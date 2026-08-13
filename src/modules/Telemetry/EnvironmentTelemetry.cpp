@@ -123,16 +123,16 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/SPA06Sensor.h"
 #endif
 
-#ifdef SENSECAP_INDICATOR
-#include "Sensor/IndicatorSensor.h"
-#endif
-
 #if __has_include(<Adafruit_TSL2561_U.h>)
 #include "Sensor/TSL2561Sensor.h"
 #endif
 
 #if __has_include(<BH1750_WE.h>)
 #include "Sensor/BH1750Sensor.h"
+#endif
+
+#if __has_include(<Adafruit_DS248x.h>)
+#include "Sensor/DS248XSensor.h"
 #endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -142,14 +142,122 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+EnvironmentTelemetryModule *environmentTelemetryModule = nullptr;
+
+namespace
+{
+EnvironmentTelemetryModule::DisplaySource gDisplaySource = EnvironmentTelemetryModule::DisplaySource::Mesh;
+} // namespace
+
 static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
+static constexpr uint32_t LOCAL_DISPLAY_REFRESH_INTERVAL_MS = 1000;
+
+EnvironmentTelemetryModule::DisplaySource EnvironmentTelemetryModule::getDisplaySource()
+{
+    return gDisplaySource;
+}
+
+void EnvironmentTelemetryModule::setDisplaySource(DisplaySource source)
+{
+    gDisplaySource = source;
+    if (environmentTelemetryModule != nullptr) {
+        environmentTelemetryModule->lastLocalDisplayRefreshMs = 0;
+        environmentTelemetryModule->refreshDisplayedMeasurement();
+    }
+}
+
+void EnvironmentTelemetryModule::clearMeasurementPacket()
+{
+    if (lastMeasurementPacket != nullptr) {
+        packetPool.release(lastMeasurementPacket);
+        lastMeasurementPacket = nullptr;
+    }
+}
+
+bool EnvironmentTelemetryModule::shouldDisplayRemoteNode(NodeNum nodeNum) const
+{
+    if (nodeNum == 0 || nodeNum == nodeDB->getNodeNum()) {
+        return false;
+    }
+
+    switch (getDisplaySource()) {
+    case DisplaySource::LocalSensor:
+        return false;
+    case DisplaySource::Mesh:
+        return true;
+    case DisplaySource::FavoriteNodesOnly:
+        return nodeDB->isFavorite(nodeNum);
+    }
+
+    return false;
+}
+
+bool EnvironmentTelemetryModule::shouldKeepCurrentRemoteDisplay() const
+{
+    if (lastMeasurementPacket == nullptr) {
+        return false;
+    }
+
+    return shouldDisplayRemoteNode(getFrom(lastMeasurementPacket));
+}
+
+bool EnvironmentTelemetryModule::shouldDisplayLocalMeasurement() const
+{
+    switch (getDisplaySource()) {
+    case DisplaySource::LocalSensor:
+        return true;
+    case DisplaySource::Mesh:
+        return !shouldKeepCurrentRemoteDisplay();
+    case DisplaySource::FavoriteNodesOnly:
+        return false;
+    }
+
+    return false;
+}
+
+bool EnvironmentTelemetryModule::refreshLocalMeasurementPacket()
+{
+    meshtastic_Telemetry local = meshtastic_Telemetry_init_zero;
+    if (!getEnvironmentTelemetry(&local)) {
+        return false;
+    }
+
+    meshtastic_MeshPacket *localPacket = allocDataProtobuf(local);
+    if (localPacket == nullptr) {
+        return false;
+    }
+
+    clearMeasurementPacket();
+    lastMeasurementPacket = packetPool.allocCopy(*localPacket);
+    packetPool.release(localPacket);
+    return lastMeasurementPacket != nullptr;
+}
+
+void EnvironmentTelemetryModule::refreshDisplayedMeasurement()
+{
+    if (shouldDisplayLocalMeasurement()) {
+        if (lastMeasurementPacket != nullptr &&
+            Throttle::isWithinTimespanMs(lastLocalDisplayRefreshMs, LOCAL_DISPLAY_REFRESH_INTERVAL_MS)) {
+            return;
+        }
+        lastLocalDisplayRefreshMs = millis();
+        if (!refreshLocalMeasurementPacket()) {
+            clearMeasurementPacket();
+        }
+        return;
+    }
+
+    if (!shouldKeepCurrentRemoteDisplay()) {
+        clearMeasurementPacket();
+    }
+}
 
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
         return;
     }
-    LOG_INFO("Environment Telemetry adding I2C devices...");
+    LOG_INFO("Environment Telemetry adding I2C devices");
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -167,10 +275,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // Not a real I2C device
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #else
-#ifdef SENSECAP_INDICATOR
-    // Not a real I2C device, uses UART
-    addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
-#endif
 #if HAS_SPA06 && __has_include(<Adafruit_SPA06_003.h>)
     addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
 #endif
@@ -247,6 +351,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // TODO Can we scan for multiple sensors connected on the same bus?
     addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
 #endif
+#if __has_include(<Adafruit_DS248x.h>)
+    addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
+#endif
+
 #endif
 }
 
@@ -258,7 +366,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
+        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
         doDeepSleep(nightyNightMs, true, false);
     }
 
@@ -299,6 +407,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = rak9154Sensor.runOnce();
 #endif
 #endif
+            refreshDisplayedMeasurement();
         }
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled
@@ -315,6 +424,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = delay;
             }
         }
+        refreshDisplayedMeasurement();
 
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
@@ -411,14 +521,17 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     }
 
     // === First line: Show sender name + time since received (left), and first metric (right) ===
-    const char *sender = getSenderShortName(*lastMeasurementPacket);
-    uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
-    String agoStr = (agoSecs > 864000) ? "?"
-                    : (agoSecs > 3600) ? String(agoSecs / 3600) + "h"
-                    : (agoSecs > 60)   ? String(agoSecs / 60) + "m"
-                                       : String(agoSecs) + "s";
-
-    String leftStr = String(sender) + " (" + agoStr + ")";
+    const bool isLocalTelemetry = (getFrom(lastMeasurementPacket) == nodeDB->getNodeNum());
+    const char *sender = isLocalTelemetry ? "Local Sensor" : getSenderShortName(*lastMeasurementPacket);
+    String leftStr = String(sender);
+    if (!isLocalTelemetry) {
+        uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
+        String agoStr = (agoSecs > 864000) ? "?"
+                        : (agoSecs > 3600) ? String(agoSecs / 3600) + "h"
+                        : (agoSecs > 60)   ? String(agoSecs / 60) + "m"
+                                           : String(agoSecs) + "s";
+        leftStr += " (" + agoStr + ")";
+    }
     display->drawString(x, currentY, leftStr); // Left side: who and when
 
     // === Collect sensor readings as label strings (no icons) ===
@@ -463,7 +576,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         static uint32_t lastAlertTime = 0;
         uint32_t now = millis();
 
-        bool isOwnTelemetry = lastMeasurementPacket->from == nodeDB->getNodeNum();
+        bool isOwnTelemetry = isLocalTelemetry;
         bool isCooldownOver = (now - lastAlertTime > 60000);
 
         if (isOwnTelemetry && bannerMsg && isCooldownOver) {
@@ -542,15 +655,17 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         LOG_INFO("(Received from %s): radiation=%fµR/h", sender, t->variant.environment_metrics.radiation);
 
 #endif
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
-
-        lastMeasurementPacket = packetPool.allocCopy(mp);
-
         // Cache the latest env metrics per node on NodeDB so the phone can
         // pull last-known values across reboots and replays.
         nodeDB->updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
+
+        const NodeNum senderNode = getFrom(&mp);
+        if (shouldDisplayRemoteNode(senderNode)) {
+            clearMeasurementPacket();
+            lastMeasurementPacket = packetPool.allocCopy(mp);
+        } else if (!shouldKeepCurrentRemoteDisplay()) {
+            refreshDisplayedMeasurement();
+        }
     }
 
     return false; // Let others look at this message also if they want
@@ -620,7 +735,7 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding EnvironmentTelemetry module!");
+            LOG_ERROR("Error decoding EnvironmentTelemetry module");
             return NULL;
         }
         // Check for a request for environment metrics
@@ -670,11 +785,6 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
             else
                 p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-            // release previous packet before occupying a new spot
-            if (lastMeasurementPacket != nullptr)
-                packetPool.release(lastMeasurementPacket);
-
-            lastMeasurementPacket = packetPool.allocCopy(*p);
             if (phoneOnly) {
                 LOG_INFO("Send packet to phone");
                 service->sendToPhone(p);
@@ -703,7 +813,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     // otherwise it stays awake until the next telemetry interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)
-            LOG_WARN("Environment telemetry unavailable this cycle, sleep without sending");
+            LOG_WARN("Env telemetry unavailable, sleep without send");
         sleepOnNextExecution = true;
         preflightSleepDeferrals = 0;
         LOG_DEBUG("Start next execution in 5s, then sleep");

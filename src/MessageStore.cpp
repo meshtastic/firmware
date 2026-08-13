@@ -42,6 +42,10 @@ static inline void resetMessagePool()
 // If not enough space remains, wrap around (ring buffer style)
 static inline uint16_t storeTextInPool(const char *src, size_t len)
 {
+    // Pool allocation can fail at boot; getTextFromPool() already maps offset 0 to "" in that case
+    if (!g_messagePool)
+        return 0;
+
     if (len >= MAX_MESSAGE_SIZE)
         len = MAX_MESSAGE_SIZE - 1;
 
@@ -215,7 +219,12 @@ const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket 
     sm.channelIndex = packet.channel;
 
     const char *payload = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
-    size_t len = strnlen(payload, MAX_MESSAGE_SIZE - 1);
+    // payload.bytes is not NUL-terminated, so bound by the received size too: a shorter message
+    // stored after a longer one would otherwise pick up the previous occupant's trailing bytes.
+    size_t avail = packet.decoded.payload.size;
+    if (avail > MAX_MESSAGE_SIZE - 1)
+        avail = MAX_MESSAGE_SIZE - 1;
+    size_t len = strnlen(payload, avail);
     sm.textOffset = storeTextInPool(payload, len);
     sm.textLength = len;
 

@@ -1,6 +1,9 @@
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "ServerAPI.h"
 #include "Throttle.h"
-#include "configuration.h"
 #include <Arduino.h>
 
 static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;

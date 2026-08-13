@@ -5,6 +5,16 @@
 #include <iterator>
 #include <stdint.h>
 
+/// Keep a function out of line even when the compiler would rather inline it. Use on helpers that
+/// hold a large object on the stack: inlining several of them into one caller makes that caller's
+/// frame reserve every helper's locals at once, which on our 8 KB Arduino loopTask is enough to
+/// overflow the stack (see issue #11237).
+#if defined(__GNUC__)
+#define NOINLINE __attribute__((noinline))
+#else
+#define NOINLINE
+#endif
+
 /// C++ v17+ clamp function, limits a given value to a range defined by lo and hi
 template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi)
 {

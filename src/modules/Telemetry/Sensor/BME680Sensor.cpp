@@ -7,6 +7,8 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "TelemetrySensor.h"
+#include "UptimeClock.h"
+#include "mesh/Throttle.h"
 
 #if __has_include(<Adafruit_BME680.h>)
 #include <cmath>
@@ -136,13 +138,13 @@ void BME680Sensor::loadState()
         file.read((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
         file.close();
         bme680.setState(bsecState);
-        LOG_INFO("%s state read from %s", sensorName, bsecConfigFileName);
+        LOG_INFO("%s: state read from %s", sensorName, bsecConfigFileName);
     } else {
         LOG_INFO("No %s state found (File: %s)", sensorName, bsecConfigFileName);
     }
     spiLock->unlock();
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
 }
 
@@ -163,7 +165,8 @@ void BME680Sensor::updateState()
         }
     } else {
         /* Update every STATE_SAVE_PERIOD minutes */
-        if ((stateUpdateCounter * STATE_SAVE_PERIOD) < millis()) {
+        // Interval since the last save; counter * period overflows uint32 past ~198 saves.
+        if (Throttle::hasElapsed(lastStateSaveMs, STATE_SAVE_PERIOD)) {
             LOG_DEBUG("%s state update every %d minutes", sensorName, STATE_SAVE_PERIOD / 60000);
             update = true;
             stateUpdateCounter++;
@@ -177,17 +180,19 @@ void BME680Sensor::updateState()
         }
         auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
         if (file) {
-            LOG_INFO("%s state write to %s", sensorName, bsecConfigFileName);
+            LOG_INFO("%s: state write to %s", sensorName, bsecConfigFileName);
             file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
             file.flush();
             file.close();
+            // Checkpoint on success only, so a failed write is retried at the next interval.
+            lastStateSaveMs = Time::getMillis();
         } else {
             LOG_INFO("Can't write %s state (File: %s)", sensorName, bsecConfigFileName);
         }
     }
     spiLock->unlock();
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
 }
 

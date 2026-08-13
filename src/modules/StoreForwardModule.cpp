@@ -193,6 +193,9 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     }
 
     this->packetHistory[this->packetHistoryTotalCount].time = getTime();
+    // getTime() silently falls back to a boot-relative count with no RTC source at all; record
+    // whether it was actually trustworthy so replay doesn't have to guess from current quality.
+    this->packetHistory[this->packetHistoryTotalCount].has_rx_time = (getRTCQuality() >= RTCQualityFromNet);
     this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
     this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
     this->packetHistory[this->packetHistoryTotalCount].from = getFrom(&mp);
@@ -201,6 +204,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].emoji = (bool)p.emoji;
     this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
     this->packetHistory[this->packetHistoryTotalCount].rx_rssi = mp.rx_rssi;
+    this->packetHistory[this->packetHistoryTotalCount].has_rx_rssi = mp.has_rx_rssi;
     this->packetHistory[this->packetHistoryTotalCount].rx_snr = mp.rx_snr;
     this->packetHistory[this->packetHistoryTotalCount].hop_start = mp.hop_start;
     this->packetHistory[this->packetHistoryTotalCount].hop_limit = mp.hop_limit;
@@ -257,8 +261,10 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 p->channel = this->packetHistory[i].channel;
                 p->decoded.reply_id = this->packetHistory[i].reply_id;
                 p->rx_time = this->packetHistory[i].time;
+                p->has_rx_time = this->packetHistory[i].has_rx_time; // presence captured at store time, not replay time
                 p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
                 p->rx_rssi = this->packetHistory[i].rx_rssi;
+                p->has_rx_rssi = this->packetHistory[i].has_rx_rssi; // presence captured at store time, not replay time
                 p->rx_snr = this->packetHistory[i].rx_snr;
                 p->hop_start = this->packetHistory[i].hop_start;
                 p->hop_limit = this->packetHistory[i].hop_limit;
@@ -415,7 +421,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 }
             } else {
                 storeForwardModule->historyAdd(mp);
-                LOG_INFO("S&F stored. Message history contains %u records now", this->packetHistoryTotalCount);
+                LOG_INFO("S&F stored, history has %u records", this->packetHistoryTotalCount);
             }
         } else if (!isFromUs(&mp) && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
             auto &p = mp.decoded;
@@ -425,7 +431,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_StoreAndForward_msg, &scratch)) {
                     decoded = &scratch;
                 } else {
-                    LOG_ERROR("Error decoding proto module!");
+                    LOG_ERROR("Error decoding proto module");
                     // if we can't decode it, nobody can process it!
                     return ProcessMessage::STOP;
                 }
@@ -561,8 +567,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             // These fields only have informational purpose on a client. Fill them to consume later.
             if (p->which_variant == meshtastic_StoreAndForward_history_tag) {
                 this->historyReturnWindow = p->variant.history.window / 60000;
-                LOG_INFO("Router Response HISTORY - Sending %d messages from last %d minutes",
-                         p->variant.history.history_messages, this->historyReturnWindow);
+                LOG_INFO("HISTORY response: %d msgs from last %d min", p->variant.history.history_messages,
+                         this->historyReturnWindow);
             }
         }
         break;

@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstring>
 
+#define TM_LOG_TRACE(fmt, ...) LOG_TRACE("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_DEBUG(fmt, ...) LOG_DEBUG("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_INFO(fmt, ...) LOG_INFO("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_WARN(fmt, ...) LOG_WARN("[TM] " fmt, ##__VA_ARGS__)
@@ -148,7 +149,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     if (cache) {
         cacheFromPsram = true;
     } else {
-        TM_LOG_WARN("PSRAM allocation failed, falling back to heap");
+        TM_LOG_WARN("PSRAM alloc failed, fall back to heap");
         cache = new UnifiedCacheEntry[allocSize]();
     }
 #else
@@ -171,7 +172,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
         nodeInfoPayloadFromPsram = true;
         TM_LOG_INFO("NodeInfo PSRAM cache ready");
     } else {
-        TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
+        TM_LOG_WARN("NodeInfo PSRAM payload alloc failed; direct responses fall back to NodeDB");
     }
 #else
     // Native unit-test build (see TMM_HAS_NODEINFO_CACHE): plain heap, so the cache paths
@@ -439,7 +440,7 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
 
 /// Find or create a NodeInfo payload entry. Victim selection is trust-tiered so the cache
 /// doubles as a pubkey pool: NodeDB membership outranks key trust, then keyless < TOFU key <
-/// signer-proven key; within a tier the oldest observation loses (never-observed = oldest).
+/// key-proven key; within a tier the oldest observation loses (never-observed = oldest).
 TrafficManagementModule::NodeInfoPayloadEntry *
 TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot, bool spareMembers)
 {
@@ -466,9 +467,9 @@ TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmpty
         }
         if (empty)
             continue; // an empty slot beats any victim; stop scoring
-        // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key;
+        // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 key-proven key;
         // +3 for NodeDB members - never shed a NodeDB-tier identity over a stranger.
-        const uint8_t tier = static_cast<uint8_t>(((entry.user.public_key.size != 32) ? 0 : (entry.keySignerProven ? 2 : 1)) +
+        const uint8_t tier = static_cast<uint8_t>(((entry.user.public_key.size != 32) ? 0 : (entry.keyProven() ? 2 : 1)) +
                                                   (entry.isMember ? 3 : 0));
         // Modular observation age; saturation keeps real ages far below the 0xFF a
         // never-observed entry scores, so that entry is always the oldest in its tier.
@@ -549,10 +550,18 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
             memcpy(entry->user.public_key.bytes, key32, 32);
             entry->user.public_key.size = 32;
         }
-        if (keyChanged)
-            entry->keySignerProven = false;
-        if (signerKnown && key32 && entry->user.public_key.size == 32 && memcmp(entry->user.public_key.bytes, key32, 32) == 0)
-            entry->keySignerProven = true;
+        if (keyChanged) {
+            entry->keyXeddsaSigned = false;
+            entry->keyManuallyVerified = false;
+        }
+        const bool keyMatch = key32 && entry->user.public_key.size == 32 && memcmp(entry->user.public_key.bytes, key32, 32) == 0;
+        if (signerKnown && keyMatch)
+            entry->keyXeddsaSigned = true;
+        // Manual verification is a hot-store fact (is_key_manually_verified); re-seed it here so a
+        // reconciled/re-created slot doesn't silently drop it. Warm-only records (hot == nullptr)
+        // don't carry the flag, so this only fires on the hot-tier pass.
+        if (hot && keyMatch && nodeInfoLiteIsKeyManuallyVerified(hot))
+            entry->keyManuallyVerified = true;
         entry->isMember = true;
     };
 
@@ -571,7 +580,7 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
         if (!warm)
             continue;
         const bool hasKey = !memfll(warm->public_key, 0, sizeof(warm->public_key));
-        reconcileOne(warm->num, hasKey ? warm->public_key : nullptr, warmSignerOf(*warm), nullptr);
+        reconcileOne(warm->num, hasKey ? warm->public_key : nullptr, warmXeddsaSignedOf(*warm), nullptr);
     }
 #endif
 
@@ -626,7 +635,7 @@ void TrafficManagementModule::maintainNodeInfoCacheLocked()
         // O(entries x members) every 60 s under cacheLock. The hourly reconcile pass
         // owns it (see reconcileNodeInfoFromNodeDBLocked).
     }
-    TM_LOG_DEBUG("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
+    TM_LOG_TRACE("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
                  static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoSaturated));
 
     // Anti-entropy: seed identities NodeDB knows but this cache lacks - a full pass at
@@ -670,12 +679,17 @@ void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshta
     // and may be re-proven by signerKnown below - which vouches for the COMMITTED key only.
     const bool sameKey = !usedEmptySlot && entry->user.public_key.size == 32 && merged.public_key.size == 32 &&
                          memcmp(entry->user.public_key.bytes, merged.public_key.bytes, 32) == 0;
-    const bool provenBefore = !usedEmptySlot && entry->keySignerProven && sameKey;
+    // Each provenance channel survives independently alongside an unchanged key. signerKnown
+    // (from updateUser's isVerifiedSignerForKey) is the XEdDSA verdict for the COMMITTED key;
+    // the manual bit isn't carried on this path, so it's only preserved, never freshly set here.
+    const bool xeddsaBefore = !usedEmptySlot && entry->keyXeddsaSigned && sameKey;
+    const bool manualBefore = !usedEmptySlot && entry->keyManuallyVerified && sameKey;
 
     entry->user = merged;
     snprintf(entry->user.id, sizeof(entry->user.id), "!%08x", node);
     entry->hasFullUser = true;
-    entry->keySignerProven = provenBefore || (signerKnown && user.public_key.size == 32);
+    entry->keyXeddsaSigned = xeddsaBefore || (signerKnown && user.public_key.size == 32);
+    entry->keyManuallyVerified = manualBefore;
     entry->isMember = true; // committed via updateUser => it sits in the hot store right now
     // obsTick/hasObserved deliberately untouched: only a heard frame makes a node servable.
 }
@@ -699,16 +713,19 @@ void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key
     memcpy(entry->user.public_key.bytes, key32, 32);
     entry->user.public_key.size = 32;
     entry->isMember = true; // the caller just committed it to the hot store
-    // A rotated key never inherits the old key's verdict; `proven` (manual verification of
-    // exactly this key) is the strongest provenance this cache can carry.
-    if (keyChanged)
-        entry->keySignerProven = false;
+    // A rotated key never inherits the old key's verdict; `proven` here means the user manually
+    // verified possession of exactly this key (KeyCommitTrust::ManuallyVerified) - it routes to
+    // the manual bit, not the XEdDSA one.
+    if (keyChanged) {
+        entry->keyXeddsaSigned = false;
+        entry->keyManuallyVerified = false;
+    }
     if (proven)
-        entry->keySignerProven = true;
+        entry->keyManuallyVerified = true;
     // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
 }
 
-bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven) const
+bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *keyProven) const
 {
     // Same enable gate as the write-through hooks and maintenance: a disabled module stops
     // updating and sweeping the cache, so its frozen contents must not keep feeding PKI key
@@ -724,12 +741,12 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
         return false;
 
     memcpy(out, entry->user.public_key.bytes, 32);
-    if (signerProven)
-        *signerProven = entry->keySignerProven;
+    if (keyProven)
+        *keyProven = entry->keyProven();
     return true;
 }
 
-bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *signerProven) const
+bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *keyProven) const
 {
     // Enable gate, as in copyPublicKey(): a disabled module must not feed name rehydration
     // from frozen cache contents once its maintenance/write-through have stopped.
@@ -746,8 +763,8 @@ bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool 
         return false;
 
     out = entry->user;
-    if (signerProven)
-        *signerProven = entry->keySignerProven;
+    if (keyProven)
+        *keyProven = entry->keyProven();
     return true;
 }
 
@@ -830,11 +847,12 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
         entry->decodedBitfield = mp.decoded.bitfield;
 
-        // Upgrade to signer-proven on a Router-verified signature or a NodeDB signer verdict
-        // for this same key. Never downgrade (a later unsigned frame leaves the flag set),
-        // and the key itself cannot change here - the pin checks above already rejected that.
+        // Upgrade the XEdDSA-signed bit on a Router-verified signature or a NodeDB signer verdict
+        // for this same key (both are XEdDSA provenance). Never downgrade (a later unsigned frame
+        // leaves it set), and the key cannot change here - the pin checks above already rejected
+        // that. The manual-verification bit is orthogonal and untouched on this observation path.
         if ((mp.xeddsa_signed || dbSaysSigner) && user.public_key.size == 32)
-            entry->keySignerProven = true;
+            entry->keyXeddsaSigned = true;
 
         if (usedEmptySlot)
             cachedCount = countNodeInfoEntriesLocked();
@@ -866,18 +884,17 @@ int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum node)
     const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
     if (!entry)
         return -1;
-    return (entry->hasObserved ? 1 : 0) | (entry->isMember ? 2 : 0) | (entry->hasFullUser ? 4 : 0) |
-           (entry->keySignerProven ? 8 : 0);
+    return (entry->hasObserved ? 1 : 0) | (entry->isMember ? 2 : 0) | (entry->hasFullUser ? 4 : 0) | (entry->keyProven() ? 8 : 0);
 }
 
-void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
+void TrafficManagementModule::markKeyXeddsaSignedForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
     if (!nodeInfoPayload)
         return;
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
         if (nodeInfoPayload[i].node == node) {
-            nodeInfoPayload[i].keySignerProven = true;
+            nodeInfoPayload[i].keyXeddsaSigned = true;
             return;
         }
     }
@@ -918,7 +935,7 @@ int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum)
 {
     return -1;
 }
-void TrafficManagementModule::markKeySignerProvenForTest(NodeNum) {}
+void TrafficManagementModule::markKeyXeddsaSignedForTest(NodeNum) {}
 
 #endif // TMM_HAS_NODEINFO_CACHE
 
@@ -1307,7 +1324,7 @@ int32_t TrafficManagementModule::runOnce()
         }
     }
 
-    TM_LOG_DEBUG("Maintenance: %u active, %u expired, %u/%u slots, %lums elapsed", activeEntries, expiredEntries,
+    TM_LOG_TRACE("Maintenance: %u active, %u expired, %u/%u slots, %lums elapsed", activeEntries, expiredEntries,
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
                  static_cast<unsigned long>(TrafficManagementModule::clockMs() - sweepStartMs));
 
@@ -1384,7 +1401,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const bool withinInterval =
         hasPositionState && (windowTicks != 0) && (static_cast<uint8_t>(nowPosTick - entry->pos_time) < windowTicks);
 
-    TM_LOG_DEBUG("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
+    TM_LOG_TRACE("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
                  entry->pos_fingerprint, samePosition, withinInterval, isNew);
 
     // Update cache entry (raw tick; 0 is a valid tick value)
@@ -1414,9 +1431,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     uint8_t cachedSourceChannel = 0;
     bool cachedHasObserved = false;
     uint8_t cachedObsTick = 0;
-    // Signer-proven provenance of the cached key, consumed by the replay gate below
+    // Key-proven provenance (XEdDSA-signed | manually verified) of the cached key, consumed by the replay gate below
     // (maybe_unused: read only when TMM_NODEINFO_REPLAY_SIGNED_GATE is compiled in).
-    [[maybe_unused]] bool cachedKeySignerProven = false;
+    [[maybe_unused]] bool cachedKeyProven = false;
     // True once we commit to answering from the NodeDB fallback (no NodeInfo cache) path. The
     // response throttle no longer distinguishes the paths - the per-requester/per-target RAM
     // tables cover both - but the replay gate below still keys off it.
@@ -1433,7 +1450,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedSourceChannel = entry->sourceChannel;
             cachedHasObserved = entry->hasObserved;
             cachedObsTick = entry->obsTick;
-            cachedKeySignerProven = entry->keySignerProven;
+            cachedKeyProven = entry->keyProven();
         }
     }
 
@@ -1461,11 +1478,12 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             return false;
         }
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
-        // Replay provenance gate (fallback path): only vouch for a node NodeDB knows as a
-        // verified signer. An unproven (trust-on-first-use) identity is left for the genuine
-        // node or another cache-holder to answer.
-        if (!nodeInfoLiteHasXeddsaSigned(node)) {
-            TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x not signer-proven, not responding", p->to);
+        // Replay provenance gate (fallback path): only vouch for a node whose key NodeDB has
+        // proven - an XEdDSA-verified signer or a manually-verified key. This mirrors the cache
+        // path's keyProven() (XEdDSA | manual). An unproven (trust-on-first-use) identity is left
+        // for the genuine node or another cache-holder to answer.
+        if (!nodeInfoLiteHasXeddsaSigned(node) && !nodeInfoLiteIsKeyManuallyVerified(node)) {
+            TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x not key-proven, not responding", p->to);
             return false;
         }
 #endif
@@ -1483,10 +1501,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     }
 
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
-    // Replay provenance gate (cache path): only spoof a reply for a signer-proven cached key.
+    // Replay provenance gate (cache path): only spoof a reply for a key-proven cached key.
     // usedFallback entries were already gated above. See TMM_NODEINFO_REPLAY_REQUIRE_SIGNED.
-    if (!usedFallback && !cachedKeySignerProven) {
-        TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not signer-proven, not responding", p->to);
+    if (!usedFallback && !cachedKeyProven) {
+        TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not key-proven, not responding", p->to);
         return false;
     }
 #endif
@@ -1498,7 +1516,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // request declined above never spends the budget). false forwards the request instead of consuming
     // it. Rationale in docs/traffic_management_module.md "Throttling direct responses".
     if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
-        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request instead", getFrom(p));
+        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request", getFrom(p));
         return false;
     }
 

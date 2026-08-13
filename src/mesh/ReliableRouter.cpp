@@ -16,6 +16,12 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+    if (isBlockedEventCoordinatePacket(p)) {
+        LOG_DEBUG("Suppress reliable coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
 #if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
     // Router owns delayed DMs before creating retransmission state, otherwise a stale copy can
     // later emit MAX_RETRANSMIT. First request that a peer refresh our NodeInfo, then recover a
@@ -36,6 +42,9 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+    const GlobalPacketId key(p);
+    const bool retransmitting = p->want_ack;
+
     if (p->want_ack) {
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
@@ -54,7 +63,12 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    ErrorCode result = isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    // Duty-cycle rejections may clear before the scheduled retry.
+    if (retransmitting && result != ERRNO_OK && result != meshtastic_Routing_Error_DUTY_CYCLE_LIMIT)
+        stopRetransmission(key);
+
+    return result;
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)

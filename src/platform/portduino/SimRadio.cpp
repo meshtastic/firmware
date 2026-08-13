@@ -27,7 +27,7 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 
     // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
-    LOG_DEBUG("Set random delay before tx");
+    LOG_TRACE("Set random delay before tx");
     setTransmitDelay();
     return res;
 }
@@ -47,7 +47,7 @@ void SimRadio::setTransmitDelay()
         startTransmitTimer(true);
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
-        LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
+        LOG_TRACE("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
         startTransmitTimerRebroadcast(p);
     }
 }
@@ -169,7 +169,7 @@ void SimRadio::onNotify(uint32_t notification)
             startTransmitTimer();
             break;
         }
-        LOG_DEBUG("delay done");
+        LOG_TRACE("delay done");
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
@@ -238,7 +238,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
             memcpy(&c.data.bytes, p->encrypted.bytes, p->encrypted.size);
             c.data.size = p->encrypted.size;
         } else {
-            LOG_WARN("Encrypted payload (%u) exceeds sim loopback capacity (%u)! Send empty payload", (unsigned)p->encrypted.size,
+            LOG_WARN("Encrypted payload (%u) > sim loopback capacity (%u), send empty", (unsigned)p->encrypted.size,
                      (unsigned)loopbackCapacity);
         }
     } else {
@@ -248,7 +248,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
             memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
             c.data.size = p->decoded.payload.size;
         } else {
-            LOG_WARN("Payload size larger than compressed message allows! Send empty payload");
+            LOG_WARN("Payload > compressed max, send empty");
         }
     }
 
@@ -295,7 +295,7 @@ void SimRadio::unpackAndReceive(meshtastic_MeshPacket &p)
                 p.decoded.portnum = scratch.portnum;
             }
         } else
-            LOG_ERROR("Error decoding proto for simulator message!");
+            LOG_ERROR("Error decoding proto for simulator message");
     }
     // Let SimRadio receive as if it did via its LoRa chip
     startReceive(&p);
@@ -305,7 +305,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
 {
 #ifdef USERPREFS_SIMRADIO_EMULATE_COLLISIONS
     if (isActivelyReceiving()) {
-        LOG_WARN("Collision detected, dropping current and previous packet!");
+        LOG_WARN("Collision detected, dropping current and previous packet");
         rxBad++;
         airTime->logAirtime(RX_ALL_LOG, getPacketTime(receivingPacket, true));
         packetPool.release(receivingPacket);
@@ -319,7 +319,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
         } else if ((interval - airtimeLeft) > preambleTimeMsec) {
             // Only if transmitting for longer than preamble there is a collision
             // (channel should actually be detected as active otherwise)
-            LOG_WARN("Collision detected during transmission!");
+            LOG_WARN("Collision detected during transmission");
             return;
         }
     }
@@ -359,11 +359,11 @@ void SimRadio::handleReceiveInterrupt()
     }
 
     if (!isReceiving) {
-        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode");
+        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt outside receive mode");
         return;
     }
 
-    LOG_DEBUG("HANDLE RECEIVE INTERRUPT");
+    LOG_TRACE("HANDLE RECEIVE INTERRUPT");
     rxGood++;
 
     meshtastic_MeshPacket *mp = packetPool.allocCopy(*receivingPacket); // keep a copy in packetPool

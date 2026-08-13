@@ -57,7 +57,7 @@ int32_t RangeTestModule::runOnce()
 
             if (moduleConfig.range_test.clear_on_reboot) {
                 // User wants to delete previous range test(s)
-                LOG_INFO("Range Test Module - Clearing out previous test file");
+                LOG_INFO("Range Test Module - Clear previous test file");
                 rangeTestModuleRadio->removeFile();
             }
             if (moduleConfig.range_test.sender) {
@@ -73,7 +73,7 @@ int32_t RangeTestModule::runOnce()
 
             if (moduleConfig.range_test.sender) {
                 // If sender
-                LOG_INFO("Range Test Module - Sending heartbeat every %d ms", (senderHeartbeat));
+                LOG_INFO("Range Test Module - Heartbeat every %d ms", (senderHeartbeat));
 
                 LOG_INFO("gpsStatus->getLatitude()     %d", gpsStatus->getLatitude());
                 LOG_INFO("gpsStatus->getLongitude()    %d", gpsStatus->getLongitude());
@@ -99,7 +99,7 @@ int32_t RangeTestModule::runOnce()
             }
         }
     } else {
-        LOG_INFO("Range Test Module - Disabled");
+        LOG_INFO("Range Test Module Disabled");
     }
 
 #endif
@@ -216,12 +216,12 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     */
     concurrency::LockGuard g(spiLock);
     if (!FSBegin()) {
-        LOG_DEBUG("An Error has occurred while mounting the filesystem");
+        LOG_DEBUG("Filesystem mount error");
         return 0;
     }
 
     if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
-        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write");
+        LOG_DEBUG("Filesystem low on free space. Abort write");
         return 0;
     }
 
@@ -233,14 +233,14 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         File fileToWrite = FSCom.open("/static/rangetest.csv", FILE_WRITE);
 
         if (!fileToWrite) {
-            LOG_ERROR("There was an error opening the file for writing");
+            LOG_ERROR("Error opening file for writing");
             return 0;
         }
 
         // Print the CSV header
         if (fileToWrite.println("time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx "
                                 "snr,distance,hop limit,payload,rx rssi")) {
-            LOG_INFO("File was written");
+            LOG_INFO("File written");
         } else {
             LOG_ERROR("File write failed");
         }
@@ -252,7 +252,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     File fileToAppend = FSCom.open("/static/rangetest.csv", FILE_APPEND);
 
     if (!fileToAppend) {
-        LOG_ERROR("There was an error opening the file for appending");
+        LOG_ERROR("Error opening file for appending");
         return 0;
     }
 
@@ -319,7 +319,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     return 1;
 
 #else
-    LOG_ERROR("Failed to store range test results - feature only available for ESP32");
+    LOG_ERROR("Can't store range test results - ESP32 only");
 
     return 0;
 #endif
@@ -329,27 +329,27 @@ bool RangeTestModuleRadio::removeFile()
 {
 #ifdef ARCH_ESP32
     if (!FSBegin()) {
-        LOG_DEBUG("An Error has occurred while mounting the filesystem");
+        LOG_DEBUG("Filesystem mount error");
         return 0;
     }
 
     if (!FSCom.exists("/static/rangetest.csv")) {
-        LOG_DEBUG("No range tests found.");
+        LOG_DEBUG("No range tests found");
         return 0;
     }
 
-    LOG_INFO("Deleting previous range test.");
+    LOG_INFO("Deleting previous range test");
     bool result = FSCom.remove("/static/rangetest.csv");
 
     if (!result) {
-        LOG_ERROR("Failed to delete range test.");
+        LOG_ERROR("Failed to delete range test");
         return 0;
     }
-    LOG_INFO("Range test removed.");
+    LOG_INFO("Range test removed");
 
     return 1;
 #else
-    LOG_ERROR("Failed to remove range test results - feature only available for ESP32");
+    LOG_ERROR("Can't remove range test results - ESP32 only");
 
     return 0;
 #endif

@@ -5,7 +5,6 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/RTC.h"
@@ -16,9 +15,6 @@
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
-#include "mesh/Channels.h"
-#include "mesh/generated/meshtastic/deviceonly.pb.h"
-#include "sleep.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -28,9 +24,6 @@
 #endif
 #endif
 
-#ifdef ARCH_ESP32
-#include "modules/StoreForwardModule.h"
-#endif
 #include <DisplayFormatters.h>
 #include <RadioLibInterface.h>
 #include <target_specific.h>
@@ -39,110 +32,16 @@ using namespace meshtastic;
 
 // External variables
 extern std::unique_ptr<graphics::Screen> screen;
-extern PowerStatus *powerStatus;
 extern NodeStatus *nodeStatus;
-extern GPSStatus *gpsStatus;
-extern Channels channels;
 extern AirTime *airTime;
 
 // External functions from Screen.cpp
 extern bool heartbeat;
 
-#ifdef ARCH_ESP32
-extern StoreForwardModule *storeForwardModule;
-#endif
-
 namespace graphics
 {
 namespace DebugRenderer
 {
-
-void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    char channelStr[20];
-    snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    // Display nodes status
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        UIRenderer::drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
-    } else {
-        UIRenderer::drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
-    }
-#if HAS_GPS
-    // Display GPS status
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        UIRenderer::drawGpsPowerStatus(display, x, y + 2, gpsStatus);
-    } else {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
-        } else {
-            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
-        }
-    }
-#endif
-    display->setColor(WHITE);
-    // Draw the channel name
-    display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
-    // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
-    if (moduleConfig.store_forward.enabled) {
-#ifdef ARCH_ESP32
-        if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
-                                          (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12,
-                                   8, imgQuestionL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12,
-                                   8, imgQuestionL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 8,
-                                   8, imgQuestion);
-#endif
-        } else {
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 16,
-                                   8, imgSFL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 16,
-                                   8, imgSFL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 13 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 11,
-                                   8, imgSF);
-#endif
-        }
-#endif
-    } else {
-        // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL1);
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL2);
-#else
-        display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8,
-                               imgInfo);
-#endif
-    }
-
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(screen->ourId), y + FONT_HEIGHT_SMALL, screen->ourId);
-
-    // Draw any log messages
-    display->drawLogBuffer(x, y + (FONT_HEIGHT_SMALL * 2));
-
-    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
-}
 
 // ****************************
 // * WiFi Screen              *
@@ -230,12 +129,6 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 #endif
 }
 
-// Trampoline functions for DebugInfo class access
-void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrameWiFi(display, state, x, y);
-}
-
 // ****************************
 // * LoRa Focused Screen      *
 // ****************************
@@ -268,13 +161,15 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int nameX = (SCREEN_WIDTH - textWidth);
     display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
 
-    // === Second Row: Role ===
-    auto role = DisplayFormatters::getDeviceRole(config.device.role);
-    char device_role[25];
-    snprintf(device_role, sizeof(device_role), "Role: %s", role);
-    textWidth = display->getStringWidth(device_role);
-    nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, getTextPositions(display)[line++], device_role);
+    if (!graphics::isCompactPanel(display)) {
+        // === Second Row: Role ===
+        auto role = DisplayFormatters::getDeviceRole(config.device.role);
+        char device_role[25];
+        snprintf(device_role, sizeof(device_role), "Role: %s", role);
+        textWidth = display->getStringWidth(device_role);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], device_role);
+    }
 
     // === Third Row: Radio Preset ===
     // For custom modem settings show the actual parameters; for presets use the preset name.
@@ -329,75 +224,83 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
 #if !defined(OLED_TINY)
     // === Fifth Row: Channel Utilization ===
-    const char *chUtil = "ChUtil:";
-    char chUtilPercentage[10];
-    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
-
-    int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
-                                                                 : display->getStringWidth(chUtil) + 5;
-    int chUtil_y = getTextPositions(display)[line] + 3;
-
-    int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
-    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
-    int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
-    int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
-    int chutil_percent = airTime->channelUtilizationPercent();
-    const int raw_chutil_percent = chutil_percent;
-
-    int centerofscreen = SCREEN_WIDTH / 2;
-    int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
-    int starting_position = centerofscreen - total_line_content_width;
-
-    display->drawString(starting_position, getTextPositions(display)[line], chUtil);
-
-    // Force 61% or higher to show a full 100% bar, text would still show related percent.
-    if (chutil_percent >= 61) {
-        chutil_percent = 100;
-    }
-
-    // Weighting for nonlinear segments
-    float milestone1 = 25;
-    float milestone2 = 40;
-    float weight1 = 0.45; // Weight for 0-25%
-    float weight2 = 0.35; // Weight for 25-40%
-    float weight3 = 0.20; // Weight for 40-100%
-    float totalWeight = weight1 + weight2 + weight3;
-
-    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
-    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
-    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
-
-    int fillRight = 0;
-
-    if (chutil_percent <= milestone1) {
-        fillRight = (seg1 * (chutil_percent / milestone1));
-    } else if (chutil_percent <= milestone2) {
-        fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
+    if (!config.lora.tx_enabled) {
+        const char *txdisabled = "Transmit Disabled";
+        textWidth = display->getStringWidth(txdisabled);
+        display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line], txdisabled);
     } else {
-        fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
-    }
 
-    // Draw outline
-    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+        const char *chUtil = "ChUtil:";
+        char chUtilPercentage[10];
+        snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
 
-    // Fill progress
-    if (fillRight > 0) {
-#if GRAPHICS_TFT_COLORING_ENABLED
-        uint16_t UtilizationFillColor = TFTPalette::Good;
-        if (raw_chutil_percent >= 60) {
-            UtilizationFillColor = TFTPalette::Bad;
-        } else if (raw_chutil_percent >= 35) {
-            UtilizationFillColor = TFTPalette::Medium;
+        int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
+                                                                     : display->getStringWidth(chUtil) + 5;
+        int chUtil_y = getTextPositions(display)[line] + 3;
+
+        int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+        int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
+        int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
+        int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
+        int chutil_percent = airTime->channelUtilizationPercent();
+        const int raw_chutil_percent = chutil_percent;
+
+        int centerofscreen = SCREEN_WIDTH / 2;
+        int total_line_content_width =
+            (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
+        int starting_position = centerofscreen - total_line_content_width;
+
+        display->drawString(starting_position, getTextPositions(display)[line], chUtil);
+
+        // Force 61% or higher to show a full 100% bar, text would still show related percent.
+        if (chutil_percent >= 61) {
+            chutil_percent = 100;
         }
-        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
-                                   starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
-#endif
-        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
-    }
 
-    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
-                        chUtilPercentage);
+        // Weighting for nonlinear segments
+        float milestone1 = 25;
+        float milestone2 = 40;
+        float weight1 = 0.45; // Weight for 0-25%
+        float weight2 = 0.35; // Weight for 25-40%
+        float weight3 = 0.20; // Weight for 40-100%
+        float totalWeight = weight1 + weight2 + weight3;
+
+        int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
+        int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
+        int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
+
+        int fillRight = 0;
+
+        if (chutil_percent <= milestone1) {
+            fillRight = (seg1 * (chutil_percent / milestone1));
+        } else if (chutil_percent <= milestone2) {
+            fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
+        } else {
+            fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
+        }
+
+        // Draw outline
+        display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+
+        // Fill progress
+        if (fillRight > 0) {
+#if GRAPHICS_TFT_COLORING_ENABLED
+            uint16_t UtilizationFillColor = TFTPalette::Good;
+            if (raw_chutil_percent >= 60) {
+                UtilizationFillColor = TFTPalette::Bad;
+            } else if (raw_chutil_percent >= 35) {
+                UtilizationFillColor = TFTPalette::Medium;
+            }
+            setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
+                                       starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
 #endif
+            display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+        }
+
+        display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
+                            chUtilPercentage);
+#endif
+    }
     graphics::drawCommonFooter(display, x, y);
 }
 
@@ -530,10 +433,14 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // System Uptime
-    if (line < 2) {
+    if (graphics::isCompactPanel(display)) {
+        line += 1;
+    } else {
+        if (line < 2) {
+            line += 1;
+        }
         line += 1;
     }
-    line += 1;
 
     char appversionstr[35];
     char appversionstr_formatted[40];
@@ -568,7 +475,8 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
 
-    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
+    if (!graphics::isCompactPanel(display) &&
+        (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5))) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
         getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
@@ -578,6 +486,23 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
         char api_state[32] = "";
+#if defined(OLED_COMPACT_UI)
+        const char *connection = "None";
+        if (service->api_state == service->STATE_BLE) {
+            connection = "BLE";
+        } else if (service->api_state == service->STATE_WIFI) {
+            connection = "WiFi";
+        } else if (service->api_state == service->STATE_SERIAL) {
+            connection = "USB";
+        } else if (service->api_state == service->STATE_PACKET) {
+            connection = "Local";
+        } else if (service->api_state == service->STATE_HTTP) {
+            connection = "HTTP";
+        } else if (service->api_state == service->STATE_ETH) {
+            connection = "Eth";
+        }
+        snprintf(api_state, sizeof(api_state), "App: %s", connection);
+#else
         const char *clientWord = nullptr;
 
         // Determine if narrow or wide screen
@@ -601,6 +526,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         } else if (service->api_state == service->STATE_ETH) {
             snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
         }
+#endif
         if (api_state[0] != '\0') {
             display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
                                 api_state);
