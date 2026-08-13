@@ -149,9 +149,8 @@ void test_nexthop_ignored_without_a_relay(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(NODE_D), "no relay means no corroboration");
 }
 
-// UDP multicast ingress preserves the on-wire relay_node while clearing pki_encrypted, rx_snr and
-// rx_rssi, so relay_node alone cannot show the reply came off the radio. A LAN peer can name any
-// node in the route and set relay_node to match; only the transport check rejects it.
+// UDP ingress keeps the on-wire relay_node, so a LAN peer can name any node in the route and set
+// relay_node to match. Only the transport check rejects that.
 void test_nexthop_ignored_when_reply_arrived_over_udp(void)
 {
     meshtastic_RouteDiscovery r;
