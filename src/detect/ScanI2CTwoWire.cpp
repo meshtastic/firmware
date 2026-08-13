@@ -160,10 +160,17 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 #include "../modules/Telemetry/Sensor/SEN5XSensor.h"
+#include "../modules/Telemetry/Sensor/SEN6XSensor.h"
 bool probeSEN5X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
 {
     SEN5XSensor sen5xsensor;
     return sen5xsensor.probe(i2cBus, address, port);
+}
+
+bool probeSEN6X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
+{
+    SEN6XSensor sen6xsensor;
+    return sen6xsensor.probe(i2cBus, address, port);
 }
 
 bool probeHM330x(TwoWire *i2cBus, uint8_t address)
@@ -700,7 +707,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 logFoundDevice("QMC6310U", (uint8_t)addr.address);
                 break;
 
-            case QMI8658_ADDR:
+            case QMI8658_ADDR: // same as BQ25896_ADDR and SEN6X_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
                 if (registerValue == 0xC0) {
                     type = BQ24295;
@@ -721,6 +728,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = ISM330DHCX;
                     logFoundDevice("ISM330DHCX", (uint8_t)addr.address);
                 } else {
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+                    if (probeSEN6X(i2cBus, addr.address, port)) {
+                        type = SEN6X;
+                        logFoundDevice("SEN6X", addr.address);
+                        break;
+                    }
+#endif
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
                 }

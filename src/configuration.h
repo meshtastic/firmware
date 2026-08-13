@@ -300,6 +300,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
+#define SEN6X_ADDR 0x6B // same as QMI8658_ADDR and BQ25896_ADDR
 #define SCD30_ADDR 0x61
 #define ADS1X15_ADDR 0x48
 #define ADS1X15_ADDR_ALT1 0x49
