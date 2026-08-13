@@ -476,11 +476,8 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         return;
     }
 
-    // `decoded` and `encrypted` are a union, and meshtastic_Data::portnum overlays the encrypted
-    // arm's `size` field. perhapsDecode() above deliberately lets undecryptable packets through, so
-    // reading decoded.portnum on one of those returns the ciphertext length - and TEXT_MESSAGE_APP
-    // (1) and RANGE_TEST_APP (66) are both ordinary payload sizes. Only trust portnum once the
-    // packet has actually decoded.
+    // portnum overlays the encrypted arm of the union, so on an undecryptable packet it reads back
+    // as ciphertext length. Only trust it once the packet has actually decoded.
     const bool isDecoded = p->which_payload_variant == meshtastic_MeshPacket_decoded_tag;
 
 #ifdef ARCH_ESP32
@@ -495,9 +492,8 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
-        // ROUTING_APP carries the delivery verdict for a message the phone is already tracking - an
-        // ACK or a MAX_RETRANSMIT NAK. Dropping it strands that message in "sending" forever, since
-        // a client cannot infer anything from a NAK that never arrives.
+        // ROUTING_APP is the delivery verdict for a message the phone is already tracking, so
+        // dropping it strands that message in "sending" forever.
         if (isDecoded &&
             (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
              p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP || p->decoded.portnum == meshtastic_PortNum_ROUTING_APP)) {
