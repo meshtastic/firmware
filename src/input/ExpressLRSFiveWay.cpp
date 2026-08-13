@@ -132,8 +132,8 @@ int32_t ExpressLRSFiveWay::runOnce()
     determineAction((KeyType)keyValue, longPressed ? LONG : SHORT);
 
     // If there has been recent key activity, poll the joystick slightly more frequently. keyDownStart
-    // is 0 until the first press, reading as "recent" for the first 20s of uptime - as it did before.
-    if (Throttle::isWithinTimespanMs(keyDownStart, 20 * 1000UL)) // Within last 20 seconds
+    // is 0 until the first press of a boot, which is no activity rather than activity at time zero.
+    if (keyDownStart != 0 && Throttle::isWithinTimespanMs(keyDownStart, 20 * 1000UL)) // Within last 20 seconds
         return 100;
 
     // Otherwise, poll slightly less often

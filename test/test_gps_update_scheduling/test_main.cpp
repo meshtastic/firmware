@@ -81,12 +81,8 @@ static void test_clamp_boundary(void)
     TEST_ASSERT_EQUAL_UINT32(gpsHardsleepThresholdMs(900), gpsHardsleepThresholdMs(901));
 }
 
-// --- elapsedSearchMs(): "am I searching?" across the 32-bit millis() wrap ---
-//
-// The predicate used to be `searchStartedMs > searchEndedMs`, an ordering of two raw stamps. It
-// inverts whenever one stamp sits on the far side of the wrap, which is what these cases pin. A
-// wrong answer feeds searchedTooLong(): "searching" when idle aborts a search that is not running,
-// and "idle" when searching means an unproductive search is never aborted.
+// elapsedSearchMs() across the 32-bit millis() wrap. Ordering the two raw stamps, as it used to,
+// reports an idle receiver as searching or a searching one as idle, and searchedTooLong() acts on it.
 
 // A search that has not started yet reads as idle, not as a search of length millis().
 static void test_elapsed_is_zero_before_any_search(void)
