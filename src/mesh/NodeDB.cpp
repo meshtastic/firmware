@@ -3720,11 +3720,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 #endif
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway.
-        // Only from genuine RF receptions: for an MQTT- or UDP-sourced packet the hop fields describe the
-        // path to the *gateway*, not to us, so hops_away would be measuring someone else's distance. A
-        // gateway that heard the sender directly yields hops_away == 0 and a phantom "direct neighbour"
-        // that we have no RF path to at all - which NodeDB::resolveLastByte(requireDirectNeighbor=true)
-        // then trusts when picking a next hop.
+        // Only from RF: on an MQTT or UDP packet the hop fields measure the path to the gateway, so a
+        // gateway that heard the sender directly invents a direct neighbour we have no RF path to.
         const int8_t hopsAway = getHopsAway(mp);
         if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopsAway >= 0) {
             info->has_hops_away = true;
