@@ -265,12 +265,21 @@ static MockMeshService *mockService;
 static MockRouter *mockRouter;
 static MockRoutingModule *mockRoutingModule;
 static NeighborInfoModule *realNeighborInfoModule;
+static RoutingModule *realRoutingModule;
 static std::vector<MeshModule *> dispatchModules;
 
 template <typename T> static T *registerDispatchModule(T *module)
 {
     dispatchModules.push_back(module);
     return module;
+}
+
+// Swap the mocked RoutingModule for a real one. tearDown() owns the cleanup because a failed
+// assertion longjmps out of the test, which would otherwise leave it registered in MeshModule::modules.
+static void installRealRoutingModule()
+{
+    realRoutingModule = new RoutingModule();
+    routingModule = realRoutingModule;
 }
 
 static meshtastic_MeshPacket makeRequest(meshtastic_PortNum port)
@@ -335,6 +344,7 @@ void setUp(void)
 
     mockRoutingModule = new MockRoutingModule();
     routingModule = mockRoutingModule;
+    realRoutingModule = nullptr;
 
     testModule = new TestModule();
     memset(&testPacket, 0, sizeof(testPacket));
@@ -354,6 +364,9 @@ void tearDown(void)
 
     delete testModule;
     testModule = nullptr;
+
+    delete realRoutingModule;
+    realRoutingModule = nullptr;
 
     delete mockRoutingModule;
     mockRoutingModule = nullptr;
@@ -677,9 +690,7 @@ static void test_handleFromRadio_ownPacketAddressedToUsReachesPhone()
 // loopback gate never applies and only handleFromRadio's filter gates the implicit ACK / NAK path.
 static void test_localAckNak_reachesPhoneViaRealRoutingModule()
 {
-    RoutingModule *savedRoutingModule = routingModule;
-    auto *realRoutingModule = new RoutingModule(); // registers itself in MeshModule::modules
-    routingModule = realRoutingModule;
+    installRealRoutingModule();
 
     realRoutingModule->sendAckNak(meshtastic_Routing_Error_NONE, LOCAL_NODE, 0xFEEDBEEF, 0);
 
@@ -690,18 +701,13 @@ static void test_localAckNak_reachesPhoneViaRealRoutingModule()
     TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->to);
     TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->from);
     mockService->releaseToPool(toPhone);
-
-    routingModule = savedRoutingModule;
-    delete realRoutingModule;
 }
 
 // The mirror of the above: a broadcast we originated, heard back off the mesh, must not reach the
 // phone even though it travels the same RoutingModule path.
 static void test_ownBroadcastEcho_isDroppedByRealRoutingModule()
 {
-    RoutingModule *savedRoutingModule = routingModule;
-    auto *realRoutingModule = new RoutingModule();
-    routingModule = realRoutingModule;
+    installRealRoutingModule();
 
     meshtastic_MeshPacket echo = meshtastic_MeshPacket_init_zero;
     echo.from = LOCAL_NODE;
@@ -713,9 +719,6 @@ static void test_ownBroadcastEcho_isDroppedByRealRoutingModule()
     MeshModule::callModules(echo, RX_SRC_RADIO);
 
     TEST_ASSERT_NULL(mockService->getForPhone());
-
-    routingModule = savedRoutingModule;
-    delete realRoutingModule;
 }
 
 // Full loop: a phone-originated want_response request (from == 0, RX_SRC_USER) dispatched
