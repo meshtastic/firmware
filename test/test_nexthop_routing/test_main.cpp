@@ -1,4 +1,4 @@
-// Unit tests for NextHop direct-message reliability mitigations (see docs/nexthop-routing-reliability.md):
+// Unit tests for NextHop direct-message reliability mitigations (landed in meshtastic/firmware#10745):
 //   M1 - NodeDB::resolveLastByte / resolveUniqueLastByte (ambiguity-aware last-byte resolution)
 //   M2 - NextHopRouter::getNextHop strict-neighbor gate + Router::shouldDecrementHopLimit favorite check
 //   M3 - NextHopRouter route-health freshness / failure decay
