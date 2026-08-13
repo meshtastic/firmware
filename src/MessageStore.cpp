@@ -42,6 +42,10 @@ static inline void resetMessagePool()
 // If not enough space remains, wrap around (ring buffer style)
 static inline uint16_t storeTextInPool(const char *src, size_t len)
 {
+    // Pool allocation can fail at boot; getTextFromPool() already maps offset 0 to "" in that case
+    if (!g_messagePool)
+        return 0;
+
     if (len >= MAX_MESSAGE_SIZE)
         len = MAX_MESSAGE_SIZE - 1;
 
