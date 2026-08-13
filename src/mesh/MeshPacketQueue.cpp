@@ -1,5 +1,7 @@
 #include "MeshPacketQueue.h"
 #include "NodeDB.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include <assert.h>
 
@@ -186,9 +188,13 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 
     if (backPacket->tx_after) {
         // Check if there's a late packet at the queue end
-        auto now = millis();
-        if (backPacket->tx_after < now && (!p->tx_after || backPacket->tx_after > p->tx_after)) {
-            int32_t dt = (int32_t)(backPacket->tx_after - now);
+        const uint32_t now = Time::getMillis();
+        // tx_after is an absolute deadline, so both tests subtract before comparing. A larger
+        // elapsed means the deadline passed longer ago, so the smaller one is scheduled later.
+        const uint32_t backElapsed = now - backPacket->tx_after;
+        const bool newGoesFirst = !p->tx_after || backElapsed < (uint32_t)(now - p->tx_after);
+        if (Throttle::deadlinePassedAt(now, backPacket->tx_after) && newGoesFirst) {
+            int32_t dt = -(int32_t)backElapsed;
             if (p->tx_after) {
                 LOG_WARN("Dropping late packet 0x%08x with TX delay %dms to make room in the TX queue for packet 0x%08x with "
                          "TX delay %ums",
