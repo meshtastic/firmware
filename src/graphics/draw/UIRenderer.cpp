@@ -546,7 +546,7 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
     if (currentResolution == ScreenResolution::High) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
-        display->drawXbm(x + 1, y + 1, imgGPS_width, imgGPS_height, imgGPS);
+        display->drawXbm(x + 1, y + 3, imgGPS_width, imgGPS_height, imgGPS);
     }
 
     display->drawString(x + textOffset, y, textString);

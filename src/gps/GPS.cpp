@@ -10,6 +10,7 @@
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "buzz.h"
 #include "concurrency/Periodic.h"
 #include "gps/RTC.h"
@@ -350,11 +351,13 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     uint8_t buffer[768] = {0};
     uint8_t b;
     int bytesRead = 0;
-    uint32_t startTimeout = millis() + waitMillis;
+    // Start stamp + interval rather than a stored deadline: same wrap-safety, but the full 49.7-day
+    // range instead of 24.8 days ahead, and Time::getMillis() makes the wait injectable.
+    const uint32_t waitStartMs = Time::getMillis();
 #if GPS_DEBUG
     std::string debugmsg = "";
 #endif
-    while (millis() < startTimeout) {
+    while (Throttle::isWithinTimespanMs(waitStartMs, waitMillis)) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
@@ -1389,11 +1392,7 @@ void GPS::down()
 #endif
 
         if (softsleepSupported) {
-            // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
-            // GPS_SOFTSLEEP? Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M
-            // and M10050 https://www.desmos.com/calculator/6gvjghoumr This is not particularly accurate, but probably an
-            // improvement over a single, fixed threshold
-            uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
+            uint32_t hardsleepThreshold = gpsHardsleepThresholdMs(predictedSearchDuration / 1000);
             LOG_DEBUG("gps_update_interval >= %us needed for hardsleep", hardsleepThreshold / 1000);
 
             // If update interval too short: softsleep (if supported by hardware)
@@ -1424,6 +1423,29 @@ void GPS::publishUpdate()
             positionModule->handleNewPosition();
         }
     }
+}
+
+/// Is a post-lock ephemeris hold currently in force? The `!= 0` is the "never armed" sentinel, which
+/// deadlinePassed() reads as passed for the first half of each wrap cycle and as ~24.8 days in the
+/// future for the second. No header: test_gps_fix_hold declares the prototypes itself.
+bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs)
+{
+    return fixHoldEnds != 0 && !Throttle::deadlinePassed(fixHoldEnds + threadIntervalMs);
+}
+
+/// Did an armed hold just expire? `!= 0` guards against negating fixHoldInForce() alone, which would
+/// call an unarmed hold "expired" every cycle. No grace interval: the deadline itself is go-down time.
+bool holdJustExpired(uint32_t fixHoldEnds)
+{
+    return fixHoldEnds != 0 && !fixHoldInForce(fixHoldEnds, 0);
+}
+
+/// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold in force" fires often, since
+/// every publish clears the hold, including ones that don't put the receiver back to sleep.
+bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds, uint32_t threadIntervalMs)
+{
+    // First lock of a cycle, first lock after the receiver was off, or nothing holding right now.
+    return !hasValidLocation || prevFixQual == 0 || !fixHoldInForce(fixHoldEnds, threadIntervalMs);
 }
 
 int32_t GPS::runOnce()
@@ -1526,13 +1548,15 @@ int32_t GPS::runOnce()
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
-            } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < millis()) {
+            } else if (shouldArmFixHold(hasValidLocation, prev_fixQual, fixHoldEnds, GPS_THREAD_INTERVAL)) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
-                fixHoldEnds = millis() + holdTime;
+                // Same clock the Throttle evaluation reads, and never the "no hold" sentinel.
+                const uint32_t holdEnds = Time::getMillis() + holdTime;
+                fixHoldEnds = holdEnds == 0 ? 1 : holdEnds;
                 LOG_DEBUG_GPS("Holding for %ums after lock", holdTime);
             }
         }
@@ -1550,7 +1574,7 @@ int32_t GPS::runOnce()
         }
 
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
-        bool holdExpired = (fixHoldEnds != 0 && millis() > fixHoldEnds);
+        bool holdExpired = holdJustExpired(fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
@@ -1567,7 +1591,7 @@ int32_t GPS::runOnce()
 
 #if GPS_DEBUG
         } else if (fixHoldEnds != 0) {
-            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
+            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - Time::getMillis(), p.sats_in_view);
 #endif
         }
     }

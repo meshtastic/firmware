@@ -50,8 +50,8 @@ ScanI2C::FoundDevice ScanI2C::firstMagnetometer() const
 
 ScanI2C::FoundDevice ScanI2C::firstAQI() const
 {
-    ScanI2C::DeviceType types[] = {PMSA003I, SEN5X, SCD4X, SFA30};
-    return firstOfOrNONE(4, types);
+    ScanI2C::DeviceType types[] = {PMSA003I, SEN5X, SEN6X, SCD4X, SFA30};
+    return firstOfOrNONE(5, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstRGBLED() const

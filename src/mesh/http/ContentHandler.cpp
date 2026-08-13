@@ -628,13 +628,18 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         return s;
     };
 
-    uint32_t *logArray;
-    logArray = airTime->airtimeReport(TX_LOG);
-    std::string txLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
-    logArray = airTime->airtimeReport(RX_LOG);
-    std::string rxLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
-    logArray = airTime->airtimeReport(RX_ALL_LOG);
-    std::string rxAllLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
+    // One constant sizes the buffer and the count, so they cannot drift. Buffer is per call, so a
+    // report that fails emits zeros rather than the previous type's data.
+    constexpr size_t periods = AirTime::getPeriodsToLog();
+    auto reportFor = [&](reportTypes reportType) {
+        uint32_t logArray[periods] = {0};
+        (void)airTime->airtimeReport(reportType, logArray, periods);
+        return arrayFromLog(logArray, (int)periods);
+    };
+
+    std::string txLog = reportFor(TX_LOG);
+    std::string rxLog = reportFor(RX_LOG);
+    std::string rxAllLog = reportFor(RX_ALL_LOG);
 
     String wifiIPString = WiFi.localIP().toString();
     std::string wifiIP = wifiIPString.c_str();

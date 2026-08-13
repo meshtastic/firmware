@@ -151,6 +151,16 @@ lint:
     - linters: [ascii-dash]
       paths:
         - src/graphics/fonts/**
+    # millis()-wraparound tests pin dense clusters of hex boundary constants
+    # (0xFFFFFF00u and neighbors). trufflehog's Lob detector stitches nearby
+    # hex literals into one candidate string and the result happens to match
+    # a Lob API key shape. Not secrets - deterministic test fixtures for the
+    # 32-bit rollover.
+    - linters: [trufflehog]
+      paths:
+        - test/test_airtime/test_main.cpp
+        - test/test_throttle/test_main.cpp
+        - test/test_uptime_clock/test_main.cpp
 runtimes:
   enabled:
     - python@3.14.4
