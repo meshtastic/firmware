@@ -545,12 +545,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             packetPool.release(p_decoded);
             p->channel = 0; // Reset the channel to 0, so we don't use the failing hash again
             abortSendAndNak(encodeResult, p);
-            // abortSendAndNak() has already released p, so we must never hand back a value the
-            // caller reads as ERRNO_SHOULD_RELEASE - it would release the packet a second time.
-            // meshtastic_Routing_Error and ErrorCode share this one return channel and their
-            // numbering overlaps (PKI_UNKNOWN_PUBKEY == ERRNO_SHOULD_RELEASE == 35,
-            // PKI_FAILED == ERRNO_DISABLED == 34, BAD_REQUEST == ERRNO_UNKNOWN == 32).
-            // ERRNO_SHOULD_RELEASE is the only one any caller actually compares against.
+            // abortSendAndNak() already released p, and Routing_Error shares this return channel with
+            // ErrorCode: PKI_UNKNOWN_PUBKEY is 35, so returning it raw would free the packet twice.
             static_assert((int)meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY == ERRNO_SHOULD_RELEASE,
                           "Routing_Error/ERRNO overlap changed; re-check the guard below");
             if ((int)encodeResult == ERRNO_SHOULD_RELEASE)
