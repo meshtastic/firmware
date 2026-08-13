@@ -174,6 +174,7 @@ class AuthPipelineRouter : public ReliableRouter
         return entry ? entry->nextTxMsec : 0;
     }
     size_t pendingCount() const { return pending.size(); }
+    void sniff(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) { ReliableRouter::sniffReceived(p, c); }
     void clearPending()
     {
         for (auto &entry : pending)
@@ -182,10 +183,38 @@ class AuthPipelineRouter : public ReliableRouter
     }
 };
 
+// Counting the call is not enough to model sendAckNak(). In the firmware it continues into
+// router->sendLocal(), and a NAK addressed to ourselves reaches deliverLocal(), which delivers inline
+// whenever handleDepth is 0. ReliableRouter::sniffReceived() then acts on that NAK while the original
+// caller is still mid-send. A stub that only counts cannot show whether a pending record survives
+// that, so drive the loopback for error NAKs the way the firmware does.
 class AuthPipelineRoutingModule : public RoutingModule
 {
   public:
-    void sendAckNak(meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false) override { ackCalls++; }
+    AuthPipelineRouter *target = nullptr;
+
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t = 0,
+                    bool = false) override
+    {
+        ackCalls++;
+        if (target == nullptr || err == meshtastic_Routing_Error_NONE)
+            return;
+
+        meshtastic_MeshPacket nak = meshtastic_MeshPacket_init_zero;
+        nak.from = to;
+        nak.to = to;
+        nak.id = idFrom ^ 0x3C3C3C3C;
+        nak.channel = chIndex;
+        nak.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        nak.decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+        nak.decoded.request_id = idFrom;
+
+        meshtastic_Routing routing = meshtastic_Routing_init_zero;
+        routing.error_reason = err;
+
+        target->sniff(&nak, &routing);
+    }
+
     uint32_t ackCalls = 0;
 };
 
@@ -1916,6 +1945,7 @@ void setup()
     pipelineRouter->addInterface(std::move(pipelineRadioOwner));
     router = pipelineRouter;
     routingModule = pipelineRouting = new AuthPipelineRoutingModule();
+    pipelineRouting->target = pipelineRouter; // deliver NAKs back into the router, as sendLocal() does
     pipelineModule = new AuthPipelineModule();
     service = pipelineService = new MeshService();
     mqtt = pipelineMqtt = new AuthPipelineMqtt();
