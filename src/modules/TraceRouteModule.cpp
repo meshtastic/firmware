@@ -307,8 +307,14 @@ void TraceRouteModule::updateNextHops(const meshtastic_MeshPacket &p, meshtastic
 
         // The route array is unauthenticated payload, so only learn from it when the node it names as our
         // next hop is the one that actually relayed this packet to us. Otherwise a forged response could
-        // point any node's next_hop anywhere. relay_node is 0 for MQTT-sourced packets, which cannot
-        // corroborate an RF route either.
+        // point any node's next_hop anywhere. relay_node only corroborates an RF route when the packet
+        // actually arrived over RF: MQTT ingress zeroes it (so the NO_RELAY_NODE test below catches that),
+        // but UDP multicast ingress preserves the on-wire value while clearing pki_encrypted, rx_snr and
+        // rx_rssi, so a LAN peer's reply would otherwise satisfy this check with no RF evidence at all.
+        if (p.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+            LOG_DEBUG("Ignore traceroute next-hop 0x%02x: non-RF transport %d", nextHopByte, p.transport_mechanism);
+            return;
+        }
         if (p.relay_node == NO_RELAY_NODE || nextHopByte != p.relay_node) {
             LOG_DEBUG("Ignore traceroute next-hop 0x%02x, relayed by 0x%02x", nextHopByte, p.relay_node);
             return;
