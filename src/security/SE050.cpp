@@ -550,12 +550,22 @@ int SE050::secureApdu(const uint8_t header[4], const uint8_t *data, int dataLen,
         return -1;
     }
 
-    // Response is [encrypted data][R-MAC 8][SW 2]. A short frame means an error
-    // was returned without a MAC - the card processed the command, but without an R-MAC
-    // to check there's no way to confirm the ICV really stayed in step.
+    // Response is [encrypted data][R-MAC 8][SW 2]. A short frame is the card answering with a
+    // bare status word and no R-MAC, which is what it does for an ordinary application error:
+    // the 6985 from the idempotent setup steps in identitySession() is one, and so is the failed
+    // ReadObject that tells identityEnsure() there is no identity on the chip yet. Both of those
+    // commands did travel the secure channel - the card accepted the C-MAC and advanced its
+    // counter in step with ours - so the channel is still good and the caller only needs the SW.
+    // Closing here regardless made every idempotent step poison the session it was preparing.
+    //
+    // Only a response with no status word at all, or one saying the secure messaging itself was
+    // refused, can leave the two sides disagreeing about the counter.
     if (n < 10) {
-        scp.open = sessionActive = false;
         *sw = statusWord(r, n);
+        if (n < 2 || *sw == 0x6982 || *sw == 0x6987 || *sw == 0x6988) {
+            LOG_WARN("SE050: secure channel closed after a %04x response, it will be reopened", *sw);
+            scp.open = sessionActive = false;
+        }
         return n >= 2 ? 0 : -1;
     }
     *sw = (uint16_t)((r[n - 2] << 8) | r[n - 1]);
