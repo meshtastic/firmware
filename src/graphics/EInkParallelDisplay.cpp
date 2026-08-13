@@ -6,6 +6,7 @@
 #include "variant.h"
 #include <Arduino.h>
 #include <atomic>
+#include <new>
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,7 +43,9 @@ EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRot
     // allocate dirty pixel buffer same size as epaper buffers (rowBytes * height)
     size_t rowBytes = (this->displayWidth + 7) / 8;
     dirtyPixelsSize = rowBytes * this->displayHeight;
-    dirtyPixels = std::make_unique<uint8_t[]>(dirtyPixelsSize);
+    // nothrow + value-init keeps the old calloc semantics: zeroed buffer, and nullptr on OOM
+    // (the render paths null-check) instead of a bad_alloc crash
+    dirtyPixels.reset(new (std::nothrow) uint8_t[dirtyPixelsSize]());
     ghostPixelCount = 0;
 #endif
 }

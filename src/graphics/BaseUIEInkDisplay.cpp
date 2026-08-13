@@ -22,7 +22,8 @@ BaseUIEInkDisplay::BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation) : 
     // Panel-native row-major buffer
     panelRowBytes = ((driver->width - 1) / 8) + 1;
     panelBufferSize = panelRowBytes * driver->height;
-    panelBuffer = std::make_unique<uint8_t[]>(panelBufferSize);
+    // plain new (no value-init): the memset below fills the buffer anyway
+    panelBuffer.reset(new uint8_t[panelBufferSize]);
     memset(panelBuffer.get(), 0xFF, panelBufferSize); // All white
 }
 
