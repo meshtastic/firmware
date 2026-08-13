@@ -183,11 +183,8 @@ class AuthPipelineRouter : public ReliableRouter
     }
 };
 
-// Counting the call is not enough to model sendAckNak(). In the firmware it continues into
-// router->sendLocal(), and a NAK addressed to ourselves reaches deliverLocal(), which delivers inline
-// whenever handleDepth is 0. ReliableRouter::sniffReceived() then acts on that NAK while the original
-// caller is still mid-send. A stub that only counts cannot show whether a pending record survives
-// that, so drive the loopback for error NAKs the way the firmware does.
+// A stub that only counts the call cannot show whether a pending record survives, since the real
+// sendAckNak() loops a self-addressed NAK back into sniffReceived() inline. So drive that loopback.
 class AuthPipelineRoutingModule : public RoutingModule
 {
   public:

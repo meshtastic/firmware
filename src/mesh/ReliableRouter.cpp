@@ -171,12 +171,8 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 if (!isBroadcast(getFrom(p)))
                     noteRouteSuccess(getFrom(p), millis());
             } else if (c && c->error_reason == meshtastic_Routing_Error_DUTY_CYCLE_LIMIT && isFromUs(p)) {
-                // Our own duty-cycle rejection, looped back. Router::send() aborts the packet and NAKs
-                // it to us, and deliverLocal() runs that inline because doRetransmissions() and
-                // ReliableRouter::send() both run with handleDepth == 0. ReliableRouter::send()
-                // deliberately keeps the pending record for this error so the retry can go out once
-                // the window clears; erasing it here would defeat that before send() ever inspects
-                // its result. The client still gets the NAK, it just is not the final word.
+                // Our own duty-cycle rejection, looped straight back inline. send() keeps the pending
+                // record for this error on purpose, so erasing it here would undo that carve-out.
                 LOG_DEBUG("Duty cycle NAK for 0x%08x, keep retransmissions", nakId);
             } else {
                 stopRetransmission(p->to, nakId);
