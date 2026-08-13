@@ -606,7 +606,8 @@ static void test_localReplyToSelf_isDeliveredToPhone()
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size()); // nothing went toward the radio
 }
 
-// handleFromRadio() is private to RoutingModule; MeshService befriends this under PIO_UNIT_TESTING.
+// handleFromRadio() is private to MeshService, which befriends RoutingModule and, under
+// PIO_UNIT_TESTING, this seam.
 class MeshServicePhoneDeliveryTest
 {
   public:
@@ -649,6 +650,72 @@ static void test_handleFromRadio_ownPacketIsNotEchoedToPhone()
     ours.id = 0x5E1F0002;
     MeshServicePhoneDeliveryTest::deliver(ours);
     TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
+// A packet from us *addressed to us* is locally-generated feedback, not an echo, and must still be
+// delivered - suppressing it would silently drop every ACK/NAK the client relies on.
+static void test_handleFromRadio_ownPacketAddressedToUsReachesPhone()
+{
+    meshtastic_MeshPacket ack = meshtastic_MeshPacket_init_zero;
+    ack.from = LOCAL_NODE;
+    ack.to = LOCAL_NODE;
+    ack.id = 0x5E1F0003;
+    ack.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    ack.decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+    ack.decoded.request_id = 0x0C0FFEE0;
+
+    MeshServicePhoneDeliveryTest::deliver(ack);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0x0C0FFEE0, toPhone->decoded.request_id);
+    mockService->releaseToPool(toPhone);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
+// sendAckNak stamps from == our nodenum and to == us, and sendLocal defaults to RX_SRC_RADIO, so the
+// loopback gate never applies and only handleFromRadio's filter gates the implicit ACK / NAK path.
+static void test_localAckNak_reachesPhoneViaRealRoutingModule()
+{
+    RoutingModule *savedRoutingModule = routingModule;
+    auto *realRoutingModule = new RoutingModule(); // registers itself in MeshModule::modules
+    routingModule = realRoutingModule;
+
+    realRoutingModule->sendAckNak(meshtastic_Routing_Error_NONE, LOCAL_NODE, 0xFEEDBEEF, 0);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, toPhone->decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0xFEEDBEEF, toPhone->decoded.request_id);
+    TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->to);
+    TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->from);
+    mockService->releaseToPool(toPhone);
+
+    routingModule = savedRoutingModule;
+    delete realRoutingModule;
+}
+
+// The mirror of the above: a broadcast we originated, heard back off the mesh, must not reach the
+// phone even though it travels the same RoutingModule path.
+static void test_ownBroadcastEcho_isDroppedByRealRoutingModule()
+{
+    RoutingModule *savedRoutingModule = routingModule;
+    auto *realRoutingModule = new RoutingModule();
+    routingModule = realRoutingModule;
+
+    meshtastic_MeshPacket echo = meshtastic_MeshPacket_init_zero;
+    echo.from = LOCAL_NODE;
+    echo.to = NODENUM_BROADCAST;
+    echo.id = 0x5E1F0004;
+    echo.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    echo.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    MeshModule::callModules(echo, RX_SRC_RADIO);
+
+    TEST_ASSERT_NULL(mockService->getForPhone());
+
+    routingModule = savedRoutingModule;
+    delete realRoutingModule;
 }
 
 // Full loop: a phone-originated want_response request (from == 0, RX_SRC_USER) dispatched
@@ -783,6 +850,9 @@ void setup()
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
     RUN_TEST(test_handleFromRadio_remotePacketReachesPhone);
     RUN_TEST(test_handleFromRadio_ownPacketIsNotEchoedToPhone);
+    RUN_TEST(test_handleFromRadio_ownPacketAddressedToUsReachesPhone);
+    RUN_TEST(test_localAckNak_reachesPhoneViaRealRoutingModule);
+    RUN_TEST(test_ownBroadcastEcho_isDroppedByRealRoutingModule);
     RUN_TEST(test_phoneRequest_replyReachesPhone);
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
