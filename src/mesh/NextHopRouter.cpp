@@ -53,6 +53,11 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
 {
+    // numRetransmissions is a total attempt count including the send the caller has already done, so
+    // zero has no meaning here and would wrap the subtraction below to 255, giving the record a
+    // near-endless retry budget. Every caller passes a constant of at least 2.
+    assert(numRetransmissions > 0);
+
     packet = p;
     this->numRetransmissions = numRetransmissions - 1; // We subtract one, because we assume the user just did the first send
 }
