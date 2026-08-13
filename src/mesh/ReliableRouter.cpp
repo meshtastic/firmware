@@ -69,12 +69,24 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Generate implicit ack");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
+            // This call already ends the retransmissions, so nothing follows it here. sendAckNak()
+            // reaches router->sendLocal(), and the ACK is addressed to us, so deliverLocal() takes
+            // it. deliverLocal() only defers when handleDepth > 0, and we are called from
+            // perhapsHandleReceived() before handleReceived() raises it, so the delivery runs inline
+            // on this stack. sniffReceived() then sees an ACK for this packet's id and calls
+            // stopRetransmission() itself.
+            //
+            // There used to be a `if (transport_mechanism == TRANSPORT_LORA) stopRetransmission(key)`
+            // below, meant to keep retrying when a rebroadcast reached us by some other transport.
+            // It could not work: by the time it ran the record was already gone, whatever the
+            // transport. It was also unreachable in the sense that mattered, since no non-LoRa
+            // transport delivers our own packets back to this function - MQTT returns early for
+            // self-origin envelopes and UDP multicast drops them on ingress.
+            //
+            // If a transport is ever added that can land here, that intent needs implementing where
+            // it can take effect, i.e. as an exemption in sniffReceived() keyed off the ACK's own
+            // transport_mechanism, which is the pattern MQTT's implicit ACK already uses.
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
-
-            // Only stop retransmissions if the rebroadcast came via LoRa
-            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-                stopRetransmission(key);
-            }
         } else {
             LOG_DEBUG("Didn't find pending packet");
         }
