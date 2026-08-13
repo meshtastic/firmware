@@ -220,6 +220,14 @@ So: `exit(UNITY_END())` in **every** `setup()` branch, including the `#else` of 
 
 Wrap the entire test body in the same `#if` guard the module uses (e.g. `#if HAS_VARIABLE_HOPS`, `#if !MESHTASTIC_EXCLUDE_GPS`). When the feature is disabled, the `#else` branch produces an empty passing suite.
 
+### 5. Don't Name a Test Exactly 35 Characters Past `test_`
+
+Trunk runs `trufflehog`, whose Lob detector matches `test_` followed by exactly 35 further identifier characters and reports the function name as a verified secret. It only fires on files a PR touches, so an offending name can sit on `develop` for months and then fail CI in an unrelated change. Longer or shorter both pass - only 35 matches. Check with:
+
+```sh
+grep -oE '\b(test|live)_[a-zA-Z0-9_]{35}\b' test/<suite>/test_main.cpp
+```
+
 ## Common Patterns
 
 ### MockNodeDB

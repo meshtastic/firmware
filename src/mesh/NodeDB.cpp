@@ -2363,6 +2363,17 @@ void NodeDB::loadFromDisk()
     {
         concurrency::LockGuard guard(&satelliteMutex);
         armNodeDatabaseDecodeTargets();
+        // Where a satellite DB is compiled out there is no map to arm, so the decode callback falls
+        // through to the vector and push_back()s into it. Reset those the same way the save path
+        // does on its way out, so no build can carry entries from one load into the next.
+        nodeDatabase.positions.clear();
+        nodeDatabase.positions.shrink_to_fit();
+        nodeDatabase.telemetry.clear();
+        nodeDatabase.telemetry.shrink_to_fit();
+        nodeDatabase.environment.clear();
+        nodeDatabase.environment.shrink_to_fit();
+        nodeDatabase.status.clear();
+        nodeDatabase.status.shrink_to_fit();
     }
     struct Disarm {
         NodeDB &self;

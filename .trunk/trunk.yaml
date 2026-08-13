@@ -161,15 +161,6 @@ lint:
         - test/test_airtime/test_main.cpp
         - test/test_throttle/test_main.cpp
         - test/test_uptime_clock/test_main.cpp
-    # Same detector, different trigger: Lob's key shape is a short word, an
-    # underscore and exactly 35 further name characters, so any test function
-    # whose name runs 35 characters past "test_" matches. Two in this file do -
-    # naming them here would trip the detector on this file too. The reported
-    # "secret" is the function name itself, and the alternative is padding
-    # identifiers to dodge a character count.
-    - linters: [trufflehog]
-      paths:
-        - test/test_nodedb_blocked/test_main.cpp
 runtimes:
   enabled:
     - python@3.14.4

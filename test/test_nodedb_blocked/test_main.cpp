@@ -264,7 +264,7 @@ static void test_protectedCap_refusesBeyondLimit(void)
 
 // removeNodeByNum() compacts survivors down and clears the slots that leaves free. A full
 // store with no matching node frees none, so there is nothing past the last node to clear.
-static void test_removeNodeByNum_absentNodeOnFullDb(void)
+static void test_removeNodeByNum_absentNodeFullDb(void)
 {
     db->seedSelf();
     for (int i = 1; i < MAX_NUM_NODES; i++) // fill to MAX_NUM_NODES total (incl. self)
@@ -281,7 +281,7 @@ static void test_removeNodeByNum_absentNodeOnFullDb(void)
 
 // Control for the above: a matching node on a full store is still removed, the survivors
 // compact down, and the freed tail slot is cleared.
-static void test_removeNodeByNum_presentNodeOnFullDb(void)
+static void test_removeNodeByNum_presentNodeFullDb(void)
 {
     db->seedSelf();
     for (int i = 1; i < MAX_NUM_NODES; i++)
@@ -316,7 +316,7 @@ static void test_removeNodeByNum_presentNodeOnFullDb(void)
 // installDefaultNodeDatabase() - so the reload decoded the real store on top of
 // MAX_NUM_NODES zeroed rows, went over cap, and nodeDBSelfCare() truncated and rewrote
 // nodes.proto with cleanupMeshDB() never running on that path.
-static void test_saveThenLoad_doesNotAccumulateNodes(void)
+static void test_saveThenLoad_doesNotAccumulate(void)
 {
     db->clearHot();
     db->seedSelf();
@@ -421,9 +421,9 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_prefersCurrentBootStampOverPost2038Epoch);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
-    RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
-    RUN_TEST(test_removeNodeByNum_presentNodeOnFullDb);
-    RUN_TEST(test_saveThenLoad_doesNotAccumulateNodes);
+    RUN_TEST(test_removeNodeByNum_absentNodeFullDb);
+    RUN_TEST(test_removeNodeByNum_presentNodeFullDb);
+    RUN_TEST(test_saveThenLoad_doesNotAccumulate);
     RUN_TEST(test_loadFromDisk_absentFileDoesNotInheritStaleNodes);
     RUN_TEST(test_getOrCreateMeshNode_refusesWhenFullAndEveryCandidateProtected);
     RUN_TEST(test_getOrCreateMeshNode_admitsAtCapWhenProtectedLimitHonoured);
