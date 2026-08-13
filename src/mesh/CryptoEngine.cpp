@@ -403,11 +403,8 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    // Allocated once on first use instead of per packet: this runs for every encrypted send and
-    // every channel decrypt attempt, and the churn fragments small heaps. Reuse is safe for the
-    // same reason the static scratch buffer below is - all callers serialize under cryptLock -
-    // and setKey/setIV reinitialize the full cipher state each call. Lazy heap singletons (not
-    // static objects) so platforms that override this method never reserve the RAM.
+    // Reused instead of reallocated per packet: safe because all callers hold cryptLock and setKey/setIV reset the
+    // full cipher state. Lazy so overriding platforms reserve nothing; key material now lives until the next call.
     static CTR<AES128> *ctr128 = nullptr;
     static CTR<AES256> *ctr256 = nullptr;
     CTRCommon *ctr;
