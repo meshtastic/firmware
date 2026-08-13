@@ -287,15 +287,8 @@ class MockRoutingModule : public RoutingModule
     std::list<std::tuple<meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t, bool>> ackNaks;
 };
 
-// MockRoutingModule records sendAckNak() and stops. In the firmware the call does not stop there:
-// Router::sendAckNak() -> RoutingModule::sendAckNak() -> router->sendLocal(), and for a NAK addressed
-// to ourselves sendLocal() reaches deliverLocal(), which only defers when handleDepth > 0.
-// doRetransmissions() runs from runOnce() rather than from inside handleReceived(), so handleDepth is
-// 0 and the delivery happens inline, on this stack. ReliableRouter::sniffReceived() then calls
-// stopRetransmission() for the NAK's request_id, which erases the record doRetransmissions() is in
-// the middle of using.
-//
-// This module reproduces that re-entrancy so the lifetime bug is reachable from a native test.
+// MockRoutingModule records sendAckNak() and stops, but the real one loops a self-addressed NAK back
+// into sniffReceived() inline. Reproduce that so the lifetime bug is reachable from a native test.
 class LoopbackRoutingModule : public RoutingModule
 {
   public:
@@ -944,11 +937,8 @@ void test_early_flood_preserves_fresh_verified_route(void)
     TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
 }
 
-// doRetransmissions() must survive its own sendAckNak() re-entering the router and erasing the
-// record it is working on. Seeded with one attempt the record sits at numRetransmissions == 0, so the
-// first due pass takes the MAX_RETRANSMIT branch, emits a NAK, and the loopback deletes the entry
-// before control returns. Reading the map node afterwards is a use-after-free, which ASAN reports on
-// the native-macos-debug / coverage environments.
+// Seeded with one attempt, the first due pass NAKs and the loopback deletes the entry before control
+// returns, so anything doRetransmissions() reads afterwards is a use-after-free. ASAN catches it.
 void test_retransmissionSurvivesLoopbackErasingItsOwnRecord(void)
 {
     LoopbackRoutingModule loopback;
