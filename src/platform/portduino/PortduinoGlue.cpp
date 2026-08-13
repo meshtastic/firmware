@@ -845,10 +845,10 @@ int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     std::cout << "Initializing " << gpio_name << " on chip " << gpioChipName << std::endl;
     try {
-        GPIOPin *csPin;
-        csPin = new LinuxGPIOPin(pinNum, gpioChipName.c_str(), line, gpio_name.c_str());
+        auto csPin = std::make_unique<LinuxGPIOPin>(pinNum, gpioChipName.c_str(), line, gpio_name.c_str());
         csPin->setSilent();
-        gpioBind(csPin);
+        gpioBind(csPin.get());
+        csPin.release(); // owned by the gpio table from here on
         return ERRNO_OK;
     } catch (...) {
         const std::type_info *t = abi::__cxa_current_exception_type();

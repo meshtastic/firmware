@@ -22,6 +22,7 @@
 // compiled out unless both PKI and XEdDSA are enabled (e.g. stm32 sets MESHTASTIC_EXCLUDE_XEDDSA).
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
+#include "UptimeClock.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshRadio.h"
@@ -421,6 +422,16 @@ void tearDown(void)
     delete mockNodeDB;
     mockNodeDB = nullptr;
     nodeDB = nullptr;
+
+    // Restore globals here, not at the end of a test body: an assertion aborts the body, and these
+    // would otherwise leak into every later case. The injected clock is the one the N8-N11
+    // suppression-window cases drive; the region and TX bucket are C14's duty-cycle setup.
+    Time::useRealClock();
+    Time::resetMonotonicForTests();
+    if (airTime)
+        airTime->utilizationTX[0] = 0;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
 }
 
 // ===========================================================================
@@ -1073,6 +1084,7 @@ void test_B13_licensed_port_and_destination_signing_matrix(void)
 class NodeInfoTestShim : public NodeInfoModule
 {
   public:
+    using MeshModule::currentRequest; // allocReply() only suppresses while a request is in flight
     using NodeInfoModule::allocReply;
     using NodeInfoModule::handleReceivedProtobuf;
 };
@@ -1221,14 +1233,18 @@ void test_C3_invalid_repeated_packet_cannot_ack_or_change_retry_state(void)
     prior.hop_start = 2;
     prior.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pipelineRouter->remember(&prior);
-    pipelineRouter->addPending(prior, UINT32_MAX);
+    // "Far future, so no retransmission is due." Must be a representable future time, not
+    // UINT32_MAX: doRetransmissions() compares with an unsigned half-range test, under which
+    // UINT32_MAX is ~1ms in the *past* and would fire a retransmit and rewrite nextTxMsec.
+    const uint32_t notDueTxMsec = Time::getMillis() + 3600000UL;
+    pipelineRouter->addPending(prior, notDueTxMsec);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(LOCAL_NODE)->last_heard;
 
     meshtastic_MeshPacket invalid = makeSignedWirePacket(LOCAL_NODE, NODENUM_BROADCAST, id, 2, 2, 0, 0x34, false);
     runPipelineIngress(invalid);
     assertNoRejectedPipelineEffects(LOCAL_NODE, lastHeard);
     TEST_ASSERT_EQUAL(1, pipelineRouter->pendingCount());
-    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, pipelineRouter->pendingNextTx(LOCAL_NODE, id));
+    TEST_ASSERT_EQUAL_UINT32(notDueTxMsec, pipelineRouter->pendingNextTx(LOCAL_NODE, id));
 }
 
 void test_C4_invalid_fallback_packet_cannot_relay(void)
@@ -1567,6 +1583,113 @@ void test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name(void)
     TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
     TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE),
                                      "non-signer identity learning must be unaffected");
+}
+
+// ---------------------------------------------------------------------------
+// N8-N11: the 12h reply-suppression window.
+//
+// The stamp is uptime SECONDS, not milliseconds: entries live for as long as the node stays in the
+// DB, so a 32-bit millisecond stamp aliased back into the window once uptime passed 49.7 days and
+// suppressed a legitimate reply for up to 12h. Driven through Time::setTestMillis() rather than by
+// waiting.
+// ---------------------------------------------------------------------------
+
+static constexpr uint32_t kSuppressSecs = 12 * 60 * 60;
+
+// Deliver a NodeInfo request from `sender` and report whether we would reply to it.
+static bool wouldReplyToNodeInfoRequest(NodeInfoTestShim &shim, NodeNum sender)
+{
+    meshtastic_MeshPacket mp = makeDecoded(sender, NODENUM_BROADCAST, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.decoded.want_response = true;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+
+    shim.handleReceivedProtobuf(mp, &user);
+
+    NodeInfoTestShim::currentRequest = &mp;
+    meshtastic_MeshPacket *reply = shim.allocReply();
+    NodeInfoTestShim::currentRequest = nullptr;
+
+    if (reply) {
+        packetPool.release(reply);
+        return true;
+    }
+    return false;
+}
+
+// Step the injected clock the way the main loop does - advance, then publish the wrap carry.
+static void advanceUptime(uint32_t deltaMs)
+{
+    Time::advanceTestMillis(deltaMs);
+    Time::serviceMonotonic();
+}
+
+void test_N8_second_request_inside_the_window_is_suppressed(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(60 * 1000);
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "first request must be answered");
+
+    advanceUptime(60 * 60 * 1000); // 1h later, well inside the 12h window
+    TEST_ASSERT_FALSE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "repeat request inside 12h must be suppressed");
+}
+
+void test_N9_request_after_the_window_is_answered(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(60 * 1000);
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+
+    advanceUptime((kSuppressSecs + 60) * 1000); // 12h + a minute
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "request after 12h must be answered");
+}
+
+// The regression. A stamp is only aliased by a counter that wraps underneath it, so the failure
+// needs a *full* 2^32 ms of uptime to elapse, not merely a crossing of the boundary: with 32-bit
+// millisecond stamps `now - stamp` then computes as 0 and the sender looks like it was answered
+// this instant. Uptime seconds do not wrap for 136 years, so the entry reads as ~49.7 days old.
+void test_N10_stale_stamp_does_not_alias_after_a_full_wrap(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(0x80000000u); // ~24.8 days of uptime
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+
+    // A whole millis() cycle, in two serviced halves - one publish per window is the contract.
+    advanceUptime(0x80000000u);
+    advanceUptime(0x80000000u);
+
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                             "a stamp one full wrap old must read as ~49.7 days, not as this instant");
+}
+
+// Suppression must still behave normally either side of the boundary: still suppressing inside the
+// window, and answering again once 12h have passed, with the stamp and the reading on opposite
+// sides of the wrap.
+void test_N11_window_still_applies_across_the_wrap(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(0xFFFF0000u); // just short of the wrap
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+
+    advanceUptime(0x20000u); // ~131s later, and now past the wrap
+    TEST_ASSERT_FALSE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                              "the window must still bite when the stamp sits the other side of the wrap");
+
+    advanceUptime((kSuppressSecs + 60) * 1000);
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                             "and must still release once 12h have passed across the wrap");
 }
 
 void test_L1_licensed_nodeinfo_publishes_public_key(void)
@@ -1984,6 +2107,10 @@ void setup()
     RUN_TEST(test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
     RUN_TEST(test_N6_signed_unicast_nodeinfo_from_signer_changes_name);
     RUN_TEST(test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name);
+    RUN_TEST(test_N8_second_request_inside_the_window_is_suppressed);
+    RUN_TEST(test_N9_request_after_the_window_is_answered);
+    RUN_TEST(test_N10_stale_stamp_does_not_alias_after_a_full_wrap);
+    RUN_TEST(test_N11_window_still_applies_across_the_wrap);
 
     printf("\n=== Group L: licensed identity and plaintext signing ===\n");
     RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);
