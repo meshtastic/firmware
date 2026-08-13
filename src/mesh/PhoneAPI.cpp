@@ -1842,6 +1842,10 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 #endif
         if (p.id > 0 && wasSeenRecently(p.id)) {
             LOG_DEBUG("Ignore phone packet, seen recently");
+            if (router->isDeferredDm(p.id)) {
+                meshtastic_QueueStatus qs = router->getQueueStatus();
+                service->sendQueueStatusToPhone(qs, ERRNO_OK, p.id, meshtastic_QueueStatus_State_KEY_EXCHANGE);
+            }
             return false;
         }
 
@@ -1872,7 +1876,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
                Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], TWO_SECONDS_MS)) {
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         meshtastic_QueueStatus qs = router->getQueueStatus();
-        service->sendQueueStatusToPhone(qs, 0, p.id);
+        service->sendQueueStatusToPhone(qs, meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, p.id);
         service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &p);
         // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
         return false;

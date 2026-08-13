@@ -660,6 +660,16 @@ typedef enum _meshtastic_LogRecord_Level {
     meshtastic_LogRecord_Level_TRACE = 5
 } meshtastic_LogRecord_Level;
 
+/* Lifecycle state for the mesh packet identified by mesh_packet_id.
+ Clients that do not recognize this field should retain their existing
+ queue-status behavior. */
+typedef enum _meshtastic_QueueStatus_State {
+    meshtastic_QueueStatus_State_STATE_UNSPECIFIED = 0,
+    /* The device is holding a direct message while it requests the
+ recipient's NodeInfo to obtain a public encryption key. */
+    meshtastic_QueueStatus_State_KEY_EXCHANGE = 1
+} meshtastic_QueueStatus_State;
+
 typedef enum _meshtastic_LockdownStatus_State {
     /* Default; should not be sent. */
     meshtastic_LockdownStatus_State_STATE_UNSPECIFIED = 0,
@@ -1257,6 +1267,8 @@ typedef struct _meshtastic_QueueStatus {
     uint8_t maxlen;
     /* What was mesh packet id that generated this response? */
     uint32_t mesh_packet_id;
+    /* Current lifecycle state for mesh_packet_id */
+    meshtastic_QueueStatus_State state;
 } meshtastic_QueueStatus;
 
 /* Lockdown state report from firmware to client (for hardened builds
@@ -1267,15 +1279,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        — storage already unlocked, client must auth
-   "token_missing"     — no boot token on flash
-   "token_expired"     — boot token wall-clock TTL elapsed
-   "token_boots_zero"  — boot token boot-count TTL exhausted
-   "token_hmac_fail"   — token tampered or wrong device
-   "token_dek_fail"    — token DEK decrypt failed
-   "token_wrong_size"  — token file corrupted
-   "token_bad_magic"   — token file corrupted
-   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
+   "needs_auth"        - storage already unlocked, client must auth
+   "token_missing"     - no boot token on flash
+   "token_expired"     - boot token wall-clock TTL elapsed
+   "token_boots_zero"  - boot token boot-count TTL exhausted
+   "token_hmac_fail"   - token tampered or wrong device
+   "token_dek_fail"    - token DEK decrypt failed
+   "token_wrong_size"  - token file corrupted
+   "token_bad_magic"   - token file corrupted
+   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];
@@ -1667,6 +1679,10 @@ extern "C" {
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
+#define _meshtastic_QueueStatus_State_MIN meshtastic_QueueStatus_State_STATE_UNSPECIFIED
+#define _meshtastic_QueueStatus_State_MAX meshtastic_QueueStatus_State_KEY_EXCHANGE
+#define _meshtastic_QueueStatus_State_ARRAYSIZE ((meshtastic_QueueStatus_State)(meshtastic_QueueStatus_State_KEY_EXCHANGE+1))
+
 #define _meshtastic_LockdownStatus_State_MIN meshtastic_LockdownStatus_State_STATE_UNSPECIFIED
 #define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_DISABLED
 #define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_DISABLED+1))
@@ -1700,6 +1716,7 @@ extern "C" {
 
 #define meshtastic_LogRecord_level_ENUMTYPE meshtastic_LogRecord_Level
 
+#define meshtastic_QueueStatus_state_ENUMTYPE meshtastic_QueueStatus_State
 
 
 #define meshtastic_LockdownStatus_state_ENUMTYPE meshtastic_LockdownStatus_State
@@ -1749,7 +1766,7 @@ extern "C" {
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
-#define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
+#define meshtastic_QueueStatus_init_default      {0, 0, 0, 0, _meshtastic_QueueStatus_State_MIN}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_LockdownStatus_init_default   {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_default {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_default}}
@@ -1788,7 +1805,7 @@ extern "C" {
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
-#define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
+#define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0, _meshtastic_QueueStatus_State_MIN}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_LockdownStatus_init_zero      {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_zero  {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_zero}}
@@ -1958,6 +1975,7 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_QueueStatus_state_tag         5
 #define meshtastic_LockdownStatus_state_tag      1
 #define meshtastic_LockdownStatus_lock_reason_tag 2
 #define meshtastic_LockdownStatus_boots_remaining_tag 3
@@ -2268,7 +2286,8 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 X(a, STATIC,   SINGULAR, INT32,    res,               1) \
 X(a, STATIC,   SINGULAR, UINT32,   free,              2) \
 X(a, STATIC,   SINGULAR, UINT32,   maxlen,            3) \
-X(a, STATIC,   SINGULAR, UINT32,   mesh_packet_id,    4)
+X(a, STATIC,   SINGULAR, UINT32,   mesh_packet_id,    4) \
+X(a, STATIC,   SINGULAR, UENUM,    state,             5)
 #define meshtastic_QueueStatus_CALLBACK NULL
 #define meshtastic_QueueStatus_DEFAULT NULL
 
@@ -2597,7 +2616,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_NodeInfo_size                 327
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
-#define meshtastic_QueueStatus_size              23
+#define meshtastic_QueueStatus_size              25
 #define meshtastic_RemoteShell_size              253
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259

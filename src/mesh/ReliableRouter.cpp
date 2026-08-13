@@ -22,6 +22,26 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         return meshtastic_Routing_Error_NOT_AUTHORIZED;
     }
 
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    // Router owns delayed DMs before creating retransmission state, otherwise a stale copy can
+    // later emit MAX_RETRANSMIT. First request that a peer refresh our NodeInfo, then recover a
+    // missing destination key when necessary.
+    auto deferredDm = deferPeerKeyDm(p, false);
+    if (deferredDm == DeferredDmResult::DEFERRED)
+        return ERRNO_OK;
+    if (deferredDm == DeferredDmResult::FAILED) {
+        abortSendAndNak(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, p);
+        return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
+    }
+    deferredDm = deferMissingKeyDm(p);
+    if (deferredDm == DeferredDmResult::DEFERRED)
+        return ERRNO_OK;
+    if (deferredDm == DeferredDmResult::FAILED) {
+        abortSendAndNak(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, p);
+        return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
+    }
+#endif
+
     const GlobalPacketId key(p);
     const bool retransmitting = p->want_ack;
 
@@ -107,6 +127,29 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     if (isToUs(p)) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
+        bool deferredForPeerKey = false;
+        bool alreadyRetriedForPeerKey = false;
+        if (c && c->error_reason == meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY &&
+            p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->decoded.request_id) {
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+            if (isWaitingForPeerKeyDm(p->from, p->decoded.request_id)) {
+                suppressRoutingDelivery(*p);
+                deferredForPeerKey = true;
+            } else if (!(alreadyRetriedForPeerKey = hasRetriedPeerKeyDm(p->from, p->decoded.request_id))) {
+                if (PendingPacket *pendingPacket = findPendingPacket(GlobalPacketId(p->to, p->decoded.request_id))) {
+                    meshtastic_MeshPacket *retry = packetPool.allocCopy(*pendingPacket->packet);
+                    if (retry && deferPeerKeyDm(retry, true, true) == DeferredDmResult::DEFERRED) {
+                        rememberPeerKeyRetry(p->from, p->decoded.request_id);
+                        stopRetransmission(p->to, p->decoded.request_id);
+                        suppressRoutingDelivery(*p);
+                        deferredForPeerKey = true;
+                    } else if (retry) {
+                        packetPool.release(retry);
+                    }
+                }
+            }
+#endif
+        }
         if (!MeshModule::currentReply) {
             if (p->want_ack) {
                 if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
@@ -129,11 +172,13 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                         // stop the immediate relayer's retransmissions.
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
-                } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
-                           (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->public_key.size == 0)) {
-                    LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
-                    sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
-                               routingModule->getHopLimitForResponse(*p));
+                } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0) {
+                    meshtastic_NodeInfoLite_public_key_t senderKey = {0, {0}};
+                    const bool hasSenderKey = nodeDB->copyPublicKey(p->from, senderKey) && senderKey.size == 32;
+                    const auto error =
+                        hasSenderKey ? meshtastic_Routing_Error_PKI_FAILED : meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY;
+                    LOG_INFO("Undecryptable PKI packet from 0x%08x, send error 0x%x", p->from, error);
+                    sendAckNak(error, getFrom(p), p->id, channels.getPrimaryIndex(), routingModule->getHopLimitForResponse(*p));
                 } else {
                     // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
                     sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(),
@@ -146,8 +191,8 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         } else {
             LOG_DEBUG("Another module replied to this message, no need for 2nd ack");
         }
-        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && c &&
-            c->error_reason == meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY) {
+        if (!deferredForPeerKey && !alreadyRetriedForPeerKey && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            c && c->error_reason == meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY) {
             if (owner.public_key.size == 32) {
                 LOG_INFO("PKI decrypt failure, send a NodeInfo");
                 nodeInfoModule->sendOurNodeInfo(p->from, false, p->channel, true);

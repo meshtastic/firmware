@@ -93,6 +93,15 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Return Underlying interface's TX queue status */
     [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
+    /// True while a direct message with this ID is waiting for a peer public key.
+    bool isDeferredDm(PacketId id) const;
+
+    /// Consume a routing packet that firmware handled as an internal DM key exchange step.
+    bool shouldSuppressRoutingDelivery(const meshtastic_MeshPacket &p);
+
+    /// Retry a deferred DM early when its directed NodeInfo exchange completes.
+    bool retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p);
+
     /**
      * @return our local nodenum */
     [[nodiscard]] NodeNum getNodeNum();
@@ -123,6 +132,22 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
   protected:
     friend class RoutingModule;
+
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    enum class DeferredDmResult : uint8_t { NOT_APPLICABLE, DEFERRED, FAILED };
+
+    /// Takes ownership when a local text DM needs a public-key exchange before it can be sent.
+    /// Derived routers must call this before creating retransmission state for the packet.
+    DeferredDmResult deferMissingKeyDm(meshtastic_MeshPacket *p);
+    /// Takes ownership while requesting a NodeInfo exchange before a PKI DM.
+    DeferredDmResult deferPeerKeyDm(meshtastic_MeshPacket *p, bool reportQueueStatus = true, bool force = false);
+    bool isWaitingForPeerKeyDm(NodeNum peer, PacketId id) const;
+    bool hasRetriedPeerKeyDm(NodeNum peer, PacketId id);
+    void rememberPeerKeyRetry(NodeNum peer, PacketId id);
+    bool hasPeerKeyExchangeAttempt(NodeNum peer);
+    void rememberPeerKeyExchangeAttempt(NodeNum peer);
+    void suppressRoutingDelivery(const meshtastic_MeshPacket &p);
+#endif
 
     /**
      * Should this incoming filter be dropped?
@@ -160,6 +185,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false);
+
+    /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
+    void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 
   private:
     /**
@@ -227,8 +255,58 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Caller must hold deferredLock.
     bool dequeueDeferredLocal(DeferredLocal &out);
 
-    /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
-    void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    /// Key-exchange DM recovery holds the original packet while it learns or shares public keys.
+    /// The fixed queue bounds RAM held for unavailable peers.
+    struct DeferredDm {
+        enum class Reason : uint8_t { DESTINATION_KEY, PEER_KEY };
+
+        meshtastic_MeshPacket *p = nullptr;
+        uint32_t queuedAtMs = 0;
+        PacketId keyExchangeId = 0;
+        Reason reason = Reason::DESTINATION_KEY;
+        bool retryingAfterPeerKeyWait = false;
+    };
+
+    static constexpr uint8_t DEFERRED_DM_CAPACITY = 2;
+    static constexpr uint8_t KEY_EXCHANGE_ATTEMPT_CAPACITY = 8;
+    static constexpr uint32_t DEFERRED_DM_KEY_WAIT_MS = 30 * 1000UL;
+    static constexpr uint32_t DEFERRED_DM_PEER_KEY_WAIT_MS = 2 * 1000UL;
+    static constexpr uint32_t PEER_KEY_RETRY_MEMORY_MS = 30 * 1000UL;
+    static constexpr uint32_t PEER_KEY_EXCHANGE_ATTEMPT_MS = 30 * 60 * 1000UL;
+    DeferredDm deferredDms[DEFERRED_DM_CAPACITY];
+
+    struct PeerKeyRetry {
+        NodeNum peer = 0;
+        PacketId id = 0;
+        uint32_t retriedAtMs = 0;
+    } peerKeyRetries[DEFERRED_DM_CAPACITY];
+
+    struct PeerKeyExchangeAttempt {
+        NodeNum peer = 0;
+        uint32_t attemptedAtMs = 0;
+        uint32_t localKeyTag = 0;
+        uint32_t peerKeyTag = 0;
+    } peerKeyExchangeAttempts[KEY_EXCHANGE_ATTEMPT_CAPACITY];
+
+    struct DestinationKeyExchangeAttempt {
+        NodeNum peer = 0;
+        PacketId requestId = 0;
+        uint32_t attemptedAtMs = 0;
+    } destinationKeyExchangeAttempts[KEY_EXCHANGE_ATTEMPT_CAPACITY];
+
+    void processDeferredDms();
+    uint8_t deferredDmCount() const;
+    PacketId recentDestinationKeyExchange(NodeNum peer);
+    void rememberDestinationKeyExchange(NodeNum peer, PacketId requestId);
+    void clearDestinationKeyExchange(NodeNum peer, PacketId requestId);
+
+    struct SuppressedRoutingDelivery {
+        NodeNum from = 0;
+        PacketId id = 0;
+        PacketId requestId = 0;
+    } suppressedRoutingDelivery;
+#endif
 
 #ifdef PIO_UNIT_TESTING
   public:
@@ -239,6 +317,47 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     uint32_t deferredLocalDropped = 0;
     /// Number of deferred local packets currently queued.
     uint8_t deferredLocalPending() const { return deferredLocalCount; }
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    uint8_t deferredDmPending() const { return deferredDmCount(); }
+    void processDeferredDmsForTest() { processDeferredDms(); }
+    void expireDeferredDmsForTest()
+    {
+        for (auto &deferred : deferredDms) {
+            if (deferred.p)
+                deferred.queuedAtMs = millis() - DEFERRED_DM_KEY_WAIT_MS;
+        }
+    }
+    void retryDeferredDmsForTest()
+    {
+        for (auto &deferred : deferredDms) {
+            if (deferred.p && deferred.reason == DeferredDm::Reason::PEER_KEY)
+                deferred.queuedAtMs = millis() - DEFERRED_DM_PEER_KEY_WAIT_MS;
+        }
+    }
+    void clearDeferredDmsForTest()
+    {
+        for (auto &deferred : deferredDms) {
+            if (deferred.p)
+                packetPool.release(deferred.p);
+            deferred = {};
+        }
+    }
+    void resetPeerKeyRetriesForTest()
+    {
+        for (auto &retry : peerKeyRetries)
+            retry = {};
+    }
+    void resetPeerKeyExchangeAttemptsForTest()
+    {
+        for (auto &attempt : peerKeyExchangeAttempts)
+            attempt = {};
+    }
+    void resetDestinationKeyExchangeAttemptsForTest()
+    {
+        for (auto &attempt : destinationKeyExchangeAttempts)
+            attempt = {};
+    }
+#endif
 #endif
 };
 

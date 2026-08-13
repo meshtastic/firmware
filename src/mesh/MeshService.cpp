@@ -334,7 +334,8 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB->getNodeNum(), id);
 }
 
-ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
+ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id,
+                                              meshtastic_QueueStatus_State state)
 {
     meshtastic_QueueStatus *copied = queueStatusPool.allocCopy(qs);
     if (!copied)
@@ -342,6 +343,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 
     copied->res = res;
     copied->mesh_packet_id = mesh_packet_id;
+    copied->state = state;
 
     if (toPhoneQueueStatusQueue.numFree() == 0) {
         LOG_INFO("tophone queue status queue full, discard oldest");
@@ -360,7 +362,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     return res ? ERRNO_OK : ERRNO_UNKNOWN;
 }
 
-void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
+ErrorCode MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone, bool reportQueueStatus)
 {
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
@@ -376,11 +378,16 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
 
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */
-    meshtastic_QueueStatus qs = router->getQueueStatus();
-    // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
-    ErrorCode r = sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id);
-    if (r != ERRNO_OK) {
-        LOG_DEBUG("Can't send status to phone");
+    if (reportQueueStatus) {
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        const auto state = router->isDeferredDm(mesh_packet_id) ? meshtastic_QueueStatus_State_KEY_EXCHANGE
+                                                                : meshtastic_QueueStatus_State_STATE_UNSPECIFIED;
+        // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
+        ErrorCode r =
+            sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id, state);
+        if (r != ERRNO_OK) {
+            LOG_DEBUG("Can't send status to phone");
+        }
     }
 
     if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
@@ -396,6 +403,8 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     if (res == ERRNO_SHOULD_RELEASE) {
         releaseToPool(p);
     }
+
+    return res;
 }
 
 bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
