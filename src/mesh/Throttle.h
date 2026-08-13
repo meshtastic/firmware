@@ -7,4 +7,48 @@ class Throttle
   public:
     static bool execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, void (*func)(void), void (*onDefer)(void) = NULL);
     static bool isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t intervalMs);
+
+    /// Complement of isWithinTimespanMs(): true once intervalMs has passed since lastExecutionMs.
+    /// Boundary is inclusive (>=), mirroring isWithinTimespanMs()'s exclusive <.
+    /// Deliberately does not treat lastExecutionMs == 0 as "never run" - callers that use 0 as a
+    /// sentinel must test for it separately, so the sentinel never reaches the arithmetic.
+    static bool hasElapsed(uint32_t lastExecutionMs, uint32_t intervalMs)
+    {
+        return !isWithinTimespanMs(lastExecutionMs, intervalMs);
+    }
+
+    /// True once an absolute deadline has arrived. Use this rather than comparing against millis()
+    /// directly: that inverts while the deadline sits on the far side of the 32-bit wrap, so the
+    /// action either fires immediately or blocks for about the interval it should have waited.
+    ///
+    /// Use this when the site stores a deadline; use hasElapsed() when it stores the time of the
+    /// last event, which allows the full ~49.7 day range instead of ~24.8 days ahead.
+    ///
+    /// Callers that overload the deadline with an "inactive" sentinel (0, or UINT32_MAX) MUST test
+    /// for that separately, first: every such value is arithmetically far in the past, so it reads
+    /// as passed.
+    ///
+    /// TODO(deadline-type): mistake-proof that MUST by giving a deadline its own one-field type -
+    /// Deadline::in(ms) / .armed() / .passed() / .disarm(). A hand-built `now + interval` could then
+    /// no longer land on the sentinel by accident, and "armed" would stay a question separate from
+    /// "passed" - the split that has to survive, because which way "inactive" falls is the caller's
+    /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the four
+    /// meanings they give the sentinel today:
+    ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec (the cheapest pair to convert), and
+    ///                 GPS.cpp fixHoldEnds, whose arm site remaps a 0 result to 1 by hand.
+    ///   0 = forever - NotificationRenderer.cpp alertBannerUntil. Every read spells its own `> 0`
+    ///                 guard, so this third state wants naming rather than repeating.
+    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up.
+    ///   UINT32_MAX  - ExternalNotificationModule.cpp nagCycleCutoff, whose armed() also lives in a
+    ///                 second variable (isNagging) and whose arm site can land on the sentinel.
+    static bool deadlinePassed(uint32_t deadlineMs);
+
+    /// deadlinePassed() against a caller-supplied "now", for a loop that snapshots the time once and
+    /// tests many deadlines against it. Same range limit and sentinel rules as above.
+    static bool deadlinePassedAt(uint32_t nowMs, uint32_t deadlineMs)
+    {
+        // Passed iff now - deadline has not wrapped past 2^31 ms; further-ahead deadlines land in
+        // the top half. Not an int32_t cast, which is implementation-defined beyond INT32_MAX.
+        return (uint32_t)(nowMs - deadlineMs) < 0x80000000u;
+    }
 };
