@@ -393,6 +393,11 @@ void setup()
     digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
 #endif
 
+#ifdef LED_LORA
+    pinMode(LED_LORA, OUTPUT);
+    digitalWrite(LED_LORA, HIGH ^ LED_STATE_ON);
+#endif
+
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
     digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
