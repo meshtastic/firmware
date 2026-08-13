@@ -142,6 +142,8 @@ class NextHopRouterTestShim : public NextHopRouter
         TEST_ASSERT_NOT_NULL(entry);
         TEST_ASSERT_GREATER_THAN_UINT8(0, entry->numRetransmissions);
         --entry->numRetransmissions;
+    }
+
     bool filterViaFlooding(const meshtastic_MeshPacket *p) { return FloodingRouter::shouldFilterReceived(p); }
     bool filterViaNextHop(const meshtastic_MeshPacket *p) { return NextHopRouter::shouldFilterReceived(p); }
 
@@ -871,12 +873,35 @@ void test_intermediate_three_attempts_preserve_record_and_flood_last(void)
 
     shim->fireNextRetryForTest(p.from, p.id);
     TEST_ASSERT_EQUAL_UINT32(1, mockIface->sentNextHops.size());
+#if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
+    TEST_ASSERT_EQUAL_HEX8(NO_NEXT_HOP_PREFERENCE, mockIface->sentNextHops[0]);
+#else
     TEST_ASSERT_EQUAL_HEX8(0xAB, mockIface->sentNextHops[0]);
+#endif
     TEST_ASSERT_EQUAL_PTR(trackedPacket, shim->pendingPacketForTest(p.from, p.id));
 
     shim->fireNextRetryForTest(p.from, p.id);
     TEST_ASSERT_EQUAL_UINT32(2, mockIface->sentNextHops.size());
     TEST_ASSERT_EQUAL_HEX8(NO_NEXT_HOP_PREFERENCE, mockIface->sentNextHops[1]);
+    TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
+}
+
+void test_early_flood_preserves_fresh_verified_route(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    constexpr NodeNum dest = 0x33333333;
+    mockNodeDB->addNode(dest, 2, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, false, false, 0xAB);
+    mockNodeDB->addNode(0x000007AB, 0, true, 60);
+    shim->noteRouteLearned(dest, 0xAB, millis());
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(dest);
+    p.id = 0x51530005;
+    p.next_hop = 0xAB;
+    TEST_ASSERT_NOT_NULL(shim->trackWithDefaultBudgetForTest(p));
+
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->sentNextHops.size());
+    TEST_ASSERT_EQUAL_HEX8(0xAB, mockIface->sentNextHops[0]);
     TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
 }
 
@@ -1014,12 +1039,6 @@ void setup()
     RUN_TEST(test_hoplimit_decrement_on_colliding_favorites);
     RUN_TEST(test_hoplimit_decrement_when_resolved_not_favorite);
 
-    printf("\n=== pending retransmission bookkeeping ===\n");
-    RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
-    RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
-    RUN_TEST(test_directed_hop_tracks_three_total_attempts);
-    RUN_TEST(test_intermediate_three_attempts_preserve_record_and_flood_last);
-    
     printf("\n=== event-coordinate routing behavior ===\n");
     RUN_TEST(test_eventPolicy_reliableOriginSendSuppressesTxAndPending);
     RUN_TEST(test_eventPolicy_reliablePrivateCoordinateStillSends);
@@ -1028,6 +1047,13 @@ void setup()
     RUN_TEST(test_eventPolicy_repeatedLocalPacketSuppressesCoordinateAckButKeepsTextAck);
     RUN_TEST(test_eventPolicy_seededRetrySuppressesTxUntilGateOff);
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
+
+    printf("\n=== pending retransmission bookkeeping ===\n");
+    RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
+    RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
+    RUN_TEST(test_directed_hop_tracks_three_total_attempts);
+    RUN_TEST(test_intermediate_three_attempts_preserve_record_and_flood_last);
+    RUN_TEST(test_early_flood_preserves_fresh_verified_route);
 
     printf("\n=== rebroadcast of NODENUM_BROADCAST_NO_LORA ===\n");
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
