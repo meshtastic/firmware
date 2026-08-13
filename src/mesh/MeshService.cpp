@@ -536,9 +536,8 @@ void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const
         return;
     }
 
-    // Use the routing module to send the error response. getFrom() rather than mp->from: this runs
-    // on the ToRadio path before handleToRadio() normalises `from`, so a client that left it unset
-    // would otherwise address the NAK to node 0 and put it on the air instead of delivering it.
+    // getFrom() rather than mp->from: this runs before handleToRadio() normalises `from`, so an unset
+    // one would address the NAK to node 0 and put it on the air instead of delivering it locally.
     if (routingModule) {
         routingModule->sendAckNak(error, getFrom(mp), mp->id, mp->channel);
     } else {
