@@ -189,10 +189,11 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
     if (backPacket->tx_after) {
         // Check if there's a late packet at the queue end
         const uint32_t now = Time::getMillis();
-        // tx_after is an absolute deadline, so both tests subtract before comparing. A larger
-        // elapsed means the deadline passed longer ago, so the smaller one is scheduled later.
+        // Elapsed times only order two deadlines that have both passed: a future one subtracts to a
+        // near-2^32 elapsed and would read as the most overdue packet in the queue.
         const uint32_t backElapsed = now - backPacket->tx_after;
-        const bool newGoesFirst = !p->tx_after || backElapsed < (uint32_t)(now - p->tx_after);
+        const bool newGoesFirst =
+            !p->tx_after || (Throttle::deadlinePassedAt(now, p->tx_after) && backElapsed < (uint32_t)(now - p->tx_after));
         if (Throttle::deadlinePassedAt(now, backPacket->tx_after) && newGoesFirst) {
             int32_t dt = -(int32_t)backElapsed;
             if (p->tx_after) {
