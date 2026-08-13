@@ -173,12 +173,11 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0) {
-                    const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(p->from);
-                    const bool hasSenderKey = sender && sender->public_key.size == 32 &&
-                                              !memfll(sender->public_key.bytes, 0, sizeof(sender->public_key.bytes));
+                    meshtastic_NodeInfoLite_public_key_t senderKey = {0, {0}};
+                    const bool hasSenderKey = nodeDB->copyPublicKey(p->from, senderKey) && senderKey.size == 32;
                     const auto error =
                         hasSenderKey ? meshtastic_Routing_Error_PKI_FAILED : meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY;
-                    LOG_INFO("Undecryptable PKI packet from 0x%08x, send error %d", p->from, error);
+                    LOG_INFO("Undecryptable PKI packet from 0x%08x, send error 0x%x", p->from, error);
                     sendAckNak(error, getFrom(p), p->id, channels.getPrimaryIndex(), routingModule->getHopLimitForResponse(*p));
                 } else {
                     // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded

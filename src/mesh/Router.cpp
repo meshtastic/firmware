@@ -421,7 +421,7 @@ bool Router::retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p)
         p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP || !p.decoded.request_id)
         return false;
 
-    meshtastic_MeshPacket *retries[deferredDmCapacity] = {};
+    meshtastic_MeshPacket *retries[DEFERRED_DM_CAPACITY] = {};
     uint8_t retryCount = 0;
     for (auto &deferred : deferredDms) {
         if (!deferred.p || deferred.p->to != p.from || deferred.keyExchangeId != p.decoded.request_id)
@@ -1527,7 +1527,7 @@ bool Router::hasRetriedPeerKeyDm(NodeNum peer, PacketId id)
     for (auto &retry : peerKeyRetries) {
         if (retry.peer != peer || retry.id != id)
             continue;
-        if (Throttle::isWithinTimespanMs(retry.retriedAtMs, peerKeyRetryMemoryMs))
+        if (Throttle::isWithinTimespanMs(retry.retriedAtMs, PEER_KEY_RETRY_MEMORY_MS))
             return true;
         retry = {};
         return false;
@@ -1540,7 +1540,7 @@ void Router::rememberPeerKeyRetry(NodeNum peer, PacketId id)
     PeerKeyRetry *slot = &peerKeyRetries[0];
     for (auto &retry : peerKeyRetries) {
         if ((retry.peer == peer && retry.id == id) || retry.peer == 0 ||
-            !Throttle::isWithinTimespanMs(retry.retriedAtMs, peerKeyRetryMemoryMs)) {
+            !Throttle::isWithinTimespanMs(retry.retriedAtMs, PEER_KEY_RETRY_MEMORY_MS)) {
             slot = &retry;
             break;
         }
@@ -1559,7 +1559,7 @@ bool Router::hasPeerKeyExchangeAttempt(NodeNum peer)
         if (attempt.peer != peer)
             continue;
         if (attempt.localKeyTag == localKeyTag && attempt.peerKeyTag == peerKeyTag &&
-            Throttle::isWithinTimespanMs(attempt.attemptedAtMs, peerKeyExchangeAttemptMs))
+            Throttle::isWithinTimespanMs(attempt.attemptedAtMs, PEER_KEY_EXCHANGE_ATTEMPT_MS))
             return true;
         attempt = {};
         return false;
@@ -1576,7 +1576,7 @@ void Router::rememberPeerKeyExchangeAttempt(NodeNum peer)
     PeerKeyExchangeAttempt *slot = &peerKeyExchangeAttempts[0];
     for (auto &attempt : peerKeyExchangeAttempts) {
         if (attempt.peer == peer || attempt.peer == 0 ||
-            !Throttle::isWithinTimespanMs(attempt.attemptedAtMs, peerKeyExchangeAttemptMs)) {
+            !Throttle::isWithinTimespanMs(attempt.attemptedAtMs, PEER_KEY_EXCHANGE_ATTEMPT_MS)) {
             slot = &attempt;
             break;
         }
@@ -1590,7 +1590,7 @@ PacketId Router::recentDestinationKeyExchange(NodeNum peer)
     for (auto &attempt : destinationKeyExchangeAttempts) {
         if (attempt.peer != peer)
             continue;
-        if (Throttle::isWithinTimespanMs(attempt.attemptedAtMs, deferredDmKeyWaitMs))
+        if (Throttle::isWithinTimespanMs(attempt.attemptedAtMs, DEFERRED_DM_KEY_WAIT_MS))
             return attempt.requestId;
         attempt = {};
         return 0;
@@ -1603,7 +1603,7 @@ void Router::rememberDestinationKeyExchange(NodeNum peer, PacketId requestId)
     DestinationKeyExchangeAttempt *slot = &destinationKeyExchangeAttempts[0];
     for (auto &attempt : destinationKeyExchangeAttempts) {
         if (attempt.peer == peer || attempt.peer == 0 ||
-            !Throttle::isWithinTimespanMs(attempt.attemptedAtMs, deferredDmKeyWaitMs)) {
+            !Throttle::isWithinTimespanMs(attempt.attemptedAtMs, DEFERRED_DM_KEY_WAIT_MS)) {
             slot = &attempt;
             break;
         }
@@ -1634,7 +1634,7 @@ void Router::processDeferredDms()
             continue;
 
         if (deferred.reason == DeferredDm::Reason::PEER_KEY) {
-            if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmPeerKeyWaitMs)) {
+            if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, DEFERRED_DM_PEER_KEY_WAIT_MS)) {
                 LOG_INFO("Retrying deferred DM id=0x%08x after NodeInfo response wait for 0x%08x", p->id, p->to);
                 rememberPeerKeyExchangeAttempt(p->to);
                 const PacketId dmId = p->id;
@@ -1659,7 +1659,7 @@ void Router::processDeferredDms()
             const auto state =
                 isDeferredDm(dmId) ? meshtastic_QueueStatus_State_KEY_EXCHANGE : meshtastic_QueueStatus_State_STATE_UNSPECIFIED;
             service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, state);
-        } else if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmKeyWaitMs)) {
+        } else if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, DEFERRED_DM_KEY_WAIT_MS)) {
             deferred.p = nullptr;
             deferred.queuedAtMs = 0;
             deferred.keyExchangeId = 0;

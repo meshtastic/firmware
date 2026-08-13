@@ -268,31 +268,32 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         bool retryingAfterPeerKeyWait = false;
     };
 
-    static constexpr uint8_t deferredDmCapacity = 2;
-    static constexpr uint32_t deferredDmKeyWaitMs = 30 * 1000UL;
-    static constexpr uint32_t deferredDmPeerKeyWaitMs = 2 * 1000UL;
-    static constexpr uint32_t peerKeyRetryMemoryMs = 30 * 1000UL;
-    static constexpr uint32_t peerKeyExchangeAttemptMs = 30 * 60 * 1000UL;
-    DeferredDm deferredDms[deferredDmCapacity];
+    static constexpr uint8_t DEFERRED_DM_CAPACITY = 2;
+    static constexpr uint8_t KEY_EXCHANGE_ATTEMPT_CAPACITY = 8;
+    static constexpr uint32_t DEFERRED_DM_KEY_WAIT_MS = 30 * 1000UL;
+    static constexpr uint32_t DEFERRED_DM_PEER_KEY_WAIT_MS = 2 * 1000UL;
+    static constexpr uint32_t PEER_KEY_RETRY_MEMORY_MS = 30 * 1000UL;
+    static constexpr uint32_t PEER_KEY_EXCHANGE_ATTEMPT_MS = 30 * 60 * 1000UL;
+    DeferredDm deferredDms[DEFERRED_DM_CAPACITY];
 
     struct PeerKeyRetry {
         NodeNum peer = 0;
         PacketId id = 0;
         uint32_t retriedAtMs = 0;
-    } peerKeyRetries[deferredDmCapacity];
+    } peerKeyRetries[DEFERRED_DM_CAPACITY];
 
     struct PeerKeyExchangeAttempt {
         NodeNum peer = 0;
         uint32_t attemptedAtMs = 0;
         uint32_t localKeyTag = 0;
         uint32_t peerKeyTag = 0;
-    } peerKeyExchangeAttempts[8];
+    } peerKeyExchangeAttempts[KEY_EXCHANGE_ATTEMPT_CAPACITY];
 
     struct DestinationKeyExchangeAttempt {
         NodeNum peer = 0;
         PacketId requestId = 0;
         uint32_t attemptedAtMs = 0;
-    } destinationKeyExchangeAttempts[8];
+    } destinationKeyExchangeAttempts[KEY_EXCHANGE_ATTEMPT_CAPACITY];
 
     void processDeferredDms();
     uint8_t deferredDmCount() const;
@@ -323,14 +324,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     {
         for (auto &deferred : deferredDms) {
             if (deferred.p)
-                deferred.queuedAtMs = millis() - deferredDmKeyWaitMs;
+                deferred.queuedAtMs = millis() - DEFERRED_DM_KEY_WAIT_MS;
         }
     }
     void retryDeferredDmsForTest()
     {
         for (auto &deferred : deferredDms) {
             if (deferred.p && deferred.reason == DeferredDm::Reason::PEER_KEY)
-                deferred.queuedAtMs = millis() - deferredDmPeerKeyWaitMs;
+                deferred.queuedAtMs = millis() - DEFERRED_DM_PEER_KEY_WAIT_MS;
         }
     }
     void clearDeferredDmsForTest()

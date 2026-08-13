@@ -263,6 +263,9 @@ static MeshService *pipelineService = nullptr;
 class NodeInfoTestShim;
 static NodeInfoTestShim *dmKeyWaitNodeInfo = nullptr;
 static AirTime *dmKeyWaitAirTime = nullptr;
+static NodeInfoModule *dmKeyWaitOriginalNodeInfo = nullptr;
+static AirTime *dmKeyWaitOriginalAirTime = nullptr;
+static bool dmKeyWaitStateSaved = false;
 #if ARCH_PORTDUINO
 static bool dmKeyWaitOriginalForceSimRadio = false;
 static bool dmKeyWaitChangedForceSimRadio = false;
@@ -482,6 +485,17 @@ void tearDown(void)
     // suppression-window cases drive; the region and TX bucket are C14's duty-cycle setup.
     Time::useRealClock();
     Time::resetMonotonicForTests();
+    if (dmKeyWaitStateSaved) {
+        nodeInfoModule = dmKeyWaitOriginalNodeInfo;
+        airTime = dmKeyWaitOriginalAirTime;
+        dmKeyWaitStateSaved = false;
+    }
+#if ARCH_PORTDUINO
+    if (dmKeyWaitChangedForceSimRadio) {
+        portduino_config.force_simradio = dmKeyWaitOriginalForceSimRadio;
+        dmKeyWaitChangedForceSimRadio = false;
+    }
+#endif
     if (airTime)
         airTime->utilizationTX[0] = 0;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
@@ -1551,6 +1565,11 @@ static void enablePkiForLocalNode()
 
 static void enableNodeInfoForDmKeyWait()
 {
+    if (!dmKeyWaitStateSaved) {
+        dmKeyWaitOriginalNodeInfo = nodeInfoModule;
+        dmKeyWaitOriginalAirTime = airTime;
+        dmKeyWaitStateSaved = true;
+    }
     if (!dmKeyWaitNodeInfo)
         dmKeyWaitNodeInfo = new NodeInfoTestShim();
     dmKeyWaitNodeInfo->rejectReplies = false;
@@ -1678,9 +1697,6 @@ void test_M2_unknown_dm_fails_only_after_key_exchange_timeout(void)
     TEST_ASSERT_TRUE(terminalStatusReceived);
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, finalStatus);
     TEST_ASSERT_EQUAL(meshtastic_QueueStatus_State_STATE_UNSPECIFIED, finalState);
-#if ARCH_PORTDUINO
-    portduino_config.force_simradio = dmKeyWaitOriginalForceSimRadio;
-#endif
 }
 
 void test_M2a_known_licensed_recipient_does_not_start_key_exchange(void)
@@ -2728,6 +2744,23 @@ void test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name(void)
                                      "non-signer identity learning must be unaffected");
 }
 
+void test_N12_all_zero_public_key_is_not_persisted(void)
+{
+    meshtastic_User user = meshtastic_User_init_zero;
+    strcpy(user.long_name, "Zero key peer");
+    strcpy(user.short_name, "ZERO");
+    user.public_key.size = sizeof(user.public_key.bytes);
+
+    TEST_ASSERT_TRUE(mockNodeDB->updateUser(REMOTE_NODE, user, 0, false));
+
+    const meshtastic_NodeInfoLite *stored = mockNodeDB->getMeshNode(REMOTE_NODE);
+    TEST_ASSERT_NOT_NULL(stored);
+    TEST_ASSERT_EQUAL_STRING("Zero key peer", stored->long_name);
+    meshtastic_NodeInfoLite_public_key_t key = {0, {0}};
+    TEST_ASSERT_FALSE(mockNodeDB->copyPublicKey(REMOTE_NODE, key));
+    TEST_ASSERT_EQUAL(0, stored->public_key.size);
+}
+
 // ---------------------------------------------------------------------------
 // N8-N11: the 12h reply-suppression window.
 //
@@ -3284,6 +3317,7 @@ void setup()
     RUN_TEST(test_N9_request_after_the_window_is_answered);
     RUN_TEST(test_N10_stale_stamp_does_not_alias_after_a_full_wrap);
     RUN_TEST(test_N11_window_still_applies_across_the_wrap);
+    RUN_TEST(test_N12_all_zero_public_key_is_not_persisted);
 
     printf("\n=== Group L: licensed identity and plaintext signing ===\n");
     RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);

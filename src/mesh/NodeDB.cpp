@@ -3560,6 +3560,12 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
+        if (memfll(p.public_key.bytes, 0, sizeof(p.public_key.bytes))) {
+            LOG_WARN("Ignore zero-filled public key for node 0x%08x", nodeId);
+            p.public_key.size = 0;
+        }
+    }
+    if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
 
         // Alert the user if a remote node is advertising public key that matches our own
