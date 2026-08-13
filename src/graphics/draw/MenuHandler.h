@@ -13,6 +13,7 @@ class menuHandler
         LoraPicker,
         DeviceRolePicker,
         RadioPresetPicker,
+        TXEnabledMenu,
         FrequencySlot,
         NoTimeoutLoraPicker,
         TzPicker,
@@ -73,6 +74,7 @@ class menuHandler
     static void loraMenu();
     static void deviceRolePicker();
     static void radioPresetPicker();
+    static void txEnabledMenu();
     static void FrequencySlotPicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
