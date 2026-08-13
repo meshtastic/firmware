@@ -75,6 +75,9 @@ static meshtastic_MeshPacket makeResponse(uint8_t relayByte, meshtastic_RouteDis
     p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p.decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
     p.decoded.request_id = 0x9999; // non-zero marks this a response, which is what drives updateNextHops
+    // RadioInterface::deliverToReceiver() stamps this on every RF reception before the router sees the
+    // packet, so anything that reached a module off the radio carries it.
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     return p;
 }
 
@@ -146,6 +149,22 @@ void test_nexthop_ignored_without_a_relay(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(NODE_D), "no relay means no corroboration");
 }
 
+// UDP multicast ingress preserves the on-wire relay_node while clearing pki_encrypted, rx_snr and
+// rx_rssi, so relay_node alone cannot show the reply came off the radio. A LAN peer can name any
+// node in the route and set relay_node to match; only the transport check rejects it.
+void test_nexthop_ignored_when_reply_arrived_over_udp(void)
+{
+    meshtastic_RouteDiscovery r;
+    meshtastic_MeshPacket p = makeResponse(nodeDB->getLastByteOfNodeNum(RELAY_B), &r);
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
+
+    shim->alterReceivedProtobuf(p, &r);
+
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(RELAY_B), "UDP reply must not set a next hop");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(NODE_C), "UDP reply must not set a next hop");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(NODE_D), "UDP reply must not set a next hop");
+}
+
 void setup()
 {
     delay(10);
@@ -156,6 +175,7 @@ void setup()
     RUN_TEST(test_nexthop_learned_when_route_matches_relay);
     RUN_TEST(test_nexthop_ignored_when_route_contradicts_relay);
     RUN_TEST(test_nexthop_ignored_without_a_relay);
+    RUN_TEST(test_nexthop_ignored_when_reply_arrived_over_udp);
     exit(UNITY_END());
 }
 
