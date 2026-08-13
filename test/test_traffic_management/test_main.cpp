@@ -37,24 +37,26 @@ constexpr NodeNum kTargetNode = 0x33333333;
 // a fresh requester for their "served again" step to avoid the per-requester window masking them.
 constexpr NodeNum kRemoteNode2 = 0x44444444;
 
-// Telemetry hop exhaustion is gated on channel congestion (alterReceived checks
-// airTime->isTxAllowedChannelUtil/isTxAllowedAirUtil). Installs a global
-// airTime reporting 100% channel utilization for the enclosing scope.
-class ScopedBusyAirTime
-{
-  public:
-    ScopedBusyAirTime() : previous(airTime)
-    {
-        for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++)
-            busy.channelUtilization[i] = 10000; // 10 s of airtime per 10 s period
-        airTime = &busy;
-    }
-    ~ScopedBusyAirTime() { airTime = previous; }
-
-  private:
-    AirTime busy;
-    AirTime *previous;
-};
+// INERT - commented out, not deleted. TrafficManagementModule holds no reference to airTime:
+// the gating this described went with exhaust_hop_telemetry / exhaust_hop_position, and
+// shouldExhaustHops() is now a compare of three members nothing sets. Writing the buckets did not
+// work either - the first accessor call takes AirTime's firstTime branch and memsets them, so this
+// reported 0%, not 100%. A revived version must fill them via logAirtime(); they are private now.
+//
+// class ScopedBusyAirTime
+// {
+//   public:
+//     ScopedBusyAirTime() : previous(airTime)
+//     {
+//         busy.logAirtime(RX_ALL_LOG, CHANNEL_UTILIZATION_PERIODS * 10 * 1000); // a full window
+//         airTime = &busy;
+//     }
+//     ~ScopedBusyAirTime() { airTime = previous; }
+//
+//   private:
+//     AirTime busy;
+//     AirTime *previous;
+// };
 
 class MockNodeDB : public NodeDB
 {
@@ -2307,7 +2309,7 @@ static void test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed(void)
  */
 static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 {
-    ScopedBusyAirTime busyChannel; // congestion present but exhaust is disabled
+    // ScopedBusyAirTime busyChannel; // INERT: the module never reads airTime
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
     packet.hop_start = 5;

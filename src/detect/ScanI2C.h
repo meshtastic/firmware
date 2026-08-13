@@ -96,6 +96,7 @@ class ScanI2C
         CST3530,
         BMI270,
         SEN5X,
+        SEN6X,
         SFA30,
         CW2015,
         SCD30,

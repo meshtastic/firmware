@@ -705,7 +705,7 @@ uint32_t SCD4XSensor::wakeUp()
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (startMeasurement()) {
-        co2MeasureStarted = getTime();
+        co2MeasureStarted = millis();
 #ifdef SCD4X_I2C_CLOCK_SPEED
         reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
@@ -755,9 +755,7 @@ int32_t SCD4XSensor::wakeUpTimeMs()
 
 int32_t SCD4XSensor::pendingForReadyMs()
 {
-    uint32_t now;
-    now = getTime();
-    uint32_t sinceCO2MeasureStarted = (now - co2MeasureStarted) * 1000;
+    uint32_t sinceCO2MeasureStarted = millis() - co2MeasureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sinceCO2MeasureStarted);
 
     if (sinceCO2MeasureStarted < SCD4X_WARMUP_MS) {
@@ -785,84 +783,47 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
             break;
         }
 
-        if (request->sensor_config.scd4x_config.has_factory_reset) {
-            LOG_DEBUG("%s: Requested factory reset", sensorName);
-            if (!this->factoryReset()) {
+        {
+            const auto &cfg = request->sensor_config.scd4x_config;
+            bool ok = true;
+
+            // FRC/ASC/altitude/pressure/factory-reset calibration branching is shared with
+            // SCD30Sensor and the CO2-capable SEN6X variants via CO2CalibrationSensor.
+            if (cfg.has_factory_reset || cfg.has_set_asc || cfg.has_set_altitude || cfg.has_set_ambient_pressure) {
+                Co2AdminRequest co2req;
+                co2req.hasFactoryReset = cfg.has_factory_reset;
+                co2req.hasSetAsc = cfg.has_set_asc;
+                co2req.setAsc = cfg.set_asc;
+                co2req.hasTargetCo2 = cfg.has_set_target_co2_conc;
+                co2req.targetCo2 = cfg.set_target_co2_conc;
+                co2req.hasSetAltitude = cfg.has_set_altitude;
+                co2req.setAltitude = cfg.set_altitude;
+                co2req.hasSetAmbientPressure = cfg.has_set_ambient_pressure;
+                co2req.setAmbientPressure = cfg.set_ambient_pressure;
+                ok &= this->handleCo2AdminRequest(co2req, sensorName);
+            }
+
+            // A factory reset erases calibration history outright - matches the original
+            // behavior of skipping every other field when it's requested.
+            if (ok && !cfg.has_factory_reset) {
+                // Check for temperature offset
+                // NOTE: this requires to have a sensor working on stable environment
+                // And to make it between readings
+                if (cfg.has_set_temperature) {
+                    ok &= this->setTemperature(cfg.set_temperature);
+                }
+
+                // Check for low power mode
+                // NOTE: to switch from one mode to another do:
+                // setPowerMode -> startMeasurement
+                if (cfg.has_set_power_mode) {
+                    ok &= this->setPowerMode(cfg.set_power_mode);
+                }
+            }
+
+            if (!ok) {
                 result = AdminMessageHandleResult::NOT_HANDLED;
                 break;
-            }
-        } else {
-            if (request->sensor_config.scd4x_config.has_set_asc) {
-                getASC(ascActive);
-                bool currentASC = ascActive;
-                if (request->sensor_config.scd4x_config.set_asc == false) {
-                    LOG_DEBUG("%s: Request for FRC", sensorName);
-                    if (request->sensor_config.scd4x_config.has_set_target_co2_conc) {
-                        if (this->setASC(request->sensor_config.scd4x_config.set_asc)) {
-                            if (!this->performFRC(request->sensor_config.scd4x_config.set_target_co2_conc)) {
-                                result = AdminMessageHandleResult::NOT_HANDLED;
-                                // Set it back to ASC if failed
-                                setASC(currentASC);
-                                break;
-                            };
-                        } else {
-                            result = AdminMessageHandleResult::NOT_HANDLED;
-                            break;
-                        }
-                    } else {
-                        // FRC requested but no target CO2 provided
-                        LOG_ERROR("%s: target CO2 not provided", sensorName);
-                        result = AdminMessageHandleResult::NOT_HANDLED;
-                        break;
-                    }
-                } else {
-                    LOG_DEBUG("%s: Request for ASC", sensorName);
-                    if (this->setASC(request->sensor_config.scd4x_config.set_asc)) {
-                        if (request->sensor_config.scd4x_config.has_set_target_co2_conc) {
-                            LOG_DEBUG("%s: Request has target CO2", sensorName);
-                            this->setASCBaseline(request->sensor_config.scd4x_config.set_target_co2_conc);
-                            // NOTE - in this situation, if we set ASC, but baseline set fails, we stay on ASC
-                        } else {
-                            LOG_DEBUG("%s: Request doesn't have target CO2", sensorName);
-                        }
-                    } else {
-                        result = AdminMessageHandleResult::NOT_HANDLED;
-                        break;
-                    }
-                }
-            }
-
-            // Check for temperature offset
-            // NOTE: this requires to have a sensor working on stable environment
-            // And to make it between readings
-            if (request->sensor_config.scd4x_config.has_set_temperature) {
-                if (!this->setTemperature(request->sensor_config.scd4x_config.set_temperature)) {
-                    result = AdminMessageHandleResult::NOT_HANDLED;
-                    break;
-                }
-            }
-
-            // Check for altitude or pressure offset
-            if (request->sensor_config.scd4x_config.has_set_altitude) {
-                if (!this->setAltitude(request->sensor_config.scd4x_config.set_altitude)) {
-                    result = AdminMessageHandleResult::NOT_HANDLED;
-                    break;
-                }
-            } else if (request->sensor_config.scd4x_config.has_set_ambient_pressure) {
-                if (!this->setAmbientPressure(request->sensor_config.scd4x_config.set_ambient_pressure)) {
-                    result = AdminMessageHandleResult::NOT_HANDLED;
-                    break;
-                }
-            }
-
-            // Check for low power mode
-            // NOTE: to switch from one mode to another do:
-            // setPowerMode -> startMeasurement
-            if (request->sensor_config.scd4x_config.has_set_power_mode) {
-                if (!this->setPowerMode(request->sensor_config.scd4x_config.set_power_mode)) {
-                    result = AdminMessageHandleResult::NOT_HANDLED;
-                    break;
-                }
             }
         }
 

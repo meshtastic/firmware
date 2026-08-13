@@ -181,7 +181,7 @@ static void test_eviction_preservesFavorite(void)
 
 // A node heard during this boot is newer than every persisted epoch, including valid epochs after
 // 2038. Ranking both domains in one uint32_t incorrectly evicts the current-boot node first.
-static void test_eviction_prefers_current_boot_stamp_over_post2038_epoch(void)
+static void test_eviction_prefersCurrentBootStampOverPost2038Epoch(void)
 {
     constexpr NodeNum futureDated = 0x70000001;
     constexpr NodeNum heardThisBoot = 0x70000002;
@@ -291,7 +291,7 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_migration_carriesRoleAndProtectedIntoWarm);
     RUN_TEST(test_migration_carriesSignerBitThroughWarm);
     RUN_TEST(test_eviction_preservesFavorite);
-    RUN_TEST(test_eviction_prefers_current_boot_stamp_over_post2038_epoch);
+    RUN_TEST(test_eviction_prefersCurrentBootStampOverPost2038Epoch);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
     RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);

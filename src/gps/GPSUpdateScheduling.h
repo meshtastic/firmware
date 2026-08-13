@@ -25,6 +25,7 @@ class GPSUpdateScheduling
 
   private:
     void updateLockTimePrediction(); // Called from informGotLock
+    bool searching = false;          // Set by the inform*() calls; never inferred from stamp ordering
     uint32_t searchStartedMs = 0;
     uint32_t searchEndedMs = 0;
     uint32_t searchCount = 0;
