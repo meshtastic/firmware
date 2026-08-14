@@ -13,6 +13,10 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "modules/PositionModule.h"
 
+#ifdef SENSECAP_INDICATOR
+#include "mesh/comms/UARTProxy.h"
+#endif
+
 // Allow defining the polarity of the ENABLE output.  default is active high
 #ifndef GPS_EN_ACTIVE
 #define GPS_EN_ACTIVE 1
@@ -21,6 +25,11 @@
 // Allow defining the polarity of the STANDBY output.  default is LOW for standby
 #ifndef GPS_STANDBY_ACTIVE
 #define GPS_STANDBY_ACTIVE LOW
+#endif
+
+// Allow defining the polarity of an external GPS RF front-end enable. Default is active high.
+#ifndef GPS_RF_EN_ACTIVE
+#define GPS_RF_EN_ACTIVE HIGH
 #endif
 
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
@@ -110,9 +119,6 @@ class GPS : private concurrency::OSThread
 
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
-
-    /// Returns true if there's valid data flow with the chip.
-    virtual bool hasFlow();
 
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
@@ -219,7 +225,9 @@ class GPS : private concurrency::OSThread
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
     /** If !NULL we will use this serial port to construct our GPS */
-#if defined(ARCH_RP2040)
+#if defined(SENSECAP_INDICATOR)
+    static UARTProxy *_serial_gps;
+#elif defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
 #elif defined(ARCH_NRF52)
     static Uart *_serial_gps;
@@ -253,6 +261,10 @@ class GPS : private concurrency::OSThread
     /** Set the value of the STANDBY pin, if relevant
      */
     void writePinStandby(bool standby);
+
+    /** Set the external RF front-end enable pin, if relevant
+     */
+    void writePinRFEN(bool on);
 
     /** Set GPS power with PMU, if relevant
      */

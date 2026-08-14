@@ -13,6 +13,14 @@ int InkHUD::MapApplet::s_lockedZoom = -1;
 int InkHUD::MapApplet::s_lastRenderedZoom = -1;
 int InkHUD::MapApplet::s_autoFitZoom = -1;
 
+static bool usesGridTileLayout();
+static int gridTilesPerBlock();
+static int tileZoomAt(int tileIndex);
+static int tileTxAt(int tileIndex);
+static int tileTyAt(int tileIndex);
+static int tileMetadataZoomCount();
+static int tileMetadataZoomAt(int index);
+
 // Observe GPS position updates so the map redraws whenever a new location arrives.
 InkHUD::MapApplet::MapApplet()
 {
@@ -48,8 +56,8 @@ void InkHUD::MapApplet::zoomIn()
 
     // Jump to the next tile zoom strictly above current, not just +1
     int next = -1;
-    for (int i = 0; i < map_tile_count; i++) {
-        int z = map_tile_zooms[i];
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
         if (z > baseZoom && (next < 0 || z < next))
             next = z;
     }
@@ -73,8 +81,8 @@ bool InkHUD::MapApplet::canZoomIn() const
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
     if (map_tile_count == 0)
         return ref < ZOOM_MAX_NO_TILES;
-    for (int i = 0; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] > ref)
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        if (tileMetadataZoomAt(i) > ref)
             return true;
     }
     return false;
@@ -103,8 +111,8 @@ void InkHUD::MapApplet::zoomOut()
 
     // Jump to the next tile zoom strictly below current, not just -1
     int next = -1;
-    for (int i = 0; i < map_tile_count; i++) {
-        int z = map_tile_zooms[i];
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
         if (z < baseZoom && (next < 0 || z > next))
             next = z;
     }
@@ -125,8 +133,8 @@ bool InkHUD::MapApplet::canZoomOut() const
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
     if (map_tile_count == 0)
         return s_autoFitZoom >= 0 ? ref > s_autoFitZoom : false;
-    for (int i = 0; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] < ref)
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        if (tileMetadataZoomAt(i) < ref)
             return true;
     }
     return false;
@@ -181,10 +189,79 @@ static int lz4_decompress(const uint8_t *src, int src_len, uint8_t *dst, int dst
 
 // Tiles are 1 bit/pixel, column-major: [bx=0..31][y=0..255], 8 pixels per byte.
 static uint8_t s_tileCacheBuffer[8192];
+static constexpr uint8_t MAP_TILE_LAYOUT_SPARSE = 0;
+static constexpr uint8_t MAP_TILE_LAYOUT_GRID = 1;
+static constexpr uint8_t MAP_TILE_KIND_LZ4 = 0;
+static constexpr uint8_t MAP_TILE_KIND_WHITE = 1;
+static constexpr uint8_t MAP_TILE_KIND_BLACK = 2;
+
+static bool usesGridTileLayout()
+{
+    return map_tile_layout == MAP_TILE_LAYOUT_GRID && map_tile_grid_cols > 0 && map_tile_grid_rows > 0 &&
+           map_tile_block_count > 0;
+}
+
+static int gridTilesPerBlock()
+{
+    return (int)map_tile_grid_cols * (int)map_tile_grid_rows;
+}
+
+static int tileZoomAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_zooms[tileIndex];
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    return map_tile_block_zooms[blockIndex];
+}
+
+static int tileTxAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_tx[tileIndex];
+    int rows = map_tile_grid_rows;
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    int localIndex = tilesPerBlock > 0 ? (tileIndex % tilesPerBlock) : 0;
+    return map_tile_block_tx[blockIndex] + (rows > 0 ? (localIndex / rows) : 0);
+}
+
+static int tileTyAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_ty[tileIndex];
+    int rows = map_tile_grid_rows;
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    int localIndex = tilesPerBlock > 0 ? (tileIndex % tilesPerBlock) : 0;
+    return map_tile_block_ty[blockIndex] + (rows > 0 ? (localIndex % rows) : 0);
+}
+
+static int tileMetadataZoomCount()
+{
+    if (usesGridTileLayout())
+        return map_tile_block_count;
+    return map_tile_count;
+}
+
+static int tileMetadataZoomAt(int index)
+{
+    return usesGridTileLayout() ? map_tile_block_zooms[index] : map_tile_zooms[index];
+}
 
 static const uint8_t *decodeSparseTile(int tileIndex)
 {
-    int n = lz4_decompress(map_tile_data[tileIndex], map_tile_sizes[tileIndex], s_tileCacheBuffer, sizeof(s_tileCacheBuffer));
+    const uint8_t kind = map_tile_kinds[tileIndex];
+    if (kind == MAP_TILE_KIND_WHITE) {
+        memset(s_tileCacheBuffer, 0x00, sizeof(s_tileCacheBuffer));
+        return s_tileCacheBuffer;
+    }
+    if (kind == MAP_TILE_KIND_BLACK) {
+        memset(s_tileCacheBuffer, 0xFF, sizeof(s_tileCacheBuffer));
+        return s_tileCacheBuffer;
+    }
+    const uint8_t *compressed = map_tile_data + map_tile_offsets[tileIndex];
+    int n = lz4_decompress(compressed, map_tile_sizes[tileIndex], s_tileCacheBuffer, sizeof(s_tileCacheBuffer));
     return n == sizeof(s_tileCacheBuffer) ? s_tileCacheBuffer : nullptr;
 }
 
@@ -202,14 +279,14 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
 
     // Find best tile zoom: highest available <= zoom, or lowest available if none below.
     int tileZoom = -1;
-    for (int i = 0; i < map_tile_count; i++) {
-        int z = map_tile_zooms[i];
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
         if (z <= zoom && (tileZoom < 0 || z > tileZoom))
             tileZoom = z;
     }
     if (tileZoom < 0) {
-        for (int i = 0; i < map_tile_count; i++) {
-            int z = map_tile_zooms[i];
+        for (int i = 0; i < tileMetadataZoomCount(); i++) {
+            int z = tileMetadataZoomAt(i);
             if (tileZoom < 0 || z < tileZoom)
                 tileZoom = z;
         }
@@ -231,11 +308,11 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
     const float maxWy = gpxY + height() * 0.5f * tileWorldPx;
 
     for (int i = 0; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] != tileZoom)
+        if (tileZoomAt(i) != tileZoom)
             continue;
 
-        const int tx = map_tile_tx[i];
-        const int ty = map_tile_ty[i];
+        const int tx = tileTxAt(i);
+        const int ty = tileTyAt(i);
         const float tileMinWx = tx * 256.0f;
         const float tileMaxWx = tileMinWx + 256.0f;
         const float tileMinWy = ty * 256.0f;
@@ -275,11 +352,11 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
 
 void InkHUD::MapApplet::onRender(bool full)
 {
-    // Map center is always the node centroid — tiles are background only.
+    // Map center is always the node centroid - tiles are background only.
     getMapCenter(&latCenter, &lngCenter);
     calculateAllMarkers();
 
-    // Show placeholder only if we have no position at all — no tiles, no own node
+    // Show placeholder only if we have no position at all - no tiles, no own node
     if (!enoughMarkers() && !centerIsOurNode) {
         printAt(X(0.5), Y(0.5) - (getFont().lineHeight() / 2), "Node positions", CENTER, MIDDLE);
         printAt(X(0.5), Y(0.5) + (getFont().lineHeight() / 2), "will appear here", CENTER, MIDDLE);
@@ -299,16 +376,16 @@ void InkHUD::MapApplet::onRender(bool full)
         // Collect unique zooms, sort descending (highest detail first)
         int zooms[16] = {};
         int nzooms = 0;
-        for (int i = 0; i < map_tile_count && nzooms < 16; i++) {
+        for (int i = 0; i < tileMetadataZoomCount() && nzooms < 16; i++) {
             bool found = false;
             for (int j = 0; j < nzooms; j++) {
-                if (zooms[j] == map_tile_zooms[i]) {
+                if (zooms[j] == tileMetadataZoomAt(i)) {
                     found = true;
                     break;
                 }
             }
             if (!found)
-                zooms[nzooms++] = map_tile_zooms[i];
+                zooms[nzooms++] = tileMetadataZoomAt(i);
         }
         for (int i = 0; i < nzooms - 1; i++) {
             for (int j = i + 1; j < nzooms; j++) {
@@ -324,7 +401,7 @@ void InkHUD::MapApplet::onRender(bool full)
         float chosenMetersToPx = metersToPxFit;                 // fallback: fit-scale (may downsample)
 
         if (s_zoomLocked && s_lockedZoom >= 0) {
-            // Use locked zoom at native 1:1 scale — never zoom out for new nodes
+            // Use locked zoom at native 1:1 scale - never zoom out for new nodes
             chosenZoom = s_lockedZoom;
             float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
             chosenMetersToPx = 1.0f / mpp;
@@ -338,7 +415,7 @@ void InkHUD::MapApplet::onRender(bool full)
                 float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << zooms[zi]))) * cosf(latRad);
                 float nativeMetersToPx = 1.0f / mpp;
                 if (nativeMetersToPx <= metersToPxFit) {
-                    // This zoom at native scale shows all nodes — use it (highest detail that fits)
+                    // This zoom at native scale shows all nodes - use it (highest detail that fits)
                     chosenZoom = zooms[zi];
                     chosenMetersToPx = nativeMetersToPx;
                     break;
@@ -628,7 +705,7 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
     // When zoom is locked, keep center exactly on own node / zero-hop centroid.
     // Skip bounding-box shift so new distant nodes don't move the zoomed view.
     if (s_zoomLocked) {
-        // Own node has no position — re-center on zero-hop centroid instead.
+        // Own node has no position - re-center on zero-hop centroid instead.
         if (!centerIsOurNode) {
             uint32_t count = 0;
             float xAvg = 0, yAvg = 0, zAvg = 0;
@@ -878,7 +955,7 @@ void InkHUD::MapApplet::calculateAllMarkers()
         if (node->num == nodeDB->getNodeNum())
             continue;
 
-        // Skip nodes with unknown hop count — partial info, not useful to plot
+        // Skip nodes with unknown hop count - partial info, not useful to plot
         if (!node->has_hops_away)
             continue;
 

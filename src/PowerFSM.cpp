@@ -165,7 +165,7 @@ static void lsIdle()
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
-                // LOG_INFO("Sleep, flash led!");
+                // LOG_INFO("Sleep, flash led");
                 break;
 
             case ESP_SLEEP_WAKEUP_UART:
@@ -237,7 +237,7 @@ static void serialEnter()
 {
     LOG_POWERFSM("State: serialEnter");
 #ifndef ARCH_NRF52
-    // nRF52 runs BLE on SoftDevice independently of USB serial — no need to disable it.
+    // nRF52 runs BLE on SoftDevice independently of USB serial - no need to disable it.
     // (Same rationale as nbEnter() which already guards this with #ifdef ARCH_ESP32)
     setBluetoothEnable(false);
 #endif

@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/http/WebServer.h"
@@ -96,21 +97,13 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
-#if 0
-    // Delete the saved certs (used in debugging)
-    LOG_DEBUG("Delete any saved SSL keys");
-    // prefs.clear();
-    prefs.remove("PK");
-    prefs.remove("cert");
-#endif
-
     LOG_INFO("Checking if we have a saved SSL Certificate");
 
     size_t pkLen = prefs.getBytesLength("PK");
     size_t certLen = prefs.getBytesLength("cert");
 
     if (pkLen && certLen) {
-        LOG_INFO("Existing SSL Certificate found!");
+        LOG_INFO("Existing SSL Certificate found");
 
         uint8_t *pkBuffer = new uint8_t[pkLen];
         prefs.getBytes("PK", pkBuffer, pkLen);
@@ -188,7 +181,7 @@ void createSSLCert()
                 runLoop = true;
             }
         }
-        LOG_INFO("SSL Cert Ready!");
+        LOG_INFO("SSL Cert Ready");
     }
 }
 
@@ -199,28 +192,19 @@ WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
     if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
-    lastActivityTime = millis();
+    lastActivityTime = Time::getMillis();
 }
 
 void WebServerThread::markActivity()
 {
-    lastActivityTime = millis();
+    lastActivityTime = Time::getMillis();
 }
 
 int32_t WebServerThread::getAdaptiveInterval()
 {
-    uint32_t currentTime = millis();
-    uint32_t timeSinceActivity;
-
-    if (currentTime >= lastActivityTime) {
-        timeSinceActivity = currentTime - lastActivityTime;
-    } else {
-        timeSinceActivity = (UINT32_MAX - lastActivityTime) + currentTime + 1;
-    }
-
-    if (timeSinceActivity < ACTIVE_THRESHOLD_MS) {
+    if (Throttle::isWithinTimespanMs(lastActivityTime, ACTIVE_THRESHOLD_MS)) {
         return ACTIVE_INTERVAL_MS;
-    } else if (timeSinceActivity < MEDIUM_THRESHOLD_MS) {
+    } else if (Throttle::isWithinTimespanMs(lastActivityTime, MEDIUM_THRESHOLD_MS)) {
         return MEDIUM_INTERVAL_MS;
     } else {
         return IDLE_INTERVAL_MS;

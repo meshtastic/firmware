@@ -2,6 +2,7 @@
 #include "CryptoEngine.h"
 
 #include "TestUtil.h"
+#include "aes-ccm.h"
 #include <XEdDSA.h>
 #include <unity.h>
 
@@ -46,6 +47,17 @@ void test_SHA256(void)
     crypto->hash(hash, 2);
     TEST_ASSERT_EQUAL_MEMORY(hash, expected, 32);
 }
+
+void test_SHA256_large_input(void)
+{
+    uint8_t hash[300] = {0};
+    uint8_t expected[32];
+
+    HexToBytes(expected, "d13d4a8b3b8add19b5970157f09d00c12cbda4fed4d74d8493156523f7069b66");
+    crypto->hash(hash, sizeof(hash));
+    TEST_ASSERT_EQUAL_MEMORY(hash, expected, sizeof(expected));
+}
+
 void test_ECB_AES256(void)
 {
     // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_ECB.pdf
@@ -263,11 +275,12 @@ void test_XEdDSA_max_payload(void)
     TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, payload, len, signature));
 }
 
-// Signing the same message twice yields signatures that both verify. This XEdDSA implementation is
-// deterministic in practice (the two signatures are typically byte-identical, even though
-// HardwareRNG::fill provides real entropy on this platform), so we assert only the security-relevant
-// property — every produced signature verifies — rather than asserting (non-)determinism.
-void test_XEdDSA_repeated_sign_verifies(void)
+// XEdDSA is a randomized (hedged) scheme: the nonce mixes in Z, caller-supplied randomness
+// (Signal spec; meshtastic/Crypto#3). CryptoEngine::xeddsa_sign seeds Z from the hardware RNG, so
+// signing the same message twice yields *different* signatures that both verify. This pins that
+// the randomization is actually wired through end to end - if signing regresses to deterministic
+// (Z dropped by the library, or xeddsa_sign stops seeding entropy), the inequality assertion fails.
+void test_XEdDSA_repeated_sign_is_randomized(void)
 {
     uint8_t pub[32], priv[32], sig1[64], sig2[64];
     uint8_t message[] = "same message";
@@ -277,6 +290,8 @@ void test_XEdDSA_repeated_sign_verifies(void)
     TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sig1));
     TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sig2));
 
+    TEST_ASSERT_TRUE_MESSAGE(memcmp(sig1, sig2, sizeof(sig1)) != 0,
+                             "signatures must differ - XEdDSA Z randomization is not wired through");
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, message, sizeof(message), sig1));
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, message, sizeof(message), sig2));
 }
@@ -307,6 +322,42 @@ void test_AES_CTR(void)
     TEST_ASSERT_EQUAL_MEMORY(expected, plain, 16);
 }
 
+void test_AES_CCM_partial_block_bounds(void)
+{
+    // aes_ccm_encr() used to write a whole 16-byte AES block at the output before XOR-ing,
+    // so a trailing partial block scribbled up to 15 bytes past what the caller allocated.
+    const uint8_t guard = 0xA5;
+    const size_t guardLen = 16;
+    const size_t lengths[] = {5, 20}; // pure partial block, and one full block plus a partial one
+    uint8_t key[32];
+    uint8_t nonce[13];
+    uint8_t auth[8];
+
+    HexToBytes(key, "603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
+    HexToBytes(nonce, "000102030405060708090A0B0C");
+
+    for (size_t n = 0; n < sizeof(lengths) / sizeof(lengths[0]); n++) {
+        const size_t len = lengths[n];
+        uint8_t plain[32];
+        uint8_t crypt[32 + guardLen];
+        uint8_t decrypted[32 + guardLen];
+
+        for (size_t i = 0; i < len; i++)
+            plain[i] = (uint8_t)i;
+        memset(crypt + len, guard, guardLen);
+        memset(decrypted + len, guard, guardLen);
+
+        TEST_ASSERT_EQUAL(0, aes_ccm_ae(key, sizeof(key), nonce, sizeof(auth), plain, len, nullptr, 0, crypt, auth));
+        for (size_t i = 0; i < guardLen; i++)
+            TEST_ASSERT_EQUAL_UINT8(guard, crypt[len + i]);
+
+        TEST_ASSERT_TRUE(aes_ccm_ad(key, sizeof(key), nonce, sizeof(auth), crypt, len, nullptr, 0, auth, decrypted));
+        for (size_t i = 0; i < guardLen; i++)
+            TEST_ASSERT_EQUAL_UINT8(guard, decrypted[len + i]);
+        TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, len);
+    }
+}
+
 void setup()
 {
     // NOTE!!! Wait for >2 secs
@@ -317,16 +368,18 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN(); // IMPORTANT LINE!
     RUN_TEST(test_SHA256);
+    RUN_TEST(test_SHA256_large_input);
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
+    RUN_TEST(test_AES_CCM_partial_block_bounds);
     RUN_TEST(test_PKC);
     RUN_TEST(test_XEdDSA);
     RUN_TEST(test_XEdDSA_cross_key_reject);
     RUN_TEST(test_XEdDSA_empty_key_sign_fails);
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
-    RUN_TEST(test_XEdDSA_repeated_sign_verifies);
+    RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
     exit(UNITY_END()); // stop unit testing
 }
 

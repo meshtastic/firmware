@@ -35,22 +35,27 @@ class UIRenderer
   public:
     // Common UI elements
     static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus,
-                          int node_offset = 0, bool show_total = true, const char *additional_words = "");
+                          int node_offset = 0, bool show_total = true, const char *additional_words = "", bool center = false);
 
     // GPS status functions
-    static void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gpsStatus);
+    static void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gpsStatus, bool center = false);
     static void drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gpsStatus,
                                    const char *mode = "line1");
     static void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gpsStatus);
-    static void drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gpsStatus);
 
     // Overlay and special screens
     static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *text);
 
     // Navigation bar overlay
     static void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
+    // Compact panels: called when the screen turns back on, so the intro splash replays even
+    // though drawNavigationBar itself never ran while the screen (and its OSThread) was off.
+    static void notifyScreenWoke();
 
     static void drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    // Compact panels: toggle between compass+distance view and status/telemetry view
+    static void scrollFavoriteDown();
+    static void scrollFavoriteUp();
 
     static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
@@ -61,6 +66,9 @@ class UIRenderer
 
     // Compass and location screen
     static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    // Compact panels: toggle between compass view and coordinates+elevation view
+    static void scrollPositionDown();
+    static void scrollPositionUp();
 
     static NodeNum currentFavoriteNodeNum;
     static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
@@ -104,9 +112,6 @@ class UIRenderer
     {
         drawStringWithEmotes(display, x, y, line.c_str(), fontHeight, emoteSpacing, fauxBold);
     }
-
-    // Check if the display can render a string (detect special chars; emoji)
-    static bool haveGlyphs(const char *str);
 }; // namespace UIRenderer
 
 } // namespace graphics

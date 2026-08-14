@@ -37,9 +37,9 @@ ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 
 ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 {
-    ScanI2C::DeviceType types[] = {MPU6050,  LIS3DH,   BMA423, LSM6DS3, BMX160,    STK8BAXX,
-                                   ICM20948, QMA6100P, BMM150, BMI270,  ICM42607P, ISM330DHCX};
-    return firstOfOrNONE(12, types);
+    ScanI2C::DeviceType types[] = {MPU6050,  LIS3DH, SC7A20, BMA423,    LSM6DS3,    BMX160,  STK8BAXX,
+                                   ICM20948, BMM150, BMI270, ICM42607P, ISM330DHCX, QMA6100P};
+    return firstOfOrNONE(13, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstMagnetometer() const
@@ -50,8 +50,8 @@ ScanI2C::FoundDevice ScanI2C::firstMagnetometer() const
 
 ScanI2C::FoundDevice ScanI2C::firstAQI() const
 {
-    ScanI2C::DeviceType types[] = {PMSA003I, SEN5X, SCD4X, SFA30};
-    return firstOfOrNONE(4, types);
+    ScanI2C::DeviceType types[] = {PMSA003I, SEN5X, SEN6X, SCD4X, SFA30};
+    return firstOfOrNONE(5, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstRGBLED() const
