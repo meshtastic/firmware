@@ -230,8 +230,6 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     if (!HardwareRNG::fill((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp)))
         CryptRNG.rand((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
     auth = bytesOut + numBytes;
-    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
-           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
@@ -246,8 +244,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempt encrypt with nonce: ", nonce, 13);
     printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
-    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
-               auth); // this can write up to 15 bytes longer than numbytes past bytesOut
+    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     return true;
@@ -305,8 +302,8 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 {
     SHA256 hash;
     size_t posn;
-    uint8_t size = numBytes;
-    uint8_t inc = 16;
+    size_t size = numBytes;
+    constexpr size_t inc = 16;
     hash.reset();
     for (posn = 0; posn < size; posn += inc) {
         size_t len = size - posn;
@@ -339,7 +336,7 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     // Calculate the shared secret with the specified node's public key and our private key
     // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
     if (!Curve25519::dh2(shared_key, local_priv)) {
-        LOG_WARN("Curve25519DH step 2 failed!");
+        LOG_WARN("Curve25519DH step 2 failed");
         return false;
     }
     return true;
@@ -376,7 +373,7 @@ concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {
-    LOG_DEBUG("Use AES%d key!", k.length * 8);
+    LOG_DEBUG("Use AES%d key", k.length * 8);
     key = k;
 }
 
@@ -392,7 +389,7 @@ void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t nu
         if (numBytes <= MAX_BLOCKSIZE) {
             encryptAESCtr(key, nonce, numBytes, bytes);
         } else {
-            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
+            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption", numBytes);
         }
     }
 }
@@ -406,11 +403,20 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    std::unique_ptr<CTRCommon> ctr;
-    if (_key.length == 16)
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES128>());
-    else
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES256>());
+    // Reused instead of reallocated per packet: safe because all callers hold cryptLock and setKey/setIV reset the
+    // full cipher state. Lazy so overriding platforms reserve nothing; key material now lives until the next call.
+    static CTR<AES128> *ctr128 = nullptr;
+    static CTR<AES256> *ctr256 = nullptr;
+    CTRCommon *ctr;
+    if (_key.length == 16) {
+        if (!ctr128)
+            ctr128 = new CTR<AES128>();
+        ctr = ctr128;
+    } else {
+        if (!ctr256)
+            ctr256 = new CTR<AES256>();
+        ctr = ctr256;
+    }
     ctr->setKey(_key.bytes, _key.length);
     static uint8_t scratch[MAX_BLOCKSIZE];
     memcpy(scratch, bytes, numBytes);

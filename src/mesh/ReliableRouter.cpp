@@ -16,13 +16,24 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+    if (isBlockedEventCoordinatePacket(p)) {
+        LOG_DEBUG("Suppress reliable coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
+    const GlobalPacketId key(p);
+    const bool retransmitting = p->want_ack;
+
     if (p->want_ack) {
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
 
-        if (copy)
-            startRetransmission(copy, NUM_RELIABLE_RETX);
+        if (copy) {
+            const uint8_t totalAttempts = isBroadcast(p->to) ? NUM_RELIABLE_RETX : NUM_RELIABLE_UNICAST_ATTEMPTS;
+            startRetransmission(copy, totalAttempts);
+        }
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an
@@ -34,7 +45,12 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    ErrorCode result = isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    // Duty-cycle rejections may clear before the scheduled retry.
+    if (retransmitting && result != ERRNO_OK && result != meshtastic_Routing_Error_DUTY_CYCLE_LIMIT)
+        stopRetransmission(key);
+
+    return result;
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)

@@ -100,10 +100,17 @@ bool File::_open_dir(char const *filepath)
         return false;
     }
 
-    _is_dir = true;
-
     _dir_path = (char *)rtos_malloc(strlen(filepath) + 1);
+    if (!_dir_path) {
+        // match the _dir failure path above: don't leave a half-open dir behind
+        lfs_dir_close(_fs->_getFS(), _dir);
+        rtos_free(_dir);
+        _dir = NULL;
+        return false;
+    }
     strcpy(_dir_path, filepath);
+
+    _is_dir = true;
 
     return true;
 }

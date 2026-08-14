@@ -46,6 +46,7 @@ class ScanI2C
         QMA6100P,
         MPU6050,
         LIS3DH,
+        SC7A20, // LIS3DH register map, different WHO_AM_I
         BMA423,
         BQ24295,
         LSM6DS3,
@@ -95,13 +96,17 @@ class ScanI2C
         CST3530,
         BMI270,
         SEN5X,
+        SEN6X,
         SFA30,
         CW2015,
         SCD30,
-        ADS1115,
+        ADS1X15,
+        ADS1X15_ALT,
         IIS2MDCTR,
         ISM330DHCX,
         SPA06,
+        DS248X,
+        HM330X
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
