@@ -114,6 +114,14 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         }
     }
 
+    // Our own packet heard back off the mesh, which the duplicate cache only suppresses best-effort.
+    // Clients can't tell an echo from genuine ingress, so it surfaces as an incoming message. Packets
+    // addressed to us are locally-generated feedback (implicit ACK, NAK, routing error), not an echo.
+    if (isFromUs(mp) && !isToUs(mp)) {
+        LOG_DEBUG("Skip phone echo of our own packet 0x%08x", mp->id);
+        return 0;
+    }
+
     printPacket("Forwarding to phone", mp);
     if (auto *toPhone = packetPool.allocCopy(*mp))
         sendToPhone(toPhone);
