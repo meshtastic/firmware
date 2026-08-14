@@ -63,6 +63,20 @@ void testStateCheckpoint(const char *, const char *) {}
 namespace
 {
 
+/// MinGW-w64 has no lstat(): Windows has no POSIX symlink stat, and nothing in a test sandbox
+/// creates a symlink, so stat() sees the same thing for every entry walk() can reach.
+#ifdef _WIN32
+inline int lstatCompat(const char *path, struct stat *st)
+{
+    return stat(path, st);
+}
+#else
+inline int lstatCompat(const char *path, struct stat *st)
+{
+    return lstat(path, st);
+}
+#endif
+
 /// Content fingerprint, used only to answer "did this file change?". FNV-1a rather than a real
 /// digest because the answer is a boolean and the files are a few KB of protobuf; nothing here
 /// records a hash as an expected value, which is what would make this a snapshot test.
@@ -96,7 +110,7 @@ void walk(const std::string &root, const std::string &rel, std::map<std::string,
         const std::string childRel = rel.empty() ? std::string(e->d_name) : rel + "/" + e->d_name;
         const std::string childPath = root + "/" + childRel;
         struct stat st;
-        if (lstat(childPath.c_str(), &st) != 0)
+        if (lstatCompat(childPath.c_str(), &st) != 0)
             continue;
         if (S_ISDIR(st.st_mode))
             walk(root, childRel, out);
