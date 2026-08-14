@@ -3,10 +3,12 @@
 #include "SPILock.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
+#include "mesh/SerialHalFraming.h"
 #include "mesh/StreamAPI.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <Arduino.h>
 #include <SPI.h>
+#include <atomic>
 #include <cstring>
 #include <stdint.h>
 
@@ -29,7 +31,10 @@ struct InterruptSlot {
     bool used = false;
     uint32_t pin = 0;
     uint32_t mode = 0;
-    volatile bool pending = false;
+    /// Set from interrupt context, cleared by pumpInterruptEvents() under interruptMutex. The ISR
+    /// cannot take the lock, so this needs to carry its own ordering - volatile alone says nothing
+    /// about visibility to the core running the pump.
+    std::atomic<bool> pending{false};
 };
 
 concurrency::Lock interruptMutex;
@@ -106,7 +111,7 @@ void emitInterruptEvent(uint32_t pin, StreamAPI *streamApi)
 void markPendingBySlot(uint8_t slot)
 {
     if (slot < MAX_INTERRUPT_SLOTS && interruptSlots[slot].used) {
-        interruptSlots[slot].pending = true;
+        interruptSlots[slot].pending.store(true);
     }
 }
 
@@ -155,8 +160,7 @@ int32_t pumpInterruptEvents()
         concurrency::LockGuard lock(&interruptMutex);
         streamApi = interruptStreamApi;
         for (size_t i = 0; i < MAX_INTERRUPT_SLOTS; ++i) {
-            if (interruptSlots[i].used && interruptSlots[i].pending) {
-                interruptSlots[i].pending = false;
+            if (interruptSlots[i].used && interruptSlots[i].pending.exchange(false)) {
                 toEmit[emitCount++] = interruptSlots[i].pin;
             }
         }
@@ -284,7 +288,7 @@ void SerialHalDevice::handleAttachInterrupt(const meshtastic_SerialHalCommand &c
             interruptSlots[slot].used = true;
             interruptSlots[slot].pin = cmd.pin;
             interruptSlots[slot].mode = cmd.mode;
-            interruptSlots[slot].pending = false;
+            interruptSlots[slot].pending.store(false);
         }
     }
 
@@ -306,7 +310,11 @@ void SerialHalDevice::handleDetachInterrupt(const meshtastic_SerialHalCommand &c
         concurrency::LockGuard lock(&interruptMutex);
         const int slot = findSlotByPinLocked(cmd.pin);
         if (slot >= 0) {
-            interruptSlots[slot] = InterruptSlot{};
+            // Reset field by field: the atomic member makes InterruptSlot non-assignable.
+            interruptSlots[slot].used = false;
+            interruptSlots[slot].pin = 0;
+            interruptSlots[slot].mode = 0;
+            interruptSlots[slot].pending.store(false);
         }
     }
 }
@@ -364,18 +372,8 @@ void SerialHalDevice::emitResponse(const meshtastic_SerialHalResponse &response,
         return;
     }
 
-    // Build frame with StreamAPI framing: START1 SERIALHAL_MAGIC LEN_H LEN_L [payload]
-    constexpr uint8_t START1 = 0x94;
-    constexpr uint8_t SERIALHAL_MAGIC = 0xA5;
-
-    uint8_t hdr[4];
-    hdr[0] = START1;
-    hdr[1] = SERIALHAL_MAGIC;
-    hdr[2] = (uint8_t)((responseLen >> 8) & 0xFF); // LEN_H
-    hdr[3] = (uint8_t)(responseLen & 0xFF);        // LEN_L
-
-    // Emit via StreamAPI (this uses the internal txBuf + framing)
-    streamApi->emitSerialHalResponse(hdr, sizeof(hdr), encoded, responseLen);
+    // StreamAPI owns the framing; it stamps START1 SERIALHAL_MAGIC LEN_H LEN_L ahead of this.
+    streamApi->emitSerialHalResponse(encoded, responseLen);
 
     // Keep a recent stream instance so async interrupt events can be emitted.
     {

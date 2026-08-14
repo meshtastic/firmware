@@ -1,5 +1,6 @@
 #include "platform/portduino/SerialHal.h"
 
+#include "mesh/SerialHalFraming.h"
 #include "mesh/mesh-pb-constants.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <cerrno>
@@ -15,10 +16,13 @@
 
 namespace
 {
-constexpr uint8_t START1 = 0x94;
-constexpr uint8_t SERIALHAL_MAGIC = 0xA5;
-constexpr size_t HEADER_SIZE = 4; // START1 + SERIALHAL_MAGIC + LEN_H + LEN_L
-constexpr uint8_t START2 = 0xC3;  // second byte of a normal FromRadio frame
+/// True while the calling thread is executing one of SerialHal's own worker loops.
+///
+/// A RadioLib interrupt callback runs on interruptThread and is free to call back into the HAL. If
+/// that path reaches openPort() it would call closePort() -> stopReaderThread() -> join() on the
+/// very thread doing the joining, which is undefined behaviour. Worker threads therefore decline
+/// to recycle the port and let the request fail instead.
+thread_local bool inHalWorkerThread = false;
 
 speed_t toTermiosBaud(uint32_t baud)
 {
@@ -61,15 +65,36 @@ SerialHal::~SerialHal()
 
 bool SerialHal::openPort()
 {
-    closePort();
-    fd = ::open(device.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
-    if (fd < 0) {
+    if (inHalWorkerThread) {
+        // Recycling the port from here would join this very thread. Fail the request; the next
+        // call from the radio thread will reopen.
+        return false;
+    }
+    std::lock_guard<std::mutex> guard(fdMutex);
+    return openPortLocked();
+}
+
+void SerialHal::closePort()
+{
+    if (inHalWorkerThread) {
+        return;
+    }
+    std::lock_guard<std::mutex> guard(fdMutex);
+    closePortLocked();
+}
+
+bool SerialHal::openPortLocked()
+{
+    closePortLocked();
+    const int opened = ::open(device.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
+    fd.store(opened);
+    if (opened < 0) {
         return false;
     }
 
     termios tty = {};
-    if (tcgetattr(fd, &tty) != 0) {
-        closePort();
+    if (tcgetattr(opened, &tty) != 0) {
+        closePortLocked();
         return false;
     }
 
@@ -87,29 +112,30 @@ bool SerialHal::openPort()
     tty.c_cflag &= ~CSTOPB;
     tty.c_cflag &= ~CRTSCTS;
 
-    if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-        closePort();
+    if (tcsetattr(opened, TCSANOW, &tty) != 0) {
+        closePortLocked();
         return false;
     }
 
-    tcflush(fd, TCIOFLUSH);
+    tcflush(opened, TCIOFLUSH);
     inError = false;
     startReaderThread();
     return true;
 }
 
-void SerialHal::closePort()
+void SerialHal::closePortLocked()
 {
+    // Threads first: both worker loops read fd directly, so they must be gone before it closes.
     stopReaderThread();
-    if (fd >= 0) {
-        ::close(fd);
-        fd = -1;
+    const int current = fd.exchange(-1);
+    if (current >= 0) {
+        ::close(current);
     }
 }
 
 void SerialHal::setTransportError(const char *msg)
 {
-    if (!inError.load() || !hasWarned) {
+    if (!inError.load() || !hasWarned.load()) {
         LOG_ERROR("SerialHal: %s (%s)", msg, device.c_str());
     }
     inError = true;
@@ -119,11 +145,12 @@ void SerialHal::setTransportError(const char *msg)
 
 bool SerialHal::waitForReadable(int timeout)
 {
-    if (fd < 0) {
+    const int current = fd.load();
+    if (current < 0) {
         return false;
     }
     pollfd pfd = {};
-    pfd.fd = fd;
+    pfd.fd = current;
     pfd.events = POLLIN;
     int ret = poll(&pfd, 1, timeout);
     return ret > 0 && (pfd.revents & POLLIN);
@@ -131,9 +158,13 @@ bool SerialHal::waitForReadable(int timeout)
 
 bool SerialHal::writeAll(const uint8_t *data, size_t len)
 {
+    const int current = fd.load();
+    if (current < 0) {
+        return false;
+    }
     size_t off = 0;
     while (off < len) {
-        ssize_t rc = ::write(fd, data + off, len - off);
+        ssize_t rc = ::write(current, data + off, len - off);
         if (rc < 0) {
             if (errno == EINTR) {
                 continue;
@@ -147,6 +178,10 @@ bool SerialHal::writeAll(const uint8_t *data, size_t len)
 
 bool SerialHal::readExact(uint8_t *data, size_t len)
 {
+    const int current = fd.load();
+    if (current < 0) {
+        return false;
+    }
     size_t off = 0;
     auto start = std::chrono::steady_clock::now();
     while (off < len) {
@@ -156,7 +191,7 @@ bool SerialHal::readExact(uint8_t *data, size_t len)
         if (remaining <= 0 || !waitForReadable(remaining)) {
             return false;
         }
-        ssize_t rc = ::read(fd, data + off, len - off);
+        ssize_t rc = ::read(current, data + off, len - off);
         if (rc < 0) {
             if (errno == EINTR) {
                 continue;
@@ -171,25 +206,20 @@ bool SerialHal::readExact(uint8_t *data, size_t len)
     return true;
 }
 
-uint16_t SerialHal::crc16(const uint8_t *data, size_t len) const
+uint16_t SerialHal::nextTransactionId()
 {
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < len; ++i) {
-        crc ^= ((uint16_t)data[i] << 8);
-        for (int bit = 0; bit < 8; ++bit) {
-            if (crc & 0x8000) {
-                crc = (uint16_t)((crc << 1) ^ 0x1021);
-            } else {
-                crc = (uint16_t)(crc << 1);
-            }
-        }
+    uint16_t id = txId.fetch_add(1);
+    if (id == 0) {
+        // The counter wrapped onto the value readerLoop() treats as an unsolicited interrupt
+        // event, so this request would never be matched. Take the next one instead.
+        id = txId.fetch_add(1);
     }
-    return crc;
+    return id;
 }
 
 bool SerialHal::sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_SerialHalResponse *response)
 {
-    if (fd < 0 && !openPort()) {
+    if (fd.load() < 0 && !openPort()) {
         setTransportError("serial open failed");
         return false;
     }
@@ -204,17 +234,26 @@ bool SerialHal::sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_S
 
     // Build frame with StreamAPI canonical framing: START1 SERIALHAL_MAGIC LEN_H LEN_L [payload]
     std::vector<uint8_t> frame;
-    frame.resize(HEADER_SIZE + payloadLen);
+    frame.resize(HEADER_LEN + payloadLen);
 
     frame[0] = START1;
     frame[1] = SERIALHAL_MAGIC;
     frame[2] = (uint8_t)((payloadLen >> 8) & 0xFF); // LEN_H (big-endian)
     frame[3] = (uint8_t)(payloadLen & 0xFF);        // LEN_L
-    memcpy(frame.data() + HEADER_SIZE, encoded, payloadLen);
+    memcpy(frame.data() + HEADER_LEN, encoded, payloadLen);
+
+    // Claim the id before the bytes go out, so a reply that comes back immediately is not
+    // mistaken by the reader for a late response to an abandoned request.
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        inFlight.insert(cmd.transaction_id);
+    }
 
     {
         std::lock_guard<std::mutex> writeGuard(writeMutex);
         if (!writeAll(frame.data(), frame.size())) {
+            std::lock_guard<std::mutex> lock(stateMutex);
+            inFlight.erase(cmd.transaction_id);
             setTransportError("serial write failed");
             return false;
         }
@@ -225,7 +264,14 @@ bool SerialHal::sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_S
         std::unique_lock<std::mutex> lock(stateMutex);
         const auto timeout = std::chrono::milliseconds(timeoutMs);
         const bool arrived = responseCv.wait_for(lock, timeout, [&]() { return pendingResponses.count(cmd.transaction_id) > 0; });
+
+        inFlight.erase(cmd.transaction_id);
         if (!arrived) {
+            // Drop anything cached for this id as well: transaction ids are 16 bits and get
+            // reused, so a stale entry left here would later satisfy an unrelated caller.
+            pendingResponses.erase(cmd.transaction_id);
+            lock.unlock();
+
             setTransportError("serial response timeout");
             LOG_WARN("SerialHal: response timeout for transaction_id %u, cmd type %u", cmd.transaction_id, cmd.type);
             return false;
@@ -235,10 +281,18 @@ bool SerialHal::sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_S
         pendingResponses.erase(cmd.transaction_id);
     }
 
-    if (got.result != meshtastic_SerialHalResponse_Result_OK) {
-        setTransportError("serial response reported error");
-        LOG_WARN("SerialHal: response error: %s, %u, %u", got.error, cmd.type, cmd.data.size);
+    // A reply arrived, so the link itself is healthy - clear any transport latch before looking at
+    // what the device actually said.
+    inError = false;
+    hasWarned = false;
 
+    if (got.result != meshtastic_SerialHalResponse_Result_OK) {
+        // An application-level refusal (bad pin, unsupported command, device not in
+        // serial_hal_only mode) says nothing about the transport. Latching inError here would be
+        // terminal: checkError() gates every public entry point and sendRequest() is the only
+        // thing that clears the latch, so one bad command would disable the HAL for the life of
+        // the process.
+        LOG_WARN("SerialHal: response error: %s, cmd type %u, response data size %u", got.error, cmd.type, got.data.size);
         return false;
     }
 
@@ -246,8 +300,6 @@ bool SerialHal::sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_S
         *response = got;
     }
 
-    inError = false;
-    hasWarned = false;
     return true;
 }
 
@@ -258,7 +310,7 @@ void SerialHal::pinMode(uint32_t pin, uint32_t mode)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_PIN_MODE;
     cmd.pin = pin;
     cmd.mode = mode;
@@ -274,7 +326,7 @@ void SerialHal::digitalWrite(uint32_t pin, uint32_t value)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_DIGITAL_WRITE;
     cmd.pin = pin;
     cmd.value = value;
@@ -290,7 +342,7 @@ uint32_t SerialHal::digitalRead(uint32_t pin)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_DIGITAL_READ;
     cmd.pin = pin;
 
@@ -313,7 +365,7 @@ void SerialHal::attachInterrupt(uint32_t interruptNum, void (*interruptCb)(void)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_ATTACH_INTERRUPT;
     cmd.pin = interruptNum;
     cmd.mode = mode;
@@ -334,7 +386,7 @@ void SerialHal::detachInterrupt(uint32_t interruptNum)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_DETACH_INTERRUPT;
     cmd.pin = interruptNum;
 
@@ -395,16 +447,26 @@ void SerialHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_SPI_TRANSFER;
 
     const size_t maxTx = sizeof(cmd.data.bytes);
-    const size_t txLen = len < maxTx ? len : maxTx;
-    cmd.data.size = txLen;
+    if (len > maxTx) {
+        // Quietly sending a short transfer would leave the radio's registers in a state neither
+        // side can reason about. RadioLib stays well inside a LoRa payload today, so this is a
+        // guard against a future caller rather than a limit we expect to reach.
+        LOG_ERROR("SerialHal: SPI transfer of %u bytes exceeds the %u byte frame payload limit", (unsigned)len, (unsigned)maxTx);
+        if (in != nullptr) {
+            memset(in, 0, len);
+        }
+        return;
+    }
+
+    cmd.data.size = len;
     if (out != nullptr) {
-        memcpy(cmd.data.bytes, out, txLen);
+        memcpy(cmd.data.bytes, out, len);
     } else {
-        memset(cmd.data.bytes, 0, txLen);
+        memset(cmd.data.bytes, 0, len);
     }
 
     meshtastic_SerialHalResponse response = meshtastic_SerialHalResponse_init_zero;
@@ -424,9 +486,8 @@ void SerialHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 bool SerialHal::checkError()
 {
     if (inError.load()) {
-        if (!hasWarned) {
+        if (!hasWarned.exchange(true)) {
             LOG_ERROR("SerialHal in_error detected");
-            hasWarned = true;
         }
         portduino_status.LoRa_in_error = true;
         return true;
@@ -435,18 +496,23 @@ bool SerialHal::checkError()
     return false;
 }
 
-bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
+bool SerialHal::readFrame(std::vector<uint8_t> &payload)
 {
     payload.clear();
+
+    const int current = fd.load();
+    if (current < 0) {
+        return false;
+    }
 
     // Loop so that normal FromRadio frames (START1 START2 ...) emitted by the
     // device on the same serial port are drained and discarded rather than
     // causing the byte stream to desync.
     for (;;) {
-        uint8_t hdr[HEADER_SIZE] = {0};
+        uint8_t hdr[HEADER_LEN] = {0};
         for (;;) {
 
-            ssize_t rc = ::read(fd, &hdr[0], 1);
+            ssize_t rc = ::read(current, &hdr[0], 1);
             if (rc < 0) {
                 if (errno == EINTR) {
                     continue;
@@ -461,7 +527,7 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
             }
         }
 
-        if (!readExact(hdr + 1, HEADER_SIZE - 1)) {
+        if (!readExact(hdr + 1, HEADER_LEN - 1)) {
             return false;
         }
 
@@ -497,9 +563,10 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
 
 void SerialHal::readerLoop()
 {
+    inHalWorkerThread = true;
     readerRunning = true;
     while (!readerStopRequested.load()) {
-        if (fd < 0) {
+        if (fd.load() < 0) {
             break;
         }
 
@@ -508,7 +575,7 @@ void SerialHal::readerLoop()
         }
 
         std::vector<uint8_t> payload;
-        if (!readFrame(payload, 40)) {
+        if (!readFrame(payload)) {
             continue;
         }
 
@@ -534,6 +601,13 @@ void SerialHal::readerLoop()
 
         {
             std::lock_guard<std::mutex> lock(stateMutex);
+            if (inFlight.count(resp.transaction_id) == 0) {
+                // Nobody is waiting on this id - it is a reply to a request that already timed
+                // out. Caching it would grow the map without bound and, once the 16-bit id wraps,
+                // hand stale data to a future caller.
+                LOG_DEBUG("SerialHal: dropping unmatched response for transaction_id %u", resp.transaction_id);
+                continue;
+            }
             pendingResponses[resp.transaction_id] = resp;
         }
         responseCv.notify_all();
@@ -543,6 +617,7 @@ void SerialHal::readerLoop()
 
 void SerialHal::interruptDispatchLoop()
 {
+    inHalWorkerThread = true;
     interruptDispatcherRunning = true;
     while (!readerStopRequested.load()) {
         uint32_t pin = 0;

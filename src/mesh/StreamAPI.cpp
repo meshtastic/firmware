@@ -6,19 +6,45 @@
 #include "RTC.h"
 #include "RedirectablePrint.h"
 #include "SerialHalDevice.h"
+#include "SerialHalFraming.h"
 #include "StreamAPI.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
 #include "gps/RTC.h"
 
-#define START1 0x94
-#define START2 0xc3
-#define SERIALHAL_MAGIC 0xa5 // second framing byte for SerialHal frames (START1 SH_MAGIC LEN_H LEN_L PAYLOAD)
-#define HEADER_LEN 4
+/// Enter or leave the SerialHal receive window.
+///
+/// The window keeps readStream() polling at full speed and mutes log output so a LogRecord frame
+/// cannot delay the response the host is blocking on. Both effects are global, so the three call
+/// sites that open and close it must stay in step - hence one helper rather than the flag pair
+/// being poked by hand.
+void StreamAPI::setSerialHalRxActive(bool active)
+{
+    serialHalRxActive.store(active);
+    RedirectablePrint::setSerialHalLogSuppressed(active);
+    if (active)
+        serialHalRxStartMsec = millis();
+}
+
+/// Abandon a SerialHal frame that stopped arriving part-way through.
+///
+/// Suppression is armed on the frame's second byte and disarmed on its last one. A host that
+/// stalls or disconnects mid-frame would otherwise hold the window open forever, silencing logs
+/// for every subsystem on the node with no way back.
+void StreamAPI::expireStaleSerialHalRx()
+{
+    if (!serialHalRxActive.load() || Throttle::isWithinTimespanMs(serialHalRxStartMsec, SERIALHAL_RX_TIMEOUT_MSEC))
+        return;
+
+    LOG_WARN("StreamAPI: SerialHal frame stalled mid-receive, dropping it");
+    rxPtr = 0;
+    setSerialHalRxActive(false);
+}
 
 /// Poll the underlying stream, drain output, and update connection state.
 int32_t StreamAPI::runOncePart()
 {
+    expireStaleSerialHalRx();
     auto result = readStream();
     // More to send: come straight back instead of sleeping out readStream's idle delay.
     if (writeStream())
@@ -30,6 +56,7 @@ int32_t StreamAPI::runOncePart()
 /// Consume supplied input bytes, drain output, and update connection state.
 int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 {
+    expireStaleSerialHalRx();
     auto result = readStream(buf, bufLen);
     if (writeStream())
         result = 0;
@@ -111,16 +138,13 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
         } else if (ptr == 1) { // discriminate frame type on second byte
             if (c == START2) {
                 rxIsSerialHal = false; // standard ToRadio frame
-                serialHalRxActive.store(false);
-                RedirectablePrint::setSerialHalLogSuppressed(false);
+                setSerialHalRxActive(false);
             } else if (c == SERIALHAL_MAGIC) {
                 rxIsSerialHal = true; // SerialHal command frame
-                serialHalRxActive.store(true);
-                RedirectablePrint::setSerialHalLogSuppressed(true);
+                setSerialHalRxActive(true);
             } else {
                 rxPtr = 0; // unrecognised second byte - not our frame
-                serialHalRxActive.store(false);
-                RedirectablePrint::setSerialHalLogSuppressed(false);
+                setSerialHalRxActive(false);
             }
         } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
             uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
@@ -130,8 +154,10 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
             if (ptr == HEADER_LEN - 1) {
                 // we _just_ finished our 4 byte header, validate length now
                 uint32_t maxLen = rxIsSerialHal ? (uint32_t)meshtastic_SerialHalCommand_size : MAX_TO_FROM_RADIO_SIZE;
-                if (len > maxLen)
-                    rxPtr = 0; // length is bogus, restart search for framing
+                if (len > maxLen) {
+                    rxPtr = 0;                   // length is bogus, restart search for framing
+                    setSerialHalRxActive(false); // and close the window this frame opened
+                }
             }
 
             if (rxPtr != 0)                        // Is packet still considered 'good'?
@@ -145,9 +171,7 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
                         handleToRadio(rxBuf + HEADER_LEN, len);
 
                     if (rxIsSerialHal)
-                        serialHalRxActive.store(false);
-                    if (rxIsSerialHal)
-                        RedirectablePrint::setSerialHalLogSuppressed(false);
+                        setSerialHalRxActive(false);
                 }
         }
     }
@@ -191,17 +215,13 @@ int32_t StreamAPI::readStream()
             } else if (ptr == 1) { // discriminate frame type on second byte
                 if (c == START2) {
                     rxIsSerialHal = false; // standard ToRadio frame
-                    serialHalRxActive.store(false);
-                    RedirectablePrint::setSerialHalLogSuppressed(false);
+                    setSerialHalRxActive(false);
                 } else if (c == SERIALHAL_MAGIC) {
                     rxIsSerialHal = true; // SerialHal command frame
-                    serialHalRxActive.store(true);
-                    RedirectablePrint::setSerialHalLogSuppressed(true);
-                    LOG_WARN("StreamAPI: Detected SerialHal command frame");
+                    setSerialHalRxActive(true);
                 } else {
                     rxPtr = 0; // unrecognised second byte - not our frame
-                    serialHalRxActive.store(false);
-                    RedirectablePrint::setSerialHalLogSuppressed(false);
+                    setSerialHalRxActive(false);
                 }
             } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
                 uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
@@ -211,8 +231,10 @@ int32_t StreamAPI::readStream()
                 if (ptr == HEADER_LEN - 1) {
                     // we _just_ finished our 4 byte header, validate length now
                     uint32_t maxLen = rxIsSerialHal ? (uint32_t)meshtastic_SerialHalCommand_size : MAX_TO_FROM_RADIO_SIZE;
-                    if (len > maxLen)
-                        rxPtr = 0; // length is bogus, restart search for framing
+                    if (len > maxLen) {
+                        rxPtr = 0;                   // length is bogus, restart search for framing
+                        setSerialHalRxActive(false); // and close the window this frame opened
+                    }
                 }
 
                 if (rxPtr != 0)                        // Is packet still considered 'good'?
@@ -226,9 +248,7 @@ int32_t StreamAPI::readStream()
                             handleToRadio(rxBuf + HEADER_LEN, len);
 
                         if (rxIsSerialHal)
-                            serialHalRxActive.store(false);
-                        if (rxIsSerialHal)
-                            RedirectablePrint::setSerialHalLogSuppressed(false);
+                            setSerialHalRxActive(false);
                     }
             }
         }
@@ -240,10 +260,10 @@ int32_t StreamAPI::readStream()
 }
 
 /// Encode the stream marker and big-endian payload length.
-size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen)
+size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen, uint8_t discriminator)
 {
     buf[0] = START1;
-    buf[1] = START2;
+    buf[1] = discriminator;
     buf[2] = (payloadLen >> 8) & 0xff;
     buf[3] = payloadLen & 0xff;
     return payloadLen + HEADER_LEN;
@@ -253,13 +273,13 @@ size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen)
  * Send the current txBuffer over our stream
  */
 /// Write one framed payload using the transport's failure semantics.
-bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
+bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort, uint8_t discriminator)
 {
     (void)bestEffort;
     if (len == 0 || !canWrite)
         return false;
 
-    const size_t totalLen = buildFrameHeader(buf, len);
+    const size_t totalLen = buildFrameHeader(buf, len, discriminator);
     // Serialize write-readiness checks, writes and write-failure handling
     // against concurrent stream writes/close.
     concurrency::LockGuard guard(&streamLock);
@@ -279,7 +299,7 @@ bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 /// Emit the prepared main PhoneAPI payload as required output.
 bool StreamAPI::emitTxBuffer(size_t len)
 {
-    return writeFrame(txBuf, len, false);
+    return writeFrame(txBuf, len, false, START2);
 }
 
 /// Emit the initial reboot notification as a framed FromRadio payload.
@@ -326,7 +346,7 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
 
     size_t len =
         pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
-    writeFrame(txBufLog, len, true);
+    writeFrame(txBufLog, len, true, START2);
 }
 
 /// Hookable to find out when connection changes
@@ -349,23 +369,19 @@ void StreamAPI::handleSerialHalCommand(const uint8_t *buf, size_t len)
     SerialHalDevice::handleCommand(buf, len, this);
 }
 
-void StreamAPI::emitSerialHalResponse(const uint8_t *hdr, size_t hdrLen, const uint8_t *payload, size_t payloadLen)
+void StreamAPI::emitSerialHalResponse(const uint8_t *payload, size_t payloadLen)
 {
-    if (hdr == nullptr || hdrLen != 4 || payload == nullptr || payloadLen > meshtastic_SerialHalResponse_size) {
+    if (payload == nullptr || payloadLen == 0 || payloadLen > meshtastic_SerialHalResponse_size) {
         LOG_ERROR("StreamAPI: Invalid SerialHal response parameters");
         return;
     }
 
-    // Build complete frame in a temporary buffer
-    uint8_t frame[4 + meshtastic_SerialHalResponse_size];
-    memcpy(frame, hdr, hdrLen);
-    memcpy(frame + hdrLen, payload, payloadLen);
+    // Leave HEADER_LEN bytes clear so writeFrame() can stamp the header in place. Going through
+    // writeFrame() rather than writing the stream directly is what gets this path the transport's
+    // own admission control, partial-write reporting and - on USB CDC consoles - the retained
+    // frame machinery, which a direct write would interleave bytes into.
+    uint8_t frame[HEADER_LEN + meshtastic_SerialHalResponse_size];
+    memcpy(frame + HEADER_LEN, payload, payloadLen);
 
-    size_t totalLen = hdrLen + payloadLen;
-
-    // Serialize stream writes against other emit operations via streamLock
-    concurrency::LockGuard guard(&streamLock);
-    stream->write(frame, totalLen);
-    stream->flush();
-    LOG_WARN("StreamAPI: Emitted SerialHal response frame (len=%zu)", totalLen);
+    writeFrame(frame, payloadLen, false, SERIALHAL_MAGIC);
 }
