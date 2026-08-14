@@ -57,9 +57,8 @@ class StreamAPI : public PhoneAPI
     virtual int32_t runOncePart();
     virtual int32_t runOncePart(char *buf, uint16_t bufLen);
 
-    /// True while undelivered output remains: a transport-retained frame or queued PhoneAPI
-    /// data. writeStream() stops mid-dump at STREAM_WRITE_BUDGET_MSEC, so callers whose idle
-    /// sleep is woken only by RX activity must keep polling while this holds (see #11164).
+    /// True while undelivered output remains (retained frame or queued PhoneAPI data); callers
+    /// woken only by RX activity must keep polling while set, as drains stop mid-dump (#11164).
     bool hasPendingOutput();
 
     /// Check the current underlying physical link to see if the client is currently connected

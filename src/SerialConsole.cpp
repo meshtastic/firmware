@@ -125,9 +125,8 @@ int32_t SerialConsole::runOnce()
 
     int32_t delay = runOncePart();
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
-    // Only rxInt()/onNowHasData() end the idle sleep, and neither fires for "TX space
-    // freed": the bounded drain (#11164) can leave queued output behind with no RX
-    // pending, so an unbounded sleep here would strand the rest of a config dump.
+    // Nothing wakes the idle sleep for "TX space freed" or a bounded-drain remainder
+    // (#11164), so keep polling while the API holds undelivered output.
     if (hasPendingOutput())
         return delay < 25 ? delay : 25; // 0 continues a budget slice; else short-poll TX drain
     return Port.available() ? delay : INT32_MAX;

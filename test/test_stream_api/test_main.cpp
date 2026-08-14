@@ -586,29 +586,25 @@ static bool drainHandshakeForPacketFrom(PhoneAPITestShim &api, NodeNum from, mes
     return false;
 }
 
-/// Swaps in a scratch NodeDB for the config-dump stream, restoring the prior one on
-/// destruction (Unity asserts longjmp out, so cleanup cannot sit at the end of a test).
-class ScopedNodeDB
+// Scratch NodeDB for the config-dump stream; restored by tearDown() rather than RAII
+// because a failed TEST_ASSERT longjmps out of the test without running destructors.
+static NodeDB *scratchNodeDB = nullptr;
+static NodeDB *savedNodeDB = nullptr;
+
+/// Install a scratch NodeDB; tearDown() restores the previous one after any test outcome.
+static void installScratchNodeDB()
 {
-  public:
-    /// Install the scoped NodeDB.
-    ScopedNodeDB() : previous(nodeDB) { nodeDB = &instance; }
-    /// Restore the prior NodeDB.
-    ~ScopedNodeDB() { nodeDB = previous; }
+    savedNodeDB = nodeDB;
+    scratchNodeDB = new NodeDB();
+    nodeDB = scratchNodeDB;
+}
 
-  private:
-    NodeDB instance;
-    NodeDB *previous;
-};
-
-// The #11164 bounded drain can end a dispatch with config frames still queued and no RX
-// pending. SerialConsole::runOnce gates its INT32_MAX idle sleep on hasPendingOutput(),
-// so this pins the contract: pending while queued or retained, clear once drained, and
-// always gated off while the transport is not yet writable.
+// SerialConsole::runOnce gates its INT32_MAX idle sleep on hasPendingOutput(): pending while
+// output is queued or retained (#11164 bounded drain), clear when drained or pre-contact.
 static void test_stream_api_pending_output_tracks_queue_and_retained_frame(void)
 {
     ScopedMeshService scopedService;
-    ScopedNodeDB scopedNodeDB;
+    installScratchNodeDB();
     ScriptedStream stream;
     PendingOutputStreamAPI api(&stream);
 
@@ -791,8 +787,15 @@ static void test_node_heard_during_first_uptime_second_gets_last_heard_backfille
 
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
-/// Unity per-test teardown; fixtures clean themselves up.
-void tearDown(void) {}
+/// Unity per-test teardown; restores state that a failed assert's longjmp would leak.
+void tearDown(void)
+{
+    if (scratchNodeDB) {
+        nodeDB = savedNodeDB;
+        delete scratchNodeDB;
+        scratchNodeDB = nullptr;
+    }
+}
 
 /// Initialize the native environment and run the stream regression suite.
 void setup()
