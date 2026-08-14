@@ -733,6 +733,65 @@ void test_receiveWithoutChannelDownlink(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+// A disabled channel keeps its name and downlink_enabled: ensureLicensedOperation() leaves an admin
+// channel in exactly that shape. It must not answer for a channel the user turned off.
+void test_receiveIgnoresDisabledChannelDownlink(void)
+{
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "ghost", .downlink_enabled = true},
+        .role = meshtastic_Channel_Role_DISABLED,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+
+    unitTest->publish(&decoded, "!87654321", "ghost");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// Nor may it be the thing that unlocks the PKI topic.
+void test_receiveIgnoresPkiWhenOnlyDisabledChannelHasDownlink(void)
+{
+    channelFile.channels[0].settings.downlink_enabled = false;
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "ghost", .downlink_enabled = true},
+        .role = meshtastic_Channel_Role_DISABLED,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+    meshtastic_MeshPacket e = encrypted;
+    e.to = myNodeInfo.my_node_num;
+
+    unitTest->publish(&e, "!87654321", "PKI");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// Two active slots can legitimately share a global id, since every blank name resolves to the preset
+// name. That must still deliver, resolved to the first match, not be rejected as ambiguous.
+void test_receiveAcceptsDownlinkWhenTwoChannelsShareAGlobalId(void)
+{
+    config.lora.use_preset = true; // blank names resolve to "LongFast"
+    channelFile.channels[0].settings.name[0] = '\0';
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "", .downlink_enabled = true},
+        .role = meshtastic_Channel_Role_SECONDARY,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+
+    unitTest->publish(&decoded, "!87654321", "LongFast");
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_EQUAL(0, mockRouter->packets_.front().channel);
+}
+
 // Test receiving an encrypted MeshPacket on the PKI topic.
 void test_receiveEncryptedPKITopicToUs(void)
 {
@@ -1278,6 +1337,9 @@ void setup()
     RUN_TEST(test_receiveTextVariantFromProxyIsNotReadAsBytes);
     RUN_TEST(test_receiveNoVariantFromProxyIsIgnored);
     RUN_TEST(test_receiveWithoutChannelDownlink);
+    RUN_TEST(test_receiveIgnoresDisabledChannelDownlink);
+    RUN_TEST(test_receiveIgnoresPkiWhenOnlyDisabledChannelHasDownlink);
+    RUN_TEST(test_receiveAcceptsDownlinkWhenTwoChannelsShareAGlobalId);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
     RUN_TEST(test_receiveAcksOwnSentMessages);
