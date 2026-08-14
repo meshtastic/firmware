@@ -77,7 +77,7 @@ class MagnetometerThread : public concurrency::OSThread
 #endif
 #if __has_include(<SensorQMC6309.hpp>)
         case ScanI2C::DeviceType::QMC6309:
-            sensor = new QMC6309Sensor(device);
+            sensor.reset(new QMC6309Sensor(device));
             break;
 #endif
         default:

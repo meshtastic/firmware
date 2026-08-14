@@ -150,7 +150,7 @@ class AccelerometerThread : public concurrency::OSThread
 #endif
 #if __has_include(<SensorQMI8658.hpp>)
         case ScanI2C::DeviceType::QMI8658:
-            sensor = new QMI8658Sensor(device);
+            sensor.reset(new QMI8658Sensor(device));
             break;
 #endif
         default:
