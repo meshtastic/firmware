@@ -826,7 +826,7 @@ void test_reliableAckStopsNormalPendingTransmission(void)
 // cannot decode it. The routing auth gate classifies it opaque and returns before
 // shouldFilterReceived() runs, so the implicit ACK has to be reachable from the header alone -
 // otherwise the client never sees "Delivered to mesh" for a DM.
-void test_implicitAck_firesForUndecodableOwnOverheardPacket(void)
+void test_implicit_ack_for_opaque_own_packet(void)
 {
     auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
     reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
@@ -854,7 +854,7 @@ void test_implicitAck_firesForUndecodableOwnOverheardPacket(void)
 }
 
 // Someone else's traffic must never mint an ACK, even with a colliding id.
-void test_implicitAck_ignoresPacketsNotFromUs(void)
+void test_implicit_ack_ignores_foreign_packet(void)
 {
     auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
     reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
@@ -1102,8 +1102,8 @@ void setup()
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
-    RUN_TEST(test_implicitAck_firesForUndecodableOwnOverheardPacket);
-    RUN_TEST(test_implicitAck_ignoresPacketsNotFromUs);
+    RUN_TEST(test_implicit_ack_for_opaque_own_packet);
+    RUN_TEST(test_implicit_ack_ignores_foreign_packet);
     RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
     RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
     RUN_TEST(test_directed_hop_tracks_three_total_attempts);
