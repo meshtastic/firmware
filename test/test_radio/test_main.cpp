@@ -292,9 +292,7 @@ static size_t countKnownRegions()
 
 // Every region in the firmware table (except the UNSET sentinel) must appear
 // exactly once in the map, and all counts must stay within the mesh.options bounds
-// (exceeding them would mean nanopb silently truncates the wire message). A build that
-// pins a preset in userPrefs adds one more entry for UNSET - see
-// test_regionPresetMap_unsetCarriesUserprefsIntent.
+// (exceeding them would mean nanopb silently truncates the wire message).
 static void test_regionPresetMap_coversAllRegionsWithinBounds()
 {
     meshtastic_LoRaRegionPresetMap map;
@@ -341,9 +339,7 @@ static void test_regionPresetMap_matchesRegionTable()
         const RegionInfo *r = getRegion(code);
 
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
-        // UNSET's entry states the build's pinned preset rather than mirroring PROFILE_UNDEF,
-        // so the table comparisons below do not apply to it. Covered instead by
-        // test_regionPresetMap_unsetCarriesUserprefsIntent.
+        // UNSET states the pinned preset, not PROFILE_UNDEF's list, so the table checks below don't apply.
         if (code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
             continue;
 #endif
@@ -387,10 +383,8 @@ static void test_regionPresetMap_matchesRegionTable()
     }
 }
 
-// UNSET is in the map only when the build pins a preset in userPrefs, and then it states
-// exactly that preset - a statement of intent a client can distinguish from the LONG_FAST
-// placeholder a stock install leaves behind. A stock build leaves UNSET out entirely, which
-// clients read as "unconstrained".
+// UNSET appears only when the build pins a preset, and then states exactly that preset.
+// A stock build leaves it out entirely, which clients read as "unconstrained".
 static void test_regionPresetMap_unsetCarriesUserprefsIntent()
 {
     meshtastic_LoRaRegionPresetMap map;

@@ -746,18 +746,8 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
     }
 
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
-    // A vendor build pins a preset in installDefaultConfig() and ships with the region still
-    // UNSET, so its nodes reach the user in a state stock firmware never produces: a preset
-    // that is deliberate rather than the LONG_FAST placeholder a default install leaves
-    // behind. Nothing on the wire told the two apart, so clients treated every unset-region
-    // node as factory-fresh and overwrote the preset the moment a region was picked.
-    //
-    // Advertising the pinned preset as UNSET's sole entry is that missing statement of
-    // intent. It is NOT enforcement: supportsPreset() accepts any known preset while the
-    // region is unset, and the radio is held silent either way, so the device will still
-    // honour whatever the user or an admin sets. A stock build emits no UNSET entry at all,
-    // which every client already reads as "unconstrained" - so this is inert unless a build
-    // actually pins a preset.
+    // A pinned preset is a statement of intent, not enforcement: supportsPreset() still accepts any
+    // known preset while unset. Stock builds emit no UNSET entry, which clients read as unconstrained.
     if (map.groups_count < maxGroups && map.region_groups_count < maxRegions) {
         const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
         meshtastic_LoRaPresetGroup &grp = map.groups[map.groups_count];
@@ -770,8 +760,7 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
         rg.region = unset->code;
         rg.group_index = (uint8_t)map.groups_count++;
     } else {
-        // Losing this entry only costs the intent signal - clients fall back to treating
-        // UNSET as unconstrained - but it must not be silent.
+        // Costs only the intent signal - clients fall back to unconstrained - but must not be silent.
         LOG_ERROR("Region preset map full; UNSET intent omitted");
     }
 #endif
