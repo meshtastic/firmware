@@ -579,6 +579,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+        // strncpy does not terminate when the source fills the buffer; a 40+ char
+        // APP_ENV would make nanopb reject the MyInfo encode ("unterminated string").
+        myNodeInfo.pio_env[sizeof(myNodeInfo.pio_env) - 1] = '\0';
         myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
         fromRadioScratch.my_info = myNodeInfo;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
@@ -972,6 +975,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         }
 
         if (infoToSend.num != 0) {
+            // A record prefetched before the clock became trusted carries last_heard == 0 even
+            // once the store is backfilled, so re-read it at send time: handshake ordering
+            // (time-set vs node-list download) must not decide what the phone sees.
+            if (infoToSend.last_heard == 0 && infoToSend.num != nodeDB->getNodeNum()) {
+                const meshtastic_NodeInfoLite *fresh = nodeDB->getMeshNode(infoToSend.num);
+                if (fresh)
+                    infoToSend.last_heard = fresh->last_heard;
+            }
             // Just in case we stored a different user.id in the past, but should never happen going forward
             sprintf(infoToSend.user.id, "!%08x", infoToSend.num);
 

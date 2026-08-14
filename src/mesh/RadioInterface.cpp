@@ -672,6 +672,19 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     return r;
 }
 
+bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    // Walks profile->presets directly rather than RegionInfo::supportsPreset(), which calls
+    // back here for the UNSET entry. UNSET terminates the table, so it is checked last.
+    for (const RegionInfo *r = regions;; r++) {
+        for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END; i++)
+            if (r->profile->presets[i] == preset)
+                return true;
+        if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            return false;
+    }
+}
+
 void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
 {
     map = meshtastic_LoRaRegionPresetMap_init_zero;

@@ -4,12 +4,18 @@
 #include "RadioLibInterface.h"
 #include "RadioLibRF95.h"
 
+#include <memory>
+
 /**
  * Our new not radiohead adapter for RF95 style radios
  */
 class RF95Interface : public RadioLibInterface
 {
-    RadioLibRF95 *lora = NULL; // Either a RFM95 or RFM96 depending on what was stuffed on this board
+    // Either a RFM95 or RFM96 depending on what was stuffed on this board.
+    // Owned here; every other radio interface holds its driver by value, but this one is
+    // constructed in init(), so unique_ptr keeps it from leaking when init() fails and the
+    // interface is destroyed.
+    std::unique_ptr<RadioLibRF95> lora;
 
   public:
     RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,

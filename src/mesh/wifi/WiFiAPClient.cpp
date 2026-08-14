@@ -294,7 +294,7 @@ static int32_t reconnectWiFi()
 #ifndef DISABLE_NTP
     if (WiFi.isConnected() && (!Throttle::isWithinTimespanMs(lastrun_ntp, 43200000) || (lastrun_ntp == 0))) { // every 12 hours
         LOG_DEBUG("Update NTP time from %s", config.network.ntp_server);
-        if (timeClient.update()) {
+        if (timeClient.forceUpdate()) {
             LOG_DEBUG("NTP success - set RTCQualityNTP if needed");
 
             struct timeval tv;
@@ -316,7 +316,11 @@ static int32_t reconnectWiFi()
         return 1000; // check once per second
     } else {
         onNetworkConnected(); // will only do anything once (guarded by APStartupComplete)
-        return 300000;        // every 5 minutes
+#ifndef DISABLE_NTP
+        if (lastrun_ntp == 0)
+            return 5000; // NTP not yet synced, retry sooner
+#endif
+        return 300000; // every 5 minutes
     }
 }
 
