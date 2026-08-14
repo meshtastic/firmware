@@ -17,7 +17,13 @@
 #include <PubSubClient.h>
 #include <WiFiClient.h>
 
+// htonl() for remoteIP() below. MinGW has no <arpa/inet.h>; the byte-order helpers live in
+// winsock2.h, which must precede any <windows.h> the Arduino shims pull in.
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 
 #include <algorithm>
 #include <list>
