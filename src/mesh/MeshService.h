@@ -222,6 +222,9 @@ class MeshService
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
+#ifdef PIO_UNIT_TESTING
+    friend class MeshServicePhoneDeliveryTest;
+#endif
 };
 
 extern MeshService *service;
