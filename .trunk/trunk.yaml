@@ -158,6 +158,7 @@ lint:
     # 32-bit rollover.
     - linters: [trufflehog]
       paths:
+        - test/test_airtime/test_main.cpp
         - test/test_throttle/test_main.cpp
         - test/test_uptime_clock/test_main.cpp
 runtimes:

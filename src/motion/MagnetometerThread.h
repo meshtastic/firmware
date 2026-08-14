@@ -10,12 +10,14 @@
 #include "MMC5983MASensor.h"
 #include "MotionSensor.h"
 
+#include <memory>
+
 extern ScanI2C::DeviceAddress magnetometer_found;
 
 class MagnetometerThread : public concurrency::OSThread
 {
   private:
-    MotionSensor *sensor = nullptr;
+    std::unique_ptr<MotionSensor> sensor;
     ScanI2C::FoundDevice device;
     bool isInitialised = false;
 
@@ -69,7 +71,7 @@ class MagnetometerThread : public concurrency::OSThread
         switch (device.type) {
 #if __has_include(<SparkFun_MMC5983MA_Arduino_Library.h>)
         case ScanI2C::DeviceType::MMC5983MA:
-            sensor = new MMC5983MASensor(device);
+            sensor.reset(new MMC5983MASensor(device));
             break;
 #endif
         default:
@@ -106,8 +108,7 @@ class MagnetometerThread : public concurrency::OSThread
     void clean()
     {
         isInitialised = false;
-        delete sensor;
-        sensor = nullptr;
+        sensor.reset();
     }
 };
 

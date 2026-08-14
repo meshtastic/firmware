@@ -424,37 +424,34 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
             LOG_DEBUG("%s: Requested soft reset", sensorName);
             this->softReset();
         } else {
+            const auto &cfg = request->sensor_config.scd30_config;
 
-            if (request->sensor_config.scd30_config.has_set_asc) {
-                this->setASC(request->sensor_config.scd30_config.set_asc);
-                if (request->sensor_config.scd30_config.set_asc == false) {
-                    LOG_DEBUG("%s: Request for FRC", sensorName);
-                    if (request->sensor_config.scd30_config.has_set_target_co2_conc) {
-                        this->performFRC(request->sensor_config.scd30_config.set_target_co2_conc);
-                    } else {
-                        // FRC requested but no target CO2 provided
-                        LOG_ERROR("%s: target CO2 not provided", sensorName);
-                        result = AdminMessageHandleResult::NOT_HANDLED;
-                        break;
-                    }
+            // ASC/FRC/altitude calibration branching is shared with SCD4XSensor and the
+            // CO2-capable SEN6X variants via CO2CalibrationSensor.
+            if (cfg.has_set_asc || cfg.has_set_altitude) {
+                Co2AdminRequest co2req;
+                co2req.hasSetAsc = cfg.has_set_asc;
+                co2req.setAsc = cfg.set_asc;
+                co2req.hasTargetCo2 = cfg.has_set_target_co2_conc;
+                co2req.targetCo2 = cfg.set_target_co2_conc;
+                co2req.hasSetAltitude = cfg.has_set_altitude;
+                co2req.setAltitude = cfg.set_altitude;
+                if (!this->handleCo2AdminRequest(co2req, sensorName)) {
+                    result = AdminMessageHandleResult::NOT_HANDLED;
+                    break;
                 }
             }
 
             // Check for temperature offset
             // NOTE: this requires to have a sensor working on stable environment
             // And to make it between readings
-            if (request->sensor_config.scd30_config.has_set_temperature) {
-                this->setTemperature(request->sensor_config.scd30_config.set_temperature);
-            }
-
-            // Check for altitude
-            if (request->sensor_config.scd30_config.has_set_altitude) {
-                this->setAltitude(request->sensor_config.scd30_config.set_altitude);
+            if (cfg.has_set_temperature) {
+                this->setTemperature(cfg.set_temperature);
             }
 
             // Check for set measuremen interval
-            if (request->sensor_config.scd30_config.has_set_measurement_interval) {
-                this->setMeasurementInterval(request->sensor_config.scd30_config.set_measurement_interval);
+            if (cfg.has_set_measurement_interval) {
+                this->setMeasurementInterval(cfg.set_measurement_interval);
             }
         }
 

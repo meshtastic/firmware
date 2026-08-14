@@ -140,6 +140,9 @@ RTCSetResult readFromRTC()
             RTCQuality oldQuality = currentQuality;
             timeStartMs64 = now;
             zeroOffsetSecs = tv.tv_sec;
+#if defined(ARCH_ESP32) || defined(ARCH_RP2040)
+            settimeofday(&tv, NULL);
+#endif
             currentQuality = RTCQualityDevice;
             onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
@@ -186,6 +189,9 @@ RTCSetResult readFromRTC()
             RTCQuality oldQuality = currentQuality;
             timeStartMs64 = now;
             zeroOffsetSecs = tv.tv_sec;
+#if defined(ARCH_ESP32) || defined(ARCH_RP2040)
+            settimeofday(&tv, NULL);
+#endif
             currentQuality = RTCQualityDevice;
             onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
@@ -222,6 +228,9 @@ RTCSetResult readFromRTC()
                 RTCQuality oldQuality = currentQuality;
                 timeStartMs64 = now;
                 zeroOffsetSecs = tv.tv_sec;
+#if defined(ARCH_ESP32) || defined(ARCH_RP2040)
+                settimeofday(&tv, NULL);
+#endif
                 currentQuality = RTCQualityDevice;
                 onTimeSourceQualityChanged(oldQuality, currentQuality);
             }
@@ -389,7 +398,11 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         if (stm32wlRtcAvailable()) {
             STM32RTC::getInstance().setEpoch(tv->tv_sec);
         }
-#elif defined(ARCH_ESP32) || defined(ARCH_RP2040)
+#endif
+        // Keep the POSIX system clock in sync on platforms that support it so that
+        // any code using time() (e.g. the device-ui thread) sees the correct wall time
+        // even when a hardware RTC chip is also present and handled above.
+#if defined(ARCH_ESP32) || defined(ARCH_RP2040)
         settimeofday(tv, NULL);
 #endif
 
