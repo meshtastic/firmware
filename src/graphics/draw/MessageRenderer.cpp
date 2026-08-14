@@ -6,6 +6,7 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
@@ -14,6 +15,7 @@
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
+#include "graphics/draw/NotificationRenderer.h"
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
@@ -570,7 +572,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         } else if (m.timestamp > 0 && nowSecs == 0) {
             // RTC not valid: only trust boot-relative if same boot
-            uint32_t bootNow = millis() / 1000;
+            uint32_t bootNow = Time::getUptimeSecs();
             if (m.isBootRelative && m.timestamp <= bootNow) {
                 seconds = bootNow - m.timestamp;
                 invalidTime = false;
@@ -1128,6 +1130,9 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
     if (packet.from != 0) {
         hasUnreadMessage = true;
         const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
+        // Don't let the pop-up clobber a menu/picker the user is interacting with; the wake below
+        // still happens so a message can light the screen back up.
+        const bool menuShowing = NotificationRenderer::isMenuShowing();
 
         // Determine if message belongs to a muted channel
         bool isChannelMuted = false;
@@ -1222,7 +1227,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             screen->setOn(true);
         }
 
-        if (!suppressBanner) {
+        if (!suppressBanner && !menuShowing) {
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
         }
     }

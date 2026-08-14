@@ -156,7 +156,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     return true;
 }
 
-template <typename T> void SX128xInterface<T>::disableInterrupt()
+template <typename T> void SX128xInterface<T>::clearRadioIsr()
 {
     lora.clearDio1Action();
 }

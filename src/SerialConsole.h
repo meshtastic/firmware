@@ -51,6 +51,8 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
 
     /// Continue retained USB CDC output before PhoneAPI advances.
     virtual bool finishPendingFrame() override;
+    /// Report a retained USB CDC frame awaiting TX space.
+    virtual bool hasRetainedFrame() override;
     /// Return whether the dedicated log buffer can be safely overwritten.
     virtual bool canEncodeLogRecord() override;
     /// Write or retain one framed USB CDC message.

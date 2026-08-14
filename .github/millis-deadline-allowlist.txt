@@ -1,0 +1,22 @@
+# Allowlist for the millis-deadline-check guard in .github/workflows/test_native.yml.
+#
+# That guard rejects comparisons made directly against millis(), because they invert while the
+# deadline sits on the far side of the 32-bit wrap. Use Throttle::deadlinePassed(deadline) or
+# Throttle::hasElapsed(lastEvent, intervalMs) instead - see .github/copilot-instructions.md.
+#
+# Only add a line here when the comparison genuinely is not a deadline test. The usual valid case is
+# an *uptime threshold*: "has the device been up for at least N ms", where there is no stored
+# deadline and no event to measure from. Those still misbehave briefly after a wrap - the threshold
+# is simply re-crossed - which is harmless for boot-holdoff logic and not worth new state.
+#
+# Format: <path><TAB><exact trimmed source line, comments stripped>
+# Line numbers are deliberately absent so edits above an entry do not invalidate it. A `#` comment
+# on the code line is stripped before matching, so do not include one here.
+
+# Boot holdoff, not a deadline: suppresses a phantom shutdown from floating pins during the first
+# 30s of uptime. Pairs with the buttonPressStartTime > 30000 test on the same line.
+src/input/ButtonThread.cpp	if (millis() > 30000 && buttonPressStartTime > 30000 && _longLongPress != INPUT_BROKER_NONE &&
+
+# Boot-window check, not a deadline: draws the custom OEM logo only during the first 10s of uptime,
+# so the ordinary Meshtastic logo is used at shutdown.
+src/graphics/niche/InkHUD/Applets/System/Logo/LogoApplet.cpp	if (millis() < 10 * 1000UL) {

@@ -20,6 +20,9 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "main.h"
 #include "mesh/Default.h"
+#if HAS_LORA_FEM
+#include "mesh/LoRaFEMInterface.h"
+#endif
 #include "mesh/MeshTypes.h"
 #include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
@@ -139,12 +142,38 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
-    enum optionsNumbers { Back = 0, DeviceRolePicker = 1, RadioPresetPicker = 2, FrequencySlot = 3, LoraPicker = 4 };
+    static const char *optionsArray[] = {
+        "Back",
+        "Device Role",
+        "Radio Preset",
+        "Frequency Slot",
+        "LoRa Region",
+        "Transmit Enabled",
+#if HAS_LORA_FEM
+        "FEM LNA",
+#endif
+    };
+    // NOTE: "FEM LNA" must stay last; it is the only entry that can be hidden at runtime by
+    // trimming optionsCount, which only works for a trailing option.
+    enum optionsNumbers {
+        Back = 0,
+        DeviceRolePicker = 1,
+        RadioPresetPicker = 2,
+        FrequencySlot = 3,
+        LoraPicker = 4,
+        TxEnabled = 5,
+#if HAS_LORA_FEM
+        LoraFemLna = 6
+#endif
+    };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 5;
+#if HAS_LORA_FEM
+    bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? 7 : 6;
+#else
+    bannerOptions.optionsCount = 6;
+#endif
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
@@ -156,7 +185,14 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::FrequencySlot;
         } else if (selected == LoraPicker) {
             menuHandler::menuQueue = menuHandler::LoraPicker;
+        } else if (selected == TxEnabled) {
+            menuHandler::menuQueue = menuHandler::TXEnabledMenu;
         }
+#if HAS_LORA_FEM
+        else if (selected == LoraFemLna) {
+            menuHandler::menuQueue = menuHandler::LoraFemLnaToggleMenu;
+        }
+#endif
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -193,7 +229,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     // flip the region right back. The user picked the region, so the preset follows it.
     const RegionInfo *newRegion = getRegion(region);
     if (config.lora.use_preset && !newRegion->supportsPreset(config.lora.modem_preset)) {
-        LOG_INFO("Preset %s not available in %s, using default %s",
+        LOG_INFO("Preset %s unavailable in %s, use default %s",
                  DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), newRegion->name,
                  DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
         config.lora.modem_preset = newRegion->getDefaultPreset();
@@ -319,7 +355,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 menuQueue = HamModeConfirm;
                 screen->runNow();
             } else if (owner.is_licensed) {
-                LOG_INFO("Licensed user chose a non-ham region; prompting to revert licensed mode");
+                LOG_INFO("Licensed user chose non-ham region; prompt to revert licensed mode");
                 pendingRegion = selectedRegion;
                 menuQueue = LicensedToNormalConfirm;
                 screen->runNow();
@@ -439,10 +475,10 @@ void menuHandler::FrequencySlotPicker()
         if (denominator > 0.0) {
             numChannels = static_cast<uint32_t>(round(numerator / denominator));
         } else {
-            LOG_WARN("Invalid region configuration: non-positive channel spacing/width");
+            LOG_WARN("Invalid region config: non-positive channel spacing/width");
         }
     } else {
-        LOG_WARN("Region not set, cannot calculate number of channels");
+        LOG_WARN("Region not set, can't calc channel count");
         return;
     }
 
@@ -539,6 +575,31 @@ static BannerOverlayOptions buildRegionPresetBanner()
 void menuHandler::radioPresetPicker()
 {
     screen->showOverlayBanner(buildRegionPresetBanner());
+}
+
+void menuHandler::txEnabledMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    enum optionsNumbers { Back = 0, Enabled = 1, Disabled = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Transmit Enabled";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.InitialSelected = config.lora.tx_enabled ? Enabled : Disabled;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        // -1 is the timeout/dismiss case; treat it like Back so we never write config.
+        if (selected <= Back) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+            return;
+        }
+        bool wanted = (selected == Enabled);
+        if (config.lora.tx_enabled == wanted)
+            return;
+        config.lora.tx_enabled = wanted;
+        service->reloadConfig(SEGMENT_CONFIG);
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::twelveHourPicker()
@@ -944,7 +1005,7 @@ void menuHandler::deleteMessagesMenu()
 
         // This only appears in non-ALL modes
         if (selected == DeleteThis) {
-            LOG_INFO("Deleting all messages in this thread");
+            LOG_INFO("Deleting all messages in thread");
 
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 messageStore.deleteAllMessagesInChannel(ch);
@@ -1792,7 +1853,7 @@ void menuHandler::resetNodeDBMenu()
             disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 2) {
-            LOG_INFO("Initiate node-db reset but keeping favorites");
+            LOG_INFO("Initiate node-db reset, keep favorites");
             nodeDB->resetNodes(1);
             disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
@@ -2359,7 +2420,7 @@ void menuHandler::removeFavoriteMenu()
 void menuHandler::traceRouteMenu()
 {
     screen->showNodePicker("Node to Trace", 30000, [](uint32_t nodenum) -> void {
-        LOG_INFO("Menu: Node picker selected node 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
+        LOG_INFO("Menu: Node picker selected 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
         if (traceRouteModule) {
             traceRouteModule->startTraceRoute(nodenum);
         }
@@ -2804,6 +2865,49 @@ void menuHandler::messageBubblesMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+#if HAS_LORA_FEM
+void menuHandler::LoRaFEMLNAToggleMenu()
+{
+    static const LoRaFEMLNAToggleOption femToggleOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"Enabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED},
+        {"Disabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED},
+    };
+    constexpr size_t toggleCount = sizeof(femToggleOptions) / sizeof(femToggleOptions[0]);
+    static std::array<const char *, toggleCount> toggleLabels{};
+
+    auto bannerOptions = createStaticBannerOptions(
+        "FEM LNA", femToggleOptions, toggleLabels, [](const LoRaFEMLNAToggleOption &option, int) -> void {
+            if (option.action == OptionsAction::Back) {
+                menuQueue = LoraMenu;
+                screen->runNow();
+                return;
+            }
+
+            if (!option.hasValue || config.lora.fem_lna_mode == option.value) {
+                return;
+            }
+
+            const bool enabled = option.value != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
+            config.lora.fem_lna_mode = option.value;
+            loraFEMInterface.setLNAEnable(enabled);
+            service->reloadConfig(SEGMENT_CONFIG);
+            LOG_INFO("FEM LNA %s", enabled ? "enabled" : "disabled");
+        });
+
+    int initialSelection = 0;
+    for (size_t i = 0; i < toggleCount; ++i) {
+        if (femToggleOptions[i].hasValue && config.lora.fem_lna_mode == femToggleOptions[i].value) {
+            initialSelection = static_cast<int>(i);
+            break;
+        }
+    }
+    bannerOptions.InitialSelected = initialSelection;
+
+    screen->showOverlayBanner(bannerOptions);
+}
+#endif
+
 void menuHandler::themeMenu()
 {
     // Build menu dynamically from the theme table.
@@ -2869,6 +2973,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case RadioPresetPicker:
         radioPresetPicker();
+        break;
+    case TXEnabledMenu:
+        txEnabledMenu();
         break;
     case FrequencySlot:
         FrequencySlotPicker();
@@ -3013,6 +3120,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case LicensedToNormalConfirm:
         licensedToNormalConfirmMenu();
         break;
+#if HAS_LORA_FEM
+    case LoraFemLnaToggleMenu:
+        LoRaFEMLNAToggleMenu();
+        break;
+#endif
     }
     menuQueue = MenuNone;
 }

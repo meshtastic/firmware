@@ -26,7 +26,7 @@
 // FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #ifndef MAX_RX_TOPHONE
-#if defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#if defined(ARCH_STM32WL) || (defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)))
 #define MAX_RX_TOPHONE 8
 #elif defined(NRF52840_XXAA)
 // Each slot is a ~340 B MeshPacket in the static pool (Router.cpp MAX_PACKETS_STATIC), so 32 slots
@@ -34,10 +34,8 @@
 // the 8 classic ESP32 has shipped with for years; drops start when a stalled phone/serial client has
 // 16 packets queued.
 #define MAX_RX_TOPHONE 16
-#elif MESHTASTIC_MEM_CLASS >= MEM_CLASS_MEDIUM || defined(ARCH_RP2040) || defined(CONFIG_IDF_TARGET_ESP32C3) ||                  \
-    defined(ARCH_STM32WL)
-// RP2040/RP2350, ESP32-C3 and STM32WL keep their historical 32 (no field pressure to cut them;
-// STM32WL's pool is dynamic, so the constant only bounds in-flight packets there).
+#elif MESHTASTIC_MEM_CLASS >= MEM_CLASS_MEDIUM || defined(ARCH_RP2040) || defined(CONFIG_IDF_TARGET_ESP32C3)
+// RP2040/RP2350 and ESP32-C3 keep their historical 32.
 #define MAX_RX_TOPHONE 32
 #else
 #define MAX_RX_TOPHONE 16 // unclassified small parts: fail safe-small
@@ -131,7 +129,11 @@ static inline int get_max_num_nodes()
 /// full mesh, floored at 100. Shared by PacketHistory's constructor clamp and
 /// the boot-cache budget assert below so the two cannot drift.
 #ifndef PACKETHISTORY_MAX
+#if defined(ARCH_STM32WL)
+#define PACKETHISTORY_MAX (MAX_NUM_NODES * 2) // 20 entries for 10-node STM32WL
+#else
 #define PACKETHISTORY_MAX (MAX_NUM_NODES * 2 > 100 ? (uint32_t)(MAX_NUM_NODES * 2) : (uint32_t)100)
+#endif
 #endif
 
 /// Per-map cap (position/telemetry/environment/status): only the freshest
