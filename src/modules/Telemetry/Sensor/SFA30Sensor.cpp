@@ -46,8 +46,8 @@ bool SFA30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     status = 1;
     state = State::ACTIVE;
-    measureStarted = getTime();
-    LOG_INFO("%s: Enabled", sensorName);
+    measureStarted = millis();
+    LOG_INFO("%s Enabled", sensorName);
 
     initI2CSensor();
     return true;
@@ -102,7 +102,7 @@ uint32_t SFA30Sensor::wakeUp()
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
     state = State::ACTIVE;
-    measureStarted = getTime();
+    measureStarted = millis();
     return SFA30_WARMUP_MS;
 }
 
@@ -125,9 +125,7 @@ bool SFA30Sensor::isActive()
 
 int32_t SFA30Sensor::pendingForReadyMs()
 {
-    uint32_t now;
-    now = getTime();
-    uint32_t sinceHchoMeasureStarted = (now - measureStarted) * 1000;
+    uint32_t sinceHchoMeasureStarted = millis() - measureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sinceHchoMeasureStarted);
 
     if (sinceHchoMeasureStarted < SFA30_WARMUP_MS) {

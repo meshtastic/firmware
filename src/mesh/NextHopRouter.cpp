@@ -57,12 +57,18 @@ PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmission
 {
     packet = p;
     this->numRetransmissions = numRetransmissions - 1; // We subtract one, because we assume the user just did the first send
+    this->initialNumRetransmissions = this->numRetransmissions;
 }
 
 /**
  * Send a packet
  */
 ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
+{
+    return sendWithNextHop(p, true);
+}
+
+ErrorCode NextHopRouter::sendWithNextHop(meshtastic_MeshPacket *p, bool trackRetransmission)
 {
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
@@ -73,7 +79,8 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
-    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack)) {
+    if (trackRetransmission && (!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE &&
+        (p->hop_limit > 0 || p->want_ack)) {
         if (auto *copy = packetPool.allocCopy(*p))
             startRetransmission(copy); // start retransmission for relayed packet
     }
@@ -362,7 +369,7 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         auto p = old->packet;
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
-        if (old->numRetransmissions < NUM_RELIABLE_RETX - 1) {
+        if (old->numRetransmissions < old->initialNumRetransmissions) {
             // We only cancel it if we are the original sender or if we're not a router(_late)
             if (isFromUs(p) || roleAllowsCancelingFromTxQueue(p)) {
                 // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
@@ -475,13 +482,13 @@ int32_t NextHopRouter::doRetransmissions()
                             }
                         } else {
                             if (auto *copy = packetPool.allocCopy(*p.packet)) {
-                                if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
                                     packetPool.release(copy);
                             }
                         }
 #else
                         if (auto *copy = packetPool.allocCopy(*p.packet)) {
-                            if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                            if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
                                 packetPool.release(copy);
                         }
 #endif

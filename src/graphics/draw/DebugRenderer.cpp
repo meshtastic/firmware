@@ -299,8 +299,8 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
         display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
                             chUtilPercentage);
-#endif
     }
+#endif
     graphics::drawCommonFooter(display, x, y);
 }
 

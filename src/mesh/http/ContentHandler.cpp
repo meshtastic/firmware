@@ -6,6 +6,7 @@
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
 #include "mesh/http/WebServer.h"
+#include <memory>
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -484,7 +485,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
     // Actually we do this only for documentary purposes, we know the form is going
     // to be multipart/form-data.
     LOG_DEBUG("Form Upload - Creating body parser reference");
-    HTTPBodyParser *parser;
+    std::unique_ptr<HTTPBodyParser> parser;
     std::string contentType = req->getHeader("Content-Type");
 
     // The content type may have additional properties after a semicolon, for example:
@@ -500,7 +501,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
     // Now, we can decide based on the content type:
     if (contentType == "multipart/form-data") {
         LOG_DEBUG("Form Upload - multipart/form-data");
-        parser = new HTTPMultipartBodyParser(req);
+        parser.reset(new HTTPMultipartBodyParser(req));
     } else {
         LOG_DEBUG("Unknown POST Content-Type: %s", contentType.c_str());
         return;
@@ -536,7 +537,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (name != "file") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
-            delete parser;
             return;
         }
 
@@ -544,7 +544,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (filename == "") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
-            delete parser;
             return;
         }
 
@@ -575,7 +574,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
                 // enableLoopWDT();
 
-                delete parser;
                 return;
             }
 
@@ -596,7 +594,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         res->println("<p>Did not write any file</p>");
     }
     res->println("</body></html>");
-    delete parser;
 }
 
 void handleReport(HTTPRequest *req, HTTPResponse *res)
@@ -628,13 +625,18 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         return s;
     };
 
-    uint32_t *logArray;
-    logArray = airTime->airtimeReport(TX_LOG);
-    std::string txLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
-    logArray = airTime->airtimeReport(RX_LOG);
-    std::string rxLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
-    logArray = airTime->airtimeReport(RX_ALL_LOG);
-    std::string rxAllLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
+    // One constant sizes the buffer and the count, so they cannot drift. Buffer is per call, so a
+    // report that fails emits zeros rather than the previous type's data.
+    constexpr size_t periods = AirTime::getPeriodsToLog();
+    auto reportFor = [&](reportTypes reportType) {
+        uint32_t logArray[periods] = {0};
+        (void)airTime->airtimeReport(reportType, logArray, periods);
+        return arrayFromLog(logArray, (int)periods);
+    };
+
+    std::string txLog = reportFor(TX_LOG);
+    std::string rxLog = reportFor(RX_LOG);
+    std::string rxAllLog = reportFor(RX_ALL_LOG);
 
     String wifiIPString = WiFi.localIP().toString();
     std::string wifiIP = wifiIPString.c_str();

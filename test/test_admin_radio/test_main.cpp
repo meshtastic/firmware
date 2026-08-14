@@ -607,21 +607,43 @@ static void test_validateConfigLora_bogusPresetRejected()
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
 }
 
-static void test_validateConfigLora_unsetRegionOnlyAcceptsLongFast()
+static void test_validateConfigLora_unsetRegionAcceptsAnyRealPreset()
 {
-    // UNSET uses PROFILE_UNDEF which has only LONG_FAST
+    // UNSET is "no region chosen yet", not a regulatory domain, so it must not invalidate
+    // a preset the user already picked - whichever region that preset belongs to.
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     cfg.use_preset = true;
 
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), "LONG_FAST should be valid for UNSET");
+    const meshtastic_Config_LoRaConfig_ModemPreset realPresets[] = {
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+        meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST,   meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW,
+        meshtastic_Config_LoRaConfig_ModemPreset_TINY_FAST,
+    };
+    for (auto preset : realPresets) {
+        cfg.modem_preset = preset;
+        char msg[64];
+        snprintf(msg, sizeof(msg), "preset %d should be valid for UNSET", (int)preset);
+        TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), msg);
+    }
 
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "MEDIUM_FAST should be invalid for UNSET");
+    // A value no region offers is still invalid, so the clamp can repair it.
+    cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "bogus preset should be invalid for UNSET");
+}
 
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
-    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "SHORT_TURBO should be invalid for UNSET");
+static void test_isKnownModemPreset_matchesRegionTable()
+{
+    // Every preset some region offers is "known"...
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO));
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW));
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW));
+
+    // ...and nothing else is, including the retired VERY_LONG_SLOW enum value.
+    TEST_ASSERT_FALSE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW));
+    TEST_ASSERT_FALSE(isKnownModemPreset((meshtastic_Config_LoRaConfig_ModemPreset)99));
 }
 
 static void test_validateConfigLora_allPresetsValidForLORA24()
@@ -706,7 +728,7 @@ static void test_clampConfigLora_customBwValidLeftUnchanged()
 
 static void test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast()
 {
-    // UNSET uses PROFILE_UNDEF with only LONG_FAST; any other preset should clamp to it
+    // UNSET's default preset is LONG_FAST; a value no region offers clamps to it
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     cfg.use_preset = true;
@@ -715,6 +737,21 @@ static void test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast()
     RadioInterface::clampConfigLora(cfg);
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_unsetRegionKeepsRealPreset()
+{
+    // The boot-time clamp (NodeDB::loadFromDisk) runs on every boot. While the region is
+    // unset it must leave a real preset alone rather than rewriting it to LONG_FAST.
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, cfg.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, cfg.region);
 }
 
 static void test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault()
@@ -1436,6 +1473,14 @@ static void test_regionInfo_supportsPreset()
     const RegionInfo *eu866 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_866);
     TEST_ASSERT_TRUE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW));
     TEST_ASSERT_FALSE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+
+    // UNSET enforces nothing (the radio is silent regardless), so it supports every real
+    // preset - not just the LONG_FAST its own profile advertises as the default.
+    const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST));
+    TEST_ASSERT_FALSE(unset->supportsPreset((meshtastic_Config_LoRaConfig_ModemPreset)99));
 }
 
 static void test_checkConfigRegion_quietCheckReportsReason()
@@ -1499,6 +1544,50 @@ static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejecte
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_presetChosenBeforeRegionSurvives()
+{
+    // A fresh device: the user picks a preset in the app before choosing a region. The
+    // unset region must not clamp that choice back to LONG_FAST.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_UNSET, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_unsettingRegionKeepsPreset()
+{
+    // Clearing the region is a valid request in its own right. It must take effect (and
+    // disable tx) without discarding the config because the preset outlives the region.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.tx_enabled = true;
+    initRegion();
+
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_UNSET, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+    c.payload_variant.lora.tx_enabled = true;
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, config.lora.modem_preset);
+    TEST_ASSERT_FALSE_MESSAGE(config.lora.tx_enabled, "unsetting the region must disable tx");
+
+    // Restore the region table pointer for subsequent tests
+    initRegion();
 }
 
 // -----------------------------------------------------------------------
@@ -1919,7 +2008,8 @@ void setup()
     RUN_TEST(test_validateConfigLora_customBandwidthFitsUS);
     RUN_TEST(test_validateConfigLora_customBandwidthFitsEU868);
     RUN_TEST(test_validateConfigLora_bogusPresetRejected);
-    RUN_TEST(test_validateConfigLora_unsetRegionOnlyAcceptsLongFast);
+    RUN_TEST(test_validateConfigLora_unsetRegionAcceptsAnyRealPreset);
+    RUN_TEST(test_isKnownModemPreset_matchesRegionTable);
     RUN_TEST(test_validateConfigLora_allPresetsValidForLORA24);
 
     // clampConfigLora()
@@ -1928,6 +2018,7 @@ void setup()
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
+    RUN_TEST(test_clampConfigLora_unsetRegionKeepsRealPreset);
     RUN_TEST(test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault);
 
     // Region-locked preset swap
@@ -1977,6 +2068,8 @@ void setup()
     RUN_TEST(test_checkConfigRegion_allowsProspectiveLicensedOwner);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
+    RUN_TEST(test_handleSetConfig_presetChosenBeforeRegionSurvives);
+    RUN_TEST(test_handleSetConfig_unsettingRegionKeepsPreset);
 
     // Channel-configuration warning + coalescing
     RUN_TEST(test_warn_singleChannel_variantName_oneSpecificMessage);
