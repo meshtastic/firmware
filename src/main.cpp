@@ -1546,14 +1546,13 @@ void loop()
         LOG_ERROR("LoRa error detected, recovering");
         router->addInterface(nullptr);
         if (portduino_config.lora_spi_dev == "ch341") {
-            if (ch341Hal != nullptr) {
-                delete ch341Hal;
-                ch341Hal = nullptr;
+            if (ch341Hal) {
+                ch341Hal.reset();
                 sleep(3);
             }
             try {
-                ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                        portduino_config.lora_usb_pid);
+                ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                                      portduino_config.lora_usb_pid);
             } catch (std::exception &e) {
                 std::cerr << e.what() << std::endl;
                 std::cerr << "Could not initialize CH341 device!" << std::endl;

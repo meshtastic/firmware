@@ -30,8 +30,10 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
 
-        if (copy)
-            startRetransmission(copy, NUM_RELIABLE_RETX);
+        if (copy) {
+            const uint8_t totalAttempts = isBroadcast(p->to) ? NUM_RELIABLE_RETX : NUM_RELIABLE_UNICAST_ATTEMPTS;
+            startRetransmission(copy, totalAttempts);
+        }
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an

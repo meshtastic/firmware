@@ -174,6 +174,11 @@ class AuthPipelineRouter : public ReliableRouter
         PendingPacket *entry = findPendingPacket(from, id);
         return entry ? entry->nextTxMsec : 0;
     }
+    uint8_t pendingTotalAttempts(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        return entry ? entry->initialNumRetransmissions + 1 : 0;
+    }
     size_t pendingCount() const { return pending.size(); }
     void clearPending()
     {
@@ -417,6 +422,9 @@ void setUp(void)
     resetRoutingAuthEvaluationCount();
 }
 
+// Set while C14's saturated AirTime is installed; see useDutyCycleSaturatedAirTime() below.
+static AirTime *c14SavedAirTime = nullptr;
+
 void tearDown(void)
 {
     delete mockNodeDB;
@@ -425,13 +433,15 @@ void tearDown(void)
 
     // Restore globals here, not at the end of a test body: an assertion aborts the body, and these
     // would otherwise leak into every later case. The injected clock is the one the N8-N11
-    // suppression-window cases drive; the region and TX bucket are C14's duty-cycle setup.
+    // suppression-window cases drive; the region and the AirTime swap are C14's duty-cycle setup.
     Time::useRealClock();
     Time::resetMonotonicForTests();
-    if (airTime)
-        airTime->utilizationTX[0] = 0;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
+    if (c14SavedAirTime) {
+        airTime = c14SavedAirTime;
+        c14SavedAirTime = nullptr;
+    }
 }
 
 // ===========================================================================
@@ -1500,12 +1510,32 @@ void test_C13_failed_initial_reliable_send_does_not_retry(void)
                                      "failed interface enqueue must not leave a retransmission pending");
 }
 
+// C14 needs a node that has used its whole hourly duty-cycle allowance. Swaps in a separate AirTime
+// rather than poking the global's buckets, which are private now.
+//
+// Deliberately NOT a scoped guard: Unity's TEST_ABORT() is longjmp, which does not run destructors
+// of automatic objects, so a guard would leave `airTime` dangling into an abandoned stack frame on
+// any assertion failure - and later cases dereference it (NodeInfoModule::allocReply). tearDown()
+// restores the global unconditionally instead. The instance is a function-local static so it
+// outlives the longjmp.
+//
+// Note it also parks channel utilisation at ~6000%, because logAirtime() credits that for every
+// report type. C14 gates on utilizationTXPercent() alone; do not reuse this for an
+// isTxAllowedChannelUtil() path, which would then pass for the wrong reason.
+static void useDutyCycleSaturatedAirTime()
+{
+    static AirTime saturated;
+    c14SavedAirTime = airTime;
+    airTime = &saturated;
+    saturated.logAirtime(TX_LOG, MS_IN_HOUR); // utilizationTXPercent() sums every bucket -> 100%
+}
+
 void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
 {
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     config.lora.override_duty_cycle = false;
     initRegion();
-    airTime->utilizationTX[0] = MS_IN_HOUR;
+    useDutyCycleSaturatedAirTime();
 
     meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
     initial.id = 0xC14C14C1;
@@ -1519,9 +1549,28 @@ void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(),
                                      "duty-cycle rejection must retain the retry for when airtime is available");
 
-    airTime->utilizationTX[0] = 0;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
+}
+
+void test_C15_reliable_unicast_tracks_five_total_attempts(void)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    p.id = 0x51530001;
+    p.want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_EQUAL_UINT8(5, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
+}
+
+void test_C16_reliable_broadcast_keeps_three_total_attempts(void)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    p.id = 0x51530002;
+    p.want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_EQUAL_UINT8(3, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
 }
 
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
@@ -2099,6 +2148,8 @@ void setup()
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
     RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
+    RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
+    RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
