@@ -62,7 +62,7 @@ portduino_config_struct portduino_config;
 portduino_status_struct portduino_status;
 std::ofstream traceFile;
 std::ofstream JSONFile;
-Ch341Hal *ch341Hal = nullptr;
+std::unique_ptr<Ch341Hal> ch341Hal;
 char *configPath = nullptr;
 char *optionMac = nullptr;
 bool verboseEnabled = false;
@@ -325,8 +325,8 @@ void portduinoSetup()
     {
         extern void wasm_config_apply();
         wasm_config_apply();
-        ch341Hal =
-            new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+        ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                              portduino_config.lora_usb_pid);
     }
     return;
 #endif
@@ -650,8 +650,8 @@ void portduinoSetup()
     uint8_t dmac[6] = {0};
     if (portduino_config.lora_spi_dev == "ch341") {
         try {
-            ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                    portduino_config.lora_usb_pid);
+            ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                                  portduino_config.lora_usb_pid);
         } catch (std::exception &e) {
             std::cerr << e.what() << std::endl;
             std::cerr << "Could not initialize CH341 device!" << std::endl;
