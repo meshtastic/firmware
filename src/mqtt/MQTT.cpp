@@ -111,6 +111,16 @@ inline bool anyChannelWantsDownlink()
     return false;
 }
 
+inline bool anyChannelWantsUplink()
+{
+    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++) {
+        const meshtastic_Channel &c = channels.getByIndex(i);
+        if (c.role != meshtastic_Channel_Role_DISABLED && c.has_settings && c.settings.uplink_enabled)
+            return true;
+    }
+    return false;
+}
+
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
@@ -722,12 +732,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         return;
     }
 #endif
-    bool uplinkEnabled = false;
-    for (int i = 0; i <= 7; i++) {
-        if (channels.getByIndex(i).settings.uplink_enabled)
-            uplinkEnabled = true;
-    }
-    if (!uplinkEnabled)
+    // For a PKI packet this is the only uplink gate, since the per-channel check below is bypassed,
+    // so a disabled slot's stale uplink_enabled would publish DMs the user opted out of uplinking.
+    if (!anyChannelWantsUplink())
         return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 

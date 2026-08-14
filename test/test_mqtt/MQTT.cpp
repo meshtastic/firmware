@@ -511,6 +511,28 @@ void test_explicitPkiPositionStillPublishesWithEventPolicy(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/PKI/!12345678", pubsub->published_.front().first.c_str());
 }
 
+// A PKI packet skips the per-channel uplink check, so the "does any channel want uplink" scan is the
+// only gate it passes. A disabled slot's stale uplink_enabled must not be what opens it.
+void test_pkiNotUplinkedWhenOnlyDisabledChannelHasUplink(void)
+{
+    clearPublicationState();
+    channelFile.channels[0].settings.uplink_enabled = false;
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "ghost", .uplink_enabled = true},
+        .role = meshtastic_Channel_Role_DISABLED,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+    meshtastic_MeshPacket encryptedPki = encrypted;
+    encryptedPki.pki_encrypted = true;
+
+    mqtt->onSend(encryptedPki, decoded, 0);
+
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+}
+
 // Verify that the decoded MeshPacket is proxied through the MeshService when encryption_enabled = false.
 void test_proxyToMeshServiceDecoded(void)
 {
@@ -1322,6 +1344,7 @@ void setup()
     RUN_TEST(test_eventPositionPublicationFollowsCompileTimePolicy);
     RUN_TEST(test_privatePositionStillPublishesWithEventPolicy);
     RUN_TEST(test_explicitPkiPositionStillPublishesWithEventPolicy);
+    RUN_TEST(test_pkiNotUplinkedWhenOnlyDisabledChannelHasUplink);
     RUN_TEST(test_proxyToMeshServiceDecoded);
     RUN_TEST(test_proxyToMeshServiceEncrypted);
     RUN_TEST(test_dontMqttMeOnPublicServer);
