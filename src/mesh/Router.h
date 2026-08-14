@@ -138,6 +138,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
 
     /**
+     * Generate the implicit ACK for our own transmission overheard being rebroadcast, using header
+     * fields only (from/id). Split out of shouldFilterReceived() so it can also run when the auth
+     * gate short-circuits a packet we cannot decrypt (a PKI DM we originated is opaque to us, so
+     * without this the client never sees "Delivered to mesh" for DMs).
+     */
+    virtual void perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *) {}
+
+    /**
      * Determine if hop_limit should be decremented for a relay operation.
      * Returns false (preserve hop_limit) only if all conditions are met:
      * - It's NOT the first hop (first hop must always decrement)
