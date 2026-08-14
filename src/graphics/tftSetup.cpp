@@ -275,6 +275,19 @@ class ReentrantSpiLock : public ISpiLock
         depth = 1;
     }
 
+    bool lock(uint32_t timeout) override
+    {
+        ThreadId self = currentThread();
+        if (depth && owner == self) {
+            depth++;
+            return true;
+        }
+        bool result = spiLock->lock(timeout);
+        owner = self;
+        depth = 1;
+        return result;
+    }
+
     void unlock(void) override
     {
         if (--depth == 0) {
