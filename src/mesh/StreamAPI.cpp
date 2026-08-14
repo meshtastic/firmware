@@ -33,6 +33,12 @@ int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
     return result;
 }
 
+/// Report undelivered output so idle-sleep decisions keep the drain alive.
+bool StreamAPI::hasPendingOutput()
+{
+    return canWrite && (hasRetainedFrame() || available());
+}
+
 /**
  * Read any rx chars from the link and call handleRecStream
  */

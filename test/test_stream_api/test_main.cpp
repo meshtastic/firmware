@@ -147,6 +147,26 @@ class PhoneAPITestShim : public PhoneAPI
     bool checkIsConnected() override { return true; }
 };
 
+/// Exposes the hasPendingOutput() inputs used by idle-sleep gating.
+class PendingOutputStreamAPI : public StreamAPI
+{
+  public:
+    /// Construct the shim over a scripted stream.
+    explicit PendingOutputStreamAPI(Stream *stream) : StreamAPI(stream) {}
+
+    /// Keep connection-timeout handling inactive during tests.
+    bool checkIsConnected() override { return true; }
+
+    /// Set the transport-writability gate normally controlled by first client contact.
+    void setCanWrite(bool value) { canWrite = value; }
+
+    bool retainedFrame = false;
+
+  protected:
+    /// Report the scripted retained-frame state.
+    bool hasRetainedFrame() override { return retainedFrame; }
+};
+
 /// Exposes framed-log hooks and records best-effort writes.
 class LogHookStreamAPI : public StreamAPI
 {
@@ -538,7 +558,7 @@ static void queuePendingTimePlaceholderPacket(NodeNum from, uint32_t placeholder
     service->sendToPhone(packetPool.allocCopy(pending));
 }
 
-static void startHandshake(PhoneAPITestShim &api)
+static void startHandshake(PhoneAPI &api)
 {
     meshtastic_ToRadio request = meshtastic_ToRadio_init_zero;
     request.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
@@ -564,6 +584,58 @@ static bool drainHandshakeForPacketFrom(PhoneAPITestShim &api, NodeNum from, mes
         }
     }
     return false;
+}
+
+// Scratch NodeDB for the config-dump stream; restored by tearDown() rather than RAII
+// because a failed TEST_ASSERT longjmps out of the test without running destructors.
+static NodeDB *scratchNodeDB = nullptr;
+static NodeDB *savedNodeDB = nullptr;
+
+/// Install a scratch NodeDB; tearDown() restores the previous one after any test outcome.
+static void installScratchNodeDB()
+{
+    savedNodeDB = nodeDB;
+    scratchNodeDB = new NodeDB();
+    nodeDB = scratchNodeDB;
+}
+
+// SerialConsole::runOnce gates its INT32_MAX idle sleep on hasPendingOutput(): pending while
+// output is queued or retained (#11164 bounded drain), clear when drained or pre-contact.
+static void test_stream_api_pending_output_tracks_queue_and_retained_frame(void)
+{
+    ScopedMeshService scopedService;
+    installScratchNodeDB();
+    ScriptedStream stream;
+    PendingOutputStreamAPI api(&stream);
+
+    // Nothing queued and no client yet: an idle console must be allowed to sleep.
+    TEST_ASSERT_FALSE(api.hasPendingOutput());
+
+    // A client that has not yet spoken (canWrite false) must not force polling,
+    // even with a full config dump queued behind the gate.
+    startHandshake(api);
+    api.setCanWrite(false);
+    TEST_ASSERT_FALSE(api.hasPendingOutput());
+
+    // Once writable, the queued dump is pending output until fully drained.
+    api.setCanWrite(true);
+    TEST_ASSERT_TRUE(api.hasPendingOutput());
+    unsigned drained = 0;
+    for (unsigned i = 0; i < 512 && api.hasPendingOutput(); ++i) {
+        uint8_t responseBytes[meshtastic_FromRadio_size];
+        if (api.getFromRadio(responseBytes) != 0)
+            drained++;
+    }
+    TEST_ASSERT_GREATER_THAN_UINT(0, drained);
+    TEST_ASSERT_FALSE_MESSAGE(api.hasPendingOutput(), "pending output must clear once the dump is drained");
+
+    // A transport-retained partial frame alone keeps the drain alive.
+    api.retainedFrame = true;
+    TEST_ASSERT_TRUE(api.hasPendingOutput());
+    api.retainedFrame = false;
+    TEST_ASSERT_FALSE(api.hasPendingOutput());
+
+    api.close();
 }
 
 /// Swaps in a scratch NodeDB and the injected clock, restoring both plus the RTC on destruction.
@@ -715,8 +787,15 @@ static void test_node_heard_during_first_uptime_second_gets_last_heard_backfille
 
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
-/// Unity per-test teardown; fixtures clean themselves up.
-void tearDown(void) {}
+/// Unity per-test teardown; restores state that a failed assert's longjmp would leak.
+void tearDown(void)
+{
+    if (scratchNodeDB) {
+        nodeDB = savedNodeDB;
+        delete scratchNodeDB;
+        scratchNodeDB = nullptr;
+    }
+}
 
 /// Initialize the native environment and run the stream regression suite.
 void setup()
@@ -735,6 +814,7 @@ void setup()
     RUN_TEST(test_lockdown_admin_gate_ignores_wire_from);
     RUN_TEST(test_lockdown_admin_gate_rejects_undecodable_admin);
     RUN_TEST(test_want_config_includes_status_message_module_config);
+    RUN_TEST(test_stream_api_pending_output_tracks_queue_and_retained_frame);
     RUN_TEST(test_time_given_at_handshake_start_reconciles_queued_packet);
     RUN_TEST(test_time_given_at_handshake_end_does_not_rewrite_already_sent_packet);
     RUN_TEST(test_node_heard_before_time_gets_last_heard_backfilled);
