@@ -57,6 +57,11 @@ class StreamAPI : public PhoneAPI
     virtual int32_t runOncePart();
     virtual int32_t runOncePart(char *buf, uint16_t bufLen);
 
+    /// True while undelivered output remains: a transport-retained frame or queued PhoneAPI
+    /// data. writeStream() stops mid-dump at STREAM_WRITE_BUDGET_MSEC, so callers whose idle
+    /// sleep is woken only by RX activity must keep polling while this holds (see #11164).
+    bool hasPendingOutput();
+
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override = 0;
 
@@ -104,6 +109,8 @@ class StreamAPI : public PhoneAPI
 
     /// Complete retained transport output before dequeuing another PhoneAPI packet.
     virtual bool finishPendingFrame() { return true; }
+    /// Return whether the transport retains an incomplete frame awaiting TX space.
+    virtual bool hasRetainedFrame() { return false; }
     /// Return whether the dedicated log buffer is available for encoding.
     virtual bool canEncodeLogRecord() { return true; }
     /// Frame and write a payload, optionally using best-effort admission.
