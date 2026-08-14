@@ -226,16 +226,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // #define INA3221_BAT_CH INA3221_CH2
 // #define INA3221_ENV_CH INA3221_CH1
 
-// enables 3.3V periphery like GPS or IO Module
-// Do not toggle this for GPS power savings
+// WisBlock 3V3_S (IO2): one rail for every slot (GPS, sensors, IO)
 #define PIN_3V3_EN (34)
 #define WB_IO2 PIN_3V3_EN
-
-// GPS EN only for finished products that accept cutting 3V3_S with GPS off.
-// Generic rak4631 / sensor bases keep this undefined so sensors on 3V3_S stay powered.
-#if defined(WISMESH_POCKET) || defined(WISMESH_REPEATER_MINI)
-#define PIN_GPS_EN PIN_3V3_EN
-#endif
 
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base
@@ -244,7 +237,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Therefore must be 1 to keep peripherals powered
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
-// #define PIN_GPS_EN PIN_3V3_EN
+// Default ON so GPS-off actually drops idle current. Comment out to keep slot sensors powered with GPS disabled.
+#define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
