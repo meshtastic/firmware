@@ -1573,6 +1573,44 @@ void test_C16_reliable_broadcast_keeps_three_total_attempts(void)
     TEST_ASSERT_EQUAL_UINT8(3, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
 }
 
+// A relay of our own outgoing PKI DM never decrypts for us (we're not the recipient), so it always
+// classifies as opaque. It must still generate the implicit ACK and cancel the retransmission from
+// its plaintext (from, id) header alone, without being admitted to history, modules, or MQTT.
+void test_C17_opaque_own_rebroadcast_still_generates_implicit_ack(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    const PacketId id = 0xC17C17C1;
+    meshtastic_MeshPacket prior = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    prior.id = id;
+    prior.channel = 0;
+    pipelineRouter->addPending(prior, Time::getMillis() + 3600000UL);
+    TEST_ASSERT_EQUAL(1, pipelineRouter->pendingCount());
+
+    meshtastic_MeshPacket relayed = meshtastic_MeshPacket_init_zero;
+    relayed.from = LOCAL_NODE;
+    relayed.to = REMOTE_NODE;
+    relayed.id = id;
+    relayed.channel = 0xFE; // no configured channel matches, so decode is opaque, not a failure
+    relayed.hop_limit = 2;
+    relayed.hop_start = 3;
+    relayed.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    relayed.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    relayed.encrypted.size = 16;
+    memset(relayed.encrypted.bytes, 0xA5, relayed.encrypted.size);
+
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&relayed)));
+    runPipelineIngress(relayed);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "overhearing our own relayed DM must still generate an implicit ACK");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "the implicit ACK must cancel our pending retransmission");
+    TEST_ASSERT_EQUAL(0, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+    TEST_ASSERT_NULL(pipelineService->getForPhone());
+    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&relayed));
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2150,6 +2188,7 @@ void setup()
     RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
+    RUN_TEST(test_C17_opaque_own_rebroadcast_still_generates_implicit_ack);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

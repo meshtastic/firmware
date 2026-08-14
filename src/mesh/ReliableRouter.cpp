@@ -53,7 +53,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     return result;
 }
 
-bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
+void ReliableRouter::handleOwnRebroadcastImplicitAck(const meshtastic_MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
     if (p->from == getNodeNum()) {
@@ -81,6 +81,16 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Didn't find pending packet");
         }
     }
+}
+
+void ReliableRouter::noteOpaqueOwnRebroadcast(const meshtastic_MeshPacket *p)
+{
+    handleOwnRebroadcastImplicitAck(p);
+}
+
+bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
+{
+    handleOwnRebroadcastImplicitAck(p);
 
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,

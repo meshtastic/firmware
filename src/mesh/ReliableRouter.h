@@ -32,9 +32,15 @@ class ReliableRouter : public NextHopRouter
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
 
+    /** Same implicit-ACK match as shouldFilterReceived, usable on undecodable (opaque) traffic too. */
+    virtual void noteOpaqueOwnRebroadcast(const meshtastic_MeshPacket *p) override;
+
   private:
     /**
      * Should this packet be ACKed with a want_ack for reliable delivery?
      */
     bool shouldSuccessAckWithWantAck(const meshtastic_MeshPacket *p);
+
+    /** Implicit-ACK/cancel-retransmission match; only reads the plaintext (from, id) header. */
+    void handleOwnRebroadcastImplicitAck(const meshtastic_MeshPacket *p);
 };

@@ -1612,6 +1612,9 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
     if (authVerdict == RoutingAuthVerdict::OPAQUE_RELAY_ONLY) {
         relayOpaquePacket(p);
+        // Own outgoing PKI DMs always classify as opaque (we're not the recipient), but the plaintext
+        // header still lets us implicit-ACK them without admitting the packet to routing/history state.
+        noteOpaqueOwnRebroadcast(p);
         packetPool.release(p);
         return;
     }

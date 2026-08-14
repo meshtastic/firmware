@@ -137,6 +137,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Relay an opaque packet without admitting it to local routing/history state. */
     virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
 
+    /** An opaque packet's plaintext (from, id) header can still match our own pending retransmissions. */
+    virtual void noteOpaqueOwnRebroadcast(const meshtastic_MeshPacket *) {}
+
     /**
      * Determine if hop_limit should be decremented for a relay operation.
      * Returns false (preserve hop_limit) only if all conditions are met:
