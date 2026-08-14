@@ -36,6 +36,13 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     void rxInt();
 
   protected:
+    /**
+     * A SerialHal host drives the radio without ever sending a ToRadio frame, so it would
+     * otherwise never reach handleToRadio() and never take us out of raw-console mode. Recognise
+     * its command frames as the same proof of a smart host.
+     */
+    virtual void handleSerialHalCommand(const uint8_t *buf, size_t len) override;
+
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
 
@@ -56,7 +63,7 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     /// Return whether the dedicated log buffer can be safely overwritten.
     virtual bool canEncodeLogRecord() override;
     /// Write or retain one framed USB CDC message.
-    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort) override;
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort, uint8_t discriminator) override;
 
   private:
     /// On USB CDC targets, keep console TX non-blocking unless a host is draining the

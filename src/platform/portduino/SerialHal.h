@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #define SERIAL_PI_INPUT (0)
@@ -57,27 +58,34 @@ class SerialHal : public RadioLibHal
   private:
     bool openPort();
     void closePort();
+    bool openPortLocked();
+    void closePortLocked();
     bool sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_SerialHalResponse *response);
     bool writeAll(const uint8_t *data, size_t len);
     bool readExact(uint8_t *data, size_t len);
     bool waitForReadable(int timeoutMs);
-    bool readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs);
+    bool readFrame(std::vector<uint8_t> &payload);
     void readerLoop();
     void interruptDispatchLoop();
     void startReaderThread();
     void stopReaderThread();
 
-    uint16_t crc16(const uint8_t *data, size_t len) const;
+    /// Hand out the next request id, stepping over 0 (reserved for unsolicited interrupt events).
+    uint16_t nextTransactionId();
     void setTransportError(const char *msg);
 
     std::string device;
     uint32_t baud;
     uint32_t timeoutMs;
-    int fd = -1;
-    bool hasWarned = false;
+    /// Atomic because the reader thread polls it while the radio thread can be opening or closing
+    /// the port. The lifecycle transitions themselves are serialized by fdMutex.
+    std::atomic<int> fd{-1};
+    std::atomic<bool> hasWarned{false};
     std::atomic<bool> inError{false};
     std::atomic<uint16_t> txId{1};
 
+    /// Serializes openPort()/closePort() so two callers cannot tear down the port at once. The
+    /// worker threads never take it, so stopReaderThread() can join while holding it.
     std::mutex fdMutex;
     std::mutex writeMutex;
     std::mutex stateMutex;
@@ -94,6 +102,10 @@ class SerialHal : public RadioLibHal
 
     std::unordered_map<uint32_t, void (*)(void)> interruptCallbacks;
     std::unordered_map<uint16_t, meshtastic_SerialHalResponse> pendingResponses;
+    /// Request ids a caller is currently blocked on. The reader drops anything not listed here, so
+    /// a reply that arrives after its caller gave up cannot be handed to a later request once the
+    /// 16-bit id wraps around.
+    std::unordered_set<uint16_t> inFlight;
 };
 
 #endif

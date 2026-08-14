@@ -239,18 +239,18 @@ bool SerialConsole::canEncodeLogRecord()
 }
 
 /// Frame USB CDC output and retain any unwritten tail.
-bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
+bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort, uint8_t discriminator)
 {
 #ifdef IS_USB_SERIAL
     if (len == 0 || !canWrite)
         return false;
 
-    const size_t totalLen = buildFrameHeader(buf, len);
+    const size_t totalLen = buildFrameHeader(buf, len, discriminator);
 
     concurrency::LockGuard guard(&streamLock);
     return frameWriter.writeFrame(Port, buf, totalLen, bestEffort);
 #else
-    return StreamAPI::writeFrame(buf, len, bestEffort);
+    return StreamAPI::writeFrame(buf, len, bestEffort, discriminator);
 #endif
 }
 
@@ -274,6 +274,24 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
     } else {
         return false;
     }
+}
+
+/**
+ * A SerialHal host proxies the radio over this port and never sends a ToRadio frame, so
+ * handleToRadio() above never runs for it. Without this the console would still believe it is
+ * talking to a dumb terminal: canWrite stays false and the response we owe the host is dropped,
+ * and raw log text would be written into what is definitively a framed binary stream.
+ */
+void SerialConsole::handleSerialHalCommand(const uint8_t *buf, size_t len)
+{
+    if (!config.has_lora || !config.security.serial_enabled)
+        return;
+
+    setHostDraining(true);
+    usingProtobufs = true;
+    canWrite = true;
+
+    StreamAPI::handleSerialHalCommand(buf, len);
 }
 
 /// Route logs without allowing raw bytes into an active protobuf stream.

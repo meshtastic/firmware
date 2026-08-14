@@ -18,6 +18,11 @@
 // hardware watchdog (RP2350 arms 8s) resets mid-dump.
 #define STREAM_WRITE_BUDGET_MSEC 100
 
+// How long a partially-received SerialHal frame may hold the log-suppression window open. Comfortably
+// longer than any real frame at 115200 baud, short enough that a host which dies mid-frame does not
+// leave the node silent.
+#define SERIALHAL_RX_TIMEOUT_MSEC 1000
+
 /**
  * A version of our 'phone' API that talks over a Stream.  So therefore well suited to use with serial links
  * or TCP connections.
@@ -50,6 +55,8 @@ class StreamAPI : public PhoneAPI
     size_t rxPtr = 0;
     bool rxIsSerialHal = false; ///< true when the current in-progress frame is a SerialHal frame (START1 SH_MAGIC ...)
     std::atomic<bool> serialHalRxActive{false};
+    /// millis() when the current SerialHal receive window opened, so a stalled frame can be expired
+    uint32_t serialHalRxStartMsec = 0;
 
     /// time of last rx, used, to slow down our polling if we haven't heard from anyone
     uint32_t lastRxMsec = 0;
@@ -75,12 +82,10 @@ class StreamAPI : public PhoneAPI
      * Emit a SerialHal response frame with proper framing (START1 SERIALHAL_MAGIC LEN_H LEN_L payload).
      * Called by SerialHalDevice to send responses back to the host.
      *
-     * @param hdr     4-byte header (START1 SERIALHAL_MAGIC LEN_H LEN_L)
-     * @param hdrLen  Length of header (should be 4)
      * @param payload Encoded SerialHalResponse protobuf payload
      * @param payloadLen Length of payload
      */
-    void emitSerialHalResponse(const uint8_t *hdr, size_t hdrLen, const uint8_t *payload, size_t payloadLen);
+    void emitSerialHalResponse(const uint8_t *payload, size_t payloadLen);
 
   private:
     /**
@@ -89,6 +94,11 @@ class StreamAPI : public PhoneAPI
     int32_t readStream();
     int32_t readStream(const char *buf, uint16_t bufLen);
     int32_t handleRecStream(const char *buf, uint16_t bufLen);
+
+    /// Open or close the SerialHal receive window (fast polling + log suppression) as one unit.
+    void setSerialHalRxActive(bool active);
+    /// Drop a SerialHal frame that stopped arriving, so it cannot wedge log suppression on.
+    void expireStaleSerialHalRx();
 
     /// Emit a slice of pending output. True asks the caller to come straight back; false covers
     /// both a drained queue and backpressure, so it does not mean the queue is empty.
@@ -127,8 +137,12 @@ class StreamAPI : public PhoneAPI
     /// Let transports recover from or close after an incomplete write.
     virtual void onFrameWriteFailed(size_t frameLen, size_t writtenLen) {}
 
-    /// Fill in the 4-byte 0x94C3 length header; returns the total frame length.
-    static size_t buildFrameHeader(uint8_t *buf, size_t payloadLen);
+    /// Fill in the 4-byte framing + length header; returns the total frame length. The
+    /// discriminator is the frame's second byte and selects its type: START2 for FromRadio,
+    /// SERIALHAL_MAGIC for a SerialHal response (see mesh/SerialHalFraming.h). It has no default
+    /// so this header does not have to pull the framing constants into every translation unit -
+    /// configuration.h reaches StreamAPI.h, so that would be all of them.
+    static size_t buildFrameHeader(uint8_t *buf, size_t payloadLen, uint8_t discriminator);
 
     /// Complete retained transport output before dequeuing another PhoneAPI packet.
     virtual bool finishPendingFrame() { return true; }
@@ -136,8 +150,9 @@ class StreamAPI : public PhoneAPI
     virtual bool hasRetainedFrame() { return false; }
     /// Return whether the dedicated log buffer is available for encoding.
     virtual bool canEncodeLogRecord() { return true; }
-    /// Frame and write a payload, optionally using best-effort admission.
-    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort);
+    /// Frame and write a payload, optionally using best-effort admission. `buf` must have
+    /// HEADER_LEN bytes of room ahead of the payload for the header this stamps in.
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort, uint8_t discriminator);
 
     concurrency::Lock streamLock;
 

@@ -308,7 +308,12 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
 
-    if (isSerialHalLogSuppressed()) {
+    // Suppression is global and sits ahead of every level filter and every destination, so it
+    // would otherwise silence unrelated subsystems mid-frame. Keeping ERROR and CRIT flowing costs
+    // a few bytes of latency on the SerialHal response and preserves the only output that matters
+    // when something is actually going wrong.
+    if (isSerialHalLogSuppressed() && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) != 0 &&
+        strcmp(logLevel, MESHTASTIC_LOG_LEVEL_CRIT) != 0) {
         return;
     }
 
