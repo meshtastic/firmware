@@ -31,3 +31,16 @@ reviews:
       instructions: >
         meshtasticd configuration files. Bundled with meshtasticd Linux/MacOS packaging.
         Ensure configurations include metadata found in other configs.
+    - path: "**/*.md"
+      instructions: >
+        Documentation does not live in this repo; it lives in
+        https://github.com/meshtastic/meshtastic. Flag any NEW .md file that documents a
+        feature, configuration surface, API, wire format, or design, and ask for it to be
+        opened against the docs repo instead. Flag any attempt to recreate a docs/
+        directory: it was deleted in #11488 and must not come back. Flag write-ups left in
+        the tree - investigation notes, mitigation plans, migration checklists, "how we got
+        here" narrative, summaries of what a change did - that content belongs in the PR
+        description and commit message. Documentation that does belong upstream must read
+        as a technical manual, not a novel: what it does, the settings in user terms, the
+        API or protocol a client speaks. No debugging journey, no rationale essays, no
+        changelog prose.

@@ -1,6 +1,7 @@
 #include "GPSUpdateScheduling.h"
 
 #include "Default.h"
+#include "UptimeClock.h"
 
 // Sampled from the original `2750 * seconds^1.22` curve. Interpolation tracks it within 0.6% for
 // inputs >=10s and 1.7% below that; the 1s/2s/3s points keep the convex first segment from
@@ -30,14 +31,16 @@ uint32_t gpsHardsleepThresholdMs(uint32_t predictedSearchSecs)
 // Mark the time when searching for GPS position begins
 void GPSUpdateScheduling::informSearching()
 {
-    searchStartedMs = millis();
+    searching = true;
+    searchStartedMs = Time::getMillis();
 }
 
 // Mark the time when searching for GPS is complete,
 // then update the predicted lock-time
 void GPSUpdateScheduling::informGotLock()
 {
-    searchEndedMs = millis();
+    searching = false;
+    searchEndedMs = Time::getMillis();
     LOG_DEBUG("Took %us to get lock", (searchEndedMs - searchStartedMs) / 1000);
     updateLockTimePrediction();
     consecutiveFailures = 0; // Drop back to fast cadence as soon as we acquire any fix
@@ -49,7 +52,8 @@ void GPSUpdateScheduling::informGotLock()
 // down() to fall into GPS_IDLE, leaving the chip awake on subsequent indoor cycles.
 void GPSUpdateScheduling::informSearchFailed()
 {
-    searchEndedMs = millis();
+    searching = false;
+    searchEndedMs = Time::getMillis();
     consecutiveFailures++;
     LOG_DEBUG("GPS search ended without fix after %us (consecutive failures: %u)", (searchEndedMs - searchStartedMs) / 1000,
               consecutiveFailures);
@@ -59,6 +63,7 @@ void GPSUpdateScheduling::informSearchFailed()
 // When re-enabling GPS with user button.
 void GPSUpdateScheduling::reset()
 {
+    searching = false;
     searchStartedMs = 0;
     searchEndedMs = 0;
     searchCount = 0;
@@ -70,7 +75,7 @@ void GPSUpdateScheduling::reset()
 // Used by GPS hardware directly, to enter timed hardware sleep
 uint32_t GPSUpdateScheduling::msUntilNextSearch()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     // Target interval (seconds), between GPS updates
     uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval, default_gps_update_interval);
@@ -105,13 +110,12 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
 // Used to abort a search in progress, if it runs unacceptably long
 uint32_t GPSUpdateScheduling::elapsedSearchMs()
 {
-    // If searching
-    if (searchStartedMs > searchEndedMs)
-        return millis() - searchStartedMs;
+    // Recorded, not inferred from searchStartedMs > searchEndedMs: ordering two stamps inverts
+    // across the 32-bit wrap, and the inform*() calls already know which state we are in.
+    if (!searching)
+        return 0; // Not searching. We shouldn't really consume this value
 
-    // If not searching - 0ms. We shouldn't really consume this value
-    else
-        return 0;
+    return Time::getMillis() - searchStartedMs;
 }
 
 // Is it now time to begin searching for a GPS position?
