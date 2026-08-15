@@ -110,7 +110,8 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 
 #ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
-#ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
+#ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded
+                            // in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
@@ -127,35 +128,37 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #ifdef DEBUG_PARTITION_TABLE
 #include "esp_partition.h"
 
-void printPartitionTable()
-{
-    printf("\n--- Partition Table ---\n");
-    // Print Column Headers
-    printf("| %-16s | %-4s | %-7s | %-10s | %-10s |\n", "Label", "Type", "Subtype", "Offset", "Size");
-    printf("|------------------|------|---------|------------|------------|\n");
+void printPartitionTable() {
+  printf("\n--- Partition Table ---\n");
+  // Print Column Headers
+  printf("| %-16s | %-4s | %-7s | %-10s | %-10s |\n", "Label", "Type",
+         "Subtype", "Offset", "Size");
+  printf("|------------------|------|---------|------------|------------|\n");
 
-    // Create an iterator to find ALL partitions (Type ANY, Subtype ANY)
-    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+  // Create an iterator to find ALL partitions (Type ANY, Subtype ANY)
+  esp_partition_iterator_t it = esp_partition_find(
+      ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
 
-    // Loop through the iterator
-    if (it != NULL) {
-        do {
-            const esp_partition_t *part = esp_partition_get(it);
+  // Loop through the iterator
+  if (it != NULL) {
+    do {
+      const esp_partition_t *part = esp_partition_get(it);
 
-            // Print details: Label, Type (Hex), Subtype (Hex), Offset (Hex), Size (Hex)
-            printf("| %-16s | 0x%02x | 0x%02x    | 0x%08x | 0x%08x |\n", part->label, part->type, part->subtype, part->address,
-                   part->size);
+      // Print details: Label, Type (Hex), Subtype (Hex), Offset (Hex), Size
+      // (Hex)
+      printf("| %-16s | 0x%02x | 0x%02x    | 0x%08x | 0x%08x |\n", part->label,
+             part->type, part->subtype, part->address, part->size);
 
-            // Move to next partition
-            it = esp_partition_next(it);
-        } while (it != NULL);
+      // Move to next partition
+      it = esp_partition_next(it);
+    } while (it != NULL);
 
-        // Release the iterator memory
-        esp_partition_iterator_release(it);
-    } else {
-        printf("No partitions found.\n");
-    }
-    printf("-----------------------\n");
+    // Release the iterator memory
+    esp_partition_iterator_release(it);
+  } else {
+    printf("No partitions found.\n");
+  }
+  printf("-----------------------\n");
 }
 #endif // DEBUG_PARTITION_TABLE
 #endif // ARCH_ESP32
@@ -163,11 +166,13 @@ void printPartitionTable()
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C &&                       \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C &&                       \
+    !MESHTASTIC_EXCLUDE_MAGNETOMETER
 #include "motion/MagnetometerThread.h"
 MagnetometerThread *magnetometerThread = nullptr;
 #endif
@@ -196,7 +201,9 @@ UdpMulticastHandler *udpHandler = nullptr;
 #endif
 
 #if defined(TCXO_OPTIONAL)
-float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
+float tcxoVoltage =
+    SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be
+                              // changed further down.
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -206,9 +213,10 @@ void setupNicheGraphics();
 
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 #if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
-// Reuse FSCommon's SPI_HSPI instance to avoid double-initializing SPI2_HOST in arduino-esp32 3.x.
-// Two SPIClass(HSPI) objects on the same bus cause the second spi_bus_initialize() to return
-// ESP_ERR_INVALID_STATE, leaving the LoRa device handle invalid and blocking SPI transfers.
+// Reuse FSCommon's SPI_HSPI instance to avoid double-initializing SPI2_HOST in
+// arduino-esp32 3.x. Two SPIClass(HSPI) objects on the same bus cause the
+// second spi_bus_initialize() to return ESP_ERR_INVALID_STATE, leaving the LoRa
+// device handle invalid and blocking SPI transfers.
 extern SPIClass SPI_HSPI;
 SPIClass &SPI1 = SPI_HSPI;
 #else
@@ -233,7 +241,8 @@ meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
 meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 // Global Bluetooth status
-meshtastic::BluetoothStatus *bluetoothStatus = new meshtastic::BluetoothStatus();
+meshtastic::BluetoothStatus *bluetoothStatus =
+    new meshtastic::BluetoothStatus();
 
 // Scan for I2C Devices
 
@@ -256,7 +265,8 @@ ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Magnetometer (if found)
 ScanI2C::DeviceAddress magnetometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
-ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
+ScanI2C::FoundDevice rgb_found =
+    ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 /// The I2C address of our Air Quality Indicator (if found)
 ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
@@ -274,30 +284,34 @@ bool pauseBluetoothLogging = false;
 bool pmu_found;
 
 #if !MESHTASTIC_EXCLUDE_I2C
-// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
-std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
+// Array map of sensor types with i2c address and wire as we'll find in the i2c
+// scan
+std::pair<uint8_t, TwoWire *>
+    nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 #endif
 
-Router *router = NULL; // Users of router don't care what sort of subclass implements that API
+Router *router = NULL; // Users of router don't care what sort of subclass
+                       // implements that API
 
 const char *firmware_version = optstr(APP_VERSION_SHORT);
 
-const char *getDeviceName()
-{
-    uint8_t dmac[6];
+const char *getDeviceName() {
+  uint8_t dmac[6];
 
-    getMacAddr(dmac);
+  getMacAddr(dmac);
 
-    // Meshtastic_ab3c or Shortname_abcd
-    static char name[20];
-    snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
-    // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if (strcmp(owner.short_name, name) != 0) {
-        snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
-    } else {
-        snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
-    }
-    return name;
+  // Meshtastic_ab3c or Shortname_abcd
+  static char name[20];
+  snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
+  // if the shortname exists and is NOT the new default of ab3c, use it for BLE
+  // name.
+  if (strcmp(owner.short_name, name) != 0) {
+    snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4],
+             dmac[5]);
+  } else {
+    snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
+  }
+  return name;
 }
 
 uint32_t timeLastPowered = 0;
@@ -308,12 +322,10 @@ AmbientLightingThread *ambientLightingThread;
 RadioLibHal *RadioLibHAL = NULL;
 
 /**
- * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
+ * Some platforms (nrf52) might provide an alterate version that suppresses
+ * calling delay from sleep.
  */
-__attribute__((weak, noinline)) bool loopCanSleep()
-{
-    return true;
-}
+__attribute__((weak, noinline)) bool loopCanSleep() { return true; }
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
@@ -325,72 +337,71 @@ __attribute__((noinline)) void lateInitVariant() {}
 __attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
 __attribute__((noinline)) void earlyInitVariant() {}
 
-// NRF52 (and probably other platforms) can report when system is in power failure mode
-// (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
-// For example NRF52 will prevent any flash writes in that case automatically
-// (but it causes issues we need to handle).
-// This detection is independent from whatever ADC or dividers used in Meshtastic
+// NRF52 (and probably other platforms) can report when system is in power
+// failure mode (eg. too low battery voltage) and operating it is unsafe (data
+// corruption, bootloops, etc). For example NRF52 will prevent any flash writes
+// in that case automatically (but it causes issues we need to handle). This
+// detection is independent from whatever ADC or dividers used in Meshtastic
 // boards and is internal to chip.
 
-// we use powerHAL layer to get this info and delay booting until power level is safe
+// we use powerHAL layer to get this info and delay booting until power level is
+// safe
 
 // wait until power level is safe to continue booting (to avoid bootloops)
 // blink user led in 3 flashes sequence to indicate what is happening
-void waitUntilPowerLevelSafe()
-{
-    while (powerHAL_isPowerLevelSafe() == false) {
+void waitUntilPowerLevelSafe() {
+  while (powerHAL_isPowerLevelSafe() == false) {
 
 #ifdef LED_POWER
 
-        // 3x: blink for 300 ms, pause for 300 ms
+    // 3x: blink for 300 ms, pause for 300 ms
 
-        for (int i = 0; i < 3; i++) {
-            digitalWrite(LED_POWER, LED_STATE_ON);
-            delay(300);
-            digitalWrite(LED_POWER, LED_STATE_OFF);
-            delay(300);
-        }
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(LED_POWER, LED_STATE_ON);
+      delay(300);
+      digitalWrite(LED_POWER, LED_STATE_OFF);
+      delay(300);
+    }
 #endif
 
-        // sleep for 2s
-        delay(2000);
-    }
+    // sleep for 2s
+    delay(2000);
+  }
 }
 
 /**
  * Print info as a structured log message (for automated log processing)
  */
-void printInfo()
-{
-    LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
+void printInfo() {
+  LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV),
+           optstr(APP_REPO));
 }
 #ifndef PIO_UNIT_TESTING
-void setup()
-{
+void setup() {
 
-    // initialize power HAL layer as early as possible
-    powerHAL_init();
+  // initialize power HAL layer as early as possible
+  powerHAL_init();
 
 #ifdef LED_POWER
-    pinMode(LED_POWER, OUTPUT);
-    digitalWrite(LED_POWER, LED_STATE_ON);
+  pinMode(LED_POWER, OUTPUT);
+  digitalWrite(LED_POWER, LED_STATE_ON);
 #endif
 
-    // prevent booting if device is in power failure mode
-    // boot sequence will follow when battery level raises to safe mode
-    waitUntilPowerLevelSafe();
+  // prevent booting if device is in power failure mode
+  // boot sequence will follow when battery level raises to safe mode
+  waitUntilPowerLevelSafe();
 
-    // Defined in variant.cpp for early init code
-    earlyInitVariant();
+  // Defined in variant.cpp for early init code
+  earlyInitVariant();
 
 #if defined(PIN_POWER_EN)
-    pinMode(PIN_POWER_EN, OUTPUT);
-    digitalWrite(PIN_POWER_EN, HIGH);
+  pinMode(PIN_POWER_EN, OUTPUT);
+  digitalWrite(PIN_POWER_EN, HIGH);
 #endif
 
 #ifdef LED_NOTIFICATION
-    pinMode(LED_NOTIFICATION, OUTPUT);
-    digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
+  pinMode(LED_NOTIFICATION, OUTPUT);
+  digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
 #endif
 
 #ifdef LED_LORA
@@ -399,50 +410,52 @@ void setup()
 #endif
 
 #ifdef WIFI_LED
-    pinMode(WIFI_LED, OUTPUT);
-    digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
+  pinMode(WIFI_LED, OUTPUT);
+  digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 
 #ifdef BLE_LED
-    pinMode(BLE_LED, OUTPUT);
-    digitalWrite(BLE_LED, LED_STATE_OFF);
+  pinMode(BLE_LED, OUTPUT);
+  digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
-    concurrency::hasBeenSetup = true;
+  concurrency::hasBeenSetup = true;
 #if HAS_SCREEN
-    meshtastic_Config_DisplayConfig_OledType screen_model =
-        meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
+  meshtastic_Config_DisplayConfig_OledType screen_model =
+      meshtastic_Config_DisplayConfig_OledType::
+          meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
 #endif
-    OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
+  OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
 #ifdef USE_SEGGER
-    auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
+  auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL
+                    : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
 #ifdef NRF52840_XXAA
-    auto buflen = 4096; // this board has a fair amount of ram
+  auto buflen = 4096; // this board has a fair amount of ram
 #else
-    auto buflen = 256; // this board has a fair amount of ram
+  auto buflen = 256; // this board has a fair amount of ram
 #endif
-    SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
+  SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
 #endif
 
 #ifdef DEBUG_PORT
-    consoleInit(); // Set serial baud rate and init our mesh console
+  consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
-    // M23 (audit): APPROTECT engagement moved below fsInit() so we can gate
-    // on EncryptedStorage::isProvisioned(). Engaging on an unprovisioned dev
-    // board permanently locks SWD before the operator has even set a
-    // passphrase - a misconfigured CI build flashed to a developer device
-    // would brick its debug port on first boot. Now we only engage when the
-    // device has a DEK file on flash, i.e. the operator has explicitly
-    // committed to lockdown via passphrase provisioning.
+  // M23 (audit): APPROTECT engagement moved below fsInit() so we can gate
+  // on EncryptedStorage::isProvisioned(). Engaging on an unprovisioned dev
+  // board permanently locks SWD before the operator has even set a
+  // passphrase - a misconfigured CI build flashed to a developer device
+  // would brick its debug port on first boot. Now we only engage when the
+  // device has a DEK file on flash, i.e. the operator has explicitly
+  // committed to lockdown via passphrase provisioning.
 
 #ifdef UNPHONE
-    unphone.printStore();
+  unphone.printStore();
 #endif
 
 #if ARCH_PORTDUINO
-    RTCQuality ourQuality = RTCQualityDevice;
+  RTCQuality ourQuality = RTCQualityDevice;
 
 #ifdef __linux__
     // timedatectl is systemd-only, so macOS, Windows and WASM stay at
@@ -453,100 +466,102 @@ void setup()
     }
 #endif
 
-    struct timeval tv;
-    tv.tv_sec = time(NULL);
-    tv.tv_usec = 0;
-    perhapsSetRTC(ourQuality, &tv);
+  struct timeval tv;
+  tv.tv_sec = time(NULL);
+  tv.tv_usec = 0;
+  perhapsSetRTC(ourQuality, &tv);
 #endif
 
-    powerMonInit();
-    serialSinceMsec = millis();
+  powerMonInit();
+  serialSinceMsec = millis();
 
-    LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
+  LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 #ifndef SENSECAP_INDICATOR
-    // use PSRAM for malloc calls > 2048 bytes
-    heap_caps_malloc_extmem_enable(2048);
+  // use PSRAM for malloc calls > 2048 bytes
+  heap_caps_malloc_extmem_enable(2048);
 #endif
 #endif
 
-    // The DEBUG_MUTE "we are muted, FYI" banner spills APP_VERSION / APP_ENV /
-    // APP_REPO out the USB CDC even with logging otherwise suppressed - a free
-    // firmware-fingerprinting primitive for an attacker holding the cable.
-    // Under MESHTASTIC_LOCKDOWN we want the device to look uniformly silent
-    // until the operator authenticates, so skip the banner entirely there.
+  // The DEBUG_MUTE "we are muted, FYI" banner spills APP_VERSION / APP_ENV /
+  // APP_REPO out the USB CDC even with logging otherwise suppressed - a free
+  // firmware-fingerprinting primitive for an attacker holding the cable.
+  // Under MESHTASTIC_LOCKDOWN we want the device to look uniformly silent
+  // until the operator authenticates, so skip the banner entirely there.
 #if defined(DEBUG_MUTE) && defined(DEBUG_PORT) && !defined(MESHTASTIC_LOCKDOWN)
-    DEBUG_PORT.printf("\r\n\r\n//\\ E S H T /\\ S T / C\r\n");
-    DEBUG_PORT.printf("Version %s for %s from %s\r\n", optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
-    DEBUG_PORT.printf("Debug mute is enabled, there will be no serial output.\r\n");
+  DEBUG_PORT.printf("\r\n\r\n//\\ E S H T /\\ S T / C\r\n");
+  DEBUG_PORT.printf("Version %s for %s from %s\r\n", optstr(APP_VERSION),
+                    optstr(APP_ENV), optstr(APP_REPO));
+  DEBUG_PORT.printf(
+      "Debug mute is enabled, there will be no serial output.\r\n");
 #endif
 
-    initDeepSleep();
+  initDeepSleep();
 
 #if defined(MODEM_POWER_EN)
-    pinMode(MODEM_POWER_EN, OUTPUT);
-    digitalWrite(MODEM_POWER_EN, LOW);
+  pinMode(MODEM_POWER_EN, OUTPUT);
+  digitalWrite(MODEM_POWER_EN, LOW);
 #endif
 
 #if defined(MODEM_PWRKEY)
-    pinMode(MODEM_PWRKEY, OUTPUT);
-    digitalWrite(MODEM_PWRKEY, LOW);
+  pinMode(MODEM_PWRKEY, OUTPUT);
+  digitalWrite(MODEM_PWRKEY, LOW);
 #endif
 
 #if defined(LORA_TCXO_GPIO)
-    pinMode(LORA_TCXO_GPIO, OUTPUT);
-    digitalWrite(LORA_TCXO_GPIO, HIGH);
+  pinMode(LORA_TCXO_GPIO, OUTPUT);
+  digitalWrite(LORA_TCXO_GPIO, HIGH);
 #endif
 
 #if defined(VEXT_ENABLE)
-    pinMode(VEXT_ENABLE, OUTPUT);
-    digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
+  pinMode(VEXT_ENABLE, OUTPUT);
+  digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
 #endif
 
 #if defined(PIN_SENSOR_EN)
-    pinMode(PIN_SENSOR_EN, OUTPUT);
-    digitalWrite(PIN_SENSOR_EN, PIN_SENSOR_EN_ACTIVE); // turn on sensor power
+  pinMode(PIN_SENSOR_EN, OUTPUT);
+  digitalWrite(PIN_SENSOR_EN, PIN_SENSOR_EN_ACTIVE); // turn on sensor power
 #endif
 
 #if defined(BIAS_T_ENABLE)
-    pinMode(BIAS_T_ENABLE, OUTPUT);
-    digitalWrite(BIAS_T_ENABLE, BIAS_T_VALUE); // turn on 5V for GPS Antenna
+  pinMode(BIAS_T_ENABLE, OUTPUT);
+  digitalWrite(BIAS_T_ENABLE, BIAS_T_VALUE); // turn on 5V for GPS Antenna
 #endif
 
 #if defined(VTFT_CTRL)
-    pinMode(VTFT_CTRL, OUTPUT);
-    digitalWrite(VTFT_CTRL, LOW);
+  pinMode(VTFT_CTRL, OUTPUT);
+  digitalWrite(VTFT_CTRL, LOW);
 #endif
 
 #ifdef RESET_OLED
-    pinMode(RESET_OLED, OUTPUT);
-    digitalWrite(RESET_OLED, 1);
-    delay(2);
-    digitalWrite(RESET_OLED, 0);
-    delay(10);
-    digitalWrite(RESET_OLED, 1);
+  pinMode(RESET_OLED, OUTPUT);
+  digitalWrite(RESET_OLED, 1);
+  delay(2);
+  digitalWrite(RESET_OLED, 0);
+  delay(10);
+  digitalWrite(RESET_OLED, 1);
 #endif
 
 #ifdef SENSOR_POWER_CTRL_PIN
-    pinMode(SENSOR_POWER_CTRL_PIN, OUTPUT);
-    digitalWrite(SENSOR_POWER_CTRL_PIN, SENSOR_POWER_ON);
+  pinMode(SENSOR_POWER_CTRL_PIN, OUTPUT);
+  digitalWrite(SENSOR_POWER_CTRL_PIN, SENSOR_POWER_ON);
 #endif
 
 #ifdef SENSOR_GPS_CONFLICT
-    bool sensor_detected = false;
+  bool sensor_detected = false;
 #endif
 #ifdef PERIPHERAL_WARMUP_MS
-    // Some peripherals may require additional time to stabilize after power is connected
-    // e.g. I2C on Heltec Vision Master
-    LOG_INFO("Wait for peripherals to stabilize");
-    delay(PERIPHERAL_WARMUP_MS);
+  // Some peripherals may require additional time to stabilize after power is
+  // connected e.g. I2C on Heltec Vision Master
+  LOG_INFO("Wait for peripherals to stabilize");
+  delay(PERIPHERAL_WARMUP_MS);
 #endif
-    initSPI();
+  initSPI();
 
-    OSThread::setup();
+  OSThread::setup();
 
-    fsInit();
+  fsInit();
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     EncryptedStorage::initLocked();
@@ -574,10 +589,10 @@ void setup()
         LOG_INFO("APPROTECT deferred: not provisioned");
     }
 #elif defined(MESHTASTIC_ENABLE_APPROTECT)
-    // Lockdown without encrypted storage shouldn't be reachable per
-    // configuration.h, but if it ever is, fall back to the unconditional
-    // engagement.
-    enableAPProtect();
+  // Lockdown without encrypted storage shouldn't be reachable per
+  // configuration.h, but if it ever is, fall back to the unconditional
+  // engagement.
+  enableAPProtect();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -589,62 +604,64 @@ void setup()
     Wire1.setSCL(I2C_SCL1);
     Wire1.begin();
 #elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
-    Wire1.begin(I2C_SDA1, I2C_SCL1);
+  Wire1.begin(I2C_SDA1, I2C_SCL1);
 #elif WIRE_INTERFACES_COUNT == 2
-    Wire1.begin();
+  Wire1.begin();
 #endif
 
 #if defined(I2C_SDA) && defined(ARCH_RP2040)
-    Wire.setSDA(I2C_SDA);
-    Wire.setSCL(I2C_SCL);
-    Wire.begin();
+  Wire.setSDA(I2C_SDA);
+  Wire.setSCL(I2C_SCL);
+  Wire.begin();
 #elif defined(I2C_SDA) && !defined(ARCH_RP2040)
-    LOG_INFO("Starting Bus with (SDA) %d and (SCL) %d: ", I2C_SDA, I2C_SCL);
-    Wire.begin(I2C_SDA, I2C_SCL);
+  LOG_INFO("Starting Bus with (SDA) %d and (SCL) %d: ", I2C_SDA, I2C_SCL);
+  Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
-    if (portduino_config.i2cdev != "") {
-        LOG_INFO("Use %s as I2C device", portduino_config.i2cdev.c_str());
-        Wire.begin(portduino_config.i2cdev.c_str());
-    } else {
-        LOG_INFO("No I2C device configured, Skip");
-    }
+  if (portduino_config.i2cdev != "") {
+    LOG_INFO("Use %s as I2C device", portduino_config.i2cdev.c_str());
+    Wire.begin(portduino_config.i2cdev.c_str());
+  } else {
+    LOG_INFO("No I2C device configured, Skip");
+  }
 #elif HAS_WIRE
-    Wire.begin();
+  Wire.begin();
 #endif
 #endif
 
 #if defined(M5STACK_UNITC6L)
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, 1);
-    c6l_init();
+  pinMode(LORA_CS, OUTPUT);
+  digitalWrite(LORA_CS, 1);
+  c6l_init();
 #endif
 
 #ifdef PIN_LCD_RESET
-    // FIXME - move this someplace better, LCD is at address 0x3F
-    pinMode(PIN_LCD_RESET, OUTPUT);
-    digitalWrite(PIN_LCD_RESET, 0);
-    delay(1);
-    digitalWrite(PIN_LCD_RESET, 1);
-    delay(1);
+  // FIXME - move this someplace better, LCD is at address 0x3F
+  pinMode(PIN_LCD_RESET, OUTPUT);
+  digitalWrite(PIN_LCD_RESET, 0);
+  delay(1);
+  digitalWrite(PIN_LCD_RESET, 1);
+  delay(1);
 #endif
 
 #ifdef AQ_SET_PIN
-    // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3 seconds, so we need to rescan later
-    pinMode(AQ_SET_PIN, OUTPUT);
-    digitalWrite(AQ_SET_PIN, HIGH);
+  // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3
+  // seconds, so we need to rescan later
+  pinMode(AQ_SET_PIN, OUTPUT);
+  digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
-    // Currently only the tbeam has a PMU
-    // PMU initialization needs to be placed before i2c scanning
-    power = new Power();
-    power->setStatusHandler(powerStatus);
-    powerStatus->observe(&power->newStatus);
-    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+  // Currently only the tbeam has a PMU
+  // PMU initialization needs to be placed before i2c scanning
+  power = new Power();
+  power->setStatusHandler(powerStatus);
+  powerStatus->observe(&power->newStatus);
+  power->setup(); // Must be after status handler is installed, so that handler
+                  // gets notified of the initial configuration
 
 #ifdef USE_MCP23017
-    // Bring up the I2C IO expander (LoRa reset, LCD reset, GPS wake) now that the PMU rails are up,
-    // before the I2C scan and radio/display init
-    mcp23017EarlyInit();
+  // Bring up the I2C IO expander (LoRa reset, LCD reset, GPS wake) now that the
+  // PMU rails are up, before the I2C scan and radio/display init
+  mcp23017EarlyInit();
 #endif
 
 #ifdef SENSECAP_INDICATOR
@@ -662,11 +679,11 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-    // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
-    // accessories
-    auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
+  // We need to scan here to decide if we have a screen for nodeDB.init() and
+  // because power has been applied to accessories
+  auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 #if HAS_WIRE
-    LOG_INFO("Scan for i2c devices");
+  LOG_INFO("Scan for i2c devices");
 #endif
 
 #if defined(SENSECAP_INDICATOR) || defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
@@ -674,28 +691,28 @@ void setup()
 #endif
 
 #if defined(I2C_SDA)
-    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+  i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif defined(ARCH_PORTDUINO)
-    if (portduino_config.i2cdev != "") {
-        LOG_INFO("Scan for i2c devices");
-        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
-    }
-#elif HAS_WIRE
+  if (portduino_config.i2cdev != "") {
+    LOG_INFO("Scan for i2c devices");
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+  }
+#elif HAS_WIRE
+  i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #endif
 
-    auto i2cCount = i2cScanner->countDevices();
-    if (i2cCount == 0) {
-        LOG_INFO("No I2C devices found");
-    } else {
-        LOG_INFO("%i I2C devices found", i2cCount);
+  auto i2cCount = i2cScanner->countDevices();
+  if (i2cCount == 0) {
+    LOG_INFO("No I2C devices found");
+  } else {
+    LOG_INFO("%i I2C devices found", i2cCount);
 #ifdef SENSOR_GPS_CONFLICT
-        sensor_detected = true;
+    sensor_detected = true;
 #endif
-    }
+  }
 #ifdef ARCH_ESP32
 #ifdef DEBUG_PARTITION_TABLE
-    printPartitionTable();
+  printPartitionTable();
 #endif
 #endif // ARCH_ESP32
 #ifdef ARCH_ESP32
@@ -707,33 +724,39 @@ void setup()
 #endif
 
 #if HAS_SCREEN
-    auto screenInfo = i2cScanner->firstScreen();
-    screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
+  auto screenInfo = i2cScanner->firstScreen();
+  screen_found = screenInfo.type != ScanI2C::DeviceType::NONE
+                     ? screenInfo.address
+                     : ScanI2C::ADDRESS_NONE;
 
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C) {
-        switch (screenInfo.type) {
-        case ScanI2C::DeviceType::SCREEN_SH1106:
-            screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
-            break;
-        case ScanI2C::DeviceType::SCREEN_SSD1306:
-            screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306;
-            break;
-        case ScanI2C::DeviceType::SCREEN_ST7567:
-        case ScanI2C::DeviceType::SCREEN_UNKNOWN:
-        default:
-            screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
-        }
+  if (screen_found.port != ScanI2C::I2CPort::NO_I2C) {
+    switch (screenInfo.type) {
+    case ScanI2C::DeviceType::SCREEN_SH1106:
+      screen_model = meshtastic_Config_DisplayConfig_OledType::
+          meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
+      break;
+    case ScanI2C::DeviceType::SCREEN_SSD1306:
+      screen_model = meshtastic_Config_DisplayConfig_OledType::
+          meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306;
+      break;
+    case ScanI2C::DeviceType::SCREEN_ST7567:
+    case ScanI2C::DeviceType::SCREEN_UNKNOWN:
+    default:
+      screen_model = meshtastic_Config_DisplayConfig_OledType::
+          meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     }
+  }
 #endif
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
 #if defined(USE_VIRTUAL_KEYBOARD)
-    kb_found = true;
+  kb_found = true;
 #endif
-    auto rtc_info = i2cScanner->firstRTC();
-    rtc_found = rtc_info.type != ScanI2C::DeviceType::NONE ? rtc_info.address : rtc_found;
+  auto rtc_info = i2cScanner->firstRTC();
+  rtc_found =
+      rtc_info.type != ScanI2C::DeviceType::NONE ? rtc_info.address : rtc_found;
 
-    auto kb_info = i2cScanner->firstKeyboard();
+  auto kb_info = i2cScanner->firstKeyboard();
 
     if (kb_info.type != ScanI2C::DeviceType::NONE) {
         kb_found = true;
@@ -772,121 +795,146 @@ void setup()
         }
     }
 
-    pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
+  pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
-    auto aqiInfo = i2cScanner->firstAQI();
-    aqi_found = aqiInfo.type != ScanI2C::DeviceType::NONE ? aqiInfo.address : ScanI2C::ADDRESS_NONE;
+  auto aqiInfo = i2cScanner->firstAQI();
+  aqi_found = aqiInfo.type != ScanI2C::DeviceType::NONE ? aqiInfo.address
+                                                        : ScanI2C::ADDRESS_NONE;
 
 /*
- * There are a bunch of sensors that have no further logic than to be found and stuffed into the
- * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
- * "found".
+ * There are a bunch of sensors that have no further logic than to be found and
+ * stuffed into the nodeTelemetrySensorsMap singleton. This wraps that logic in
+ * a temporary scope to declare the temporary field "found".
  */
 
 // Two supported RGB LED currently
 #ifdef HAS_RGB_LED
-    rgb_found = i2cScanner->firstRGBLED();
+  rgb_found = i2cScanner->firstRGBLED();
 #endif
 
 #ifdef HAS_TPS65233
-    // TPS65233 is a power management IC for satellite modems, used in the Dreamcatcher
-    // We are switching it off here since we don't use an LNB.
-    if (i2cScanner->exists(ScanI2C::DeviceType::TPS65233)) {
-        Wire.beginTransmission(TPS65233_ADDR);
-        Wire.write(0);   // Register 0
-        Wire.write(128); // Turn off the LNB power, keep I2C Control enabled
-        Wire.endTransmission();
-        Wire.beginTransmission(TPS65233_ADDR);
-        Wire.write(1); // Register 1
-        Wire.write(0); // Turn off Tone Generator 22kHz
-        Wire.endTransmission();
-    }
+  // TPS65233 is a power management IC for satellite modems, used in the
+  // Dreamcatcher We are switching it off here since we don't use an LNB.
+  if (i2cScanner->exists(ScanI2C::DeviceType::TPS65233)) {
+    Wire.beginTransmission(TPS65233_ADDR);
+    Wire.write(0);   // Register 0
+    Wire.write(128); // Turn off the LNB power, keep I2C Control enabled
+    Wire.endTransmission();
+    Wire.beginTransmission(TPS65233_ADDR);
+    Wire.write(1); // Register 1
+    Wire.write(0); // Turn off Tone Generator 22kHz
+    Wire.endTransmission();
+  }
 #endif
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
-    auto acc_info = i2cScanner->firstAccelerometer();
-    accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
-    LOG_DEBUG("acc_info = %i", acc_info.type);
+  auto acc_info = i2cScanner->firstAccelerometer();
+  accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE
+                            ? acc_info.address
+                            : accelerometer_found;
+  LOG_DEBUG("acc_info = %i", acc_info.type);
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
-    auto mag_info = i2cScanner->firstMagnetometer();
-    magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
-    LOG_DEBUG("mag_info = %i", mag_info.type);
+  auto mag_info = i2cScanner->firstMagnetometer();
+  magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE
+                           ? mag_info.address
+                           : magnetometer_found;
+  LOG_DEBUG("mag_info = %i", mag_info.type);
 #endif
 
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA226, meshtastic_TelemetrySensorType_INA226);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX17048, meshtastic_TelemetrySensorType_MAX17048);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310U, meshtastic_TelemetrySensorType_QMC6310);
-    // TODO: Types need to be added meshtastic_TelemetrySensorType_QMC6310N
-    //  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310N, meshtastic_TelemetrySensorType_QMC6310N);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::HMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MMC5983MA, meshtastic_TelemetrySensorType_MMC5983MA);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM42607P, meshtastic_TelemetrySensorType_ICM42607P);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA260,
+                      meshtastic_TelemetrySensorType_INA260);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA226,
+                      meshtastic_TelemetrySensorType_INA226);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA219,
+                      meshtastic_TelemetrySensorType_INA219);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA3221,
+                      meshtastic_TelemetrySensorType_INA3221);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX17048,
+                      meshtastic_TelemetrySensorType_MAX17048);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310U,
+                      meshtastic_TelemetrySensorType_QMC6310);
+  // TODO: Types need to be added meshtastic_TelemetrySensorType_QMC6310N
+  //  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310N,
+  //  meshtastic_TelemetrySensorType_QMC6310N);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMI8658,
+                      meshtastic_TelemetrySensorType_QMI8658);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC5883L,
+                      meshtastic_TelemetrySensorType_QMC5883L);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::HMC5883L,
+                      meshtastic_TelemetrySensorType_QMC5883L);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MMC5983MA,
+                      meshtastic_TelemetrySensorType_MMC5983MA);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM42607P,
+                      meshtastic_TelemetrySensorType_ICM42607P);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614,
+                      meshtastic_TelemetrySensorType_MLX90614);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948,
+                      meshtastic_TelemetrySensorType_ICM20948);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102,
+                      meshtastic_TelemetrySensorType_MAX30102);
 #endif
 
 #ifdef HAS_SDCARD
-    setupSDCard();
+  setupSDCard();
 #endif
 
-    // Hello
-    printInfo();
+  // Hello
+  printInfo();
 #ifdef BUILD_EPOCH
-    LOG_INFO("Build timestamp: %ld", BUILD_EPOCH);
+  LOG_INFO("Build timestamp: %ld", BUILD_EPOCH);
 #endif
 
 #ifdef ARCH_ESP32
-    esp32Setup();
+  esp32Setup();
 #endif
 
 #ifdef ARCH_NRF52
-    nrf52Setup();
+  nrf52Setup();
 #endif
 #ifdef ARCH_NRF54L15
-    nrf54l15Setup();
+  nrf54l15Setup();
 #endif
 
 #ifdef ARCH_RP2040
-    rp2040Setup();
+  rp2040Setup();
 #endif
 
 #ifdef ARCH_STM32WL
     stm32wlSetup();
 #endif
 
-    // We do this as early as possible because this loads preferences from flash
-    // but we need to do this after main cpu init (esp32setup), because we need the random seed set
-    nodeDB = new NodeDB;
+  // We do this as early as possible because this loads preferences from flash
+  // but we need to do this after main cpu init (esp32setup), because we need
+  // the random seed set
+  nodeDB = new NodeDB;
 #ifdef ARCH_ESP32
-    // Config is loaded now, and Bluetooth has not been initialized yet. If the
-    // saved config will keep Bluetooth inactive, return its reserved memory early.
-    esp32ReleaseBluetoothMemoryIfUnused();
+  // Config is loaded now, and Bluetooth has not been initialized yet. If the
+  // saved config will keep Bluetooth inactive, return its reserved memory
+  // early.
+  esp32ReleaseBluetoothMemoryIfUnused();
 #endif
 
-    // Initialize transmit history to persist broadcast throttle timers across reboots
-    TransmitHistory::getInstance()->loadFromDisk();
+  // Initialize transmit history to persist broadcast throttle timers across
+  // reboots
+  TransmitHistory::getInstance()->loadFromDisk();
 #if HAS_TFT
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        tftSetup();
-    }
+  if (config.display.displaymode ==
+      meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    tftSetup();
+  }
 #endif
 
-    router = new ReliableRouter();
+  router = new ReliableRouter();
 
-    // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true &&
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
-                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
-        LOG_DEBUG("Tracker/Sensor: Skip start melody");
-    else
-        playStartMelody();
+  // only play start melody when role is not tracker or sensor
+  if (config.power.is_power_saving == true &&
+      IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                meshtastic_Config_DeviceConfig_Role_TAK_TRACKER,
+                meshtastic_Config_DeviceConfig_Role_SENSOR))
+    LOG_DEBUG("Tracker/Sensor: Skip start melody");
+  else
+    playStartMelody();
 
 #if HAS_SCREEN
         // fixed screen override?
@@ -898,10 +946,13 @@ void setup()
     screen_geometry = GEOMETRY_128_128;
 #endif
 #elif defined(USE_SH1107_128_64)
-    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+  screen_model =
+      meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of
+                                                            // 128x64
 #else
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
-        screen_model = config.display.oled;
+  if (config.display.oled !=
+      meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
+    screen_model = config.display.oled;
 
         // Fix: update geometry for SH1107 128x128 selected via menu
         if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
@@ -913,100 +964,104 @@ void setup()
     }
 #endif
 #ifdef OLED_GEOMETRY_OVERRIDE
-    // Per-variant geometry (e.g. 72x40 micro-OLEDs). Takes precedence over the
-    // default GEOMETRY_128_64 set at the top of setup().
-    screen_geometry = OLED_GEOMETRY_OVERRIDE;
+  // Per-variant geometry (e.g. 72x40 micro-OLEDs). Takes precedence over the
+  // default GEOMETRY_128_64 set at the top of setup().
+  screen_geometry = OLED_GEOMETRY_OVERRIDE;
 #endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
-    if (acc_info.type != ScanI2C::DeviceType::NONE) {
-        accelerometerThread = new AccelerometerThread(acc_info.type);
-    }
+  if (acc_info.type != ScanI2C::DeviceType::NONE) {
+    accelerometerThread = new AccelerometerThread(acc_info.type);
+  }
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
-    if (mag_info.type != ScanI2C::DeviceType::NONE) {
-        magnetometerThread = new MagnetometerThread(mag_info.type);
-    }
+  if (mag_info.type != ScanI2C::DeviceType::NONE) {
+    magnetometerThread = new MagnetometerThread(mag_info.type);
+  }
 #endif
 
 #if defined(HAS_NEOPIXEL) || defined(UNPHONE) || defined(RGBLED_RED)
-    ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
+  ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
 #elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-    if (rgb_found.type != ScanI2C::DeviceType::NONE) {
-        ambientLightingThread = new AmbientLightingThread(rgb_found.type);
-    }
+  if (rgb_found.type != ScanI2C::DeviceType::NONE) {
+    ambientLightingThread = new AmbientLightingThread(rgb_found.type);
+  }
 #endif
 #endif
 
 #ifdef HAS_DRV2605
 #if defined(PIN_DRV_EN)
-    pinMode(PIN_DRV_EN, OUTPUT);
-    digitalWrite(PIN_DRV_EN, HIGH);
-    delay(10);
+  pinMode(PIN_DRV_EN, OUTPUT);
+  digitalWrite(PIN_DRV_EN, HIGH);
+  delay(10);
 #endif
-    drv.begin();
+  drv.begin();
 
-    // Bits	Field	        Value	Meaning
-    // 7	N_ERM_LRA	    1	    LRA mode (vs 0 = ERM)
-    // 6:4	FB_BRAKE_FACTOR	3	    4× brake factor
-    // 3:2	LOOP_GAIN	    1	    medium loop gain
-    // 1:0	BEMF_GAIN	    2	    back-EMF gain
+  // Bits	Field	        Value	Meaning
+  // 7	N_ERM_LRA	    1	    LRA mode (vs 0 = ERM)
+  // 6:4	FB_BRAKE_FACTOR	3	    4× brake factor
+  // 3:2	LOOP_GAIN	    1	    medium loop gain
+  // 1:0	BEMF_GAIN	    2	    back-EMF gain
 
 #if defined(DRV2605_USE_LRA)
-    drv.writeRegister8(DRV2605_REG_FEEDBACK, 0xB6);
+  drv.writeRegister8(DRV2605_REG_FEEDBACK, 0xB6);
 #endif
 
-    drv.selectLibrary(1);
-    // I2C trigger by sending 'go' command
-    drv.setMode(DRV2605_MODE_INTTRIG);
+  drv.selectLibrary(1);
+  // I2C trigger by sending 'go' command
+  drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
 
-    // Init our SPI controller (must be before screen and lora)
+  // Init our SPI controller (must be before screen and lora)
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
-    SPI1.setSCK(LORA_SCK);
-    SPI1.setTX(LORA_MOSI);
-    SPI1.setRX(LORA_MISO);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    SPI1.begin(false);
+  SPI1.setSCK(LORA_SCK);
+  SPI1.setTX(LORA_MOSI);
+  SPI1.setRX(LORA_MISO);
+  pinMode(LORA_CS, OUTPUT);
+  digitalWrite(LORA_CS, HIGH);
+  SPI1.begin(false);
 #else  // HW_SPI1_DEVICE
-    SPI.setSCK(LORA_SCK);
-    SPI.setTX(LORA_MOSI);
-    SPI.setRX(LORA_MISO);
-    SPI.begin(false);
+  SPI.setSCK(LORA_SCK);
+  SPI.setTX(LORA_MOSI);
+  SPI.setRX(LORA_MISO);
+  SPI.begin(false);
 #endif // HW_SPI1_DEVICE
 #elif ARCH_PORTDUINO
-    if (portduino_config.lora_spi_dev != "ch341") {
-        SPI.begin();
-    }
+  if (portduino_config.lora_spi_dev != "ch341") {
+    SPI.begin();
+  }
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
 #if defined(RAK3401) || defined(RAK13302)
-    pinMode(WB_IO2, OUTPUT);
-    digitalWrite(WB_IO2, HIGH);
-    SPI1.setPins(LORA_MISO, LORA_SCK, LORA_MOSI);
-    SPI1.begin();
+  pinMode(WB_IO2, OUTPUT);
+  digitalWrite(WB_IO2, HIGH);
+  SPI1.setPins(LORA_MISO, LORA_SCK, LORA_MOSI);
+  SPI1.begin();
 #else
-    SPI.begin();
+  SPI.begin();
 #endif
 #else
-        // ESP32
+  // ESP32
 #if defined(HW_SPI1_DEVICE)
-    SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-    LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-    SPI1.setFrequency(4000000);
+  SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+  LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO,
+            LORA_MOSI, LORA_CS);
+  SPI1.setFrequency(4000000);
 #else
-    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-    LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-    SPI.setFrequency(4000000);
+  SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+  LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO,
+            LORA_MOSI, LORA_CS);
+  SPI.setFrequency(4000000);
 #endif
 #endif
 
-    // Initialize the screen first so we can show the logo while we start up everything else.
+  // Initialize the screen first so we can show the logo while we start up
+  // everything else.
 #if HAS_SCREEN
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+  if (config.display.displaymode !=
+      meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
 #if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
         screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
@@ -1019,139 +1074,152 @@ void setup()
         if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
             screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
 #endif
-    }
+  }
 #endif // HAS_SCREEN
 
-    // TODO Remove magic string
-    // setup TZ prior to time actions.
+  // TODO Remove magic string
+  // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
-    LOG_DEBUG("Use compiled/slipstreamed %s", slipstreamTZString); // important, removing this clobbers our magic string
-    if (*config.device.tzdef && config.device.tzdef[0] != 0) {
-        LOG_DEBUG("Saved TZ: %s ", config.device.tzdef);
-        setenv("TZ", config.device.tzdef, 1);
+  LOG_DEBUG(
+      "Use compiled/slipstreamed %s",
+      slipstreamTZString); // important, removing this clobbers our magic string
+  if (*config.device.tzdef && config.device.tzdef[0] != 0) {
+    LOG_DEBUG("Saved TZ: %s ", config.device.tzdef);
+    setenv("TZ", config.device.tzdef, 1);
+  } else {
+    if (strncmp((const char *)slipstreamTZString, "tzpl", 4) == 0) {
+      setenv("TZ", "GMT0", 1);
     } else {
-        if (strncmp((const char *)slipstreamTZString, "tzpl", 4) == 0) {
-            setenv("TZ", "GMT0", 1);
-        } else {
-            setenv("TZ", (const char *)slipstreamTZString, 1);
-            strcpy(config.device.tzdef, (const char *)slipstreamTZString);
-        }
+      setenv("TZ", (const char *)slipstreamTZString, 1);
+      strcpy(config.device.tzdef, (const char *)slipstreamTZString);
     }
-    tzset();
-    LOG_DEBUG("Set Timezone to %s", getenv("TZ"));
+  }
+  tzset();
+  LOG_DEBUG("Set Timezone to %s", getenv("TZ"));
 #endif
 
-    readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
+  readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS
+                 // time)
 
 #if !MESHTASTIC_EXCLUDE_GPS
-    // If we're taking on the repeater role, ignore GPS
+  // If we're taking on the repeater role, ignore GPS
 #ifdef SENSOR_GPS_CONFLICT
-    if (sensor_detected == false) {
+  if (sensor_detected == false) {
 #endif
-        if (HAS_GPS) {
-            if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-                gps = GPS::createGps();
-                if (gps) {
-                    gpsStatus->observe(&gps->newStatus);
+    if (HAS_GPS) {
+      if (config.position.gps_mode !=
+          meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+        gps = GPS::createGps();
+        if (gps) {
+          gpsStatus->observe(&gps->newStatus);
 
-                    // If lora region is unset, disable the gps thread
-                    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
-                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-                        gps->disable();
-                    }
-                } else {
-                    LOG_DEBUG("Run without GPS");
-                }
-            }
+          // If lora region is unset, disable the gps thread
+          if (config.lora.region ==
+                  meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+              config.position.gps_mode ==
+                  meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+            gps->disable();
+          }
+        } else {
+          LOG_DEBUG("Run without GPS");
         }
-#ifdef SENSOR_GPS_CONFLICT
+      }
     }
+#ifdef SENSOR_GPS_CONFLICT
+  }
 #endif
 
 #endif
 
-    nodeStatus->observe(&nodeDB->newStatus);
+  nodeStatus->observe(&nodeDB->newStatus);
 
 #ifdef HAS_I2S
-    LOG_DEBUG("Start audio thread");
-    audioThread = new AudioThread();
+  LOG_DEBUG("Start audio thread");
+  audioThread = new AudioThread();
 #endif
 
 #ifdef HAS_UDP_MULTICAST
-    LOG_DEBUG("Start multicast thread");
-    udpHandler = new UdpMulticastHandler();
+  LOG_DEBUG("Start multicast thread");
+  udpHandler = new UdpMulticastHandler();
 #ifdef ARCH_PORTDUINO
-    // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
-    // onNetworkConnected there
-    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpHandler->start();
-    }
+  // FIXME: portduino does not ever call onNetworkConnected so call it here
+  // because I don't know what happen if I call onNetworkConnected there
+  if (config.network.enabled_protocols &
+      meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+    udpHandler->start();
+  }
 #endif
 #endif
-    service = new MeshService();
-    service->init();
+  service = new MeshService();
+  service->init();
 
-    // Set osk_found for trackball/encoder devices BEFORE setupModules so CannedMessageModule can detect it
-#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+  // Set osk_found for trackball/encoder devices BEFORE setupModules so
+  // CannedMessageModule can detect it
+#if defined(HAS_TRACKBALL) ||                                                  \
+    (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
 #ifndef HAS_PHYSICAL_KEYBOARD
-    osk_found = true;
+  osk_found = true;
 #endif
 #endif
 
-    // Now that the mesh service is created, create any modules
-    setupModules();
+  // Now that the mesh service is created, create any modules
+  setupModules();
 
 #if !MESHTASTIC_EXCLUDE_I2C
-    // Inform modules about I2C devices
-    ScanI2CCompleted(i2cScanner.get());
-    i2cScanner.reset();
+  // Inform modules about I2C devices
+  ScanI2CCompleted(i2cScanner.get());
+  i2cScanner.reset();
 #endif
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
-    // warn the user about a low entropy key
-    if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
-        LOG_WARN(LOW_ENTROPY_WARNING);
-        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        if (cn) {
-            cn->level = meshtastic_LogRecord_Level_WARNING;
-            cn->time = getValidTime(RTCQualityFromNet);
-            sprintf(cn->message, LOW_ENTROPY_WARNING);
-            service->sendClientNotification(cn);
-        }
-        nodeDB->hasWarned = true;
+  // warn the user about a low entropy key
+  if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
+    LOG_WARN(LOW_ENTROPY_WARNING);
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (cn) {
+      cn->level = meshtastic_LogRecord_Level_WARNING;
+      cn->time = getValidTime(RTCQualityFromNet);
+      sprintf(cn->message, LOW_ENTROPY_WARNING);
+      service->sendClientNotification(cn);
     }
+    nodeDB->hasWarned = true;
+  }
 #endif
     nodeDB->notifyPendingLicensedIdentityMigration();
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
-    if (inputBroker)
-        inputBroker->Init();
+  if (inputBroker)
+    inputBroker->Init();
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-    // After modules are setup, so we can observe modules
-    setupNicheGraphics();
+  // After modules are setup, so we can observe modules
+  setupNicheGraphics();
 #endif
 
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
-    if (!pmu_found)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
+  if (!pmu_found)
+    RECORD_CRITICALERROR(
+        meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for
+                                                 // missing hardware
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
-    if (screen)
-        screen->setup();
+  if (screen)
+    screen->setup();
 #elif defined(ARCH_PORTDUINO)
-    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
-        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        screen->setup();
-    }
+  if ((screen_found.port != ScanI2C::I2CPort::NO_I2C ||
+       portduino_config.displayPanel) &&
+      config.display.displaymode !=
+          meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    screen->setup();
+  }
 #else
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
-        screen->setup();
+  if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
+    screen->setup();
 #endif
 #endif
 
@@ -1172,97 +1240,104 @@ void setup()
     LOG_DEBUG("SPI2 restarted after ST7701 init (SCK=%d, MISO=%d, MOSI=%d)", LORA_SCK, LORA_MISO, LORA_MOSI);
 #endif
 
-    auto rIf = initLoRa();
+  auto rIf = initLoRa();
 
-    lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+  lateInitVariant(); // Do board specific init (see extra_variants/README.md for
+                     // documentation)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
-    mqttInit();
+  mqttInit();
 #endif
 
 #ifdef RF95_FAN_EN
-    // Ability to disable FAN if PIN has been set with RF95_FAN_EN.
-    // Make sure LoRa has been started before disabling FAN.
-    if (config.lora.pa_fan_disabled)
-        digitalWrite(RF95_FAN_EN, LOW ^ 0);
+  // Ability to disable FAN if PIN has been set with RF95_FAN_EN.
+  // Make sure LoRa has been started before disabling FAN.
+  if (config.lora.pa_fan_disabled)
+    digitalWrite(RF95_FAN_EN, LOW ^ 0);
 #endif
 
 #ifndef ARCH_PORTDUINO
 
-        // Initialize Wifi
+  // Initialize Wifi
 #if HAS_WIFI
-    initWifi();
+  initWifi();
 #endif
 
 #if HAS_ETHERNET
-    // Initialize Ethernet
-    initEthernet();
+  // Initialize Ethernet
+  initEthernet();
 #endif
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
-    // Start web server thread.
-    webServerThread = new WebServerThread();
+  // Start web server thread.
+  webServerThread = new WebServerThread();
 #endif
 
 #ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
-    if (portduino_config.webserverport != -1) {
-        piwebServerThread = new PiWebServerThread();
-        std::atexit([] { delete piwebServerThread; });
-    }
+  if (portduino_config.webserverport != -1) {
+    piwebServerThread = new PiWebServerThread();
+    std::atexit([] { delete piwebServerThread; });
+  }
 #endif
-    initApiServer(TCPPort);
+  initApiServer(TCPPort);
 #endif
 
-    // Start airtime logger thread.
-    airTime = new AirTime();
+  // Start airtime logger thread.
+  airTime = new AirTime();
 
-    if (!rIf)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
-    else {
+  if (!rIf)
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
+  else {
 #ifndef ARCH_PORTDUINO_WASM
-        // Log bit rate to debug output
-        LOG_DEBUG("LoRA bitrate = %f bytes / sec", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
-                                                    (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
-                                                       1000);
+    // Log bit rate to debug output
+    LOG_DEBUG(
+        "LoRA bitrate = %f bytes / sec",
+        (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
+         (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
+            1000);
 #endif
 
-        router->addInterface(std::move(rIf));
-    }
+    router->addInterface(std::move(rIf));
+  }
 
-    // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
-    PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
-    powerFSMthread = new PowerFSMThread();
+  // This must be _after_ service.init because we need our preferences loaded
+  // from flash to have proper timeout values
+  PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME,
+                    // only do this for cold boots, not waking from SDS
+  powerFSMthread = new PowerFSMThread();
 
 #if !HAS_TFT
-    setCPUFast(false); // 80MHz is fine for our slow peripherals
+  setCPUFast(false); // 80MHz is fine for our slow peripherals
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
-    LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
-    LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
+  LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
+  LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
 
-    // Log the per-subsystem heap breakdown now that the big allocations are done
-    memaudit::logBreakdown("boot");
+  // Log the per-subsystem heap breakdown now that the big allocations are done
+  memaudit::logBreakdown("boot");
 
-    // We manually run this to update the NodeStatus
-    nodeDB->notifyObservers(true);
+  // We manually run this to update the NodeStatus
+  nodeDB->notifyObservers(true);
 
 #ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
-    // Opt-in CI guardrail: on nRF52840 static RAM growth eats the heap arena 1:1,
-    // so flag loudly when less than 20% of the heap is free at the end of setup().
-    {
-        uint32_t heapTotal = memGet.getHeapSize();
-        // Platforms without heap accounting report UINT32_MAX (or 0); skip those
-        if (heapTotal != 0 && heapTotal != UINT32_MAX) {
-            uint32_t heapFree = memGet.getFreeHeap();
-            if (heapFree < heapTotal / 5) {
-                LOG_ERROR("Boot heap watermark: only %u of %u bytes free (<20%%)", heapFree, heapTotal);
-            }
-        }
+  // Opt-in CI guardrail: on nRF52840 static RAM growth eats the heap arena 1:1,
+  // so flag loudly when less than 20% of the heap is free at the end of
+  // setup().
+  {
+    uint32_t heapTotal = memGet.getHeapSize();
+    // Platforms without heap accounting report UINT32_MAX (or 0); skip those
+    if (heapTotal != 0 && heapTotal != UINT32_MAX) {
+      uint32_t heapFree = memGet.getFreeHeap();
+      if (heapFree < heapTotal / 5) {
+        LOG_ERROR("Boot heap watermark: only %u of %u bytes free (<20%%)",
+                  heapFree, heapTotal);
+      }
     }
+  }
 #endif
 
 #if defined(ARCH_PORTDUINO) && defined(_WIN32)
@@ -1272,17 +1347,24 @@ void setup()
 }
 
 #endif
-uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to reboot shortly after the update completes)
-uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
-bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
+uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to
+                           // reboot shortly after the update completes)
+uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to
+                           // shutdown from python or mobile client)
+bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for
+                           // OTA handoff)
 
-#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
-volatile bool lockdownReloadPending;  // see main.h - deferred NodeDB reload after lockdown unlock
-volatile bool lockdownDisablePending; // see main.h - deferred decrypt-revert after lockdown disable
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) &&                                   \
+    defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+volatile bool lockdownReloadPending;  // see main.h - deferred NodeDB reload
+                                      // after lockdown unlock
+volatile bool lockdownDisablePending; // see main.h - deferred decrypt-revert
+                                      // after lockdown disable
 #endif
 
-// If a thread does something that might need for it to be rescheduled ASAP it can set this flag
-// This will suppress the current delay and instead try to run ASAP.
+// If a thread does something that might need for it to be rescheduled ASAP it
+// can set this flag This will suppress the current delay and instead try to run
+// ASAP.
 bool runASAP;
 
 // TODO find better home than main.cpp
@@ -1301,51 +1383,67 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     deviceMetadata.excluded_modules = meshtastic_ExcludedModules_EXCLUDED_NONE;
 #if MESHTASTIC_EXCLUDE_REMOTEHARDWARE
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_REMOTEHARDWARE_CONFIG;
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_REMOTEHARDWARE_CONFIG;
 #endif
 #if MESHTASTIC_EXCLUDE_AUDIO
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
+  deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
-// Option to explicitly include canned messages for edge cases, e.g. niche graphics
-#if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
+// Option to explicitly include canned messages for edge cases, e.g. niche
+// graphics
+#if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) &&     \
+    !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
+  deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
-// Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
-// We'll have to macro guard against those targets potentially
+// Only edge case here is if we apply this a device with built in Accelerometer
+// and want to detect interrupts We'll have to macro guard against those targets
+// potentially
 #if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
 #endif
-// If we don't have any GPIO and we don't have GPS OR we don't want too - no purpose in having serial config
+// If we don't have any GPIO and we don't have GPS OR we don't want too - no
+// purpose in having serial config
 #if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
+  deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
 #ifndef ARCH_ESP32
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
 #if !defined(HAS_RGB_LED) && !RAK_4631
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
     // Range test is always excluded as of 2.8
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_RANGETEST_CONFIG;
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
-// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
-#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6)
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
+// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth
+// stacks integrated yet.
+#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) ||  \
+    defined(CONFIG_IDF_TARGET_ESP32C6)
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
-#if defined(ARCH_NRF52) && !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet gateway currently
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on nRF52
+#if defined(ARCH_NRF52) &&                                                     \
+    !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet
+                  // gateway currently
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on nRF52
 #elif defined(ARCH_RP2040) && !HAS_WIFI && !HAS_ETHERNET
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on RP2040
+  deviceMetadata.excluded_modules |=
+      meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on RP2040
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    deviceMetadata.hasPKC = true;
+  deviceMetadata.hasPKC = true;
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     deviceMetadata.has_xeddsa = true;
@@ -1354,21 +1452,21 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 }
 
 #if !MESHTASTIC_EXCLUDE_I2C
-void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, ScanI2C::DeviceType deviceType,
-                         meshtastic_TelemetrySensorType sensorType)
-{
-    auto found = i2cScanner->find(deviceType);
-    if (found.type != ScanI2C::DeviceType::NONE) {
-        nodeTelemetrySensorsMap[sensorType].first = found.address.address;
-        nodeTelemetrySensorsMap[sensorType].second = i2cScanner->fetchI2CBus(found.address);
-    }
+void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner,
+                         ScanI2C::DeviceType deviceType,
+                         meshtastic_TelemetrySensorType sensorType) {
+  auto found = i2cScanner->find(deviceType);
+  if (found.type != ScanI2C::DeviceType::NONE) {
+    nodeTelemetrySensorsMap[sensorType].first = found.address.address;
+    nodeTelemetrySensorsMap[sensorType].second =
+        i2cScanner->fetchI2CBus(found.address);
+  }
 }
 #endif
 
 #ifndef PIO_UNIT_TESTING
-void loop()
-{
-    runASAP = false;
+void loop() {
+  runASAP = false;
 
     // The single writer of the monotonic wrap carry; every other caller only reads it.
     Time::serviceMonotonic();
@@ -1453,46 +1551,47 @@ void loop()
 #endif
 
 #ifdef ARCH_ESP32
-    esp32Loop();
+  esp32Loop();
 #endif
 #ifdef ARCH_NRF52
-    nrf52Loop();
+  nrf52Loop();
 #endif
 #ifdef ARCH_NRF54L15
-    nrf54l15Loop();
+  nrf54l15Loop();
 #endif
 #ifdef ARCH_RP2040
-    rp2040Loop();
+  rp2040Loop();
 #endif
-    power->powerCommandsCheck();
+  power->powerCommandsCheck();
 
-    if (RadioLibInterface::instance != nullptr) {
-        static uint32_t lastRadioMissedIrqPoll;
-        if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
-            lastRadioMissedIrqPoll = millis();
-            RadioLibInterface::instance->pollMissedIrqs();
-        }
-
-        // Periodic AGC reset - warm sleep + recalibrate to prevent stuck AGC gain
-        static uint32_t lastAgcReset;
-        if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
-            lastAgcReset = millis();
-            RadioLibInterface::instance->resetAGC();
-        }
+  if (RadioLibInterface::instance != nullptr) {
+    static uint32_t lastRadioMissedIrqPoll;
+    if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
+      lastRadioMissedIrqPoll = millis();
+      RadioLibInterface::instance->pollMissedIrqs();
     }
+
+    // Periodic AGC reset - warm sleep + recalibrate to prevent stuck AGC gain
+    static uint32_t lastAgcReset;
+    if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
+      lastAgcReset = millis();
+      RadioLibInterface::instance->resetAGC();
+    }
+  }
 
 #ifdef DEBUG_STACK
-    static uint32_t lastPrint = 0;
-    if (!Throttle::isWithinTimespanMs(lastPrint, 10 * 1000L)) {
-        lastPrint = millis();
-        meshtastic::printThreadInfo("main");
-    }
+  static uint32_t lastPrint = 0;
+  if (!Throttle::isWithinTimespanMs(lastPrint, 10 * 1000L)) {
+    lastPrint = millis();
+    meshtastic::printThreadInfo("main");
+  }
 #endif
 
-    service->loop();
-#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
-    if (inputBroker)
-        inputBroker->processInputEventQueue();
+  service->loop();
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS) &&               \
+    !defined(ARCH_RP2040)
+  if (inputBroker)
+    inputBroker->processInputEventQueue();
 #endif
 #if ARCH_PORTDUINO
     if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
@@ -1528,34 +1627,36 @@ void loop()
         }
     }
 #if HAS_TFT
-    if (screen && portduino_config.displayPanel == x11 &&
-        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        auto dispdev = screen->getDisplayDevice();
-        if (dispdev)
-            static_cast<TFTDisplay *>(dispdev)->sdlLoop();
-    }
+  if (screen && portduino_config.displayPanel == x11 &&
+      config.display.displaymode !=
+          meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    auto dispdev = screen->getDisplayDevice();
+    if (dispdev)
+      static_cast<TFTDisplay *>(dispdev)->sdlLoop();
+  }
 #endif
 #endif
-#if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) && ENABLE_MESSAGE_PERSISTENCE
-    messageStoreAutosaveTick();
+#if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) &&              \
+    ENABLE_MESSAGE_PERSISTENCE
+  messageStoreAutosaveTick();
 #endif
-    long delayMsec = mainController.runOrDelay();
+  long delayMsec = mainController.runOrDelay();
 
-    // We want to sleep as long as possible here - because it saves power
-    if (!runASAP && loopCanSleep()) {
+  // We want to sleep as long as possible here - because it saves power
+  if (!runASAP && loopCanSleep()) {
 #ifdef DEBUG_LOOP_TIMING
-        LOG_DEBUG("main loop delay: %d", delayMsec);
+    LOG_DEBUG("main loop delay: %d", delayMsec);
 #endif
 #ifdef ARCH_PORTDUINO_WASM
-        // Single-threaded wasm: mainDelay's InterruptableDelay is a pthread
-        // cond/mutex semaphore that no other thread can ever give(), and
-        // emscripten's single-threaded pthread_cond_timedwait busy-spins. Suspend
-        // cooperatively via Asyncify instead, capping idle sleep so the per-tick
-        // IRQ poll latency stays bounded (RX/TX-done is detected by polling).
-        emscripten_sleep(delayMsec > 50 ? 50 : delayMsec);
+    // Single-threaded wasm: mainDelay's InterruptableDelay is a pthread
+    // cond/mutex semaphore that no other thread can ever give(), and
+    // emscripten's single-threaded pthread_cond_timedwait busy-spins. Suspend
+    // cooperatively via Asyncify instead, capping idle sleep so the per-tick
+    // IRQ poll latency stays bounded (RX/TX-done is detected by polling).
+    emscripten_sleep(delayMsec > 50 ? 50 : delayMsec);
 #else
-        mainDelay.delay(delayMsec);
+    mainDelay.delay(delayMsec);
 #endif
-    }
+  }
 }
 #endif
