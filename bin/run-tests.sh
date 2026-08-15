@@ -533,6 +533,7 @@ if [[ -f $STATE_SUMMARY ]]; then
 	mapfile -t DIRTY_SUITES < <(awk -F'\t' '$3 == "DIRTY" { print $1 " (" $4 ")" }' "$STATE_SUMMARY")
 	mapfile -t MISSING_SUITES < <(awk -F'\t' '$3 == "MISSING" { print $1 " (" $4 ")" }' "$STATE_SUMMARY")
 	mapfile -t SURVIVOR_SUITES < <(awk -F'\t' '$6 != "" { print $1 " (pid " $6 ")" }' "$STATE_SUMMARY")
+	mapfile -t ERROR_BUDGET_SUITES < <(awk -F'\t' '$7 == "OVER" || $7 == "UNDER" { print $1 " " tolower($7) " budget: " $8 }' "$STATE_SUMMARY")
 fi
 
 # Print the opt-out count on every run, so the number creeping upward is visible without anyone
@@ -609,6 +610,21 @@ if ((${#DIRTY_SUITES[@]} > 0)); then
 	echo "    -> declare these in test/state-manifest.tsv with a reason, or stop the write."
 	echo "    -> ./bin/run-tests.sh --write-manifest prints the entries to paste."
 	echo "RESULT: AMBER ${#DIRTY_SUITES[@]} suite(s) left undeclared shared state $(verdict_suffix)"
+	exit 2
+fi
+
+# AMBER: a suite spent its LOG_ERROR budget, or came in under a declared floor. Over budget buries a
+# real failure in noise - three log sites account for nearly all of today's volume, and until those
+# are demoted this stays AMBER rather than RED so it does not land red on day one and get switched
+# off. Under a floor is the more interesting half: a fuzz suite that stops logging rejections has
+# stopped feeding malformed input, and every one of its cases still passes.
+if ((${#ERROR_BUDGET_SUITES[@]} > 0)); then
+	echo ""
+	printf '    %s\n' "${ERROR_BUDGET_SUITES[@]}"
+	echo ""
+	echo "    -> over: demote the log line if the condition is expected, or declare errors=<max> in"
+	echo "       test/state-manifest.tsv with a reason. Under: check the suite still exercises the path."
+	echo "RESULT: AMBER ${#ERROR_BUDGET_SUITES[@]} suite(s) outside their error budget $(verdict_suffix)"
 	exit 2
 fi
 

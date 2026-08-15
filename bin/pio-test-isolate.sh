@@ -92,6 +92,11 @@ GRANULARITY="$(state_flag_value state "$FLAGS")"
 
 IFS=$'\t' read -r VERDICT DETAIL <<<"$(state_classify "$CHANGED" "$DECLARED")"
 
+# Error-line budget: same manifest, same declare-and-justify shape as the writes above. Counted from
+# the captured log, so it costs nothing extra.
+ERROR_COUNT="$(state_count_errors "$LOG")"
+IFS=$'\t' read -r ERROR_VERDICT ERROR_DETAIL <<<"$(state_classify_errors "$ERROR_COUNT" "$(state_flag_value errors "$FLAGS")")"
+
 # Per-test attribution, when the suite has not declared that it carries state across its own test
 # cases. For a state=per-suite suite every test after the first would be flagged by design - that
 # carry *is* the declared behaviour - so only the suite boundary is meaningful there.
@@ -114,8 +119,8 @@ fi
 
 STATUS=$([[ $RC -eq 0 ]] && echo PASS || echo FAIL)
 mkdir -p "$(dirname "$SUMMARY")" 2>/dev/null
-printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$SUITE" "$STATUS" "$VERDICT" "${DETAIL-}" "${PER_TEST_DETAIL-}" \
-	"${SURVIVORS-}" >>"$SUMMARY"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$SUITE" "$STATUS" "$VERDICT" "${DETAIL-}" "${PER_TEST_DETAIL-}" \
+	"${SURVIVORS-}" "${ERROR_VERDICT-}" "${ERROR_DETAIL-}" >>"$SUMMARY"
 
 # Keep the sandbox when there is something to look at: on a failure it plus the built binary is a
 # complete, replayable reproduction, and on a DIRTY verdict the leftovers *are* the bug report. A
