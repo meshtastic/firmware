@@ -447,6 +447,18 @@ verdict_red() {
 		exit 1
 	fi
 
+	# A guard in test/TestUtil.cpp aborting on purpose - a listening socket, or force_simradio put
+	# back. It prints FATAL on stdout precisely so this can be told apart from a fault: otherwise its
+	# exit(EXIT_FAILURE) lands in the heuristic below and is reported as a sanitizer abort that never
+	# happened, which is the same wrong-cause-in-the-verdict trap as the phantom signal above.
+	if grep -qE '^FATAL: ' "$LOG"; then
+		grep -E '^FATAL: ' "$LOG" | head -3 | sed 's/^/    /'
+		echo "    -> a harness guard aborted the suite deliberately. Not a crash and not a sanitizer"
+		echo "       fault; the reason is the FATAL line above, and the suite's sandbox has the full log."
+		echo "RESULT: RED harness guard - $(grep -m1 -oE '^FATAL: .*' "$LOG")"
+		exit 1
+	fi
+
 	# All tests passed but the process still aborted at EXIT (ERRORED/SIGHUP/SIGABRT) and the
 	# sanitizer report was swallowed by the runner (often surfaced only as SIGHUP). Almost always a
 	# sanitizer fault - point at how to surface it rather than calling it a generic crash.
