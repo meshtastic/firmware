@@ -125,9 +125,18 @@ static inline int get_max_num_nodes()
 #endif                    // platform
 #endif                    // MAX_NUM_NODES
 
-/// Packet-history capacity: 2x the hot store so dedup/relayer state survives a
-/// full mesh, floored at 100. Shared by PacketHistory's constructor clamp and
-/// the boot-cache budget assert below so the two cannot drift.
+/// Occupancy above which we stop *actively* introducing ourselves to newly-heard
+/// nodes: capacity above this baseline is filled passively, buying no extra airtime.
+#ifndef NODEDB_BASELINE_NODES
+#define NODEDB_BASELINE_NODES MAX_NUM_NODES
+#endif
+
+/// Packet-history capacity: 2x the *baseline* hot store so dedup/relayer state
+/// survives a full mesh, floored at 100. Shared by PacketHistory's constructor
+/// clamp and the boot-cache budget assert below so the two cannot drift.
+///
+/// Keyed to MAX_NUM_NODES, never NodeDB::effectiveMaxNodes(): the ratio is allowed to fall below
+/// 2x while the ratchet is engaged. Re-check MESHTASTIC_BOOT_CACHE_BUDGET if you rewire it.
 #ifndef PACKETHISTORY_MAX
 #if defined(ARCH_STM32WL)
 #define PACKETHISTORY_MAX (MAX_NUM_NODES * 2) // 20 entries for 10-node STM32WL
@@ -141,6 +150,8 @@ static inline int get_max_num_nodes()
 /// NodeInfoLite header. RAM-bound (the maps are internal-SRAM, not PSRAM), so
 /// flash-rich hosts get a cap >= their hot store (satellites for every node, as
 /// before the cap existed) while constrained parts stay at 40.
+/// This is the *unpressured* cap: NodeDBScalingModule ratchets the effective caps
+/// down from here in a megamesh (modules/NodeDBScalingModule.h).
 #ifndef MAX_SATELLITE_NODES
 #if MESHTASTIC_MEM_CLASS >= MEM_CLASS_LARGE
 #define MAX_SATELLITE_NODES 250
@@ -199,6 +210,16 @@ static inline int get_max_num_nodes()
 
 #ifndef HAS_VARIABLE_HOPS
 #define HAS_VARIABLE_HOPS 1
+#endif
+
+// NodeDBScalingModule - ratchets the satellite caps down under megamesh pressure. Needs
+// HopScalingModule's estimate, and has nothing to trade on TINY parts (no satellite DBs).
+#ifndef HAS_NODEDB_SCALING
+#if MESHTASTIC_MEM_CLASS <= MEM_CLASS_TINY || !HAS_VARIABLE_HOPS
+#define HAS_NODEDB_SCALING 0
+#else
+#define HAS_NODEDB_SCALING 1
+#endif
 #endif
 
 // Cache size for traffic management (number of nodes to track)

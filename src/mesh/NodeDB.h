@@ -28,6 +28,10 @@
 /// them still decodes here; the excess is trimmed after load.
 static constexpr size_t NODEDB_MIGRATION_LOAD_CEILING = 250;
 
+/// Heap that must stay free after a hot-store growth allocation. The vector reallocates, so both
+/// buffers coexist briefly; declining the extra slots costs nothing but capacity.
+static constexpr size_t NODEDB_GROWTH_HEAP_MARGIN = 8 * 1024;
+
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
 // E3B0C442 is the blank hash
 static const uint8_t LOW_ENTROPY_HASHES[][32] = {
@@ -271,6 +275,10 @@ class NodeDB
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
     pb_size_t numMeshNodes;
+
+    /// Hot-store evictions since boot; free-running, read as a delta. NodeDBScalingModule
+    /// uses it as the "the squeeze is on us" signal.
+    uint32_t hotEvictions = 0;
 
     // Satellite per-NodeNum maps. std::map avoids unordered_map's bucket-array
     // preallocation; O(log N) lookup is fine at these sizes.
@@ -548,8 +556,28 @@ class NodeDB
                (loadCeiling * meshtastic_NodeEnvironmentEntry_size) + (loadCeiling * meshtastic_NodeStatusEntry_size);
     }
 
+    /// The hot store's live capacity, only ever reporting slots that are actually allocated -
+    /// so no caller (notably getOrCreateMeshNode) can be tempted to append past the buffer.
+    pb_size_t effectiveMaxNodes() const;
+
+    /// What the ratchet would like the capacity to be: baseline + funded slots, clamped to the
+    /// decode ceiling. Only applyHotStoreCapacity() should act on this.
+    pb_size_t desiredMaxNodes() const;
+
+    /// Resize the hot store to desiredMaxNodes(); growth is heap-guarded and may be declined,
+    /// shrinking demotes the overflow to warm first. Main loop only, never a packet path.
+    void applyHotStoreCapacity();
+
     // returns true if the maximum number of nodes is reached or we are running low on memory
     bool isFull();
+
+    /// True once the store holds NODEDB_BASELINE_NODES entries: we stop actively introducing
+    /// ourselves, so granting a larger hot store never grants more handshake airtime with it.
+    bool isPassiveFillOnly();
+
+    /// Trim each satellite map to its current effective cap, dropping the stalest entries.
+    /// Returns true iff anything was trimmed.
+    bool enforceSatelliteCaps();
 
     void clearLocalPosition();
 
@@ -645,6 +673,9 @@ class NodeDB
     // enough room to create it safely at boot. A later boot retries the check.
     bool eventProfileStorageUnavailable = false;
 #endif
+    /// Backed hot-store capacity; 0 means "the platform baseline". Raised only by a
+    /// successful applyHotStoreCapacity() resize.
+    pb_size_t hotCapacity = 0;
     uint32_t lastNodeDbSave = 0;     // when we last saved our db to flash
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
@@ -695,11 +726,6 @@ class NodeDB
 
     /// purge db entries without user info
     void cleanupMeshDB();
-
-    /// Trim each satellite map down to MAX_SATELLITE_NODES, dropping the
-    /// stalest entries (used after loading files written before the cap, or by
-    /// a build with a larger cap). Returns true iff anything was trimmed.
-    bool enforceSatelliteCaps();
 
     /// Node-DB self-care; call only once identity is established (getNodeNum()
     /// valid). Confirms self is present, trims/demotes only NON-self overflow, and

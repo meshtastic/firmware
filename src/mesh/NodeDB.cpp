@@ -28,6 +28,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "modules/NodeDBScalingModule.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -431,8 +432,8 @@ NodeDB::NodeDB()
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
 
-    // likewise the edition: it lives in persisted devicestate, so a vanilla install must
-    // overwrite the previous event build's value. Before the CRC compare, so the change persists.
+    // likewise the edition: it lives in persisted devicestate, so a vanilla install must overwrite
+    // the previous event build's value. Before the CRC compare, so the change persists.
 #ifdef USERPREFS_FIRMWARE_EDITION
     myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
 #else
@@ -728,12 +729,11 @@ template <typename Map> bool evictStalestSatellite(NodeDB &db, Map &map)
     return true;
 }
 
-// Keep `map` within MAX_SATELLITE_NODES ahead of inserting `incoming` (the
-// tier-1/tier-2 split: only the freshest MAX_SATELLITE_NODES nodes carry
-// satellite payloads). Caller holds satelliteMutex.
-template <typename Map> void evictSatelliteOverCap(NodeDB &db, Map &map, NodeNum incoming)
+// Keep `map` within `cap` ahead of inserting `incoming`: only the freshest `cap` nodes carry
+// satellite payloads. `cap` is the effective one, not MAX_SATELLITE_NODES. Caller holds the mutex.
+template <typename Map> void evictSatelliteOverCap(NodeDB &db, Map &map, NodeNum incoming, uint16_t cap)
 {
-    if (map.size() < MAX_SATELLITE_NODES || map.count(incoming))
+    if (map.size() < cap || map.count(incoming))
         return;
     evictStalestSatellite(db, map);
 }
@@ -1820,7 +1820,7 @@ void NodeDB::setNodeStatus(NodeNum n, const meshtastic_StatusMessage &status)
     (void)status;
 #else
     concurrency::LockGuard guard(&satelliteMutex);
-    evictSatelliteOverCap(*this, nodeStatus, n);
+    evictSatelliteOverCap(*this, nodeStatus, n, nodeDBEnvironmentCap());
     nodeStatus[n] = status;
 #endif
 }
@@ -1832,7 +1832,7 @@ void NodeDB::touchNodePositionTime(NodeNum n, uint32_t time)
     (void)time;
 #else
     concurrency::LockGuard guard(&satelliteMutex);
-    evictSatelliteOverCap(*this, nodePositions, n);
+    evictSatelliteOverCap(*this, nodePositions, n, nodeDBSatelliteCap());
     nodePositions[n].time = time;
 #endif
 }
@@ -1861,35 +1861,40 @@ bool NodeDB::enforceSatelliteCaps()
 {
     concurrency::LockGuard guard(&satelliteMutex);
     bool trimmedAny = false;
-    auto trim = [this, &trimmedAny](auto &map, const char *name) {
+    auto trim = [this, &trimmedAny](auto &map, const char *name, uint16_t cap) {
         const size_t before = map.size();
-        while (map.size() > MAX_SATELLITE_NODES) {
+        while (map.size() > cap) {
             if (!evictStalestSatellite(*this, map))
                 break;
         }
         if (map.size() != before) {
             trimmedAny = true;
-            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
-                          MAX_SATELLITE_NODES);
+            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %u)", name, (unsigned)before, (unsigned)map.size(), (unsigned)cap);
         }
     };
+    // Position and telemetry share the UI-facing cap; environment and status take the deeper one.
+    const uint16_t satCap = nodeDBSatelliteCap();
+    const uint16_t envCap = nodeDBEnvironmentCap();
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-    trim(nodePositions, "position");
+    trim(nodePositions, "position", satCap);
 #endif
 
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-    trim(nodeTelemetry, "telemetry");
+    trim(nodeTelemetry, "telemetry", satCap);
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    trim(nodeEnvironment, "environment");
+    trim(nodeEnvironment, "environment", envCap);
 #endif
 
 #if !MESHTASTIC_EXCLUDE_STATUSDB
-    trim(nodeStatus, "status");
+    trim(nodeStatus, "status", envCap);
 #endif
 
-    (void)trim; // all four maps may be compiled out
+    // all four maps may be compiled out (STM32WL), leaving these with no reader
+    (void)trim;
+    (void)satCap;
+    (void)envCap;
 
     // Approximate satellite heap usage: each std::map entry is one rb-tree node,
     // value_type plus ~44 B of node overhead (parent/left/right pointers, color,
@@ -2129,7 +2134,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 #if WARM_NODE_COUNT > 0
 void NodeDB::demoteOldestHotNodesToWarm()
 {
-    const int keep = MAX_NUM_NODES;
+    const int keep = effectiveMaxNodes();
     if (numMeshNodes <= keep)
         return;
 
@@ -2171,7 +2176,7 @@ void NodeDB::nodeDBSelfCare()
         return;
 
     const NodeNum self = getNodeNum();
-    const bool nodesOverCap = numMeshNodes > MAX_NUM_NODES;
+    const bool nodesOverCap = numMeshNodes > effectiveMaxNodes();
 
     // Confirm self is present and its key matches what we just (re)derived. A
     // non-empty DB that doesn't contain us means a foreign/over-cap or corrupt
@@ -2196,16 +2201,24 @@ void NodeDB::nodeDBSelfCare()
         demoteOldestHotNodesToWarm(); // demotes oldest NON-self overflow; index 0 (us) left in place
 #endif
 
-    if (numMeshNodes > MAX_NUM_NODES) {
-        LOG_WARN("NodeDB self-care: %d over cap %d, truncating", numMeshNodes, MAX_NUM_NODES);
-        numMeshNodes = MAX_NUM_NODES;
+    if (numMeshNodes > effectiveMaxNodes()) {
+        LOG_WARN("NodeDB self-care: %d over cap %d, truncating", numMeshNodes, (int)effectiveMaxNodes());
+        numMeshNodes = effectiveMaxNodes();
     }
     // Normalise the backing store to the hot cap so getOrCreateMeshNode always
     // has spare slots to append into (it indexes meshNodes->at(numMeshNodes++)).
-    meshNodes->resize(MAX_NUM_NODES);
-    memaudit::set("nodedb", MAX_NUM_NODES * sizeof(meshtastic_NodeInfoLite));
+    hotCapacity = effectiveMaxNodes(); // pin the live cap to what we are about to allocate
+    meshNodes->resize(hotCapacity);
+    memaudit::set("nodedb", (size_t)hotCapacity * sizeof(meshtastic_NodeInfoLite));
 
     const bool satsTrimmed = enforceSatelliteCaps();
+
+    LOG_INFO("NodeDB: %d nodes, cap %d (base %d, +%u ratchet), passive-fill above %d", numMeshNodes, (int)effectiveMaxNodes(),
+             (int)MAX_NUM_NODES, nodeDBBonusNodes(), (int)NODEDB_BASELINE_NODES);
+    // Dedup history is pinned to the baseline by design; log the ratio so a field log shows how
+    // thin it has become rather than leaving it to be inferred (mesh-pb-constants.h).
+    LOG_DEBUG("NodeDB: dedup history %u records for cap %d (%u%% of 2x)", (unsigned)PACKETHISTORY_MAX, (int)effectiveMaxNodes(),
+              (unsigned)((uint32_t)PACKETHISTORY_MAX * 50u / (effectiveMaxNodes() ? effectiveMaxNodes() : 1)));
 
     // Ensure self exists, sits at index 0, and carries current owner info - after
     // any demotion has freed a slot. Covers the foreign/fixture case where the
@@ -2375,7 +2388,7 @@ void NodeDB::loadFromDisk()
     } disarm{*this};
 
     // Avoid push_back's power-of-2 capacity growth wasting RAM at small N.
-    nodeDatabase.nodes.reserve(MAX_NUM_NODES);
+    nodeDatabase.nodes.reserve(effectiveMaxNodes());
 
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
@@ -3389,7 +3402,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
 #else
     {
         concurrency::LockGuard guard(&satelliteMutex);
-        evictSatelliteOverCap(*this, nodePositions, nodeId);
+        evictSatelliteOverCap(*this, nodePositions, nodeId, nodeDBSatelliteCap());
         meshtastic_PositionLite &slot = nodePositions[nodeId]; // creates default-zero entry if missing
 
         if (src == RX_SRC_LOCAL) {
@@ -3447,7 +3460,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
-        evictSatelliteOverCap(*this, nodeTelemetry, nodeId);
+        evictSatelliteOverCap(*this, nodeTelemetry, nodeId, nodeDBSatelliteCap());
         nodeTelemetry[nodeId] = t.variant.device_metrics;
 #endif
 
@@ -3459,7 +3472,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
-        evictSatelliteOverCap(*this, nodeEnvironment, nodeId);
+        evictSatelliteOverCap(*this, nodeEnvironment, nodeId, nodeDBEnvironmentCap());
         nodeEnvironment[nodeId] = t.variant.environment_metrics;
 #endif
 
@@ -3758,10 +3771,8 @@ bool NodeDB::setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool
         nodeInfoLiteSetBit(node, mask, false);
         return true;
     }
-    // Adding a flag to a node that is already protected doesn't grow the
-    // protected set, so it's always allowed. A newly-protected node is refused
-    // once the protected set has reached MAX_NUM_NODES-2, leaving two evictable
-    // slots so getOrCreateMeshNode can always make room.
+    // Flagging an already-protected node doesn't grow the set, so it's always allowed. The cap is
+    // MAX_NUM_NODES-2, never the ratcheted one: warm rehydration cannot restore these flags.
     if (nodeInfoLiteIsProtected(node) || numProtectedNodes() < MAX_NUM_NODES - 2) {
         nodeInfoLiteSetBit(node, mask, true);
         return true;
@@ -3974,9 +3985,62 @@ bool NodeDB::resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor,
 }
 
 // returns true if the maximum number of nodes is reached or we are running low on memory
+pb_size_t NodeDB::effectiveMaxNodes() const
+{
+    return hotCapacity ? hotCapacity : (pb_size_t)MAX_NUM_NODES;
+}
+
+pb_size_t NodeDB::desiredMaxNodes() const
+{
+    const uint32_t total = (uint32_t)MAX_NUM_NODES + nodeDBBonusNodes();
+    return (pb_size_t)((total > NODEDB_MIGRATION_LOAD_CEILING) ? NODEDB_MIGRATION_LOAD_CEILING : total);
+}
+
+void NodeDB::applyHotStoreCapacity()
+{
+    if (!meshNodes)
+        return;
+
+    const pb_size_t target = desiredMaxNodes();
+    const pb_size_t live = effectiveMaxNodes();
+    if (target == live && meshNodes->size() == target)
+        return;
+
+    if (target > live) {
+        // Both buffers are live across the reallocation, so demand the new one plus a margin:
+        // declining costs only capacity, getting it wrong on a 99%-heap part costs the boot.
+        const size_t needed = (size_t)target * sizeof(meshtastic_NodeInfoLite);
+        if (memGet.getFreeHeap() < needed + NODEDB_GROWTH_HEAP_MARGIN) {
+            LOG_WARN("NodeDB: decline grow %d->%d, %u B free", (int)live, (int)target, (unsigned)memGet.getFreeHeap());
+            return; // hotCapacity untouched: the cap keeps matching what is actually allocated
+        }
+        meshNodes->resize(target);
+        hotCapacity = target;
+        LOG_INFO("NodeDB: hot store %d -> %d slots (+%u ratchet)", (int)live, (int)target, nodeDBBonusNodes());
+    } else {
+        // Handing capacity back: the overflow keeps its key in the warm tier rather than vanishing.
+        // hotCapacity first - demoteOldestHotNodesToWarm() keeps effectiveMaxNodes() entries.
+        hotCapacity = target;
+        if (numMeshNodes > target) {
+#if WARM_NODE_COUNT > 0
+            demoteOldestHotNodesToWarm();
+#endif
+            numMeshNodes = std::min(numMeshNodes, target); // whatever the warm tier could not take
+        }
+        meshNodes->resize(target);
+        LOG_INFO("NodeDB: hot store %d -> %d slots, %d held", (int)live, (int)target, numMeshNodes);
+    }
+    memaudit::set("nodedb", (size_t)target * sizeof(meshtastic_NodeInfoLite));
+}
+
 bool NodeDB::isFull()
 {
-    return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+    return (numMeshNodes >= effectiveMaxNodes()) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
+bool NodeDB::isPassiveFillOnly()
+{
+    return (numMeshNodes >= NODEDB_BASELINE_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
 
 uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
@@ -4241,13 +4305,14 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                     meshNodes->at(i) = meshNodes->at(i + 1);
                 }
                 (numMeshNodes)--;
+                hotEvictions++;
             }
         }
         // Don't append past the end of the vector. The protected-node cap
         // (numProtectedNodes() <= MAX_NUM_NODES-2) means the eviction above frees
         // a slot in normal operation; this guards the legacy case of a pre-cap
         // database that is full of protected nodes - refuse rather than overrun.
-        if (numMeshNodes >= MAX_NUM_NODES)
+        if (numMeshNodes >= effectiveMaxNodes())
             return NULL;
         // Pre-size before append when run before nodeDBSelfCare() (boot keygen); else at() aborts on nRF52.
         if (static_cast<size_t>(numMeshNodes) >= meshNodes->size())

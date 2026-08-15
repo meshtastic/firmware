@@ -50,6 +50,7 @@
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
+#include "modules/NodeDBScalingModule.h"
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -141,6 +142,11 @@ void setupModules()
 
 #if HAS_VARIABLE_HOPS
     hopScalingModule = new HopScalingModule();
+#endif
+
+#if HAS_NODEDB_SCALING
+    // After HopScalingModule: it reads that module's population estimate.
+    nodeDBScalingModule = new NodeDBScalingModule();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN
