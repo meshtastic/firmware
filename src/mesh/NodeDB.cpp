@@ -2052,6 +2052,13 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = nodeNum;
 }
 
+/// Both NodeDatabase descriptors decode into structs holding std::vector members, which a memset
+/// would leave in an undefined state; their callers reset the destination themselves instead.
+static inline bool destinationHasVectorMembers(const pb_msgdesc_t *fields)
+{
+    return fields == &meshtastic_NodeDatabase_msg || fields == &meshtastic_NodeDatabase_Legacy_msg;
+}
+
 /** Load a protobuf from a file, return LoadFileResult */
 LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
                                  void *dest_struct)
@@ -2073,7 +2080,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
         if (EncryptedStorage::readAndDecrypt(filename, decBuf.get(), protoSize, decLen)) {
             LOG_INFO("Load encrypted %s", filename);
             pb_istream_t stream = pb_istream_from_buffer(decBuf.get(), decLen);
-            if (fields != &meshtastic_NodeDatabase_msg)
+            if (!destinationHasVectorMembers(fields))
                 memset(dest_struct, 0, objSize);
             if (!pb_decode(&stream, fields, dest_struct)) {
                 LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
@@ -2100,8 +2107,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     if (f) {
         LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
-        if (fields != &meshtastic_NodeDatabase_msg &&
-            fields != &meshtastic_NodeDatabase_Legacy_msg) // both NodeDatabase descriptors contain std::vector members
+        if (!destinationHasVectorMembers(fields))
             memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
@@ -2383,8 +2389,8 @@ void NodeDB::loadFromDisk()
     // loadProto() skips its destination memset for this struct (std::vector members), so reset it
     // here: the nodes callback only push_back()s and nodeDatabase is a global, so a second load
     // appended to the first, and a stale version skipped installDefaultNodeDatabase().
+    numMeshNodes = 0; // before the clear: the old count against an emptied vector reads past the end
     nodeDatabase.nodes.clear();
-    numMeshNodes = 0;
     nodeDatabase.version = 0;
     // Avoid push_back's power-of-2 capacity growth wasting RAM at small N.
     nodeDatabase.nodes.reserve(MAX_NUM_NODES);

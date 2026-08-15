@@ -357,8 +357,10 @@ static void test_loadFromDisk_absentFileDoesNotInheritStaleNodes(void)
     TEST_ASSERT_NULL(db->getMeshNode(0x0B000001));
     TEST_ASSERT_NULL(db->getMeshNode(0x0BADF00D)); // not even self survives an empty store
 
-    // Leave the file the suite declares in state-manifest.tsv on disk for the next test.
+    // Leave the file state-manifest.tsv declares on disk. clearHot() first: the defaults the absent
+    // file installed leave MAX_NUM_NODES zeroed rows in the vector the encode walks.
     armSaveGate();
+    db->clearHot();
     TEST_ASSERT_TRUE(db->runSave());
 }
 
