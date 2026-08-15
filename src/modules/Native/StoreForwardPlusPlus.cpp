@@ -474,18 +474,18 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
     }
 
-    if (router == nullptr || router->p_encrypted == nullptr) {
+    if (currentEncrypted == nullptr) {
         LOG_WARN("StoreForwardpp cannot process text message, due to null pointer");
         return ProcessMessage::CONTINUE;
     }
 
-    if (mp.id != router->p_encrypted->id) {
-        LOG_WARN("Wrong packet in p_encrypted, dropping text message");
+    if (mp.id != currentEncrypted->id) {
+        LOG_WARN("Wrong packet in currentEncrypted, dropping text message");
         return ProcessMessage::CONTINUE; // Let others look at this message also if they want
     }
 
     if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && mp.to == NODENUM_BROADCAST) {
-        link_object lo = ingestTextPacket(mp, router->p_encrypted);
+        link_object lo = ingestTextPacket(mp, currentEncrypted);
 
         if (isInDB(lo.message_hash, lo.message_hash_len)) {
             LOG_DEBUG("StoreForwardpp Found text message in chain DB");
@@ -565,14 +565,19 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         uint8_t tmp_root_hash_bytes[SFPP_HASH_SIZE] = {0};
 
         LOG_DEBUG("StoreForwardpp Received a CANON_ANNOUNCE");
-        if (getRootFromChannelHash(router->p_encrypted->channel, tmp_root_hash_bytes)) {
+        // The pre-decode channel hash only exists on the encrypted copy; allocCopy can fail.
+        if (currentEncrypted == nullptr) {
+            LOG_WARN("StoreForwardpp CANON_ANNOUNCE without encrypted packet, dropping");
+            return true;
+        }
+        if (getRootFromChannelHash(currentEncrypted->channel, tmp_root_hash_bytes)) {
             // we found the hash, check if it's the right one
             if (memcmp(tmp_root_hash_bytes, t->root_hash.bytes, t->root_hash.size) != 0) {
                 LOG_INFO("StoreForwardpp Root hash does not match. Possibly two stratum0 nodes on the mesh?");
                 return true;
             }
         } else if (t->root_hash.size == SFPP_HASH_SIZE) {
-            addRootToMappings(router->p_encrypted->channel, t->root_hash.bytes);
+            addRootToMappings(currentEncrypted->channel, t->root_hash.bytes);
             LOG_DEBUG("StoreForwardpp Adding root hash to mappings");
         } else {
             LOG_WARN("No root hash and unable to add");

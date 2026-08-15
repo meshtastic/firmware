@@ -75,8 +75,11 @@ class MeshModule
     static bool replyPortMatches(meshtastic_PortNum modulePort, const meshtastic_MeshPacket &mp);
 
     /** For use only by MeshService
+     * @param encrypted the still-encrypted copy of mp, published to modules as currentEncrypted
+     *                  for the duration of this dispatch only. NULL when unavailable.
      */
-    static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
+    static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO,
+                            const meshtastic_MeshPacket *encrypted = NULL);
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames(int startIndex);
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
@@ -137,6 +140,16 @@ class MeshModule
      * plumodulegin at a time.
      */
     static const meshtastic_MeshPacket *currentRequest;
+
+    /**
+     * The still-encrypted copy of currentRequest, for handlers that need the packet exactly as it
+     * arrived (e.g. hashing the wire bytes, or reading the pre-decode channel hash).
+     *
+     * Valid ONLY for the duration of callModules(); it is cleared when dispatch ends. Router owns
+     * the packet and releases it after callModules() returns, so never retain this pointer. May be
+     * NULL when the caller had no encrypted copy.
+     */
+    static const meshtastic_MeshPacket *currentEncrypted;
 
     /// Where currentRequest came from. Only meaningful while currentRequest points at the packet being handled.
     static RxSource currentRequestSource;

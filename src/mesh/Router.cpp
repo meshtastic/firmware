@@ -1665,7 +1665,8 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
     if (!skipHandle) {
-        MeshModule::callModules(*p, src);
+        // Lend modules the encrypted copy for the dispatch; we still own it and release it below.
+        MeshModule::callModules(*p, src, p_encrypted);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         if (p_encrypted == nullptr) {

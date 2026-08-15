@@ -11,6 +11,7 @@
 std::vector<MeshModule *> *MeshModule::modules;
 
 const meshtastic_MeshPacket *MeshModule::currentRequest;
+const meshtastic_MeshPacket *MeshModule::currentEncrypted;
 RxSource MeshModule::currentRequestSource = RX_SRC_RADIO;
 uint8_t MeshModule::numPeriodicModules = 0;
 
@@ -114,7 +115,7 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     return r;
 }
 
-void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
+void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src, const meshtastic_MeshPacket *encrypted)
 {
     // LOG_DEBUG("In call modules");
     bool moduleFound = false;
@@ -123,6 +124,9 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     bool isDecoded = mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
+
+    // Borrowed for this dispatch only - the caller owns it and releases it once we return.
+    currentEncrypted = encrypted;
 
     bool ignoreRequest = false; // No module asked to ignore the request yet
 
@@ -233,6 +237,10 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     if (!moduleFound && isDecoded) {
         LOG_DEBUG("No modules interested in portnum=%d, src=%s", mp.decoded.portnum, (src == RX_SRC_LOCAL) ? "LOCAL" : "REMOTE");
     }
+
+    // Drop the borrowed pointer before the caller releases the packet, so a later reader cannot
+    // dereference freed memory.
+    currentEncrypted = NULL;
 }
 
 meshtastic_MeshPacket *MeshModule::allocReply()
