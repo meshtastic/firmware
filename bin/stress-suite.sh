@@ -11,6 +11,12 @@
 #   ./bin/stress-suite.sh -e native -n 50 test_admin_radio     # the other env's invocation
 #   ./bin/stress-suite.sh -l 8 -n 50 test_pki_admin_fallback   # 8 spinners of CPU contention
 #   ./bin/stress-suite.sh --no-simradio -n 50 test_packet_signing
+#   ./bin/stress-suite.sh --shuffle -n 5                       # whole suite set, a new order each time
+#
+# --shuffle is the other axis and takes no suite name: it drives bin/run-tests.sh --seed with a fresh
+# seed per iteration, so suite ORDER varies. Use it for state that leaks suite -> suite; use the
+# single-suite mode above for races and slow-host margins, which order cannot expose. Every seed is
+# printed, and a red one is replayable with ./bin/run-tests.sh --seed <n>.
 #
 # Each run gets a fresh scratch $HOME, so no run inherits another's prefs. Failing runs keep their
 # log and their $HOME; passing runs leave nothing behind.
@@ -24,6 +30,7 @@ ENV_NAME=coverage
 RUNS=20
 LOAD=0
 SIMRADIO=auto
+SHUFFLE=false
 SUITE=""
 
 usage() {
@@ -45,6 +52,10 @@ while [[ $# -gt 0 ]]; do
 		LOAD="$2"
 		shift 2
 		;;
+	--shuffle)
+		SHUFFLE=true
+		shift
+		;;
 	--simradio)
 		SIMRADIO=yes
 		shift
@@ -64,6 +75,36 @@ while [[ $# -gt 0 ]]; do
 		;;
 	esac
 done
+
+if $SHUFFLE; then
+	[[ -z $SUITE ]] || {
+		echo "--shuffle varies suite order across the whole set; drop the suite name" >&2
+		exit 2
+	}
+	fails=0
+	reds=()
+	echo "running the full suite set x$RUNS on $ENV_NAME, reshuffled each time"
+	for ((run = 1; run <= RUNS; run++)); do
+		# Seeds from /dev/urandom, printed and recorded: an order you cannot replay is not evidence.
+		seed=$((RANDOM * 32768 + RANDOM))
+		log="$REPO/.pio/build/$ENV_NAME/stress-shuffle.$seed.log"
+		mkdir -p "$(dirname "$log")"
+		printf 'run %d/%d seed %s ... ' "$run" "$RUNS" "$seed"
+		if "$REPO/bin/run-tests.sh" -e "$ENV_NAME" --seed "$seed" >"$log" 2>&1; then
+			echo "GREEN"
+			rm -f "$log"
+		else
+			rc=$?
+			fails=$((fails + 1))
+			reds+=("$seed")
+			echo "$(grep -m1 '^RESULT:' "$log" || echo "exit $rc") - log $log"
+		fi
+	done
+	echo "RESULT: $fails/$RUNS runs not green"
+	[[ ${#reds[@]} -gt 0 ]] && echo "replay: ./bin/run-tests.sh --seed ${reds[0]}"
+	[[ $fails -eq 0 ]] || exit 1
+	exit 0
+fi
 
 [[ -n $SUITE ]] || usage
 
