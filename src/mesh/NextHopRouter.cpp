@@ -430,9 +430,15 @@ int32_t NextHopRouter::doRetransmissions()
         if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
-                    LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
-                              p.packet->id);
-                    sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
+                    if (p.mqttAcked) {
+                        // The MQTT echo already handed the client a successful ACK for this id, so a NAK
+                        // now would only downgrade a message it has already shown as delivered.
+                        LOG_DEBUG("Retransmissions exhausted for 0x%08x but it was ACKed via MQTT, no nak", p.packet->id);
+                    } else {
+                        LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
+                                  p.packet->id);
+                        sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
+                    }
                 }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);

@@ -42,6 +42,13 @@ struct PendingPacket {
     /** Initial remaining retry count, used to detect whether a retry has fired. */
     uint8_t initialNumRetransmissions = 0;
 
+    /** We saw our own packet come back down from the MQTT broker we uplinked it to, which is a weak
+        delivery confirmation: the broker has it, but we have no evidence any LoRa node did. We keep
+        retransmitting over the air (MQTT reach is not mesh reach), but the originator has already been
+        told the send succeeded, so the terminal MAX_RETRANSMIT NAK must be suppressed - otherwise the
+        client flips a delivered message to failed. See ReliableRouter::sniffReceived. */
+    bool mqttAcked = false;
+
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };

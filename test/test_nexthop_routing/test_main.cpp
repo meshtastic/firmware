@@ -270,6 +270,13 @@ class ReliableRouterTestShim : public ReliableRouter
 
     void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsGenerateImplicitAckForOwnOverheard(p); }
 
+    bool mqttAckedForTest(NodeNum from, PacketId id)
+    {
+        PendingPacket *record = findPendingPacket(from, id);
+        TEST_ASSERT_NOT_NULL(record);
+        return record->mqttAcked;
+    }
+
     void clearPendingForTest()
     {
         while (!pending.empty())
@@ -822,6 +829,109 @@ void test_reliableAckStopsNormalPendingTransmission(void)
     TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
 }
 
+// Builds the ACK that MQTT.cpp's onReceiveProto() mints locally when the broker echoes back a packet
+// we uplinked ourselves: addressed to us, sourced from us, and tagged TRANSPORT_MQTT.
+static meshtastic_MeshPacket makeMqttSelfAck(PacketId originalId, uint8_t channel)
+{
+    auto ack = makeBehaviorPacket(meshtastic_PortNum_ROUTING_APP, kLocalNode, kLocalNode, channel);
+    ack.decoded.request_id = originalId;
+    ack.hop_limit = 0;
+    ack.hop_start = 0;
+    ack.relay_node = 0;
+    ack.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+    return ack;
+}
+
+// An MQTT-only mesh (uplink/downlink on, no neighbor in range) is the whole point of this pair of
+// tests. The broker echo is not proof any LoRa node heard us, so retransmissions must continue - but
+// the client was already handed a successful ACK, so the terminal NAK has to be suppressed. Emitting
+// both is what turned every message on such a mesh into "Failed to deliver to mesh" after showing as
+// delivered first.
+void test_mqtt_self_ack_keeps_retransmitting(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, NODENUM_BROADCAST, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_RETX);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+    mockRoutingModule->ackNaks.clear();
+    reliableRadio->reset();
+
+    auto ack = makeMqttSelfAck(original.id, original.channel);
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+
+    reliableShim->sniffForTest(&ack, &routing);
+
+    // Still pending, and flagged so the terminal NAK is suppressed later.
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+    TEST_ASSERT_TRUE(reliableShim->mqttAckedForTest(kLocalNode, original.id));
+
+    // The next scheduled retry still goes out over the air.
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    reliableShim->runDueRetries();
+    TEST_ASSERT_EQUAL_UINT32(1, reliableRadio->sentPackets.size());
+
+    reliableShim->clearPendingForTest();
+}
+
+void test_mqtt_self_ack_suppresses_final_nak(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, NODENUM_BROADCAST, 0, /*wantAck=*/true);
+    // attempts=1 leaves zero retries, so the next due run takes the give-up branch.
+    reliableShim->seedRetry(original, /*attempts=*/1);
+    mockRoutingModule->ackNaks.clear();
+
+    auto ack = makeMqttSelfAck(original.id, original.channel);
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+    reliableShim->sniffForTest(&ack, &routing);
+    mockRoutingModule->ackNaks.clear(); // ignore anything the sniff itself emitted
+
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    reliableShim->runDueRetries();
+
+    // Record is reaped as usual, but no MAX_RETRANSMIT reaches the client.
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+// Control for the two above: without the MQTT echo, giving up must still NAK, otherwise a genuinely
+// undelivered message would silently look fine.
+void test_unacked_broadcast_still_naks(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, NODENUM_BROADCAST, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, /*attempts=*/1);
+    mockRoutingModule->ackNaks.clear();
+
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    reliableShim->runDueRetries();
+
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    const auto &nak = mockRoutingModule->ackNaks.front();
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_MAX_RETRANSMIT, std::get<0>(nak));
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, std::get<1>(nak));
+    TEST_ASSERT_EQUAL_UINT32(original.id, std::get<2>(nak));
+}
+
+// The suppression is keyed on the ACK being one we minted for ourselves. A real ACK that merely
+// arrived over MQTT from another node is end-to-end proof of delivery and must still stop retries.
+void test_foreign_ack_over_mqtt_still_stops_retransmission(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_RETX);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+
+    auto ack = makeBehaviorPacket(meshtastic_PortNum_ROUTING_APP, kRemoteNode, kLocalNode, 1);
+    ack.decoded.request_id = original.id;
+    ack.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+
+    reliableShim->sniffForTest(&ack, &routing);
+
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+}
+
 // A PKI DM we originated is encrypted to the recipient, so when we overhear it being rebroadcast we
 // cannot decode it. The routing auth gate classifies it opaque and returns before
 // shouldFilterReceived() runs, so the implicit ACK has to be reachable from the header alone -
@@ -1102,6 +1212,10 @@ void setup()
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
+    RUN_TEST(test_mqtt_self_ack_keeps_retransmitting);
+    RUN_TEST(test_mqtt_self_ack_suppresses_final_nak);
+    RUN_TEST(test_unacked_broadcast_still_naks);
+    RUN_TEST(test_foreign_ack_over_mqtt_still_stops_retransmission);
     RUN_TEST(test_implicit_ack_for_opaque_own_packet);
     RUN_TEST(test_implicit_ack_ignores_foreign_pkt);
     RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);

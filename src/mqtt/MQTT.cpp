@@ -118,7 +118,10 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
         // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
         // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
-        // receives it when we get our own packet back. Then we'll stop our retransmissions.
+        // receives it when we get our own packet back. This ACK reaches the client, but deliberately does NOT stop
+        // LoRa retransmissions - the broker taking the packet is not evidence a mesh node heard it. ReliableRouter
+        // instead records it on the pending entry so the terminal MAX_RETRANSMIT NAK is suppressed once the retries
+        // run out; without that the client would show the message delivered and then flip it to failed.
         if (isFromUs(e.packet)) {
             auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
             if (!pAck)

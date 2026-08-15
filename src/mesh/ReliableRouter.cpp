@@ -169,18 +169,34 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if ((ackId || nakId) &&
-            // Implicit ACKs from MQTT should not stop retransmissions
-            !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
-            LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
-            if (ackId) {
-                stopRetransmission(p->to, ackId);
-                // M3: an end-to-end ACK proves the directed route to the ACK's sender currently works,
-                // so clear its failure count and refresh freshness (keeps a good route pinned).
-                if (!isBroadcast(getFrom(p)))
-                    noteRouteSuccess(getFrom(p), millis());
+        if (ackId || nakId) {
+            // An ACK we generated for ourselves because our own packet came back down from the broker we
+            // uplinked it to (see onReceiveProto() in MQTT.cpp). The broker having the packet is not
+            // evidence that any LoRa node does, so this must not stop retransmissions. But the originator
+            // has already been handed a successful ACK, so remember it on the pending record and let
+            // doRetransmissions() suppress the terminal NAK - without this the client shows a delivered
+            // message and then flips it to failed once the retries run out, which on an MQTT-only mesh
+            // (no neighbors in range to implicitly ACK) is every single message.
+            const bool mqttSelfAck =
+                isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+
+            if (mqttSelfAck) {
+                // Only a success ACK counts; a NAK we minted for ourselves is not a delivery claim.
+                if (PendingPacket *record = ackId ? findPendingPacket(p->to, ackId) : nullptr) {
+                    LOG_DEBUG("Received an MQTT ACK for 0x%08x, keep retransmitting but suppress NAK", ackId);
+                    record->mqttAcked = true;
+                }
             } else {
-                stopRetransmission(p->to, nakId);
+                LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
+                if (ackId) {
+                    stopRetransmission(p->to, ackId);
+                    // M3: an end-to-end ACK proves the directed route to the ACK's sender currently works,
+                    // so clear its failure count and refresh freshness (keeps a good route pinned).
+                    if (!isBroadcast(getFrom(p)))
+                        noteRouteSuccess(getFrom(p), millis());
+                } else {
+                    stopRetransmission(p->to, nakId);
+                }
             }
         }
     }
