@@ -1,21 +1,6 @@
-// Round-trip fidelity of the v25 slim NodeDB persistence cycle - the encode/decode
-// callback in src/mesh/NodeDB.cpp (meshtastic_NodeDatabase_callback):
-//
-//  - snr is persisted as snr_q4 (lroundf, sint32) and disambiguated from the proto3
-//    0-sentinel by the NODEINFO_BITFIELD_HAS_SNR bit (the #11271 phantom-SNR fix),
-//    with a compat branch for legacy records that carry snr_q4 without the bit;
-//  - the satellite maps (position/telemetry/environment/status) are projected into
-//    the struct's temp vectors only inside saveNodeDatabaseToDisk() and rehydrated
-//    at boot via armNodeDatabaseDecodeTargets();
-//  - keyless devices silently skip the nodes.proto write (saveNodeDatabaseToDisk's
-//    PKI gate), returning success so saveToDisk() never falls into fsFormat();
-//  - satellite maps evict at MAX_SATELLITE_NODES: orphans (owner not in the hot
-//    store) first, then the stalest-by-owner entry, never our own node;
-//  - resetNodes(keepFavorites) compacts favorites into contiguous low slots so the
-//    serialized tail carries no ghost rows (the ghost-favorite bug).
-//
-// Each persistence test saves through the real path, then cold-boots a real NodeDB
-// (fresh globals, exactly like a process restart) and asserts what came back.
+// Round-trip fidelity of the v25 slim NodeDB persistence cycle: snr_q4 quantization and its
+// HAS_SNR sentinel, satellite-map projection/rehydration and eviction, the keyless-device write
+// skip, and resetNodes() compaction. Each test saves, cold-boots a real NodeDB, and reads back.
 #include "MeshTypes.h" // BEFORE TestUtil.h - provides MAX_SATELLITE_NODES via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>

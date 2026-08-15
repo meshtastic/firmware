@@ -202,7 +202,7 @@ void test_xmodem_receive_happy_path(void)
     TEST_ASSERT_EQUAL_HEX8_ARRAY(payload, readBack, sizeof(payload));
 }
 
-void test_xmodem_receive_truncates_stale_file(void)
+void test_xmodem_receive_truncates_a_stale_file(void)
 {
     // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate; xmodem.cpp removes the target
     // before opening. A shorter transfer over a longer stale file must leave no tail bytes.
@@ -292,7 +292,7 @@ void test_xmodem_receive_naks_traversal_filename(void)
 // testable on native: Portduino's VFSImpl::open() returns a truthy File whenever the mode permits
 // creation, even when the underlying fopen fails, so the branch is unreachable here.
 
-void test_xmodem_can_mid_receive_removes_file(void)
+void test_xmodem_can_mid_receive_removes_the_file(void)
 {
     uint8_t payload[kChunk];
     fillPattern(payload, sizeof(payload), 42);
@@ -428,7 +428,7 @@ void test_xmodem_soh_mid_transmit_cancels(void)
     TEST_ASSERT_FALSE(xm->isBusy());
 }
 
-void test_xmodem_eot_mid_transmit_leaves_busy(void)
+void test_xmodem_eot_mid_transmit_leaves_state_busy(void)
 {
     // Documents current behaviour: the EOT handler only clears isReceiving, so an EOT received
     // while transmitting ACKs, closes the file, and leaves the adapter wedged busy. A deliberate
@@ -513,11 +513,11 @@ void setup()
 
     printf("\n=== Receive path ===\n");
     RUN_TEST(test_xmodem_receive_happy_path);
-    RUN_TEST(test_xmodem_receive_truncates_stale_file);
+    RUN_TEST(test_xmodem_receive_truncates_a_stale_file);
     RUN_TEST(test_xmodem_receive_rejects_wrong_seq);
     RUN_TEST(test_xmodem_receive_rejects_bad_crc);
     RUN_TEST(test_xmodem_receive_naks_traversal_filename);
-    RUN_TEST(test_xmodem_can_mid_receive_removes_file);
+    RUN_TEST(test_xmodem_can_mid_receive_removes_the_file);
     RUN_TEST(test_xmodem_can_after_eot_removes_completed_file);
 
     printf("\n=== Transmit path ===\n");
@@ -526,7 +526,7 @@ void setup()
     RUN_TEST(test_xmodem_transmit_retry_cap_cancels);
     RUN_TEST(test_xmodem_transmit_naks_missing_file);
     RUN_TEST(test_xmodem_soh_mid_transmit_cancels);
-    RUN_TEST(test_xmodem_eot_mid_transmit_leaves_busy);
+    RUN_TEST(test_xmodem_eot_mid_transmit_leaves_state_busy);
 
     printf("\n=== Idle replies / phone contract ===\n");
     RUN_TEST(test_xmodem_ack_nak_while_idle_provoke_can);

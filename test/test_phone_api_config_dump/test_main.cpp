@@ -1,10 +1,6 @@
-// PhoneAPI::getFromRadio() config-dump state machine. The header comment over getFromRadio()
-// says the client apps ASSUME THIS SEQUENCE, DO NOT CHANGE IT - this suite is the assertion of
-// that sequence, on decoded FromRadio protobufs rather than internals:
-//   my_info -> deviceuiConfig -> own node_info -> metadata -> region_presets -> 8 channels ->
-//   configs -> moduleConfigs -> other node_infos -> fileInfo* -> config_complete_id (nonce echo)
-// plus the heartbeat preempt, the SPECIAL_NONCE_ONLY_* jumps, mid-dump restart, and the
-// post-complete drain reaching idle (the infinite-drain regression class).
+// PhoneAPI::getFromRadio() config-dump sequence, asserted on decoded FromRadio protobufs: the
+// order client apps depend on, the heartbeat preempt, SPECIAL_NONCE_ONLY_* jumps, mid-dump
+// restart, and the post-complete drain reaching idle.
 #include "MeshTypes.h"
 #include "TestUtil.h"
 #include <unity.h>

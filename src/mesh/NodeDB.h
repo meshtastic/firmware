@@ -223,9 +223,8 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 #endif
 }
 
-/// Post-decode half of the pre-hop drop: the bitfield proving the origin populated hop_start is
-/// channel-encrypted, so MISSING_OR_UNKNOWN only becomes decidable once the packet is decoded.
-/// Local-origin packets are exempt. Router::handleReceived uses this to set skipHandle.
+/// Post-decode, the encrypted bitfield makes MISSING_OR_UNKNOWN decidable.
+/// Local packets are exempt; Router::dispatchReceived uses this predicate to set skipHandle.
 inline bool shouldSkipHandleForPostDecodeHop(const meshtastic_MeshPacket &p)
 {
 #if !MESHTASTIC_PREHOP_DROP

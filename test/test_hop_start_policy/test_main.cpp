@@ -60,13 +60,13 @@ static meshtastic_MeshPacket makeDecoded(NodeNum from, uint8_t hopStart, uint8_t
 static void assertClassify(const meshtastic_MeshPacket &p, HopStartStatus expected, const char *label)
 {
     HopStartStatus got = classifyHopStart(p);
-    TEST_MSG_FMT("%-44s hop_start=%u hop_limit=%u -> %d (expect %d)", label, p.hop_start, p.hop_limit, (int)got, (int)expected);
+    TEST_MSG_FMT("%-44s hop_start=%u hop_limit=%u -> %d (expect %d)", label, (unsigned)p.hop_start, (unsigned)p.hop_limit,
+                 (int)got, (int)expected);
     TEST_ASSERT_EQUAL_INT_MESSAGE((int)expected, (int)got, label);
 }
 
-// The post-decode re-check Router::handleReceived uses to set skipHandle, via the shared
-// shouldSkipHandleForPostDecodeHop helper - the test drives the exact predicate the router
-// calls, so drift in the gate fails here. (The cancelSending side effect stays uncovered.)
+// The shared predicate Router::dispatchReceived uses to set skipHandle, so gate drift fails here.
+// (The cancelSending side effect stays uncovered.)
 static bool routerPostDecodeWouldSkip(const meshtastic_MeshPacket &p)
 {
     return shouldSkipHandleForPostDecodeHop(p);
@@ -114,7 +114,7 @@ void test_classify_zero_hop_decoded_without_bitfield_unknown()
     assertClassify(makeDecoded(kRemoteNode, 0, 0, false), HopStartStatus::MISSING_OR_UNKNOWN, "decoded no-bitfield 0/0");
 }
 
-void test_classify_zero_hop_encrypted_unknown()
+void test_classify_zero_hop_encrypted_is_unknown()
 {
     TEST_MESSAGE("=== 0/0 encrypted: bitfield unreadable pre-decode, MISSING_OR_UNKNOWN ===");
 
@@ -296,7 +296,7 @@ void setup()
     RUN_TEST(test_classify_valid_when_hop_start_covers_hop_limit);
     RUN_TEST(test_classify_zero_hop_modern_beacon_valid);
     RUN_TEST(test_classify_zero_hop_decoded_without_bitfield_unknown);
-    RUN_TEST(test_classify_zero_hop_encrypted_unknown);
+    RUN_TEST(test_classify_zero_hop_encrypted_is_unknown);
     RUN_TEST(test_classify_encrypted_variant_ignores_stale_union_bitfield);
     RUN_TEST(test_classify_hop_cap_boundaries);
 

@@ -1,19 +1,6 @@
-// Boot-recovery contract for NodeDB (src/mesh/NodeDB.cpp) - the fsFormat-config-wipe /
-// NodeNum-renumber bug family:
-//
-//   - A PRESENT-but-undecodable config.proto (DECODE_FAILED) must freeze identity: skip boot
-//     keygen (NodeNum == crc32(public_key), so minting a key re-numbers the node), force
-//     region UNSET + tx_enabled false, and never persist zeroed defaults over the
-//     maybe-transient on-disk file. The 2.8 total-wipe cascade rode the unprotected path.
-//   - An ABSENT config (loadProto never returns NOT_FOUND; an unopenable file is
-//     OTHER_FAILURE) takes the normal fresh-install path: defaults + new keypair.
-//   - The freeze is config-scoped: a corrupt nodes.proto alone must not freeze identity.
-//   - An old-version devicestate recovers owner fields from our own NodeDB entry.
-//
-// The tests form a deliberate ladder (state=per-suite in test/state-manifest.tsv): each test
-// arranges the on-disk /prefs files, then "reboots" by constructing a fresh NodeDB, the same
-// pattern test_firmware_edition uses. RAM globals that a real cold boot would find zeroed
-// (nodeDatabase) are reset before each reboot so the in-process reboot matches the device.
+// NodeDB boot-recovery contract: an undecodable config.proto must freeze identity (no keygen, no
+// overwrite), an absent one takes the fresh-install path, and a corrupt nodes.proto does neither.
+// The tests are a ladder (state=per-suite): arrange /prefs, then "reboot" a fresh NodeDB.
 #include "MeshTypes.h" // Include BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>

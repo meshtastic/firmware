@@ -1,18 +1,7 @@
-// Unit tests for the ReliableRouter ACK/NAK decision matrix:
-//   - sniffReceived(): which ACK or NAK a node emits for every inbound want_ack shape
-//     (want-ack text DMs, plain DMs, responses, undecodable PKI/channel packets, next-hop stops)
-//   - shouldSuccessAckWithWantAck(): text DMs get an ACK that itself sets want_ack (tested through
-//     sniffReceived - the method is private, so the emitted ackWantsAck flag is the observable)
-//   - retransmission bookkeeping: explicit ACK/NAK stop pending retries, the from-us MQTT-echo gate
-//     does not, and an end-to-end ACK feeds noteRouteSuccess
-//   - the #11502 restore: an overheard rebroadcast of our own opaque DM mints an implicit ACK, and
-//     only a LoRa copy stops the retransmissions. In production the opaque copy short-circuits at
-//     Router::perhapsHandleReceived's OPAQUE_RELAY_ONLY branch and never reaches
-//     shouldFilterReceived - Group 5b drives that real ingress wiring; Group 5 covers the
-//     shouldFilterReceived route (which in production sees decodable copies still in wire form)
-//   - the pending-timer airtime-extension loops in send() and shouldFilterReceived()
-//
-// Harness copied from test_nexthop_routing (ReliableRouterTestShim + MockRoutingModule pattern).
+// ReliableRouter ACK/NAK decision matrix: which ACK or NAK sniffReceived() emits per inbound
+// shape, retransmission bookkeeping, the #11502 implicit ACK for our own overheard opaque DM
+// (Group 5b drives the real OPAQUE_RELAY_ONLY ingress path), and the pending-timer extensions.
+// Harness copied from test_nexthop_routing (ReliableRouterTestShim + MockRoutingModule).
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
@@ -461,7 +450,7 @@ void test_next_hop_addressed_to_us_gets_zero_hop_ack(void)
     expectSingleAckNak(meshtastic_Routing_Error_NONE, kRemoteNode, p.id, 1, /*hopLimit=*/0, /*ackWantsAck=*/false);
 }
 
-void test_next_hop_hop_limit_zero_gets_no_ack(void)
+void test_next_hop_with_hop_limit_zero_gets_no_ack(void)
 {
     auto p = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, kLocalNode, 1, /*wantAck=*/false);
     p.next_hop = 0x11;
@@ -829,7 +818,7 @@ void setup()
 
     printf("\n=== next-hop 0-hop ACK without want_ack ===\n");
     RUN_TEST(test_next_hop_addressed_to_us_gets_zero_hop_ack);
-    RUN_TEST(test_next_hop_hop_limit_zero_gets_no_ack);
+    RUN_TEST(test_next_hop_with_hop_limit_zero_gets_no_ack);
     RUN_TEST(test_next_hop_other_byte_gets_no_ack);
 
     printf("\n=== ACK/NAK vs pending retransmissions ===\n");

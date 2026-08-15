@@ -1,17 +1,6 @@
-// Tests for the one-shot v24 -> v25 NodeDatabase migration every 2.7 -> 2.8
-// upgrader runs - src/mesh/NodeDBLegacyMigration.cpp and the loadFromDisk()
-// version-gate ladder in src/mesh/NodeDB.cpp.
-//
-// Each test hand-encodes a legacy-format /prefs/nodes.proto (via the same
-// meshtastic_NodeDatabase_Legacy descriptor the migration decodes with), then
-// cold-boots a real NodeDB so the full ladder runs: version gate -> legacy
-// decode -> field-by-field copy (bools packed into the bitfield, names
-// sanitized, position/device_metrics routed into the satellite maps) ->
-// deferred re-save as v25 (migrationSavePending).
-//
-// The sanitizeUtf8 assertions matter beyond cosmetics: an unsanitized v24 name
-// makes the later nanopb encode fail, and a failed save is what triggers
-// saveToDisk()'s fsFormat() wipe - this suite pins the firewall in front of it.
+// The one-shot v24 -> v25 NodeDatabase migration every 2.7 -> 2.8 upgrader runs: each test
+// hand-encodes a legacy /prefs/nodes.proto, cold-boots a real NodeDB, and asserts the migrated
+// state (including sanitizeUtf8 of legacy names, which the later encode depends on).
 #include "MeshTypes.h" // BEFORE TestUtil.h - provides MAX_NUM_NODES via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -348,7 +337,7 @@ static void test_v24RoundTrip_migratesFieldsBitfieldAndSatellites(void)
 
 // has_position=false / has_device_metrics=false entries must not seed
 // zero-position ghosts in the satellite maps.
-static void test_absentSubmessages_noSatelliteGhosts(void)
+static void test_absentSubmessages_noSatelliteGhostRows(void)
 {
     auto a = makeLegacyNode(0xC3000001, 1000);
     giveLegacyUser(a, "NoPos", "NP");
@@ -551,7 +540,7 @@ NDBM_TEST_ENTRY void setup()
 
     printf("\n=== Migration fidelity ===\n");
     RUN_TEST(test_v24RoundTrip_migratesFieldsBitfieldAndSatellites);
-    RUN_TEST(test_absentSubmessages_noSatelliteGhosts);
+    RUN_TEST(test_absentSubmessages_noSatelliteGhostRows);
 
     printf("\n=== sanitizeUtf8 firewall ===\n");
     RUN_TEST(test_truncatedWideName_sanitizedAndReencodable);

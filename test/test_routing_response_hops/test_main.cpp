@@ -1,11 +1,5 @@
-// Unit tests for RoutingModule::getHopLimitForResponse (src/modules/RoutingModule.cpp) - the hop
-// budget stamped onto every reply, ACK, and NAK - and for setReplyTo() (src/mesh/MeshModule.cpp),
-// which applies it to reply packets.
-//
-// The hops-used input comes from getHopsAway() (src/mesh/NodeDB.cpp), whose sentinel rules are what
-// most of these tests exercise through the response path: hop_start==0 is only trustworthy when the
-// decoded bitfield proves the sender is new enough to populate it, and a forged hop_start below
-// hop_limit must not produce a negative-derived hop budget.
+// RoutingModule::getHopLimitForResponse - the hop budget stamped on every reply/ACK/NAK - and
+// MeshModule::setReplyTo() applying it, driven through getHopsAway()'s sentinel rules.
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
@@ -115,7 +109,7 @@ void test_two_hops_used_gets_margin_of_two(void)
     TEST_ASSERT_EQUAL_UINT8(4, testRoutingModule->getHopLimitForResponse(request));
 }
 
-void test_margin_below_boundary_still_applies(void)
+void test_margin_just_below_boundary_still_applies(void)
 {
     config.lora.hop_limit = 7;
     auto request = makeRequest(7, 3); // 4 hops used: 4 + 2 = 6 < 7
@@ -240,7 +234,7 @@ void setup()
     printf("\n=== known hop distance: margin, clamp, uncapped long path ===\n");
     RUN_TEST(test_direct_neighbor_response_gets_two_hop_margin);
     RUN_TEST(test_two_hops_used_gets_margin_of_two);
-    RUN_TEST(test_margin_below_boundary_still_applies);
+    RUN_TEST(test_margin_just_below_boundary_still_applies);
     RUN_TEST(test_margin_at_boundary_clamps_to_configured_limit);
     RUN_TEST(test_hops_equal_to_limit_returns_limit);
     RUN_TEST(test_long_path_exceeds_configured_limit_uncapped);

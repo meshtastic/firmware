@@ -1,9 +1,5 @@
-// Identity-hygiene tests for the two remote-identity commit paths in
-// src/mesh/NodeDB.cpp: updateUser() (key pinning, empty-key drop, own-key
-// advertisement, XEdDSA-signer gate) and addFromContact() (key-erasure guard,
-// manually-verified pin, ignore semantics, merge behavior). The addFromContact
-// key-erasure guard pins the #11432 regression: clients send add_contact before
-// every DM, and a keyless contact must never erase a stored 32-byte key.
+// Identity hygiene for the remote-identity commit paths in NodeDB: updateUser() key pinning and
+// addFromContact() guards (a keyless contact must never erase a stored key - the #11432 regression).
 #include "MeshTypes.h" // Include BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>

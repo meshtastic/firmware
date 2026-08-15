@@ -152,7 +152,7 @@ static void test_downgrade_rejected_state_untouched(void)
 }
 
 // Equal-quality FromNet has no reapply branch: the second set is ignored.
-static void test_equal_quality_fromnet_not_reapplied(void)
+static void test_equal_quality_fromnet_is_not_reapplied(void)
 {
     beginFakeClock(60 * 1000);
     const time_t firstEpoch = makeValidEpoch();
@@ -432,7 +432,7 @@ void setup()
 
     printf("\n=== perhapsSetRTC(timeval) quality arbitration ===\n");
     RUN_TEST(test_downgrade_rejected_state_untouched);
-    RUN_TEST(test_equal_quality_fromnet_not_reapplied);
+    RUN_TEST(test_equal_quality_fromnet_is_not_reapplied);
     RUN_TEST(test_gps_reapply_always_accepted);
     RUN_TEST(test_ntp_drift_throttle);
     RUN_TEST(test_force_update_overrides_downgrade);

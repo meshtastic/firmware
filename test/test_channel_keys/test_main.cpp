@@ -1,9 +1,5 @@
-// Channel key derivation and hash layer: getKey() PSK expansion/padding/inheritance,
-// generateHash() wire-compat golden values, the onConfigChanged() no-primary restore,
-// setChannel() primary demotion, the decryptForHash() bounds pin (#11046, cfecef537),
-// and Router perhapsDecode()'s same-hash fall-through that rewrites p->channel from
-// hash to index. A regression in the hash or expansion silently partitions the mesh:
-// nothing crashes, packets just stop decoding on every peer.
+// Channel key derivation and hash layer: getKey() PSK expansion, generateHash() golden values,
+// onConfigChanged() primary restore, setChannel() demotion, and perhapsDecode()'s hash fall-through.
 
 #include "Channels.h"
 #include "CryptoEngine.h"

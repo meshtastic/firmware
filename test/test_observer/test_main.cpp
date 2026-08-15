@@ -1,21 +1,5 @@
-// Unit tests for src/Observer.h - the pub/sub backbone wiring GPS, power, NodeDB status,
-// PhoneAPI and module dispatch.
-//
-// Pins the observable contract: insertion-order notification, the nonzero-return abort chain,
-// CallbackObserver member-function dispatch, ~Observer auto-detach, duplicate-observe semantics,
-// and which list mutations are safe from inside onNotify.
-//
-// notifyObservers() iterates its std::list with a raw iterator (Observer.h:66-76). std::list
-// guarantees that erasing any node other than the one the iterator points at leaves the iterator
-// valid, so detaching an earlier, later, or even the immediately-next observer mid-notify is
-// well-defined today - those cases are asserted below, and the coverage env's ASan turns any
-// future iterator-invalidation regression (e.g. a switch to std::vector) into a clean red.
-//
-// Deliberately NOT tested: an observer calling unobserve(observable) on ITSELF from onNotify.
-// That frees the node under the iterator and the following ++iterator is use-after-free - real,
-// field-reachable UB (PhoneAPI::onNotify -> checkConnectionTimeout -> close() -> unobserve of
-// service->fromNumChanged). A test asserting the crash would be asserting UB; harden
-// notifyObservers first, then add the self-detach case here.
+// Unit tests for src/Observer.h: notification order, the nonzero-return abort chain,
+// CallbackObserver dispatch, ~Observer auto-detach, and list mutation from inside onNotify.
 #include "Arduino.h"
 #include "Observer.h"
 #include "TestUtil.h"
@@ -299,6 +283,53 @@ void test_detach_of_immediately_next_observer_during_notify()
     TEST_ASSERT_EQUAL_STRING("AC", callOrder.c_str());
 }
 
+// An observer that unobserves itself and returns 0 must not corrupt the dispatch: the entry is
+// nulled and swept after the pass, so the observers behind it still run.
+void test_self_detach_during_notify_still_notifies_rest()
+{
+    Observable<int> subject;
+    RecordingObserver a('A'), b('B'), c('C');
+    a.observe(&subject);
+    b.observe(&subject);
+    c.observe(&subject);
+    b.detachWho = &b; // B removes itself mid-dispatch, without aborting the chain
+    b.detachFrom = &subject;
+
+    TEST_ASSERT_EQUAL(0, subject.notifyObservers(1));
+    TEST_ASSERT_EQUAL_STRING("ABC", callOrder.c_str());
+
+    // B is really gone on the next pass, and the list carries no leftover null entry.
+    b.detachWho = nullptr;
+    callOrder.clear();
+    TEST_ASSERT_EQUAL(0, subject.notifyObservers(2));
+    TEST_ASSERT_EQUAL_STRING("AC", callOrder.c_str());
+    TEST_ASSERT_EQUAL(1, b.calls);
+}
+
+// Same, when the self-detaching observer also aborts the chain (PhoneAPI's pattern: onNotify ->
+// checkConnectionTimeout -> close() -> unobserve, returning -1).
+void test_self_detach_with_abort_during_notify()
+{
+    Observable<int> subject;
+    RecordingObserver a('A'), b('B'), c('C');
+    a.observe(&subject);
+    b.observe(&subject);
+    c.observe(&subject);
+    b.detachWho = &b;
+    b.detachFrom = &subject;
+    b.returnCode = -1;
+
+    TEST_ASSERT_EQUAL(-1, subject.notifyObservers(1));
+    TEST_ASSERT_EQUAL_STRING("AB", callOrder.c_str()); // C never runs: the chain aborted
+    TEST_ASSERT_EQUAL(0, c.calls);
+
+    b.detachWho = nullptr;
+    b.returnCode = 0;
+    callOrder.clear();
+    TEST_ASSERT_EQUAL(0, subject.notifyObservers(2));
+    TEST_ASSERT_EQUAL_STRING("AC", callOrder.c_str());
+}
+
 void test_attach_during_notify_is_safe_and_delivers_next_time()
 {
     Observable<int> subject;
@@ -357,6 +388,8 @@ void setup()
     RUN_TEST(test_detach_of_earlier_observer_during_notify);
     RUN_TEST(test_detach_of_later_observer_during_notify);
     RUN_TEST(test_detach_of_immediately_next_observer_during_notify);
+    RUN_TEST(test_self_detach_during_notify_still_notifies_rest);
+    RUN_TEST(test_self_detach_with_abort_during_notify);
     RUN_TEST(test_attach_during_notify_is_safe_and_delivers_next_time);
 
     exit(UNITY_END());
