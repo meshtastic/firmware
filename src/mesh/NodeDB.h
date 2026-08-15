@@ -272,6 +272,10 @@ class NodeDB
     Observable<const meshtastic::NodeStatus *> newStatus;
     pb_size_t numMeshNodes;
 
+    /// Hot-store evictions since boot. Free-running; read as a delta, never as a rate.
+    /// NodeDBScalingModule uses it as the "the squeeze is on us" signal.
+    uint32_t hotEvictions = 0;
+
     // Satellite per-NodeNum maps. std::map avoids unordered_map's bucket-array
     // preallocation; O(log N) lookup is fine at these sizes.
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
@@ -551,6 +555,18 @@ class NodeDB
     // returns true if the maximum number of nodes is reached or we are running low on memory
     bool isFull();
 
+    /// True once the hot store holds NODEDB_BASELINE_NODES entries (or heap is low): the
+    /// point at which we stop *actively* introducing ourselves to newly-heard nodes and let
+    /// any remaining capacity fill passively from observed traffic. Distinct from isFull()
+    /// so that granting a larger hot store never grants more handshake airtime with it.
+    bool isPassiveFillOnly();
+
+    /// Trim each satellite map down to its current effective cap (nodeDBSatelliteCap() /
+    /// nodeDBEnvironmentCap()), dropping the stalest entries. Used after loading files
+    /// written before the caps existed or by a build with larger ones, and by
+    /// NodeDBScalingModule when it ratchets a cap down. Returns true iff anything was trimmed.
+    bool enforceSatelliteCaps();
+
     void clearLocalPosition();
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
@@ -695,11 +711,6 @@ class NodeDB
 
     /// purge db entries without user info
     void cleanupMeshDB();
-
-    /// Trim each satellite map down to MAX_SATELLITE_NODES, dropping the
-    /// stalest entries (used after loading files written before the cap, or by
-    /// a build with a larger cap). Returns true iff anything was trimmed.
-    bool enforceSatelliteCaps();
 
     /// Node-DB self-care; call only once identity is established (getNodeNum()
     /// valid). Confirms self is present, trims/demotes only NON-self overflow, and

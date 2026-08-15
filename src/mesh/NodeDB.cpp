@@ -28,6 +28,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "modules/NodeDBScalingModule.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -728,12 +729,12 @@ template <typename Map> bool evictStalestSatellite(NodeDB &db, Map &map)
     return true;
 }
 
-// Keep `map` within MAX_SATELLITE_NODES ahead of inserting `incoming` (the
-// tier-1/tier-2 split: only the freshest MAX_SATELLITE_NODES nodes carry
-// satellite payloads). Caller holds satelliteMutex.
-template <typename Map> void evictSatelliteOverCap(NodeDB &db, Map &map, NodeNum incoming)
+// Keep `map` within `cap` ahead of inserting `incoming` (the tier-1/tier-2 split: only the
+// freshest `cap` nodes carry satellite payloads). `cap` is the effective, possibly
+// ratcheted-down cap, not MAX_SATELLITE_NODES. Caller holds satelliteMutex.
+template <typename Map> void evictSatelliteOverCap(NodeDB &db, Map &map, NodeNum incoming, uint16_t cap)
 {
-    if (map.size() < MAX_SATELLITE_NODES || map.count(incoming))
+    if (map.size() < cap || map.count(incoming))
         return;
     evictStalestSatellite(db, map);
 }
@@ -1820,7 +1821,7 @@ void NodeDB::setNodeStatus(NodeNum n, const meshtastic_StatusMessage &status)
     (void)status;
 #else
     concurrency::LockGuard guard(&satelliteMutex);
-    evictSatelliteOverCap(*this, nodeStatus, n);
+    evictSatelliteOverCap(*this, nodeStatus, n, nodeDBEnvironmentCap());
     nodeStatus[n] = status;
 #endif
 }
@@ -1832,7 +1833,7 @@ void NodeDB::touchNodePositionTime(NodeNum n, uint32_t time)
     (void)time;
 #else
     concurrency::LockGuard guard(&satelliteMutex);
-    evictSatelliteOverCap(*this, nodePositions, n);
+    evictSatelliteOverCap(*this, nodePositions, n, nodeDBSatelliteCap());
     nodePositions[n].time = time;
 #endif
 }
@@ -1861,35 +1862,41 @@ bool NodeDB::enforceSatelliteCaps()
 {
     concurrency::LockGuard guard(&satelliteMutex);
     bool trimmedAny = false;
-    auto trim = [this, &trimmedAny](auto &map, const char *name) {
+    auto trim = [this, &trimmedAny](auto &map, const char *name, uint16_t cap) {
         const size_t before = map.size();
-        while (map.size() > MAX_SATELLITE_NODES) {
+        while (map.size() > cap) {
             if (!evictStalestSatellite(*this, map))
                 break;
         }
         if (map.size() != before) {
             trimmedAny = true;
-            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
-                          MAX_SATELLITE_NODES);
+            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %u)", name, (unsigned)before, (unsigned)map.size(), (unsigned)cap);
         }
     };
+    // Position and telemetry share the UI-facing cap; environment and status take the
+    // deeper one (bigger entries, no map/list reader). See NodeDBScalingModule.h.
+    const uint16_t satCap = nodeDBSatelliteCap();
+    const uint16_t envCap = nodeDBEnvironmentCap();
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-    trim(nodePositions, "position");
+    trim(nodePositions, "position", satCap);
 #endif
 
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-    trim(nodeTelemetry, "telemetry");
+    trim(nodeTelemetry, "telemetry", satCap);
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    trim(nodeEnvironment, "environment");
+    trim(nodeEnvironment, "environment", envCap);
 #endif
 
 #if !MESHTASTIC_EXCLUDE_STATUSDB
-    trim(nodeStatus, "status");
+    trim(nodeStatus, "status", envCap);
 #endif
 
-    (void)trim; // all four maps may be compiled out
+    // all four maps may be compiled out (STM32WL), leaving these with no reader
+    (void)trim;
+    (void)satCap;
+    (void)envCap;
 
     // Approximate satellite heap usage: each std::map entry is one rb-tree node,
     // value_type plus ~44 B of node overhead (parent/left/right pointers, color,
@@ -3389,7 +3396,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
 #else
     {
         concurrency::LockGuard guard(&satelliteMutex);
-        evictSatelliteOverCap(*this, nodePositions, nodeId);
+        evictSatelliteOverCap(*this, nodePositions, nodeId, nodeDBSatelliteCap());
         meshtastic_PositionLite &slot = nodePositions[nodeId]; // creates default-zero entry if missing
 
         if (src == RX_SRC_LOCAL) {
@@ -3447,7 +3454,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
-        evictSatelliteOverCap(*this, nodeTelemetry, nodeId);
+        evictSatelliteOverCap(*this, nodeTelemetry, nodeId, nodeDBSatelliteCap());
         nodeTelemetry[nodeId] = t.variant.device_metrics;
 #endif
 
@@ -3459,7 +3466,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
-        evictSatelliteOverCap(*this, nodeEnvironment, nodeId);
+        evictSatelliteOverCap(*this, nodeEnvironment, nodeId, nodeDBEnvironmentCap());
         nodeEnvironment[nodeId] = t.variant.environment_metrics;
 #endif
 
@@ -3979,6 +3986,11 @@ bool NodeDB::isFull()
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
 
+bool NodeDB::isPassiveFillOnly()
+{
+    return (numMeshNodes >= NODEDB_BASELINE_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
 uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
 {
     for (int i = 0; i < numMeshNodes; i++)
@@ -4241,6 +4253,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                     meshNodes->at(i) = meshNodes->at(i + 1);
                 }
                 (numMeshNodes)--;
+                hotEvictions++;
             }
         }
         // Don't append past the end of the vector. The protected-node cap
