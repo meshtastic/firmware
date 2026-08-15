@@ -55,6 +55,8 @@ def collect(paths):
     cases = {}
     for path in paths:
         try:
+            # The input is the JUnit report PlatformIO just wrote in this same run, not untrusted
+            # data, and defusedxml is not installed for this job. nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
             root = ET.parse(path).getroot()
         except (ET.ParseError, OSError) as exc:
             sys.stderr.write(f"check-test-attribution: cannot read {path}: {exc}\n")
