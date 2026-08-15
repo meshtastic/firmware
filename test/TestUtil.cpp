@@ -103,21 +103,46 @@ static void assertNoListeningSockets()
 }
 #endif
 
+#if ARCH_PORTDUINO
+static bool environmentBaselined = false;
+
+// -s is how the harness keeps a test run off the host's radio: it makes portduinoSetup() skip the
+// /etc/meshtasticd/config.yaml search and return before GPIO/SPI init. That job is done by the time
+// any of this runs, and the flag's only remaining readers are behaviour we do want under test -
+// wouldEncryptWithPKC() disables PKC while it is set. Clear it so suites exercise the production
+// encode path; the radio choice is already made and is not revisited.
+static void baselineEnvironment()
+{
+    portduino_config.force_simradio = false;
+    assertNoListeningSockets();
+    environmentBaselined = true;
+}
+#endif
+
 void testAssertEnvironmentIntact(const char *testName)
 {
 #if ARCH_PORTDUINO
+    // Not every suite calls initializeTestEnvironment() - test_atak does not - so the baseline
+    // cannot live only there, or those suites run with PKC off and skip the socket check. Establish
+    // it at the first RUN_TEST for whoever has not, and hold it from then on.
+    if (!environmentBaselined) {
+        baselineEnvironment();
+        return;
+    }
+
     if (!portduino_config.force_simradio)
         return;
 
     // Hard exit rather than TEST_FAIL: this runs between tests, outside any Unity test frame, so
     // there is no failure to longjmp into. Repairing the flag silently would be worse - it would
     // leave the suite that broke it passing.
-    fprintf(stderr,
-            "FATAL: force_simradio was set back on before %s\n"
-            "PKC is disabled while it is set, so the encode path under test falls back to channel\n"
-            "crypto and every later case asserts the wrong thing. A test that needs simradio must\n"
-            "restore the flag before it returns.\n",
-            testName ? testName : "(unknown test)");
+    for (FILE *out : {stdout, stderr})
+        fprintf(out,
+                "FATAL: force_simradio was set back on before %s\n"
+                "PKC is disabled while it is set, so the encode path under test falls back to channel\n"
+                "crypto and every later case asserts the wrong thing. A test that needs simradio must\n"
+                "restore the flag before it returns.\n",
+                testName ? testName : "(unknown test)");
     fflush(stderr);
     exit(EXIT_FAILURE);
 #else
@@ -130,14 +155,7 @@ void initializeTestEnvironment()
     concurrency::hasBeenSetup = true;
     consoleInit();
 #if ARCH_PORTDUINO
-    // -s is how the harness keeps a test run off the host's radio: it makes portduinoSetup() skip
-    // the /etc/meshtasticd/config.yaml search and return before GPIO/SPI init. That job is done by
-    // the time we get here, and the flag's only remaining readers are behaviour we do want under
-    // test - wouldEncryptWithPKC() disables PKC while it is set. Clear it so suites exercise the
-    // production encode path; the radio choice is already made and is not revisited.
-    portduino_config.force_simradio = false;
-
-    assertNoListeningSockets();
+    baselineEnvironment();
 
     struct timeval tv;
     tv.tv_sec = time(NULL);
