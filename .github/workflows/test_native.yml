@@ -195,6 +195,22 @@ jobs:
         timeout-minutes: 5
         run: ./bin/test-config-check.sh .pio/build/coverage/meshtasticd
 
+      - name: Shared-state checker self-test
+        # Fixtures that write nothing / exactly what they declare / something undeclared /
+        # a declared write they never make, asserting CLEAN / CLEAN / DIRTY / MISSING. A
+        # checker that has silently stopped matching looks identical to a clean codebase.
+        timeout-minutes: 5
+        run: ./bin/test-state-check.sh
+
+      - name: Attribution canary
+        # Reproduces the false green on purpose - two suites run with --without-building, so
+        # PlatformIO does not relink and both execute the same leftover binary - and requires
+        # check-test-attribution.py to catch it. The whole suite set once reported green this
+        # way with five test programs actually running; this fails if that guard ever stops
+        # firing, or if the reproduction stops reproducing.
+        timeout-minutes: 15
+        run: ./bin/test-attribution-canary.sh -e coverage
+
       - name: Integration test
         # Cap the whole step: if the simulator ever fails to exit (e.g. the
         # exit_simulator admin path regresses again) the job must fail fast,
