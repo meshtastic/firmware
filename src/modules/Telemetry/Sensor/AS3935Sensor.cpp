@@ -44,6 +44,11 @@ bool AS3935Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         return status;
     }
 
+    // Oscillators are tuned to the antenna resonance; calibration affects strike detection thresholds.
+    if (!lightning->calibrateOsc()) {
+        LOG_WARN("%s: oscillator calibration failed", sensorName);
+    }
+
     // Defaults match the library's own example, except outdoor mode and unmasked
     // disturbers (kept visible in the log).
     lightning->setIndoorOutdoor(OUTDOOR);
@@ -55,6 +60,8 @@ bool AS3935Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 #ifdef AS3935_IRQ
     pinMode(AS3935_IRQ, INPUT);
+    // Drain any interrupt already latched at init, so we don't start already stuck HIGH.
+    lightning->readInterruptReg();
 #endif
 
     windowStartMs = millis();

@@ -826,6 +826,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                      m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
                      m.variant.environment_metrics.adc_voltage_ch7);
 
+        LOG_INFO("Send: lightning_strike_count_1h=%u, lightning_distance_km=%f",
+                 m.variant.environment_metrics.lightning_strike_count_1h, m.variant.environment_metrics.lightning_distance_km);
+
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         if (!p) {
             validTelemetry = false;
