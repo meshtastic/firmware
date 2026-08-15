@@ -1,4 +1,4 @@
-// Unit tests for NextHop direct-message reliability mitigations (see docs/nexthop-routing-reliability.md):
+// Unit tests for NextHop direct-message reliability mitigations (landed in meshtastic/firmware#10745):
 //   M1 - NodeDB::resolveLastByte / resolveUniqueLastByte (ambiguity-aware last-byte resolution)
 //   M2 - NextHopRouter::getNextHop strict-neighbor gate + Router::shouldDecrementHopLimit favorite check
 //   M3 - NextHopRouter route-health freshness / failure decay
@@ -11,15 +11,21 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "airtime.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "mesh/Default.h"
 #include "mesh/NextHopRouter.h"
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
+#include "mesh/ReliableRouter.h"
+#include "modules/RoutingModule.h"
 #include <cstdio>
 #include <cstring>
+#include <list>
 #include <memory>
+#include <tuple>
+#include <vector>
 
 #define MSG_BUF_LEN 200
 #define TEST_MSG_FMT(fmt, ...)                                                                                                   \
@@ -30,6 +36,13 @@
     } while (0)
 
 static constexpr NodeNum kLocalNode = 0x11111111; // last byte 0x11
+static constexpr NodeNum kRemoteNode = 0x22222222;
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+static constexpr bool kEventPolicyEnabled = true;
+#else
+static constexpr bool kEventPolicyEnabled = false;
+#endif
 
 // ---------------------------------------------------------------------------
 // MockNodeDB - inject nodes with controlled last byte, hop distance, age, role, favorite flag.
@@ -93,6 +106,53 @@ class NextHopRouterTestShim : public NextHopRouter
     using NextHopRouter::relayOpaquePacket;
     using Router::shouldDecrementHopLimit; // protected in Router
 
+    PendingPacket *trackForTest(const meshtastic_MeshPacket &packet, uint8_t totalAttempts)
+    {
+        auto *copy = packetPool.allocCopy(packet);
+        TEST_ASSERT_NOT_NULL(copy);
+        return startRetransmission(copy, totalAttempts);
+    }
+
+    PendingPacket *trackWithDefaultBudgetForTest(const meshtastic_MeshPacket &packet)
+    {
+        auto *copy = packetPool.allocCopy(packet);
+        TEST_ASSERT_NOT_NULL(copy);
+        return startRetransmission(copy);
+    }
+
+    bool stopForTest(NodeNum from, PacketId id) { return stopRetransmission(from, id); }
+
+    meshtastic_MeshPacket *pendingPacketForTest(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        return entry ? entry->packet : nullptr;
+    }
+
+    void fireNextRetryForTest(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        TEST_ASSERT_NOT_NULL(entry);
+        entry->nextTxMsec = 0;
+        doRetransmissions();
+    }
+
+    void markOneRetryFiredForTest(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        TEST_ASSERT_NOT_NULL(entry);
+        TEST_ASSERT_GREATER_THAN_UINT8(0, entry->numRetransmissions);
+        --entry->numRetransmissions;
+    }
+
+    bool filterViaFlooding(const meshtastic_MeshPacket *p) { return FloodingRouter::shouldFilterReceived(p); }
+    bool filterViaNextHop(const meshtastic_MeshPacket *p) { return NextHopRouter::shouldFilterReceived(p); }
+
+    void clearPendingForTest()
+    {
+        while (!pending.empty())
+            stopRetransmission(pending.begin()->first);
+    }
+
     void resetRouteHealthForTest()
     {
         for (auto &h : routeHealth)
@@ -100,10 +160,8 @@ class NextHopRouterTestShim : public NextHopRouter
     }
 };
 
-// ---------------------------------------------------------------------------
-// MockRadioInterface - mirrors RadioLibInterface::send()'s NODENUM_BROADCAST_NO_LORA branch, which
-// returns ERRNO_SHOULD_RELEASE without releasing.
-// ---------------------------------------------------------------------------
+// Mirrors RadioLibInterface::send()'s NODENUM_BROADCAST_NO_LORA branch, which
+// returns ERRNO_SHOULD_RELEASE without releasing the packet.
 class MockRadioInterface : public RadioInterface
 {
   public:
@@ -112,6 +170,7 @@ class MockRadioInterface : public RadioInterface
         sendCount++;
         lastHopLimit = p->hop_limit;
         lastHopStart = p->hop_start;
+        sentNextHops.push_back(p->next_hop);
         if (declineAll || p->to == NODENUM_BROADCAST_NO_LORA)
             return ERRNO_SHOULD_RELEASE;
 
@@ -126,14 +185,153 @@ class MockRadioInterface : public RadioInterface
         return 0;
     }
 
+    bool cancelSending(NodeNum, PacketId) override
+    {
+        cancelCount++;
+        return true;
+    }
+
     int sendCount = 0;
+    uint32_t cancelCount = 0;
     bool declineAll = false;
     uint8_t lastHopLimit = 0;
     uint8_t lastHopStart = 0;
+    std::vector<uint8_t> sentNextHops;
 };
+
+class CaptureRadioInterface : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        sentPackets.push_back(*p);
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    bool cancelSending(NodeNum from, PacketId id) override
+    {
+        (void)from;
+        (void)id;
+        cancelCount++;
+        return false;
+    }
+
+    bool findInTxQueue(NodeNum from, PacketId id) override
+    {
+        (void)from;
+        (void)id;
+        return false;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+
+    void reset()
+    {
+        sentPackets.clear();
+        cancelCount = 0;
+    }
+
+    std::vector<meshtastic_MeshPacket> sentPackets;
+    uint32_t cancelCount = 0;
+};
+
+class ReliableRouterTestShim : public ReliableRouter
+{
+  public:
+    ReliableRouterTestShim() : ReliableRouter() {}
+
+    size_t pendingCount() const { return pending.size(); }
+
+    void seedRetry(const meshtastic_MeshPacket &p, uint8_t attempts)
+    {
+        auto *copy = packetPool.allocCopy(p);
+        TEST_ASSERT_NOT_NULL(copy);
+        startRetransmission(copy, attempts);
+    }
+
+    void makeRetryDue(NodeNum from, PacketId id)
+    {
+        PendingPacket *record = findPendingPacket(from, id);
+        TEST_ASSERT_NOT_NULL(record);
+        record->nextTxMsec = 0;
+    }
+
+    int32_t runDueRetries() { return doRetransmissions(); }
+    void sniffForTest(const meshtastic_MeshPacket *p, const meshtastic_Routing *routing)
+    {
+        ReliableRouter::sniffReceived(p, routing);
+    }
+
+    void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsGenerateImplicitAckForOwnOverheard(p); }
+
+    void clearPendingForTest()
+    {
+        while (!pending.empty())
+            stopRetransmission(pending.begin()->first);
+    }
+};
+
+class MockRoutingModule : public RoutingModule
+{
+  public:
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false) override
+    {
+        ackNaks.emplace_back(err, to, idFrom, chIndex, hopLimit, ackWantsAck);
+    }
+
+    std::list<std::tuple<meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t, bool>> ackNaks;
+};
+
+class ScopedAirTimeFixture
+{
+  public:
+    ScopedAirTimeFixture() : previous(airTime) { airTime = &instance; }
+    ~ScopedAirTimeFixture() { airTime = previous; }
+
+  private:
+    AirTime instance;
+    AirTime *previous;
+};
+
+static meshtastic_MeshPacket makeRebroadcastCandidate(NodeNum to)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = kRemoteNode;
+    p.to = to;
+    p.id = 0x0BADF00D;
+    p.hop_start = 3;
+    p.hop_limit = 3;
+    p.next_hop = NO_NEXT_HOP_PREFERENCE;
+    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p.encrypted.size = 8;
+    return p;
+}
 
 static MockNodeDB *mockNodeDB = nullptr;
 static NextHopRouterTestShim *shim = nullptr;
+static ReliableRouterTestShim *reliableShim = nullptr;
+static CaptureRadioInterface *nextHopRadio = nullptr;
+static CaptureRadioInterface *reliableRadio = nullptr;
+static MockRoutingModule *mockRoutingModule = nullptr;
+static std::unique_ptr<ScopedAirTimeFixture> airTimeFixture;
+static PacketId nextBehaviorPacketId = 0x70000000;
+
+static MockRadioInterface *installMockIface()
+{
+    MockRadioInterface *mock = new MockRadioInterface();
+    // addInterface replaces and destroys the suite's original capture interface.
+    // Clear its borrowed pointer before the next Unity setUp() runs.
+    nextHopRadio = nullptr;
+    shim->addInterface(std::unique_ptr<RadioInterface>(mock));
+    return mock;
+}
 
 static constexpr uint32_t TTL = NextHopRouter::ROUTE_TTL_MSEC;
 static constexpr uint8_t THRESH = NextHopRouter::ROUTE_FAILURE_THRESHOLD;
@@ -150,12 +348,84 @@ static meshtastic_MeshPacket makeRelayedPacket(uint8_t relay, uint8_t hopsAway)
     return p;
 }
 
+static meshtastic_Channel makeBehaviorChannel(meshtastic_Channel_Role role, const char *name)
+{
+    meshtastic_Channel channel = meshtastic_Channel_init_default;
+    channel.has_settings = true;
+    channel.role = role;
+    channel.settings.has_module_settings = true;
+    channel.settings.module_settings.position_precision = 16;
+    strncpy(channel.settings.name, name, sizeof(channel.settings.name) - 1);
+    return channel;
+}
+
+static void configureBehaviorChannels()
+{
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = 2;
+
+    meshtastic_Channel eventChannel = makeBehaviorChannel(meshtastic_Channel_Role_PRIMARY, "everyone");
+    eventChannel.index = 0;
+#ifdef USERPREFS_CHANNEL_0_PSK
+    static const uint8_t eventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    eventChannel.settings.psk.size = sizeof(eventPsk);
+    memcpy(eventChannel.settings.psk.bytes, eventPsk, sizeof(eventPsk));
+#endif
+
+    meshtastic_Channel privateChannel = makeBehaviorChannel(meshtastic_Channel_Role_SECONDARY, "private");
+    privateChannel.index = 1;
+    privateChannel.settings.psk.size = 32;
+    memset(privateChannel.settings.psk.bytes, 0xAB, privateChannel.settings.psk.size);
+
+    channelFile.channels[0] = eventChannel;
+    channelFile.channels[1] = privateChannel;
+    channels.onConfigChanged();
+}
+
+static meshtastic_MeshPacket makeBehaviorPacket(meshtastic_PortNum portnum, NodeNum from, NodeNum to, uint8_t channel,
+                                                bool wantAck = false)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from;
+    p.to = to;
+    p.id = nextBehaviorPacketId++;
+    p.channel = channel;
+    p.hop_start = 3;
+    p.hop_limit = 3;
+    p.relay_node = 0x22;
+    p.next_hop = NO_NEXT_HOP_PREFERENCE;
+    p.want_ack = wantAck;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = portnum;
+    return p;
+}
+
+static meshtastic_MeshPacket *allocBehaviorPacket(meshtastic_PortNum portnum, NodeNum to, uint8_t channel, bool wantAck)
+{
+    auto packet = makeBehaviorPacket(portnum, kLocalNode, to, channel, wantAck);
+    auto *allocated = packetPool.allocCopy(packet);
+    TEST_ASSERT_NOT_NULL(allocated);
+    return allocated;
+}
+
 void setUp(void)
 {
     myNodeInfo.my_node_num = kLocalNode;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    config.lora.override_duty_cycle = true;
+    config.security.private_key.size = 0;
+    owner.is_licensed = false;
     mockNodeDB->clearTestNodes();
     shim->resetRouteHealthForTest();
+    shim->clearPendingForTest();
+    reliableShim->clearPendingForTest();
+    if (nextHopRadio)
+        nextHopRadio->reset();
+    reliableRadio->reset();
+    mockRoutingModule->ackNaks.clear();
+    configureBehaviorChannels();
 }
 
 void tearDown(void) {}
@@ -446,30 +716,246 @@ void test_hoplimit_decrement_when_resolved_not_favorite(void)
 }
 
 // ===========================================================================
-// Rebroadcast of NODENUM_BROADCAST_NO_LORA
+// Group 5 - event-coordinate routing behavior
 // ===========================================================================
 
-static MockRadioInterface *installMockIface()
+void test_eventPolicy_reliableOriginSendSuppressesTxAndPending(void)
 {
-    MockRadioInterface *m = new MockRadioInterface();
-    shim->addInterface(std::unique_ptr<RadioInterface>(m));
-    return m;
+    ErrorCode result = reliableShim->send(
+        allocBehaviorPacket(meshtastic_PortNum_WAYPOINT_APP, NODENUM_BROADCAST, /*event channel=*/0, /*wantAck=*/true));
+
+    if (kEventPolicyEnabled) {
+        TEST_ASSERT_EQUAL_INT(meshtastic_Routing_Error_NOT_AUTHORIZED, result);
+        TEST_ASSERT_EQUAL_UINT32(0, reliableRadio->sentPackets.size());
+        TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+    } else {
+        TEST_ASSERT_EQUAL_INT(ERRNO_OK, result);
+        TEST_ASSERT_EQUAL_UINT32(1, reliableRadio->sentPackets.size());
+        TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+    }
 }
 
-// Eligible for rebroadcast: not from/to us, hops left, nonzero id, no next-hop preference.
-// Encrypted variant so Router::send() skips the encode path.
-static meshtastic_MeshPacket makeRebroadcastCandidate(NodeNum to)
+void test_eventPolicy_reliablePrivateCoordinateStillSends(void)
 {
-    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
-    p.from = 0x22222222; // not us
-    p.to = to;
-    p.id = 0x0BADF00D;
-    p.hop_start = 3;
-    p.hop_limit = 3;
-    p.next_hop = NO_NEXT_HOP_PREFERENCE;
-    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    p.encrypted.size = 8;
-    return p;
+    ErrorCode result = reliableShim->send(
+        allocBehaviorPacket(meshtastic_PortNum_WAYPOINT_APP, NODENUM_BROADCAST, /*private channel=*/1, /*wantAck=*/true));
+
+    TEST_ASSERT_EQUAL_INT(ERRNO_OK, result);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableRadio->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+}
+
+void test_eventPolicy_floodingDuplicateSuppressesCoordinateButRelaysText(void)
+{
+    mockNodeDB->addNode(kRemoteNode, 0, true, 0);
+    auto coordinate = makeBehaviorPacket(meshtastic_PortNum_WAYPOINT_APP, kRemoteNode, NODENUM_BROADCAST, 0);
+    TEST_ASSERT_FALSE(shim->filterViaFlooding(&coordinate));
+    TEST_ASSERT_TRUE(shim->filterViaFlooding(&coordinate));
+    TEST_ASSERT_EQUAL_UINT32(kEventPolicyEnabled ? 0 : 1, nextHopRadio->sentPackets.size());
+
+    nextHopRadio->reset();
+    auto text = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, NODENUM_BROADCAST, 0);
+    TEST_ASSERT_FALSE(shim->filterViaFlooding(&text));
+    TEST_ASSERT_TRUE(shim->filterViaFlooding(&text));
+    TEST_ASSERT_EQUAL_UINT32(1, nextHopRadio->sentPackets.size());
+}
+
+void test_eventPolicy_nextHopDuplicateSuppressesEventButRelaysPrivateCoordinate(void)
+{
+    mockNodeDB->addNode(kRemoteNode, 0, true, 0);
+    auto eventCoordinate = makeBehaviorPacket(meshtastic_PortNum_WAYPOINT_APP, kRemoteNode, NODENUM_BROADCAST, 0);
+    TEST_ASSERT_FALSE(shim->filterViaNextHop(&eventCoordinate));
+    TEST_ASSERT_TRUE(shim->filterViaNextHop(&eventCoordinate));
+    TEST_ASSERT_EQUAL_UINT32(kEventPolicyEnabled ? 0 : 1, nextHopRadio->sentPackets.size());
+
+    nextHopRadio->reset();
+    auto privateCoordinate = makeBehaviorPacket(meshtastic_PortNum_WAYPOINT_APP, kRemoteNode, NODENUM_BROADCAST, 1);
+    TEST_ASSERT_FALSE(shim->filterViaNextHop(&privateCoordinate));
+    TEST_ASSERT_TRUE(shim->filterViaNextHop(&privateCoordinate));
+    TEST_ASSERT_EQUAL_UINT32(1, nextHopRadio->sentPackets.size());
+}
+
+void test_eventPolicy_repeatedLocalPacketSuppressesCoordinateAckButKeepsTextAck(void)
+{
+    mockNodeDB->addNode(kRemoteNode, 0, true, 0);
+    auto coordinate = makeBehaviorPacket(meshtastic_PortNum_WAYPOINT_APP, kRemoteNode, kLocalNode, 0, /*wantAck=*/true);
+    TEST_ASSERT_FALSE(shim->filterViaNextHop(&coordinate));
+    TEST_ASSERT_TRUE(shim->filterViaNextHop(&coordinate));
+    TEST_ASSERT_EQUAL_UINT32(kEventPolicyEnabled ? 0 : 1, mockRoutingModule->ackNaks.size());
+
+    mockRoutingModule->ackNaks.clear();
+    auto text = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kLocalNode, 0, /*wantAck=*/true);
+    TEST_ASSERT_FALSE(shim->filterViaNextHop(&text));
+    TEST_ASSERT_TRUE(shim->filterViaNextHop(&text));
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    const auto &ack = mockRoutingModule->ackNaks.front();
+    TEST_ASSERT_EQUAL_INT(meshtastic_Routing_Error_NONE, std::get<0>(ack));
+    TEST_ASSERT_EQUAL_HEX32(kRemoteNode, std::get<1>(ack));
+    TEST_ASSERT_EQUAL_HEX32(text.id, std::get<2>(ack));
+}
+
+void test_eventPolicy_seededRetrySuppressesTxUntilGateOff(void)
+{
+    auto coordinate = makeBehaviorPacket(meshtastic_PortNum_WAYPOINT_APP, kLocalNode, NODENUM_BROADCAST, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(coordinate, /*attempts=*/2);
+    reliableShim->makeRetryDue(kLocalNode, coordinate.id);
+
+    reliableShim->runDueRetries();
+
+    TEST_ASSERT_EQUAL_UINT32(kEventPolicyEnabled ? 0 : 1, reliableRadio->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+}
+
+void test_reliableAckStopsNormalPendingTransmission(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_RETX);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+
+    auto ack = makeBehaviorPacket(meshtastic_PortNum_ROUTING_APP, kRemoteNode, kLocalNode, 1);
+    ack.decoded.request_id = original.id;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+
+    reliableShim->sniffForTest(&ack, &routing);
+
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+}
+
+// A PKI DM we originated is encrypted to the recipient, so when we overhear it being rebroadcast we
+// cannot decode it. The routing auth gate classifies it opaque and returns before
+// shouldFilterReceived() runs, so the implicit ACK has to be reachable from the header alone -
+// otherwise the client never sees "Delivered to mesh" for a DM.
+void test_implicit_ack_for_opaque_own_packet(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+    mockRoutingModule->ackNaks.clear();
+
+    // The overheard copy as it actually arrives: still encrypted, nothing decoded.
+    meshtastic_MeshPacket overheard = meshtastic_MeshPacket_init_zero;
+    overheard.from = kLocalNode;
+    overheard.to = kRemoteNode;
+    overheard.id = original.id;
+    overheard.channel = 0;
+    overheard.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    overheard.encrypted.size = 32;
+
+    reliableShim->implicitAckForTest(&overheard);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    const auto &ack = mockRoutingModule->ackNaks.front();
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, std::get<0>(ack));
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, std::get<1>(ack)); // addressed to us -> reaches the phone
+    TEST_ASSERT_EQUAL_UINT32(original.id, std::get<2>(ack));
+
+    reliableShim->clearPendingForTest();
+}
+
+// Someone else's traffic must never mint an ACK, even with a colliding id.
+void test_implicit_ack_ignores_foreign_pkt(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    mockRoutingModule->ackNaks.clear();
+
+    meshtastic_MeshPacket foreign = meshtastic_MeshPacket_init_zero;
+    foreign.from = kRemoteNode;
+    foreign.to = kLocalNode;
+    foreign.id = original.id;
+    foreign.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    foreign.encrypted.size = 32;
+
+    reliableShim->implicitAckForTest(&foreign);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+    reliableShim->clearPendingForTest();
+}
+
+void test_pending_does_not_cancel_radio_queue_before_first_retry(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.from = kLocalNode;
+    p.id = 0x51000001;
+    shim->trackForTest(p, 5);
+
+    TEST_ASSERT_TRUE(shim->stopForTest(kLocalNode, p.id));
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->cancelCount);
+}
+
+void test_pending_cancels_radio_queue_after_first_retry_for_any_budget(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.from = kLocalNode;
+    p.id = 0x51000002;
+    shim->trackForTest(p, 5);
+    shim->markOneRetryFiredForTest(kLocalNode, p.id);
+
+    TEST_ASSERT_TRUE(shim->stopForTest(kLocalNode, p.id));
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->cancelCount);
+}
+
+void test_directed_hop_tracks_three_total_attempts(void)
+{
+    installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.id = 0x51530003;
+
+    PendingPacket *entry = shim->trackWithDefaultBudgetForTest(p);
+    TEST_ASSERT_NOT_NULL(entry);
+    TEST_ASSERT_EQUAL_UINT8(3, entry->initialNumRetransmissions + 1);
+    TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
+}
+
+void test_intermediate_three_attempts_preserve_record_and_flood_last(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    constexpr NodeNum dest = 0x33333333;
+    mockNodeDB->addNode(dest, 2, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, false, false, 0xAB);
+    mockNodeDB->addNode(0x000007AB, 0, true, 60);
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(dest);
+    p.id = 0x51530004;
+    p.next_hop = 0xAB;
+    PendingPacket *entry = shim->trackWithDefaultBudgetForTest(p);
+    TEST_ASSERT_NOT_NULL(entry);
+    meshtastic_MeshPacket *trackedPacket = entry->packet;
+
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->sentNextHops.size());
+#if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
+    TEST_ASSERT_EQUAL_HEX8(NO_NEXT_HOP_PREFERENCE, mockIface->sentNextHops[0]);
+#else
+    TEST_ASSERT_EQUAL_HEX8(0xAB, mockIface->sentNextHops[0]);
+#endif
+    TEST_ASSERT_EQUAL_PTR(trackedPacket, shim->pendingPacketForTest(p.from, p.id));
+
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_UINT32(2, mockIface->sentNextHops.size());
+    TEST_ASSERT_EQUAL_HEX8(NO_NEXT_HOP_PREFERENCE, mockIface->sentNextHops[1]);
+    TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
+}
+
+void test_early_flood_preserves_fresh_verified_route(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    constexpr NodeNum dest = 0x33333333;
+    mockNodeDB->addNode(dest, 2, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, false, false, 0xAB);
+    mockNodeDB->addNode(0x000007AB, 0, true, 60);
+    shim->noteRouteLearned(dest, 0xAB, millis());
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(dest);
+    p.id = 0x51530005;
+    p.next_hop = 0xAB;
+    TEST_ASSERT_NOT_NULL(shim->trackWithDefaultBudgetForTest(p));
+
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->sentNextHops.size());
+    TEST_ASSERT_EQUAL_HEX8(0xAB, mockIface->sentNextHops[0]);
+    TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
 }
 
 // Control: proves the NO_LORA case below turns on the `to` field alone.
@@ -491,13 +977,10 @@ void test_rebroadcast_no_lora_broadcast_is_not_relayed(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "no packet should be handed to the radio at all");
 }
 
-// Declining mock bypasses the guard so send() is reached; the release itself is only observable as
-// a sanitizer leak report, not an assertion.
 void test_rebroadcast_declined_send_releases_packet(void)
 {
     MockRadioInterface *mockIface = installMockIface();
     mockIface->declineAll = true;
-
     meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
 
     TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&p), "the rebroadcast must still be attempted");
@@ -549,11 +1032,26 @@ void test_event_mode_hop_behavior(void)
 void setup()
 {
     initializeTestEnvironment();
+    AirTime testAirTime;
+    airTime = &testAirTime;
     UNITY_BEGIN();
 
+    airTimeFixture = std::make_unique<ScopedAirTimeFixture>();
     mockNodeDB = new MockNodeDB();
     shim = new NextHopRouterTestShim();
+    reliableShim = new ReliableRouterTestShim();
     nodeDB = mockNodeDB;
+
+    auto nextRadio = std::make_unique<CaptureRadioInterface>();
+    nextHopRadio = nextRadio.get();
+    shim->addInterface(std::move(nextRadio));
+
+    auto reliableCapture = std::make_unique<CaptureRadioInterface>();
+    reliableRadio = reliableCapture.get();
+    reliableShim->addInterface(std::move(reliableCapture));
+
+    mockRoutingModule = new MockRoutingModule();
+    routingModule = mockRoutingModule;
 
     printf("\n=== resolveLastByte (M1) ===\n");
     RUN_TEST(test_resolve_none_when_empty);
@@ -594,6 +1092,24 @@ void setup()
     RUN_TEST(test_hoplimit_decrement_on_colliding_favorites);
     RUN_TEST(test_hoplimit_decrement_when_resolved_not_favorite);
 
+    printf("\n=== event-coordinate routing behavior ===\n");
+    RUN_TEST(test_eventPolicy_reliableOriginSendSuppressesTxAndPending);
+    RUN_TEST(test_eventPolicy_reliablePrivateCoordinateStillSends);
+    RUN_TEST(test_eventPolicy_floodingDuplicateSuppressesCoordinateButRelaysText);
+    RUN_TEST(test_eventPolicy_nextHopDuplicateSuppressesEventButRelaysPrivateCoordinate);
+    RUN_TEST(test_eventPolicy_repeatedLocalPacketSuppressesCoordinateAckButKeepsTextAck);
+    RUN_TEST(test_eventPolicy_seededRetrySuppressesTxUntilGateOff);
+    RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
+
+    printf("\n=== pending retransmission bookkeeping ===\n");
+    RUN_TEST(test_implicit_ack_for_opaque_own_packet);
+    RUN_TEST(test_implicit_ack_ignores_foreign_pkt);
+    RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
+    RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
+    RUN_TEST(test_directed_hop_tracks_three_total_attempts);
+    RUN_TEST(test_intermediate_three_attempts_preserve_record_and_flood_last);
+    RUN_TEST(test_early_flood_preserves_fresh_verified_route);
+
     printf("\n=== rebroadcast of NODENUM_BROADCAST_NO_LORA ===\n");
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
@@ -602,7 +1118,9 @@ void setup()
     RUN_TEST(test_event_mode_hop_behavior);
 #endif
 
-    exit(UNITY_END());
+    int result = UNITY_END();
+    airTimeFixture.reset();
+    exit(result);
 }
 
 void loop() {}

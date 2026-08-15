@@ -27,6 +27,7 @@ static constexpr uint16_t TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY = 0x8004;
 #include "Sensor/AddI2CSensorTemplate.h"
 #include "Sensor/PMSA003ISensor.h"
 #include "Sensor/SEN5XSensor.h"
+#include "Sensor/SEN6XSensor.h"
 #if __has_include(<SensirionI2cScd4x.h>)
 #include "Sensor/SCD4XSensor.h"
 #endif
@@ -66,6 +67,8 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
         supportedSensors[PMSA003I_ADDR] = ScanI2C::DeviceType::PMSA003I;
     if (!supportedSensors.count(SEN5X_ADDR))
         supportedSensors[SEN5X_ADDR] = ScanI2C::DeviceType::SEN5X;
+    if (!supportedSensors.count(SEN6X_ADDR))
+        supportedSensors[SEN6X_ADDR] = ScanI2C::DeviceType::SEN6X;
 #if __has_include(<SensirionI2cScd4x.h>)
     if (!supportedSensors.count(SCD4X_ADDR))
         supportedSensors[SCD4X_ADDR] = ScanI2C::DeviceType::SCD4X;
@@ -108,6 +111,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // order by priority of metrics/values (low top, high bottom)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
     addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
+    addSensor<SEN6XSensor>(i2cScanner, ScanI2C::DeviceType::SEN6X);
 #if __has_include(<SensirionI2cScd4x.h>)
     addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SCD4X);
 #endif
@@ -187,7 +191,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         // - We can publish the data on the mesh shortly
         // - Or we can send it to the phone
         // TODO: This will need to be refurbished once we implement separate intervals
-        LOG_INFO("Waking up sensors");
+        LOG_INFO("Waking sensors");
         for (TelemetrySensor *sensor : sensors) {
             if (!sensor->canSleep()) {
                 LOG_DEBUG("%s: no sleep support, skip", sensor->sensorName);
@@ -207,7 +211,11 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
 
             if (!sensor->isActive()) {
-                LOG_DEBUG("Waking up: %s", sensor->sensorName);
+                LOG_DEBUG("Waking %s", sensor->sensorName);
+                if (awakeAheadOfTimeMs == 0)
+                    startAirQualityTelemetryCycle = millis();
+                awakeAheadOfTimeMs = max(awakeAheadOfTimeMs, sensor->wakeUpTimeMs());
+                // TODO multiple sensors with different wake up times collide
                 return sensor->wakeUp();
             }
 
@@ -219,19 +227,35 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         bool telemetryDue = (lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, telemetryIntervalMs);
-
         bool phoneDue = (lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs);
 
         if (telemetryDue && telemetryAllowed) {
-            sendTelemetry();
-
-            if (transmitHistory) {
-                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
+            if (sendTelemetry()) {
+                if (transmitHistory) {
+                    transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
+                }
+                // Correct the awake time, trimming to 0
+                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
+                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
+                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
+            } else {
+                awakeAheadOfTimeMs = 0;
             }
         } else if (phoneDue && phoneAllowed) {
             // Mesh transmission isn't due yet, but we can still update the phone.
-            sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            if (sendTelemetry(NODENUM_BROADCAST, true)) {
+                lastSentToPhone = millis();
+                // Correct the awake time, trimming to 0
+                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
+                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
+                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
+            } else {
+                awakeAheadOfTimeMs = 0;
+            }
+        } else {
+            // if for some reason we end up here after waking up, but not able to send, then reset
+            // the counter
+            awakeAheadOfTimeMs = 0;
         }
 
         // Send to sleep sensors that can be to save power
@@ -253,7 +277,13 @@ int32_t AirQualityTelemetryModule::runOnce()
         // mistime the pending deep sleep
         return FIVE_SECONDS_MS;
     }
-    return min(sendToPhoneIntervalMs, result);
+
+    // Update next interval if we were ahead
+    uint32_t correctedIntervalMs = sendToPhoneIntervalMs + awakeAheadOfTimeMs;
+    awakeAheadOfTimeMs = 0;
+    startAirQualityTelemetryCycle = 0;
+    LOG_DEBUG("Corrected interval in ms: %u", correctedIntervalMs);
+    return min(correctedIntervalMs, result);
 }
 
 bool AirQualityTelemetryModule::wantUIFrame()

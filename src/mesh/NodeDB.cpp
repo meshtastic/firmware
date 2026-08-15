@@ -19,6 +19,7 @@
 #include "SafeFile.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "error.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -98,11 +99,13 @@ static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-void variantDefaultConfig() __attribute__((weak));
-void variantDefaultConfig() {}
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. Same guard as earlyInitVariant() in main.cpp.
+__attribute__((noinline)) void variantDefaultConfig() __attribute__((weak));
+__attribute__((noinline)) void variantDefaultConfig() {}
 
-void variantDefaultModuleConfig() __attribute__((weak));
-void variantDefaultModuleConfig() {}
+__attribute__((noinline)) void variantDefaultModuleConfig() __attribute__((weak));
+__attribute__((noinline)) void variantDefaultModuleConfig() {}
 
 #ifdef HELTEC_MESH_NODE_T114
 
@@ -427,6 +430,14 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
+
+    // likewise the edition: it lives in persisted devicestate, so a vanilla install must
+    // overwrite the previous event build's value. Before the CRC compare, so the change persists.
+#ifdef USERPREFS_FIRMWARE_EDITION
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
+#else
+    myNodeInfo.firmware_edition = meshtastic_FirmwareEdition_VANILLA;
+#endif
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -612,9 +623,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-#ifdef USERPREFS_FIRMWARE_EDITION
-    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
-#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -983,7 +991,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
-        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+        // Never log the key bytes: debug logs get pasted into public bug reports.
+        LOG_DEBUG("Restored preserved private key");
     } else {
         config.security.private_key.size = 0;
     }
@@ -3266,7 +3275,7 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // rx_time may be an uptime-seconds placeholder while has_rx_time is false - don't age it as
     // wall-clock, and don't pass it off as "just now" either.
     if (!p->has_rx_time)
         return SINCE_UNKNOWN;
@@ -3432,9 +3441,9 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
     if (t.which_variant == meshtastic_Telemetry_device_metrics_tag) {
         if (src == RX_SRC_LOCAL) {
-            LOG_DEBUG("updateTelemetry LOCAL device");
+            LOG_TRACE("updateTelemetry LOCAL device");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE device node=0x%08x", nodeId);
+            LOG_TRACE("updateTelemetry REMOTE device node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3444,9 +3453,9 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
     } else if (t.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
         if (src == RX_SRC_LOCAL) {
-            LOG_DEBUG("updateTelemetry LOCAL env");
+            LOG_TRACE("updateTelemetry LOCAL env");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE env node=0x%08x", nodeId);
+            LOG_TRACE("updateTelemetry REMOTE env node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3480,7 +3489,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         }
     }
     info->num = contact.node_num;
+    // CopyUserToNodeInfoLite assigns public_key unconditionally, and clients send add_contact before every
+    // DM - often from an entry that carries no key at all. A contact may still supply or update a full
+    // 32-byte key (that's what add_contact is for), but it must never *erase* a key we already hold, which
+    // would be persisted below and break subsequent DMs with PKI_SEND_FAIL_PUBLIC_KEY.
+    const meshtastic_NodeInfoLite_public_key_t storedKey = info->public_key;
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
+    if (storedKey.size == 32 && info->public_key.size != 32) {
+        LOG_INFO("Contact 0x%08x has no key, keep the stored one", contact.node_num);
+        info->public_key = storedKey;
+    }
     if (contact.should_ignore) {
         // Block the contact and drop its rich satellite data, but keep the
         // public key copied above - an ignored peer keeps a usable identity
@@ -3504,16 +3522,18 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
             // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
             // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
-            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
-            // last_heard to now, so that the add_contact node doesn't immediately get evicted.
-            info->last_heard = getTime();
+            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll
+            // stamp the contact as heard now, so that the add_contact node doesn't immediately get evicted.
+            stampContactHeardNow(info);
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            // If the protected cap refuses the favorite, fall back to stamping last_heard so the
+            // If the protected cap refuses the favorite, fall back to a heard-now stamp so the
             // contact still isn't the first eviction victim.
-            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
-                info->last_heard = getTime();
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
+                stampContactHeardNow(info);
+            }
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
@@ -3647,7 +3667,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         return;
     }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
+        LOG_TRACE("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
         // mp.from is unauthenticated, so rate-limit admission once the database is full: otherwise
         // invented node numbers churn it at packet rate and push real neighbours out.
@@ -3666,9 +3686,13 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             return;
         }
 
-        // Gate on has_rx_time, not truthiness - rx_time may hold a millis() placeholder.
+        // Gate on has_rx_time, not truthiness - rx_time may hold an uptime-seconds placeholder.
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
+        else
+            // rx_time is the arrival instant in uptime seconds. It goes to the RAM sidecar, not
+            // last_heard, which only ever holds a real epoch or 0.
+            recordHeardWhileClockUntrusted(getFrom(&mp), mp.rx_time);
 
         // Gate on the packet actually having been received over our own radio, not on rx_snr being
         // truthy, because 0 dB is valid. TRANSPORT_LORA is set only on the real over-the-air RX path
@@ -4084,6 +4108,84 @@ meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
     return meshtastic_Config_DeviceConfig_Role_CLIENT;
 }
 
+void NodeDB::recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptime)
+{
+    // Update in place if the node already has a stamp.
+    for (auto &h : heardAt) {
+        if (h.num == num) {
+            h.heardAtUptimeSecs = heardAtUptime;
+            return;
+        }
+    }
+    // Otherwise take an empty slot, or reuse the oldest stamp.
+    NodeHeardAt *victim = &heardAt[0];
+    for (auto &h : heardAt) {
+        if (h.num == 0) {
+            victim = &h;
+            break;
+        }
+        if (h.heardAtUptimeSecs < victim->heardAtUptimeSecs)
+            victim = &h;
+    }
+    victim->num = num;
+    victim->heardAtUptimeSecs = heardAtUptime;
+}
+
+bool NodeDB::getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const
+{
+    for (const auto &h : heardAt) {
+        if (h.num == num) {
+            stamp = h.heardAtUptimeSecs;
+            return true;
+        }
+    }
+    return false;
+}
+
+NodeDB::EvictionRecency NodeDB::evictionRecency(const meshtastic_NodeInfoLite *n) const
+{
+    uint32_t stamp = 0;
+    const bool heardThisBoot = getHeardAtUptimeSecs(n->num, stamp);
+    return {heardThisBoot ? stamp : n->last_heard, heardThisBoot};
+}
+
+bool NodeDB::evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent)
+{
+    if (candidate.heardThisBoot != incumbent.heardThisBoot)
+        return !candidate.heardThisBoot;
+    return candidate.value < incumbent.value;
+}
+
+void NodeDB::stampContactHeardNow(meshtastic_NodeInfoLite *info)
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch)
+        info->last_heard = nowEpoch;
+    else
+        recordHeardWhileClockUntrusted(info->num, Time::getUptimeSecs());
+}
+
+void NodeDB::backfillHeardAt()
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch == 0) // called before the clock was actually valid - nothing to date against
+        return;
+    const uint32_t nowUptimeSecs = Time::getUptimeSecs();
+    for (auto &h : heardAt) {
+        if (h.num == 0)
+            continue;
+        meshtastic_NodeInfoLite *info = getMeshNode(h.num);
+        if (info) {
+            // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
+            // Never move last_heard backwards: the node may since have been re-heard on a good clock.
+            const uint32_t elapsedSecs = nowUptimeSecs - h.heardAtUptimeSecs;
+            if (elapsedSecs < nowEpoch && nowEpoch - elapsedSecs > info->last_heard)
+                info->last_heard = nowEpoch - elapsedSecs;
+        }
+        h = {}; // evicted or converted either way, the stamp's job is done
+    }
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
@@ -4093,8 +4195,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         if (isFull()) {
             LOG_INFO("Node database full: %i nodes, %u bytes free. Erase oldest", numMeshNodes, memGet.getFreeHeap());
             // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            uint32_t oldestBoring = UINT32_MAX;
+            // Newest-possible sentinel: a zeroed init ranks older than every candidate, so nothing
+            // would ever be selected. Keep it maximal even though the index guards below also cover it.
+            EvictionRecency oldest = {UINT32_MAX, true};
+            EvictionRecency oldestBoring = {UINT32_MAX, true};
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
@@ -4102,14 +4206,19 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
                 const bool isIgnored = nodeInfoLiteIsIgnored(cand);
                 const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
+                // last_heard, except that nodes heard this boot before the clock became trusted
+                // rank by their RAM arrival stamp instead of the 0 in the stored field.
+                const EvictionRecency candRecency = evictionRecency(cand);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavoriteNode && !isIgnored && !isVerified && cand->last_heard < oldest) {
-                    oldest = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && !isVerified &&
+                    (oldestIndex == -1 || evictionRecencyOlder(candRecency, oldest))) {
+                    oldest = candRecency;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 && cand->last_heard < oldestBoring) {
-                    oldestBoring = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 &&
+                    (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
+                    oldestBoring = candRecency;
                     oldestBoringIndex = i;
                 }
             }

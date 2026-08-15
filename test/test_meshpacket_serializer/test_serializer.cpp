@@ -23,6 +23,10 @@ void test_timestamp_present_when_has_rx_time();
 void test_timestamp_zeroed_when_rx_time_absent();
 void test_encrypted_timestamp_zeroed_when_rx_time_absent();
 
+// Required by Unity: PlatformIO's weak defaults do not link on MinGW (PE-COFF weak externals).
+void setUp(void) {}
+void tearDown(void) {}
+
 void setup()
 {
     UNITY_BEGIN();

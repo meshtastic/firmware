@@ -13,6 +13,7 @@
 #include "PowerFSM.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
+#include "gps/GPSLog.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
@@ -113,6 +114,14 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         }
     }
 
+    // Our own packet heard back off the mesh, which the duplicate cache only suppresses best-effort.
+    // Clients can't tell an echo from genuine ingress, so it surfaces as an incoming message. Packets
+    // addressed to us are locally-generated feedback (implicit ACK, NAK, routing error), not an echo.
+    if (isFromUs(mp) && !isToUs(mp)) {
+        LOG_DEBUG("Skip phone echo of our own packet 0x%08x", mp->id);
+        return 0;
+    }
+
     printPacket("Forwarding to phone", mp);
     if (auto *toPhone = packetPool.allocCopy(*mp))
         sendToPhone(toPhone);
@@ -188,14 +197,14 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     return nodenum;
 }
 
-// Back-calculate the real epoch for any queued packet still carrying a millis() rx_time
+// Back-calculate the real epoch for any queued packet still carrying an uptime-seconds rx_time
 // placeholder, now that the clock is trustworthy.
 void MeshService::reconcilePendingRxTimes()
 {
     const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
     if (nowEpoch == 0) // called before the clock was actually valid - nothing to reconcile against
         return;
-    const uint32_t nowMillis = Time::getMillis();
+    const uint32_t nowUptimeSecs = Time::getUptimeSecs();
 
     // Rotate the queue once. TypedQueue is strictly FIFO on both backends, so dequeueing and
     // re-enqueueing every element in turn leaves the delivery order unchanged.
@@ -204,11 +213,13 @@ void MeshService::reconcilePendingRxTimes()
         if (!p) // drained from under us - nothing left to rotate
             break;
         if (!p->has_rx_time) {
-            // Unsigned subtraction is wraparound-safe; rx_time is a 32-bit wire field, so the
-            // placeholder was never wider than 32 bits to begin with.
-            const uint32_t elapsedMs = nowMillis - p->rx_time;
-            p->rx_time = nowEpoch - (elapsedMs / 1000);
-            p->has_rx_time = true;
+            // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
+            // If it somehow exceeds the epoch, leave the packet un-dated rather than pre-1970.
+            const uint32_t elapsedSecs = nowUptimeSecs - p->rx_time;
+            if (elapsedSecs < nowEpoch) {
+                p->rx_time = nowEpoch - elapsedSecs;
+                p->has_rx_time = true;
+            }
         }
         if (!toPhoneQueue.enqueue(p, 0)) { // mirrors sendToPhone()'s degrade-on-failure path
             LOG_CRIT("Requeue to toPhoneQueue failed");
@@ -356,12 +367,9 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 
     lastQueueStatus = *copied;
 
-    bool enqueued = toPhoneQueueStatusQueue.enqueue(copied, 0);
-    if (!enqueued) {
-        LOG_WARN("Failed to enqueue QueueStatus to phone queue; releasing");
+    res = toPhoneQueueStatusQueue.enqueue(copied, 0);
+    if (!res)
         releaseQueueStatusToPool(copied);
-        return ERRNO_UNKNOWN;
-    }
     fromNum++;
 
     return ERRNO_OK;
@@ -502,8 +510,11 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
-        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
+        // ROUTING_APP is the phone's only delivery confirmation, so it displaces the oldest like
+        // text does. Gate the variant: decoded.portnum aliases encrypted.size in the union.
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP || p->decoded.portnum == meshtastic_PortNum_ROUTING_APP)) {
             LOG_WARN("ToPhone queue full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
@@ -616,9 +627,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         pos = gps->p;
     } else {
         // The GPS has lost lock
-#ifdef GPS_DEBUG
-        LOG_DEBUG("onGPSchanged() - lost validLocation");
-#endif
+        LOG_DEBUG_GPS("onGPSchanged() - lost validLocation");
     }
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
@@ -648,7 +657,7 @@ bool MeshService::isToPhoneQueueEmpty()
 
 uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // rx_time may be an uptime-seconds placeholder while has_rx_time is false - don't age it as
     // wall-clock, and don't pass it off as "just now" either.
     if (!mp->has_rx_time)
         return SINCE_UNKNOWN;

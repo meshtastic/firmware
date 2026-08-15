@@ -5,6 +5,8 @@
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "memory/MemAudit.h"
 #include <cstring> // memcpy
@@ -42,6 +44,10 @@ static inline void resetMessagePool()
 // If not enough space remains, wrap around (ring buffer style)
 static inline uint16_t storeTextInPool(const char *src, size_t len)
 {
+    // Pool allocation can fail at boot; getTextFromPool() already maps offset 0 to "" in that case
+    if (!g_messagePool)
+        return 0;
+
     if (len >= MAX_MESSAGE_SIZE)
         len = MAX_MESSAGE_SIZE - 1;
 
@@ -82,7 +88,9 @@ static inline void assignTimestamp(StoredMessage &sm)
         sm.timestamp = nowSecs;
         sm.isBootRelative = false;
     } else {
-        sm.timestamp = millis() / 1000;
+        // Uptime seconds, not millis()/1000: a stamp taken before the 32-bit wrap otherwise reads as
+        // newer than "now" afterwards, and upgradeBootRelativeTimestamps() then declines to heal it.
+        sm.timestamp = Time::getUptimeSecs();
         sm.isBootRelative = true;
     }
 }
@@ -130,18 +138,13 @@ static inline uint32_t autosaveIntervalMs()
     return sec * 1000UL;
 }
 
-static inline bool reachedMs(uint32_t now, uint32_t target)
-{
-    return (int32_t)(now - target) >= 0;
-}
-
 // Mark new messages in RAM that need to be saved later
 static inline void markMessageStoreUnsaved()
 {
     g_messageStoreHasUnsavedChanges = true;
 
     if (g_lastAutoSaveMs == 0) {
-        g_lastAutoSaveMs = millis();
+        g_lastAutoSaveMs = Time::getMillis();
     }
 }
 
@@ -151,14 +154,14 @@ static inline void autosaveTick(MessageStore *store)
     if (!store)
         return;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     if (g_lastAutoSaveMs == 0) {
         g_lastAutoSaveMs = now;
         return;
     }
 
-    if (!reachedMs(now, g_lastAutoSaveMs + autosaveIntervalMs()))
+    if (Throttle::isWithinTimespanMs(g_lastAutoSaveMs, autosaveIntervalMs()))
         return;
 
     // Autosave interval reached, only save if there are unsaved messages.
@@ -336,7 +339,7 @@ void MessageStore::saveToFlash()
 
     // Reset autosave state after any save
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 }
 
 void MessageStore::loadFromFlash()
@@ -375,7 +378,7 @@ void MessageStore::loadFromFlash()
 #endif
     // Loading messages does not trigger an autosave
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 }
 
 #else
@@ -406,7 +409,7 @@ void MessageStore::clearAllMessages()
 
 #if ENABLE_MESSAGE_PERSISTENCE
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 #endif
 }
 
@@ -544,7 +547,7 @@ void MessageStore::upgradeBootRelativeTimestamps()
     if (nowSecs == 0)
         return; // Still no valid RTC
 
-    uint32_t bootNow = millis() / 1000;
+    uint32_t bootNow = Time::getUptimeSecs();
 
     auto fix = [&](std::deque<StoredMessage> &dq) {
         for (auto &m : dq) {

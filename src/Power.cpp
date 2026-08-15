@@ -606,7 +606,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             // get current flow from INA sensor - negative value means power flowing
             // into the battery default assuming  BATTERY+  <--> INA_VIN+ <--> SHUNT
             // RESISTOR <--> INA_VIN- <--> LOAD
-            LOG_DEBUG("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
+            LOG_TRACE("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
 #if defined(INA_CHARGING_DETECTION_INVERT)
             return getINACurrent() > 0;
 #else
@@ -837,12 +837,13 @@ bool Power::setup()
 
 void Power::powerCommandsCheck()
 {
-    if (rebootAtMsec && millis() > rebootAtMsec) {
+    // 0 means "not scheduled" for both, and reads as long expired - test it first.
+    if (rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec)) {
         LOG_INFO("Rebooting");
         reboot();
     }
 
-    if (shutdownAtMsec && millis() > shutdownAtMsec) {
+    if (shutdownAtMsec && Throttle::deadlinePassed(shutdownAtMsec)) {
         shutdownAtMsec = 0;
         shutdown();
     }
@@ -884,9 +885,10 @@ void Power::reboot()
 #elif defined(ARCH_STM32)
     HAL_NVIC_SystemReset();
 #else
-    rebootAtMsec = -1;
-    LOG_WARN("FIXME implement reboot for this platform; some settings "
-             "need restart to apply");
+    // 0 disarms; UINT32_MAX would read as long expired and reboot-loop.
+    rebootAtMsec = 0;
+    LOG_WARN("FIXME implement reboot for this platform. Note that some settings "
+             "require a restart to be applied");
 #endif
 }
 
@@ -1117,6 +1119,7 @@ int32_t Power::runOnce()
 {
     readPowerStatus();
     logHeapUsage();
+    lipoChargerRetry();
 
 #ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from
@@ -1733,13 +1736,32 @@ bool Power::cw2015Init()
 
 #if defined(HAS_PPM) && HAS_PPM
 
+// The gauge is soldered on, so a failed init means wedged rather than absent - retry from
+// the power thread before writing it off.
+#define BQ27220_INIT_ATTEMPTS 3
+#define BQ27220_RETRY_INTERVAL_MS (60 * 1000)
+
 /**
  * Adapter class for BQ25896/BQ27220 Lipo battery charger.
+ *
+ * The gauge only adds time-to-full/empty, so its failure must not take the charger down.
  */
 class LipoCharger : public HasBatteryLevel
 {
   private:
     BQ27220 *bq = nullptr;
+    uint8_t gaugeAttemptsLeft = BQ27220_INIT_ATTEMPTS;
+    uint32_t lastGaugeAttemptMs = 0;
+
+    // An aborted transfer leaves the i2c_master driver holding a stale transaction, which
+    // the next transfer trips over. Deleting the bus frees it along with the interrupt.
+    void recoverI2CBus()
+    {
+#ifdef ARCH_ESP32
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+#endif
+    }
 
   public:
     /**
@@ -1786,24 +1808,46 @@ class LipoCharger : public HasBatteryLevel
                 return false;
             }
         }
-        if (bq == nullptr) {
-            bq = new BQ27220;
-            bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
+        gaugeRunOnce();
+        // Ready on the charger alone, so Power stays enabled and can retry the gauge later.
+        return true;
+    }
 
-            bool result = bq->init();
-            if (result) {
-                LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
-                LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
-                LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
-                return true;
-            } else {
-                LOG_WARN("BQ27220 init failed");
-                delete bq;
-                bq = nullptr;
-                return false;
-            }
+    /// Bring up the BQ27220 fuel gauge, unless it is already up or out of attempts
+    void gaugeRunOnce()
+    {
+        if (bq != nullptr || gaugeAttemptsLeft == 0)
+            return;
+        if (gaugeAttemptsLeft < BQ27220_INIT_ATTEMPTS &&
+            Throttle::isWithinTimespanMs(lastGaugeAttemptMs, BQ27220_RETRY_INTERVAL_MS))
+            return;
+
+        lastGaugeAttemptMs = millis();
+        gaugeAttemptsLeft--;
+
+        // Cheap probe first: a silent gauge costs one transaction instead of the
+        // multi-second unseal/reset/provision sequence inside init().
+        Wire.beginTransmission(BQ27220_I2C_ADDRESS);
+        if (Wire.endTransmission() != 0) {
+            LOG_WARN("BQ27220 not responding at 0x%x", BQ27220_I2C_ADDRESS);
+            return;
         }
-        return false;
+
+        bq = new BQ27220;
+        bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
+
+        if (bq->init()) {
+            LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
+            LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
+            LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
+            return;
+        }
+
+        delete bq;
+        bq = nullptr;
+        // init() bails out mid-sequence, so hand the next bus user a sane driver state.
+        recoverI2CBus();
+        LOG_WARN("BQ27220 init failed (%d retries left), use BQ25896 for battery state", (int)gaugeAttemptsLeft);
     }
 
     /**
@@ -1819,7 +1863,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); }
+    virtual uint16_t getBattVoltage() override { return bq ? bq->getVoltage() : PPM->getBattVoltage(); }
 
     /**
      * return true if there is a battery installed in this unit
@@ -1837,11 +1881,13 @@ class LipoCharger : public HasBatteryLevel
     virtual bool isCharging() override
     {
         bool isCharging = PPM->isCharging();
-        if (isCharging) {
-            LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
-        } else {
-            if (!PPM->isVbusIn()) {
-                LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
+        if (bq) {
+            if (isCharging) {
+                LOG_TRACE("BQ27220 time to full charge: %d min", bq->getTimeToFull());
+            } else {
+                if (!PPM->isVbusIn()) {
+                    LOG_TRACE("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
+                }
             }
         }
         return isCharging;
@@ -1863,6 +1909,12 @@ bool Power::lipoChargerInit()
     return true;
 }
 
+/// Retry a fuel gauge that did not come up during setup
+void Power::lipoChargerRetry()
+{
+    lipoCharger.gaugeRunOnce();
+}
+
 #else
 /**
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
@@ -1871,6 +1923,8 @@ bool Power::lipoChargerInit()
 {
     return false;
 }
+
+void Power::lipoChargerRetry() {}
 #endif
 
 #ifdef HELTEC_MESH_SOLAR

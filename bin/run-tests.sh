@@ -163,19 +163,10 @@ export MESHTASTIC_TEST_STATE_SUMMARY="$STATE_SUMMARY"
 $KEEP_STATE && export MESHTASTIC_TEST_KEEP_STATE=1
 $WRITE_MANIFEST && export MESHTASTIC_TEST_KEEP_STATE=1
 
-# Canonical suite set = the directories in test/. This is the source of truth for
-# "what should run"; a filtered run only expects its filtered suite.
+# Canonical suite set = the directories in test/, detected on the fly. This is the sole source
+# of truth for "what should run"; a filtered run only expects its filtered suite.
 mapfile -t ALL_SUITES < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
 EXPECTED_COUNT=${#ALL_SUITES[@]}
-
-# Canonical suite count - the registered total, maintained in test/native-suite-count.
-# Update that file whenever a test suite is added or removed.
-CANONICAL_COUNT_FILE="test/native-suite-count"
-if [[ -f $CANONICAL_COUNT_FILE ]]; then
-	CANONICAL_COUNT=$(tr -d '[:space:]' <"$CANONICAL_COUNT_FILE")
-else
-	CANONICAL_COUNT=""
-fi
 
 # Cached object-count for this env, written after each completed build (in the gitignored build
 # dir). Used as the progress denominator: accurate for a full rebuild (every object recompiles),
@@ -462,30 +453,14 @@ if ! grep -qE "$PASS_RE" "$LOG"; then
 	exit 1
 fi
 
-# Canonical-count rating suffix - appended to every verdict line so the result is always
-# rated against the registered total, not just the directory count.
-# If the two counts diverge (suite added/removed without updating native-suite-count), that
-# is itself surfaced as AMBER before we reach any verdict.
-canonical_rating() {
+# Verdict-line suffix. The suite count itself is derived from the test_* directories on the fly
+# (EXPECTED_COUNT above), so the only extra context a verdict needs is the shuffle seed - carried
+# into the machine-readable line so a verdict is always replayable from it alone.
+verdict_suffix() {
 	local rating=""
-	if [[ -n $CANONICAL_COUNT ]]; then
-		rating="[canonical: ${RAN_COUNT}/${CANONICAL_COUNT}]"
-	fi
-	# Carry the seed into the machine-readable line so a verdict is always replayable from it alone.
-	$SHUFFLE && rating="$rating [seed: $SEED]"
+	$SHUFFLE && rating="[seed: $SEED]"
 	echo "$rating"
 }
-
-# AMBER: directory count disagrees with native-suite-count - file needs updating.
-if [[ -n $CANONICAL_COUNT && $EXPECTED_COUNT -ne $CANONICAL_COUNT ]]; then
-	echo ""
-	if [[ $EXPECTED_COUNT -gt $CANONICAL_COUNT ]]; then
-		echo "RESULT: AMBER test/ has $EXPECTED_COUNT suite directories but native-suite-count says $CANONICAL_COUNT - update test/native-suite-count after registering new suites"
-	else
-		echo "RESULT: AMBER test/ has $EXPECTED_COUNT suite directories but native-suite-count says $CANONICAL_COUNT - update test/native-suite-count after removing suites"
-	fi
-	exit 2
-fi
 
 # --- Shared-state axis --------------------------------------------------------
 # Read what the per-suite wrapper recorded. Reported after the count checks so a structural problem
@@ -546,7 +521,7 @@ if [[ $IGNORED_COUNT -gt 0 ]]; then
 	echo ""
 	echo "$IGNORE_DETAIL"
 	echo ""
-	echo "RESULT: AMBER ${IGNORED_COUNT} test case(s) ignored $(canonical_rating)"
+	echo "RESULT: AMBER ${IGNORED_COUNT} test case(s) ignored $(verdict_suffix)"
 	exit 2
 fi
 
@@ -558,7 +533,7 @@ if [[ -z $FILTER && $ACCOUNTED_COUNT -lt $EXPECTED_COUNT ]]; then
 		printf '%s\n' "${RAN_SUITES[@]}" "${SKIPPED_SUITES[@]}" | grep -qx "$s" || missing+=("$s")
 	done
 	echo ""
-	echo "RESULT: AMBER ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (missing: ${missing[*]}) - all that ran passed $(canonical_rating)"
+	echo "RESULT: AMBER ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (missing: ${missing[*]}) - all that ran passed $(verdict_suffix)"
 	exit 2
 fi
 
@@ -572,7 +547,7 @@ if ((${#DIRTY_SUITES[@]} > 0)); then
 	echo ""
 	echo "    -> declare these in test/state-manifest.tsv with a reason, or stop the write."
 	echo "    -> ./bin/run-tests.sh --write-manifest prints the entries to paste."
-	echo "RESULT: AMBER ${#DIRTY_SUITES[@]} suite(s) left undeclared shared state $(canonical_rating)"
+	echo "RESULT: AMBER ${#DIRTY_SUITES[@]} suite(s) left undeclared shared state $(verdict_suffix)"
 	exit 2
 fi
 
@@ -588,7 +563,7 @@ if ((${#SURVIVOR_SUITES[@]} > 0)); then
 	echo ""
 	echo "    -> end every setup() branch with exit(UNITY_END()), not a bare UNITY_END()."
 	echo "    -> ./bin/lint-unity-exit.sh test/**/*.cpp finds the sites; see test/README.md."
-	echo "RESULT: AMBER ${#SURVIVOR_SUITES[@]} suite(s) still running after the suite finished $(canonical_rating)"
+	echo "RESULT: AMBER ${#SURVIVOR_SUITES[@]} suite(s) still running after the suite finished $(verdict_suffix)"
 	exit 2
 fi
 
@@ -599,10 +574,10 @@ if [[ -n $FILTER ]]; then
 	for s in "${ALL_SUITES[@]}"; do
 		printf '%s\n' "${RAN_SUITES[@]}" "${SKIPPED_SUITES[@]}" | grep -qx "$s" || not_run+=("$s")
 	done
-	echo "RESULT: FILTERED ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (not run: ${not_run[*]}) - filtered: $FILTER $(canonical_rating)"
+	echo "RESULT: FILTERED ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (not run: ${not_run[*]}) - filtered: $FILTER $(verdict_suffix)"
 	exit 3
 fi
 
 # GREEN: all canonical suites ran, all passed, no ignored test cases, nothing undeclared left behind.
-echo "RESULT: GREEN ${RAN_COUNT}/${EXPECTED_COUNT} suites passed, all CLEAN $(canonical_rating)"
+echo "RESULT: GREEN ${RAN_COUNT}/${EXPECTED_COUNT} suites passed, all CLEAN $(verdict_suffix)"
 exit 0

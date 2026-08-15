@@ -69,6 +69,52 @@ Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
+static ChannelIndex getEffectiveChannelIndex(const meshtastic_MeshPacket *p)
+{
+    ChannelIndex chIndex = p->channel;
+    if (nodeDB && isFromUs(p) && !chIndex && !p->pki_encrypted && !isBroadcast(p->to)) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        if (node)
+            chIndex = node->channel;
+    }
+    return chIndex;
+}
+
+bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (p->pki_encrypted || willUsePki(p)) {
+        return false;
+    }
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        return isCoordinatePortnum(p->decoded.portnum) && channels.isEventChannel(getEffectiveChannelIndex(p));
+    }
+    return false;
+#else
+    (void)p;
+    return false;
+#endif
+}
+
+bool willUsePki(const meshtastic_MeshPacket *p)
+{
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag || !isFromUs(p))
+        return false;
+    bool haveDestKey = false;
+    if (p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP) {
+        meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+        haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
+        if (!haveDestKey && p->pki_encrypted)
+            haveDestKey = crypto->getPendingPublicKey(p->to, destKey);
+    }
+    return wouldEncryptWithPKC(p, getEffectiveChannelIndex(p), haveDestKey);
+#else
+    (void)p;
+    return false;
+#endif
+}
+
 struct RoutingAuthCache {
     bool valid = false;
     // Deliberately NOT initialized in-class as this eats flash space.
@@ -141,7 +187,6 @@ void resetRoutingAuthEvaluationCount()
     }
 }
 #endif
-
 /**
  * Constructor
  *
@@ -266,14 +311,14 @@ PacketId generatePacketId()
 
     rollingPacketId &= ID_COUNTER_MASK;                                    // Mask out the top 22 bits
     PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
-    LOG_DEBUG("Partially randomized packet id %u", id);
+    LOG_TRACE("Partially randomized packet id 0x%08x", id);
     return id;
 }
 
 RxTimeStamp computeRxTimeStamp()
 {
     const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-    return {haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis(), haveTime};
+    return {haveTime ? getValidTime(RTCQualityFromNet) : Time::getUptimeSecs(), haveTime};
 }
 
 void stampRxTime(meshtastic_MeshPacket *p)
@@ -364,10 +409,10 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         // don't override if a channel was requested and no need to set it when PKI is enforced
         if (!p->channel && !p->pki_encrypted && !isBroadcast(p->to)) {
-            meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->to);
-            if (node) {
-                p->channel = node->channel;
-                LOG_DEBUG("localSend to channel %d", p->channel);
+            ChannelIndex chIndex = getEffectiveChannelIndex(p);
+            if (chIndex) {
+                p->channel = chIndex;
+                LOG_TRACE("localSend to channel %d", p->channel);
             }
         }
 
@@ -478,6 +523,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     fixPriority(p); // Before encryption, fix the priority if it's unset
     // Position precision is an originator-only privacy policy. Relays keep
     // p->from as the original sender, so do not rewrite their POSITION_APP payload.
+    if (isBlockedEventCoordinatePacket(p)) {
+        LOG_DEBUG("Suppress coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
     if (isFromUs(p)) {
         if (!applyPositionPrecisionForChannel(*p, p->channel)) {
             LOG_ERROR("Drop malformed position packet before send");
@@ -662,7 +713,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
                 if (!node)
                     return false;
                 nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
-                LOG_DEBUG("Verified XEdDSA signature from 0x%08x", p->from);
+                LOG_TRACE("Verified XEdDSA signature from 0x%08x", p->from);
             } else {
                 LOG_WARN("XEdDSA signature verify failed from 0x%08x, drop", p->from);
                 return false;
@@ -845,7 +896,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         licensedPkiCandidate = true;
     } else if (pkiCandidate) {
         pkiAttempted = true;
-        LOG_DEBUG("Attempt PKI decryption");
+        LOG_TRACE("Attempt PKI decryption");
         // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
         // packet: copyPublicKeyForDecrypt() can fall through to a linear scan of TrafficManagement's large
         // NodeInfo cache. It returns authoritative keys (hot/warm), or a cold-tier cache key only when it is
@@ -970,6 +1021,11 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (!checkXeddsaReceivePolicy(p))
             return DecodeState::DECODE_POLICY_REJECT;
 #endif
+
+        if (isBlockedEventCoordinatePacket(p)) {
+            LOG_DEBUG("Decoded coordinate packet on event channel; suppress payload logging");
+            return DecodeState::DECODE_SUCCESS;
+        }
 
         if (p->decoded.has_bitfield)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
@@ -1102,7 +1158,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
-                    LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
+                    LOG_TRACE("XEdDSA signed packet 0x%08x", p->id);
                 }
             }
 #endif
@@ -1451,6 +1507,16 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+        // Discard coordinate-bearing packets that arrive on the event ("everyone")
+        // channel: don't process, store in NodeDB, or rebroadcast them.
+        if (!skipHandle && isBlockedEventCoordinatePacket(p)) {
+            LOG_DEBUG("Drop coordinate packet on event (everyone) channel");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
@@ -1560,6 +1626,12 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
     if (authVerdict == RoutingAuthVerdict::OPAQUE_RELAY_ONLY) {
+        // A packet we originated but cannot decrypt (a PKI DM we sent, overheard being rebroadcast)
+        // is opaque to us and would otherwise skip shouldFilterReceived entirely, so the implicit
+        // ACK that marks a DM "Delivered to mesh" never fires. The ACK is header-only (from/id), so
+        // generate it here from the still-encrypted packet before opaque relay.
+        if (isFromUs(p))
+            perhapsGenerateImplicitAckForOwnOverheard(p);
         relayOpaquePacket(p);
         packetPool.release(p);
         return;

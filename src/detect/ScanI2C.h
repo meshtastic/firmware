@@ -96,16 +96,18 @@ class ScanI2C
         CST3530,
         BMI270,
         SEN5X,
+        SEN6X,
         SFA30,
         CW2015,
         SCD30,
-        ADS1115,
+        ADS1X15,
+        ADS1X15_ALT,
         IIS2MDCTR,
         ISM330DHCX,
         SPA06,
         DS248X,
         HM330X
-   } DeviceType;
+    } DeviceType;
 
     // typedef uint8_t DeviceAddress;
     typedef enum I2CPort {

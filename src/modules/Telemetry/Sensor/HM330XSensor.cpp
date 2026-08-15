@@ -17,14 +17,11 @@ bool HM330XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef HM330X_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(HM330X_I2C_CLOCK_SPEED);
 #endif /* HM330X_I2C_CLOCK_SPEED */
 
     if (hm330x.init(_bus) != HM330XErrorCode::NO_ERROR) {
 #ifdef HM330X_I2C_CLOCK_SPEED
-        LOG_INFO("%s: restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* HM330X_I2C_CLOCK_SPEED */
         LOG_WARN("%s error in sensor init", sensorName);
@@ -32,7 +29,6 @@ bool HM330XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     }
 
 #ifdef HM330X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* HM330X_I2C_CLOCK_SPEED */
 
@@ -46,7 +42,7 @@ bool HM330XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 uint32_t HM330XSensor::wakeUp()
 {
     state = State::ACTIVE;
-    measureStarted = getTime();
+    measureStarted = millis();
     return HM330X_WARMUP_MS;
 }
 
@@ -68,9 +64,7 @@ bool HM330XSensor::isActive()
 
 int32_t HM330XSensor::pendingForReadyMs()
 {
-    uint32_t now;
-    now = getTime();
-    uint32_t sincePMMeasureStarted = (now - measureStarted) * 1000;
+    uint32_t sincePMMeasureStarted = millis() - measureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePMMeasureStarted);
 
     if (sincePMMeasureStarted < HM330X_WARMUP_MS) {
@@ -83,21 +77,18 @@ int32_t HM330XSensor::pendingForReadyMs()
 bool HM330XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
 #ifdef HM330X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(HM330X_I2C_CLOCK_SPEED);
 #endif /* HM330X_I2C_CLOCK_SPEED */
 
     if (hm330x.read_sensor_value(buffer, 29)) {
         LOG_WARN("%s: read result failed", sensorName);
 #ifdef HM330X_I2C_CLOCK_SPEED
-        LOG_INFO("%s: restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* HM330X_I2C_CLOCK_SPEED */
         return false;
     }
 
 #ifdef HM330X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* HM330X_I2C_CLOCK_SPEED */
 

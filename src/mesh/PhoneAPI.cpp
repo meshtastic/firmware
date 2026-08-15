@@ -486,7 +486,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
 #if !MESHTASTIC_EXCLUDE_MQTT
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
-            LOG_DEBUG("Got MqttClientProxy message");
+            LOG_TRACE("Got MqttClientProxy message");
             if (state != STATE_SEND_PACKETS) {
                 LOG_WARN("Ignore MqttClientProxy msg during config handshake");
                 break;
@@ -514,7 +514,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                     nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);
                 }
             } else {
-                LOG_DEBUG("Got client heartbeat");
+                LOG_TRACE("Got client heartbeat");
                 heartbeatReceived = true;
             }
             break;
@@ -558,7 +558,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.queueStatus = router->getQueueStatus();
         heartbeatReceived = false;
         size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
-        LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
+        LOG_TRACE("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", (unsigned)numbytes);
         return numbytes;
     }
 
@@ -571,7 +571,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // Advance states as needed
     switch (state) {
     case STATE_SEND_NOTHING:
-        LOG_DEBUG("FromRadio=STATE_SEND_NOTHING");
+        LOG_TRACE("FromRadio=STATE_SEND_NOTHING");
         break;
     case STATE_SEND_MY_INFO:
         LOG_DEBUG("FromRadio=STATE_SEND_MY_INFO");
@@ -579,6 +579,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+        // strncpy does not terminate when the source fills the buffer; a 40+ char
+        // APP_ENV would make nanopb reject the MyInfo encode ("unterminated string").
+        myNodeInfo.pio_env[sizeof(myNodeInfo.pio_env) - 1] = '\0';
         myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
         fromRadioScratch.my_info = myNodeInfo;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
@@ -615,6 +618,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             auto info = TypeConversions::ConvertToNodeInfo(us);
             info.has_hops_away = false;
             info.is_favorite = true;
+            // NodeInfoLite dropped macaddr, so ConvertToUser() zero-fills it.
+            if (info.has_user)
+                memcpy(info.user.macaddr, owner.macaddr, sizeof(info.user.macaddr));
             {
                 concurrency::LockGuard guard(&nodeInfoMutex);
                 nodeInfoForPhone = info;
@@ -969,6 +975,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         }
 
         if (infoToSend.num != 0) {
+            // A record prefetched before the clock became trusted carries last_heard == 0 even
+            // once the store is backfilled, so re-read it at send time: handshake ordering
+            // (time-set vs node-list download) must not decide what the phone sees.
+            if (infoToSend.last_heard == 0 && infoToSend.num != nodeDB->getNodeNum()) {
+                const meshtastic_NodeInfoLite *fresh = nodeDB->getMeshNode(infoToSend.num);
+                if (fresh)
+                    infoToSend.last_heard = fresh->last_heard;
+            }
             // Just in case we stored a different user.id in the past, but should never happen going forward
             sprintf(infoToSend.user.id, "!%08x", infoToSend.num);
 
@@ -999,7 +1013,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_fileInfo_tag;
             fromRadioScratch.fileInfo = filesManifest.at(config_state);
-            LOG_DEBUG("File: %s (%d) bytes", fromRadioScratch.fileInfo.file_name, fromRadioScratch.fileInfo.size_bytes);
+            LOG_TRACE("File: %s (%d) bytes", fromRadioScratch.fileInfo.file_name, fromRadioScratch.fileInfo.size_bytes);
             config_state++;
         }
         break;
@@ -1012,7 +1026,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_PACKETS:
         pauseBluetoothLogging = false;
         // Do we have a message from the mesh or packet from the local device?
-        LOG_DEBUG("FromRadio=STATE_SEND_PACKETS");
+        LOG_TRACE("FromRadio=STATE_SEND_PACKETS");
         if (queueStatusPacketForPhone) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
@@ -1097,7 +1111,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         return numbytes;
     }
 
-    LOG_DEBUG("No FromRadio packet available");
+    LOG_TRACE("No FromRadio packet available");
     return 0;
 }
 
@@ -1201,7 +1215,7 @@ void PhoneAPI::prefetchNodeInfos()
             nodeInfoQueue.push_back(info);
             // Log progress here (at fetch time) so readIndex is accurate and each value logs only once.
             if (readIndex == 2 || readIndex % 20 == 0) {
-                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
+                LOG_TRACE("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
             }
             added = true;
         }
@@ -1811,6 +1825,16 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         }
     }
 #endif
+
+    // Reject before recording duplicate or per-port cooldown state, so a blocked
+    // attempt cannot throttle a valid private-channel position retry.
+    if (isBlockedEventCoordinatePacket(&p)) {
+        LOG_DEBUG("Suppress phone coordinate send on event (everyone) channel");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Location sharing is disabled on this channel");
+        return false;
+    }
 
 #if defined(ARCH_PORTDUINO)
     // For use with the simulator, we should not ignore duplicate packets from the phone

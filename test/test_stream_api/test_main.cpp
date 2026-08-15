@@ -147,6 +147,26 @@ class PhoneAPITestShim : public PhoneAPI
     bool checkIsConnected() override { return true; }
 };
 
+/// Exposes the hasPendingOutput() inputs used by idle-sleep gating.
+class PendingOutputStreamAPI : public StreamAPI
+{
+  public:
+    /// Construct the shim over a scripted stream.
+    explicit PendingOutputStreamAPI(Stream *stream) : StreamAPI(stream) {}
+
+    /// Keep connection-timeout handling inactive during tests.
+    bool checkIsConnected() override { return true; }
+
+    /// Set the transport-writability gate normally controlled by first client contact.
+    void setCanWrite(bool value) { canWrite = value; }
+
+    bool retainedFrame = false;
+
+  protected:
+    /// Report the scripted retained-frame state.
+    bool hasRetainedFrame() override { return retainedFrame; }
+};
+
 /// Exposes framed-log hooks and records best-effort writes.
 class LogHookStreamAPI : public StreamAPI
 {
@@ -526,19 +546,19 @@ static void test_want_config_includes_status_message_module_config(void)
 }
 
 /// Queue a packet as Router::dispatchReceived would have, before any time source existed.
-static void queuePendingTimePlaceholderPacket(NodeNum from, uint32_t placeholderMillis)
+static void queuePendingTimePlaceholderPacket(NodeNum from, uint32_t placeholderUptimeSecs)
 {
     meshtastic_MeshPacket pending = meshtastic_MeshPacket_init_zero;
     pending.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     pending.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     pending.from = from;
     pending.to = NODENUM_BROADCAST;
-    pending.rx_time = placeholderMillis;
+    pending.rx_time = placeholderUptimeSecs; // computeRxTimeStamp() stamps Time::getUptimeSecs()
     pending.has_rx_time = false;
     service->sendToPhone(packetPool.allocCopy(pending));
 }
 
-static void startHandshake(PhoneAPITestShim &api)
+static void startHandshake(PhoneAPI &api)
 {
     meshtastic_ToRadio request = meshtastic_ToRadio_init_zero;
     request.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
@@ -566,6 +586,58 @@ static bool drainHandshakeForPacketFrom(PhoneAPITestShim &api, NodeNum from, mes
     return false;
 }
 
+// Scratch NodeDB for the config-dump stream; restored by tearDown() rather than RAII
+// because a failed TEST_ASSERT longjmps out of the test without running destructors.
+static NodeDB *scratchNodeDB = nullptr;
+static NodeDB *savedNodeDB = nullptr;
+
+/// Install a scratch NodeDB; tearDown() restores the previous one after any test outcome.
+static void installScratchNodeDB()
+{
+    savedNodeDB = nodeDB;
+    scratchNodeDB = new NodeDB();
+    nodeDB = scratchNodeDB;
+}
+
+// SerialConsole::runOnce gates its INT32_MAX idle sleep on hasPendingOutput(): pending while
+// output is queued or retained (#11164 bounded drain), clear when drained or pre-contact.
+static void test_stream_api_pending_output_tracks_queue_and_retained_frame(void)
+{
+    ScopedMeshService scopedService;
+    installScratchNodeDB();
+    ScriptedStream stream;
+    PendingOutputStreamAPI api(&stream);
+
+    // Nothing queued and no client yet: an idle console must be allowed to sleep.
+    TEST_ASSERT_FALSE(api.hasPendingOutput());
+
+    // A client that has not yet spoken (canWrite false) must not force polling,
+    // even with a full config dump queued behind the gate.
+    startHandshake(api);
+    api.setCanWrite(false);
+    TEST_ASSERT_FALSE(api.hasPendingOutput());
+
+    // Once writable, the queued dump is pending output until fully drained.
+    api.setCanWrite(true);
+    TEST_ASSERT_TRUE(api.hasPendingOutput());
+    unsigned drained = 0;
+    for (unsigned i = 0; i < 512 && api.hasPendingOutput(); ++i) {
+        uint8_t responseBytes[meshtastic_FromRadio_size];
+        if (api.getFromRadio(responseBytes) != 0)
+            drained++;
+    }
+    TEST_ASSERT_GREATER_THAN_UINT(0, drained);
+    TEST_ASSERT_FALSE_MESSAGE(api.hasPendingOutput(), "pending output must clear once the dump is drained");
+
+    // A transport-retained partial frame alone keeps the drain alive.
+    api.retainedFrame = true;
+    TEST_ASSERT_TRUE(api.hasPendingOutput());
+    api.retainedFrame = false;
+    TEST_ASSERT_FALSE(api.hasPendingOutput());
+
+    api.close();
+}
+
 /// Swaps in a scratch NodeDB and the injected clock, restoring both plus the RTC on destruction.
 /// Unity's TEST_ASSERT longjmps out on failure, so cleanup must not live at the end of the test.
 class ScopedTimeFixture
@@ -574,6 +646,7 @@ class ScopedTimeFixture
     ScopedTimeFixture(uint32_t startMillis) : previous(nodeDB)
     {
         resetRTCStateForTests();
+        Time::resetMonotonicForTests(); // uptime-seconds placeholders assume no carried wrap
         nodeDB = &instance;
         Time::setTestMillis(startMillis);
     }
@@ -597,7 +670,7 @@ static void test_time_given_at_handshake_start_reconciles_queued_packet(void)
     ScopedTimeFixture timeFixture(5000);
 
     const NodeNum sender = 0x12345678;
-    queuePendingTimePlaceholderPacket(sender, 2000); // "received" 3s before the test's current millis()
+    queuePendingTimePlaceholderPacket(sender, 2); // "received" at uptime 2s, 3s before the fixture's 5000ms now
 
     PhoneAPITestShim api;
     startHandshake(api);
@@ -624,7 +697,7 @@ static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packe
     ScopedTimeFixture timeFixture(5000);
 
     const NodeNum sender = 0x12345678;
-    queuePendingTimePlaceholderPacket(sender, 2000);
+    queuePendingTimePlaceholderPacket(sender, 2);
 
     PhoneAPITestShim api;
     startHandshake(api);
@@ -650,10 +723,79 @@ static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packe
     api.close();
 }
 
+// The NodeDB half of the same transition: a node heard while the clock was untrusted gets no
+// last_heard at all (the arrival instant waits in the RAM sidecar as uptime seconds), and the
+// clock-valid hook backfills it to the real epoch of the sighting - so the phone reads
+// "last heard: unknown" only until time arrives, never a boot-relative value.
+static void test_node_heard_before_time_gets_last_heard_backfilled(void)
+{
+    ScopedMeshService scopedService;
+    ScopedTimeFixture timeFixture(5000);
+
+    const NodeNum sender = 0x22334455;
+    meshtastic_MeshPacket heard = meshtastic_MeshPacket_init_zero;
+    heard.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    heard.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    heard.from = sender;
+    heard.to = NODENUM_BROADCAST;
+    heard.rx_time = 2; // uptime-seconds placeholder: "arrived at uptime 2s"
+    heard.has_rx_time = false;
+    nodeDB->updateFrom(heard);
+
+    const meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(sender);
+    TEST_ASSERT_NOT_NULL(info);
+    TEST_ASSERT_EQUAL_UINT32(0u, info->last_heard); // absent, never a boot-relative stamp
+
+    struct timeval networkTime;
+    networkTime.tv_sec = time(NULL) + SEC_PER_DAY;
+    networkTime.tv_usec = 0;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &networkTime));
+
+    // Heard at uptime 2s, clock arrived at uptime 5s: the sighting dates to nowEpoch - 3.
+    TEST_ASSERT_UINT32_WITHIN(2, (uint32_t)networkTime.tv_sec - 3, info->last_heard);
+}
+
+// Uptime zero is a valid arrival instant during the first second of boot. It must not be confused
+// with an absent sidecar record when network time arrives.
+static void test_node_heard_during_first_uptime_second_gets_last_heard_backfilled(void)
+{
+    ScopedMeshService scopedService;
+    ScopedTimeFixture timeFixture(500);
+
+    const NodeNum sender = 0x33445566;
+    TEST_ASSERT_NOT_NULL(nodeDB->getOrCreateMeshNode(sender));
+    meshtastic_MeshPacket heard = meshtastic_MeshPacket_init_zero;
+    heard.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    heard.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    heard.from = sender;
+    heard.to = NODENUM_BROADCAST;
+    heard.rx_time = 0; // received during uptime second zero
+    heard.has_rx_time = false;
+    nodeDB->updateFrom(heard);
+
+    const meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(sender);
+    TEST_ASSERT_NOT_NULL(info);
+    TEST_ASSERT_EQUAL_UINT32(0u, info->last_heard);
+
+    struct timeval networkTime;
+    networkTime.tv_sec = time(NULL) + SEC_PER_DAY;
+    networkTime.tv_usec = 0;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &networkTime));
+
+    TEST_ASSERT_UINT32_WITHIN(1, (uint32_t)networkTime.tv_sec, info->last_heard);
+}
+
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
-/// Unity per-test teardown; fixtures clean themselves up.
-void tearDown(void) {}
+/// Unity per-test teardown; restores state that a failed assert's longjmp would leak.
+void tearDown(void)
+{
+    if (scratchNodeDB) {
+        nodeDB = savedNodeDB;
+        delete scratchNodeDB;
+        scratchNodeDB = nullptr;
+    }
+}
 
 /// Initialize the native environment and run the stream regression suite.
 void setup()
@@ -672,8 +814,11 @@ void setup()
     RUN_TEST(test_lockdown_admin_gate_ignores_wire_from);
     RUN_TEST(test_lockdown_admin_gate_rejects_undecodable_admin);
     RUN_TEST(test_want_config_includes_status_message_module_config);
+    RUN_TEST(test_stream_api_pending_output_tracks_queue_and_retained_frame);
     RUN_TEST(test_time_given_at_handshake_start_reconciles_queued_packet);
     RUN_TEST(test_time_given_at_handshake_end_does_not_rewrite_already_sent_packet);
+    RUN_TEST(test_node_heard_before_time_gets_last_heard_backfilled);
+    RUN_TEST(test_node_heard_during_first_uptime_second_gets_last_heard_backfilled);
     // usingProtobufs intentionally has no reset path, so this must run last.
     RUN_TEST(test_serial_console_suppresses_raw_output_in_protobuf_mode);
     exit(UNITY_END());
