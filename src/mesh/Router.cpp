@@ -1443,11 +1443,10 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             printPacket("handleReceived(REMOTE)", p);
 
 #if MESHTASTIC_PREHOP_DROP
-        // Pre-hop firmware drop, post-decode half: the bitfield that proves the origin populated hop_start is
-        // encrypted under the channel key, so it can only be evaluated now that the packet is decoded. A packet
-        // whose hop_start is still missing/unknown comes from pre-hop firmware - keep it out of module
-        // processing, admin handling, phone delivery, MQTT and rebroadcast. Local-origin packets are exempt.
-        if (!isFromUs(p) && classifyHopStart(*p) != HopStartStatus::VALID) {
+        // Pre-hop firmware drop, post-decode half: a packet whose hop_start is still missing/unknown comes
+        // from pre-hop firmware - keep it out of module processing, admin handling, phone delivery, MQTT
+        // and rebroadcast.
+        if (shouldSkipHandleForPostDecodeHop(*p)) {
             logHopStartDrop(*p, "post-decode pre-hop drop");
             cancelSending(p->from, p->id);
             skipHandle = true;
