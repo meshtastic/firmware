@@ -171,7 +171,7 @@ void test_releaseNeedsSustainedQuiet()
     TEST_ASSERT_EQUAL_UINT8(0, mod->getStep());
 }
 
-void test_populationInsideHysteresisBandHolds()
+void test_populationInsideTheHysteresisBandHolds()
 {
     mod->setStep(1); // entry 200, release below 150: 175 is inside the band
     for (int i = 0; i < 20; i++)
@@ -420,7 +420,7 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_populationWithoutPressureDoesNotDescend);
     RUN_TEST(test_capsFollowTheStep);
     RUN_TEST(test_releaseNeedsSustainedQuiet);
-    RUN_TEST(test_populationInsideHysteresisBandHolds);
+    RUN_TEST(test_populationInsideTheHysteresisBandHolds);
     RUN_TEST(test_quietRunIsResetByABusyEvaluation);
     RUN_TEST(test_highPopulationWithoutPressureVoidsTheQuietRun);
     RUN_TEST(test_ratchetIsSymmetricAcrossAFullCycle);
