@@ -196,6 +196,25 @@ void test_quietRunIsResetByABusyEvaluation()
     TEST_ASSERT_EQUAL_UINT8(0, mod->getStep());
 }
 
+// A population warranting a deeper step voids the release run even with no pressure signal -
+// otherwise quiet hours from either side of a busy spell add up to an undeserved release.
+void test_highPopulationWithoutPressureVoidsTheQuietRun()
+{
+    mod->setStep(1); // entry 200, release below 150
+    for (uint8_t i = 0; i < NodeDBScalingModule::QUIET_HOURS_PER_STEP - 1; i++)
+        mod->evaluate(100, false);
+
+    mod->evaluate(500, /*underPressure=*/false); // warrants step 2, but nothing is squeezing us
+    TEST_ASSERT_EQUAL_UINT8(1, mod->getStep());
+
+    mod->evaluate(100, false); // would have been the sixth quiet hour had the run survived
+    TEST_ASSERT_EQUAL_UINT8(1, mod->getStep());
+
+    for (uint8_t i = 1; i < NodeDBScalingModule::QUIET_HOURS_PER_STEP; i++)
+        mod->evaluate(100, false);
+    TEST_ASSERT_EQUAL_UINT8(0, mod->getStep());
+}
+
 void test_ratchetIsSymmetricAcrossAFullCycle()
 {
     for (int i = 0; i < NodeDBScalingModule::MAX_STEP; i++)
@@ -330,6 +349,32 @@ void test_capacityGrowsAndIsHandedBack()
     TEST_ASSERT_LESS_OR_EQUAL_UINT32((uint32_t)base, (uint32_t)db->numMeshNodes);
 }
 
+// Protected-node admission is pinned to the BASELINE cap, never the ratcheted one: capacity is
+// handed back, and a round trip through the warm tier does not restore favorite/ignore/verified.
+void test_protectedCapIgnoresTheRatchetedCapacity()
+{
+    mod->setStep(NodeDBScalingModule::MAX_STEP);
+    db->applyHotStoreCapacity();
+
+    db->clearHot();
+    const pb_size_t grown = db->effectiveMaxNodes();
+    for (pb_size_t i = 0; i < grown; i++)
+        db->pushWithSatellites(0x3000 + i, 1000 + i);
+
+    int admitted = 0;
+    for (pb_size_t i = 0; i < grown; i++)
+        if (db->setProtectedFlag(&db->meshNodes->at(i), NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
+            admitted++;
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES - 2, admitted);
+    TEST_ASSERT_EQUAL_INT(admitted, db->numProtectedNodes());
+
+    // Hand the capacity back: the overflow demotes, but no favorite is among it.
+    mod->setStep(0);
+    db->applyHotStoreCapacity();
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)MAX_NUM_NODES, (uint32_t)db->effectiveMaxNodes());
+    TEST_ASSERT_EQUAL_INT(admitted, db->numProtectedNodes());
+}
+
 // Accepted trade, guarded so it cannot drift: dedup history is sized from the BASELINE hot
 // store, never from the ratcheted cap. Wiring it to the effective cap would spend the heap the
 // growth guard exists to protect, and would silently blow MESHTASTIC_BOOT_CACHE_BUDGET.
@@ -377,6 +422,7 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_releaseNeedsSustainedQuiet);
     RUN_TEST(test_populationInsideHysteresisBandHolds);
     RUN_TEST(test_quietRunIsResetByABusyEvaluation);
+    RUN_TEST(test_highPopulationWithoutPressureVoidsTheQuietRun);
     RUN_TEST(test_ratchetIsSymmetricAcrossAFullCycle);
 
     RUN_TEST(test_freeAccessorsTrackTheModule);
@@ -386,6 +432,7 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_effectiveMaxNodesNeverExceedsDecodeCeiling);
     RUN_TEST(test_passiveFillGateDoesNotFollowTheBonus);
     RUN_TEST(test_capacityGrowsAndIsHandedBack);
+    RUN_TEST(test_protectedCapIgnoresTheRatchetedCapacity);
     RUN_TEST(test_dedupHistoryStaysPinnedToBaseline);
 
     exit(UNITY_END());

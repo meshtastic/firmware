@@ -432,8 +432,8 @@ NodeDB::NodeDB()
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
 
-    // likewise the edition: it lives in persisted devicestate, so a vanilla install must
-    // overwrite the previous event build's value. Before the CRC compare, so the change persists.
+    // likewise the edition: it lives in persisted devicestate, so a vanilla install must overwrite
+    // the previous event build's value. Before the CRC compare, so the change persists.
 #ifdef USERPREFS_FIRMWARE_EDITION
     myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
 #else
@@ -729,9 +729,8 @@ template <typename Map> bool evictStalestSatellite(NodeDB &db, Map &map)
     return true;
 }
 
-// Keep `map` within `cap` ahead of inserting `incoming` (the tier-1/tier-2 split: only the
-// freshest `cap` nodes carry satellite payloads). `cap` is the effective, possibly
-// ratcheted-down cap, not MAX_SATELLITE_NODES. Caller holds satelliteMutex.
+// Keep `map` within `cap` ahead of inserting `incoming`: only the freshest `cap` nodes carry
+// satellite payloads. `cap` is the effective one, not MAX_SATELLITE_NODES. Caller holds the mutex.
 template <typename Map> void evictSatelliteOverCap(NodeDB &db, Map &map, NodeNum incoming, uint16_t cap)
 {
     if (map.size() < cap || map.count(incoming))
@@ -1873,8 +1872,7 @@ bool NodeDB::enforceSatelliteCaps()
             LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %u)", name, (unsigned)before, (unsigned)map.size(), (unsigned)cap);
         }
     };
-    // Position and telemetry share the UI-facing cap; environment and status take the
-    // deeper one (bigger entries, no map/list reader). See NodeDBScalingModule.h.
+    // Position and telemetry share the UI-facing cap; environment and status take the deeper one.
     const uint16_t satCap = nodeDBSatelliteCap();
     const uint16_t envCap = nodeDBEnvironmentCap();
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
@@ -2215,11 +2213,10 @@ void NodeDB::nodeDBSelfCare()
 
     const bool satsTrimmed = enforceSatelliteCaps();
 
-    // Boot report: what the store holds, what it may hold, and where the handshake gate sits.
     LOG_INFO("NodeDB: %d nodes, cap %d (base %d, +%u ratchet), passive-fill above %d", numMeshNodes, (int)effectiveMaxNodes(),
              (int)MAX_NUM_NODES, nodeDBBonusNodes(), (int)NODEDB_BASELINE_NODES);
-    // Dedup history is pinned to the baseline by design; log the ratio so a field log shows
-    // how thin it has become rather than leaving it to be inferred (mesh-pb-constants.h).
+    // Dedup history is pinned to the baseline by design; log the ratio so a field log shows how
+    // thin it has become rather than leaving it to be inferred (mesh-pb-constants.h).
     LOG_DEBUG("NodeDB: dedup history %u records for cap %d (%u%% of 2x)", (unsigned)PACKETHISTORY_MAX, (int)effectiveMaxNodes(),
               (unsigned)((uint32_t)PACKETHISTORY_MAX * 50u / (effectiveMaxNodes() ? effectiveMaxNodes() : 1)));
 
@@ -3520,7 +3517,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // public key copied above - an ignored peer keeps a usable identity
         // (a verifiable target) rather than a bare node number.
         if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
-            LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, (int)effectiveMaxNodes() - 2);
+            LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
 #if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
@@ -3547,7 +3544,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             // If the protected cap refuses the favorite, fall back to a heard-now stamp so the
             // contact still isn't the first eviction victim.
             if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
-                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, (int)effectiveMaxNodes() - 2);
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
                 stampContactHeardNow(info);
             }
         }
@@ -3555,7 +3552,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
             if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true))
-                LOG_WARN(PROTECTED_CAP_WARN_FMT, "verify", contact.node_num, (int)effectiveMaxNodes() - 2);
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "verify", contact.node_num, MAX_NUM_NODES - 2);
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
@@ -3774,11 +3771,9 @@ bool NodeDB::setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool
         nodeInfoLiteSetBit(node, mask, false);
         return true;
     }
-    // Adding a flag to a node that is already protected doesn't grow the
-    // protected set, so it's always allowed. A newly-protected node is refused
-    // once the protected set has reached MAX_NUM_NODES-2, leaving two evictable
-    // slots so getOrCreateMeshNode can always make room.
-    if (nodeInfoLiteIsProtected(node) || numProtectedNodes() < (int)effectiveMaxNodes() - 2) {
+    // Flagging an already-protected node doesn't grow the set, so it's always allowed. The cap is
+    // MAX_NUM_NODES-2, never the ratcheted one: warm rehydration cannot restore these flags.
+    if (nodeInfoLiteIsProtected(node) || numProtectedNodes() < MAX_NUM_NODES - 2) {
         nodeInfoLiteSetBit(node, mask, true);
         return true;
     }
@@ -3797,7 +3792,7 @@ bool NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
         saveNodeDatabaseToDisk();
         return true;
     }
-    LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", nodeId, (int)effectiveMaxNodes() - 2);
+    LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", nodeId, MAX_NUM_NODES - 2);
     return false;
 }
 
@@ -4012,9 +4007,8 @@ void NodeDB::applyHotStoreCapacity()
         return;
 
     if (target > live) {
-        // Growing the vector reallocates, so old and new buffers are live at once. Demand the new
-        // one plus a margin before trying - declining the extra slots costs only capacity, while
-        // getting this wrong on a 99%-heap part costs the boot.
+        // Both buffers are live across the reallocation, so demand the new one plus a margin:
+        // declining costs only capacity, getting it wrong on a 99%-heap part costs the boot.
         const size_t needed = (size_t)target * sizeof(meshtastic_NodeInfoLite);
         if (memGet.getFreeHeap() < needed + NODEDB_GROWTH_HEAP_MARGIN) {
             LOG_WARN("NodeDB: decline grow %d->%d, %u B free", (int)live, (int)target, (unsigned)memGet.getFreeHeap());
@@ -4025,13 +4019,13 @@ void NodeDB::applyHotStoreCapacity()
         LOG_INFO("NodeDB: hot store %d -> %d slots (+%u ratchet)", (int)live, (int)target, nodeDBBonusNodes());
     } else {
         // Handing capacity back: the overflow keeps its key in the warm tier rather than vanishing.
+        // hotCapacity first - demoteOldestHotNodesToWarm() keeps effectiveMaxNodes() entries.
         hotCapacity = target;
         if (numMeshNodes > target) {
 #if WARM_NODE_COUNT > 0
             demoteOldestHotNodesToWarm();
 #endif
-            if (numMeshNodes > target)
-                numMeshNodes = target;
+            numMeshNodes = std::min(numMeshNodes, target); // whatever the warm tier could not take
         }
         meshNodes->resize(target);
         LOG_INFO("NodeDB: hot store %d -> %d slots, %d held", (int)live, (int)target, numMeshNodes);

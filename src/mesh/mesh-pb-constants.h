@@ -125,12 +125,8 @@ static inline int get_max_num_nodes()
 #endif                    // platform
 #endif                    // MAX_NUM_NODES
 
-/// Hot-store occupancy above which we stop *actively* introducing ourselves to
-/// newly-heard nodes (MeshService's "heard a new node, send NodeInfo and ask for
-/// a reply"). Deliberately the platform's baseline cap, not MAX_NUM_NODES: any
-/// capacity granted above this baseline is to be filled passively from observed
-/// traffic, so a larger hot store never buys extra handshake airtime. Pin this to
-/// the unexpanded value if MAX_NUM_NODES ever flexes upward at runtime.
+/// Occupancy above which we stop *actively* introducing ourselves to newly-heard
+/// nodes: capacity above this baseline is filled passively, buying no extra airtime.
 #ifndef NODEDB_BASELINE_NODES
 #define NODEDB_BASELINE_NODES MAX_NUM_NODES
 #endif
@@ -139,15 +135,8 @@ static inline int get_max_num_nodes()
 /// survives a full mesh, floored at 100. Shared by PacketHistory's constructor
 /// clamp and the boot-cache budget assert below so the two cannot drift.
 ///
-/// Deliberately keyed to MAX_NUM_NODES and NOT to NodeDB::effectiveMaxNodes():
-/// when NodeDBScalingModule ratchets extra hot-store slots into being, this stays
-/// where it is. That is an accepted trade, not an oversight. Growing it would cost
-/// 20 B per added record on the same heap the growth guard is protecting (nRF52840
-/// runs its ~115 KB arena at 99%), and PacketHistory allocates its array once in
-/// the constructor, so it cannot grow later without new machinery. The cost is that
-/// the ratio falls below 2x while the ratchet is engaged - dedup records are evicted
-/// sooner relative to mesh size. Eviction is LRU, so this degrades rather than fails.
-/// If you ever wire this to the effective cap, re-check MESHTASTIC_BOOT_CACHE_BUDGET.
+/// Keyed to MAX_NUM_NODES, never NodeDB::effectiveMaxNodes(): the ratio is allowed to fall below
+/// 2x while the ratchet is engaged. Re-check MESHTASTIC_BOOT_CACHE_BUDGET if you rewire it.
 #ifndef PACKETHISTORY_MAX
 #if defined(ARCH_STM32WL)
 #define PACKETHISTORY_MAX (MAX_NUM_NODES * 2) // 20 entries for 10-node STM32WL
@@ -223,9 +212,8 @@ static inline int get_max_num_nodes()
 #define HAS_VARIABLE_HOPS 1
 #endif
 
-// NodeDBScalingModule - ratchets the satellite caps down under megamesh pressure.
-// Needs HopScalingModule's population estimate as its input signal, and has nothing
-// to trade on TINY parts (satellite DBs already compiled out there).
+// NodeDBScalingModule - ratchets the satellite caps down under megamesh pressure. Needs
+// HopScalingModule's estimate, and has nothing to trade on TINY parts (no satellite DBs).
 #ifndef HAS_NODEDB_SCALING
 #if MESHTASTIC_MEM_CLASS <= MEM_CLASS_TINY || !HAS_VARIABLE_HOPS
 #define HAS_NODEDB_SCALING 0

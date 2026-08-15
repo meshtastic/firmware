@@ -8,54 +8,35 @@
 /**
  * NodeDBScalingModule: ratchets the NodeDB satellite caps down under megamesh pressure.
  *
- * The problem: on a constrained part the satellite stores (position / telemetry /
- * environment / status) cost ~452 B RAM and 336 B flash per node at their worst, against
- * 100 B / 112 B for the NodeInfoLite header itself. In a mesh large enough to churn the
- * hot store, that budget is better spent on identities than on stale payloads for nodes
- * we will not see again.
+ * Satellite payloads (position / telemetry / environment / status) cost ~452 B RAM and 336 B
+ * flash per node against 100 B / 112 B for the NodeInfoLite header, so once the mesh is large
+ * enough to churn the hot store that budget buys more identities than stale payloads. The freed
+ * flash is spent on hot-store slots (NodeDB::applyHotStoreCapacity), filled passively from
+ * observed traffic so a larger store never buys extra handshake airtime.
  *
- * The policy: a step ladder, one step per hourly evaluation, driven by HopScalingModule's
- * population estimate and gated on evidence that the pressure is actually on *us* (a full
- * hot store, or evictions since the last evaluation). Descending is fast (one step per
- * hour while the population warrants it); ascending needs QUIET_HOURS_PER_STEP consecutive
- * quiet hours per step, so a mesh that briefly quietens does not thrash the caps.
+ *   step  population  sat (pos/tel)  bulk (env/status)
+ *   ----  ----------  -------------  -----------------
+ *      0           -      40 (100%)          40 (100%)
+ *      1       >=200      24  (60%)          24  (60%)
+ *      2       >=400      16  (40%)          16  (40%)
+ *      3       >=800       8  (20%)           8  (20%)
+ *      4      >=1500       8  (20%)           4  (10%)
  *
- * Ladder (percentages of MAX_SATELLITE_NODES, i.e. of 40 on a constrained part):
+ * Percentages are of MAX_SATELLITE_NODES (40 on a constrained part). Env/status ratchet one step
+ * deeper: EnvironmentMetrics is 4-5x any other entry and the least useful thing to persist, while
+ * position and telemetry both feed the on-device UI and keep a floor for it. Descent is one step
+ * per hourly evaluation and needs evidence the squeeze is on us (full hot store, or an eviction
+ * since the last evaluation); ascent needs QUIET_HOURS_PER_STEP consecutive quiet evaluations.
+ * The step is not persisted - it re-derives from HopScalingModule's warm-started estimate.
  *
- *   step  population  satellites (pos/tel)  bulk (env/status)
- *   ----  ----------  --------------------  -----------------
- *     0            -              40 (100%)          40 (100%)
- *     1         >=200              24  (60%)          24  (60%)
- *     2         >=400              16  (40%)          16  (40%)
- *     3         >=800               8  (20%)           8  (20%)
- *     4        >=1500               8  (20%)           4  (10%)
- *
- * Position and telemetry share a ladder because the on-device UI reads both (distance,
- * bearing, battery column). Environment and status get the extra step because
- * EnvironmentMetrics is the elephant - 196 B RAM / 170 B flash per entry, 4-5x anything
- * else - and is the least useful thing to persist in a megamesh.
- *
- * UI floor: satellite entries feed the local display, so builds that draw a map or a node
- * list keep an absolute minimum of them regardless of how far the ladder descends
- * (UI_SATELLITE_FLOOR below). A headless router has no such reader and ratchets freely.
- *
- * No persistence: the step is re-derived on the first evaluation after boot from
- * HopScalingModule's own warm-started estimate, so a reboot costs at most one startup
- * delay of over-capacity, not a state file.
- *
- * Accepted trade - packet history does not follow the growth. PACKETHISTORY_MAX is
- * 2x the *baseline* hot store and stays there while the ratchet is engaged, so dedup
- * coverage per node falls (on nRF52840: 240 records against up to 225 slots, ~1.1x
- * rather than 2x). Growing it would spend heap - the resource the growth guard exists
- * to protect - to buy back a property that degrades gracefully, since eviction is LRU.
- * See the PACKETHISTORY_MAX comment in mesh-pb-constants.h.
+ * Accepted trade: PACKETHISTORY_MAX stays sized from the baseline hot store, so dedup coverage
+ * per node thins while the ratchet is engaged. See its comment in mesh-pb-constants.h.
  */
 
 #if HAS_NODEDB_SCALING
 
-/// Absolute minimum satellite entries kept for builds whose UI reads them. InkHUD's map
-/// applet draws every node with a position, so it needs more than a node list that only
-/// resolves distance for the row in view; a headless build reads none of it.
+/// Minimum satellite entries kept for builds whose UI reads them: InkHUD's map applet draws every
+/// positioned node, a node list resolves only the row in view, a headless build reads none of it.
 #ifndef NODEDB_SCALING_UI_SATELLITE_FLOOR
 #if defined(MESHTASTIC_INCLUDE_INKHUD)
 #define NODEDB_SCALING_UI_SATELLITE_FLOOR 12
@@ -84,24 +65,20 @@ class NodeDBScalingModule : private concurrency::OSThread
     static constexpr uint8_t STEP_COUNT = sizeof(STEPS) / sizeof(STEPS[0]);
     static constexpr uint8_t MAX_STEP = STEP_COUNT - 1;
 
-    /// A step is released (ratcheted back up) only once the population drops below this
-    /// percentage of the step's own entry threshold - the hysteresis band that stops a
-    /// mesh hovering at ~200 nodes from stepping down and up every hour.
+    /// Release band: a step is given back only below this percentage of its own entry threshold,
+    /// so a mesh hovering at ~200 nodes does not step down and up every hour.
     static constexpr uint8_t RELEASE_PCT = 75;
 
-    /// Consecutive quiet evaluations required to release one step. Descent is one step per
-    /// evaluation; ascent is deliberately six times slower.
+    /// Consecutive quiet evaluations required to release one step; descent takes one.
     static constexpr uint8_t QUIET_HOURS_PER_STEP = 6;
 
     // -----------------------------------------------------------------------
     // Floors
     // -----------------------------------------------------------------------
-    /// Absolute minimum satellite entries kept for builds whose UI reads them; see the
-    /// NODEDB_SCALING_UI_SATELLITE_FLOOR block above this class.
+    /// Minimum kept for a UI that reads them; see NODEDB_SCALING_UI_SATELLITE_FLOOR above.
     static constexpr uint16_t UI_SATELLITE_FLOOR = NODEDB_SCALING_UI_SATELLITE_FLOOR;
 
-    /// Environment and status have no map/list reader to starve, so they floor low
-    /// everywhere - just enough to keep the nearest few sensor nodes.
+    /// Environment and status have no map/list reader to starve, so they floor low everywhere.
     static constexpr uint16_t BULK_FLOOR = 4;
 
     NodeDBScalingModule();
@@ -114,10 +91,8 @@ class NodeDBScalingModule : private concurrency::OSThread
     uint16_t getEnvironmentCap() const { return environmentCap; }
     uint8_t getStep() const { return step; }
 
-    /// Extra hot-store slots this step's satellite savings pay for, priced in worst-case
-    /// on-disk bytes (the budget that sizes MAX_NUM_NODES): freed satellite entry bytes
-    /// divided by meshtastic_NodeInfoLite_size. This is the funding only - NodeDB clamps the
-    /// resulting total to its decode ceiling and to what the heap can actually carry.
+    /// Hot-store slots this step's savings fund, priced in the worst-case on-disk bytes that size
+    /// MAX_NUM_NODES. Funding only - NodeDB clamps to its decode ceiling and to the live heap.
     uint16_t getBonusNodes() const { return bonusNodes; }
 
     /// Worst-case bytes reclaimed from nodes.proto at the given caps, and the slots they buy.
@@ -127,14 +102,13 @@ class NodeDBScalingModule : private concurrency::OSThread
     /// One-shot startup report: the ladder, and what each step would cost and fund.
     void logLadder() const;
 
-    /// Apply a step directly. Recomputes the caps and, when the step moved, trims the
-    /// satellite maps to match. Public for tests and for a future admin override.
+    /// Apply a step directly, trimming the satellite maps when it moved. Public for tests
+    /// and for a future admin override.
     void setStep(uint8_t newStep);
 
-    /// One evaluation of the ladder against the supplied signals. Separated from runOnce()
-    /// so tests can drive it without a clock or a live HopScalingModule.
-    /// @param population estimated mesh population (HopScalingModule's scaled total)
-    /// @param underPressure true when the hot store is full or has evicted since the last call
+    /// One ladder evaluation; split from runOnce() so tests need no clock or HopScalingModule.
+    /// @param population HopScalingModule's scaled total
+    /// @param underPressure hot store full, or evicted since the last call
     void evaluate(uint16_t population, bool underPressure);
 
     /// Ladder lookup: the step this population alone warrants, before hysteresis.
@@ -165,9 +139,8 @@ extern NodeDBScalingModule *nodeDBScalingModule;
 
 #endif // HAS_NODEDB_SCALING
 
-/// Effective per-map satellite caps. Both fall back to the compile-time
-/// MAX_SATELLITE_NODES when the module is compiled out or not yet constructed, so NodeDB
-/// can call them at any point in boot.
+/// Effective per-map satellite caps. Both fall back to MAX_SATELLITE_NODES when the module is
+/// compiled out or not yet constructed, so NodeDB can call them at any point in boot.
 uint16_t nodeDBSatelliteCap();
 uint16_t nodeDBEnvironmentCap();
 

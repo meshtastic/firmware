@@ -46,9 +46,8 @@ uint8_t NodeDBScalingModule::stepForPopulation(uint16_t population)
 
 uint32_t NodeDBScalingModule::freedFlashBytes(uint16_t satCap, uint16_t envCap)
 {
-    // Price the trade in the same currency that sizes MAX_NUM_NODES: worst-case encoded bytes
-    // in nodes.proto. Position and telemetry ride the satellite cap, environment and status the
-    // bulk one, matching how enforceSatelliteCaps() trims them.
+    // Priced in the currency that sizes MAX_NUM_NODES: worst-case encoded bytes in nodes.proto,
+    // split across the two caps exactly as enforceSatelliteCaps() trims them.
     const uint16_t satDropped = (satCap < MAX_SATELLITE_NODES) ? (uint16_t)(MAX_SATELLITE_NODES - satCap) : 0;
     const uint16_t envDropped = (envCap < MAX_SATELLITE_NODES) ? (uint16_t)(MAX_SATELLITE_NODES - envCap) : 0;
     return (uint32_t)satDropped * (meshtastic_NodePositionEntry_size + meshtastic_NodeTelemetryEntry_size) +
@@ -106,12 +105,13 @@ void NodeDBScalingModule::evaluate(uint16_t population, bool underPressure)
     const uint8_t warranted = stepForPopulation(population);
 
     if (warranted > step) {
-        // Population alone is not enough: a node parked beside a busy repeater hears a big
-        // mesh without its own store ever being squeezed. Require evidence of the squeeze.
-        if (underPressure) {
-            quietEvaluations = 0;
+        // A population that warrants *more* ratchet voids any release run in progress, whether
+        // or not we act on it - otherwise quiet hours accumulate across a busy spell between them.
+        quietEvaluations = 0;
+        // Population alone is not enough to descend: a node parked beside a busy repeater hears a
+        // big mesh without its own store ever being squeezed. Require evidence of the squeeze.
+        if (underPressure)
             setStep(step + 1);
-        }
         return;
     }
 
