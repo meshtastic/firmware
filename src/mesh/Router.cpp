@@ -821,7 +821,8 @@ static bool adminKeyFallbackAllowed()
     if (!haveAdminKey)
         return false; // nothing to try, so do not spend a token
 
-    uint32_t now = millis();
+    // Injectable clock so the budget can be tested without sleeping, and without racing a slow host.
+    uint32_t now = Time::getMillis();
     if (adminKeyFallbackRefillMs == 0)
         adminKeyFallbackRefillMs = now;
     uint32_t elapsed = now - adminKeyFallbackRefillMs;
