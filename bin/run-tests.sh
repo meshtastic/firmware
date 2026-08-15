@@ -38,7 +38,8 @@
 #              test/state-manifest.tsv.
 #   FILTERED - a -f run completed cleanly; suites not in the filter were intentionally skipped.
 #              Use this when iterating on a single suite; it is not a quality signal.
-#   RED      - at least one failure, build error, or sanitizer fault.
+#   RED      - at least one failure, build error, sanitizer fault, or a suite that reported
+#              another suite's test cases (bin/check-test-attribution.py).
 #
 # Two orthogonal axes: PASS/FAIL × CLEAN/DIRTY. Each suite runs in its own scratch $HOME
 # (bin/pio-test-isolate.sh), so leftovers are harmless; DIRTY means "undeclared", not "dangerous".
@@ -59,6 +60,7 @@
 #   RESULT: AMBER N/M suites ran (missing: test_radio test_serial) - all that ran passed
 #   RESULT: AMBER 3 test case(s) ignored
 #   RESULT: FILTERED 1/N suites ran (not run: …) - filtered: test_utf8
+#   RESULT: RED test attribution failed - suites did not run their own tests
 #   RESULT: RED test_traffic_management: 1 failed  (or: build/crash error)
 #   RESULT: RED sanitizer fault - SUMMARY: AddressSanitizer: 1272 byte(s) leaked  (tests may have
 #           all passed; the coverage build aborts at exit on an ASan/LSan fault - often shown only
@@ -163,6 +165,16 @@ export MESHTASTIC_TEST_STATE_SUMMARY="$STATE_SUMMARY"
 $KEEP_STATE && export MESHTASTIC_TEST_KEEP_STATE=1
 $WRITE_MANIFEST && export MESHTASTIC_TEST_KEEP_STATE=1
 
+# --- Test attribution --------------------------------------------------------
+# PlatformIO parses Unity output textually and never checks that the source file a case came from
+# belongs to the suite it thinks it ran, so one suite's binary running under another's name reads
+# as a pass. The JUnit reports carry both halves (testsuite@name vs testcase@file), so collect them
+# here and grade with bin/check-test-attribution.py below. Cleared first: a stale report from an
+# earlier run would otherwise satisfy this run's expectations.
+ATTRIB_DIR="$ROOT_DIR/.pio/test-attribution"
+rm -rf "$ATTRIB_DIR"
+mkdir -p "$ATTRIB_DIR"
+
 # Canonical suite set = the directories in test/, detected on the fly. This is the sole source
 # of truth for "what should run"; a filtered run only expects its filtered suite.
 mapfile -t ALL_SUITES < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
@@ -251,10 +263,15 @@ if $SHUFFLE; then
 	echo "suite order: shuffled with --seed $SEED (${#RUN_ORDER[@]} suites)"
 fi
 
-# Build every test program before running any of them, the way .github/workflows/test_native.yml
+# Warm the shared src objects before running any suite, the way .github/workflows/test_native.yml
 # does. Fused build+run makes whichever suite PlatformIO's directory walk reaches first absorb the
 # whole src compile and report it as its own duration - that is how a 35s suite once reported 13
 # minutes, and it hides the build cost from every timing the summary prints.
+#
+# This is a WARM-UP ONLY: the run below must still build. PlatformIO links every test program to
+# the one $BUILD_DIR/$PROGNAME path, so a `--without-building` run executes whichever suite was
+# linked last - every suite, under its own name, all PASSED. The warm-up keeps the src compile out
+# of the suite timings; the per-suite step is then just one test_main.cpp plus a link.
 BUILD_SECS=0
 build_started=$SECONDS
 if $QUIET; then
@@ -289,19 +306,23 @@ if $SHUFFLE; then
 	: >"$LOG"
 	for suite in "${RUN_ORDER[@]}"; do
 		if $QUIET; then
-			"$PIO" test -e "$ENV" -f "$suite" "${EXTRA_ARGS[@]}" --without-building >>"$LOG" 2>&1
+			"$PIO" test -e "$ENV" -f "$suite" "${EXTRA_ARGS[@]}" \
+				--junit-output-path "$ATTRIB_DIR/$suite.xml" >>"$LOG" 2>&1
 			rc=$?
 		else
-			"$PIO" test -e "$ENV" -f "$suite" "${EXTRA_ARGS[@]}" --without-building 2>&1 | tee -a "$LOG"
+			"$PIO" test -e "$ENV" -f "$suite" "${EXTRA_ARGS[@]}" \
+				--junit-output-path "$ATTRIB_DIR/$suite.xml" 2>&1 | tee -a "$LOG"
 			rc=${PIPESTATUS[0]}
 		fi
 		((rc != 0)) && PIO_RC=$rc
 	done
 elif $QUIET; then
-	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" --without-building >"$LOG" 2>&1
+	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" \
+		--junit-output-path "$ATTRIB_DIR/all.xml" >"$LOG" 2>&1
 	PIO_RC=$?
 else
-	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" --without-building 2>&1 | tee "$LOG"
+	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" \
+		--junit-output-path "$ATTRIB_DIR/all.xml" 2>&1 | tee "$LOG"
 	PIO_RC=${PIPESTATUS[0]}
 fi
 
@@ -461,6 +482,34 @@ verdict_suffix() {
 	$SHUFFLE && rating="[seed: $SEED]"
 	echo "$rating"
 }
+
+# --- Attribution axis ---------------------------------------------------------
+# RED, and checked before every softer verdict: a suite that reported another suite's test cases
+# did not run at all, so every count and state verdict below it is measuring the wrong thing. A
+# filtered run expects only its own suite; a full run expects the canonical set.
+# -f takes an fnmatch pattern, not necessarily a suite name, so resolve it against the canonical
+# set rather than expecting a suite literally called "test_nodedb*". An unmatched pattern leaves
+# the list empty, which checks attribution only - a filter that selects nothing is already RED
+# above, for want of a pass summary.
+ATTRIB_EXPECT="${ALL_SUITES[*]}"
+if [[ -n $FILTER ]]; then
+	ATTRIB_EXPECT=""
+	for attrib_suite in "${ALL_SUITES[@]}"; do
+		# shellcheck disable=SC2053 # deliberate glob match: FILTER is a pattern, not a literal
+		[[ $attrib_suite == $FILTER ]] && ATTRIB_EXPECT+="$attrib_suite "
+	done
+fi
+ATTRIB_OUT="$("$SCRIPT_DIR/check-test-attribution.py" --expect "$ATTRIB_EXPECT" \
+	--label "$ENV" "$ATTRIB_DIR"/*.xml 2>&1)"
+ATTRIB_RC=$?
+if ((ATTRIB_RC != 0)); then
+	echo ""
+	echo "$ATTRIB_OUT" | sed 's/^/    /'
+	preserve_run_log
+	echo "RESULT: RED test attribution failed - suites did not run their own tests $(verdict_suffix)"
+	exit 1
+fi
+$QUIET || echo "$ATTRIB_OUT" | tail -1
 
 # --- Shared-state axis --------------------------------------------------------
 # Read what the per-suite wrapper recorded. Reported after the count checks so a structural problem
