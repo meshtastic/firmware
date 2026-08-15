@@ -41,9 +41,6 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
-#if ARCH_PORTDUINO
-#include "platform/portduino/PortduinoGlue.h"
-#endif
 
 // ---------------------------------------------------------------------------
 // Test fixture identifiers
@@ -382,20 +379,9 @@ static meshtastic_MeshPacket makeBroadcastWithUnknownFields()
 // ---------------------------------------------------------------------------
 // Unity lifecycle
 // ---------------------------------------------------------------------------
-#if ARCH_PORTDUINO
-static bool savedForceSimradio = false;
-#endif
-
 void setUp(void)
 {
     service = pipelineService;
-
-#if ARCH_PORTDUINO
-    // The PKI cases assert the production encode path, and wouldEncryptWithPKC() disables PKC under
-    // simradio - which [env:coverage] turns on by passing -s to the test binary.
-    savedForceSimradio = portduino_config.force_simradio;
-    portduino_config.force_simradio = false;
-#endif
 
     // Construct the mock FIRST: the NodeDB constructor can reload persisted state from the
     // host filesystem (portduino VFS) and repopulate the globals - a saved private key
@@ -441,10 +427,6 @@ static AirTime *c14SavedAirTime = nullptr;
 
 void tearDown(void)
 {
-#if ARCH_PORTDUINO
-    portduino_config.force_simradio = savedForceSimradio;
-#endif
-
     delete mockNodeDB;
     mockNodeDB = nullptr;
     nodeDB = nullptr;
