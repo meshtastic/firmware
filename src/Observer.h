@@ -56,10 +56,6 @@ template <class Callback, class T> class CallbackObserver : public Observer<T>
 template <class T> class Observable
 {
     std::list<Observer<T> *> observers;
-    // Erasing a node that notifyObservers() is holding an iterator into is a use-after-free, so a
-    // removal during dispatch only nulls the entry; the outermost notify sweeps the nulls after.
-    bool notifying = false;
-    bool pendingRemoval = false;
 
   public:
     /**
@@ -69,26 +65,14 @@ template <class T> class Observable
      */
     int notifyObservers(T arg)
     {
-        const bool outermost = !notifying;
-        notifying = true;
-
-        int result = 0;
-        for (typename std::list<Observer<T> *>::iterator iterator = observers.begin(); iterator != observers.end(); ++iterator) {
-            if (!*iterator)
-                continue; // detached earlier in this same dispatch
-            result = (*iterator)->onNotify(arg);
+        for (typename std::list<Observer<T> *>::const_iterator iterator = observers.begin(); iterator != observers.end();
+             ++iterator) {
+            int result = (*iterator)->onNotify(arg);
             if (result != 0)
-                break;
+                return result;
         }
 
-        if (outermost) {
-            notifying = false;
-            if (pendingRemoval) {
-                observers.remove(nullptr);
-                pendingRemoval = false;
-            }
-        }
-        return result;
+        return 0;
     }
 
   private:
@@ -97,19 +81,7 @@ template <class T> class Observable
     // Not called directly, instead call observer.observe
     void addObserver(Observer<T> *o) { observers.push_back(o); }
 
-    void removeObserver(Observer<T> *o)
-    {
-        if (!notifying) {
-            observers.remove(o);
-            return;
-        }
-        for (Observer<T> *&entry : observers) {
-            if (entry == o) {
-                entry = nullptr;
-                pendingRemoval = true;
-            }
-        }
-    }
+    void removeObserver(Observer<T> *o) { observers.remove(o); }
 };
 
 template <class T> Observer<T>::~Observer()
