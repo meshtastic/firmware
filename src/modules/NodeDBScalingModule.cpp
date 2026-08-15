@@ -20,6 +20,7 @@ NodeDBScalingModule *nodeDBScalingModule = nullptr;
 NodeDBScalingModule::NodeDBScalingModule() : concurrency::OSThread("NodeDBScaling")
 {
     refreshCaps();
+    logLadder();
     setIntervalFromNow(INITIAL_DELAY_MS);
 }
 
@@ -43,10 +44,39 @@ uint8_t NodeDBScalingModule::stepForPopulation(uint16_t population)
     return warranted;
 }
 
+uint32_t NodeDBScalingModule::freedFlashBytes(uint16_t satCap, uint16_t envCap)
+{
+    // Price the trade in the same currency that sizes MAX_NUM_NODES: worst-case encoded bytes
+    // in nodes.proto. Position and telemetry ride the satellite cap, environment and status the
+    // bulk one, matching how enforceSatelliteCaps() trims them.
+    const uint16_t satDropped = (satCap < MAX_SATELLITE_NODES) ? (uint16_t)(MAX_SATELLITE_NODES - satCap) : 0;
+    const uint16_t envDropped = (envCap < MAX_SATELLITE_NODES) ? (uint16_t)(MAX_SATELLITE_NODES - envCap) : 0;
+    return (uint32_t)satDropped * (meshtastic_NodePositionEntry_size + meshtastic_NodeTelemetryEntry_size) +
+           (uint32_t)envDropped * (meshtastic_NodeEnvironmentEntry_size + meshtastic_NodeStatusEntry_size);
+}
+
+uint16_t NodeDBScalingModule::bonusForCaps(uint16_t satCap, uint16_t envCap)
+{
+    return (uint16_t)(freedFlashBytes(satCap, envCap) / meshtastic_NodeInfoLite_size);
+}
+
 void NodeDBScalingModule::refreshCaps()
 {
     satelliteCap = capForPct(STEPS[step].satellitePct, UI_SATELLITE_FLOOR);
     environmentCap = capForPct(STEPS[step].bulkPct, BULK_FLOOR);
+    bonusNodes = bonusForCaps(satelliteCap, environmentCap);
+}
+
+void NodeDBScalingModule::logLadder() const
+{
+    LOG_INFO("NodeDB scaling: base sats %d, hot store %d (passive-fill above %d)", MAX_SATELLITE_NODES, (int)MAX_NUM_NODES,
+             (int)NODEDB_BASELINE_NODES);
+    for (uint8_t i = 0; i < STEP_COUNT; i++) {
+        const uint16_t sat = capForPct(STEPS[i].satellitePct, UI_SATELLITE_FLOOR);
+        const uint16_t env = capForPct(STEPS[i].bulkPct, BULK_FLOOR);
+        LOG_DEBUG("  step %u: pop>=%u sats %u env %u frees %uB -> +%u nodes", i, STEPS[i].enterPopulation, sat, env,
+                  (unsigned)freedFlashBytes(sat, env), bonusForCaps(sat, env));
+    }
 }
 
 void NodeDBScalingModule::setStep(uint8_t newStep)
@@ -61,11 +91,14 @@ void NodeDBScalingModule::setStep(uint8_t newStep)
 
     step = newStep;
     refreshCaps();
-    LOG_INFO("NodeDB scaling: step %u - satellites %u, environment/status %u (of %d)", step, satelliteCap, environmentCap,
-             MAX_SATELLITE_NODES);
+    LOG_INFO("NodeDB scaling: step %u - sats %u, env/status %u (of %d), +%u nodes", step, satelliteCap, environmentCap,
+             MAX_SATELLITE_NODES, bonusNodes);
     // Descending must reclaim immediately; ascending is a no-op here and refills from traffic.
-    if (nodeDB)
+    if (nodeDB) {
         nodeDB->enforceSatelliteCaps();
+        // Spend (or hand back) the freed budget. Growth is heap-guarded and may decline.
+        nodeDB->applyHotStoreCapacity();
+    }
 }
 
 void NodeDBScalingModule::evaluate(uint16_t population, bool underPressure)
@@ -132,6 +165,11 @@ uint16_t nodeDBEnvironmentCap()
     return nodeDBScalingModule ? nodeDBScalingModule->getEnvironmentCap() : (uint16_t)MAX_SATELLITE_NODES;
 }
 
+uint16_t nodeDBBonusNodes()
+{
+    return nodeDBScalingModule ? nodeDBScalingModule->getBonusNodes() : 0;
+}
+
 #else // HAS_NODEDB_SCALING
 
 uint16_t nodeDBSatelliteCap()
@@ -142,6 +180,11 @@ uint16_t nodeDBSatelliteCap()
 uint16_t nodeDBEnvironmentCap()
 {
     return MAX_SATELLITE_NODES;
+}
+
+uint16_t nodeDBBonusNodes()
+{
+    return 0;
 }
 
 #endif // HAS_NODEDB_SCALING

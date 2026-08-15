@@ -41,6 +41,22 @@ class NodeDBTestShim : public NodeDB
         nodePositions[num] = pos;
         nodeEnvironment[num] = meshtastic_EnvironmentMetrics_init_zero;
     }
+
+    /// Bare hot-store rows, no satellites - for occupancy/gate tests.
+    void fillHot(pb_size_t count)
+    {
+        clearHot();
+        for (pb_size_t i = 0; i < count; i++) {
+            meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
+            n.num = 0x2000 + i;
+            n.last_heard = 1000 + i;
+            meshNodes->push_back(n);
+        }
+        numMeshNodes = count;
+        // Keep the backing store at the live cap, as production does after applyHotStoreCapacity().
+        if (meshNodes->size() < effectiveMaxNodes())
+            meshNodes->resize(effectiveMaxNodes());
+    }
 };
 
 namespace
@@ -243,6 +259,94 @@ void test_stepDownTrimsSatellitesOldestFirst()
     TEST_ASSERT_EQUAL_UINT32((uint32_t)satCap, (uint32_t)db->nodePositions.size());
 }
 
+// ---------------------------------------------------------------------------
+// Converting freed satellite budget into hot-store slots
+// ---------------------------------------------------------------------------
+
+// The funding is priced in worst-case on-disk bytes, so it must rise monotonically as the
+// ladder descends and be zero when unpressured.
+void test_bonusRisesWithEachStep()
+{
+    TEST_ASSERT_EQUAL_UINT32(0, NodeDBScalingModule::freedFlashBytes(MAX_SATELLITE_NODES, MAX_SATELLITE_NODES));
+    TEST_ASSERT_EQUAL_UINT16(0, NodeDBScalingModule::bonusForCaps(MAX_SATELLITE_NODES, MAX_SATELLITE_NODES));
+
+    uint16_t previous = 0;
+    for (uint8_t i = 1; i < NodeDBScalingModule::STEP_COUNT; i++) {
+        const uint16_t sat =
+            NodeDBScalingModule::capForPct(NodeDBScalingModule::STEPS[i].satellitePct, NodeDBScalingModule::UI_SATELLITE_FLOOR);
+        const uint16_t env =
+            NodeDBScalingModule::capForPct(NodeDBScalingModule::STEPS[i].bulkPct, NodeDBScalingModule::BULK_FLOOR);
+        const uint16_t bonus = NodeDBScalingModule::bonusForCaps(sat, env);
+        TEST_ASSERT_GREATER_THAN_UINT16(previous, bonus);
+        previous = bonus;
+    }
+}
+
+// A file we write must stay inside the decode allowance every build already grants, or a peer
+// or a downgrade could not read it back.
+void test_effectiveMaxNodesNeverExceedsDecodeCeiling()
+{
+    for (uint8_t i = 0; i < NodeDBScalingModule::STEP_COUNT; i++) {
+        mod->setStep(i);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32(NODEDB_MIGRATION_LOAD_CEILING, (uint32_t)db->effectiveMaxNodes());
+        TEST_ASSERT_GREATER_OR_EQUAL_UINT32((uint32_t)MAX_NUM_NODES, (uint32_t)db->effectiveMaxNodes());
+    }
+}
+
+// THE invariant: extra capacity is filled passively. The introduce-yourself handshake gate must
+// stay pinned to the baseline even while the store is allowed to grow past it.
+void test_passiveFillGateDoesNotFollowTheBonus()
+{
+    mod->setStep(NodeDBScalingModule::MAX_STEP);
+    db->applyHotStoreCapacity();
+
+    // Below baseline: still actively introducing ourselves.
+    db->fillHot(NODEDB_BASELINE_NODES - 1);
+    TEST_ASSERT_FALSE(db->isPassiveFillOnly());
+
+    // At baseline: gate closes, even though the store has room to keep growing.
+    db->fillHot(NODEDB_BASELINE_NODES);
+    TEST_ASSERT_TRUE(db->isPassiveFillOnly());
+    if (db->effectiveMaxNodes() > NODEDB_BASELINE_NODES)
+        TEST_ASSERT_FALSE(db->isFull()); // room remains, but only for passively-learned nodes
+}
+
+void test_capacityGrowsAndIsHandedBack()
+{
+    mod->setStep(0);
+    db->applyHotStoreCapacity();
+    const size_t base = db->meshNodes->size();
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)db->effectiveMaxNodes(), (uint32_t)base);
+
+    mod->setStep(NodeDBScalingModule::MAX_STEP);
+    db->applyHotStoreCapacity();
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32((uint32_t)base, (uint32_t)db->meshNodes->size());
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)db->effectiveMaxNodes(), (uint32_t)db->meshNodes->size());
+
+    // Mesh quietens: the slots go back, and the store is resized to match.
+    mod->setStep(0);
+    db->applyHotStoreCapacity();
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)base, (uint32_t)db->meshNodes->size());
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32((uint32_t)base, (uint32_t)db->numMeshNodes);
+}
+
+// Accepted trade, guarded so it cannot drift: dedup history is sized from the BASELINE hot
+// store, never from the ratcheted cap. Wiring it to the effective cap would spend the heap the
+// growth guard exists to protect, and would silently blow MESHTASTIC_BOOT_CACHE_BUDGET.
+void test_dedupHistoryStaysPinnedToBaseline()
+{
+    const uint32_t fromBaseline = ((uint32_t)MAX_NUM_NODES * 2 > 100) ? (uint32_t)MAX_NUM_NODES * 2 : 100u;
+    TEST_ASSERT_EQUAL_UINT32(fromBaseline, (uint32_t)PACKETHISTORY_MAX);
+
+    // With the ratchet fully engaged the cap grows, but the history does not follow it - so the
+    // records-per-slot ratio is expected to fall below the nominal 2x.
+    mod->setStep(NodeDBScalingModule::MAX_STEP);
+    db->applyHotStoreCapacity();
+    TEST_ASSERT_EQUAL_UINT32(fromBaseline, (uint32_t)PACKETHISTORY_MAX);
+    if (db->effectiveMaxNodes() > MAX_NUM_NODES)
+        TEST_ASSERT_LESS_THAN_UINT32((uint32_t)db->effectiveMaxNodes() * 2u, (uint32_t)PACKETHISTORY_MAX);
+}
+
 } // namespace
 
 // Every test starts from an unpressured ladder; setStep() also clears the hysteresis run.
@@ -277,6 +381,12 @@ NDB_TEST_ENTRY void setup()
 
     RUN_TEST(test_freeAccessorsTrackTheModule);
     RUN_TEST(test_stepDownTrimsSatellitesOldestFirst);
+
+    RUN_TEST(test_bonusRisesWithEachStep);
+    RUN_TEST(test_effectiveMaxNodesNeverExceedsDecodeCeiling);
+    RUN_TEST(test_passiveFillGateDoesNotFollowTheBonus);
+    RUN_TEST(test_capacityGrowsAndIsHandedBack);
+    RUN_TEST(test_dedupHistoryStaysPinnedToBaseline);
 
     exit(UNITY_END());
 }

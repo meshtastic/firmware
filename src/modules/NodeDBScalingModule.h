@@ -42,6 +42,13 @@
  * No persistence: the step is re-derived on the first evaluation after boot from
  * HopScalingModule's own warm-started estimate, so a reboot costs at most one startup
  * delay of over-capacity, not a state file.
+ *
+ * Accepted trade - packet history does not follow the growth. PACKETHISTORY_MAX is
+ * 2x the *baseline* hot store and stays there while the ratchet is engaged, so dedup
+ * coverage per node falls (on nRF52840: 240 records against up to 225 slots, ~1.1x
+ * rather than 2x). Growing it would spend heap - the resource the growth guard exists
+ * to protect - to buy back a property that degrades gracefully, since eviction is LRU.
+ * See the PACKETHISTORY_MAX comment in mesh-pb-constants.h.
  */
 
 #if HAS_NODEDB_SCALING
@@ -107,6 +114,19 @@ class NodeDBScalingModule : private concurrency::OSThread
     uint16_t getEnvironmentCap() const { return environmentCap; }
     uint8_t getStep() const { return step; }
 
+    /// Extra hot-store slots this step's satellite savings pay for, priced in worst-case
+    /// on-disk bytes (the budget that sizes MAX_NUM_NODES): freed satellite entry bytes
+    /// divided by meshtastic_NodeInfoLite_size. This is the funding only - NodeDB clamps the
+    /// resulting total to its decode ceiling and to what the heap can actually carry.
+    uint16_t getBonusNodes() const { return bonusNodes; }
+
+    /// Worst-case bytes reclaimed from nodes.proto at the given caps, and the slots they buy.
+    static uint32_t freedFlashBytes(uint16_t satCap, uint16_t envCap);
+    static uint16_t bonusForCaps(uint16_t satCap, uint16_t envCap);
+
+    /// One-shot startup report: the ladder, and what each step would cost and fund.
+    void logLadder() const;
+
     /// Apply a step directly. Recomputes the caps and, when the step moved, trims the
     /// satellite maps to match. Public for tests and for a future admin override.
     void setStep(uint8_t newStep);
@@ -137,6 +157,7 @@ class NodeDBScalingModule : private concurrency::OSThread
     uint8_t quietEvaluations = 0; ///< consecutive evaluations that warranted a release
     uint16_t satelliteCap = MAX_SATELLITE_NODES;
     uint16_t environmentCap = MAX_SATELLITE_NODES;
+    uint16_t bonusNodes = 0;
     uint32_t lastEvictionCount = 0; ///< NodeDB::hotEvictions at the previous evaluation
 };
 
@@ -149,3 +170,6 @@ extern NodeDBScalingModule *nodeDBScalingModule;
 /// can call them at any point in boot.
 uint16_t nodeDBSatelliteCap();
 uint16_t nodeDBEnvironmentCap();
+
+/// Extra hot-store slots funded by the satellite savings; 0 when unpressured or compiled out.
+uint16_t nodeDBBonusNodes();

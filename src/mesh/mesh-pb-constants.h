@@ -135,9 +135,19 @@ static inline int get_max_num_nodes()
 #define NODEDB_BASELINE_NODES MAX_NUM_NODES
 #endif
 
-/// Packet-history capacity: 2x the hot store so dedup/relayer state survives a
-/// full mesh, floored at 100. Shared by PacketHistory's constructor clamp and
-/// the boot-cache budget assert below so the two cannot drift.
+/// Packet-history capacity: 2x the *baseline* hot store so dedup/relayer state
+/// survives a full mesh, floored at 100. Shared by PacketHistory's constructor
+/// clamp and the boot-cache budget assert below so the two cannot drift.
+///
+/// Deliberately keyed to MAX_NUM_NODES and NOT to NodeDB::effectiveMaxNodes():
+/// when NodeDBScalingModule ratchets extra hot-store slots into being, this stays
+/// where it is. That is an accepted trade, not an oversight. Growing it would cost
+/// 20 B per added record on the same heap the growth guard is protecting (nRF52840
+/// runs its ~115 KB arena at 99%), and PacketHistory allocates its array once in
+/// the constructor, so it cannot grow later without new machinery. The cost is that
+/// the ratio falls below 2x while the ratchet is engaged - dedup records are evicted
+/// sooner relative to mesh size. Eviction is LRU, so this degrades rather than fails.
+/// If you ever wire this to the effective cap, re-check MESHTASTIC_BOOT_CACHE_BUDGET.
 #ifndef PACKETHISTORY_MAX
 #if defined(ARCH_STM32WL)
 #define PACKETHISTORY_MAX (MAX_NUM_NODES * 2) // 20 entries for 10-node STM32WL

@@ -28,6 +28,11 @@
 /// them still decodes here; the excess is trimmed after load.
 static constexpr size_t NODEDB_MIGRATION_LOAD_CEILING = 250;
 
+/// Heap that must remain free *after* a hot-store growth allocation before we attempt it. Growing
+/// the vector reallocates, so old and new buffers coexist briefly; on the RAM-tightest parts that
+/// transient is the whole risk. Declining the extra slots costs nothing but capacity.
+static constexpr size_t NODEDB_GROWTH_HEAP_MARGIN = 8 * 1024;
+
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
 // E3B0C442 is the blank hash
 static const uint8_t LOW_ENTROPY_HASHES[][32] = {
@@ -552,6 +557,23 @@ class NodeDB
                (loadCeiling * meshtastic_NodeEnvironmentEntry_size) + (loadCeiling * meshtastic_NodeStatusEntry_size);
     }
 
+    /// The hot store's live capacity. This only ever reports slots that are actually backed by
+    /// allocated storage: applyHotStoreCapacity() raises it after a successful resize and never
+    /// when growth was declined, so no caller can be tempted to append past the buffer (in
+    /// particular getOrCreateMeshNode's grow-by-one fallback, which runs on the packet path).
+    /// Equals MAX_NUM_NODES when unpressured or when the scaling module is compiled out.
+    pb_size_t effectiveMaxNodes() const;
+
+    /// What the ratchet would like the capacity to be: baseline + funded slots, clamped to
+    /// NODEDB_MIGRATION_LOAD_CEILING so a file we write stays inside the decode allowance every
+    /// build already grants. Only applyHotStoreCapacity() should act on this.
+    pb_size_t desiredMaxNodes() const;
+
+    /// Resize the hot store to effectiveMaxNodes(). Growth is refused unless the heap can carry the
+    /// new allocation alongside the old one; shrinking demotes the overflow into the warm tier
+    /// first. Call only from the main loop - never from a packet path.
+    void applyHotStoreCapacity();
+
     // returns true if the maximum number of nodes is reached or we are running low on memory
     bool isFull();
 
@@ -661,6 +683,9 @@ class NodeDB
     // enough room to create it safely at boot. A later boot retries the check.
     bool eventProfileStorageUnavailable = false;
 #endif
+    /// Backed hot-store capacity; 0 until first set, meaning "the platform baseline".
+    /// Raised only by a successful applyHotStoreCapacity() resize.
+    pb_size_t hotCapacity = 0;
     uint32_t lastNodeDbSave = 0;     // when we last saved our db to flash
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
