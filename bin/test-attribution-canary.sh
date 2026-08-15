@@ -52,8 +52,18 @@ echo "canary: running them the broken way (--without-building)"
 	exit 2
 }
 
-# The checker must FAIL here. Its exit code is the assertion.
-if ./bin/check-test-attribution.py --label "canary" "$REPORT" >/dev/null 2>&1; then
+# The checker must FAIL here, and fail for the RIGHT reason. Exit 1 is a finding; exit 2 is bad
+# usage or an unreadable report, which would let a broken canary read as a caught mismatch.
+OUT="$(./bin/check-test-attribution.py --label "canary" "$REPORT" 2>&1)"
+RC=$?
+if [[ $RC -eq 2 ]]; then
+	echo ""
+	echo "CANARY INCONCLUSIVE: the checker could not read the report it was given (exit 2)."
+	echo "$OUT"
+	echo "Report kept at: $REPORT"
+	exit 2
+fi
+if [[ $RC -eq 0 ]] || ! grep -q 'MISATTRIBUTED' <<<"$OUT"; then
 	echo ""
 	echo "CANARY FAILED: the attribution check passed a run that mis-attributes its cases."
 	echo ""

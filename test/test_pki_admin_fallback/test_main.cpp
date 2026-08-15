@@ -149,8 +149,10 @@ void setUp(void)
 
 void tearDown(void)
 {
-    // The rate-limit case drives a virtual timebase; leave the real clock for everyone else.
+    // The rate-limit case drives a virtual timebase; leave the real clock for everyone else, and
+    // re-stamp the budget so the next case does not measure a virtual stamp against real millis.
     Time::useRealClock();
+    resetAdminKeyFallbackBudget();
 
     delete mockNodeDB;
     mockNodeDB = nullptr;
@@ -211,7 +213,8 @@ void test_admin_key_fallback_is_rate_limited(void)
 {
     // Drive the virtual clock: on the wall clock the eight decodes below have to beat the 250ms
     // refill, which is ~31ms each - CI misses that and the bucket refills mid-drain.
-    Time::setTestMillis(1000000); // far past the last refill stamp, so the bucket starts full
+    Time::setTestMillis(1000000);
+    resetAdminKeyFallbackBudget(); // re-stamp against the virtual clock we just switched to
 
     uint8_t otherPub[32], otherPriv[32];
     crypto->generateKeyPair(otherPub, otherPriv);

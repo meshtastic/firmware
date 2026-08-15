@@ -187,7 +187,9 @@ state_count_errors() {
 		printf '0'
 		return 0
 	}
-	grep -cE '^ERROR +\|' "$log" 2>/dev/null || printf '0'
+	# `|| true`, not `|| printf 0`: grep -c already prints 0 before exiting 1 on no match, so a
+	# fallback that prints appends a second line and the caller gets "0\n0" to do arithmetic on.
+	grep -cE '^ERROR +\|' "$log" 2>/dev/null || true
 }
 
 # VERDICT<TAB>DETAIL. WITHIN / OVER / UNDER, mirroring state_classify()'s shape.

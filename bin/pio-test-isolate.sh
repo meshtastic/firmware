@@ -126,7 +126,7 @@ printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$SUITE" "$STATUS" "$VERDICT" "${DETAI
 # complete, replayable reproduction, and on a DIRTY verdict the leftovers *are* the bug report. A
 # clean pass leaves nothing behind.
 KEEP="${MESHTASTIC_TEST_KEEP_STATE:-0}"
-if [[ $RC -ne 0 || $VERDICT != CLEAN || -n ${SURVIVORS-} || $KEEP == 1 ]]; then
+if [[ $RC -ne 0 || $VERDICT != CLEAN || $ERROR_VERDICT != WITHIN || -n ${SURVIVORS-} || $KEEP == 1 ]]; then
 	DEST="$STATE_ROOT/$SUITE"
 	rm -rf "$DEST" 2>/dev/null
 	mv "$SCRATCH" "$DEST" 2>/dev/null || DEST="$SCRATCH"

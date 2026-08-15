@@ -38,17 +38,37 @@ usage() {
 	exit 2
 }
 
+# A missing or non-numeric value used to sail through and produce a loop that never ran, reporting
+# "0/0 failed" as a pass. Reject it at parse time instead.
+need_value() {
+	[[ -n ${2:-} && $2 != -* ]] || {
+		echo "$1 needs a value" >&2
+		exit 2
+	}
+}
+need_number() {
+	[[ $2 =~ ^[0-9]+$ ]] || {
+		echo "$1 needs a number, got '$2'" >&2
+		exit 2
+	}
+}
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-e | --environment)
+		need_value "$1" "${2:-}"
 		ENV_NAME="$2"
 		shift 2
 		;;
 	-n | --runs)
+		need_value "$1" "${2:-}"
+		need_number "$1" "$2"
 		RUNS="$2"
 		shift 2
 		;;
 	-l | --load)
+		need_value "$1" "${2:-}"
+		need_number "$1" "$2"
 		LOAD="$2"
 		shift 2
 		;;
@@ -144,7 +164,10 @@ cleanup() {
 	[[ ${#LOADPIDS[@]} -gt 0 ]] && kill "${LOADPIDS[@]}" 2>/dev/null
 	return 0
 }
-trap cleanup EXIT INT TERM
+# EXIT cleans up; INT/TERM must also stop, or the loop keeps launching runs after a ^C.
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 if [[ $LOAD -gt 0 ]]; then
 	echo "starting $LOAD spinner(s) against $(nproc) cpu(s)"
@@ -161,7 +184,9 @@ echo "running $SUITE x$RUNS on $ENV_NAME (simradio=$SIMRADIO)"
 for ((run = 1; run <= RUNS; run++)); do
 	scratch=$(mktemp -d)
 	log="$OUT/$SUITE.$run.log"
-	if HOME="$scratch" "$BIN" "${ARGS[@]}" >"$log" 2>&1; then
+	# Through pio-test-isolate.sh, not the bare binary: that is what test_testing_command runs, so
+	# a repetition here exercises the sandboxing, survivor reaping and state verdict too.
+	if MESHTASTIC_TEST_STATE_DIR="$scratch/state" "$REPO/bin/pio-test-isolate.sh" "$BIN" "${ARGS[@]}" >"$log" 2>&1; then
 		rm -rf "$scratch" "$log"
 		printf '.'
 	else

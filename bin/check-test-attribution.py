@@ -56,7 +56,8 @@ def collect(paths):
     for path in paths:
         try:
             # The input is the JUnit report PlatformIO just wrote in this same run, not untrusted
-            # data, and defusedxml is not installed for this job. nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
+            # data, and defusedxml is not installed for this job.
+            # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
             root = ET.parse(path).getroot()
         except (ET.ParseError, OSError) as exc:
             sys.stderr.write(f"check-test-attribution: cannot read {path}: {exc}\n")
@@ -94,11 +95,11 @@ def main():
     expected = parse_expect(args.expect)
 
     misattributed = []  # (suite, case name, source file)
-    unsourced = 0
+    unsourced = []  # (suite, case name)
     for suite, entries in sorted(cases.items()):
         for name, source in entries:
             if source is None:
-                unsourced += 1
+                unsourced.append((suite, name))
             elif not owns(suite, source):
                 misattributed.append((suite, name, source))
 
@@ -111,9 +112,19 @@ def main():
         f"{len([s for s, v in cases.items() if v])} suite(s) with cases, {total} case(s)"
     )
     if unsourced:
+        print("")
+        print("UNSOURCED - these cases carry no source file, so ownership cannot be proved:")
+        for suite, name in unsourced[:20]:
+            print(f"    {suite}: case '{name}'")
+        if len(unsourced) > 20:
+            print(f"    ... +{len(unsourced) - 20} more")
         print(
-            f"  note: {unsourced} case(s) carried no source file and could not be attributed"
+            "A report without file attributes is not evidence that the suites ran their own"
         )
+        print(
+            "tests. Treat it as a finding rather than a pass: the JUnit format has changed, or"
+        )
+        print("the runner emitted cases it could not attribute.")
 
     if misattributed:
         print("")
@@ -137,11 +148,12 @@ def main():
         for suite in empty:
             print(f"    {suite}")
 
-    if misattributed or empty:
+    if misattributed or empty or unsourced:
         print("")
         print(
             "RESULT: test attribution FAILED"
-            f"{label} ({len(misattributed)} misattributed, {len(empty)} empty)"
+            f"{label} ({len(misattributed)} misattributed, {len(empty)} empty,"
+            f" {len(unsourced)} unsourced)"
         )
         return 1
 

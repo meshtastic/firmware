@@ -130,6 +130,10 @@ void testAssertEnvironmentIntact(const char *testName)
         return;
     }
 
+    // Per test, not once per suite: a service that binds a port is opened by the code under test,
+    // not by the harness, so checking only at startup would miss every case that starts one.
+    assertNoListeningSockets();
+
     if (!portduino_config.force_simradio)
         return;
 
