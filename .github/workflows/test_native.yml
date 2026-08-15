@@ -202,15 +202,6 @@ jobs:
         timeout-minutes: 5
         run: ./bin/test-state-check.sh
 
-      - name: Attribution canary
-        # Reproduces the false green on purpose - two suites run with --without-building, so
-        # PlatformIO does not relink and both execute the same leftover binary - and requires
-        # check-test-attribution.py to catch it. The whole suite set once reported green this
-        # way with five test programs actually running; this fails if that guard ever stops
-        # firing, or if the reproduction stops reproducing.
-        timeout-minutes: 15
-        run: ./bin/test-attribution-canary.sh -e coverage
-
       - name: Integration test
         # Cap the whole step: if the simulator ever fails to exit (e.g. the
         # exit_simulator admin path regresses again) the job must fail fast,
@@ -444,6 +435,18 @@ jobs:
           sudo apt-get install -y lcov
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
           sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
+
+      - name: Attribution canary
+        # Guards the guard above: runs two suites the broken way (--without-building, so PlatformIO
+        # does not relink and both execute the same leftover binary) and requires the checker to
+        # catch it. Fails if the checker regressed, or if the reproduction stops reproducing - in
+        # which case the reason both harnesses stopped passing that flag no longer holds.
+        #
+        # Lives in this job, not simulator-tests: it relinks $BUILD_DIR/$PROGNAME, and there that
+        # replaced the daemon binary with a test suite, so the integration test waited for a socket
+        # a test binary never opens. Here the binary is already per-suite and nothing later needs it.
+        timeout-minutes: 15
+        run: ./bin/test-attribution-canary.sh -e coverage
 
       - name: Event channel policy tests
         run: platformio test -e coverage-event-policy -v --junit-output-path event-policy-testreport.xml
