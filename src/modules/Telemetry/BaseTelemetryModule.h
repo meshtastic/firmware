@@ -7,6 +7,7 @@
 #include "mesh/MeshService.h"
 #include "mesh/MeshTypes.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+#include "mqtt/MQTT.h"
 #include "sleep.h"
 
 #ifndef MESHTASTIC_MAX_READINGS_PER_MESH_PACKET

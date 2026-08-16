@@ -21,6 +21,7 @@
 #include "TelemetryHistory.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CConsumer.h"
+#include "mqtt/MQTT.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 

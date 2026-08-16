@@ -131,6 +131,10 @@ bool BaseTelemetryModule::publishBufferedTelemetry(TelemetryHistoryBuffer<T, N> 
         // fire-and-forget enqueue
         service->sendToMesh(p, RX_SRC_LOCAL, false);
         sent = true;
+    } else if (target == PublishTarget::Mqtt) {
+        // Mqtt target: publish straight to broker connection
+        sent = mqtt && mqtt->publishOwnPacket(*p);
+        packetPool.release(p);
     } else {
         // Phone (or anything else) isn't a supported target for buffered history
         LOG_WARN("publishBufferedTelemetry: unsupported PublishTarget, dropping");

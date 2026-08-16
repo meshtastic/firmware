@@ -1347,6 +1347,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mqtt.tls_enabled = default_mqtt_tls_enabled;
 #endif
 
+#ifdef USERPREFS_MQTT_TELEMETRY_UPLINK_ENABLED
+    moduleConfig.mqtt.telemetry_uplink_enabled = USERPREFS_MQTT_TELEMETRY_UPLINK_ENABLED;
+#else
+    moduleConfig.mqtt.telemetry_uplink_enabled = default_mqtt_telemetry_uplink_enabled;
+#endif
+
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
 

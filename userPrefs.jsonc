@@ -67,6 +67,7 @@
   // "USERPREFS_MQTT_ENCRYPTION_ENABLED": "true",
   // "USERPREFS_MQTT_TLS_ENABLED": "false",
   // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
+  // "USERPREFS_MQTT_TELEMETRY_UPLINK_ENABLED": "true", // Always upload buffered telemetry via MQTT at read interval if directly connected
   // "USERPREFS_MESH_BEACON_LISTEN_ENABLED": "true", // Accept incoming beacons (default: on)
   //   "USERPREFS_MESH_BEACON_BROADCAST_ENABLED": "true",           // Periodically broadcast beacons from this node
   //   "USERPREFS_MESH_BEACON_MESSAGE": "Join us on NarrowSlow!!!", // Text payload included in every beacon broadcast

@@ -59,6 +59,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // moduleConfig.telemetry.air_quality_screen_enabled = 1;
     // moduleConfig.telemetry.air_quality_interval = 30 * 60;
     // moduleConfig.telemetry.air_quality_telemetry_read_interval = 6 * 60;
+    // moduleConfig.mqtt.telemetry_uplink_enabled = true;
 
     // Add here supported sensors in the Air Quality module
     // These sensors will be scanned twice, once in the first scan,
@@ -283,6 +284,23 @@ int32_t AirQualityTelemetryModule::runOnce()
                 }
             }
         }
+
+        // MQTT publish
+        // TODO should this be done differently?
+        // Like - MQTT publish interval ensuring MQTT is up?
+        bool telemetryMqttAllowed = moduleConfig.mqtt.telemetry_uplink_enabled && mqtt && mqtt->isConnectedDirectly();
+
+        bool telemetryMqttDue = (lastSentToMqtt == 0) || !Throttle::isWithinTimespanMs(lastSentToMqtt, telemetryReadIntervalMs);
+
+        bool sentTelemetryToMqtt = false; // TOREMOVE
+
+        if (telemetryMqttAllowed && telemetryMqttDue) {
+            sentTelemetryToMqtt =
+                publishBufferedTelemetry(history, PublishTarget::Mqtt, telemetryReadIntervalMs / 1000); // TOREMOVE
+            if (sentTelemetryToMqtt)
+                lastSentToMqtt = millis();
+        }
+
         // TOREMOVE: verbose end-of-cycle summary, delete once mesh/phone/mqtt gating is confirmed working
         LOG_INFO("AQ summary: read=%d valid=%d historySize=%u", readThisCycle, readGotValidTelemetry, (unsigned)history.size());
         LOG_INFO("AQ summary: mesh allowed=%d due=%d(interval=%ums lastAgo=%dms) sent=%d", telemetryMeshAllowed, telemetryMeshDue,
@@ -290,6 +308,8 @@ int32_t AirQualityTelemetryModule::runOnce()
         LOG_INFO("AQ summary: phone allowed=%d due=%d(interval=%ums lastAgo=%dms) sent=%d", telemetryPhoneAllowed,
                  telemetryPhoneDue, sendToPhoneIntervalMs, lastSentToPhone ? (int32_t)(millis() - lastSentToPhone) : -1,
                  sentTelemetryToPhone);
+        LOG_INFO("AQ summary: mqtt allowed=%d due=%d(interval=%ums lastAgo=%dms) sent=%d", telemetryMqttAllowed, telemetryMqttDue,
+                 telemetryReadIntervalMs, lastSentToMqtt ? (int32_t)(millis() - lastSentToMqtt) : -1, sentTelemetryToMqtt);
     }
     if (sleepOnNextExecution) {
         // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
