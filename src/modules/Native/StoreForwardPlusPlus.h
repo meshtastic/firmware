@@ -5,6 +5,7 @@
 #include "ProtobufModule.h"
 #include "Router.h"
 #include "SinglePortModule.h"
+#include "SketchIndex.h"
 #include "sqlite3.h"
 
 #define SFPP_HASH_SIZE 16
@@ -134,6 +135,17 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getCanonScratchStmt;
     sqlite3_stmt *removeCanonScratch;
     sqlite3_stmt *clearCanonScratchStmt;
+    sqlite3_stmt *bucketSummaryStmt;
+    sqlite3_stmt *unindexedLinksStmt;
+    sqlite3_stmt *setLinkSetIndexStmt;
+
+    // Derives the short ID and checksum contribution for any chain row that predates those columns.
+    // Bounded by the chain length, and a no-op on every run after the first.
+    void backfillSetIndex();
+
+    // Summarises one bucket of a chain: its members' short IDs, their XOR checksum and their count.
+    // Returns false when the bucket holds nothing, which is not the same as an empty sketch.
+    bool buildBucketSummary(uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found

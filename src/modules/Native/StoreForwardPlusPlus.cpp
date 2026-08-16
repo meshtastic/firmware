@@ -14,6 +14,9 @@
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
 
+#include <utility>
+#include <vector>
+
 StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     : ProtobufModule("StoreForwardpp",
                      portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
@@ -63,6 +66,11 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     if (err != nullptr)
         LOG_ERROR("%s", err);
     sqlite3_free(err);
+
+    // The set-reconciliation columns arrived after the table, so an existing store gets them here.
+    // A duplicate-column error is the expected result on every run after the first.
+    sqlite3_exec(ppDb, "ALTER TABLE channel_messages ADD COLUMN short_id INT;", NULL, NULL, NULL);
+    sqlite3_exec(ppDb, "ALTER TABLE channel_messages ADD COLUMN checksum INT;", NULL, NULL, NULL);
 
     res = sqlite3_exec(ppDb, "         \
         CREATE TABLE IF NOT EXISTS     \
@@ -182,8 +190,21 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
-        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, short_id, checksum) \
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &chain_insert_stmt, NULL);
+
+    // Both identifiers are stored beside the object, so summarising a bucket never rehashes and a
+    // restart costs a query rather than a pass over the chain.
+    sqlite3_prepare_v2(ppDb, "select short_id, checksum from channel_messages \
+        where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id is not null;",
+                       -1, &bucketSummaryStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "select message_hash from channel_messages where short_id is null limit 128;", -1,
+                       &unindexedLinksStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "update channel_messages set short_id=?, checksum=? where message_hash=?;", -1, &setLinkSetIndexStmt,
+                       NULL);
 
     sqlite3_prepare_v2(ppDb, "INSERT INTO local_messages (destination, sender, packet_id, root_hash, \
         encrypted_bytes, message_hash, rx_time, payload) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
@@ -294,7 +315,76 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     encryptedOk = true;
 
+    backfillSetIndex();
+
     this->setInterval(15 * 1000);
+}
+
+void StoreForwardPlusPlusModule::backfillSetIndex()
+{
+    uint32_t indexed = 0;
+
+    // One batch per pass: the select finds rows the update then fills, so re-running it is how the
+    // loop advances. A store written before these columns existed converges in chain_length/128 passes.
+    while (true) {
+        std::vector<std::pair<uint32_t, uint64_t>> derived;
+        std::vector<std::vector<uint8_t>> hashes;
+
+        sqlite3_reset(unindexedLinksStmt);
+        while (sqlite3_step(unindexedLinksStmt) == SQLITE_ROW) {
+            const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(unindexedLinksStmt, 0);
+            const int len = sqlite3_column_bytes(unindexedLinksStmt, 0);
+            if (hash == nullptr || len <= 0)
+                continue;
+            hashes.emplace_back(hash, hash + len);
+            derived.emplace_back(sfppsr::shortId(hash, len), sfppsr::checksumContribution(hash, len));
+        }
+        sqlite3_reset(unindexedLinksStmt);
+
+        if (hashes.empty())
+            break;
+
+        for (size_t i = 0; i < hashes.size(); i++) {
+            sqlite3_reset(setLinkSetIndexStmt);
+            sqlite3_bind_int64(setLinkSetIndexStmt, 1, derived[i].first);
+            sqlite3_bind_int64(setLinkSetIndexStmt, 2, (sqlite3_int64)derived[i].second);
+            sqlite3_bind_blob(setLinkSetIndexStmt, 3, hashes[i].data(), hashes[i].size(), NULL);
+            if (sqlite3_step(setLinkSetIndexStmt) != SQLITE_DONE) {
+                LOG_ERROR("StoreForwardpp cannot index link: %s", sqlite3_errmsg(ppDb));
+                sqlite3_reset(setLinkSetIndexStmt);
+                return; // an update that does not stick would loop the select forever
+            }
+            indexed++;
+        }
+        sqlite3_reset(setLinkSetIndexStmt);
+    }
+
+    if (indexed > 0)
+        LOG_INFO("StoreForwardpp indexed %u existing links for set reconciliation", indexed);
+}
+
+bool StoreForwardPlusPlusModule::buildBucketSummary(uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
+                                                    sfppsr::BucketSummary &out)
+{
+    out.clear();
+
+    // Counters are 1-based, so bucket b covers counters [b*n + 1, (b+1)*n].
+    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
+    const uint32_t last = first + sfppsr::kBucketObjects - 1;
+
+    sqlite3_reset(bucketSummaryStmt);
+    sqlite3_bind_int(bucketSummaryStmt, 1, root_hash_len);
+    sqlite3_bind_blob(bucketSummaryStmt, 2, root_hash, root_hash_len, NULL);
+    sqlite3_bind_int(bucketSummaryStmt, 3, first);
+    sqlite3_bind_int(bucketSummaryStmt, 4, last);
+
+    while (sqlite3_step(bucketSummaryStmt) == SQLITE_ROW) {
+        out.add((pinsketch::Element)sqlite3_column_int64(bucketSummaryStmt, 0),
+                (uint64_t)sqlite3_column_int64(bucketSummaryStmt, 1));
+    }
+    sqlite3_reset(bucketSummaryStmt);
+
+    return out.count() > 0;
 }
 
 int32_t StoreForwardPlusPlusModule::runOnce()
@@ -1298,6 +1388,9 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
     sqlite3_bind_text(chain_insert_stmt, 9, lo.payload.c_str(), lo.payload.length(), NULL);
 
     sqlite3_bind_int(chain_insert_stmt, 10, lo.counter);
+    // short_id and checksum, derived once here rather than on every advert
+    sqlite3_bind_int64(chain_insert_stmt, 11, sfppsr::shortId(lo.message_hash, lo.message_hash_len));
+    sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(lo.message_hash, lo.message_hash_len));
     int res = sqlite3_step(chain_insert_stmt);
     if (res != SQLITE_OK && res != SQLITE_DONE) {
         LOG_ERROR("StoreForwardpp Cannot step: %s", sqlite3_errmsg(ppDb));
