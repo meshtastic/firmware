@@ -35,6 +35,8 @@
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
+#define default_telemetry_read_interval_secs (15 * 60) // default telemetry read interval
+#define min_telemetry_read_interval_secs (6 * 60)      // min telemetry interval to avoid lag in queues
 
 enum class TrafficType { POSITION, TELEMETRY };
 

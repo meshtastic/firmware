@@ -1603,6 +1603,12 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.air_quality_interval = 0;
 #endif
 
+#ifdef USERPREFS_CONFIG_AQ_TELEM_READ_INTERVAL
+    moduleConfig.telemetry.air_quality_telemetry_read_interval = USERPREFS_CONFIG_AQ_TELEM_READ_INTERVAL;
+#else
+    moduleConfig.telemetry.air_quality_telemetry_read_interval = 0;
+#endif
+
 #ifdef USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED
     moduleConfig.telemetry.air_quality_enabled = USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED;
 #endif

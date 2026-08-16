@@ -41,6 +41,7 @@
   // "USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED": "1", // Force BMP280/sensor reads + LoRa broadcast on first boot
   // "USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED": "1",      // Environment telemetry enable on screen
   // "USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL": "900",     // AQ telemetry update interval in seconds
+  // "USERPREFS_CONFIG_AQ_TELEM_READ_INTERVAL": "360",       // AQ sensor read interval in seconds (floored at min_telemetry_read_interval_secs in Default.h)
   // "USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED": "1",         // AQ telemetry enable
   // "USERPREFS_CONFIG_AQ_SCREEN_ENABLED": "1",              // AQ telemetry enable on screen
   // "USERPREFS_LORACONFIG_CHANNEL_NUM": "31",
