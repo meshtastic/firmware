@@ -430,6 +430,14 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
+
+    // likewise the edition: it lives in persisted devicestate, so a vanilla install must
+    // overwrite the previous event build's value. Before the CRC compare, so the change persists.
+#ifdef USERPREFS_FIRMWARE_EDITION
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
+#else
+    myNodeInfo.firmware_edition = meshtastic_FirmwareEdition_VANILLA;
+#endif
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -615,9 +623,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-#ifdef USERPREFS_FIRMWARE_EDITION
-    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
-#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -3525,8 +3530,10 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
             // If the protected cap refuses the favorite, fall back to a heard-now stamp so the
             // contact still isn't the first eviction victim.
-            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
                 stampContactHeardNow(info);
+            }
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified

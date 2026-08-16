@@ -114,6 +114,14 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         }
     }
 
+    // Our own packet heard back off the mesh, which the duplicate cache only suppresses best-effort.
+    // Clients can't tell an echo from genuine ingress, so it surfaces as an incoming message. Packets
+    // addressed to us are locally-generated feedback (implicit ACK, NAK, routing error), not an echo.
+    if (isFromUs(mp) && !isToUs(mp)) {
+        LOG_DEBUG("Skip phone echo of our own packet 0x%08x", mp->id);
+        return 0;
+    }
+
     printPacket("Forwarding to phone", mp);
     if (auto *toPhone = packetPool.allocCopy(*mp))
         sendToPhone(toPhone);
@@ -492,8 +500,11 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
-        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
+        // ROUTING_APP is the phone's only delivery confirmation, so it displaces the oldest like
+        // text does. Gate the variant: decoded.portnum aliases encrypted.size in the union.
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP || p->decoded.portnum == meshtastic_PortNum_ROUTING_APP)) {
             LOG_WARN("ToPhone queue full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)

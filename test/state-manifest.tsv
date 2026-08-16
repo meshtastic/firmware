@@ -42,6 +42,7 @@
 # suite	flags	reason
 test_admin_radio	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs	per-test NodeDB fixture, and the admin handlers under test persist config, channels and node metadata
 test_admin_session_repro	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
+test_firmware_edition	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	persists an event firmware_edition in devicestate, then reboots a NodeDB to prove a vanilla build resets it
 test_fuzz_packets	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs	drives decode of fuzzed packets through the real NodeDB and message store
 test_hop_scaling	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB to hold the hop-distance fixtures
 test_mesh_beacon	writes=module.proto	exercises the beacon's module-config save path
