@@ -268,6 +268,8 @@ class ReliableRouterTestShim : public ReliableRouter
         ReliableRouter::sniffReceived(p, routing);
     }
 
+    void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsGenerateImplicitAckForOwnOverheard(p); }
+
     void clearPendingForTest()
     {
         while (!pending.empty())
@@ -820,6 +822,57 @@ void test_reliableAckStopsNormalPendingTransmission(void)
     TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
 }
 
+// A PKI DM we originated is encrypted to the recipient, so when we overhear it being rebroadcast we
+// cannot decode it. The routing auth gate classifies it opaque and returns before
+// shouldFilterReceived() runs, so the implicit ACK has to be reachable from the header alone -
+// otherwise the client never sees "Delivered to mesh" for a DM.
+void test_implicit_ack_for_opaque_own_packet(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+    mockRoutingModule->ackNaks.clear();
+
+    // The overheard copy as it actually arrives: still encrypted, nothing decoded.
+    meshtastic_MeshPacket overheard = meshtastic_MeshPacket_init_zero;
+    overheard.from = kLocalNode;
+    overheard.to = kRemoteNode;
+    overheard.id = original.id;
+    overheard.channel = 0;
+    overheard.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    overheard.encrypted.size = 32;
+
+    reliableShim->implicitAckForTest(&overheard);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    const auto &ack = mockRoutingModule->ackNaks.front();
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, std::get<0>(ack));
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, std::get<1>(ack)); // addressed to us -> reaches the phone
+    TEST_ASSERT_EQUAL_UINT32(original.id, std::get<2>(ack));
+
+    reliableShim->clearPendingForTest();
+}
+
+// Someone else's traffic must never mint an ACK, even with a colliding id.
+void test_implicit_ack_ignores_foreign_pkt(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    mockRoutingModule->ackNaks.clear();
+
+    meshtastic_MeshPacket foreign = meshtastic_MeshPacket_init_zero;
+    foreign.from = kRemoteNode;
+    foreign.to = kLocalNode;
+    foreign.id = original.id;
+    foreign.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    foreign.encrypted.size = 32;
+
+    reliableShim->implicitAckForTest(&foreign);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+    reliableShim->clearPendingForTest();
+}
+
 void test_pending_does_not_cancel_radio_queue_before_first_retry(void)
 {
     MockRadioInterface *mockIface = installMockIface();
@@ -1049,6 +1102,8 @@ void setup()
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
+    RUN_TEST(test_implicit_ack_for_opaque_own_packet);
+    RUN_TEST(test_implicit_ack_ignores_foreign_pkt);
     RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
     RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
     RUN_TEST(test_directed_hop_tracks_three_total_attempts);
