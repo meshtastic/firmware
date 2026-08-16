@@ -14,6 +14,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
 #include "mesh/ReliableRouter.h"
+#include "mesh/Throttle.h"
 #include "modules/RoutingModule.h"
 #include <cstdio>
 #include <cstring>
@@ -759,7 +760,8 @@ void test_send_extends_other_pending_deadlines_not_own(void)
     // further 50s out, past anything the wall clock could account for.
     uint32_t bTx = reliableShim->pendingNextTx(kLocalNode, b.id);
     uint32_t retrans = radio->getRetransmissionMsec(reliableShim->pendingPacket(kLocalNode, b.id));
-    TEST_ASSERT_TRUE_MESSAGE(bTx - retrans <= millis(), "own record must not be extended by its own send");
+    // Via Throttle rather than a bare millis() compare, per the house deadline rule.
+    TEST_ASSERT_TRUE_MESSAGE(Throttle::deadlinePassed(bTx - retrans), "own record must not be extended by its own send");
 }
 
 void test_receive_extends_all_pending_deadlines(void)

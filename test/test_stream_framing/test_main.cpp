@@ -295,21 +295,50 @@ void test_high_bytes_in_payload_delivered_on_both_paths()
 /// START1, so in 0x94 0x94 0xc3 ... the real frame's own marker was consumed by the reset. This
 /// is a known robustness gap being pinned as-is, not an endorsement; a fix would re-examine the
 /// failing byte. The parser must still recover on the next clean frame.
-void test_stray_start1_before_frame_documents_frame_loss()
+void test_stray_start1_before_frame_still_delivers()
 {
-    InputScriptedStream stream;
-    FramingStreamAPIShim api(&stream);
     std::vector<uint8_t> payload = {0x42};
-
-    std::vector<uint8_t> burst = {kStart1}; // the stray marker
     std::vector<uint8_t> frame = makeFrame(payload);
+    std::vector<uint8_t> burst = {kStart1}; // stray marker, then the real frame
     burst.insert(burst.end(), frame.begin(), frame.end());
 
-    feedBufferPath(api, burst);
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(0, api.deliveries.size(), "current parser loses the frame after a stray START1");
+    // The byte that fails START2 is itself START1 here, so the frame behind it must survive.
+    InputScriptedStream bufStream;
+    FramingStreamAPIShim bufferApi(&bufStream);
+    feedBufferPath(bufferApi, burst);
+    assertSingleDelivery(bufferApi, payload);
 
-    // The loss is confined to that frame: a subsequent clean frame delivers normally.
-    feedBufferPath(api, frame);
+    InputScriptedStream stream;
+    FramingStreamAPIShim streamApi(&stream);
+    feedStreamPath(streamApi, stream, burst);
+    assertSingleDelivery(streamApi, payload);
+}
+
+/// A run of stray markers before a frame must not consume it either.
+void test_repeated_stray_start1_before_frame_still_delivers()
+{
+    std::vector<uint8_t> payload = {0x43, 0x44};
+    std::vector<uint8_t> frame = makeFrame(payload);
+    std::vector<uint8_t> burst = {kStart1, kStart1, kStart1};
+    burst.insert(burst.end(), frame.begin(), frame.end());
+
+    InputScriptedStream stream;
+    FramingStreamAPIShim api(&stream);
+    feedStreamPath(api, stream, burst);
+    assertSingleDelivery(api, payload);
+}
+
+/// START1 followed by a non-START1, non-START2 byte still resyncs on the next real frame.
+void test_start1_then_unrelated_byte_resyncs()
+{
+    std::vector<uint8_t> payload = {0x45};
+    std::vector<uint8_t> frame = makeFrame(payload);
+    std::vector<uint8_t> burst = {kStart1, 0x00};
+    burst.insert(burst.end(), frame.begin(), frame.end());
+
+    InputScriptedStream stream;
+    FramingStreamAPIShim api(&stream);
+    feedStreamPath(api, stream, burst);
     assertSingleDelivery(api, payload);
 }
 
@@ -349,8 +378,10 @@ void setup()
     RUN_TEST(test_leading_garbage_resyncs_to_frame);
     RUN_TEST(test_bogus_length_rejected_then_next_frame_recovered);
 
-    printf("\n=== Documented gaps ===\n");
-    RUN_TEST(test_stray_start1_before_frame_documents_frame_loss);
+    printf("\n=== Stray framing markers ===\n");
+    RUN_TEST(test_stray_start1_before_frame_still_delivers);
+    RUN_TEST(test_repeated_stray_start1_before_frame_still_delivers);
+    RUN_TEST(test_start1_then_unrelated_byte_resyncs);
 
     exit(UNITY_END());
 }
