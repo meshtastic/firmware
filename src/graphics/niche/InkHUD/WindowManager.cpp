@@ -277,7 +277,11 @@ void InkHUD::WindowManager::nextApplet()
     t->getAssignedApplet()->sendToBackground();
     t->assignApplet(nextValidApplet);
     nextValidApplet->bringToForeground();
+#if defined(NM_EPD_420_BW_INKHUD)
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
+#else
     inkhud->forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
+#endif
 }
 
 // On the currently focussed tile: cycle to the previous available user applet
@@ -330,7 +334,11 @@ void InkHUD::WindowManager::prevApplet()
     t->getAssignedApplet()->sendToBackground();
     t->assignApplet(prevValidApplet);
     prevValidApplet->bringToForeground();
+#if defined(NM_EPD_420_BW_INKHUD)
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
+#else
     inkhud->forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
+#endif
 }
 
 // Show a specific applet on the focused tile, or focus the tile where it is already shown.
@@ -350,7 +358,11 @@ bool InkHUD::WindowManager::showApplet(uint8_t appletIndex)
             refocusTile();
             if (!settings->optionalMenuItems.nextTile)
                 userTiles.at(settings->userTiles.focused)->requestHighlight();
+#if defined(NM_EPD_420_BW_INKHUD)
+            inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
+#else
             inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+#endif
             return true;
         }
     }
@@ -364,7 +376,11 @@ bool InkHUD::WindowManager::showApplet(uint8_t appletIndex)
     focused->assignApplet(target);
     target->bringToForeground();
     settings->userTiles.displayedUserApplet[settings->userTiles.focused] = appletIndex;
+#if defined(NM_EPD_420_BW_INKHUD)
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
+#else
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+#endif
     return true;
 }
 

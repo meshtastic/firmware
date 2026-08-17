@@ -50,7 +50,11 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c)
         || previous.hopsAway != c.hopsAway)            // or different hops away
     {
         requestAutoshow();
+#if defined(NM_EPD_420_BW_INKHUD)
+        requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+#else
         requestUpdate();
+#endif
     }
 }
 

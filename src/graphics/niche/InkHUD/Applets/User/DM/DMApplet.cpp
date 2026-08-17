@@ -28,7 +28,11 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     // If DM (not broadcast)
     if (!isBroadcast(p->to)) {
         // Want to update display, if applet is foreground
+#if defined(NM_EPD_420_BW_INKHUD)
+        requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+#else
         requestUpdate();
+#endif
 
         // If this was an incoming message, suggest that our applet becomes foreground, if permitted
         if (getFrom(p) != nodeDB->getNodeNum())

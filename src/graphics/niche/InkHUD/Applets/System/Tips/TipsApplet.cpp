@@ -345,7 +345,11 @@ void InkHUD::TipsApplet::onButtonShortPress()
         // Close applet
         sendToBackground();
     } else {
+#if defined(NM_EPD_420_BW_INKHUD)
+        requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+#else
         requestUpdate();
+#endif
     }
 }
 

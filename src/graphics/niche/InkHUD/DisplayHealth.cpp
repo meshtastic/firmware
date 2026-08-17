@@ -70,7 +70,11 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType(bool fastSupp
     // Explicitly requested FULL
     if (finalDecision == UpdateTypes::FULL) {
         LOG_DEBUG("Explicit FULL");
+#if defined(NM_EPD_420_BW_INKHUD)
+        debt = 0.0;
+#else
         debt = max(debt - 1.0, 0.0); // Record that we have paid back (some of) the FULL refresh debt
+#endif
         return UpdateTypes::FULL;
     }
 
@@ -106,7 +110,11 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType(bool fastSupp
     // In debt: suggest FULL
     else {
         LOG_DEBUG("UNSPECIFIED: using FULL");
+#if defined(NM_EPD_420_BW_INKHUD)
+        debt = 0.0;
+#else
         debt = max(debt - 1.0, 0.0); // Record that we have paid back (some of) the FULL refresh debt
+#endif
 
         // When maintenance begins, the first refresh happens shortly after user interaction ceases (a minute or so)
         // If we *are* given an opportunity to refresh before that, we'll skip that initial maintenance refresh

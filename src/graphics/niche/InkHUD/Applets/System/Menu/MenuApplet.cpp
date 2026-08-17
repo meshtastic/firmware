@@ -124,11 +124,19 @@ static bool useTouchFriendlyMenuLayout(const InkHUD::InkHUD *inkhud)
     return inkhud != nullptr && inkhud->hasTouchEnabledProvider();
 }
 
+static uint8_t getFirstVisibleMenuItem(uint8_t cursor, uint8_t slotCount)
+{
+    return cursor < slotCount ? 0 : cursor - (slotCount - 1);
+}
+
 static uint16_t getMenuItemHeightPx(const InkHUD::InkHUD *inkhud)
 {
     const bool touchFriendly = useTouchFriendlyMenuLayout(inkhud);
     const uint16_t lineH = touchFriendly ? InkHUD::Applet::fontMedium.lineHeight() : InkHUD::Applet::fontSmall.lineHeight();
-    const float rowScale = touchFriendly ? 1.9f : 1.6f;
+    float rowScale = touchFriendly ? 1.9f : 1.6f;
+#if defined(NM_EPD_420_BW_INKHUD)
+    rowScale = 3.2f;
+#endif
     uint16_t itemH = (uint16_t)(lineH * rowScale);
     if (itemH == 0) {
         itemH = 1;
@@ -195,6 +203,35 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     cm.store = CannedMessageStore::getInstance();
 }
 
+uint8_t InkHUD::MenuApplet::getVisibleMenuSlots()
+{
+    const uint16_t itemH = getMenuItemHeightPx(inkhud);
+    uint16_t itemTop = 0;
+#if defined(NM_EPD_420_BW_INKHUD)
+    if (currentPage == ROOT)
+        itemTop = systemInfoPanelHeight;
+#endif
+    if (itemTop >= height())
+        return 1;
+
+    return max((uint8_t)1, (uint8_t)((height() - itemTop) / itemH));
+}
+
+void InkHUD::MenuApplet::requestCursorUpdate(uint8_t previousCursor)
+{
+#if defined(NM_EPD_420_BW_INKHUD)
+    const uint8_t slotCount = getVisibleMenuSlots();
+    if (getFirstVisibleMenuItem(previousCursor, slotCount) != getFirstVisibleMenuItem(cursor, slotCount)) {
+        requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+        return;
+    }
+#else
+    (void)previousCursor;
+#endif
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
 void InkHUD::MenuApplet::onForeground()
 {
     // We do need this before we render, but we can optimize by just calculating it once now
@@ -232,8 +269,12 @@ void InkHUD::MenuApplet::onForeground()
 
     freeTextMode = false;
 
+#if defined(NM_EPD_420_BW_INKHUD)
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+#else
     // Upgrade the refresh to FAST, for guaranteed responsiveness
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+#endif
 }
 
 void InkHUD::MenuApplet::onBackground()
@@ -269,9 +310,13 @@ void InkHUD::MenuApplet::onBackground()
     t->assignApplet(borrowedTileOwner); // Break our link with the tile, (and relink it with real owner, if it had one)
     borrowedTileOwner = nullptr;
 
+#if defined(NM_EPD_420_BW_INKHUD)
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+#else
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // We're only updating here to upgrade from UNSPECIFIED to FAST, to ensure responsiveness when exiting menu
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+#endif
 }
 
 // Open the menu
@@ -1812,6 +1857,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     // Remember which page we are on now
     currentPage = page;
+
+#if defined(NM_EPD_420_BW_INKHUD)
+    requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+#endif
 }
 
 void InkHUD::MenuApplet::onRender(bool full)
@@ -1844,7 +1893,14 @@ void InkHUD::MenuApplet::onRender(bool full)
     // System info panel at the top of the menu
     // =========================================
 
-    uint16_t &siH = systemInfoPanelHeight;                   // System info - height. Calculated at onForeground
+    uint16_t &siH = systemInfoPanelHeight; // System info height, calculated at onForeground
+#if defined(NM_EPD_420_BW_INKHUD)
+    if (currentPage == ROOT) {
+        drawSystemInfoPanel(0, 0, width());
+        itemT = siH;
+        slotCount = getVisibleMenuSlots();
+    }
+#else
     const uint8_t slotsObscured = ceilf(siH / (float)itemH); // How many slots are obscured by system info panel
 
     // System info - top
@@ -1858,12 +1914,11 @@ void InkHUD::MenuApplet::onRender(bool full)
     else
         siT = 0 - ((cursor - (slotCount - slotsObscured - 1)) * itemH);
 
-    // If showing ROOT menu,
-    // and the panel isn't yet scrolled off screen top
     if (currentPage == ROOT) {
         drawSystemInfoPanel(0, siT, width()); // Draw the panel.
         itemT = max(siT + siH, 0);            // Offset the first menu entry, so menu starts below the system info panel
     }
+#endif
 
     // drawSystemInfoPanel() changes font state (clock/info text).
     // Restore the active menu font so ROOT page item text matches other menu pages,
@@ -1875,11 +1930,7 @@ void InkHUD::MenuApplet::onRender(bool full)
 
     // Which item will be drawn to the top-most slot?
     // Initially, this is the item 0, but may increase once we begin scrolling
-    uint8_t firstItem;
-    if (cursor < slotCount)
-        firstItem = 0;
-    else
-        firstItem = cursor - (slotCount - 1);
+    const uint8_t firstItem = getFirstVisibleMenuItem(cursor, slotCount);
 
     // Which item will be drawn to the bottom-most slot?
     // This may be beyond the slot-count, to draw a partially off-screen item below the bottom-most slow
@@ -1990,6 +2041,12 @@ bool InkHUD::MenuApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
     const uint16_t itemH = getMenuItemHeightPx(inkhud);
     int16_t itemT = 0;
     uint8_t slotCount = (height() - itemT) / itemH;
+#if defined(NM_EPD_420_BW_INKHUD)
+    if (currentPage == ROOT) {
+        itemT = systemInfoPanelHeight;
+        slotCount = getVisibleMenuSlots();
+    }
+#else
     if (slotCount == 0) {
         slotCount = 1;
     }
@@ -2004,8 +2061,9 @@ bool InkHUD::MenuApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
         }
         itemT = max((int16_t)(siT + siH), (int16_t)0);
     }
+#endif
 
-    const uint8_t firstItem = (cursor < slotCount) ? 0 : (cursor - (slotCount - 1));
+    const uint8_t firstItem = getFirstVisibleMenuItem(cursor, slotCount);
     uint16_t visibleEnd = (uint16_t)firstItem + (uint16_t)slotCount;
     const uint8_t maxIndex = (uint8_t)items.size() - 1;
     if (visibleEnd > maxIndex) {
@@ -2045,6 +2103,7 @@ void InkHUD::MenuApplet::onButtonShortPress()
     if (!freeTextMode) {
         // Push the auto-close timer back
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+        const uint8_t previousCursor = cursor;
 
         // Touch-first nodes keep user-button short-press as "advance selection" in menus.
         // Any button-driven navigation should restore visible highlight.
@@ -2066,7 +2125,7 @@ void InkHUD::MenuApplet::onButtonShortPress()
                     cursor = (cursor + 1) % items.size();
                 } while (items.at(cursor).isHeader);
             }
-            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            requestCursorUpdate(previousCursor);
         } else {
             if (cursorShown)
                 execute(items.at(cursor));
@@ -2102,13 +2161,15 @@ void InkHUD::MenuApplet::onExitShort()
     // Exit the menu
     showPage(MenuPage::EXIT);
 
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    if (!wantsToRender())
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onNavUp()
 {
     if (!freeTextMode) {
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+        const uint8_t previousCursor = cursor;
 
         // Touch-first menus: swipe up/down should scroll only.
         // Keep cursor movement for scroll math, but selection box is hidden in onRender().
@@ -2132,7 +2193,7 @@ void InkHUD::MenuApplet::onNavUp()
                         cursor--;
                 } while (items.at(cursor).isHeader);
             }
-            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            requestCursorUpdate(previousCursor);
             return;
         }
 
@@ -2156,7 +2217,7 @@ void InkHUD::MenuApplet::onNavUp()
             } while (items.at(cursor).isHeader);
         }
 
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        requestCursorUpdate(previousCursor);
     }
 }
 
@@ -2164,6 +2225,7 @@ void InkHUD::MenuApplet::onNavDown()
 {
     if (!freeTextMode) {
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+        const uint8_t previousCursor = cursor;
 
         // Touch-first menus: swipe up/down should scroll only.
         // Keep cursor movement for scroll math, but selection box is hidden in onRender().
@@ -2184,7 +2246,7 @@ void InkHUD::MenuApplet::onNavDown()
                     cursor = (cursor + 1) % items.size();
                 } while (items.at(cursor).isHeader);
             }
-            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            requestCursorUpdate(previousCursor);
             return;
         }
 
@@ -2205,7 +2267,7 @@ void InkHUD::MenuApplet::onNavDown()
             } while (items.at(cursor).isHeader);
         }
 
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        requestCursorUpdate(previousCursor);
     }
 }
 
@@ -2216,7 +2278,8 @@ void InkHUD::MenuApplet::onNavLeft()
 
         // Go to the previous menu page
         showPage(previousPage);
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        if (!wantsToRender())
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
 }
 
@@ -2257,7 +2320,8 @@ void InkHUD::MenuApplet::onFreeTextDone()
         cm.selectedMessageItem = &cm.freeTextItem;
         showPage(MenuPage::CANNEDMESSAGE_RECIPIENT);
     }
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    if (!wantsToRender())
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onFreeTextCancel()

@@ -58,6 +58,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
 
     void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height,
                         const std::string &text); // Draw input field for free text
+    uint8_t getVisibleMenuSlots();
+    void requestCursorUpdate(uint8_t previousCursor);
     uint16_t getSystemInfoPanelHeight();
     void drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width,
                              uint16_t *height = nullptr);                   // Info panel at top of root menu
