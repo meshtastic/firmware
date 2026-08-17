@@ -10,9 +10,6 @@
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
-#if ARCH_PORTDUINO
-#include "platform/portduino/PortduinoGlue.h"
-#endif
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -121,9 +118,6 @@ struct SavedGlobals {
     MeshService *service;
     AirTime *airTime;
     concurrency::Lock *cryptLock;
-#if ARCH_PORTDUINO
-    bool forceSimRadio;
-#endif
 };
 
 SavedGlobals saved;
@@ -319,9 +313,6 @@ void setUp(void)
     saved.service = service;
     saved.airTime = airTime;
     saved.cryptLock = cryptLock;
-#if ARCH_PORTDUINO
-    saved.forceSimRadio = portduino_config.force_simradio;
-#endif
 
     testNodeDB = new TestNodeDB();
     testNodeDB->clearTestNodes();
@@ -335,9 +326,6 @@ void setUp(void)
     memset(&myNodeInfo, 0, sizeof(myNodeInfo));
     myNodeInfo.my_node_num = kLocalNode;
     service = nullptr;
-#if ARCH_PORTDUINO
-    portduino_config.force_simradio = false;
-#endif
     installChannels();
 
     testAirTime = new AirTime();
@@ -379,9 +367,6 @@ void tearDown(void)
     router = saved.router;
     service = saved.service;
     airTime = saved.airTime;
-#if ARCH_PORTDUINO
-    portduino_config.force_simradio = saved.forceSimRadio;
-#endif
 }
 
 EVENT_ROUTER_TEST_ENTRY void setup()

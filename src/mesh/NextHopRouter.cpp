@@ -37,6 +37,18 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
         (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
         return false;
 
+    // Dedup opaque relays. Opaque frames deliberately never enter PacketHistory (so unauthenticated
+    // traffic can't influence routing/ACK/next-hop) - but with NO dedup at all, a dense mesh re-relays
+    // every copy of every frame, multiplying at each hop into an unbounded broadcast storm ("let hop
+    // exhaustion bound it" caps depth, not count). Suppress duplicate opaque rebroadcasts with a small,
+    // routing-isolated seen-set. Genuine originator (re)transmissions (hop_start == hop_limit) are
+    // always relayed so reliable opaque unicast still propagates (mirrors FloodingRouter's isRepeated).
+    const bool isOriginatorTx = p->hop_start > 0 && p->hop_start == p->hop_limit;
+    if (opaqueWasSeenRecently(getFrom(p), p->id) && !isOriginatorTx) {
+        LOG_TRACE("Drop duplicate opaque relay from 0x%08x id 0x%08x", getFrom(p), p->id);
+        return false;
+    }
+
     meshtastic_MeshPacket *relay = packetPool.allocCopy(*p);
     if (!relay)
         return false;
@@ -51,6 +63,24 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     if (res == ERRNO_SHOULD_RELEASE)
         packetPool.release(relay);
     return res == ERRNO_OK;
+}
+
+// Isolated dedup for opaque relays (see relayOpaquePacket). Returns true if (from,id) is already in the
+// ring; otherwise records it (round-robin eviction) and returns false. A separate table from
+// PacketHistory on purpose: opaque frames must never influence routing/ACK/next-hop. No timestamps -
+// a stale (from,id) can't false-match a later packet because ids are effectively random.
+bool NextHopRouter::opaqueWasSeenRecently(NodeNum from, PacketId id)
+{
+    for (uint8_t i = 0; i < OPAQUE_SEEN_MAX; i++) {
+        if (opaqueSeen[i].sender == from && opaqueSeen[i].id == id)
+            return true;
+    }
+    // Not seen: record it, overwriting the oldest-written slot (FIFO). Empty slots hold id 0, which a
+    // real entry never has (relayOpaquePacket drops id 0), so they simply never match above.
+    opaqueSeen[opaqueSeenNext].sender = from;
+    opaqueSeen[opaqueSeenNext].id = id;
+    opaqueSeenNext = (uint8_t)((opaqueSeenNext + 1) % OPAQUE_SEEN_MAX);
+    return false;
 }
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)

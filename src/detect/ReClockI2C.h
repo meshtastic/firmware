@@ -13,7 +13,8 @@
     https://github.com/sandeepmistry/arduino-nRF5/blob/master/libraries/Wire/Wire.h#L50
     https://github.com/earlephilhower/arduino-pico/blob/master/libraries/Wire/src/Wire.h#L60
     https://github.com/stm32duino/Arduino_Core_STM32/blob/main/libraries/Wire/src/Wire.h#L103
-    For cases when I2C speed is different to the ones defined by sensors (see defines in sensor classes)
+    For cases when I2C speed is different to the ones defined by sensors
+    (see defines in sensor classes)
     we need to reclock I2C and set it back to the previous established speed.
     Only for cases where we can know it (ESP32 or known screen) we can do this.
 */
@@ -27,10 +28,16 @@ class ReClockI2C
     {
         this->i2cBus = i2cBus;
         this->port = port;
-        this->previousClock = 0;
     }
 
-    bool setClock(uint32_t desiredClock)
+    // Sets the I2C clock to desiredClock and returns whatever clock was active
+    // beforehand, so the caller can hand it back to restoreClock() later. The
+    // previous clock is returned rather than stored on this object, so callers
+    // that nest calls (see ReClockI2CGuard) each keep their own restoration
+    // value instead of clobbering a single shared one.
+    // Returns 0 if the clock was already at desiredClock, or if the previous
+    // clock couldn't be determined - in both cases there's nothing to restore.
+    uint32_t setClock(uint32_t desiredClock)
     {
         uint32_t currentClock = this->getClock();
 
@@ -41,36 +48,27 @@ class ReClockI2C
         if (currentClock != desiredClock) {
             LOG_TRACE("Changing I2C clock to %uHz", desiredClock);
             this->i2cBus->setClock(desiredClock);
-            // If the clock is 0Hz, we still store it
-            // We'll check in restoreClock function
-            setPreviousClock(currentClock);
-            LOG_TRACE("Stored previous clock I2C clock: %uHz", this->previousClock);
-            return true;
+            LOG_TRACE("Previous I2C clock: %uHz", currentClock);
+            return currentClock;
         }
 
         LOG_TRACE("I2C clock was already %uHz. Skipping", desiredClock);
-        setPreviousClock(0);
-        return false;
+        return 0;
     }
 
-    bool restoreClock()
+    void restoreClock(uint32_t previousClock)
     {
-        if (this->previousClock) {
-            LOG_TRACE("Restoring I2C clock to %uHz", this->previousClock);
-            i2cBus->setClock(this->previousClock);
-            setPreviousClock(0);
-            return true;
+        if (previousClock) {
+            LOG_TRACE("Restoring I2C clock to %uHz", previousClock);
+            i2cBus->setClock(previousClock);
+            return;
         }
         LOG_TRACE("I2C clock was unknown. Not restored");
-        return false;
     }
 
   private:
     TwoWire *i2cBus{};
     ScanI2C::I2CPort port{};
-    uint32_t previousClock = 0;
-
-    void setPreviousClock(uint32_t clock) { this->previousClock = clock; }
 
     uint32_t getClock()
     {
@@ -93,6 +91,25 @@ class ReClockI2C
 #endif
         return 0;
     }
+};
+
+/* Helper for ReClockI2C: sets the clock on construction and restores it on
+   destruction, so a caller with multiple early-return paths doesn't need to
+   remember to call restoreClock() on each one.
+ */
+class ReClockI2CGuard
+{
+  public:
+    ReClockI2CGuard(ReClockI2C &reClock, uint32_t desiredClock) : reClock(reClock), previousClock(reClock.setClock(desiredClock))
+    {
+    }
+    ~ReClockI2CGuard() { reClock.restoreClock(previousClock); }
+    ReClockI2CGuard(const ReClockI2CGuard &) = delete;
+    ReClockI2CGuard &operator=(const ReClockI2CGuard &) = delete;
+
+  private:
+    ReClockI2C &reClock;
+    uint32_t previousClock;
 };
 
 #endif

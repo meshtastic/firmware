@@ -211,6 +211,8 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
 
 MockNodeDB *mockNodeDB = nullptr;
 
+static void installWellKnownPrimaryChannel(); // defined below, next to the other channel fixtures
+
 static void resetTrafficConfig()
 {
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
@@ -220,7 +222,9 @@ static void resetTrafficConfig()
     config = meshtastic_LocalConfig_init_zero;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
 
-    channelFile = meshtastic_ChannelFile_init_zero;
+    // A real device always has a primary channel; leaving channels_count at 0 made every router
+    // lookup log "Invalid channel index", 12k lines of it, without testing anything.
+    installWellKnownPrimaryChannel();
     owner.is_licensed = false;
 
     myNodeInfo.my_node_num = kLocalNode;
