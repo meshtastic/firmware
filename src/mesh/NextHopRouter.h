@@ -124,7 +124,7 @@ class NextHopRouter : public FloodingRouter
     constexpr static uint32_t ROUTE_TTL_MSEC = 30UL * 60 * 1000; // re-discover a route unconfirmed for 30 min
     constexpr static uint8_t ROUTE_FAILURE_THRESHOLD = 3;        // consecutive un-ACKed directed deliveries -> dead
 
-    constexpr static uint8_t OPAQUE_SEEN_MAX = 32; // opaque-relay dedup slots (see relayOpaquePacket); ~12B/slot -> ~384B
+    constexpr static uint8_t OPAQUE_SEEN_MAX = 32; // opaque-relay dedup slots (see relayOpaquePacket); ~8B/slot -> ~256B
 
   protected:
     /**
