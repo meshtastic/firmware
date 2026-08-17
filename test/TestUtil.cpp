@@ -40,6 +40,12 @@
 //
 // Listening sockets only: an outbound connection is a different (and louder) problem, and gethostby*
 // opens transient sockets that would make an any-socket check flap.
+//
+// Linux-only: the check reads /proc, and MinGW-w64 has no readlink() to resolve an fd link. CI runs
+// every suite on Linux, so compiling it out on native-windows still leaves each merge covered.
+#ifdef _WIN32
+static void assertNoListeningSockets() {}
+#else
 static void assertNoListeningSockets()
 {
     // Socket fds appear as "socket:[inode]"; a listening TCP row in /proc/self/net carries st 0A.
@@ -101,6 +107,7 @@ static void assertNoListeningSockets()
     fflush(stderr);
     exit(EXIT_FAILURE);
 }
+#endif
 #endif
 
 #if ARCH_PORTDUINO
