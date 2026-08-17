@@ -211,8 +211,8 @@ int32_t AirQualityTelemetryModule::runOnce()
                 continue;
             }
 
-            bool shouldWake =
-                !Throttle::isWithinTimespanMs(lastRead, telemetryReadIntervalMs) || (telemetryPhoneDue && telemetryPhoneAllowed);
+            bool shouldWake = !Throttle::isWithinTimespanMs(lastRead, telemetryReadIntervalMs) ||
+                              (telemetryPhoneDue && telemetryPhoneAllowed) || lastRead == 0;
 
             if (!shouldWake) {
                 continue;
