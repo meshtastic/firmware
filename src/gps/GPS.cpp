@@ -17,6 +17,10 @@
 #include "main.h" // pmu_found
 #include "sleep.h"
 
+#if defined(T_DECK_MAX)
+#include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
+#endif
+
 #include "FSCommon.h"
 #include "GPSUpdateScheduling.h"
 #include "SPILock.h"
@@ -1901,7 +1905,11 @@ std::unique_ptr<GPS> GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
+#if defined(T_DECK_MAX)
+    uint32_t _en_gpio = config.position.gps_en_gpio;
+#else
     int8_t _en_gpio = config.position.gps_en_gpio;
+#endif
 
 #if defined(GPS_RX_PIN)
     if (!_rx_gpio)
@@ -1951,7 +1959,13 @@ std::unique_ptr<GPS> GPS::createGps()
     GpioVirtPin *virtPin = new GpioVirtPin();
     new_gps->enablePin = virtPin; // Always at least populate a virtual pin
     if (_en_gpio) {
-        GpioPin *p = new GpioHwPin(_en_gpio);
+        GpioPin *p = nullptr;
+#if defined(T_DECK_MAX)
+        if (t_deck_max::isEncodedXl9555Pin(_en_gpio))
+            p = tDeckMaxMakeGpioPin(t_deck_max::decodeXl9555Pin(_en_gpio));
+        else
+#endif
+            p = new GpioHwPin(_en_gpio);
 
         if (!GPS_EN_ACTIVE) { // Need to invert the pin before hardware
             new GpioNotTransformer(

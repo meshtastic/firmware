@@ -3,7 +3,7 @@
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
 
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK_MAX)
 #include "TDeckProKeyboard.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
@@ -20,7 +20,7 @@ extern uint8_t kb_model;
 
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK_MAX)
       TCAKeyboard(*(new TDeckProKeyboard()))
 #elif defined(T_LORA_PAGER)
       TCAKeyboard(*(new TLoraPagerKeyboard()))

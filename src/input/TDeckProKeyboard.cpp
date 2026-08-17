@@ -1,6 +1,10 @@
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK_MAX)
 
 #include "TDeckProKeyboard.h"
+
+#if defined(T_DECK_MAX)
+#include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
+#endif
 
 #define _TCA8418_COLS 10
 #define _TCA8418_ROWS 4
@@ -69,6 +73,9 @@ TDeckProKeyboard::TDeckProKeyboard()
 
 void TDeckProKeyboard::reset()
 {
+#if defined(T_DECK_MAX)
+    tDeckMaxResetKeyboard();
+#endif
     TCA8418KeyboardBase::reset();
     pinMode(KB_BL_PIN, OUTPUT);
     setBacklight(false);
@@ -192,4 +199,4 @@ bool TDeckProKeyboard::isModifierKey(uint8_t key)
     return (key == modifierRightShiftKey || key == modifierLeftShiftKey || key == modifierAltKey || key == modifierSymKey);
 }
 
-#endif // T_DECK_PRO
+#endif // T_DECK_PRO || T_DECK_MAX

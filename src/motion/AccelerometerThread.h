@@ -13,6 +13,9 @@
 #ifdef HAS_BMI270
 #include "BMI270Sensor.h"
 #endif
+#if defined(T_DECK_MAX) && defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
+#include "BHI260APSensor.h"
+#endif
 #include "BMM150Sensor.h"
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
@@ -138,6 +141,11 @@ class AccelerometerThread : public concurrency::OSThread
 #ifdef HAS_BMI270
         case ScanI2C::DeviceType::BMI270:
             sensor = new BMI270Sensor(device);
+            break;
+#endif
+#if defined(T_DECK_MAX) && defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
+        case ScanI2C::DeviceType::BHI260AP:
+            sensor = new BHI260APSensor(device);
             break;
 #endif
 #ifdef HAS_QMA6100P

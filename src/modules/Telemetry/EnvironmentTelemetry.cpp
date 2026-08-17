@@ -28,6 +28,9 @@
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_LTR553ALS) && __has_include(<SensorLTR553.hpp>)
+#include "Sensor/LTR553ALSSensor.h"
+#endif
 
 namespace graphics
 {
@@ -238,6 +241,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<SHTSensor.h>)
     // TODO Can we scan for multiple sensors connected on the same bus?
     addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
+#endif
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_LTR553ALS) && __has_include(<SensorLTR553.hpp>)
+    addSensor<LTR553ALSSensor>(i2cScanner, ScanI2C::DeviceType::LTR553ALS);
 #endif
 #endif
 }
