@@ -33,6 +33,8 @@ Randomisation costs one `pio` invocation per suite (about 4.7s each), because Pl
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
+**Never add `--without-building` to a test run.** PlatformIO links every native test program to the single `$BUILD_DIR/$PROGNAME` path and attributes Unity output by text alone, so a run that only builds beforehand executes whichever suite was linked last under _every_ suite's name - all reporting PASSED. Build once with `--without-testing` to warm the shared src objects if you like; the run itself must still build. `bin/check-test-attribution.py` grades the JUnit reports for exactly this and is wired into both `bin/run-tests.sh` (RED) and CI.
+
 **Raw `pio test` (no sanitizers, no verdict logic)** - use when you need to override the env or inspect verbose Unity output:
 
 ```bash

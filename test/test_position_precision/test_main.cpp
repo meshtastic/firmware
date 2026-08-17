@@ -8,10 +8,6 @@
 #include <cstdint>
 #include <cstring>
 #include <unity.h>
-#if ARCH_PORTDUINO
-#include "platform/portduino/PortduinoGlue.h"
-#endif
-
 static meshtastic_Position makePosition()
 {
     meshtastic_Position position = meshtastic_Position_init_default;
@@ -332,9 +328,6 @@ static void test_eventCoordinatePolicy_coversPortsAndExcludesPki()
     waypoint.to = 0x12345678;
     config.security.private_key.size = 32;
     owner.is_licensed = false;
-#if ARCH_PORTDUINO
-    portduino_config.force_simradio = false;
-#endif
     TEST_ASSERT_TRUE(willUsePki(&waypoint));
     TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&waypoint));
 #else
