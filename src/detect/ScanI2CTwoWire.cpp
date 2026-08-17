@@ -1094,7 +1094,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         }
     }
 
-#ifdef AS3935_IRQ
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
     // AS3935 addresses (0x01-0x03) fall in the reserved range the loop above skips; probe
     // them separately rather than widening that loop for every board.
     static const uint8_t as3935Candidates[] = {AS3935_ADDR_ALT, AS3935_ADDR_ALT2, AS3935_ADDR};
@@ -1107,9 +1107,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         i2cBus->beginTransmission(as3935Candidates[i]);
         uint8_t as3935Err = i2cBus->endTransmission();
         if (as3935Err == 0) {
-            // No WHOAMI register, and a POR-only check can't survive a warm reboot (this
-            // driver rewrites REG0x00 on init). Instead, write a test pattern to bits[5:1]
-            // and confirm it reads back - initDevice() overwrites this field right after anyway.
+            // No WHOAMI, and a POR-only check can't survive a warm reboot (initDevice rewrites
+            // REG0x00). Write a test pattern to bits[5:1] instead and confirm it reads back.
             constexpr uint8_t AS3935_PROBE_PATTERN = 0b01010; // arbitrary, bits[5:1]
             i2cBus->beginTransmission(as3935Candidates[i]);
             i2cBus->write((uint8_t)0x00);                        // REG0x00 (AFE_GAIN)
