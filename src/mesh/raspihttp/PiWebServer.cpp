@@ -357,13 +357,21 @@ int generate_self_signed_x509(EVP_PKEY *pkey, X509 **x509)
 
     X509_set_pubkey(*x509, pkey);
 
-    // SET Subject Name
-    X509_NAME *name = X509_get_subject_name(*x509);
-    X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (unsigned char *)"DE", -1, -1, 0);
-    X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (unsigned char *)"Meshtastic", -1, -1, 0);
-    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *)"meshtastic.local", -1, -1, 0);
-    // Selfsigned,  Issuer = Subject
-    X509_set_issuer_name(*x509, name);
+    // SET Subject Name. Build the name standalone instead of mutating the cert's own in place:
+    // OpenSSL 4.0 made X509_get_subject_name() return a const pointer, and the setters (which take
+    // a const name and copy it) are the spelling that compiles against every supported version.
+    X509_NAME *name = X509_NAME_new();
+    if (!name)
+        return -1;
+    if (X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (unsigned char *)"DE", -1, -1, 0) != 1 ||
+        X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (unsigned char *)"Meshtastic", -1, -1, 0) != 1 ||
+        X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *)"meshtastic.local", -1, -1, 0) != 1 ||
+        // Selfsigned, Issuer = Subject
+        X509_set_subject_name(*x509, name) != 1 || X509_set_issuer_name(*x509, name) != 1) {
+        X509_NAME_free(name);
+        return -1;
+    }
+    X509_NAME_free(name);
 
     // Certificate signed with our privte key
     if (X509_sign(*x509, pkey, EVP_sha256()) <= 0)
