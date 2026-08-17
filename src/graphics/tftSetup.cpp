@@ -235,10 +235,8 @@ DeviceScreen *deviceScreen = nullptr;
 
 #ifdef ARCH_ESP32
 // Get notified when the system is entering light sleep
-CallbackObserver<DeviceScreen, void *> tftSleepObserver =
-    CallbackObserver<DeviceScreen, void *>(deviceScreen, &DeviceScreen::prepareSleep);
-CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t> endSleepObserver =
-    CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t>(deviceScreen, &DeviceScreen::wakeUp);
+static CallbackObserver<DeviceScreen, void *> *tftSleepObserver = nullptr;
+static CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t> *endSleepObserver = nullptr;
 #endif
 
 /**
@@ -275,6 +273,19 @@ class ReentrantSpiLock : public ISpiLock
         spiLock->lock();
         owner = self;
         depth = 1;
+    }
+
+    bool lock(uint32_t timeout) override
+    {
+        ThreadId self = currentThread();
+        if (depth && owner == self) {
+            depth++;
+            return true;
+        }
+        bool result = spiLock->lock(timeout);
+        owner = self;
+        depth = 1;
+        return result;
     }
 
     void unlock(void) override
@@ -413,8 +424,14 @@ void tftSetup(void)
 
     if (deviceScreen) {
 #ifdef ARCH_ESP32
-        tftSleepObserver.observe(&notifyLightSleep);
-        endSleepObserver.observe(&notifyLightSleepEnd);
+        if (!tftSleepObserver) {
+            tftSleepObserver = new CallbackObserver<DeviceScreen, void *>(deviceScreen, &DeviceScreen::prepareSleep);
+        }
+        if (!endSleepObserver) {
+            endSleepObserver = new CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t>(deviceScreen, &DeviceScreen::wakeUp);
+        }
+        tftSleepObserver->observe(&notifyLightSleep);
+        endSleepObserver->observe(&notifyLightSleepEnd);
         xTaskCreatePinnedToCore(tft_task_handler, "tft", TFT_TASK_STACK_SIZE, NULL, 1, NULL, 0);
 #elif defined(ARCH_PORTDUINO)
         std::thread *tft_task = new std::thread([] { tft_task_handler(); });
