@@ -273,7 +273,7 @@ int32_t AirQualityTelemetryModule::runOnce()
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
                     sentTelemetryToMesh = publishBufferedTelemetry(history, PublishTarget::Mesh);
                 } else {
-                    sentTelemetryToMesh = sendTelemetry(TELEMETRY_PUBLISHED_MESH);
+                    sentTelemetryToMesh = sendTelemetry(NODENUM_BROADCAST, TELEMETRY_PUBLISHED_MESH);
                 }
 
                 if (transmitHistory && sentTelemetryToMesh) {
