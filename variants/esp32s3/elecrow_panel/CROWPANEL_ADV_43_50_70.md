@@ -5,6 +5,11 @@ ESP32-S3 panels, including the v1.4/v1.5 hardware family. It was developed
 from Meshtastic nightly commit `3a7c49972209c7b9adbda245b0d3c1d8337fd8b1`
 and tested on physical hardware.
 
+![CrowPanel Advance 7-inch v1.5 running Meshtastic](images/crowpanel-advance-7-v1.5-meshtastic.jpg)
+
+The photo shows the v1.5 7-inch panel, installed wireless module, and the
+Meshtastic Device UI running on the tested hardware.
+
 ## Working hardware and features
 
 - SX1262 LoRa using the v1.2+ native radio-header wiring. NSS/CS is GPIO 8;
