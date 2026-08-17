@@ -91,6 +91,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     bool isSilenced = false;
     bool buzzerShouldAlert = false;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    bool hapticShouldAlert = false;
+#endif
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
