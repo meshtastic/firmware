@@ -18,21 +18,149 @@
 // The state checkpoint needs a POSIX directory walk, and only the host builds run these suites.
 // Note ARDUINO *is* defined on portduino, so it is not the right guard here.
 #if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dirent.h>
 #include <map>
+#include <set>
 #include <string>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
+
+#if ARCH_PORTDUINO
+// A test binary must not be reachable from the network. main.cpp's setup()/loop() are compiled out
+// under PIO_UNIT_TESTING, so the phone API, MQTT and the web server are never started - but that is
+// a property of today's guards, not something anything checks. A suite that pulled in a service
+// which binds a port would otherwise open one on the developer's machine, silently, for the length
+// of the run. Assert the absence instead of trusting it.
+//
+// Listening sockets only: an outbound connection is a different (and louder) problem, and gethostby*
+// opens transient sockets that would make an any-socket check flap.
+static void assertNoListeningSockets()
+{
+    // Socket fds appear as "socket:[inode]"; a listening TCP row in /proc/self/net carries st 0A.
+    std::set<std::string> ours;
+    if (DIR *fds = opendir("/proc/self/fd")) {
+        while (struct dirent *e = readdir(fds)) {
+            char path[64], target[128];
+            snprintf(path, sizeof(path), "/proc/self/fd/%s", e->d_name);
+            ssize_t n = readlink(path, target, sizeof(target) - 1);
+            if (n <= 0)
+                continue;
+            target[n] = '\0';
+            unsigned long inode = 0;
+            if (sscanf(target, "socket:[%lu]", &inode) == 1)
+                ours.insert(std::to_string(inode));
+        }
+        closedir(fds);
+    }
+    if (ours.empty())
+        return;
+
+    std::string offenders;
+    for (const char *table : {"/proc/self/net/tcp", "/proc/self/net/tcp6"}) {
+        FILE *f = fopen(table, "r");
+        if (!f)
+            continue;
+        char line[512];
+        bool header = true;
+        while (fgets(line, sizeof(line), f)) {
+            if (header) {
+                header = false;
+                continue;
+            }
+            // sl local_address rem_address st tx:rx tr:when retrnsmt uid timeout inode
+            char local[128] = {0};
+            unsigned st = 0, uid = 0;
+            unsigned long inode = 0;
+            if (sscanf(line, "%*d: %127s %*s %x %*s %*s %*s %u %*d %lu", local, &st, &uid, &inode) != 4)
+                continue;
+            if (st != 0x0A) // TCP_LISTEN
+                continue;
+            if (ours.count(std::to_string(inode)) == 0)
+                continue;
+            offenders += " ";
+            offenders += local;
+        }
+        fclose(f);
+    }
+    if (offenders.empty())
+        return;
+
+    // Before UNITY_BEGIN(), so there is no Unity failure to record - and a test binary that has
+    // opened a port is not a result worth collecting. Fail the suite outright and say why.
+    fprintf(stderr,
+            "FATAL: test binary is listening on%s\n"
+            "A unit-test run must not be reachable. Something started a network service - check what\n"
+            "the suite constructs, and whether it belongs behind main.cpp's PIO_UNIT_TESTING guard.\n",
+            offenders.c_str());
+    fflush(stderr);
+    exit(EXIT_FAILURE);
+}
+#endif
+
+#if ARCH_PORTDUINO
+static bool environmentBaselined = false;
+
+// -s is how the harness keeps a test run off the host's radio: it makes portduinoSetup() skip the
+// /etc/meshtasticd/config.yaml search and return before GPIO/SPI init. That job is done by the time
+// any of this runs, and the flag's only remaining readers are behaviour we do want under test -
+// wouldEncryptWithPKC() disables PKC while it is set. Clear it so suites exercise the production
+// encode path; the radio choice is already made and is not revisited.
+static void baselineEnvironment()
+{
+    portduino_config.force_simradio = false;
+    assertNoListeningSockets();
+    environmentBaselined = true;
+}
+#endif
+
+void testAssertEnvironmentIntact(const char *testName)
+{
+#if ARCH_PORTDUINO
+    // Not every suite calls initializeTestEnvironment() - test_atak does not - so the baseline
+    // cannot live only there, or those suites run with PKC off and skip the socket check. Establish
+    // it at the first RUN_TEST for whoever has not, and hold it from then on.
+    if (!environmentBaselined) {
+        baselineEnvironment();
+        return;
+    }
+
+    // Per test, not once per suite: a service that binds a port is opened by the code under test,
+    // not by the harness, so checking only at startup would miss every case that starts one.
+    assertNoListeningSockets();
+
+    if (!portduino_config.force_simradio)
+        return;
+
+    // Hard exit rather than TEST_FAIL: this runs between tests, outside any Unity test frame, so
+    // there is no failure to longjmp into. Repairing the flag silently would be worse - it would
+    // leave the suite that broke it passing.
+    for (FILE *out : {stdout, stderr})
+        fprintf(out,
+                "FATAL: force_simradio was set back on before %s\n"
+                "PKC is disabled while it is set, so the encode path under test falls back to channel\n"
+                "crypto and every later case asserts the wrong thing. A test that needs simradio must\n"
+                "restore the flag before it returns.\n",
+                testName ? testName : "(unknown test)");
+    fflush(stderr);
+    exit(EXIT_FAILURE);
+#else
+    (void)testName;
+#endif
+}
 
 void initializeTestEnvironment()
 {
     concurrency::hasBeenSetup = true;
     consoleInit();
 #if ARCH_PORTDUINO
+    baselineEnvironment();
+
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;

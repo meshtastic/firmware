@@ -124,6 +124,8 @@ class NextHopRouter : public FloodingRouter
     constexpr static uint32_t ROUTE_TTL_MSEC = 30UL * 60 * 1000; // re-discover a route unconfirmed for 30 min
     constexpr static uint8_t ROUTE_FAILURE_THRESHOLD = 3;        // consecutive un-ACKed directed deliveries -> dead
 
+    constexpr static uint8_t OPAQUE_SEEN_MAX = 32; // opaque-relay dedup slots (see relayOpaquePacket); ~8B/slot -> ~256B
+
   protected:
     /**
      * Pending retransmissions
@@ -136,6 +138,21 @@ class NextHopRouter : public FloodingRouter
     RouteHealth routeHealth[ROUTE_HEALTH_MAX] = {};
 
     /**
+     * Recently-seen opaque (undecryptable) frames, keyed on the outer (from,id) header. A second,
+     * isolated PacketHistory-style dedup: it bounds broadcast amplification of frames we can't decrypt
+     * WITHOUT admitting them to the real PacketHistory/NodeDB, so unauthenticated traffic can never
+     * influence routing / ACK / next-hop decisions. Fixed-size ring, round-robin (FIFO) eviction, no
+     * timestamps (a stale (from,id) can't false-match: packet ids are effectively random, and a real
+     * entry never has id 0 - relayOpaquePacket drops id 0 before this). RAM-only.
+     */
+    struct OpaqueSeen {
+        NodeNum sender = 0;
+        PacketId id = 0; // 0 == empty/unused slot
+    };
+    OpaqueSeen opaqueSeen[OPAQUE_SEEN_MAX] = {};
+    uint8_t opaqueSeenNext = 0; // ring write cursor (round-robin eviction)
+
+    /**
      * Should this incoming filter be dropped?
      *
      * Called immediately on reception, before any further processing.
@@ -143,6 +160,9 @@ class NextHopRouter : public FloodingRouter
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
     bool relayOpaquePacket(const meshtastic_MeshPacket *p) override;
+    // Dedup helper for relayOpaquePacket: true if (from,id) is already recorded; otherwise records it
+    // (round-robin eviction) and returns false. Pure function of the table - no clock.
+    bool opaqueWasSeenRecently(NodeNum from, PacketId id);
 
     /**
      * Look for packets we need to relay

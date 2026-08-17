@@ -39,21 +39,30 @@
 # add, for a human to paste and justify. It never applies them itself, and CI never applies them at
 # all - an auto-accepted baseline is the same rot as an auto-updated snapshot.
 #
+# errors=<max> | <min>..<max> | <min>..   caps a suite's LOG_ERROR lines, default 100. A range, not a
+# ceiling: for a fuzz suite the floor is the half that matters. test_fuzz_decode logging ~100k
+# rejections is the suite working; the same suite logging none means it stopped feeding malformed
+# input, and every case would still pass. Bounds are wide on purpose - they catch a path that has
+# stopped running, not a drift of a few hundred lines.
+#
 # suite	flags	reason
-test_admin_radio	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs	per-test NodeDB fixture, and the admin handlers under test persist config, channels and node metadata
+test_admin_radio	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs errors=400	per-test NodeDB fixture, and the admin handlers under test persist config, channels and node metadata
 test_admin_session_repro	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
+test_event_channel_phone_api	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
+test_event_channel_router	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto errors=200	subclasses NodeDB for the event-channel fixtures; the base constructor persists a default set when the prefs directory is empty
 test_firmware_edition	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	persists an event firmware_edition in devicestate, then reboots a NodeDB to prove a vanilla build resets it
-test_fuzz_packets	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs	drives decode of fuzzed packets through the real NodeDB and message store
+test_fuzz_decode	errors=20000..250000	fuzzes protobuf decode; every rejection logs. A collapse to near zero means the corpus stopped reaching the decoder
+test_fuzz_packets	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs errors=5000..60000	drives decode of fuzzed packets through the real NodeDB and message store
 test_hop_scaling	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB to hold the hop-distance fixtures
 test_mesh_beacon	writes=module.proto	exercises the beacon's module-config save path
 test_mesh_module	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	module framework tests construct a NodeDB
-test_mqtt	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB for node lookups in the MQTT paths
+test_mqtt	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto errors=1000..12000	constructs a NodeDB for node lookups in the MQTT paths
 test_nexthop_routing	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	next-hop selection reads and updates the node DB
 test_nodedb_blocked	state=per-suite writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	saturates the DB with MAX_NUM_NODES-2 favourited nodes to test the protected cap; a later test's removeNodeByNum() persists that state, and the cap test depends on the fill from the test before it
-test_packet_signing	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	needs a NodeDB holding both peers' keys for the PKI encode/decode paths
+test_packet_signing	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat errors=300	needs a NodeDB holding both peers' keys for the PKI encode/decode paths
 test_pki_admin_fallback	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	needs a NodeDB holding admin keys for the fallback paths
 test_stream_api	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	drives real PhoneAPI handshakes, which read and persist config and the node DB
 test_traceroute_nexthop	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	traceroute route selection reads the node DB
-test_traffic_management	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	constructs a NodeDB for the per-node rate-limit and dedup state
+test_traffic_management	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat errors=3000..12000	constructs a NodeDB for the per-node rate-limit and dedup state; test_tm_fuzz_nodenum_blitz feeds malformed payloads, and each rejection logs (measured 7985)
 test_transmit_history	writes=transmit_history.dat	persistence round-trip: what it asserts is that retransmission state survives a save/load
 test_warm_store	writes=warm.dat	persistence round-trip of the warm-tier snapshot, which is the tier's whole contract
