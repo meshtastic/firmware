@@ -13,6 +13,9 @@ enum TelemetryPublishChannel : uint8_t {
 template <typename T> struct BufferedReading {
     T metrics;
     uint32_t time = 0;         // seconds since 1970 (or 0/unset)
+    uint32_t deltaSecs = 0;    // seconds since the previous reading was captured (monotonic-based);
+                               // only meaningful when time is unset and hasDelta is true
+    bool hasDelta = false;     // false for the very first reading ever pushed - no predecessor to diff against
     uint8_t publishedMask = 0; // which channel(s) have consumed this reading
 };
 
@@ -22,14 +25,22 @@ template <typename T, uint8_t N> class TelemetryHistoryBuffer
     // head = index (into readings[]) of the oldest reading
     uint8_t head = 0;
     uint8_t count = 0;
+    uint32_t lastCaptureMs = 0; // monotonic millis() at the last push(), for deltaSecs
+    bool hasPrevious = false;   // false until the first push() ever happens
 
   public:
     void push(const T &reading, uint32_t time)
     {
+        uint32_t nowMs = millis();
         uint8_t writeIdx = (head + count) % N;
         readings[writeIdx].metrics = reading;
         readings[writeIdx].time = time;
+
+        readings[writeIdx].deltaSecs = hasPrevious ? (nowMs - lastCaptureMs) / 1000 : 0;
+        readings[writeIdx].hasDelta = hasPrevious;
         readings[writeIdx].publishedMask = 0;
+        lastCaptureMs = nowMs;
+        hasPrevious = true;
         if (count < N)
             count++;
         else
@@ -57,25 +68,34 @@ template <typename T, uint8_t N> class TelemetryHistoryBuffer
     }
 };
 
+// time/deltaSecs are only meaningful together with the metrics they were captured with
+template <typename T> inline void assignTelemetryRecordTimeInfo(meshtastic_TelemetryRecord &r, const BufferedReading<T> &reading)
+{
+    r.has_time = reading.time != 0;
+    r.time = reading.time;
+    r.has_delta_secs = !r.has_time && reading.hasDelta;
+    r.delta_secs = r.has_delta_secs ? reading.deltaSecs : 0;
+}
+
 // Maps a concrete metrics type onto meshtastic_TelemetryRecord's oneof
-inline void assignTelemetryRecord(meshtastic_TelemetryRecord &r, const meshtastic_EnvironmentMetrics &m, uint32_t time)
+inline void assignTelemetryRecord(meshtastic_TelemetryRecord &r, const BufferedReading<meshtastic_EnvironmentMetrics> &reading)
 {
     r.which_telemetry_variant = meshtastic_TelemetryRecord_environment_metrics_tag;
-    r.telemetry_variant.environment_metrics = m;
-    r.time = time;
+    r.telemetry_variant.environment_metrics = reading.metrics;
+    assignTelemetryRecordTimeInfo(r, reading);
 }
 
-inline void assignTelemetryRecord(meshtastic_TelemetryRecord &r, const meshtastic_PowerMetrics &m, uint32_t time)
+inline void assignTelemetryRecord(meshtastic_TelemetryRecord &r, const BufferedReading<meshtastic_PowerMetrics> &reading)
 {
     r.which_telemetry_variant = meshtastic_TelemetryRecord_power_metrics_tag;
-    r.telemetry_variant.power_metrics = m;
-    r.time = time;
+    r.telemetry_variant.power_metrics = reading.metrics;
+    assignTelemetryRecordTimeInfo(r, reading);
 }
 
-inline void assignTelemetryRecord(meshtastic_TelemetryRecord &r, const meshtastic_AirQualityMetrics &m, uint32_t time)
+inline void assignTelemetryRecord(meshtastic_TelemetryRecord &r, const BufferedReading<meshtastic_AirQualityMetrics> &reading)
 {
     r.which_telemetry_variant = meshtastic_TelemetryRecord_air_quality_metrics_tag;
-    r.telemetry_variant.air_quality_metrics = m;
-    r.time = time;
+    r.telemetry_variant.air_quality_metrics = reading.metrics;
+    assignTelemetryRecordTimeInfo(r, reading);
 }
 #endif

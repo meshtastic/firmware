@@ -271,7 +271,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (!history.isEmpty()) {
             if (telemetryMeshDue && telemetryMeshAllowed) {
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
-                    sentTelemetryToMesh = publishBufferedTelemetry(history, PublishTarget::Mesh, telemetryReadIntervalMs / 1000);
+                    sentTelemetryToMesh = publishBufferedTelemetry(history, PublishTarget::Mesh);
                 } else {
                     sentTelemetryToMesh = sendTelemetry(TELEMETRY_PUBLISHED_MESH);
                 }
@@ -299,8 +299,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         bool sentTelemetryToMqtt = false; // TOREMOVE
 
         if (telemetryMqttAllowed && telemetryMqttDue) {
-            sentTelemetryToMqtt =
-                publishBufferedTelemetry(history, PublishTarget::Mqtt, telemetryReadIntervalMs / 1000); // TOREMOVE
+            sentTelemetryToMqtt = publishBufferedTelemetry(history, PublishTarget::Mqtt); // TOREMOVE
             if (sentTelemetryToMqtt)
                 lastSentToMqtt = millis();
         }

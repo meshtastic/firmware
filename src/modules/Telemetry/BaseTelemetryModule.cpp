@@ -49,18 +49,16 @@ static_assert(kMaxReadingsPerMeshPacket <= kMaxReadingsPerMqttPacket, "mesh's ca
  */
 template <typename T, uint8_t N>
 static __attribute__((noinline)) size_t encodeHistoryBatch(meshtastic_MeshPacket &p, const TelemetryHistoryBuffer<T, N> &history,
-                                                           const uint8_t *indices, size_t maxTake, uint32_t intervalSec)
+                                                           const uint8_t *indices, size_t maxTake)
 {
     size_t take = maxTake;
     while (take > 0) {
         meshtastic_TelemetryRecordHistory recordHistory = meshtastic_TelemetryRecordHistory_init_zero;
 
-        recordHistory.interval_sec = intervalSec;
         recordHistory.readings_count = take;
 
         for (size_t i = 0; i < take; i++) {
-            const BufferedReading<T> &reading = history.at(indices[i]);
-            assignTelemetryRecord(recordHistory.readings[i], reading.metrics, reading.time);
+            assignTelemetryRecord(recordHistory.readings[i], history.at(indices[i]));
         }
 
         p.decoded.payload.size = pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes),
@@ -76,13 +74,10 @@ static __attribute__((noinline)) size_t encodeHistoryBatch(meshtastic_MeshPacket
  * Publish every reading in history not yet marked for target's channel as a single
  * TelemetryRecordHistory
  *
- * @param intervalSec seconds between individual readings in the buffer (the caller's
- *        configured/default read interval), stamped into the outgoing packet
  * @return true if a packet was sent
  */
 template <typename T, uint8_t N>
-bool BaseTelemetryModule::publishBufferedTelemetry(TelemetryHistoryBuffer<T, N> &history, PublishTarget target,
-                                                   uint32_t intervalSec)
+bool BaseTelemetryModule::publishBufferedTelemetry(TelemetryHistoryBuffer<T, N> &history, PublishTarget target)
 {
     if (history.isEmpty())
         return false;
@@ -111,7 +106,7 @@ bool BaseTelemetryModule::publishBufferedTelemetry(TelemetryHistoryBuffer<T, N> 
     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
 
     const size_t maxReadingsPerPacket = target == PublishTarget::Mesh ? kMaxReadingsPerMeshPacket : kMaxReadingsPerMqttPacket;
-    size_t take = encodeHistoryBatch(*p, history, indices, min((size_t)unpublishedCount, maxReadingsPerPacket), intervalSec);
+    size_t take = encodeHistoryBatch(*p, history, indices, min((size_t)unpublishedCount, maxReadingsPerPacket));
 
     if (take == 0) {
         packetPool.release(p);
@@ -158,5 +153,5 @@ bool BaseTelemetryModule::publishBufferedTelemetry(TelemetryHistoryBuffer<T, N> 
 // publishBufferedTelemetry.
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 template bool BaseTelemetryModule::publishBufferedTelemetry<meshtastic_AirQualityMetrics, AIR_QUALITY_TELEMETRY_HISTORY_SIZE>(
-    TelemetryHistoryBuffer<meshtastic_AirQualityMetrics, AIR_QUALITY_TELEMETRY_HISTORY_SIZE> &, PublishTarget, uint32_t);
+    TelemetryHistoryBuffer<meshtastic_AirQualityMetrics, AIR_QUALITY_TELEMETRY_HISTORY_SIZE> &, PublishTarget);
 #endif
