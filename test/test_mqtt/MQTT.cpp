@@ -758,21 +758,18 @@ void test_receiveIgnoresOwnPublishedMessages(void)
     TEST_ASSERT_TRUE(mockRoutingModule->ackNacks_.empty());
 }
 
-// Considers receiving one of our packets an acknowledgement of it being sent.
-void test_receiveAcksOwnSentMessages(void)
+// Our own packet back off our own gateway is not evidence the mesh heard it, so nothing is minted.
+// getForPhone() is the assertion that bites: the old ACK reached the phone through sendLocal().
+void test_receiveDoesNotAckOwnSentMessages(void)
 {
     meshtastic_MeshPacket p = decoded;
     p.from = myNodeInfo.my_node_num;
 
     unitTest->publish(&p, nodeDB->getNodeId().c_str());
 
-    // FIXME: Better assertion for this test
-    // TEST_ASSERT_TRUE(mockRouter->packets_.empty());
-    // TEST_ASSERT_EQUAL(1, mockRoutingModule->ackNacks_.size());
-    // const auto &[err, to, idFrom, chIndex, hopLimit] = mockRoutingModule->ackNacks_.front();
-    // TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, err);
-    // TEST_ASSERT_EQUAL(myNodeInfo.my_node_num, to);
-    // TEST_ASSERT_EQUAL(p.id, idFrom);
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+    TEST_ASSERT_TRUE(mockRoutingModule->ackNacks_.empty());
+    TEST_ASSERT_NULL(mockMeshService->getForPhone());
 }
 
 // Should ignore our own messages from MQTT that were heard by other nodes.
@@ -1280,7 +1277,7 @@ void setup()
     RUN_TEST(test_receiveWithoutChannelDownlink);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
-    RUN_TEST(test_receiveAcksOwnSentMessages);
+    RUN_TEST(test_receiveDoesNotAckOwnSentMessages);
     RUN_TEST(test_receiveIgnoresSentMessagesFromOthers);
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);

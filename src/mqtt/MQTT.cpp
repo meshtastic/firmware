@@ -116,17 +116,9 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     // Generate node ID from nodenum for comparison
     std::string nodeId = nodeDB->getNodeId();
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
-        // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
-        // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
-        // receives it when we get our own packet back. Then we'll stop our retransmissions.
-        if (isFromUs(e.packet)) {
-            auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
-            if (!pAck)
-                return;
-            pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
-            if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
-                packetPool.release(pAck);
-        } else {
+        // Our own packet back off our own gateway proves the broker returned it, not that the mesh
+        // heard it, so no ACK is minted here. See the commit message.
+        if (!isFromUs(e.packet)) {
             LOG_INFO("Ignore downlink msg we sent");
         }
         return;
