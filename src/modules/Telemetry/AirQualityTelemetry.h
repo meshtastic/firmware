@@ -10,9 +10,12 @@
 #define AIR_QUALITY_TELEMETRY_MODULE_ENABLE 0
 #endif
 
-// Local retention window, shared by mesh/mqtt/phone publishing
+// Local retention window, shared by mesh/mqtt/phone publishing. Each slot is
+// sizeof(BufferedReading<meshtastic_AirQualityMetrics>) ~= 220 bytes
+// Boards with RAM to spare can raise it by defining AIR_QUALITY_TELEMETRY_HISTORY_SIZE in their
+// own variant.h
 #ifndef AIR_QUALITY_TELEMETRY_HISTORY_SIZE
-#define AIR_QUALITY_TELEMETRY_HISTORY_SIZE 50
+#define AIR_QUALITY_TELEMETRY_HISTORY_SIZE 16
 #endif
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
