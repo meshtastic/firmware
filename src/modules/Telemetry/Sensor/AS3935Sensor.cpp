@@ -10,7 +10,6 @@
 #include "TelemetrySensor.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #include <SparkFun_AS3935.h>
-#include <Throttle.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -20,9 +19,6 @@ namespace
 // I2C read itself isn't ISR-safe anyway. AS3935_IRQ is optional - see runOnce().
 constexpr int32_t AS3935_CHECK_INTERVAL_MS = DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 constexpr uint8_t AS3935_DISTANCE_OUT_OF_RANGE = 0x3F;
-// Strikes accumulate over a rolling window, reset by elapsed time rather than on
-// getMetrics() (which also fires when replying to a peer's telemetry request).
-constexpr uint32_t AS3935_STRIKE_WINDOW_MS = 60UL * 60UL * 1000; // 1 hour
 } // namespace
 
 // Fallback until an admin message sets one; 96pF is DFRobot's value for the SEN0290.
@@ -84,7 +80,6 @@ bool AS3935Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     // Drain anything already latched, so we don't report a strike that predates us.
     lightning->readInterruptReg();
 
-    windowStartMs = millis();
     initI2CSensor();
     return status;
 }
@@ -100,11 +95,6 @@ int32_t AS3935Sensor::runOnce()
     // I2C-only breakout: poll the register instead, it reads back 0 when nothing is pending.
     classifyPendingIrq();
 #endif
-    if (!Throttle::isWithinTimespanMs(windowStartMs, AS3935_STRIKE_WINDOW_MS)) {
-        strikeCountWindow = 0;
-        lastDistanceKm = -1;
-        windowStartMs = millis();
-    }
     return AS3935_CHECK_INTERVAL_MS;
 }
 
@@ -113,7 +103,7 @@ void AS3935Sensor::classifyPendingIrq()
     uint8_t interruptReason = lightning->readInterruptReg();
     switch (interruptReason) {
     case LIGHTNING: {
-        strikeCountWindow++;
+        strikes.add();
         uint8_t distance = lightning->distanceToStorm();
         if (distance != AS3935_DISTANCE_OUT_OF_RANGE) {
             lastDistanceKm = distance;
@@ -221,9 +211,11 @@ bool AS3935Sensor::loadCalibrationData()
 
 bool AS3935Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    uint32_t count = strikes.sum();
     measurement->variant.environment_metrics.has_lightning_strike_count_1h = true;
-    measurement->variant.environment_metrics.lightning_strike_count_1h = strikeCountWindow;
-    if (lastDistanceKm >= 0) {
+    measurement->variant.environment_metrics.lightning_strike_count_1h = count;
+    // The distance belongs to the newest strike, so it expires when that strike leaves the window.
+    if (count && lastDistanceKm >= 0) {
         measurement->variant.environment_metrics.has_lightning_distance_km = true;
         measurement->variant.environment_metrics.lightning_distance_km = lastDistanceKm;
     }

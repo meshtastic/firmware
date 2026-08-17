@@ -8,6 +8,7 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<SparkFun_AS3935.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RollingCounter.h"
 #include "TelemetrySensor.h"
 #include <SparkFun_AS3935.h>
 
@@ -15,9 +16,8 @@ class AS3935Sensor : public TelemetrySensor
 {
   private:
     SparkFun_AS3935 *lightning = nullptr;
-    uint32_t strikeCountWindow = 0;
-    float lastDistanceKm = -1; // sentinel: no valid distance captured this window
-    uint32_t windowStartMs = 0;
+    RollingCounter<60UL * 60 * 1000, 5UL * 60 * 1000> strikes;
+    float lastDistanceKm = -1; // sentinel: no valid distance captured yet
 
     void classifyPendingIrq();
 
