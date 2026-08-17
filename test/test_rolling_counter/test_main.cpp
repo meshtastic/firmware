@@ -114,6 +114,16 @@ void test_burst_survives_whole()
     TEST_ASSERT_EQUAL_UINT32(50000, c.sum());
 }
 
+// Weighting the edge bucket must not overflow: 50000 * 240000 exceeds 32 bits, and a 32-bit
+// product wraps to 11367 instead of 40000. Four of the bucket's five minutes are still inside.
+void test_large_burst_at_window_edge()
+{
+    Counter c;
+    c.add(50000);
+    Time::advanceTestMillis(kWindow + kMinute);
+    TEST_ASSERT_EQUAL_UINT32(40000, c.sum());
+}
+
 void test_reset_clears()
 {
     Counter c;
@@ -132,6 +142,7 @@ void setup()
     RUN_TEST(test_bucket_not_dropped_early);
     RUN_TEST(test_long_idle_gap);
     RUN_TEST(test_burst_survives_whole);
+    RUN_TEST(test_large_burst_at_window_edge);
     RUN_TEST(test_reset_clears);
     exit(UNITY_END());
 }

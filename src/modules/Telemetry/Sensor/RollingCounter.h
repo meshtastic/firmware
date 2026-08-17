@@ -50,7 +50,9 @@ template <uint32_t WindowMs, uint32_t BucketMs> class RollingCounter
         // holds the total at exactly WindowMs as the current bucket fills.
         uint32_t elapsed = Time::getMillis() - bucketStartMs;
         uint32_t inWindow = elapsed < BucketMs ? BucketMs - elapsed : 0;
-        total += (counts[(head + 1) % BUCKETS] * inWindow + BucketMs / 2) / BucketMs;
+        // 64-bit: the product overflows 32 bits once a bucket holds more than 2^32 / BucketMs
+        // events, which is only ~14k at a 5 minute width.
+        total += (uint32_t)(((uint64_t)counts[(head + 1) % BUCKETS] * inWindow + BucketMs / 2) / BucketMs);
         return total;
     }
 
