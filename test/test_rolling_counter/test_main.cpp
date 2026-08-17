@@ -1,11 +1,5 @@
-// Unit tests for RollingCounter, the fixed-memory sliding-window counter used by
-// AS3935Sensor for lightning_strike_count_1h.
-//
-// The case that matters is the span the sum actually covers. A ring sized to the window
-// alone reports WindowMs - BucketMs once the current bucket starts filling; a ring one
-// bucket larger that counts the oldest whole reports up to WindowMs + BucketMs. Neither
-// matches the "_1h" field contract, so the tests below drive the clock across bucket
-// boundaries and assert what stays in and what falls out.
+// Unit tests for RollingCounter. The case that matters is the span sum() covers: an
+// under-sized ring reports WindowMs - BucketMs, and counting the edge bucket whole reports more.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
@@ -39,10 +33,8 @@ void test_counts_within_window()
     TEST_ASSERT_EQUAL_UINT32(10, c.sum());
 }
 
-// Expiry is exact to one bucket, not to the event. Nothing records where inside a bucket an
-// event fell, so the edge bucket is counted by the fraction of it still inside the window -
-// that fraction is what holds the span at WindowMs. An event is therefore wholly counted up
-// to WindowMs, wholly gone by WindowMs + BucketMs, and never comes back in between.
+// Expiry is exact to one bucket, not to the event: nothing records where inside a bucket an event
+// fell, so it is wholly counted to WindowMs, wholly gone by WindowMs + BucketMs, decaying between.
 void test_expires_within_one_bucket_of_the_hour()
 {
     Counter c;

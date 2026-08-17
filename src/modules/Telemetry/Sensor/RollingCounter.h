@@ -5,18 +5,9 @@
 #include <string.h>
 
 /**
- * Counts events over a sliding window in fixed memory: one counter per bucket, nothing stored
- * per event, so a storm cannot grow it. sum() always spans exactly WindowMs.
- *
- * The ring holds one bucket more than the window needs. That spare is what keeps the span
- * honest at both ends: a bucket is recycled only once it has aged fully past the window rather
- * than while part of it is still counted, and the oldest bucket - which straddles the window
- * edge - contributes only the fraction still inside. Drop either and the reported span drifts
- * between WindowMs - BucketMs and WindowMs + BucketMs as the current bucket fills.
- *
+ * Sliding-window event counter in fixed memory, one counter per bucket. The spare bucket and the
+ * weighted oldest bucket are what hold sum() at exactly WindowMs rather than a bucket either way.
  *   RollingCounter<60UL * 60 * 1000, 5UL * 60 * 1000> strikes; // last hour in 5min steps
- *   strikes.add();
- *   uint32_t lastHour = strikes.sum();
  */
 template <uint32_t WindowMs, uint32_t BucketMs> class RollingCounter
 {
