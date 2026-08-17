@@ -14,7 +14,7 @@ class TDeckProKeyboard : public TCA8418KeyboardBase
 
     void updateModifierFlag(uint8_t key);
     bool isModifierKey(uint8_t key);
-    void toggleBacklight(void);
+    void toggleBacklight(bool off = false);
 
   private:
     uint8_t modifierFlag;        // Flag to indicate if a modifier key is pressed
@@ -24,4 +24,5 @@ class TDeckProKeyboard : public TCA8418KeyboardBase
     uint32_t last_tap;
     uint8_t char_idx;
     int32_t tap_interval;
+    uint32_t brightness = 0;
 };
