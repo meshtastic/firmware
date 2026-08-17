@@ -40,9 +40,8 @@
 //
 // Listening sockets only: an outbound connection is a different (and louder) problem, and gethostby*
 // opens transient sockets that would make an any-socket check flap.
-//
-// Linux-only: the check reads /proc, and MinGW-w64 has no readlink() to resolve an fd link. CI runs
-// every suite on Linux, so compiling it out on native-windows still leaves each merge covered.
+// Linux-only: this check reads /proc; MinGW-w64 has no readlink() for fd links.
+// Linux CI covers the check; native Windows uses a no-op.
 #ifdef _WIN32
 static void assertNoListeningSockets() {}
 #else
