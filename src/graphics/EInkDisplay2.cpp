@@ -56,6 +56,9 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
  */
 bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 {
+#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+    return forceDisplayFromBuffer(buffer, msecLimit);
+#else
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
 
@@ -67,11 +70,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     else
         return false;
 
-    // FIXME - only draw bits have changed (use backbuf similar to the other displays)
     const bool flipped = config.display.flip_screen;
-    // HACK for L1 EInk
 #if defined(SEEED_WIO_TRACKER_L1_EINK)
-    // For SEEED_WIO_TRACKER_L1_EINK, setRotation(3) is correct but mirrored; flip both axes
     for (uint32_t y = 0; y < displayHeight; y++) {
         for (uint32_t x = 0; x < displayWidth; x++) {
             auto b = buffer[x + (y / 8) * displayWidth];
@@ -92,6 +92,61 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     }
 #endif
 
+    LOG_DEBUG("Update E-Paper");
+    adafruitDisplay->nextPage();
+    endUpdate();
+    LOG_DEBUG("done");
+    return true;
+#endif
+}
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+bool EInkDisplay::forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t msecLimit)
+{
+    const uint8_t *frame = sourceBuffer != nullptr ? sourceBuffer : buffer;
+    if (frame == nullptr || !adafruitDisplay)
+        return false;
+
+    uint32_t now = millis();
+    if (msecLimit != 0 && lastDrawMsec != 0 && now - lastDrawMsec <= msecLimit)
+        return false;
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+    // T-Deck Pro shares this SPI bus with the LoRa radio. Avoid holding the
+    // lock for frames that the rate limiter will reject.
+    concurrency::LockGuard g(spiLock);
+    now = millis();
+    if (msecLimit != 0 && lastDrawMsec != 0 && now - lastDrawMsec <= msecLimit)
+        return false;
+#endif
+
+    lastDrawMsec = now;
+
+    // FIXME - only draw bits have changed (use backbuf similar to the other displays)
+    const bool flipped = config.display.flip_screen;
+    // HACK for L1 EInk
+#if defined(SEEED_WIO_TRACKER_L1_EINK)
+    // For SEEED_WIO_TRACKER_L1_EINK, setRotation(3) is correct but mirrored; flip both axes
+    for (uint32_t y = 0; y < displayHeight; y++) {
+        for (uint32_t x = 0; x < displayWidth; x++) {
+            auto b = frame[x + (y / 8) * displayWidth];
+            auto isset = b & (1 << (y & 7));
+            adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+        }
+    }
+#else
+    for (uint32_t y = 0; y < displayHeight; y++) {
+        for (uint32_t x = 0; x < displayWidth; x++) {
+            auto b = frame[x + (y / 8) * displayWidth];
+            auto isset = b & (1 << (y & 7));
+            if (flipped)
+                adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+            else
+                adafruitDisplay->drawPixel(x, y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+        }
+    }
+#endif
+
     // Trigger the refresh in GxEPD2
     LOG_DEBUG("Update E-Paper");
     adafruitDisplay->nextPage();
@@ -102,6 +157,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     LOG_DEBUG("done");
     return true;
 }
+#endif
 
 // End the update process - virtual method, overridden in derived class
 void EInkDisplay::endUpdate()
@@ -260,7 +316,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(0);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(M5_COREINK) || defined(T_DECK_PRO)
+#elif defined(M5_COREINK) || defined(T_DECK_PRO) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
     auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
     adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));

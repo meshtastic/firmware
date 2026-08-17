@@ -11,6 +11,9 @@
 #include "gps/RTC.h" // for getTime() function
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#include "graphics/TouchLayout.h"
+#endif
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/images.h"
@@ -77,6 +80,13 @@ void scrollDown()
     scrollIndex++;
     popupTime = millis();
 }
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+bool isTouchRowValid(uint32_t rowIndex)
+{
+    return nodeDB && rowIndex < static_cast<uint32_t>(nodeDB->getNumMeshNodes());
+}
+#endif
 
 // =============================
 // Utility Functions
@@ -600,9 +610,364 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 // Main Screen Functions
 // =============================
 
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+static void drawNodeListScrollPopup(OLEDDisplay *display, int totalEntries, int startIndex, int perPage, int page,
+                                    int usableTop, int usableBottom)
+{
+    if (millis() - popupTime >= POPUP_DURATION_MS || perPage <= 0)
+        return;
+
+    popupTotal = totalEntries;
+    popupStart = totalEntries > 0 ? startIndex + 1 : 0;
+    popupEnd = totalEntries > 0 ? min(startIndex + perPage, totalEntries) : 0;
+    popupPage = page + 1;
+    popupMaxPage = max(1, (totalEntries + perPage - 1) / perPage);
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const int padding = 2;
+    display->setFont(FONT_SMALL);
+    const int textW = display->getStringWidth(buf);
+    const int textH = FONT_HEIGHT_SMALL;
+    const int boxWidth = textW + padding * 3;
+    const int boxHeight = textH + padding * 2;
+    const int usableHeight = max(1, usableBottom - usableTop);
+    const int boxLeft = (display->getWidth() - boxWidth) / 2;
+    const int boxTop = usableTop + (usableHeight - boxHeight) / 2;
+
+    display->setColor(BLACK);
+    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+    display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
+    display->fillRect(boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+    display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);
+    display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
+    display->setColor(WHITE);
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+    display->setColor(BLACK);
+    display->fillRect(boxLeft, boxTop, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
+    display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
+    display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    registerTFTActionMenuRegions(boxLeft, boxTop, boxWidth, boxHeight);
+#endif
+    display->drawString(boxLeft + padding, boxTop + padding, buf);
+}
+
+enum class TDeckNodeListMode : uint8_t { LastHeard, HopSignal, Distance, Bearings };
+
+static void formatTDeckNodeAge(const meshtastic_NodeInfoLite *node, char *out, size_t outSize)
+{
+    const uint32_t seconds = sinceLastSeen(node);
+    if (seconds == 0 || seconds == UINT32_MAX) {
+        snprintf(out, outSize, "?");
+        return;
+    }
+
+    const uint32_t minutes = seconds / 60;
+    const uint32_t hours = minutes / 60;
+    const uint32_t days = hours / 24;
+    snprintf(out, outSize, (days > 365 ? "?" : "%lu%c"), static_cast<unsigned long>(days ? days : hours ? hours : minutes),
+             days ? 'd' : hours ? 'h' : 'm');
+}
+
+static bool formatTDeckNodeDistance(const meshtastic_NodeInfoLite *node, char *out, size_t outSize)
+{
+    out[0] = '\0';
+    if (!node || !nodeDB)
+        return false;
+
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_PositionLite ourPos;
+    meshtastic_PositionLite theirPos;
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !nodeDB->hasValidPosition(node) ||
+        !nodeDB->copyNodePosition(ourNode->num, ourPos) || !nodeDB->copyNodePosition(node->num, theirPos)) {
+        return false;
+    }
+
+    const double lat1 = ourPos.latitude_i * 1e-7;
+    const double lon1 = ourPos.longitude_i * 1e-7;
+    const double lat2 = theirPos.latitude_i * 1e-7;
+    const double lon2 = theirPos.longitude_i * 1e-7;
+    const double dLat = (lat2 - lat1) * DEG_TO_RAD;
+    const double dLon = (lon2 - lon1) * DEG_TO_RAD;
+    const double a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * sin(dLon / 2) * sin(dLon / 2);
+    const double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    const double distanceKm = 6371.0 * c;
+
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        const double miles = distanceKm * 0.621371;
+        if (miles < 0.1) {
+            const int feet = static_cast<int>(miles * 5280);
+            if (feet < 1000)
+                snprintf(out, outSize, "%dft", feet);
+            else
+                snprintf(out, outSize, "1/4mi");
+        } else {
+            const int roundedMiles = static_cast<int>(miles + 0.5);
+            if (roundedMiles < 1000)
+                snprintf(out, outSize, "%dmi", roundedMiles);
+            else
+                snprintf(out, outSize, "999");
+        }
+    } else if (distanceKm < 1.0) {
+        const int meters = static_cast<int>(distanceKm * 1000);
+        if (meters < 1000)
+            snprintf(out, outSize, "%dm", meters);
+        else
+            snprintf(out, outSize, "1k");
+    } else {
+        const int km = static_cast<int>(distanceKm + 0.5);
+        if (km < 1000)
+            snprintf(out, outSize, "%dk", km);
+        else
+            snprintf(out, outSize, "999");
+    }
+    return true;
+}
+
+static bool getTDeckNodeBearing(const meshtastic_NodeInfoLite *node, float headingRadian, float &degrees)
+{
+    if (!node || !nodeDB || !nodeDB->hasValidPosition(node))
+        return false;
+
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_PositionLite ourPos;
+    meshtastic_PositionLite nodePos;
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !nodeDB->copyNodePosition(ourNode->num, ourPos) ||
+        !nodeDB->copyNodePosition(node->num, nodePos)) {
+        return false;
+    }
+
+    const float bearing = GeoCoord::bearing(DegD(ourPos.latitude_i), DegD(ourPos.longitude_i), DegD(nodePos.latitude_i),
+                                            DegD(nodePos.longitude_i));
+    const float relativeBearing = CompassRenderer::adjustBearingForCompassMode(bearing, headingRadian);
+    degrees = CompassRenderer::radiansToDegrees360(relativeBearing);
+    return true;
+}
+
+static void drawTDeckNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
+                                    TDeckNodeListMode mode, float headingRadian = 0.0f)
+{
+    (void)state;
+    display->clear();
+    graphics::drawCommonHeader(display, x, y, title);
+
+    const int screenW = display->getWidth();
+    const int screenH = display->getHeight();
+    const int contentLeft = x + 8;
+    const int contentRight = x + screenW - 8;
+    const int summaryY = y + FONT_HEIGHT_SMALL + 5;
+    const int separatorY = summaryY + FONT_HEIGHT_SMALL + 3;
+    const int cardsTop = separatorY + 7;
+    const int cardHeight = 50;
+    const int cardGap = 4;
+    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int bodyBottom = screenH - footerReserve;
+    const int cardWidth = contentRight - contentLeft;
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL_LOCAL);
+    const bool locationMode = mode == TDeckNodeListMode::Distance || mode == TDeckNodeListMode::Bearings;
+
+    std::vector<int> drawList;
+    const int totalNodeEntries = nodeDB ? nodeDB->getNumMeshNodes() : 0;
+    drawList.reserve(totalNodeEntries);
+    for (int i = 0; i < totalNodeEntries; i++) {
+        auto *node = nodeDB->getMeshNodeByIndex(i);
+        if (node && node->num != nodeDB->getNodeNum() && (!locationMode || nodeDB->hasNodePosition(node->num)))
+            drawList.push_back(node->num);
+    }
+
+    const int totalEntries = static_cast<int>(drawList.size());
+    const int rowsAvailable = max(1, (bodyBottom - cardsTop + cardGap) / (cardHeight + cardGap));
+    const int visibleRows = min(4, rowsAvailable);
+    const int perPage = max(1, visibleRows);
+    const int maxScroll = totalEntries > 0 ? max(0, (totalEntries - 1) / perPage) : 0;
+    if (scrollIndex > maxScroll)
+        scrollIndex = maxScroll;
+
+    const int startIndex = scrollIndex * perPage;
+    const int endIndex = min(startIndex + perPage, totalEntries);
+
+    char rangeLabel[24];
+    if (totalEntries > 0) {
+        snprintf(rangeLabel, sizeof(rangeLabel), "%d-%d / %d", startIndex + 1, endIndex, totalEntries);
+    } else {
+        snprintf(rangeLabel, sizeof(rangeLabel), "0 / 0");
+    }
+    const char *summaryLabel = mode == TDeckNodeListMode::LastHeard   ? "RECENT NODES"
+                               : mode == TDeckNodeListMode::HopSignal ? "SIGNAL / HOPS"
+                               : mode == TDeckNodeListMode::Distance  ? "DISTANCE TABLE"
+                                                                       : "BEARING TABLE";
+    display->drawString(contentLeft, summaryY, summaryLabel);
+    const int rangeWidth = display->getStringWidth(rangeLabel);
+    display->drawString(contentRight - rangeWidth, summaryY, rangeLabel);
+    display->drawLine(contentLeft, separatorY, contentRight, separatorY);
+
+    if (totalEntries == 0) {
+        display->setFont(FONT_SMALL);
+        const char *emptyText = locationMode ? "No position data" : "No nodes heard yet";
+        const int emptyWidth = display->getStringWidth(emptyText);
+        display->drawString((screenW - emptyWidth) / 2, cardsTop + 30, emptyText);
+    }
+
+    for (int idx = startIndex; idx < endIndex; idx++) {
+        auto *node = nodeDB->getMeshNode(drawList[idx]);
+        if (!node)
+            continue;
+
+        const int row = idx - startIndex;
+        const int cardY = cardsTop + row * (cardHeight + cardGap);
+        display->drawRect(contentLeft, cardY, cardWidth, cardHeight);
+
+        char age[10];
+        formatTDeckNodeAge(node, age, sizeof(age));
+
+        char metric[16];
+        float bearingDegrees = 0.0f;
+        bool hasBearing = false;
+        switch (mode) {
+        case TDeckNodeListMode::LastHeard:
+            snprintf(metric, sizeof(metric), "%s", age);
+            break;
+        case TDeckNodeListMode::HopSignal:
+            if (nodeInfoLiteHasSnr(node))
+                snprintf(metric, sizeof(metric), "%+.1fdB", node->snr);
+            else
+                snprintf(metric, sizeof(metric), "--");
+            break;
+        case TDeckNodeListMode::Distance:
+            if (!formatTDeckNodeDistance(node, metric, sizeof(metric)))
+                snprintf(metric, sizeof(metric), "?");
+            break;
+        case TDeckNodeListMode::Bearings:
+            hasBearing = getTDeckNodeBearing(node, headingRadian, bearingDegrees);
+            if (hasBearing) {
+                int bearing = static_cast<int>(bearingDegrees + 0.5f);
+                if (bearing >= 360)
+                    bearing = 0;
+                snprintf(metric, sizeof(metric), "%03d", bearing);
+            } else {
+                snprintf(metric, sizeof(metric), "?");
+            }
+            break;
+        }
+
+        display->setFont(FONT_SMALL_LOCAL);
+        const int metricWidth = display->getStringWidth(metric);
+        const int nameX = contentLeft + 32;
+        const int metricRight = mode == TDeckNodeListMode::Bearings ? contentRight - 48 : contentRight - 8;
+        const int nameMaxWidth = max(24, metricRight - metricWidth - nameX - 8);
+        display->setFont(FONT_SMALL);
+        char nodeName[96];
+        UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, nameMaxWidth).c_str(), nodeName,
+                                             sizeof(nodeName), nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        applyFavoriteNodeNameColor(display, node, nodeName, nameX, cardY + 4, nameMaxWidth);
+#endif
+        UIRenderer::drawStringWithEmotes(display, nameX, cardY + 4, nodeName, FONT_HEIGHT_SMALL, 1, false);
+
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(metricRight - metricWidth, cardY + 6, metric);
+
+        char shortName[16];
+        if (nodeInfoLiteHasUser(node) && node->short_name[0]) {
+            snprintf(shortName, sizeof(shortName), "%s", node->short_name);
+        } else {
+            snprintf(shortName, sizeof(shortName), "!%08lX", static_cast<unsigned long>(node->num));
+        }
+
+        char linkInfo[48];
+        switch (mode) {
+        case TDeckNodeListMode::LastHeard:
+            if (nodeInfoLiteHasSnr(node))
+                snprintf(linkInfo, sizeof(linkInfo), "%s  SNR %+.1f", shortName, node->snr);
+            else
+                snprintf(linkInfo, sizeof(linkInfo), "%s  SNR --", shortName);
+            if (node->has_hops_away) {
+                char withHops[48];
+                snprintf(withHops, sizeof(withHops), "%s  H%u", linkInfo, node->hops_away);
+                snprintf(linkInfo, sizeof(linkInfo), "%s", withHops);
+            }
+            break;
+        case TDeckNodeListMode::HopSignal:
+            snprintf(linkInfo, sizeof(linkInfo), "%s  HEARD %s", shortName, age);
+            if (node->has_hops_away) {
+                char withHops[48];
+                snprintf(withHops, sizeof(withHops), "%s  H%u", linkInfo, node->hops_away);
+                snprintf(linkInfo, sizeof(linkInfo), "%s", withHops);
+            }
+            break;
+        case TDeckNodeListMode::Distance:
+            snprintf(linkInfo, sizeof(linkInfo), "%s  HEARD %s", shortName, age);
+            break;
+        case TDeckNodeListMode::Bearings: {
+            char distance[12];
+            if (formatTDeckNodeDistance(node, distance, sizeof(distance)))
+                snprintf(linkInfo, sizeof(linkInfo), "%s  %s", shortName, distance);
+            else
+                snprintf(linkInfo, sizeof(linkInfo), "%s  HEARD %s", shortName, age);
+            break;
+        }
+        }
+        display->drawString(nameX, cardY + 29, linkInfo);
+
+        if (mode == TDeckNodeListMode::Bearings) {
+            if (hasBearing)
+                CompassRenderer::drawArrowToNode(display, contentRight - 24, cardY + FONT_HEIGHT_SMALL / 2, FONT_HEIGHT_SMALL - 5,
+                                                  bearingDegrees);
+            else {
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(contentRight - 24, cardY + 7, "?");
+                display->setTextAlignment(TEXT_ALIGN_LEFT);
+            }
+        }
+
+        if (nodeInfoLiteIsFavorite(node)) {
+            display->fillRect(contentLeft + 10, cardY + 35, 4, 4);
+        }
+        if (nodeInfoLiteIsIgnored(node) || nodeInfoLiteIsMuted(node)) {
+            display->drawLine(nameX, cardY + 14, contentRight - 10, cardY + 14);
+        }
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+        if (screen) {
+            screen->addTouchTarget(touchExpandedRect(contentLeft, cardY, cardWidth, cardHeight, 2),
+                                   meshtastic::TouchTargetKind::NodeRow, static_cast<uint32_t>(idx), INPUT_BROKER_NONE);
+        }
+#endif
+    }
+
+    drawCommonFooter(display, x, y);
+    drawNodeListScrollPopup(display, totalEntries, startIndex, perPage, scrollIndex, summaryY, bodyBottom);
+}
+#endif
+
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    if (strcmp(title, "Last Heard") == 0) {
+        drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::LastHeard);
+        return;
+    }
+    if (strcmp(title, "Hops/Sig") == 0 || strcmp(title, "Hops / Signal") == 0) {
+        drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::HopSignal);
+        return;
+    }
+    if (strcmp(title, "Distance") == 0) {
+        drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::Distance);
+        return;
+    }
+    if (strcmp(title, "Bearings") == 0) {
+        drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::Bearings, headingRadian);
+        return;
+    }
+#endif
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
     bool locationScreen = false;
@@ -688,6 +1053,14 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
         if (extras)
             extras(display, node, xPos, yPos, columnWidth, headingRadian, lat, lon);
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+        if (screen) {
+            screen->addTouchTarget(touchExpandedRect(xPos, yPos, columnWidth, rowYOffset, 2),
+                                   meshtastic::TouchTargetKind::NodeRow, static_cast<uint32_t>(idx),
+                                   INPUT_BROKER_NONE);
+        }
+#endif
 
         lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
@@ -869,7 +1242,9 @@ void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
 void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#ifdef USE_EINK
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    const char *title = "Hops / Signal";
+#elif defined(USE_EINK)
     const char *title = "Hops/Sig";
 #else
 

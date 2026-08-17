@@ -6,6 +6,10 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#include "graphics/draw/MessageNotificationPolicy.h"
+#include "graphics/TouchLayout.h"
+#endif
 #include "gps/RTC.h"
 #include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
@@ -18,6 +22,7 @@
 #include "main.h"
 #include "meshUtils.h"
 #include "modules/CannedMessageModule.h"
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -48,6 +53,22 @@ bool scrollStarted = false;
 static bool didReset = false;
 static constexpr int MESSAGE_BLOCK_GAP = 6;
 
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+static int getTDeckMessageContentTop(OLEDDisplay *display)
+{
+    const int titleY = getTextPositions(display)[1] + 2;
+    const int localFontHeight = std::max(12, FONT_HEIGHT_SMALL - 5);
+    return titleY + localFontHeight + 2 + 7;
+}
+
+static int getTDeckMessageViewportHeight(OLEDDisplay *display)
+{
+    const int contentTop = getTDeckMessageContentTop(display);
+    const int contentBottom = display->getHeight() - FONT_HEIGHT_SMALL - 1;
+    return std::max(1, contentBottom - contentTop);
+}
+#endif
+
 void scrollUp()
 {
     manualScrolling = true;
@@ -64,7 +85,14 @@ void scrollDown()
     for (int h : cachedHeights)
         totalHeight += h;
 
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    OLEDDisplay *display = (screen != nullptr) ? screen->getDisplayDevice() : nullptr;
+    const int fallbackHeight = screen ? screen->getHeight() : 64;
+    const int visibleHeight =
+        display ? getTDeckMessageViewportHeight(display) : std::max(1, fallbackHeight - (FONT_HEIGHT_SMALL * 2));
+#else
     int visibleHeight = screen->getHeight() - (FONT_HEIGHT_SMALL * 2);
+#endif
     int maxScroll = totalHeight - visibleHeight;
     if (maxScroll < 0)
         maxScroll = 0;
@@ -104,7 +132,12 @@ void nudgeScroll(int8_t direction)
     OLEDDisplay *display = (screen != nullptr) ? screen->getDisplayDevice() : nullptr;
     const int displayHeight = display ? display->getHeight() : 64;
     const int navHeight = FONT_HEIGHT_SMALL;
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    const int usableHeight =
+        display ? getTDeckMessageViewportHeight(display) : std::max(1, displayHeight - navHeight);
+#else
     const int usableHeight = std::max(0, displayHeight - navHeight);
+#endif
 
     int totalHeight = 0;
     for (int h : cachedHeights)
@@ -388,8 +421,40 @@ static void drawMessageScrollbar(OLEDDisplay *display, int visibleHeight, int to
     }
 }
 
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+static int drawTDeckThreadHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *threadTitle, size_t visibleCount)
+{
+    graphics::drawCommonHeader(display, x, y, "Messages");
+
+    const int left = x + 8;
+    const int right = display->getWidth() - 8;
+    const int titleY = getTextPositions(display)[1] + 2;
+    const int localFontHeight = std::max(12, FONT_HEIGHT_SMALL - 5);
+
+    char countLabel[20];
+    snprintf(countLabel, sizeof(countLabel), "%u visible", static_cast<unsigned>(visibleCount));
+
+    display->setFont(FONT_SMALL_LOCAL);
+    const int countWidth = display->getStringWidth(countLabel);
+    const int titleMaxWidth = std::max(0, right - left - countWidth - 12);
+    char clippedTitle[80];
+    UIRenderer::truncateStringWithEmotes(display, threadTitle, clippedTitle, sizeof(clippedTitle), titleMaxWidth);
+    display->drawString(left, titleY, clippedTitle);
+    display->drawString(right - countWidth, titleY, countLabel);
+
+    const int dividerY = titleY + localFontHeight + 2;
+    display->drawLine(left, dividerY, right, dividerY);
+    return dividerY + 7;
+}
+#endif
+
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (screen)
+        screen->markTouchFrameMapped();
+#endif
+
     // Ensure any boot-relative timestamps are upgraded if RTC is valid
     messageStore.upgradeBootRelativeTimestamps();
 
@@ -429,7 +494,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     const int navHeight = FONT_HEIGHT_SMALL;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    const int messageContentTop = getTDeckMessageContentTop(display);
+    const int messageContentBottom = std::max(messageContentTop + 1, scrollBottom - 1);
+    const int usableHeight = std::max(1, messageContentBottom - messageContentTop);
+#else
+    const int messageContentTop = getTextPositions(display)[1];
+    const int messageContentBottom = scrollBottom;
     const int usableHeight = scrollBottom;
+#endif
     constexpr int LEFT_MARGIN = 2;
     constexpr int RIGHT_MARGIN = 2;
     constexpr int SCROLLBAR_WIDTH = 3;
@@ -474,6 +547,21 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
     }
 
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    char threadTitle[80] = "ALL THREADS";
+    switch (currentMode) {
+    case ThreadMode::ALL:
+        snprintf(threadTitle, sizeof(threadTitle), "ALL THREADS");
+        break;
+    case ThreadMode::CHANNEL:
+        snprintf(threadTitle, sizeof(threadTitle), "THREAD / %s", titleStr);
+        break;
+    case ThreadMode::DIRECT:
+        snprintf(threadTitle, sizeof(threadTitle), "THREAD / %s", titleStr);
+        break;
+    }
+#endif
+
     if (filtered.empty()) {
         // If current conversation is empty go back to ALL view
         if (currentMode != ThreadMode::ALL) {
@@ -483,11 +571,21 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         // Still in ALL mode and no messages at all → show placeholder
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+        const int emptyContentTop = drawTDeckThreadHeader(display, x, y, threadTitle, 0);
+        (void)emptyContentTop;
+        display->setFont(FONT_SMALL);
+        didReset = false;
+        const char *messageString = "No messages in this thread";
+        const int centerText = (display->getWidth() / 2) - (display->getStringWidth(messageString) / 2);
+        display->drawString(centerText, emptyContentTop + 28, messageString);
+#else
         graphics::drawCommonHeader(display, x, y, titleStr);
         didReset = false;
         const char *messageString = "No messages";
         int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
         display->drawString(center_text, getTextPositions(display)[2], messageString);
+#endif
         graphics::drawCommonFooter(display, x, y);
         return;
     }
@@ -659,7 +757,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         const char *msgText = MessageStore::getText(m);
 
-        int wrapWidth = mine ? rightTextWidth : leftTextWidth;
+        const int wrapWidth = mine ? rightTextWidth : leftTextWidth;
         std::vector<std::string> wrapped = generateLines(display, "", msgText, wrapWidth);
         // Per-message wrap-line limit: even if wrapping produces many lines, cap them to prevent
         // a single long message from consuming most or all of the cache.
@@ -721,16 +819,23 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 #else
     // E-Ink: disable autoscroll
+#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+    // Keep manual UP/DOWN positioning while leaving automatic movement disabled.
+    waitingToReset = false;
+    scrollStarted = false;
+    lastTime = millis();
+#else
     scrollY = 0.0f;
     waitingToReset = false;
     scrollStarted = false;
     lastTime = millis();
 #endif
+#endif
 
     int finalScroll = (int)scrollY;
-    int yOffset = -finalScroll + getTextPositions(display)[1];
-    const int contentTop = getTextPositions(display)[1];
-    const int contentBottom = scrollBottom; // already excludes nav line
+    int yOffset = -finalScroll + messageContentTop;
+    const int contentTop = messageContentTop;
+    const int contentBottom = messageContentBottom;
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
 #if GRAPHICS_TFT_COLORING_ENABLED
@@ -829,6 +934,16 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             if (bubbleX + bubbleW > rightEdge)
                 bubbleW = std::max(1, rightEdge - bubbleX);
 
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+            if (screen) {
+                const int touchTop = std::max(topY, contentTop);
+                const int touchBottom = std::min(bottomY, contentBottom - 1);
+                if (touchBottom >= touchTop)
+                    screen->addTouchTarget(touchExpandedRect(bubbleX, touchTop, bubbleW, touchBottom - touchTop + 1, 2),
+                                           meshtastic::TouchTargetKind::MessageRow, 0, INPUT_BROKER_NONE);
+            }
+#endif
+
             // Draw rounded rectangle bubble
             if (bubbleW > BUBBLE_RADIUS * 2 && bubbleH > BUBBLE_RADIUS * 2) {
                 const int r = BUBBLE_RADIUS;
@@ -891,7 +1006,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int lineY = yOffset;
     for (size_t i = 0; i < cachedLines.size(); ++i) {
 
-        if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+        const bool lineVisible = lineY >= contentTop && lineY < contentBottom;
+#else
+        const bool lineVisible = lineY > -cachedHeights[i] && lineY < scrollBottom;
+#endif
+        if (lineVisible) {
             if (isHeader[i]) {
 
                 int w = graphics::UIRenderer::measureStringWithEmotes(display, cachedLines[i].c_str());
@@ -958,8 +1078,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // Draw scrollbar
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, messageContentTop);
+    drawTDeckThreadHeader(display, x, y, threadTitle, filtered.size());
+#else
     drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, getTextPositions(display)[1]);
     graphics::drawCommonHeader(display, x, y, titleStr);
+#endif
     graphics::drawCommonFooter(display, x, y);
 }
 
@@ -1072,6 +1197,10 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 
 void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    const char *msgText = MessageStore::getText(sm);
+#endif
+
     if (packet.from != 0) {
         hasUnreadMessage = true;
         const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
@@ -1138,6 +1267,13 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
                 strcpy(banner, "New Message");
         }
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        // Select the thread after muted-message filtering and before rendering the banner.
+        if (msgText && msgText[0] != '\0')
+            setThreadFor(sm, packet);
+        resetScrollState();
+#endif
+
         // Append context (which channel or DM) so the banner shows where the message arrived
         {
             char contextBuf[64] = "";
@@ -1164,7 +1300,17 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
         // Shorter banner if already in a conversation (Channel or Direct)
         bool inThread = (getThreadMode() != ThreadMode::ALL);
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        const bool showBanner = shouldShowIncomingMessageBanner(screen && screen->isMessageFrameShown(), isAlert, suppressBanner);
 
+        if (showBanner && screen && shouldWakeOnReceivedMessage()) {
+            screen->setOn(true);
+        }
+
+        if (showBanner && screen) {
+            screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
+        }
+#else
         if (!suppressBanner && shouldWakeOnReceivedMessage()) {
             screen->setOn(true);
         }
@@ -1172,6 +1318,18 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         if (!suppressBanner) {
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
         }
+#endif
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    } else {
+        if (msgText && msgText[0] != '\0')
+            setThreadFor(sm, packet);
+        resetScrollState();
+    }
+
+    // E-Ink needs the Screen thread to commit the frame after message state changes.
+    if (screen)
+        screen->runNow();
+#else
     }
 
     // Always focus into the correct conversation thread when a message with real text arrives
@@ -1182,6 +1340,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
     // Reset scroll for a clean start
     resetScrollState();
+#endif
 }
 
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
