@@ -45,7 +45,7 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     // always relayed so reliable opaque unicast still propagates (mirrors FloodingRouter's isRepeated).
     const bool isOriginatorTx = p->hop_start > 0 && p->hop_start == p->hop_limit;
     if (opaqueWasSeenRecently(getFrom(p), p->id) && !isOriginatorTx) {
-        LOG_WARN("Drop duplicate opaque relay from 0x%08x id %u", getFrom(p), p->id);
+        LOG_TRACE("Drop duplicate opaque relay from 0x%08x id 0x%08x", getFrom(p), p->id);
         return false;
     }
 
