@@ -196,6 +196,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
 #elif defined(T_DECK_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
+#elif defined(T_DECK_MAX)
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(T_BEAM_1W)
 #define HW_VENDOR meshtastic_HardwareModel_TBEAM_1_WATT
 #elif defined(T_BEAM_BPF)
