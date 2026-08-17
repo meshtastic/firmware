@@ -835,6 +835,30 @@ bool Power::setup()
     return found;
 }
 
+void Power::setupINABatteryMonitor()
+{
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#ifdef DEVICE_BATTERY_INA_ADDRESS
+    if (!config.power.device_battery_ina_address)
+        config.power.device_battery_ina_address = DEVICE_BATTERY_INA_ADDRESS;
+#endif
+    if (batteryLevel || !config.power.device_battery_ina_address)
+        return;
+
+    batteryLevel = &analogLevel;
+    const uint16_t batteryVoltageMv = batteryLevel->getBattVoltage();
+    if (batteryVoltageMv == 0) {
+        batteryLevel = nullptr;
+        return;
+    }
+
+    LOG_INFO("Using INA at I2C address 0x%x as device battery monitor (%u mV)",
+             config.power.device_battery_ina_address, batteryVoltageMv);
+    enabled = true;
+    setIntervalFromNow(0);
+#endif
+}
+
 void Power::powerCommandsCheck()
 {
     // 0 means "not scheduled" for both, and reads as long expired - test it first.

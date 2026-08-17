@@ -2,6 +2,10 @@
 #include "NodeDB.h"
 #include "configuration.h"
 
+#if defined(HAS_ELECROW_STC_BUZZER)
+#include "platform/esp32/ElecrowStc.h"
+#endif
+
 #if !defined(ARCH_ESP32) && !defined(ARCH_RP2040) && !defined(ARCH_PORTDUINO)
 #include "Tone.h"
 #endif
@@ -140,6 +144,18 @@ void playTones(const ToneDuration *tone_durations, int size)
 #if defined(SPEAKER_EN_2)
     digitalWrite(SPEAKER_EN_2, LOW);
 #endif
+    return;
+#endif
+#if defined(HAS_ELECROW_STC_BUZZER)
+    for (int i = 0; i < size; i++) {
+        const auto &tone_duration = tone_durations[i];
+        const bool audible = tone_duration.frequency_khz != NOTE_SILENT;
+        elecrow_panel::setStcBuzzer(audible);
+        delay(tone_duration.duration_ms);
+        if (audible)
+            elecrow_panel::setStcBuzzer(false);
+        delay(audible ? tone_duration.duration_ms * 0.3 : 1);
+    }
     return;
 #endif
 #if defined(PIN_BUZZER)
