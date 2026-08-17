@@ -368,6 +368,13 @@ typedef struct _meshtastic_DS248X_config {
     uint32_t main_temperature_channel;
 } meshtastic_DS248X_config;
 
+typedef struct _meshtastic_AS3935_config {
+    /* Antenna tuning capacitance in pF, 0 to 120 in steps of 8. The antenna tank must
+ resonate within 3.5% of 500kHz; the correct trim is specific to the sensor board. */
+    bool has_set_tuning_cap_pf;
+    uint32_t set_tuning_cap_pf;
+} meshtastic_AS3935_config;
+
 typedef struct _meshtastic_SensorConfig {
     /* SCD4X CO2 Sensor configuration */
     bool has_scd4x_config;
@@ -387,6 +394,9 @@ typedef struct _meshtastic_SensorConfig {
     /* SEN6X PM/RHT/VOC/NOx/CO2/HCHO Sensor configuration */
     bool has_sen6x_config;
     meshtastic_SEN6X_config sen6x_config;
+    /* AS3935 lightning sensor configuration */
+    bool has_as3935_config;
+    meshtastic_AS3935_config as3935_config;
 } meshtastic_SensorConfig;
 
 typedef PB_BYTES_ARRAY_T(8) meshtastic_AdminMessage_session_passkey_t;
@@ -588,6 +598,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
@@ -597,13 +608,14 @@ extern "C" {
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_SharedContact_init_default    {0, false, meshtastic_User_init_default, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_default {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
-#define meshtastic_SensorConfig_init_default     {false, meshtastic_SCD4X_config_init_default, false, meshtastic_SEN5X_config_init_default, false, meshtastic_SCD30_config_init_default, false, meshtastic_SHTXX_config_init_default, false, meshtastic_DS248X_config_init_default, false, meshtastic_SEN6X_config_init_default}
+#define meshtastic_SensorConfig_init_default     {false, meshtastic_SCD4X_config_init_default, false, meshtastic_SEN5X_config_init_default, false, meshtastic_SCD30_config_init_default, false, meshtastic_SHTXX_config_init_default, false, meshtastic_DS248X_config_init_default, false, meshtastic_SEN6X_config_init_default, false, meshtastic_AS3935_config_init_default}
 #define meshtastic_SCD4X_config_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SEN5X_config_init_default     {false, 0, false, 0, false, 0}
 #define meshtastic_SEN6X_config_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SCD30_config_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SHTXX_config_init_default     {false, 0}
 #define meshtastic_DS248X_config_init_default    {false, 0}
+#define meshtastic_AS3935_config_init_default    {false, 0}
 #define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
@@ -612,13 +624,14 @@ extern "C" {
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_SharedContact_init_zero       {0, false, meshtastic_User_init_zero, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_zero {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
-#define meshtastic_SensorConfig_init_zero        {false, meshtastic_SCD4X_config_init_zero, false, meshtastic_SEN5X_config_init_zero, false, meshtastic_SCD30_config_init_zero, false, meshtastic_SHTXX_config_init_zero, false, meshtastic_DS248X_config_init_zero, false, meshtastic_SEN6X_config_init_zero}
+#define meshtastic_SensorConfig_init_zero        {false, meshtastic_SCD4X_config_init_zero, false, meshtastic_SEN5X_config_init_zero, false, meshtastic_SCD30_config_init_zero, false, meshtastic_SHTXX_config_init_zero, false, meshtastic_DS248X_config_init_zero, false, meshtastic_SEN6X_config_init_zero, false, meshtastic_AS3935_config_init_zero}
 #define meshtastic_SCD4X_config_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SEN5X_config_init_zero        {false, 0, false, 0, false, 0}
 #define meshtastic_SEN6X_config_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SCD30_config_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SHTXX_config_init_zero        {false, 0}
 #define meshtastic_DS248X_config_init_zero       {false, 0}
+#define meshtastic_AS3935_config_init_zero       {false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_AdminMessage_InputEvent_event_code_tag 1
@@ -673,12 +686,14 @@ extern "C" {
 #define meshtastic_SCD30_config_soft_reset_tag   6
 #define meshtastic_SHTXX_config_set_accuracy_tag 1
 #define meshtastic_DS248X_config_main_temperature_channel_tag 1
+#define meshtastic_AS3935_config_set_tuning_cap_pf_tag 1
 #define meshtastic_SensorConfig_scd4x_config_tag 1
 #define meshtastic_SensorConfig_sen5x_config_tag 2
 #define meshtastic_SensorConfig_scd30_config_tag 3
 #define meshtastic_SensorConfig_shtxx_config_tag 4
 #define meshtastic_SensorConfig_ds248x_config_tag 5
 #define meshtastic_SensorConfig_sen6x_config_tag 6
+#define meshtastic_SensorConfig_as3935_config_tag 7
 #define meshtastic_AdminMessage_get_channel_request_tag 1
 #define meshtastic_AdminMessage_get_channel_response_tag 2
 #define meshtastic_AdminMessage_get_owner_request_tag 3
@@ -886,7 +901,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  sen5x_config,      2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  scd30_config,      3) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  shtxx_config,      4) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  ds248x_config,     5) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  sen6x_config,      6)
+X(a, STATIC,   OPTIONAL, MESSAGE,  sen6x_config,      6) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  as3935_config,     7)
 #define meshtastic_SensorConfig_CALLBACK NULL
 #define meshtastic_SensorConfig_DEFAULT NULL
 #define meshtastic_SensorConfig_scd4x_config_MSGTYPE meshtastic_SCD4X_config
@@ -895,6 +911,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  sen6x_config,      6)
 #define meshtastic_SensorConfig_shtxx_config_MSGTYPE meshtastic_SHTXX_config
 #define meshtastic_SensorConfig_ds248x_config_MSGTYPE meshtastic_DS248X_config
 #define meshtastic_SensorConfig_sen6x_config_MSGTYPE meshtastic_SEN6X_config
+#define meshtastic_SensorConfig_as3935_config_MSGTYPE meshtastic_AS3935_config
 
 #define meshtastic_SCD4X_config_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, BOOL,     set_asc,           1) \
@@ -946,6 +963,11 @@ X(a, STATIC,   OPTIONAL, UINT32,   main_temperature_channel,   1)
 #define meshtastic_DS248X_config_CALLBACK NULL
 #define meshtastic_DS248X_config_DEFAULT NULL
 
+#define meshtastic_AS3935_config_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, UINT32,   set_tuning_cap_pf,   1)
+#define meshtastic_AS3935_config_CALLBACK NULL
+#define meshtastic_AS3935_config_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_InputEvent_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_OTAEvent_msg;
@@ -961,6 +983,7 @@ extern const pb_msgdesc_t meshtastic_SEN6X_config_msg;
 extern const pb_msgdesc_t meshtastic_SCD30_config_msg;
 extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 extern const pb_msgdesc_t meshtastic_DS248X_config_msg;
+extern const pb_msgdesc_t meshtastic_AS3935_config_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
@@ -978,9 +1001,11 @@ extern const pb_msgdesc_t meshtastic_DS248X_config_msg;
 #define meshtastic_SCD30_config_fields &meshtastic_SCD30_config_msg
 #define meshtastic_SHTXX_config_fields &meshtastic_SHTXX_config_msg
 #define meshtastic_DS248X_config_fields &meshtastic_DS248X_config_msg
+#define meshtastic_AS3935_config_fields &meshtastic_AS3935_config_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
+#define meshtastic_AS3935_config_size            6
 #define meshtastic_AdminMessage_InputEvent_size  14
 #define meshtastic_AdminMessage_OTAEvent_size    36
 #define meshtastic_AdminMessage_size             511
@@ -994,7 +1019,7 @@ extern const pb_msgdesc_t meshtastic_DS248X_config_msg;
 #define meshtastic_SEN5X_config_size             9
 #define meshtastic_SEN6X_config_size             31
 #define meshtastic_SHTXX_config_size             6
-#define meshtastic_SensorConfig_size             120
+#define meshtastic_SensorConfig_size             128
 #define meshtastic_SharedContact_size            127
 
 #ifdef __cplusplus
