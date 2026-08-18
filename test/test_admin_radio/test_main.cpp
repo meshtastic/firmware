@@ -1085,6 +1085,44 @@ static void test_restorePreferences_sanitizesLicensedBackupBeforeReturn()
     nodeDB = savedNodeDB;
 }
 
+static void test_restorePreferences_corruptBackupIsNotSuccess()
+{
+    NodeDB *savedNodeDB = nodeDB;
+    nodeDB = new NodeDB();
+    const meshtastic_LocalConfig savedConfig = config;
+
+    config = meshtastic_LocalConfig_init_zero;
+    config.has_security = true;
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x7C, config.security.private_key.size);
+
+    // backupPreferences() creates /backups; the file it wrote is then replaced with bytes that
+    // cannot decode, standing in for a backup corrupted after it was taken.
+    TEST_ASSERT_TRUE(nodeDB->backupPreferences(meshtastic_AdminMessage_BackupLocation_FLASH));
+    FSCom.remove(backupFileName);
+    {
+        uint8_t garbage[32];
+        memset(garbage, 0xFF, sizeof(garbage));
+        auto f = FSCom.open(backupFileName, FILE_O_WRITE);
+        TEST_ASSERT_TRUE_MESSAGE((bool)f, "could not write corrupt backup file");
+        const size_t wrote = f.write(garbage, sizeof(garbage));
+        f.close();
+        TEST_ASSERT_EQUAL_MESSAGE(sizeof(garbage), wrote, "short write of corrupt backup");
+    }
+
+    TEST_ASSERT_FALSE_MESSAGE(nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_CONFIG),
+                              "restore from an undecodable backup must fail");
+    TEST_ASSERT_EQUAL_MESSAGE(32, config.security.private_key.size, "failed restore must not clear the private key");
+    for (size_t i = 0; i < config.security.private_key.size; i++)
+        TEST_ASSERT_EQUAL_MESSAGE(0x7C, config.security.private_key.bytes[i], "failed restore must not overwrite live config");
+
+    config = savedConfig;
+    nodeDB->saveToDisk(SEGMENT_CONFIG);
+    FSCom.remove(backupFileName);
+    delete nodeDB;
+    nodeDB = savedNodeDB;
+}
+
 static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
                                            meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
@@ -1888,6 +1926,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
     RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
+    RUN_TEST(test_restorePreferences_corruptBackupIsNotSuccess);
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);
     RUN_TEST(test_getRegion_returnsCorrectRegion_EU868);
     RUN_TEST(test_getRegion_returnsCorrectRegion_LORA24);
