@@ -789,6 +789,12 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
+        // One-byte hash collisions are indistinguishable from tampering, so relay opaquely
+        // instead of blackholing; isFromUs stays REJECT to keep forged senders off the ACK path.
+        if (!isToUs(p) && !isFromUs(p)) {
+            LOG_WARN("Decryptable packet failed decoding, relay opaquely");
+            return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
+        }
         LOG_WARN("Decryptable packet failed decoding, drop");
         return RoutingAuthVerdict::REJECT;
     }
