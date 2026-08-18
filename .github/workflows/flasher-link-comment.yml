@@ -41,7 +41,7 @@ jobs:
             // Resolve the PR by matching the run's head SHA against the repo's open
             // PRs. workflow_run.pull_requests is empty for fork PRs, and
             // listPullRequestsAssociatedWithCommit won't return an open fork PR by
-            // its head commit — but pulls.list includes fork PRs. Matching on head
+            // its head commit - but pulls.list includes fork PRs. Matching on head
             // SHA also enforces that the run is for the PR's current commit, so stale
             // re-runs of an outdated commit won't match.
             const openPrs = await github.paginate(github.rest.pulls.list, {
@@ -55,7 +55,7 @@ jobs:
             const prNumber = pr.number;
 
             // Restrict to trusted authors. NOTE: author_association is computed for
-            // the GITHUB_TOKEN, which cannot see *private/concealed* org memberships —
+            // the GITHUB_TOKEN, which cannot see *private/concealed* org memberships -
             // those members come back as CONTRIBUTOR, not MEMBER. So gating on MEMBER
             // alone silently excludes most maintainers. We allow the trusted set the
             // token can actually identify (members, collaborators, and anyone with a
@@ -86,7 +86,7 @@ jobs:
             // Read each built board's manifest (.mt.json). activelySupported,
             // displayName and architecture come straight from the board's
             // custom_meshtastic_* platformio config, so the list is in sync with
-            // the firmware itself — no external device database needed.
+            // the firmware itself - no external device database needed.
             const fs = require('fs');
             let boards = [];
             try {
@@ -132,8 +132,8 @@ jobs:
               .join('\n');
 
             // Shields.io badges. Only non-user-controlled, charset-constrained values
-            // (version, commit sha, counts, dates) go into badge URLs — never board
-            // names or the PR title — so the rendered comment cannot be spoofed.
+            // (version, commit sha, counts, dates) go into badge URLs - never board
+            // names or the PR title - so the rendered comment cannot be spoofed.
             const shieldText = (s) =>
               encodeURIComponent(String(s).replace(/-/g, '--').replace(/_/g, '__').replace(/ /g, '_'));
             const shield = (label, message, color) =>

@@ -1,9 +1,10 @@
 #include "mesh/eth/ethClient.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
@@ -17,7 +18,7 @@
 #include "mesh/eth/ethTlsApiServer.h"
 #endif
 #ifdef USE_ARDUINO_ETHERNET
-#include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
+#include <Ethernet.h> // arduino-libraries/Ethernet - supports W5100/W5200/W5500
 // Shorter DHCP timeout so LoRa startup isn't blocked when no DHCP server is present.
 #define ETH_DHCP_TIMEOUT_MS 10000
 #else
@@ -181,12 +182,12 @@ static int32_t reconnectETH()
             initEthApiServer();
 #endif
 #if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
-            // Phase 2.1-bis — cert gen runs on its own OSThread so ECDSA keygen
+            // Phase 2.1-bis - cert gen runs on its own OSThread so ECDSA keygen
             // + DER encoding + LittleFS write don't share the Periodic stack
             // (which overflowed in the original inline attempt). The thread
             // polls for a non-zero IP itself and runs once.
             initEthCertThread();
-            // Phase 2.2 — TLS server skeleton on TCP/443. The worker waits
+            // Phase 2.2 - TLS server skeleton on TCP/443. The worker waits
             // until the cert thread signals isEthCertReady() before binding.
             initEthTlsApiServer();
 #endif
@@ -196,7 +197,9 @@ static int32_t reconnectETH()
     }
 
 #ifndef DISABLE_NTP
-    if (isEthernetAvailable() && (ntp_renew < millis())) {
+    // 0 here means "renew now" (forced at link-up). deadlinePassed(0) only reads as passed for the
+    // first half of each wrap cycle, so treat 0 as always-due rather than relying on that.
+    if (isEthernetAvailable() && (ntp_renew == 0 || Throttle::deadlinePassed(ntp_renew))) {
 
         LOG_INFO("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
@@ -220,7 +223,7 @@ static int32_t reconnectETH()
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
     ethOTALoop();
 #endif
-    // ethApiServer runs on its own OSThread (20ms ticks) — not polled here.
+    // ethApiServer runs on its own OSThread (20ms ticks) - not polled here.
 
     return 5000; // every 5 seconds
 }

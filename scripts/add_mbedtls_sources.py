@@ -10,16 +10,14 @@
 
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): Import/env/Return are SCons-injected globals
-# trunk-ignore-all(ruff/E402)
-# trunk-ignore-all(flake8/E402): stdlib imports must follow Import("env")
-Import("env")
-
 import glob
 import os
 
+Import("env")
+
 framework_dir = env.PioPlatform().get_package_dir("framework-arduinopico")
 if not framework_dir:
-    print("[add_mbedtls_sources] framework-arduinopico package not found — skipping")
+    print("[add_mbedtls_sources] framework-arduinopico package not found - skipping")
     Return()
 
 mbedtls_root = os.path.join(framework_dir, "pico-sdk", "lib", "mbedtls")
@@ -40,7 +38,9 @@ env.Append(CPPPATH=[include_dir, env["PROJECT_SRC_DIR"]])
 env.Append(CPPDEFINES=[("MBEDTLS_USER_CONFIG_FILE", '\\"mbedtls_user_config.h\\"')])
 
 sources = sorted(glob.glob(os.path.join(src_dir, "*.c")))
-print(f"[add_mbedtls_sources] Adding {len(sources)} mbedTLS source files from {src_dir}")
+print(
+    f"[add_mbedtls_sources] Adding {len(sources)} mbedTLS source files from {src_dir}"
+)
 
 env.BuildSources(
     os.path.join("$BUILD_DIR", "mbedtls_pico"),

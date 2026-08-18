@@ -24,6 +24,8 @@
 #include "airtime.h"
 #include "modules/AdminModule.h"
 #include "modules/MeshBeaconModule.h"
+#include "support/AdminModuleTestShim.h"
+#include "support/MockMeshService.h"
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -50,16 +52,8 @@ namespace
 constexpr NodeNum kLocalNode = 0xAAAA0001;
 constexpr NodeNum kRemoteNode = 0xBBBB0002;
 
-// ---------------------------------------------------------------------------
-// Minimal MockMeshService — stubs out side-effecting virtuals.
-// handleToRadio is non-virtual so it runs the real implementation; we guard
-// against the router->sendLocal path by setting a MockRouter below.
-// ---------------------------------------------------------------------------
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
+// MockMeshService (test/support) stubs the side-effecting virtuals; handleToRadio is non-virtual so
+// it runs the real implementation - the router->sendLocal path is guarded by MockRouter below.
 
 // ---------------------------------------------------------------------------
 // MockRouter: captures every packet handed to send() instead of transmitting.
@@ -93,17 +87,10 @@ class MockRouter : public Router
     std::vector<meshtastic_ChannelSettings> primaryAtSend;
 };
 
-// ---------------------------------------------------------------------------
-// AdminModuleTestShim — exposes protected handleSetModuleConfig.
-// ---------------------------------------------------------------------------
-class AdminModuleTestShim : public AdminModule
-{
-  public:
-    using AdminModule::handleSetModuleConfig;
-};
+// AdminModuleTestShim (test/support) exposes protected handleSetModuleConfig.
 
 // ---------------------------------------------------------------------------
-// MeshBeaconBroadcastModuleTestShim — exposes private internals for testing.
+// MeshBeaconBroadcastModuleTestShim - exposes private internals for testing.
 // ---------------------------------------------------------------------------
 class MeshBeaconBroadcastModuleTestShim : public MeshBeaconBroadcastModule
 {
@@ -117,7 +104,7 @@ class MeshBeaconBroadcastModuleTestShim : public MeshBeaconBroadcastModule
 };
 
 // ---------------------------------------------------------------------------
-// MeshBeaconListenerModuleTestShim — exposes handleReceivedProtobuf.
+// MeshBeaconListenerModuleTestShim - exposes handleReceivedProtobuf.
 // ---------------------------------------------------------------------------
 class MeshBeaconListenerModuleTestShim : public MeshBeaconListenerModule
 {
@@ -154,7 +141,7 @@ static void resetConfig()
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
     config = meshtastic_LocalConfig_init_zero;
 
-    // Device is an EU_868 node with LONG_FAST — the starting point.
+    // Device is an EU_868 node with LONG_FAST - the starting point.
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     config.lora.use_preset = true;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
@@ -204,7 +191,7 @@ static void installTestSecondaryChannel(uint8_t index, const char *name, const u
 }
 
 // ===========================================================================
-// Group 1: AdminModule config validation — bad inputs must be sanitised
+// Group 1: AdminModule config validation - bad inputs must be sanitised
 // ===========================================================================
 
 /**
@@ -262,6 +249,44 @@ static void test_adminValidation_turboPresetOnUS_isAccepted(void)
 
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
+}
+
+/**
+ * Verify MEDIUM_TURBO is also cleared for EU_868. Like SHORT_TURBO/LONG_TURBO it is a 500 kHz preset
+ * that does not fit EU_868's 250 kHz band, so it must not survive admin validation there.
+ */
+static void test_adminValidation_mediumTurboPresetOnEU868_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
+    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.has_mesh_beacon);
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
+}
+
+/**
+ * Verify MEDIUM_TURBO passes validation for US (PROFILE_STD allows the full turbo family).
+ * The same 500 kHz preset that is illegal in EU_868 must be preserved in permissive regions.
+ */
+static void test_adminValidation_mediumTurboPresetOnUS_isAccepted(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
+    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
 }
 
 /**
@@ -610,7 +635,7 @@ static void test_broadcaster_rebuildCache_idempotent(void)
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.rebuildCache();
     pb_size_t firstSize = bcast.payloadCacheSize;
-    bcast.rebuildCache(); // second call — should be identical
+    bcast.rebuildCache(); // second call - should be identical
     pb_size_t secondSize = bcast.payloadCacheSize;
 
     TEST_ASSERT_FALSE(bcast.payloadCacheDirty);
@@ -618,7 +643,7 @@ static void test_broadcaster_rebuildCache_idempotent(void)
 }
 
 // ===========================================================================
-// Group 3: Broadcaster sendBeacon — packet structure
+// Group 3: Broadcaster sendBeacon - packet structure
 // ===========================================================================
 
 /**
@@ -708,7 +733,7 @@ static void test_broadcaster_sendBeacon_fallsBackToTextMessagePortnum(void)
     moduleConfig.has_mesh_beacon = true;
     const char *msg = "plain-text-beacon";
     strncpy(moduleConfig.mesh_beacon.broadcast_message, msg, sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    // broadcast_on_preset set, but no offer — should still be TEXT_MESSAGE_APP
+    // broadcast_on_preset set, but no offer - should still be TEXT_MESSAGE_APP
     moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
     moduleConfig.mesh_beacon.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
@@ -805,7 +830,7 @@ static void test_broadcaster_runOnce_silentWhenDisabled(void)
 }
 
 // ===========================================================================
-// Group 4: Listener — offer caching and guards
+// Group 4: Listener - offer caching and guards
 // ===========================================================================
 
 // Helper: build a decoded MESH_BEACON_APP packet carrying the given MeshBeacon.
@@ -902,7 +927,7 @@ static void test_listener_emptyMessageWithoutOffer_isDropped(void)
 
 /**
  * Verify a LONG_FAST offer (preset enum value 0) with no message still populates the offer cache.
- * Important to guard the has_offer_preset fix — LONG_FAST must not be treated as 'no offer present'.
+ * Important to guard the has_offer_preset fix - LONG_FAST must not be treated as 'no offer present'.
  */
 static void test_listener_offerOnly_isCached(void)
 {
@@ -970,7 +995,7 @@ static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
 /**
  * Verify the listener does NOT unwrap a combined beacon's text into a synthesized TEXT_MESSAGE_APP.
  * The original MESH_BEACON_APP packet already reaches the client (the handler returns CONTINUE), so
- * a beacon-aware client reads `message` directly from it — injecting a copy would only duplicate it,
+ * a beacon-aware client reads `message` directly from it - injecting a copy would only duplicate it,
  * and re-injecting onto the mesh would amplify/re-attribute. So: nothing onto the mesh, nothing
  * synthesized to the phone, and the handler must not consume the packet.
  */
@@ -990,7 +1015,7 @@ static void test_listener_textMessage_notUnwrapped(void)
     bool consumed = listener.handleReceivedProtobuf(mp, &b);
 
     // CONTINUE (not STOP): the original MESH_BEACON_APP keeps flowing to the client, which reads
-    // `message` from it — the simple path for a beacon-aware client.
+    // `message` from it - the simple path for a beacon-aware client.
     TEST_ASSERT_FALSE_MESSAGE(consumed, "Listener must not consume the beacon; the original must reach the client");
     // Nothing re-injected onto the mesh.
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
@@ -1176,7 +1201,7 @@ static void test_broadcaster_channelPskOverride_swapsBeaconChannelAndRestores(vo
 
 /**
  * Without a broadcast_on_channel override, the beacon must transmit on the primary channel unchanged
- * (no swap). Guards against the swap firing — and churning the channel table — when it isn't needed.
+ * (no swap). Guards against the swap firing - and churning the channel table - when it isn't needed.
  */
 static void test_broadcaster_noChannelOverride_doesNotSwapPrimary(void)
 {
@@ -1253,7 +1278,7 @@ static void test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset(void)
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
 
-    // Exactly one beacon goes out, and a blank slot does NOT trigger a crypto swap — the primary
+    // Exactly one beacon goes out, and a blank slot does NOT trigger a crypto swap - the primary
     // stays "Home" (no garbage / no clobber), matching the no-channel-override default-for-preset path.
     TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
     TEST_ASSERT_TRUE_MESSAGE(mockRouter->primaryAtSend.size() >= 1, "expected at least one send");
@@ -1263,7 +1288,7 @@ static void test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset(void)
 
 /**
  * Two broadcast_targets that resolve to the same effective radio config (same preset/region/channel)
- * must produce only ONE beacon — the payload is identical, so re-broadcasting wastes airtime.
+ * must produce only ONE beacon - the payload is identical, so re-broadcasting wastes airtime.
  */
 static void test_broadcaster_duplicateTargets_dedupedToOnePacket(void)
 {
@@ -1289,7 +1314,7 @@ static void test_broadcaster_duplicateTargets_dedupedToOnePacket(void)
 }
 
 /**
- * Two distinct broadcast_targets (different presets) must BOTH be sent — dedup must not over-collapse.
+ * Two distinct broadcast_targets (different presets) must BOTH be sent - dedup must not over-collapse.
  */
 static void test_broadcaster_distinctTargets_bothSent(void)
 {
@@ -1341,7 +1366,7 @@ void tearDown(void)
     testAdmin = nullptr;
 
     // Drain any packets the listener delivered via sendToPhone() (toPhoneQueue takes ownership and
-    // nothing else dequeues them in tests) so they are returned to packetPool — otherwise they leak
+    // nothing else dequeues them in tests) so they are returned to packetPool - otherwise they leak
     // and LeakSanitizer aborts the process at exit.
     if (mockSvc) {
         meshtastic_MeshPacket *p;
@@ -1373,6 +1398,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_turboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
+    RUN_TEST(test_adminValidation_mediumTurboPresetOnEU868_isCleared);
+    RUN_TEST(test_adminValidation_mediumTurboPresetOnUS_isAccepted);
     RUN_TEST(test_adminValidation_unknownOfferRegion_isCleared);
     RUN_TEST(test_adminValidation_validOfferRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetUnknownRegion_isCleared);

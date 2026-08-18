@@ -6,6 +6,7 @@
 #include "ethApiHandlers.h"
 #include "ethApiServer.h"
 #include <Arduino.h>
+#include <memory>
 
 #ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h>
@@ -20,7 +21,7 @@ static constexpr int32_t ACTIVE_INTERVAL_MS = 20;
 static constexpr int32_t MEDIUM_INTERVAL_MS = 100;
 static constexpr int32_t IDLE_INTERVAL_MS = 500;
 
-static EthernetServer *apiServer = nullptr;
+static std::unique_ptr<EthernetServer> apiServer;
 
 // Adapter that exposes an EthernetClient through the transport-agnostic
 // IStreamReadWrite interface so the handlers in ethApiHandlers.cpp can drive
@@ -83,16 +84,16 @@ static EthApiServerThread *apiThread = nullptr;
 
 void initEthApiServer()
 {
-    // Bind the listener (idempotent — deInitEthApiServer() drops apiServer on a
+    // Bind the listener (idempotent - deInitEthApiServer() drops apiServer on a
     // W5500 reset, and this rebinds it on the restart path).
     if (!apiServer) {
-        apiServer = new EthernetServer(ETH_API_PORT);
+        apiServer = std::make_unique<EthernetServer>(ETH_API_PORT);
         apiServer->begin();
         LOG_INFO("ETH API: server listening on TCP port %d (phase 2.0, OSThread @ 20ms)", ETH_API_PORT);
     }
     // The worker is created once and kept for the lifetime of the process. It
     // idles harmlessly while apiServer is null (runOnce guards on it), so we
-    // never delete it from another thread's runOnce — that would corrupt the
+    // never delete it from another thread's runOnce - that would corrupt the
     // scheduler's thread list mid-iteration.
     if (!apiThread)
         apiThread = new EthApiServerThread(); // OSThread base auto-registers with the scheduler
@@ -103,10 +104,7 @@ void deInitEthApiServer()
     // A W5500 chip reset wipes the hardware socket table, so the listener is now
     // bound to a dead socket. Drop it (the worker stays alive and idles) so the
     // next initEthApiServer() from reconnectETH's restart path rebinds TCP/80.
-    if (apiServer) {
-        delete apiServer;
-        apiServer = nullptr;
-    }
+    apiServer.reset();
 }
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_API

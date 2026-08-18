@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
+#include "meshUtils.h"
 
 #if HAS_SCREEN
 #include "gps/RTC.h"
@@ -91,6 +92,10 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         devicestate.has_rx_waypoint = false;
         return;
     }
+
+    // Sanitize before these reach the OLED renderer (defense-in-depth vs PB_VALIDATE_UTF8).
+    sanitizeUtf8(wp.name, sizeof(wp.name));
+    sanitizeUtf8(wp.description, sizeof(wp.description));
 
     // Get timestamp info. Will pass as a field to drawColumns
     char lastStr[20];

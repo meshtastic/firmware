@@ -68,9 +68,11 @@ class MeshModule
     /** Constructor
      * name is for debugging output
      */
-    MeshModule(const char *_name);
+    MeshModule(const char *_name, meshtastic_PortNum _ourPortNum = meshtastic_PortNum_UNKNOWN_APP);
 
     virtual ~MeshModule();
+
+    static bool replyPortMatches(meshtastic_PortNum modulePort, const meshtastic_MeshPacket &mp);
 
     /** For use only by MeshService
      */
@@ -88,6 +90,7 @@ class MeshModule
 #endif
   protected:
     const char *name;
+    meshtastic_PortNum ourPortNum;
 
     /** Most modules only care about packets that are destined for their node (i.e. broadcasts or has their node as the specific
     recipient) But some plugs might want to 'sniff' packets that are merely being routed (passing through the current node). Those
@@ -103,7 +106,7 @@ class MeshModule
      * flag */
     bool encryptedOk = false;
 
-    /* We allow modules to ignore a request without sending an error if they have a specific reason for it. */
+    /* Per-packet flag cleared by callModules(); modules can suppress an error response for a specific request. */
     bool ignoreRequest = false;
 
     /**

@@ -99,6 +99,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M6
 #elif defined(ELECROW_ThinkNode_M4)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M4
+#elif defined(ELECROW_ThinkNode_M8)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M8
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)
@@ -113,6 +115,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
 #elif defined(TRACKER_T1000_E)
 #define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
+#elif defined(MESH_TRACKER_X1)
+#define HW_VENDOR meshtastic_HardwareModel_MESH_TRACKER_X1
 #elif defined(ME25LS01_4Y10TD)
 #define HW_VENDOR meshtastic_HardwareModel_ME25LS01_4Y10TD
 #elif defined(MS24SF1)

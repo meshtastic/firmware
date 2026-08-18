@@ -1,7 +1,7 @@
 // Minimal stub of glibc <argp.h> for the wasm build.
 //
 // framework-portduino's Arduino.h includes <argp.h> unconditionally, and
-// PortduinoGlue.cpp DEFINES argp option tables / a parse_opt callback — but
+// PortduinoGlue.cpp DEFINES argp option tables / a parse_opt callback - but
 // nothing in the wasm build CALLS argp_parse (that lived in the framework
 // main.cpp we replaced with portduino_main_wasm.cpp). So only the types and
 // macros are needed to compile; no argp functions are linked.
