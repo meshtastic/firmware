@@ -257,15 +257,45 @@ void test_gethopsaway_agrees_with_classification()
 // Summary
 // ---------------------------------------------------------------------------
 
+// Printed row and checked expectation come from one struct, so the summary cannot narrate a table
+// the predicates no longer implement. Was TEST_MESSAGE-only, i.e. a case that could not fail.
 void test_truth_table_summary()
 {
+#if MESHTASTIC_PREHOP_DROP
+    constexpr bool kGate = true;
+#else
+    constexpr bool kGate = false;
+#endif
+
+    struct Row {
+        meshtastic_MeshPacket p;
+        HopStartStatus expected;
+        bool preDrop;  // shouldDropPacketForPreHop, gate compiled in
+        bool postSkip; // shouldSkipHandleForPostDecodeHop, ditto
+        const char *label;
+    };
+    const Row rows[] = {
+        {makeDecoded(kRemoteNode, 2, 5, true), HopStartStatus::INVALID, true, true,
+         "hop_start<hop_limit | any variant           | INVALID  | drop pre-decode + post-decode"},
+        {makeDecoded(kRemoteNode, 3, 3, false), HopStartStatus::VALID, false, false,
+         "start>0, >=limit    | any variant           | VALID    | handled normally"},
+        {makeDecoded(kRemoteNode, 0, 0, true), HopStartStatus::VALID, false, false,
+         "0/0                 | decoded + bitfield    | VALID    | modern zero-hop beacon"},
+        {makeDecoded(kRemoteNode, 0, 0, false), HopStartStatus::MISSING_OR_UNKNOWN, false, true,
+         "0/0                 | decoded, no bitfield  | UNKNOWN  | kept pre-decode, skipHandle post-decode"},
+        {makeEncrypted(kRemoteNode, 0, 0), HopStartStatus::MISSING_OR_UNKNOWN, false, true,
+         "0/0                 | encrypted             | UNKNOWN  | kept pre-decode (bitfield unreadable)"},
+        {makeDecoded(kLocalNode, 2, 5, true), HopStartStatus::INVALID, false, false,
+         "isFromUs            | any                   | any      | never dropped by pre-hop policy"},
+    };
+
     TEST_MESSAGE("=== classifyHopStart truth table ===");
-    TEST_MESSAGE("hop_start<hop_limit | any variant           | INVALID  | drop pre-decode + post-decode");
-    TEST_MESSAGE("start>0, >=limit    | any variant           | VALID    | handled normally");
-    TEST_MESSAGE("0/0                 | decoded + bitfield    | VALID    | modern zero-hop beacon");
-    TEST_MESSAGE("0/0                 | decoded, no bitfield  | UNKNOWN  | kept pre-decode, skipHandle post-decode");
-    TEST_MESSAGE("0/0                 | encrypted             | UNKNOWN  | kept pre-decode (bitfield unreadable)");
-    TEST_MESSAGE("isFromUs            | any                   | any      | never dropped by pre-hop policy");
+    for (const Row &r : rows) {
+        TEST_MESSAGE(r.label);
+        TEST_ASSERT_EQUAL_INT_MESSAGE((int)r.expected, (int)classifyHopStart(r.p), r.label);
+        TEST_ASSERT_EQUAL_INT_MESSAGE((int)(kGate && r.preDrop), (int)shouldDropPacketForPreHop(r.p), r.label);
+        TEST_ASSERT_EQUAL_INT_MESSAGE((int)(kGate && r.postSkip), (int)routerPostDecodeWouldSkip(r.p), r.label);
+    }
 }
 
 // ---------------------------------------------------------------------------
