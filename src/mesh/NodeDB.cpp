@@ -19,6 +19,7 @@
 #include "SafeFile.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "error.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -98,11 +99,13 @@ static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-void variantDefaultConfig() __attribute__((weak));
-void variantDefaultConfig() {}
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. Same guard as earlyInitVariant() in main.cpp.
+__attribute__((noinline)) void variantDefaultConfig() __attribute__((weak));
+__attribute__((noinline)) void variantDefaultConfig() {}
 
-void variantDefaultModuleConfig() __attribute__((weak));
-void variantDefaultModuleConfig() {}
+__attribute__((noinline)) void variantDefaultModuleConfig() __attribute__((weak));
+__attribute__((noinline)) void variantDefaultModuleConfig() {}
 
 #ifdef HELTEC_MESH_NODE_T114
 
@@ -427,6 +430,14 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
+
+    // likewise the edition: it lives in persisted devicestate, so a vanilla install must
+    // overwrite the previous event build's value. Before the CRC compare, so the change persists.
+#ifdef USERPREFS_FIRMWARE_EDITION
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
+#else
+    myNodeInfo.firmware_edition = meshtastic_FirmwareEdition_VANILLA;
+#endif
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -486,12 +497,12 @@ NodeDB::NodeDB()
     preferences.begin("meshtastic", false);
     myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
     preferences.end();
-    LOG_DEBUG("Number of Device Reboots: %d", myNodeInfo.reboot_count);
+    LOG_DEBUG("Device reboots: %d", myNodeInfo.reboot_count);
 #endif
 
     // UA_868 is obsolete; migrate to EU_868 before resetRadioConfig() below validates the region.
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UA_868) {
-        LOG_INFO("UA_868 region is obsolete, migrating saved config to EU_868");
+        LOG_INFO("UA_868 obsolete, migrating config to EU_868");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     }
 
@@ -504,7 +515,7 @@ NodeDB::NodeDB()
     // If we are setup to broadcast on any default channel slot (with default frequency slot semantics),
     // ensure that the telemetry intervals are coerced to the role-aware minimum value.
     if (channels.hasDefaultChannel()) {
-        LOG_DEBUG("Coerce telemetry to role-aware minimum on defaults");
+        LOG_DEBUG("Coerce telemetry to role-aware min on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
         moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
@@ -527,7 +538,7 @@ NodeDB::NodeDB()
         }
     }
     if (positionUsesDefaultChannel) {
-        LOG_DEBUG("Coerce position broadcasts to role-aware minimum and smart broadcast min of 5 minutes on defaults");
+        LOG_DEBUG("Coerce position broadcasts to role-aware min and smart broadcast min of 5 min on defaults");
         config.position.position_broadcast_secs =
             Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, min_default_broadcast_interval_secs);
         config.position.broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
@@ -612,9 +623,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-#ifdef USERPREFS_FIRMWARE_EDITION
-    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
-#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -738,7 +746,7 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
     }
 
     if (channelFile.channels_count != MAX_NUM_CHANNELS) {
-        LOG_INFO("Set default channel and radio preferences!");
+        LOG_INFO("Set default channel and radio prefs");
 
         channels.initDefaults();
         // Defaults ship the public PSK, so strip it again before onConfigChanged() publishes hashes;
@@ -755,14 +763,14 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
-    LOG_INFO("Perform factory reset!");
+    LOG_INFO("Factory reset");
     // first, remove the "/prefs" (this removes most prefs)
     spiLock->lock();
     rmDir("/prefs"); // this uses spilock internally...
 
 #ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
-        LOG_ERROR("Could not remove rangetest.csv file");
+        LOG_ERROR("Can't remove rangetest.csv");
     }
 #endif
 
@@ -806,7 +814,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #endif
 
 #ifdef ARCH_NRF52
-        LOG_INFO("Clear bluetooth bonds!");
+        LOG_INFO("Clear bluetooth bonds");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
         Bluefruit.Periph.clearBonds();
@@ -884,7 +892,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     // Restrict ROUTER*, LOST AND FOUND roles for security reasons
     if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
                   meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND)) {
-        LOG_WARN("ROUTER roles are restricted, falling back to CLIENT role");
+        LOG_WARN("ROUTER roles restricted, fall back to CLIENT");
         config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     } else {
         config.device.role = USERPREFS_CONFIG_DEVICE_ROLE;
@@ -983,7 +991,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
-        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+        // Never log the key bytes: debug logs get pasted into public bug reports.
+        LOG_DEBUG("Restored preserved private key");
     } else {
         config.security.private_key.size = 0;
     }
@@ -1023,7 +1032,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2)) &&            \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
+     defined(ELECROW_ThinkNode_M9)) &&                                                                                           \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1110,6 +1120,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
+#endif
+
+#if defined(T_ECHO_CARD)
+    config.display.screen_on_secs = 60;
 #endif
 
 #ifdef COMPASS_ORIENTATION
@@ -1220,14 +1234,21 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION) ||               \
-    defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
+#if defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION)
+#define HAS_NOTIFICATION_LED
+#endif
+#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(HAS_NOTIFICATION_LED) ||                                            \
+    defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) || defined(HAS_I2S_SPEAKER_NRF52)
     moduleConfig.external_notification.enabled = true;
 #endif
 
 #if defined(PIN_BUZZER)
     moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
     moduleConfig.external_notification.use_pwm = true;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+#elif defined(HAS_I2S_SPEAKER_NRF52)
+    // No PWM piezo pin - alert playback goes through NRF52RtttlPlayer/I2S instead,
+    // gated only on alert_message_buzzer + canBuzz(), not output_buzzer/use_pwm.
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif
 
@@ -1244,9 +1265,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
 #endif
 
-#if defined(PIN_VIBRATION)
+#if HAS_TFT
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
+        moduleConfig.external_notification.nag_timeout = 0;
+#elif defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
-#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
+#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) ||                           \
+    defined(HAS_I2S_SPEAKER_NRF52)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 
@@ -1255,12 +1280,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-#if HAS_TFT
-    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
-        moduleConfig.external_notification.nag_timeout = 0;
-#else
-    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
-#endif // HAS_TFT
 #endif // HAS_I2S
 
 #ifdef NANO_G2_ULTRA
@@ -1615,7 +1634,7 @@ void NodeDB::resetNodes(bool keepFavorites)
     NodeNum ourNum = getNodeNum();
     numMeshNodes = 1;
     if (keepFavorites) {
-        LOG_INFO("Clearing node database - preserving favorites");
+        LOG_INFO("Clear node database, keep favorites");
         // Compact favorites into contiguous low slots: zeroing in place leaves one above
         // numMeshNodes, invisible to every `i < numMeshNodes` scan yet still serialized to flash.
         for (size_t i = 1; i < meshNodes->size(); i++) {
@@ -1630,7 +1649,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         }
         std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     } else {
-        LOG_INFO("Clearing node database - removing favorites");
+        LOG_INFO("Clear node database, remove favorites");
         for (size_t i = 1; i < meshNodes->size(); i++) {
             const NodeNum gone = meshNodes->at(i).num;
             if (gone)
@@ -1686,7 +1705,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
         trafficManagementModule->purgeNode(nodeNum);
 #endif
 
-    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries, saving", removed);
     saveNodeDatabaseToDisk();
 }
 
@@ -2028,7 +2047,7 @@ void NodeDB::pickNewNodeNum()
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
-            LOG_WARN("NOTE! Our desired nodenum 0x%08x is invalid or in use, picking 0x%08x", nodeNum, candidate);
+            LOG_WARN("NOTE! Desired nodenum 0x%08x invalid or in use, picking 0x%08x", nodeNum, candidate);
         nodeNum = candidate;
     }
     LOG_DEBUG("Use nodenum 0x%08x ", nodeNum);
@@ -2060,11 +2079,11 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             if (fields != &meshtastic_NodeDatabase_msg)
                 memset(dest_struct, 0, objSize);
             if (!pb_decode(&stream, fields, dest_struct)) {
-                LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+                LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
                 state = LoadFileResult::DECODE_FAILED;
                 storageCorruptThisLoad = true;
             } else {
-                LOG_INFO("Loaded encrypted %s successfully", filename);
+                LOG_INFO("Loaded encrypted %s", filename);
                 state = LoadFileResult::LOAD_SUCCESS;
             }
         } else {
@@ -2088,18 +2107,18 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             fields != &meshtastic_NodeDatabase_Legacy_msg) // both NodeDatabase descriptors contain std::vector members
             memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+            LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
             state = LoadFileResult::DECODE_FAILED;
         } else {
-            LOG_INFO("Loaded %s successfully", filename);
+            LOG_INFO("Loaded %s", filename);
             state = LoadFileResult::LOAD_SUCCESS;
         }
         f.close();
     } else {
-        LOG_ERROR("Could not open / read %s", filename);
+        LOG_ERROR("Can't open/read %s", filename);
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
     state = LoadFileResult::NO_FILESYSTEM;
 #endif
     return state;
@@ -2238,7 +2257,7 @@ void NodeDB::loadFromDisk()
     spiLock->lock();
     for (const char *filename : eventProfileFiles) {
         if (FSCom.exists(filename) && !FSCom.remove(filename))
-            LOG_WARN("Unable to remove stale event profile file %s", filename);
+            LOG_WARN("Can't remove stale event profile file %s", filename);
     }
     spiLock->unlock();
 #endif
@@ -2256,7 +2275,7 @@ void NodeDB::loadFromDisk()
         const size_t usedBytes = fsUsedBytes();
         eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
         if (eventProfileStorageUnavailable) {
-            LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",
+            LOG_ERROR("Event profile needs %u bytes free; only %u available. Changes won't persist",
                       static_cast<unsigned>(EVENT_PROFILE_STORAGE_RESERVATION_BYTES),
                       static_cast<unsigned>(totalBytes >= usedBytes ? totalBytes - usedBytes : 0));
         }
@@ -2280,7 +2299,7 @@ void NodeDB::loadFromDisk()
 #if defined(FACTORY_INSTALL) && !defined(ARCH_PORTDUINO)
     spiLock->lock();
     if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
-        LOG_WARN("Factory Install Reset!");
+        LOG_WARN("Factory Install Reset");
         rmDir("/prefs");
         FSCom.mkdir("/prefs");
         File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
@@ -2294,11 +2313,11 @@ void NodeDB::loadFromDisk()
     spiLock->lock();
     if (FSCom.exists(legacyPrefFileName)) {
         spiLock->unlock();
-        LOG_WARN("Legacy prefs version found, factory resetting");
+        LOG_WARN("Legacy prefs version, factory reset");
         if (loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config) == LoadFileResult::LOAD_SUCCESS &&
             config.has_security && config.security.private_key.size > 0) {
-            LOG_DEBUG("Saving backup of security config and keys");
+            LOG_DEBUG("Backup security config and keys");
             backupSecurity = config.security;
         }
         spiLock->lock();
@@ -2319,7 +2338,7 @@ void NodeDB::loadFromDisk()
         // Encrypted storage is locked. Install defaults and wait for the
         // passphrase over BLE/serial; PhoneAPI::handleLockdownAuthInline
         // calls reloadFromDisk() once the storage is unlocked.
-        LOG_WARN("NodeDB: Encrypted storage locked, using default config until unlocked");
+        LOG_WARN("NodeDB: Encrypted storage locked, default config until unlocked");
         installDefaultNodeDatabase();
         installDefaultDeviceState();
         installDefaultConfig();
@@ -2430,7 +2449,7 @@ void NodeDB::loadFromDisk()
         // Attempt recovery of owner fields from our own NodeDB entry if available.
         const meshtastic_NodeInfoLite *us = getMeshNode(getNodeNum());
         if (nodeInfoLiteHasUser(us)) {
-            LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
+            LOG_WARN("Restore owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for node 0x%08x",
                      us->num);
             // owner.long_name (40) is wider than the lite source (25); bound by the source
             memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
@@ -2445,7 +2464,7 @@ void NodeDB::loadFromDisk()
             saveToDisk(SEGMENT_DEVICESTATE);
         }
     } else {
-        LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
+        LOG_INFO("Loaded saved devicestate v%d", devicestate.version);
     }
 
     // Devicestate saved by firmware that allowed 39-byte names gets clamped on
@@ -2471,7 +2490,7 @@ void NodeDB::loadFromDisk()
             config.lora = eventLora;
             state = LoadFileResult::LOAD_SUCCESS;
             initializedEventConfig = true;
-            LOG_INFO("Initialized event config without modifying %s", STANDARD_CONFIG_FILE_NAME);
+            LOG_INFO("Init event config without modifying %s", STANDARD_CONFIG_FILE_NAME);
         } else {
             // Keep the event load outcome because loadProto() clears config before decoding.
             // A normal decode failure must not create a replacement identity.
@@ -2485,7 +2504,7 @@ void NodeDB::loadFromDisk()
         // our NodeNum (== crc32(public_key)) and orphan us on the mesh. configDecodeFailed freezes identity and
         // skips persisting (see ctor), so a transient failure self-heals on the next clean boot. A genuinely
         // absent config returns OTHER_FAILURE, so this never fires on first boot. Boot degraded + radio-silent.
-        LOG_ERROR("Config decode failed - freezing identity, booting degraded (radio silent until restored)");
+        LOG_ERROR("Config decode failed - freeze identity, boot degraded (radio silent until restored)");
         configDecodeFailed = true;
         installDefaultConfig(true);
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
@@ -2498,7 +2517,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("config %d is old, discard", config.version);
         installDefaultConfig(true);
     } else {
-        LOG_INFO("Loaded saved config version %d", config.version);
+        LOG_INFO("Loaded saved config v%d", config.version);
     }
     configLoadComplete = true;
 
@@ -2546,12 +2565,12 @@ void NodeDB::loadFromDisk()
         // This is the first durable event-profile write.  A failed write is
         // safe: normal files remain untouched and the next event boot retries.
         if (!saveToDisk(SEGMENT_CONFIG))
-            LOG_ERROR("Unable to persist initial event config");
+            LOG_ERROR("Can't persist initial event config");
     }
 #endif
 
     if (backupSecurity.private_key.size > 0) {
-        LOG_DEBUG("Restoring backup of security config");
+        LOG_DEBUG("Restore security config backup");
         config.security = backupSecurity;
         saveToDisk(SEGMENT_CONFIG);
     }
@@ -2570,7 +2589,7 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.");
+        LOG_INFO("Admin 0 key zero. Load hard coded key from user prefs");
         memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
         config.security.admin_key[0].size = 32;
     }
@@ -2583,7 +2602,7 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.");
+        LOG_INFO("Admin 1 key zero. Load hard coded key from user prefs");
         memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
         config.security.admin_key[1].size = 32;
     }
@@ -2596,14 +2615,14 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.");
+        LOG_INFO("Admin 2 key zero. Load hard coded key from user prefs");
         memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
         config.security.admin_key[2].size = 32;
     }
 #endif
 
     if (numAdminKeys > 0) {
-        LOG_INFO("Saving %d hard coded admin keys.", numAdminKeys);
+        LOG_INFO("Saving %d hard coded admin keys", numAdminKeys);
         config.security.admin_key_count = numAdminKeys;
         saveToDisk(SEGMENT_CONFIG);
     }
@@ -2617,7 +2636,7 @@ void NodeDB::loadFromDisk()
             LOG_WARN("moduleConfig %d is old, discard", moduleConfig.version);
             installDefaultModuleConfig();
         } else {
-            LOG_INFO("Loaded saved moduleConfig version %d", moduleConfig.version);
+            LOG_INFO("Loaded saved moduleConfig v%d", moduleConfig.version);
         }
     }
 
@@ -2640,7 +2659,7 @@ void NodeDB::loadFromDisk()
             LOG_WARN("channelFile %d is old, discard", channelFile.version);
             installDefaultChannels();
         } else {
-            LOG_INFO("Loaded saved channelFile version %d", channelFile.version);
+            LOG_INFO("Loaded saved channelFile v%d", channelFile.version);
         }
     }
 
@@ -2692,7 +2711,7 @@ void NodeDB::loadFromDisk()
         if (activeBackupExists && !EncryptedStorage::isEncrypted(backupFileName)) {
             LOG_INFO("Migrating %s to encrypted storage", backupFileName);
             if (!EncryptedStorage::migrateFile(backupFileName)) {
-                LOG_ERROR("Unable to migrate %s to encrypted storage", backupFileName);
+                LOG_ERROR("Can't migrate %s to encrypted storage", backupFileName);
                 storageCorruptThisLoad = true;
             }
         }
@@ -2711,7 +2730,7 @@ void NodeDB::loadFromDisk()
             if (exists && !EncryptedStorage::isEncrypted(fn)) {
                 LOG_INFO("Migrating inactive radio profile %s to encrypted storage", fn);
                 if (!EncryptedStorage::migrateFile(fn)) {
-                    LOG_ERROR("Unable to migrate %s to encrypted storage", fn);
+                    LOG_ERROR("Can't migrate %s to encrypted storage", fn);
                     storageCorruptThisLoad = true;
                 }
             }
@@ -2723,7 +2742,7 @@ void NodeDB::loadFromDisk()
 
     // 2.4.X - configuration migration to update new default intervals
     if (moduleConfig.version < 23) {
-        LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals", moduleConfig.version);
+        LOG_DEBUG("ModuleConfig v%d stale, upgrade to new default intervals", moduleConfig.version);
         moduleConfig.version = DEVICESTATE_CUR_VER;
         if (moduleConfig.telemetry.device_update_interval == 900)
             moduleConfig.telemetry.device_update_interval = 0;
@@ -2817,7 +2836,7 @@ bool NodeDB::reloadFromDisk()
     loadFromDisk();
 
     if (storageCorruptThisLoad) {
-        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload - surfacing as corrupt");
+        LOG_ERROR("NodeDB: reload decrypt/decode failed - treat as corrupt");
         // Leave the radio sleeping. Caller will lock storage and emit
         // a LOCKED(storage_corrupt) status; we must not reconfigure
         // the chip with the locked-default placeholder values still
@@ -2862,7 +2881,7 @@ bool NodeDB::disableLockdownToPlaintext()
                                   moduleConfigFileName,      deviceStateFileName,        nodeDatabaseFileName};
     for (const char *fn : filesToCheck) {
         if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
-            LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
+            LOG_ERROR("NodeDB: revert %s to plaintext failed; abort disable (stays in lockdown)", fn);
             return false;
         }
     }
@@ -2891,7 +2910,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
+        LOG_ERROR("saveProto() on unsafe device power level");
         return false;
     }
 
@@ -2913,7 +2932,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
         pb_ostream_t stream = pb_ostream_from_buffer(pbBuf.get(), protoSize);
         if (!pb_encode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+            LOG_ERROR("Can't encode protobuf %s", PB_GET_ERROR(&stream));
             return false;
         }
 
@@ -2921,7 +2940,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         bool ok = EncryptedStorage::encryptAndWrite(filename, pbBuf.get(), encodedSize, fullAtomic);
 
         if (!ok) {
-            LOG_ERROR("EncryptedStorage: Failed to encrypt and write %s", filename);
+            LOG_ERROR("EncryptedStorage: encrypt+write %s failed", filename);
         }
         return ok;
     }
@@ -2935,7 +2954,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
 
     if (!pb_encode(&stream, fields, dest_struct)) {
-        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+        LOG_ERROR("Can't encode protobuf %s", PB_GET_ERROR(&stream));
     } else {
         okay = true;
     }
@@ -2943,10 +2962,10 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     bool writeSucceeded = f.close();
 
     if (!okay || !writeSucceeded) {
-        LOG_ERROR("Can't write prefs!");
+        LOG_ERROR("Can't write prefs");
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
     return okay;
 }
@@ -2957,7 +2976,7 @@ bool NodeDB::saveChannelsToDisk()
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveChannelsToDisk() on unsafe device power level.");
+        LOG_ERROR("saveChannelsToDisk() on unsafe device power level");
         return false;
     }
 
@@ -2976,7 +2995,7 @@ bool NodeDB::saveDeviceStateToDisk()
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveDeviceStateToDisk() on unsafe device power level.");
+        LOG_ERROR("saveDeviceStateToDisk() on unsafe device power level");
         return false;
     }
 
@@ -3004,7 +3023,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveNodeDatabaseToDisk() on unsafe device power level.");
+        LOG_ERROR("saveNodeDatabaseToDisk() on unsafe device power level");
         return false;
     }
 
@@ -3012,7 +3031,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     // would propagate through saveToDisk() and trigger fsFormat() mid-transfer.
 #ifdef FSCom
     if (xModem.isBusy()) {
-        LOG_DEBUG("Deferring NodeDB save: xmodem transfer in progress");
+        LOG_DEBUG("Defer NodeDB save: xmodem in progress");
         return true;
     }
 #endif
@@ -3113,7 +3132,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
+        LOG_ERROR("saveToDiskNoRetry() on unsafe device power level");
         return false;
     }
 
@@ -3143,11 +3162,11 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 #if USERPREFS_EVENT_MODE
     if (eventProfileStorageUnavailable) {
         if (saveWhat & SEGMENT_CONFIG) {
-            LOG_WARN("Skipping event config write: insufficient profile storage at boot");
+            LOG_WARN("Skip event config write: insufficient profile storage at boot");
             saveWhat &= ~SEGMENT_CONFIG;
         }
         if (saveWhat & SEGMENT_CHANNELS) {
-            LOG_WARN("Skipping event channel write: insufficient profile storage at boot");
+            LOG_WARN("Skip event channel write: insufficient profile storage at boot");
             saveWhat &= ~SEGMENT_CHANNELS;
         }
     }
@@ -3211,14 +3230,14 @@ bool NodeDB::saveToDisk(int saveWhat)
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveToDisk() on unsafe device power level.");
+        LOG_ERROR("saveToDisk() on unsafe device power level");
         return false;
     }
 
     bool success = saveToDiskNoRetry(saveWhat);
 
     if (!success) {
-        LOG_ERROR("Failed to save to disk, retrying");
+        LOG_ERROR("Save to disk failed, retry");
         spiLock->lock();
         fsFormat();
         spiLock->unlock();
@@ -3254,7 +3273,7 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // rx_time may be an uptime-seconds placeholder while has_rx_time is false - don't age it as
     // wall-clock, and don't pass it off as "just now" either.
     if (!p->has_rx_time)
         return SINCE_UNKNOWN;
@@ -3420,9 +3439,9 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
     if (t.which_variant == meshtastic_Telemetry_device_metrics_tag) {
         if (src == RX_SRC_LOCAL) {
-            LOG_DEBUG("updateTelemetry LOCAL device");
+            LOG_TRACE("updateTelemetry LOCAL device");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE device node=0x%08x", nodeId);
+            LOG_TRACE("updateTelemetry REMOTE device node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3432,9 +3451,9 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
     } else if (t.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
         if (src == RX_SRC_LOCAL) {
-            LOG_DEBUG("updateTelemetry LOCAL env");
+            LOG_TRACE("updateTelemetry LOCAL env");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE env node=0x%08x", nodeId);
+            LOG_TRACE("updateTelemetry REMOTE env node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3468,7 +3487,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         }
     }
     info->num = contact.node_num;
+    // CopyUserToNodeInfoLite assigns public_key unconditionally, and clients send add_contact before every
+    // DM - often from an entry that carries no key at all. A contact may still supply or update a full
+    // 32-byte key (that's what add_contact is for), but it must never *erase* a key we already hold, which
+    // would be persisted below and break subsequent DMs with PKI_SEND_FAIL_PUBLIC_KEY.
+    const meshtastic_NodeInfoLite_public_key_t storedKey = info->public_key;
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
+    if (storedKey.size == 32 && info->public_key.size != 32) {
+        LOG_INFO("Contact 0x%08x has no key, keep the stored one", contact.node_num);
+        info->public_key = storedKey;
+    }
     if (contact.should_ignore) {
         // Block the contact and drop its rich satellite data, but keep the
         // public key copied above - an ignored peer keeps a usable identity
@@ -3492,16 +3520,18 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
             // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
             // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
-            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
-            // last_heard to now, so that the add_contact node doesn't immediately get evicted.
-            info->last_heard = getTime();
+            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll
+            // stamp the contact as heard now, so that the add_contact node doesn't immediately get evicted.
+            stampContactHeardNow(info);
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            // If the protected cap refuses the favorite, fall back to stamping last_heard so the
+            // If the protected cap refuses the favorite, fall back to a heard-now stamp so the
             // contact still isn't the first eviction victim.
-            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
-                info->last_heard = getTime();
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
+                stampContactHeardNow(info);
+            }
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
@@ -3524,7 +3554,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     // Only a signed update may change the identity of a proven signer; our own record is exempt.
     // Checked before getOrCreateMeshNode so a refusal cannot evict; isKnownXeddsaSigner covers the warm tier.
     if (nodeId != getNodeNum() && isKnownXeddsaSigner(nodeId) && !xeddsaSigned) {
-        LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
+        LOG_WARN("Refuse unsigned identity update for 0x%08x that previously signed", nodeId);
         return false;
     }
 
@@ -3565,12 +3595,12 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     if (info->public_key.size == 32) { // if we have a key for this user already, don't overwrite with a new one
         // if the key doesn't match, don't update nodeDB at all.
         if (p.public_key.size != 32 || (memcmp(p.public_key.bytes, info->public_key.bytes, 32) != 0)) {
-            LOG_WARN("Public Key mismatch, dropping NodeInfo");
+            LOG_WARN("Public Key mismatch, drop NodeInfo");
             return false;
         }
-        LOG_INFO("Public Key set for node, not updating!");
+        LOG_INFO("Public Key set, not updating");
     } else if (p.public_key.size == 32) {
-        LOG_INFO("Update Node Pubkey!");
+        LOG_INFO("Update Node Pubkey");
     }
 #endif
 
@@ -3605,7 +3635,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
         } else {
-            LOG_DEBUG("Defer NodeDB saveToDisk for now");
+            LOG_DEBUG("Defer NodeDB saveToDisk");
         }
     }
 
@@ -3635,7 +3665,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         return;
     }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
+        LOG_TRACE("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
         // mp.from is unauthenticated, so rate-limit admission once the database is full: otherwise
         // invented node numbers churn it at packet rate and push real neighbours out.
@@ -3654,9 +3684,13 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             return;
         }
 
-        // Gate on has_rx_time, not truthiness - rx_time may hold a millis() placeholder.
+        // Gate on has_rx_time, not truthiness - rx_time may hold an uptime-seconds placeholder.
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
+        else
+            // rx_time is the arrival instant in uptime seconds. It goes to the RAM sidecar, not
+            // last_heard, which only ever holds a real epoch or 0.
+            recordHeardWhileClockUntrusted(getFrom(&mp), mp.rx_time);
 
         // Gate on the packet actually having been received over our own radio, not on rx_snr being
         // truthy, because 0 dB is valid. TRANSPORT_LORA is set only on the real over-the-air RX path
@@ -3839,7 +3873,7 @@ void NodeDB::sortMeshDB()
                 }
             }
         }
-        LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
+        LOG_INFO("Sort took %u ms", millis() - lastSort);
     }
 }
 
@@ -4072,6 +4106,84 @@ meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
     return meshtastic_Config_DeviceConfig_Role_CLIENT;
 }
 
+void NodeDB::recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptime)
+{
+    // Update in place if the node already has a stamp.
+    for (auto &h : heardAt) {
+        if (h.num == num) {
+            h.heardAtUptimeSecs = heardAtUptime;
+            return;
+        }
+    }
+    // Otherwise take an empty slot, or reuse the oldest stamp.
+    NodeHeardAt *victim = &heardAt[0];
+    for (auto &h : heardAt) {
+        if (h.num == 0) {
+            victim = &h;
+            break;
+        }
+        if (h.heardAtUptimeSecs < victim->heardAtUptimeSecs)
+            victim = &h;
+    }
+    victim->num = num;
+    victim->heardAtUptimeSecs = heardAtUptime;
+}
+
+bool NodeDB::getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const
+{
+    for (const auto &h : heardAt) {
+        if (h.num == num) {
+            stamp = h.heardAtUptimeSecs;
+            return true;
+        }
+    }
+    return false;
+}
+
+NodeDB::EvictionRecency NodeDB::evictionRecency(const meshtastic_NodeInfoLite *n) const
+{
+    uint32_t stamp = 0;
+    const bool heardThisBoot = getHeardAtUptimeSecs(n->num, stamp);
+    return {heardThisBoot ? stamp : n->last_heard, heardThisBoot};
+}
+
+bool NodeDB::evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent)
+{
+    if (candidate.heardThisBoot != incumbent.heardThisBoot)
+        return !candidate.heardThisBoot;
+    return candidate.value < incumbent.value;
+}
+
+void NodeDB::stampContactHeardNow(meshtastic_NodeInfoLite *info)
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch)
+        info->last_heard = nowEpoch;
+    else
+        recordHeardWhileClockUntrusted(info->num, Time::getUptimeSecs());
+}
+
+void NodeDB::backfillHeardAt()
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch == 0) // called before the clock was actually valid - nothing to date against
+        return;
+    const uint32_t nowUptimeSecs = Time::getUptimeSecs();
+    for (auto &h : heardAt) {
+        if (h.num == 0)
+            continue;
+        meshtastic_NodeInfoLite *info = getMeshNode(h.num);
+        if (info) {
+            // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
+            // Never move last_heard backwards: the node may since have been re-heard on a good clock.
+            const uint32_t elapsedSecs = nowUptimeSecs - h.heardAtUptimeSecs;
+            if (elapsedSecs < nowEpoch && nowEpoch - elapsedSecs > info->last_heard)
+                info->last_heard = nowEpoch - elapsedSecs;
+        }
+        h = {}; // evicted or converted either way, the stamp's job is done
+    }
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
@@ -4079,11 +4191,12 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
     if (!lite) {
         if (isFull()) {
-            LOG_INFO("Node database full with %i nodes and %u bytes free. Erasing oldest entry", numMeshNodes,
-                     memGet.getFreeHeap());
+            LOG_INFO("Node database full: %i nodes, %u bytes free. Erase oldest", numMeshNodes, memGet.getFreeHeap());
             // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            uint32_t oldestBoring = UINT32_MAX;
+            // Newest-possible sentinel: a zeroed init ranks older than every candidate, so nothing
+            // would ever be selected. Keep it maximal even though the index guards below also cover it.
+            EvictionRecency oldest = {UINT32_MAX, true};
+            EvictionRecency oldestBoring = {UINT32_MAX, true};
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
@@ -4091,14 +4204,19 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
                 const bool isIgnored = nodeInfoLiteIsIgnored(cand);
                 const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
+                // last_heard, except that nodes heard this boot before the clock became trusted
+                // rank by their RAM arrival stamp instead of the 0 in the stored field.
+                const EvictionRecency candRecency = evictionRecency(cand);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavoriteNode && !isIgnored && !isVerified && cand->last_heard < oldest) {
-                    oldest = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && !isVerified &&
+                    (oldestIndex == -1 || evictionRecencyOlder(candRecency, oldest))) {
+                    oldest = candRecency;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 && cand->last_heard < oldestBoring) {
-                    oldestBoring = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 &&
+                    (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
+                    oldestBoring = candRecency;
                     oldestBoringIndex = i;
                 }
             }
@@ -4175,7 +4293,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
         }
 #endif
-        LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
+        LOG_INFO("Add node to database: %i nodes, %u bytes free", numMeshNodes, memGet.getFreeHeap());
     }
 
     return lite;
@@ -4252,14 +4370,14 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
             keygenSuccess = true;
         } else {
-            LOG_ERROR("Failed to generate public key from provided private key");
+            LOG_ERROR("Can't generate public key from private key");
             return false;
         }
     }
     // Try to regenerate public key from existing private key if it's valid and not low entropy
     else if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
         config.security.public_key.size = 32;
-        LOG_DEBUG("Regenerate PKI public key from existing private key");
+        LOG_DEBUG("Regenerate PKI public key from private key");
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
             keygenSuccess = true;
         }
@@ -4319,7 +4437,7 @@ bool NodeDB::createNewIdentity()
     // still streamed to clients, and made any DM/admin aimed at it fail forever with PKI_SEND_FAIL_PUBLIC_KEY.
     // removeNodeByNum() drops the lite entry, its satellite stores, and the warm-tier copy.
     if (getMeshNode(oldNodeNum) != NULL) {
-        LOG_DEBUG("Old node num %u is now %u, removing stale identity", oldNodeNum, newNodeNum);
+        LOG_DEBUG("Old node num 0x%08x now 0x%08x, remove stale identity", oldNodeNum, newNodeNum);
         removeNodeByNum(oldNodeNum);
     } else {
         // Lite entry already absent: drop any orphaned satellite-store entries directly.
@@ -4365,7 +4483,7 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
         if (success) {
             LOG_INFO("Saved backup preferences");
         } else {
-            LOG_ERROR("Failed to save backup preferences to file");
+            LOG_ERROR("Save backup prefs to file failed");
         }
     } else if (location == meshtastic_AdminMessage_BackupLocation_SD) {
         // TODO: After more mainline SD card support
@@ -4382,7 +4500,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
         spiLock->lock();
         if (!FSCom.exists(backupFileName)) {
             spiLock->unlock();
-            LOG_WARN("Could not restore. No backup file found");
+            LOG_WARN("Can't restore, no backup file");
             return false;
         } else {
             spiLock->unlock();
@@ -4417,12 +4535,12 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
 
             success = saveToDisk(restoreWhat);
             if (success) {
-                LOG_INFO("Restored preferences from backup");
+                LOG_INFO("Restored prefs from backup");
             } else {
-                LOG_ERROR("Failed to save restored preferences to flash");
+                LOG_ERROR("Save restored prefs to flash failed");
             }
         } else {
-            LOG_ERROR("Failed to restore preferences from backup file");
+            LOG_ERROR("Restore prefs from backup failed");
         }
     } else if (location == meshtastic_AdminMessage_BackupLocation_SD) {
         // TODO: After more mainline SD card support
@@ -4446,7 +4564,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 
     // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
-    LOG_ERROR("A critical failure occurred");
+    LOG_ERROR("Critical failure");
     // TODO: Determine if other critical errors should also cause an immediate exit
     if (code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE ||
         code == meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE)
