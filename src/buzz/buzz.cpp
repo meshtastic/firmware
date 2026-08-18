@@ -70,7 +70,7 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
         {NOTE_C4, "c5"},    {NOTE_CS4, "c#5"}, {NOTE_E4, "e5"},   {NOTE_G4, "g5"},   {NOTE_A4, "a5"},   {NOTE_B4, "b5"},
         {NOTE_C5, "c6"},    {NOTE_E5, "e6"},   {NOTE_G5, "g6"},   {NOTE_F5, "f6"},   {NOTE_G6, "g7"},   {NOTE_E7, "e8"}};
 
-    char rtttl[128] = "tone:d=32,o=4,b=200:"; // default duration and octave
+    char rtttl[128] = "tone:d=32,o=4,b=240:"; // b=240 makes 240000/(bpm*d) match the ms durations above
     for (int i = 0; i < size; i++) {
         const auto &td = tone_durations[i];
         int dur = 32; // default duration

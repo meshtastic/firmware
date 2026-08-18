@@ -682,7 +682,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             LOG_INFO("Turn on screen");
             powerMon->setState(meshtastic_PowerMon_State_Screen_On);
 #if defined(T_WATCH_S3) || defined(T_WATCH_ULTRA)
-            PMU->enablePowerOutput(XPOWERS_ALDO2);
+            if (PMU) // cleared when both AXP init attempts failed
+                PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
 
 // some screens seem to need a kick in the pants to turn back on

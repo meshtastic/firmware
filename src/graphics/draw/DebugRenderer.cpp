@@ -64,13 +64,13 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     const char *wifiName = config.network.wifi_ssid;
 
     if (WiFi.status() != WL_CONNECTED) {
-        display->drawString(x, getTextPositions(display)[line++], "WiFi: Not Connected");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "WiFi: Not Connected");
     } else {
-        display->drawString(x, getTextPositions(display)[line++], "WiFi: Connected");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "WiFi: Connected");
 
         char rssiStr[32];
         snprintf(rssiStr, sizeof(rssiStr), "RSSI: %d", WiFi.RSSI());
-        display->drawString(x, getTextPositions(display)[line++], rssiStr);
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, rssiStr);
     }
 
     /*
@@ -88,36 +88,36 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     if (WiFi.status() == WL_CONNECTED) {
         char ipStr[64];
         snprintf(ipStr, sizeof(ipStr), "IP: %s", WiFi.localIP().toString().c_str());
-        display->drawString(x, getTextPositions(display)[line++], ipStr);
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, ipStr);
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
-        display->drawString(x, getTextPositions(display)[line++], "SSID Not Found");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
-        display->drawString(x, getTextPositions(display)[line++], "Connection Lost");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "Connection Lost");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
-        display->drawString(x, getTextPositions(display)[line++], "Idle ... Reconnecting");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "Idle ... Reconnecting");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
-        display->drawString(x, getTextPositions(display)[line++], "Connection Failed");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "Connection Failed");
     }
 #ifdef ARCH_ESP32
     else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-        display->drawString(x, getTextPositions(display)[line++],
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y,
                             WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
     }
 #else
     else {
         char statusStr[32];
         snprintf(statusStr, sizeof(statusStr), "Unknown status: %d", WiFi.status());
-        display->drawString(x, getTextPositions(display)[line++], statusStr);
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, statusStr);
     }
 #endif
 
     char ssidStr[64];
     snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
-    display->drawString(x, getTextPositions(display)[line++], ssidStr);
+    display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, ssidStr);
 
-    display->drawString(x, getTextPositions(display)[line++], "URL: http://meshtastic.local");
+    display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "URL: http://meshtastic.local");
 
     graphics::drawCommonFooter(display, x, y);
 
