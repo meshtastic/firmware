@@ -313,9 +313,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("\"%.*s\",", (int)p.payload.size, p.payload.bytes);
     fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
 
-    // EOL
     fileToAppend.printf("\n");
-
     fileToAppend.flush();
     fileToAppend.close();
 
