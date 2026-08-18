@@ -1826,8 +1826,11 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     }
 #endif
 
-    // Reject before recording duplicate or per-port cooldown state, so a blocked
-    // attempt cannot throttle a valid private-channel position retry.
+    // Coordinates aimed at the event channel go out on the position channel instead (the phone picks the
+    // channel it last heard the node on, which is the event channel for everyone). Only when there is no
+    // channel to move them to is the send rejected. Reject before recording duplicate or per-port cooldown
+    // state, so a blocked attempt cannot throttle a valid private-channel position retry.
+    coerceCoordinatePacketToPositionChannel(&p);
     if (isBlockedEventCoordinatePacket(&p)) {
         LOG_DEBUG("Suppress phone coordinate send on event (everyone) channel");
         meshtastic_QueueStatus qs = router->getQueueStatus();
