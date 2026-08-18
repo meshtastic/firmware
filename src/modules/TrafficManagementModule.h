@@ -9,7 +9,7 @@
 #if HAS_TRAFFIC_MANAGEMENT
 
 // Replay provenance gate: when 1 (default), direct responses are spoofed only for nodes whose
-// cached key is signer-proven (XEdDSA-verified), not for trust-on-first-use identities.
+// cached key is key-proven (XEdDSA-signed or manually verified), not for trust-on-first-use identities.
 // Define as 0 to also serve fresh TOFU-only nodes; bypassed entirely when PKI is excluded.
 #ifndef TMM_NODEINFO_REPLAY_REQUIRE_SIGNED
 #define TMM_NODEINFO_REPLAY_REQUIRE_SIGNED 1
@@ -33,7 +33,8 @@
 
 /// Packet inspection and traffic shaping: position dedup, per-node rate limiting, unknown-packet
 /// filtering, NodeInfo direct response, and the next-hop/role overflow caches. One flat 10-byte
-/// unified cache backs all per-node features; see docs/node_info_stores.md for the store overview.
+/// unified cache backs all per-node features; see https://meshtastic.org/docs/development/reference/node-info-stores for the
+/// store overview.
 class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 {
   public:
@@ -65,14 +66,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool preloadNextHopsFromNodeDB();
 
     /// Last-resort key source for NodeDB::copyPublicKey() after the hot and warm tiers miss.
-    /// Copies the 32-byte key for `node` into out[32]; `signerProven` (optional) reports whether
-    /// the key was XEdDSA-verified vs trust-on-first-use. Thread-safe.
-    bool copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven = nullptr) const;
+    /// Copies the 32-byte key for `node` into out[32]; `keyProven` (optional) reports whether
+    /// the key is proven (XEdDSA-signed or manually verified) vs trust-on-first-use. Thread-safe.
+    bool copyPublicKey(NodeNum node, uint8_t out[32], bool *keyProven = nullptr) const;
 
     /// Copy the full cached User for `node` (used by NodeDB to rehydrate a re-admitted node's
     /// name - the warm tier keeps keys but not names). False on miss or key-only records.
-    /// `signerProven` (optional) reports the cached key's provenance. Thread-safe.
-    bool copyUser(NodeNum node, meshtastic_User &out, bool *signerProven = nullptr) const;
+    /// `keyProven` (optional) reports the cached key's provenance. Thread-safe.
+    bool copyUser(NodeNum node, meshtastic_User &out, bool *keyProven = nullptr) const;
 
     /// Write-through hook from NodeDB::updateUser(): upsert the committed identity immediately
     /// (the reconcile sweep remains the backstop). NodeDB's key is authoritative, but a keyless
@@ -125,16 +126,16 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// (distinguishes "not tracked" from CLIENT == 0).
     int peekCachedRole(NodeNum node);
 
-    /// Test hook: force a cached NodeInfo entry's key to signer-proven so replay-gate tests
+    /// Test hook: force a cached NodeInfo entry's key to XEdDSA-signed so replay-gate tests
     /// can skip a full XEdDSA verification. No-op if absent.
-    void markKeySignerProvenForTest(NodeNum node);
+    void markKeyXeddsaSignedForTest(NodeNum node);
 
     /// Test hook: free the NodeInfo cache so the NodeDB fallback path can be exercised in
     /// builds where the cache is compiled in. No-op when already absent.
     void dropNodeInfoCacheForTest();
 
     /// Test introspection: NodeInfo flag bits for `node` (-1 if absent): bit0 hasObserved,
-    /// bit1 isMember, bit2 hasFullUser, bit3 keySignerProven.
+    /// bit1 isMember, bit2 hasFullUser, bit3 keyProven (keyXeddsaSigned | keyManuallyVerified).
     int peekNodeInfoFlagsForTest(NodeNum node);
 
     /// Test introspection: NodeInfo cache capacity (kNodeInfoCacheEntries), so tests can
@@ -144,7 +145,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
   private:
     // 10-byte packed entry, all platforms. Tick stamps are free-running modular counters with
     // non-zero presence sentinels; the 4-bit cached role rides the top bits of the two count
-    // bytes (tier-3 role fallback). Full layout and rationale: docs/node_info_stores.md.
+    // bytes (tier-3 role fallback). Full layout and rationale:
+    // https://meshtastic.org/docs/development/reference/node-info-stores.
 #if _meshtastic_Config_DeviceConfig_Role_MAX > 15
 #warning "Device role enum max exceeds 15 - TMM 4-bit role cache (rate_count[7:6]/unknown_count[7:6]) will truncate new values"
 #endif
@@ -253,16 +255,23 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // in direct replies). Validity: hasDecodedBitfield.
         uint8_t decodedBitfield;
 
-        // 1-bit flags, packed into one byte (6 spare bits; add future booleans here rather
+        // 1-bit flags, packed into one byte (2 spare bits; add future booleans here rather
         // than new bytes - the array is 2000 entries).
 
         // The source packet carried a decoded bitfield (so decodedBitfield is meaningful).
         uint8_t hasDecodedBitfield : 1;
 
-        // Key provenance: set once an XEdDSA signature was verified for user.public_key
-        // (directly, or inherited from NodeDB via isVerifiedSignerForKey). Monotonic per slot;
-        // the key-pin checks forbid the key changing underneath it. TOFU keys start at 0.
-        uint8_t keySignerProven : 1;
+        // Key provenance, split by how possession was established (either one implies "proven" -
+        // read the pair via keyProven()). Both are monotonic per slot until the key rotates (the
+        // key-pin checks forbid the key changing underneath them), and TOFU keys start at 0.
+        //
+        // keyXeddsaSigned: an XEdDSA signature was verified for user.public_key - a heard signed
+        // frame, or inherited from NodeDB via isVerifiedSignerForKey.
+        uint8_t keyXeddsaSigned : 1;
+        // keyManuallyVerified: the user confirmed possession of exactly this key out-of-band
+        // (QR / fingerprint). Routed here via onNodeKeyCommitted(proven) and re-seeded from the
+        // hot-store is_key_manually_verified bit at reconcile (warm records don't carry it).
+        uint8_t keyManuallyVerified : 1;
 
         // obsTick is valid: a NODEINFO frame was actually heard within the observation clock's
         // horizon. Cleared by the sweep once the serve window passes (saturation).
@@ -277,6 +286,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // removal; a passive NodeDB eviction may lag up to an hour). Member entries are
         // stickiest under LRU; the bit is the keep-alive (no TTL).
         uint8_t isMember : 1;
+
+        // Possession proven by either channel - the "key-proven" predicate the replay gate,
+        // eviction tiering, and NodeDB pubkey-pool callers consume.
+        bool keyProven() const { return keyXeddsaSigned || keyManuallyVerified; }
     };
     // No exact-size static_assert: sizeof(meshtastic_User) and its padding vary by platform, so
     // any fixed byte count would fail the build on some boards.
@@ -336,12 +349,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     /// 60 s NodeInfo-cache maintenance under cacheLock: saturate the expired obsTick stamp (wrap-safety
     /// for the modular clock) and run the boot/hourly reconcile. Guarded by TMM_HAS_NODEINFO_CACHE alone
-    /// (never the unified cache size); see docs/node_info_stores.md "Tick clocks and wrap safety".
+    /// (never the unified cache size); see https://meshtastic.org/docs/development/reference/node-info-stores "Tick clocks and
+    /// wrap safety".
     void maintainNodeInfoCacheLocked();
 
     /// Anti-entropy under cacheLock: upsert hot-store + warm-tier records this cache lacks (never sets
     /// hasObserved - seeding is knowledge, not observation), and refresh isMember from both NodeDB
-    /// tiers. Cost/lag: docs/node_info_stores.md "Consistency with NodeDB (anti-entropy)".
+    /// tiers. Cost/lag: https://meshtastic.org/docs/development/reference/node-info-stores "Consistency with NodeDB
+    /// (anti-entropy)".
     void reconcileNodeInfoFromNodeDBLocked();
     /// Learn an observed NODEINFO frame into the cache (key hygiene + provenance rules apply).
     void cacheNodeInfoPacket(const meshtastic_MeshPacket &mp);
@@ -357,7 +372,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // Direct-response throttles bounding the reflector risk of spoofed replies: three fixed bounds
     // (per requester, per target, 1 s global airtime floor) via 8-slot LRU RAM tables, wrap-safe and
-    // PSRAM-agnostic. Design & rationale: docs/traffic_management_module.md "Throttling direct responses".
+    // PSRAM-agnostic. Design & rationale: https://meshtastic.org/docs/development/reference/traffic-management-internals
+    // "Throttling direct responses".
     static constexpr uint32_t kDirectResponsePerRequesterMs = 60'000UL;
     static constexpr uint32_t kDirectResponsePerTargetMs = 60'000UL;
     static constexpr uint32_t kDirectResponseGlobalMs = 1'000UL;

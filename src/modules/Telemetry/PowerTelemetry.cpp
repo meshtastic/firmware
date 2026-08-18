@@ -149,13 +149,18 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->drawString(x, graphics::getTextPositions(display)[line++], "Measurement Error");
-        LOG_ERROR("Unable to decode last packet");
+        LOG_ERROR("Can't decode last packet");
         return;
     }
 
     // Display "Pow. From: ..."
+    char agoStr[16];
+    if (agoSecs == SINCE_UNKNOWN)
+        snprintf(agoStr, sizeof(agoStr), "?"); // no trustworthy arrival time to age against
+    else
+        snprintf(agoStr, sizeof(agoStr), "%us", (unsigned)agoSecs);
     char fromStr[64];
-    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%us)", lastSender, agoSecs);
+    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%s)", lastSender, agoStr);
     display->drawString(x, graphics::getTextPositions(display)[line++], fromStr);
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
@@ -242,7 +247,7 @@ meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding PowerTelemetry module!");
+            LOG_ERROR("Error decoding PowerTelemetry module");
             return NULL;
         }
         // Check for a request for power metrics
@@ -267,10 +272,15 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     bool validTelemetry = getPowerTelemetry(&m);
     if (validTelemetry) {
-        LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
-                 "ch3_voltage=%f, ch3_current=%f",
-                 m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
-                 m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current);
+        LOG_INFO("Send: ch1_voltage=%f, ch2_voltage=%f, ch3_voltage=%f", m.variant.power_metrics.ch1_voltage,
+                 m.variant.power_metrics.ch2_voltage, m.variant.power_metrics.ch3_voltage);
+
+        bool hasAnyCurrent = m.variant.power_metrics.has_ch1_current || m.variant.power_metrics.has_ch2_current ||
+                             m.variant.power_metrics.has_ch3_current;
+        if (hasAnyCurrent) {
+            LOG_INFO("Send: ch1_current=%f, ch2_current=%f, ch3_current=%f", m.variant.power_metrics.ch1_current,
+                     m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_current);
+        }
 
         sensor_read_error_count = 0;
 
@@ -307,7 +317,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_WARN("Power telemetry unavailable this cycle, sleep without sending");
         sleepOnNextExecution = true;
         preflightSleepDeferrals = 0;
-        LOG_DEBUG("Start next execution in 5s then sleep");
+        LOG_DEBUG("Start next execution in 5s, then sleep");
         setIntervalFromNow(FIVE_SECONDS_MS);
     }
     return validTelemetry;
