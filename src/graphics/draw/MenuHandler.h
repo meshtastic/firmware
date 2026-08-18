@@ -32,13 +32,6 @@ class menuHandler
         CompassPointNorthMenu,
         ResetNodeDbMenu,
         BuzzerModeMenuPicker,
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-        A7682AudioVolumeMenu,
-#endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
-        HapticToggleMenu,
-#endif
         MuiPicker,
         BrightnessPicker,
         RebootMenu,
@@ -104,13 +97,6 @@ class menuHandler
     static void GPSUpdateIntervalMenu();
     static void GPSPositionBroadcastMenu();
     static void BuzzerModeMenu();
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-    static void a7682AudioVolumeMenu();
-#endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
-    static void hapticToggleMenu();
-#endif
     static void switchToMUIMenu();
     static void nodeListMenu();
     static void resetNodeDBMenu();

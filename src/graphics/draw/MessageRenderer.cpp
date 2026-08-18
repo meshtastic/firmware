@@ -7,7 +7,6 @@
 #include "NodeDB.h"
 #include "UIRenderer.h"
 #if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
-#include "graphics/draw/MessageNotificationPolicy.h"
 #include "graphics/TouchLayout.h"
 #endif
 #include "gps/RTC.h"
@@ -1300,17 +1299,6 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
         // Shorter banner if already in a conversation (Channel or Direct)
         bool inThread = (getThreadMode() != ThreadMode::ALL);
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
-        const bool showBanner = shouldShowIncomingMessageBanner(screen && screen->isMessageFrameShown(), isAlert, suppressBanner);
-
-        if (showBanner && screen && shouldWakeOnReceivedMessage()) {
-            screen->setOn(true);
-        }
-
-        if (showBanner && screen) {
-            screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
-        }
-#else
         if (!suppressBanner && shouldWakeOnReceivedMessage()) {
             screen->setOn(true);
         }
@@ -1318,7 +1306,6 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         if (!suppressBanner) {
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
         }
-#endif
 #if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
     } else {
         if (msgText && msgText[0] != '\0')
