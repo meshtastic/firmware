@@ -62,24 +62,14 @@ static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
 // Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
 static const uint32_t MIN_HEAP_FOR_SSL = 40000;
 
-/**
- * HTTPSServer that can be driven under memory pressure without accepting.
- *
- * HTTPServer::loop() does two things: it services and reaps the connections it already holds
- * (each open one gets ->loop(), which is where the idle timeout and the SSL close-notify state
- * machine run, and closed ones are deleted), and then it accepts a new connection if a slot is
- * free. handleWebResponse() skips the whole loop below MIN_HEAP_FOR_SSL so no new TLS handshake
- * is attempted on a heap that cannot hold its context - but that also froze the connections
- * already open: never looped, they never time out, their mbedTLS contexts are never freed, the
- * heap never climbs back over the threshold, and the loop is skipped forever. Splitting the two
- * halves needs the connection table, which HTTPServer keeps protected.
- */
+// HTTPSServer that can service and reap the connections it already holds without accepting new ones,
+// so a low-heap pause doesn't freeze open TLS sessions (and their heap) in place. Needs the protected table.
 class MeshHTTPSServer : public HTTPSServer
 {
   public:
     using HTTPSServer::HTTPSServer;
 
-    /// The first half of HTTPServer::loop(): drive and reap the connections we already hold, accept nothing.
+    /// The first half of HTTPServer::loop(): drive and reap existing connections, accept nothing.
     void serviceExistingConnections()
     {
         if (!_running)
@@ -115,10 +105,8 @@ static void handleWebResponse()
                 if (freeHeap >= MIN_HEAP_FOR_SSL) {
                     secureServer->loop();
                 } else {
-                    // Low heap: don't accept a new TLS handshake we can't hold a context for, but keep
-                    // driving the connections already open so they can finish, time out and be reaped -
-                    // that is what gives the heap back. Skipping them entirely pins the heap below the
-                    // threshold for good (see MeshHTTPSServer).
+                    // Low heap: accept nothing new, but keep servicing open connections so they can time out
+                    // and free their contexts - skipping them pins the heap below the threshold for good.
                     secureServer->serviceExistingConnections();
                     static uint32_t lastHeapWarning = 0;
                     if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
