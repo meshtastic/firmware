@@ -1329,7 +1329,6 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Content below header ===
 
     // === First Row: Region / Channel Utilization and Uptime ===
-    bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
     const bool compactPanel = graphics::isCompactPanel(display);
