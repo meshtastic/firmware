@@ -1,4 +1,4 @@
-# CrowPanel Advance 4.3/5.0/7.0 ESP32-S3 support
+# CrowPanel Advance 4.3/5.0/7.0 ESP32-S3 v1.2+ support
 
 This work targets the Elecrow CrowPanel Advance 4.3, 5.0, and 7.0 inch
 ESP32-S3 panels, including the v1.4/v1.5 hardware family. It was developed
@@ -22,9 +22,10 @@ Meshtastic Device UI running on the tested hardware.
 - INA219 battery monitoring at I2C address `0x40`, including battery percentage.
 - A shared I2C lock for STC, touch, and INA219 traffic.
 - Persisted display brightness, screen timeout, and touch calibration.
-- Hardware model 144, `CROWPANEL_ADV_43_50_70`, so apps can identify the
-  large CrowPanel family separately from the 2.4/2.8 inch model.
-- Wi-Fi map tiles downloaded asynchronously from Google Maps.
+- A separate `elecrow-adv1-43-50-70-tft-v12` build target, leaving the legacy
+  `elecrow-adv1-43-50-70-tft` target and its GPIO 0 radio-CS wiring unchanged.
+- Hardware model 97 (`CROWPANEL`) until a distinct model is added through the
+  authoritative Meshtastic protobuf repository.
 
 The tested SX1262 pin assignment is:
 
@@ -48,27 +49,15 @@ a clear message alert. The 250 ms default produces only a short buzz.
 
 ## Maps and SD-card status
 
-Map tiles currently come directly from Google Maps over an active Wi-Fi
-connection. The map loader is asynchronous so HTTP and image decoding do not
-block the display task, and it intentionally does not look for map tiles on the
-SD card first.
+Map handling uses the unmodified Meshtastic Device UI dependency. No build-time
+source rewriting is performed. Any Google/network-only map behavior should be
+implemented and reviewed in the Device UI repository before its dependency is
+updated here.
 
 SD-card initialization on the tested v1.4/v1.5 panels is still a work in
 progress. Because the Meshtastic UI's Backup & Restore feature stores keys on
 the SD card, that feature can remain unavailable until SD initialization is
 resolved. SD-backed/offline maps are not claimed as working by this patch.
 
-## Test firmware
-
-`firmware/Meshtastic-CrowPanel-4.3-5.0-7.0-v2.8.0-STC-GoogleMaps-GPIO8-CS.bin`
-is the application image tested on hardware. Its SHA-256 is:
-
-`B7EFB4D9855630F8AD0E7D0B14B3DD83AC17248093EE97EAA912FB7C713CFD0C`
-
-Use Meshtastic Flasher's **Pick your own file** option. This application image
-is written at offset `0x10000`. A full erase is normally unnecessary and would
-remove the node identity, channels, Wi-Fi credentials, and display settings.
-
-The GPIO 8 image is for panels with the original v1.2+ CS routing. A panel that
-has been physically modified to isolate GPIO 8 and jumper CS to GPIO 0 needs
-either the modification reversed or a separate GPIO 0 build.
+No compiled firmware is stored in this source tree. Release artifacts must be
+produced by Meshtastic's normal build and release process.

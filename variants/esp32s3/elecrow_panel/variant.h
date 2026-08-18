@@ -1,10 +1,6 @@
 #define I2C_SDA 15
 #define I2C_SCL 16
 
-#if CROW_SELECT == 2
-#define DEVICE_BATTERY_INA_ADDRESS 0x40
-#endif
-
 #if CROW_SELECT == 1
 #define WAKE_ON_TOUCH
 #define SCREEN_TOUCH_INT 47
@@ -20,6 +16,8 @@
 #define DAC_I2S_WS 11
 #define DAC_I2S_DOUT 12
 #define DAC_I2S_MCLK 8 // don't use GPIO0 because it's assigned to LoRa or button
+#else
+#define PIN_BUZZER 8
 #endif
 
 // GPS via UART1 connector
@@ -74,9 +72,7 @@
 #define SENSOR_POWER_ON LOW
 #else
 // 4.3", 5.0", 7.0"
-// The v1.2+ radio header routes SX1262 NSS/CS to GPIO8. The buzzer on these
-// panels is controlled by the STC over I2C, so GPIO8 is available for LoRa CS.
-#define LORA_CS 8
+#define LORA_CS 0
 #define LORA_SCK 5
 #define LORA_MISO 4
 #define LORA_MOSI 6

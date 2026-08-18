@@ -329,8 +329,6 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L2 = 137,
     /* Elecrow CrowPanel Advance P4 models, ESP32-P4 and TFT with SX1262 radio plugin */
     meshtastic_HardwareModel_CROWPANEL_P4 = 138,
-    /* Elecrow CrowPanel Advance 4.3, 5.0 and 7.0 inch models with ESP32-S3 and TFT */
-    meshtastic_HardwareModel_CROWPANEL_ADV_43_50_70 = 144,
     /* Heltec Mesh Tower V2 */
     meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2 = 139,
     /* Meshnology W10 */

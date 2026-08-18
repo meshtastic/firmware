@@ -186,8 +186,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_ETH_ELITE
 #elif defined(HELTEC_SENSOR_HUB)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_SENSOR_HUB
-#elif defined(ELECROW_PANEL) && CROW_SELECT == 2
-#define HW_VENDOR meshtastic_HardwareModel_CROWPANEL_ADV_43_50_70
 #elif defined(ELECROW_PANEL)
 #define HW_VENDOR meshtastic_HardwareModel_CROWPANEL
 #elif defined(RAK3312)
