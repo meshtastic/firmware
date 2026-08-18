@@ -290,11 +290,8 @@ void test_high_bytes_in_payload_delivered_on_both_paths()
     TEST_ASSERT_EQUAL_UINT8_ARRAY(streamApi.deliveries[0].data(), bufferApi.deliveries[0].data(), payload.size());
 }
 
-/// Document current behavior: a stray START1 immediately before a real frame loses that frame.
-/// After START1 + non-START2 the parser resets WITHOUT re-considering the failing byte as a new
-/// START1, so in 0x94 0x94 0xc3 ... the real frame's own marker was consumed by the reset. This
-/// is a known robustness gap being pinned as-is, not an endorsement; a fix would re-examine the
-/// failing byte. The parser must still recover on the next clean frame.
+/// A byte that fails START2 is re-tested as START1, so 0x94 0x94 0xc3 ... keeps the frame behind
+/// the stray marker instead of consuming its real marker in the reset.
 void test_stray_start1_before_frame_still_delivers()
 {
     std::vector<uint8_t> payload = {0x42};
@@ -322,10 +319,15 @@ void test_repeated_stray_start1_before_frame_still_delivers()
     std::vector<uint8_t> burst = {kStart1, kStart1, kStart1};
     burst.insert(burst.end(), frame.begin(), frame.end());
 
+    InputScriptedStream bufStream;
+    FramingStreamAPIShim bufferApi(&bufStream);
+    feedBufferPath(bufferApi, burst);
+    assertSingleDelivery(bufferApi, payload);
+
     InputScriptedStream stream;
-    FramingStreamAPIShim api(&stream);
-    feedStreamPath(api, stream, burst);
-    assertSingleDelivery(api, payload);
+    FramingStreamAPIShim streamApi(&stream);
+    feedStreamPath(streamApi, stream, burst);
+    assertSingleDelivery(streamApi, payload);
 }
 
 /// START1 followed by a non-START1, non-START2 byte still resyncs on the next real frame.
@@ -336,10 +338,15 @@ void test_start1_then_unrelated_byte_resyncs()
     std::vector<uint8_t> burst = {kStart1, 0x00};
     burst.insert(burst.end(), frame.begin(), frame.end());
 
+    InputScriptedStream bufStream;
+    FramingStreamAPIShim bufferApi(&bufStream);
+    feedBufferPath(bufferApi, burst);
+    assertSingleDelivery(bufferApi, payload);
+
     InputScriptedStream stream;
-    FramingStreamAPIShim api(&stream);
-    feedStreamPath(api, stream, burst);
-    assertSingleDelivery(api, payload);
+    FramingStreamAPIShim streamApi(&stream);
+    feedStreamPath(streamApi, stream, burst);
+    assertSingleDelivery(streamApi, payload);
 }
 
 /// Unity per-test setup: install the test MeshService the StreamAPI fixtures expect.
