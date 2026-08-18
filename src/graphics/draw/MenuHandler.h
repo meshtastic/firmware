@@ -11,6 +11,9 @@ class menuHandler
         MenuNone,
         LoraMenu,
         LoraPicker,
+#if defined(_VARIANT_T_DECK_MAX)
+        AntennaPicker,
+#endif
         DeviceRolePicker,
         RadioPresetPicker,
         TXEnabledMenu,
@@ -72,6 +75,9 @@ class menuHandler
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
+#if defined(_VARIANT_T_DECK_MAX)
+    static void antennaPicker();
+#endif
     static void deviceRolePicker();
     static void radioPresetPicker();
     static void txEnabledMenu();

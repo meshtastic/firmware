@@ -25,6 +25,10 @@
 #endif
 #include "mesh/MeshTypes.h"
 #include "mesh/RadioLibInterface.h"
+#include "mesh/Router.h"
+#if defined(_VARIANT_T_DECK_MAX)
+#include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
+#endif
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -132,6 +136,52 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
     }
 }
 
+#if defined(_VARIANT_T_DECK_MAX)
+bool applyMaxAntenna(t_deck_max::Antenna antenna)
+{
+    const t_deck_max::Antenna previous = tDeckMaxGetAntenna();
+    if (previous == antenna)
+        return true;
+
+    RadioLibInterface *radio = RadioLibInterface::instance;
+    if (!router || !radio || router->getRadioIface() != radio) {
+        LOG_WARN("T-Deck-MAX: antenna switch requested without an active radio");
+        return false;
+    }
+
+    if (!radio->canSleep(true) || radio->isSending() || radio->isActivelyReceiving() || radio->isIRQPending()) {
+        LOG_WARN("T-Deck-MAX: antenna switch deferred while radio is busy");
+        return false;
+    }
+
+    if (!radio->sleep()) {
+        LOG_WARN("T-Deck-MAX: failed to put radio to sleep for antenna switch");
+        return false;
+    }
+
+    auto restore = [&]() {
+        const bool antennaRestored = tDeckMaxSetAntenna(previous);
+        const bool radioRestored = radio->reconfigure();
+        if (!antennaRestored || !radioRestored)
+            LOG_ERROR("T-Deck-MAX: failed to restore antenna after switch failure");
+    };
+
+    if (!tDeckMaxSetAntenna(antenna) || !radio->reconfigure()) {
+        restore();
+        return false;
+    }
+
+    if (!tDeckMaxSaveAntenna()) {
+        LOG_WARN("T-Deck-MAX: antenna changed but preference could not be saved; restoring previous mode");
+        restore();
+        return false;
+    }
+
+    LOG_INFO("T-Deck-MAX: antenna switched to %s", antenna == t_deck_max::Antenna::Internal ? "internal" : "external");
+    return true;
+}
+#endif
+
 } // namespace
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
@@ -149,6 +199,9 @@ void menuHandler::loraMenu()
         "Frequency Slot",
         "LoRa Region",
         "Transmit Enabled",
+#if defined(_VARIANT_T_DECK_MAX)
+        "Antenna",
+#endif
 #if HAS_LORA_FEM
         "FEM LNA",
 #endif
@@ -162,17 +215,21 @@ void menuHandler::loraMenu()
         FrequencySlot = 3,
         LoraPicker = 4,
         TxEnabled = 5,
+#if defined(_VARIANT_T_DECK_MAX)
+        AntennaPicker,
+#endif
 #if HAS_LORA_FEM
-        LoraFemLna = 6
+        LoraFemLna
 #endif
     };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
+    const size_t optionCount = sizeof(optionsArray) / sizeof(optionsArray[0]);
 #if HAS_LORA_FEM
-    bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? 7 : 6;
+    bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? optionCount : optionCount - 1;
 #else
-    bannerOptions.optionsCount = 6;
+    bannerOptions.optionsCount = optionCount;
 #endif
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
@@ -187,6 +244,10 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::LoraPicker;
         } else if (selected == TxEnabled) {
             menuHandler::menuQueue = menuHandler::TXEnabledMenu;
+#if defined(_VARIANT_T_DECK_MAX)
+        } else if (selected == AntennaPicker) {
+            menuHandler::menuQueue = menuHandler::AntennaPicker;
+#endif
         }
 #if HAS_LORA_FEM
         else if (selected == LoraFemLna) {
@@ -196,6 +257,33 @@ void menuHandler::loraMenu()
     };
     screen->showOverlayBanner(bannerOptions);
 }
+
+#if defined(_VARIANT_T_DECK_MAX)
+void menuHandler::antennaPicker()
+{
+    enum optionsNumbers { Back, Internal, External };
+    static const char *optionsArray[] = {"Back", "Internal", "External"};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Antenna";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.InitialSelected = tDeckMaxGetAntenna() == t_deck_max::Antenna::External ? External : Internal;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+            return;
+        }
+
+        const t_deck_max::Antenna antenna =
+            selected == External ? t_deck_max::Antenna::External : t_deck_max::Antenna::Internal;
+        if (!applyMaxAntenna(antenna))
+            screen->showSimpleBanner("Antenna switch failed", 3000);
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+#endif
 
 void menuHandler::OnboardMessage()
 {
@@ -1282,7 +1370,16 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
+    enum optionsNumbers {
+        Back,
+        Notifications,
+        ScreenOptions,
+        Bluetooth,
+        WiFiToggle,
+        PowerMenu,
+        Test,
+        enumEnd
+    };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -2968,6 +3065,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case LoraPicker:
         LoraRegionPicker();
         break;
+#if defined(_VARIANT_T_DECK_MAX)
+    case AntennaPicker:
+        antennaPicker();
+        break;
+#endif
     case DeviceRolePicker:
         deviceRolePicker();
         break;
