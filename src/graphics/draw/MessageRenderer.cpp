@@ -454,6 +454,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Check if bubbles are enabled
     const bool showBubbles = config.display.enable_message_bubbles && !compactPanel;
     const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
+    // Bubbles carry their own padding, so the rounded-screen inset has to come from here
+    const int contentLeft = x + (showBubbles ? BASEUI_BODY_LR_MARGIN : 0);
 
     // Derived widths
     const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
@@ -874,10 +876,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             if (b.mine) {
                 bubbleX = rightEdge - bubbleW;
             } else {
-                bubbleX = x;
+                bubbleX = contentLeft;
             }
-            if (bubbleX < x)
-                bubbleX = x;
+            if (bubbleX < contentLeft)
+                bubbleX = contentLeft;
             if (bubbleX + bubbleW > rightEdge)
                 bubbleW = std::max(1, rightEdge - bubbleX);
 
@@ -954,7 +956,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
-                    headerX = x + textIndent;
+                    headerX = contentLeft + textIndent;
                 }
                 graphics::UIRenderer::drawStringWithEmotes(display, headerX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
                                                            true);
@@ -1003,7 +1005,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
-                    drawStringWithEmotes(display, x + textIndent, lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(display, contentLeft + textIndent, lineY, cachedLines[i], emotes, numEmotes);
                 }
             }
         }
