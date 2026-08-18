@@ -62,8 +62,43 @@ static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
 // Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
 static const uint32_t MIN_HEAP_FOR_SSL = 40000;
 
+/**
+ * HTTPSServer that can be driven under memory pressure without accepting.
+ *
+ * HTTPServer::loop() does two things: it services and reaps the connections it already holds
+ * (each open one gets ->loop(), which is where the idle timeout and the SSL close-notify state
+ * machine run, and closed ones are deleted), and then it accepts a new connection if a slot is
+ * free. handleWebResponse() skips the whole loop below MIN_HEAP_FOR_SSL so no new TLS handshake
+ * is attempted on a heap that cannot hold its context - but that also froze the connections
+ * already open: never looped, they never time out, their mbedTLS contexts are never freed, the
+ * heap never climbs back over the threshold, and the loop is skipped forever. Splitting the two
+ * halves needs the connection table, which HTTPServer keeps protected.
+ */
+class MeshHTTPSServer : public HTTPSServer
+{
+  public:
+    using HTTPSServer::HTTPSServer;
+
+    /// The first half of HTTPServer::loop(): drive and reap the connections we already hold, accept nothing.
+    void serviceExistingConnections()
+    {
+        if (!_running)
+            return;
+        for (uint8_t i = 0; i < _maxConnections; i++) {
+            if (!_connections[i])
+                continue;
+            if (_connections[i]->isClosed()) {
+                delete _connections[i];
+                _connections[i] = nullptr;
+            } else {
+                _connections[i]->loop();
+            }
+        }
+    }
+};
+
 static SSLCert *cert;
-static HTTPSServer *secureServer;
+static MeshHTTPSServer *secureServer;
 static HTTPServer *insecureServer;
 
 volatile bool isWebServerReady;
@@ -80,10 +115,14 @@ static void handleWebResponse()
                 if (freeHeap >= MIN_HEAP_FOR_SSL) {
                     secureServer->loop();
                 } else {
-                    // Skip HTTPS when memory is low to prevent SSL setup failures
+                    // Low heap: don't accept a new TLS handshake we can't hold a context for, but keep
+                    // driving the connections already open so they can finish, time out and be reaped -
+                    // that is what gives the heap back. Skipping them entirely pins the heap below the
+                    // threshold for good (see MeshHTTPSServer).
+                    secureServer->serviceExistingConnections();
                     static uint32_t lastHeapWarning = 0;
                     if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
-                        LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
+                        LOG_WARN("Low heap (%u bytes), not accepting HTTPS connections", freeHeap);
                         lastHeapWarning = millis();
                     }
                 }
@@ -231,7 +270,7 @@ void initWebServer()
     LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
-    secureServer = new HTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
+    secureServer = new MeshHTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
     insecureServer = new HTTPServer();
 
     registerHandlers(insecureServer, secureServer);
