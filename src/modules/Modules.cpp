@@ -1,4 +1,11 @@
 #include "configuration.h"
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
+    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+#include "input/HapticFeedback.h"
+#endif
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+#include "audio/A7682Audio.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
 #include "modules/SystemCommandsModule.h"
@@ -121,6 +128,14 @@
  */
 void setupModules()
 {
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
+    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+    initHapticFeedback();
+#endif
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+    initA7682Audio();
+#endif
+
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         inputBroker = new InputBroker();
