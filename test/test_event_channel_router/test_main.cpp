@@ -39,6 +39,22 @@ constexpr NodeNum kPkiPeer = 0x33333333;
 constexpr ChannelIndex kEventChannel = 0;
 constexpr ChannelIndex kPrivateChannel = 1;
 
+constexpr std::array<meshtastic_PortNum, 3> kCoordinatePorts = {
+    meshtastic_PortNum_POSITION_APP,
+    meshtastic_PortNum_WAYPOINT_APP,
+    meshtastic_PortNum_MAP_REPORT_APP,
+};
+
+// How many of kCoordinatePorts survive the receive path to reach the modules, on ANY channel.
+// USERPREFS_EVENT_MODE forces the CORE_PORTNUMS_ONLY filter in Router::dispatchReceived(), and
+// MAP_REPORT_APP is not in that allow-list, so a map report is dropped before module dispatch on
+// event-mode builds. Unrelated to the event-channel coordinate policy, which is keyed on the PSK.
+#if USERPREFS_EVENT_MODE
+constexpr size_t kRxDeliverableCoordinatePorts = kCoordinatePorts.size() - 1;
+#else
+constexpr size_t kRxDeliverableCoordinatePorts = kCoordinatePorts.size();
+#endif
+
 #if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
 constexpr bool kBlockEventCoordinates = true;
 constexpr ErrorCode kExpectedEventTxResult = meshtastic_Routing_Error_NOT_AUTHORIZED;
@@ -46,14 +62,8 @@ constexpr size_t kExpectedEventDeliveryCount = 0;
 #else
 constexpr bool kBlockEventCoordinates = false;
 constexpr ErrorCode kExpectedEventTxResult = ERRNO_OK;
-constexpr size_t kExpectedEventDeliveryCount = 3;
+constexpr size_t kExpectedEventDeliveryCount = kRxDeliverableCoordinatePorts;
 #endif
-
-constexpr std::array<meshtastic_PortNum, 3> kCoordinatePorts = {
-    meshtastic_PortNum_POSITION_APP,
-    meshtastic_PortNum_WAYPOINT_APP,
-    meshtastic_PortNum_MAP_REPORT_APP,
-};
 
 class TestNodeDB : public NodeDB
 {
@@ -247,8 +257,10 @@ static void test_private_channel_preserves_legacy_tx_and_rx_for_all_coordinate_p
         receivePacket(makeDecodedPacket(port, kRemoteNode, NODENUM_BROADCAST, kPrivateChannel));
     }
 
+    // TX is not portnum-filtered, so every coordinate port still goes out; RX drops map reports on
+    // event-mode builds (see kRxDeliverableCoordinatePorts).
     TEST_ASSERT_EQUAL_UINT32(kCoordinatePorts.size(), captureRadio->packets.size());
-    TEST_ASSERT_EQUAL_UINT32(kCoordinatePorts.size(), captureModule->packets.size());
+    TEST_ASSERT_EQUAL_UINT32(kRxDeliverableCoordinatePorts, captureModule->packets.size());
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
