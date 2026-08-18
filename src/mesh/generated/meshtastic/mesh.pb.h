@@ -339,6 +339,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_RC52 = 142,
     /* Heltec ESP32C6 + SX1262 */
     meshtastic_HardwareModel_HELTEC_RCC6 = 143,
+    /* Seeed Wio Tracker L1 Pro 1W, nRF52840 + SX1262 with 1 W external PA */
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W = 144,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
