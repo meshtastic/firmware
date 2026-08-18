@@ -289,6 +289,27 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     return reply;
 }
 
+void PositionModule::replyOnPositionChannel(const meshtastic_MeshPacket &req)
+{
+    uint8_t positionChannel;
+    if (!findPositionChannel(positionChannel)) {
+        LOG_DEBUG("Skip position reply to 0x%08x: position sharing disabled on all channels", getFrom(&req));
+        return;
+    }
+    if (!service)
+        return;
+
+    precision = getPositionPrecisionForChannel(positionChannel);
+    meshtastic_MeshPacket *reply = allocReply(); // reply throttle + precision-0/no-fix guards live here
+    if (!reply)
+        return;
+
+    setReplyTo(reply, req);
+    reply->channel = positionChannel; // not the channel the request came in on
+    LOG_INFO("Reply to position request from 0x%08x on position channel %u", getFrom(&req), positionChannel);
+    service->sendToMesh(reply);
+}
+
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
     LOG_INFO("Send TAK V2 PLI packet");
@@ -374,12 +395,11 @@ void PositionModule::sendOurPosition()
     currentGeneration = radioGeneration;
 
     // If we changed channels, ask everyone else for their latest info
-    for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
-        if (getPositionPrecisionForChannel(channelNum) != 0) {
-            LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-            sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
-            return;
-        }
+    uint8_t positionChannel;
+    if (findPositionChannel(positionChannel)) {
+        LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
+        sendOurPosition(NODENUM_BROADCAST, requestReplies, positionChannel);
+        return;
     }
     LOG_INFO("Skip pos@%x:6 broadcast; position sharing disabled on all channels", localPosition.timestamp);
 }
@@ -467,12 +487,10 @@ bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLit
     // precision). Default nodes gauge movement at that on-wire (public-clamped) resolution;
     // trackers use their own configured (unclamped) precision so finer moves still count.
     uint32_t precisionBits = 0;
-    for (uint8_t ch = 0; ch < 8; ch++) {
-        if (getPositionPrecisionForChannel(ch) == 0)
-            continue;
+    uint8_t ch;
+    if (findPositionChannel(ch)) {
         precisionBits =
             useConfiguredPrecision ? getPositionPrecisionForChannel(channels.getByIndex(ch)) : getPositionPrecisionForChannel(ch);
-        break;
     }
 
     return positionWithinPrecisionCell(selfPos.latitude_i, selfPos.longitude_i, lastGpsLatitude, lastGpsLongitude, precisionBits);
