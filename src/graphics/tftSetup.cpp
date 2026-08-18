@@ -350,12 +350,10 @@ void tftSetup(void)
         if (portduino_config.displayPanel == fb) {
             // Rotation from yaml Display.OffsetRotate: 1=90, 2=180, 3=270 deg
             displayConfig.device(DisplayDriverConfig::device_t::FB)
-                .panel(DisplayDriverConfig::panel_config_t{
-                    .type = panels[portduino_config.displayPanel],
-                    .panel_width = (uint16_t)(portduino_config.displayWidth ? portduino_config.displayWidth : c_default_width),
-                    .panel_height =
-                        (uint16_t)(portduino_config.displayHeight ? portduino_config.displayHeight : c_default_height),
-                    .offset_rotation = (uint8_t)(portduino_config.displayRotate ? portduino_config.displayOffsetRotate : 0)});
+                .panel(DisplayDriverConfig::panel_config_t{.type = panels[portduino_config.displayPanel],
+                                                           .panel_width = (uint16_t)portduino_config.displayWidth,
+                                                           .panel_height = (uint16_t)portduino_config.displayHeight,
+                                                           .offset_rotation = (uint8_t)portduino_config.displayOffsetRotate});
         } else
 #endif
         {
