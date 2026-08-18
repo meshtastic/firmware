@@ -134,6 +134,7 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
         } else {
             openAPI.reset(new (block) T(client));
         }
+        // cppcheck-suppress memleak ; block is owned by openAPI via placement new, freed by MallocDeleter
     }
 
 #if RAK_4631

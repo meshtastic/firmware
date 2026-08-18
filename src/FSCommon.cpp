@@ -283,7 +283,9 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, s
     // so there is no unwinder and a throw is std::terminate() -> abort() -> reboot. That fires on the
     // very first client handshake whenever the heap is fragmented (WiFi + TLS up, no PSRAM), which is
     // exactly when this runs. So: never let reserve() be the thing that discovers there is no room.
-    size_t reservedCount = maxCount;
+    // Cap at what a vector of FileInfo can hold at all: it keeps the probe's byte count from wrapping
+    // for a huge maxCount, and it is also the bound reserve() would otherwise reject with a throw.
+    size_t reservedCount = std::min(maxCount, filenames.max_size());
 #ifdef ARCH_ESP32
     // Ask the allocator for the largest contiguous block malloc() could hand out. MALLOC_CAP_DEFAULT
     // is the capability heap_caps_malloc_default() (what operator new resolves to) falls back to
