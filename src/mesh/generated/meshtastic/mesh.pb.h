@@ -414,6 +414,10 @@ typedef enum _meshtastic_FirmwareEdition {
     meshtastic_FirmwareEdition_HAMVENTION = 19,
     /* FAB, the international Fab Lab digital fabrication conference */
     meshtastic_FirmwareEdition_FAB = 20,
+    /* Dragon Con, the yearly pop culture convention in Atlanta, GA */
+    meshtastic_FirmwareEdition_DRAGON_CON = 21,
+    /* Chaos Communication Congress, the hacker conference held yearly in Germany */
+    meshtastic_FirmwareEdition_CCC = 22,
     /* Placeholder for DIY and unofficial events */
     meshtastic_FirmwareEdition_DIY_EDITION = 127
 } meshtastic_FirmwareEdition;
