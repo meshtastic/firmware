@@ -402,6 +402,7 @@ A well-structured test suite follows this pattern:
 | `test_mqtt`                  | MQTT integration              |
 | `test_packet_history`        | Packet history tracking       |
 | `test_position_precision`    | Position precision helpers    |
+| `test_power_fsm`             | PowerFSM timeout helpers      |
 | `test_radio`                 | Radio interface               |
 | `test_serial`                | Serial communication          |
 | `test_traffic_management`    | Traffic management            |
