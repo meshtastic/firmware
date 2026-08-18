@@ -62,8 +62,33 @@ static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
 // Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
 static const uint32_t MIN_HEAP_FOR_SSL = 40000;
 
+// HTTPSServer that can service and reap the connections it already holds without accepting new ones,
+// so a low-heap pause doesn't freeze open TLS sessions (and their heap) in place. Needs the protected table.
+class MeshHTTPSServer : public HTTPSServer
+{
+  public:
+    using HTTPSServer::HTTPSServer;
+
+    /// The first half of HTTPServer::loop(): drive and reap existing connections, accept nothing.
+    void serviceExistingConnections()
+    {
+        if (!_running)
+            return;
+        for (uint8_t i = 0; i < _maxConnections; i++) {
+            if (!_connections[i])
+                continue;
+            if (_connections[i]->isClosed()) {
+                delete _connections[i];
+                _connections[i] = nullptr;
+            } else {
+                _connections[i]->loop();
+            }
+        }
+    }
+};
+
 static SSLCert *cert;
-static HTTPSServer *secureServer;
+static MeshHTTPSServer *secureServer;
 static HTTPServer *insecureServer;
 
 volatile bool isWebServerReady;
@@ -80,10 +105,12 @@ static void handleWebResponse()
                 if (freeHeap >= MIN_HEAP_FOR_SSL) {
                     secureServer->loop();
                 } else {
-                    // Skip HTTPS when memory is low to prevent SSL setup failures
+                    // Low heap: accept nothing new, but keep servicing open connections so they can time out
+                    // and free their contexts - skipping them pins the heap below the threshold for good.
+                    secureServer->serviceExistingConnections();
                     static uint32_t lastHeapWarning = 0;
                     if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
-                        LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
+                        LOG_WARN("Low heap (%u bytes), not accepting HTTPS connections", freeHeap);
                         lastHeapWarning = millis();
                     }
                 }
@@ -231,7 +258,7 @@ void initWebServer()
     LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
-    secureServer = new HTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
+    secureServer = new MeshHTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
     insecureServer = new HTTPServer();
 
     registerHandlers(insecureServer, secureServer);
