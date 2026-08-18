@@ -437,12 +437,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     const bool compactPanel = graphics::isCompactPanel(display);
     // Compact panels: no bottom nav row anymore (see UIRenderer::drawNavigationBar), full height available.
-    const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL;
+    const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL + BASEUI_BELOW_HEADER_MARGIN + BASEUI_HEADER_MARGIN;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
-    const int contentTop = compactPanel ? 0 : getTextPositions(display)[1];
+    // Rounded screens start the body below the header margin; getTextPositions(display)[1] + BASEUI_BELOW_HEADER_MARGIN
+    const int contentTop = compactPanel ? 0 : navHeight;
     const int usableHeight = compactPanel ? scrollBottom - contentTop : scrollBottom;
-    constexpr int LEFT_MARGIN = 2;
-    constexpr int RIGHT_MARGIN = 2;
+    constexpr int LEFT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
+    constexpr int RIGHT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
     constexpr int SCROLLBAR_WIDTH = 3;
     constexpr int BUBBLE_PAD_X = 3;
     constexpr int BUBBLE_PAD_Y = 4;

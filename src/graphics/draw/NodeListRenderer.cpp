@@ -620,7 +620,7 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
-    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
+    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1 + BASEUI_HEADER_MARGIN;
     // Compact panels: 4 rows fit (0,9,18,27), a 5th pages instead of cramming in.
     const int rowYOffset = graphics::isCompactPanel(display) ? (FONT_HEIGHT_SMALL - 4) : (FONT_HEIGHT_SMALL - 3);
     bool locationScreen = false;
@@ -636,7 +636,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     // Compact panels have no header (see drawCommonHeader) - don't reserve space for one.
     if (!graphics::isCompactPanel(display))
-        y += COMMON_HEADER_HEIGHT;
+        y += COMMON_HEADER_HEIGHT + BASEUI_BELOW_HEADER_MARGIN;
     firstRowY = y;
 
     int totalColumns = 1; // Default to 1 column

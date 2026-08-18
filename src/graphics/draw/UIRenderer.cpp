@@ -1,17 +1,18 @@
 #include "configuration.h"
 #if HAS_SCREEN
+#include "CompassRenderer.h"
 #include "GPSStatus.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "graphics/draw/CompassRenderer.h"
-#include "graphics/draw/NodeListRenderer.h"
+#include "NodeListRenderer.h"
 #if !MESHTASTIC_EXCLUDE_STATUS
 #include "modules/StatusMessageModule.h"
 #endif
 #if BASEUI_HAS_GAMES
 #include "modules/games/GamesModule.h"
 #endif
+#include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
 #include "graphics/EmoteRenderer.h"
@@ -19,7 +20,6 @@
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
-#include "graphics/draw/UIRenderer.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "target_specific.h"
@@ -587,7 +587,7 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         if (strcmp(mode, "line1") == 0) {
             strcpy(displayLine, gps->getHasTime() ? "GPS Time Only" : "No GPS Lock");
-            display->drawString(x, y, displayLine);
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, y, displayLine);
         }
     } else {
 
@@ -935,6 +935,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 #endif
 
+    y += BASEUI_BELOW_HEADER_MARGIN;
     // ===== DYNAMIC ROW STACKING WITH YOUR MACROS =====
     // 1. Each potential info row has a macro-defined Y position (not regular increments!).
     // 2. Each row is only shown if it has valid data.
@@ -1328,6 +1329,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Content below header ===
 
     // === First Row: Region / Channel Utilization and Uptime ===
+    bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
     const bool compactPanel = graphics::isCompactPanel(display);
@@ -1336,19 +1338,20 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         const char *txdisabled = "Transmit Disabled";
         if (compactPanel) {
             int textWidth = display->getStringWidth(txdisabled);
-            display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line], txdisabled);
+            display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line] + y, txdisabled);
         } else {
-            display->drawString(x, getTextPositions(display)[line], txdisabled);
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + y, txdisabled);
         }
     } else if (compactPanel) {
         // No room for a separate left/right column layout - center it instead.
-        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online", true);
+        drawNodes(display, x, getTextPositions(display)[line] + y + 2, nodeStatus, -1, false, "online", true);
     } else {
         // Display Region and Channel Utilization
         if (currentResolution == ScreenResolution::UltraLow) {
-            drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+            drawNodes(display, x, getTextPositions(display)[line] + y + 2, nodeStatus, -1, false, "online");
         } else {
-            drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+            drawNodes(display, x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + y + 2, nodeStatus, -1, false,
+                      "online");
         }
     }
     char uptimeStr[32] = "";
@@ -1356,7 +1359,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
     }
     if (!compactPanel) {
-        display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
+        display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr) - BASEUI_BODY_LR_MARGIN,
+                            getTextPositions(display)[line++] + y, uptimeStr);
     } else {
         line++;
     }
@@ -1365,7 +1369,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     config.display.heading_bold = false;
 
 #if HAS_GPS
-    UIRenderer::drawGps(display, x, getTextPositions(display)[line], gpsStatus, compactPanel);
+    UIRenderer::drawGps(display, x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + y, gpsStatus, compactPanel);
 #endif
 
 #if defined(OLED_TINY)
@@ -1377,7 +1381,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         char chUtilStr[16];
         snprintf(chUtilStr, sizeof(chUtilStr), "ChUtil %d%%", chutil_percent);
         int chUtilWidth = display->getStringWidth(chUtilStr);
-        display->drawString((SCREEN_WIDTH - chUtilWidth) / 2, getTextPositions(display)[line++], chUtilStr);
+        display->drawString((SCREEN_WIDTH - chUtilWidth) / 2, getTextPositions(display)[line++] + y, chUtilStr);
 
         // === Node Identity: long name (falls back to short), truncated with "..." if too wide ===
         const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
@@ -1387,14 +1391,14 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         UIRenderer::truncateStringWithEmotes(display, rawName, nodeName, sizeof(nodeName), SCREEN_WIDTH - 4);
         int textWidth = UIRenderer::measureStringWithEmotes(display, nodeName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], nodeName, FONT_HEIGHT_SMALL, 1,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, nodeName, FONT_HEIGHT_SMALL, 1,
                                          false);
     } else {
         // === Node Identity ===
         const char *shortName = owner.short_name[0] ? owner.short_name : "";
         int textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, shortName, FONT_HEIGHT_SMALL, 1,
                                          false);
     }
 #else
@@ -1413,76 +1417,76 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     config.display.heading_bold = origBold;
 
     // === Third Row: Channel Utilization Bluetooth Off (Only If Actually Off) ===
-    {
-        const char *chUtil = "ChUtil:";
-        char chUtilPercentage[10];
-        int chutil_percent = static_cast<int>(airTime->channelUtilizationPercent() + 0.5f);
-        snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%d%%", chutil_percent);
+    const char *chUtil = "ChUtil:";
+    char chUtilPercentage[10];
+    int chutil_percent = static_cast<int>(airTime->channelUtilizationPercent() + 0.5f);
+    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%d%%", chutil_percent);
 
-        int chUtil_width = display->getStringWidth(chUtil);
-        int chUtil_y = getTextPositions(display)[line] + 3 + y;
+    int chUtil_width = display->getStringWidth(chUtil);
+    int chUtil_y = getTextPositions(display)[line] + 3 + y;
 
-        int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
-        int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
-        if (!config.bluetooth.enabled) {
+    int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
+    if (!config.bluetooth.enabled) {
 #if defined(USE_EINK)
-            chutil_bar_width = (currentResolution == ScreenResolution::High) ? 50 : 30;
+        chutil_bar_width = (currentResolution == ScreenResolution::High) ? 50 : 30;
 #else
-            chutil_bar_width = (currentResolution == ScreenResolution::High) ? 80 : 40;
+        chutil_bar_width = (currentResolution == ScreenResolution::High) ? 80 : 40;
 #endif
-        }
-        int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
-        int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
-        if (!config.bluetooth.enabled) {
-            extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 1;
-        }
-        const int raw_chutil_percent = chutil_percent;
-
-        int starting_position =
-            (SCREEN_WIDTH - chUtil_width - chutil_bar_width - extraoffset - display->getStringWidth(chUtilPercentage));
-        if (!config.bluetooth.enabled) {
-            starting_position -= (display->getStringWidth("BT off") + extraoffset);
-        }
-        starting_position /= 2;
-
-        display->drawString(starting_position, getTextPositions(display)[line] + y, chUtil);
-
-        // Force 61% or higher to show a full 100% bar, text would still show related percent.
-        if (chutil_percent >= 61) {
-            chutil_percent = 100;
-        }
-
-        int fillRight = computeChannelUtilizationFill(chutil_percent, chutil_bar_max_fill);
-
-        // Draw outline
-        display->drawRect(starting_position + chUtil_width, chUtil_y, chutil_bar_width, chutil_bar_height);
-
-        // Fill progress
-        if (fillRight > 0) {
-#if GRAPHICS_TFT_COLORING_ENABLED
-            uint16_t UtilizationFillColor = TFTPalette::Good;
-            if (raw_chutil_percent >= 60) {
-                UtilizationFillColor = TFTPalette::Bad;
-            } else if (raw_chutil_percent >= 35) {
-                UtilizationFillColor = TFTPalette::Medium;
-            }
-            setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
-                                       starting_position + chUtil_width + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
-#endif
-            display->fillRect(starting_position + chUtil_width + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
-        }
-
-        display->drawString(starting_position + chUtil_width + chutil_bar_width + extraoffset,
-                            getTextPositions(display)[line] + y, chUtilPercentage);
-
-        if (!config.bluetooth.enabled) {
-            display->drawString(starting_position + chUtil_width + chutil_bar_width + extraoffset +
-                                    display->getStringWidth(chUtilPercentage) + extraoffset,
-                                getTextPositions(display)[line] + y, "BT off");
-        }
-
-        line += 1;
     }
+    int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
+    int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
+    if (!config.bluetooth.enabled) {
+        extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 1;
+    }
+    const int raw_chutil_percent = chutil_percent;
+
+    // Center the row; with BT disabled reserve the width of the extra "BT off" indicator.
+    int starting_position =
+        (SCREEN_WIDTH - chUtil_width - chutil_bar_width - extraoffset - display->getStringWidth(chUtilPercentage));
+    if (!config.bluetooth.enabled) {
+        starting_position -= (display->getStringWidth("BT off") + extraoffset);
+    }
+    starting_position /= 2;
+
+    display->drawString(starting_position, getTextPositions(display)[line] + y, chUtil);
+
+    // Force 61% or higher to show a full 100% bar, text would still show related percent.
+    if (chutil_percent >= 61) {
+        chutil_percent = 100;
+    }
+
+    int fillRight = computeChannelUtilizationFill(chutil_percent, chutil_bar_max_fill);
+
+    // Draw outline
+    display->drawRect(starting_position + chUtil_width, chUtil_y, chutil_bar_width, chutil_bar_height);
+
+    // Fill progress
+    if (fillRight > 0) {
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t UtilizationFillColor = TFTPalette::Good;
+        if (raw_chutil_percent >= 60) {
+            UtilizationFillColor = TFTPalette::Bad;
+        } else if (raw_chutil_percent >= 35) {
+            UtilizationFillColor = TFTPalette::Medium;
+        }
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
+                                   starting_position + chUtil_width + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+#endif
+        display->fillRect(starting_position + chUtil_width + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+    }
+
+    display->drawString(starting_position + chUtil_width + chutil_bar_width + extraoffset, getTextPositions(display)[line] + y,
+                        chUtilPercentage);
+
+    if (!config.bluetooth.enabled) {
+        display->drawString(starting_position + chUtil_width + chutil_bar_width + extraoffset +
+                                display->getStringWidth(chUtilPercentage) + extraoffset,
+                            getTextPositions(display)[line] + y, "BT off");
+    }
+
+    line += 1;
+
     // === Fourth & Fifth Rows: Node Identity ===
     int textWidth = 0;
     int nameX = 0;
@@ -1502,13 +1506,13 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (SCREEN_WIDTH - UIRenderer::measureStringWithEmotes(display, combinedName) > 10) {
         textWidth = UIRenderer::measureStringWithEmotes(display, combinedName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + yOffset, combinedName,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + yOffset + y, combinedName,
                                          FONT_HEIGHT_SMALL, 1, false);
     } else {
         // === LongName Centered ===
         textWidth = UIRenderer::measureStringWithEmotes(display, longName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], longName, FONT_HEIGHT_SMALL, 1,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, longName, FONT_HEIGHT_SMALL, 1,
                                          false);
 
         // === ShortName Centered ===
@@ -1823,7 +1827,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    UIRenderer::drawGps(display, x, textPos[line++], gpsStatus, compactPanel);
+    UIRenderer::drawGps(display, x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, gpsStatus, compactPanel);
 
     config.display.heading_bold = origBold;
 
@@ -2103,6 +2107,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         lastFrameIndex = frameToHighlight;
         lastFrameChangeTime = millis();
     }
+
 #ifdef OLED_HUGE
     const int iconSize = 24;
 #else
@@ -2175,7 +2180,11 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 #endif
 
+#if BASEUI_HEADER_LR_MARGIN
+    const int navPadding = BASEUI_HEADER_LR_MARGIN;
+#else
     const int navPadding = compactPanel ? 8 : ((currentResolution == ScreenResolution::High) ? 24 : 12);
+#endif
 
     int usableWidth = SCREEN_WIDTH - (navPadding * 2);
     if (usableWidth < iconSize)

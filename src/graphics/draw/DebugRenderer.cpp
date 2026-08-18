@@ -171,7 +171,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         snprintf(device_role, sizeof(device_role), "Role: %s", role);
         textWidth = display->getStringWidth(device_role);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], device_role);
+        display->drawString(nameX, getTextPositions(display)[line++] + y, device_role);
     }
 
     // === Third Row: Radio Preset ===
@@ -230,7 +230,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     if (!config.lora.tx_enabled) {
         const char *txdisabled = "Transmit Disabled";
         textWidth = display->getStringWidth(txdisabled);
-        display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line], txdisabled);
+        display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line] + y, txdisabled);
     } else {
 
         const char *chUtil = "ChUtil:";
@@ -239,7 +239,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
         int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
                                                                      : display->getStringWidth(chUtil) + 5;
-        int chUtil_y = getTextPositions(display)[line] + 3;
+        int chUtil_y = getTextPositions(display)[line] + 3 + y;
 
         int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
         int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
@@ -253,7 +253,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
             (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
         int starting_position = centerofscreen - total_line_content_width;
 
-        display->drawString(starting_position, getTextPositions(display)[line], chUtil);
+        display->drawString(starting_position, getTextPositions(display)[line] + y, chUtil);
 
         // Force 61% or higher to show a full 100% bar, text would still show related percent.
         if (chutil_percent >= 61) {
@@ -300,7 +300,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
             display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
         }
 
-        display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
+        display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++] + y,
                             chUtilPercentage);
     }
 #endif

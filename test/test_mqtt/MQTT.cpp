@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <list>
+#include <map>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -86,8 +87,15 @@ class MockMeshService : public MeshService
 class MockNodeDB : public NodeDB
 {
   public:
-    meshtastic_NodeInfoLite *getMeshNode(NodeNum n) override { return &emptyNode; }
+    // Per-NodeNum overlay on top of the shared node, so a test can make one endpoint known
+    // while another stays unknown; everything else keeps the shared-node semantics.
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n) override
+    {
+        auto it = nodes_.find(n);
+        return it != nodes_.end() ? &it->second : &emptyNode;
+    }
     meshtastic_NodeInfoLite emptyNode = {};
+    std::map<NodeNum, meshtastic_NodeInfoLite> nodes_;
 };
 
 // Minimal RoutingModule needed to return values from sendAckNak.
@@ -417,8 +425,10 @@ void setUp(void)
 
     // The shared MockNodeDB node is mutated by the XEdDSA policy tests (signer bit, public
     // key); reset it so state can't leak between tests.
-    if (mockNodeDB)
+    if (mockNodeDB) {
         mockNodeDB->emptyNode = meshtastic_NodeInfoLite();
+        mockNodeDB->nodes_.clear();
+    }
 
     router = mockRouter = new MockRouter();
     service = mockMeshService = new MockMeshService();
@@ -758,7 +768,9 @@ void test_receiveIgnoresOwnPublishedMessages(void)
     TEST_ASSERT_TRUE(mockRoutingModule->ackNacks_.empty());
 }
 
-// Considers receiving one of our packets an acknowledgement of it being sent.
+// Considers receiving one of our packets an acknowledgement of it being sent: hearing our own
+// packet back on our own gateway topic synthesizes an implicit ACK, delivered locally through
+// sendLocal() -> handleReceived() -> the phone queue, marked as arriving via MQTT transport.
 void test_receiveAcksOwnSentMessages(void)
 {
     meshtastic_MeshPacket p = decoded;
@@ -766,13 +778,26 @@ void test_receiveAcksOwnSentMessages(void)
 
     unitTest->publish(&p, nodeDB->getNodeId().c_str());
 
-    // FIXME: Better assertion for this test
-    // TEST_ASSERT_TRUE(mockRouter->packets_.empty());
-    // TEST_ASSERT_EQUAL(1, mockRoutingModule->ackNacks_.size());
-    // const auto &[err, to, idFrom, chIndex, hopLimit] = mockRoutingModule->ackNacks_.front();
-    // TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, err);
-    // TEST_ASSERT_EQUAL(myNodeInfo.my_node_num, to);
-    // TEST_ASSERT_EQUAL(p.id, idFrom);
+    // The implicit ACK is delivered locally, never enqueued as MQTT downlink ingress.
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+
+    meshtastic_MeshPacket *ack = mockMeshService->getForPhone();
+    TEST_ASSERT_NOT_NULL(ack);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_decoded_tag, ack->which_payload_variant);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, ack->decoded.portnum);
+    TEST_ASSERT_EQUAL(myNodeInfo.my_node_num, ack->to);
+    TEST_ASSERT_EQUAL(myNodeInfo.my_node_num, ack->from);
+    TEST_ASSERT_EQUAL(p.id, ack->decoded.request_id);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT, ack->transport_mechanism);
+
+    meshtastic_Routing routing = meshtastic_Routing_init_default;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(ack->decoded.payload.bytes, ack->decoded.payload.size, &meshtastic_Routing_msg, &routing));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_error_reason_tag, routing.which_variant);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, routing.error_reason);
+
+    mockMeshService->releaseToPool(ack);
+    TEST_ASSERT_NULL(mockMeshService->getForPhone()); // exactly one ACK
 }
 
 // Should ignore our own messages from MQTT that were heard by other nodes.
@@ -963,6 +988,208 @@ void test_receiveIgnoresInvalidHopLimit(void)
     p.hop_limit = 10;
 
     unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// ===========================================================================
+// Downlink acceptance gates - shouldDropMqttDownlink + onReceiveProto policy
+// ===========================================================================
+
+// hop_start above HOP_MAX is rejected even when hop_limit is valid.
+void test_receiveIgnoresInvalidHopStart(void)
+{
+    meshtastic_MeshPacket p = decoded;
+    p.hop_start = 10;
+    p.hop_limit = 3;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// The ignore_mqtt kill-switch drops every MQTT downlink.
+void test_receiveDropsWhenIgnoreMqttSet(void)
+{
+    config.lora.ignore_mqtt = true;
+
+    unitTest->publish(&decoded);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A sender listed in config.lora.ignore_incoming is dropped.
+void test_receiveDropsSenderInIgnoreIncomingList(void)
+{
+    config.lora.ignore_incoming_count = 1;
+    config.lora.ignore_incoming[0] = decoded.from;
+
+    unitTest->publish(&decoded);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A non-empty ignore list only drops matching senders - presence of the list alone must not drop.
+void test_receiveAcceptsSenderNotInIgnoreIncomingList(void)
+{
+    config.lora.ignore_incoming_count = 2;
+    config.lora.ignore_incoming[0] = 99;
+    config.lora.ignore_incoming[1] = 100;
+
+    unitTest->publish(&decoded);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+}
+
+// A sender whose NodeDB entry carries the is_ignored bit is dropped (resurrect-ignored-node guard).
+void test_receiveDropsNodeDbIgnoredSender(void)
+{
+    mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_IS_IGNORED_MASK;
+
+    unitTest->publish(&decoded);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A packet claiming the broadcast address as its source is dropped.
+void test_receiveDropsBroadcastSource(void)
+{
+    meshtastic_MeshPacket p = decoded;
+    p.from = NODENUM_BROADCAST;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+    TEST_ASSERT_TRUE(mockRoutingModule->ackNacks_.empty());
+}
+
+// A broker cannot assert PKI authentication or a transport: every accepted downlink is laundered
+// to pki_encrypted=false + TRANSPORT_MQTT + via_mqtt=true. pki_encrypted grants admin-level trust
+// downstream, so a regression here is remote privilege escalation.
+void test_receiveLaundersPkiAndTransportFields(void)
+{
+    meshtastic_MeshPacket p = decoded;
+    p.pki_encrypted = true;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    const meshtastic_MeshPacket &r = mockRouter->packets_.front();
+    TEST_ASSERT_FALSE(r.pki_encrypted);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT, r.transport_mechanism);
+    TEST_ASSERT_TRUE(r.via_mqtt);
+}
+
+// PKI-topic envelopes are dropped when no channel has downlink enabled, even when addressed to us.
+void test_receiveDropsPkiTopicWhenNoChannelHasDownlink(void)
+{
+    channelFile.channels[0].settings.downlink_enabled = false;
+    meshtastic_MeshPacket e = encrypted;
+    e.to = myNodeInfo.my_node_num;
+
+    unitTest->publish(&e, "!87654321", "PKI");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// Any single downlink-enabled channel (here only a secondary) is enough to admit PKI envelopes.
+void test_receiveAcceptsPkiTopicWithOnlySecondaryDownlink(void)
+{
+    channelFile.channels[0].settings.downlink_enabled = false;
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "second", .downlink_enabled = true},
+        .role = meshtastic_Channel_Role_SECONDARY,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+    meshtastic_MeshPacket e = encrypted;
+    e.to = myNodeInfo.my_node_num;
+
+    unitTest->publish(&e, "!87654321", "PKI");
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+}
+
+// An encrypted PKI envelope not addressed to us needs both endpoints known with user info.
+void test_receiveDropsPkiNotToUsWithUnknownEndpoints(void)
+{
+    unitTest->publish(&encrypted, "!87654321", "PKI"); // to=2; neither endpoint has user info
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+void test_receiveAcceptsPkiNotToUsWithKnownEndpoints(void)
+{
+    // MockNodeDB serves the same node for every NodeNum, so this marks both endpoints known.
+    mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
+
+    unitTest->publish(&encrypted, "!87654321", "PKI");
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    const meshtastic_MeshPacket &r = mockRouter->packets_.front();
+    TEST_ASSERT_TRUE(r.via_mqtt);
+    TEST_ASSERT_FALSE(r.pki_encrypted); // laundered even on the PKI topic
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT, r.transport_mechanism);
+}
+
+// The endpoint gate is an AND: knowing only the sender (from=1) while the receiver (to=2) is
+// unknown must still drop. Distinguishes && from || in the MQTT.cpp acceptance rule.
+void test_receiveDropsPkiNotToUsWithOnlySenderKnown(void)
+{
+    mockNodeDB->nodes_[1].bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK; // only from=1 known; to=2 stays unknown
+
+    unitTest->publish(&encrypted, "!87654321", "PKI");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// An envelope naming a channel we do not have is dropped, even though getByName falls back to
+// the primary channel - the case-sensitive global-id recheck must refuse the substitution.
+void test_receiveDropsUnknownChannelName(void)
+{
+    unitTest->publish(&decoded, "!87654321", "nope");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// getByName matches case-insensitively, but the downlink gate compares case-sensitively; a
+// mixed-case channel_id must not ride the primary channel's downlink permission.
+void test_receiveDropsCaseMismatchedChannelName(void)
+{
+    unitTest->publish(&decoded, "!87654321", "TEST");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A validly-decoding envelope missing channel_id is rejected before any gate runs.
+void test_receiveRejectsEnvelopeWithoutChannelId(void)
+{
+    const meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(&decoded),
+                                            .channel_id = NULL,
+                                            .gateway_id = const_cast<char *>("!87654321")};
+    uint8_t bytes[256];
+    const size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    unitTest->deliverRaw("msh/2/e/test/!87654321", bytes, numBytes);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// Every strict prefix of a valid envelope must be rejected: either the truncated decode fails, or
+// it succeeds with gateway_id (the last-encoded field) missing and the NULL check refuses it.
+void test_receiveRejectsTruncatedEnvelope(void)
+{
+    const meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(&decoded),
+                                            .channel_id = const_cast<char *>("test"),
+                                            .gateway_id = const_cast<char *>("!87654321")};
+    uint8_t bytes[256];
+    const size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    TEST_ASSERT_TRUE(numBytes > 0);
+
+    for (size_t n = 1; n < numBytes; n++)
+        unitTest->deliverRaw("msh/2/e/test/!87654321", bytes, n);
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
@@ -1295,6 +1522,22 @@ void setup()
 #endif
     RUN_TEST(test_receiveIgnoresUnexpectedFields);
     RUN_TEST(test_receiveIgnoresInvalidHopLimit);
+    RUN_TEST(test_receiveIgnoresInvalidHopStart);
+    RUN_TEST(test_receiveDropsWhenIgnoreMqttSet);
+    RUN_TEST(test_receiveDropsSenderInIgnoreIncomingList);
+    RUN_TEST(test_receiveAcceptsSenderNotInIgnoreIncomingList);
+    RUN_TEST(test_receiveDropsNodeDbIgnoredSender);
+    RUN_TEST(test_receiveDropsBroadcastSource);
+    RUN_TEST(test_receiveLaundersPkiAndTransportFields);
+    RUN_TEST(test_receiveDropsPkiTopicWhenNoChannelHasDownlink);
+    RUN_TEST(test_receiveAcceptsPkiTopicWithOnlySecondaryDownlink);
+    RUN_TEST(test_receiveDropsPkiNotToUsWithUnknownEndpoints);
+    RUN_TEST(test_receiveAcceptsPkiNotToUsWithKnownEndpoints);
+    RUN_TEST(test_receiveDropsPkiNotToUsWithOnlySenderKnown);
+    RUN_TEST(test_receiveDropsUnknownChannelName);
+    RUN_TEST(test_receiveDropsCaseMismatchedChannelName);
+    RUN_TEST(test_receiveRejectsEnvelopeWithoutChannelId);
+    RUN_TEST(test_receiveRejectsTruncatedEnvelope);
     RUN_TEST(test_receiveFuzzServiceEnvelope);
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
