@@ -809,6 +809,18 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 static uint32_t adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
 static uint32_t adminKeyFallbackRefillMs = 0;
 
+#ifdef PIO_UNIT_TESTING
+// The refill stamp is a timestamp, so it is only meaningful against the clock that produced it.
+// A suite that swaps between the real and the virtual clock leaves a stamp from the other
+// timebase, and the next unsigned subtraction reads as a near-infinite gap: the bucket silently
+// refills to full. Re-stamp when the clock changes.
+void resetAdminKeyFallbackBudget()
+{
+    adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+    adminKeyFallbackRefillMs = Time::getMillis();
+}
+#endif
+
 static bool adminKeyFallbackAllowed()
 {
     bool haveAdminKey = false;
@@ -821,7 +833,8 @@ static bool adminKeyFallbackAllowed()
     if (!haveAdminKey)
         return false; // nothing to try, so do not spend a token
 
-    uint32_t now = millis();
+    // Injectable clock so the budget can be tested without sleeping, and without racing a slow host.
+    uint32_t now = Time::getMillis();
     if (adminKeyFallbackRefillMs == 0)
         adminKeyFallbackRefillMs = now;
     uint32_t elapsed = now - adminKeyFallbackRefillMs;

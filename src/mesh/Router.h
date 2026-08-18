@@ -265,6 +265,8 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p);
 #ifdef PIO_UNIT_TESTING
 uint32_t routingAuthEvaluationCount();
 void resetRoutingAuthEvaluationCount();
+/** Refill the admin-key fallback budget and re-stamp it against the clock in use right now. */
+void resetAdminKeyFallbackBudget();
 #endif
 
 /** Return 0 for success or a Routing_Error code for failure

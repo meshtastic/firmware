@@ -42,6 +42,7 @@ class ScanI2C
         QMC5883L,
         HMC5883L,
         MMC5983MA,
+        QMC6309,
         PMSA003I,
         QMA6100P,
         MPU6050,
@@ -105,6 +106,7 @@ class ScanI2C
         IIS2MDCTR,
         ISM330DHCX,
         SPA06,
+        STC8HKB, // STC8H companion-MCU keypad (ThinkNode-M9)
         DS248X,
         HM330X
     } DeviceType;
