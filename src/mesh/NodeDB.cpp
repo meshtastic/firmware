@@ -2229,6 +2229,29 @@ void NodeDB::nodeDBSelfCare()
     }
 }
 
+bool NodeDB::recoverOwnerFromNodeDB()
+{
+    // Pre-PKI / keyless builds keep the old behaviour: probe the provisional number.
+    const NodeNum selfNum = (config.has_security && config.security.public_key.size == 32)
+                                ? crc32Buffer(config.security.public_key.bytes, config.security.public_key.size)
+                                : getNodeNum();
+    const meshtastic_NodeInfoLite *us = getMeshNode(selfNum);
+    if (!nodeInfoLiteHasUser(us))
+        return false;
+
+    LOG_WARN("Restore owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for node 0x%08x", us->num);
+    // owner.long_name (40) is wider than the lite source (25); bound by the source
+    memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
+    owner.long_name[sizeof(us->long_name) - 1] = '\0';
+    clampLongName(owner.long_name); // recovery runs after loadFromDisk's clamp; keep the cap invariant
+    memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
+    owner.short_name[sizeof(owner.short_name) - 1] = '\0';
+    owner.is_licensed = nodeInfoLiteIsLicensed(us);
+    owner.has_is_unmessagable = nodeInfoLiteHasIsUnmessagable(us);
+    owner.is_unmessagable = nodeInfoLiteIsUnmessagable(us);
+    return true;
+}
+
 void NodeDB::loadFromDisk()
 {
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
@@ -2562,28 +2585,9 @@ void NodeDB::loadFromDisk()
 
     // config.security is final now, so the key-derived NodeNum is derivable. Matching on
     // identity means a nodes.proto without us is a clean miss, not a wrong-owner restore.
-    if (ownerRecoveryPending) {
-        // Pre-PKI / keyless builds keep the old behaviour: probe the provisional number.
-        const NodeNum selfNum = (config.has_security && config.security.public_key.size == 32)
-                                    ? crc32Buffer(config.security.public_key.bytes, config.security.public_key.size)
-                                    : getNodeNum();
-        const meshtastic_NodeInfoLite *us = getMeshNode(selfNum);
-        if (nodeInfoLiteHasUser(us)) {
-            LOG_WARN("Restore owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for node 0x%08x",
-                     us->num);
-            // owner.long_name (40) is wider than the lite source (25); bound by the source
-            memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
-            owner.long_name[sizeof(us->long_name) - 1] = '\0';
-            clampLongName(owner.long_name); // recovery now runs past the clamp above; keep the cap invariant
-            memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
-            owner.short_name[sizeof(owner.short_name) - 1] = '\0';
-            owner.is_licensed = nodeInfoLiteIsLicensed(us);
-            owner.has_is_unmessagable = nodeInfoLiteHasIsUnmessagable(us);
-            owner.is_unmessagable = nodeInfoLiteIsUnmessagable(us);
-
-            // Save the recovered owner to device state on disk
-            saveToDisk(SEGMENT_DEVICESTATE);
-        }
+    if (ownerRecoveryPending && recoverOwnerFromNodeDB()) {
+        // Save the recovered owner to device state on disk
+        saveToDisk(SEGMENT_DEVICESTATE);
     }
 
     // Make sure we load hard coded admin keys even when the configuration file has none.

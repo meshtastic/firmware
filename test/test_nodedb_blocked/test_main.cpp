@@ -1,5 +1,5 @@
-// Tests for the NodeDB hot-store migration and favourite/ignored (blocked)
-// retention paths - src/mesh/NodeDB.cpp.
+// Tests for the NodeDB hot-store migration, favourite/ignored (blocked)
+// retention and owner-recovery paths - src/mesh/NodeDB.cpp.
 #include "MeshTypes.h" // BEFORE TestUtil.h - provides WARM_NODE_COUNT / MAX_NUM_NODES via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -14,6 +14,7 @@
 #if WARM_NODE_COUNT > 0
 
 #include "mesh/NodeDB.h"
+#include <ErriezCRC32.h>
 #include <cstring>
 
 // Subclass shim: exposes the private maintenance paths (via the friend
@@ -25,6 +26,7 @@ class NodeDBTestShim : public NodeDB
   public:
     void runDemote() { demoteOldestHotNodesToWarm(); }
     void runCleanup() { cleanupMeshDB(); }
+    bool runOwnerRecovery() { return recoverOwnerFromNodeDB(); }
 
     // Read back the role + protected category the warm tier cached for a node.
     bool warmMeta(NodeNum n, uint8_t &role, uint8_t &prot) { return warmStore.lookupMeta(n, role, prot); }
@@ -70,6 +72,41 @@ bool warmHasKey(NodeNum n)
 {
     meshtastic_NodeInfoLite_public_key_t k = {0, {0}};
     return db->copyPublicKey(n, k) && k.size == 32;
+}
+
+// Owner-recovery fixtures. The provisional number is the macaddr-derived one
+// pickNewNodeNum() leaves behind; our real row is stored under crc32(public_key).
+const NodeNum provisionalNum = 0x1A2B3C4D;
+
+NodeNum setSecurityKey(uint8_t fill)
+{
+    config.has_security = true;
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, fill, 32);
+    return crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+}
+
+void pushOwnerRow(NodeNum num, const char *longName, const char *shortName, bool licensed, bool unmessagable)
+{
+    db->push(num, /*last_heard=*/100, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true, /*withKey=*/false);
+    meshtastic_NodeInfoLite *n = db->getMeshNode(num);
+    strncpy(n->long_name, longName, sizeof(n->long_name) - 1);
+    strncpy(n->short_name, shortName, sizeof(n->short_name) - 1);
+    nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_LICENSED_MASK, licensed);
+    nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK, true);
+    nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK, unmessagable);
+}
+
+// The state a discarded devicestate leaves behind: factory owner, provisional
+// number, and no security config yet because config has not been read.
+void installFactoryOwner()
+{
+    myNodeInfo.my_node_num = provisionalNum;
+    memset(&owner, 0, sizeof(owner));
+    strcpy(owner.long_name, "Meshtastic 3c4d");
+    strcpy(owner.short_name, "3c4d");
+    config.has_security = false;
+    config.security.public_key.size = 0;
 }
 
 } // namespace
@@ -258,6 +295,58 @@ static void test_removeNodeByNum_presentNodeOnFullDb(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // survivors kept
 }
 
+// Owner recovery after a discarded devicestate reads our own row, which lives under
+// crc32(public_key) - not under the provisional number pickNewNodeNum() just handed us.
+static void test_ownerRecovery_restoresFromKeyDerivedRow(void)
+{
+    installFactoryOwner();
+    const NodeNum selfNum = setSecurityKey(0xA5);
+    TEST_ASSERT_NOT_EQUAL(provisionalNum, selfNum);
+    pushOwnerRow(selfNum, "Base Camp Repeater", "BCMP", /*licensed=*/true, /*unmessagable=*/true);
+
+    TEST_ASSERT_TRUE(db->runOwnerRecovery());
+
+    TEST_ASSERT_EQUAL_STRING("Base Camp Repeater", owner.long_name);
+    TEST_ASSERT_EQUAL_STRING("BCMP", owner.short_name);
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    TEST_ASSERT_TRUE(owner.has_is_unmessagable);
+    TEST_ASSERT_TRUE(owner.is_unmessagable);
+}
+
+// A node DB that does not contain us is a clean miss: the factory owner stands, even
+// though a foreign row happens to sit on the provisional number.
+static void test_ownerRecovery_missKeepsFactoryOwner(void)
+{
+    installFactoryOwner();
+    const NodeNum selfNum = setSecurityKey(0x5A);
+    pushOwnerRow(provisionalNum, "Someone Elses Node", "ELSE", /*licensed=*/true, /*unmessagable=*/true);
+    TEST_ASSERT_NULL(db->getMeshNode(selfNum)); // our own row really is absent
+
+    TEST_ASSERT_FALSE(db->runOwnerRecovery());
+
+    TEST_ASSERT_EQUAL_STRING("Meshtastic 3c4d", owner.long_name);
+    TEST_ASSERT_EQUAL_STRING("3c4d", owner.short_name);
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    TEST_ASSERT_FALSE(owner.has_is_unmessagable);
+    TEST_ASSERT_FALSE(owner.is_unmessagable);
+}
+
+// Keyless / pre-PKI builds have no key to derive from, so recovery keeps probing the
+// provisional number - which on those builds is our identity.
+static void test_ownerRecovery_keylessUsesProvisionalNum(void)
+{
+    installFactoryOwner(); // leaves config.has_security false
+    pushOwnerRow(provisionalNum, "Keyless Legacy Node", "KLGY", /*licensed=*/false, /*unmessagable=*/false);
+
+    TEST_ASSERT_TRUE(db->runOwnerRecovery());
+
+    TEST_ASSERT_EQUAL_STRING("Keyless Legacy Node", owner.long_name);
+    TEST_ASSERT_EQUAL_STRING("KLGY", owner.short_name);
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    TEST_ASSERT_TRUE(owner.has_is_unmessagable); // the row carries the flag explicitly
+    TEST_ASSERT_FALSE(owner.is_unmessagable);
+}
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -273,6 +362,9 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
     RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
     RUN_TEST(test_removeNodeByNum_presentNodeOnFullDb);
+    RUN_TEST(test_ownerRecovery_restoresFromKeyDerivedRow);
+    RUN_TEST(test_ownerRecovery_missKeepsFactoryOwner);
+    RUN_TEST(test_ownerRecovery_keylessUsesProvisionalNum);
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
