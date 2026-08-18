@@ -104,5 +104,7 @@
 #define MODEM_DTR 8
 #define MODEM_RX 10
 #define MODEM_TX 11
+#define HAS_A7682_AUDIO 1
+#define A7682_AUDIO_DEBUG_FILESYSTEM 1 // Temporary: list C:/ files at modem startup
 
 #define HAS_PHYSICAL_KEYBOARD 1

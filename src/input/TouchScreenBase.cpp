@@ -1,5 +1,8 @@
 #include "TouchScreenBase.h"
 #include "configuration.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#include "input/HapticFeedback.h"
+#endif
 #include "main.h"
 
 #if defined(RAK14014) && !defined(MESHTASTIC_EXCLUDE_CANNEDMESSAGES)
@@ -319,7 +322,12 @@ int32_t TouchScreenBase::runOnce()
 
 void TouchScreenBase::hapticFeedback()
 {
-#if !defined(T_DECK_MAX) && !defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+    if (::hapticFeedback)
+        ::hapticFeedback->play(HapticEffect::NAVIGATION);
+#endif
+#else
 #ifdef T_WATCH_S3
     drv.setWaveform(0, 75);
     drv.setWaveform(1, 0); // end waveform

@@ -16,6 +16,13 @@
 #include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
+    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+#include "input/HapticFeedback.h"
+#endif
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+#include "audio/A7682Audio.h"
+#endif
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "main.h"
@@ -1313,6 +1320,10 @@ void menuHandler::systemBaseMenu()
     enum optionsNumbers {
         Back,
         Notifications,
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+        MessageVolume,
+#endif
+        VibrationToggle,
         ScreenOptions,
         Bluetooth,
         WiFiToggle,
@@ -1326,6 +1337,17 @@ void menuHandler::systemBaseMenu()
 
     optionsArray[options] = "Notifications";
     optionsEnumArray[options++] = Notifications;
+
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+    optionsArray[options] = "Message Volume";
+    optionsEnumArray[options++] = MessageVolume;
+#endif
+
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
+    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+    optionsArray[options] = "Vibration Toggle";
+    optionsEnumArray[options++] = VibrationToggle;
+#endif
 
     optionsArray[options] = "Display Options";
     optionsEnumArray[options++] = ScreenOptions;
@@ -1365,6 +1387,17 @@ void menuHandler::systemBaseMenu()
         if (selected == Notifications) {
             menuHandler::menuQueue = menuHandler::BuzzerModeMenuPicker;
             screen->runNow();
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+        } else if (selected == MessageVolume) {
+            menuHandler::menuQueue = menuHandler::A7682AudioVolumeMenu;
+            screen->runNow();
+#endif
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
+    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+        } else if (selected == VibrationToggle) {
+            menuHandler::menuQueue = menuHandler::HapticToggleMenu;
+            screen->runNow();
+#endif
         } else if (selected == ScreenOptions) {
             menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
             screen->runNow();
@@ -2252,6 +2285,43 @@ void menuHandler::BuzzerModeMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+void menuHandler::a7682AudioVolumeMenu()
+{
+    static const char *optionsArray[] = {"Back", "0", "1", "2", "3", "4", "5", "6", "7"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Message Volume";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = static_cast<uint8_t>(sizeof(optionsArray) / sizeof(optionsArray[0]));
+    bannerOptions.InitialSelected = a7682Audio ? static_cast<int>(a7682Audio->getVolume()) + 1 : 1;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected >= 1 && selected <= A7682_AUDIO_MAX_VOLUME + 1 && a7682Audio)
+            a7682Audio->setVolume(static_cast<uint8_t>(selected - 1));
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+#endif
+
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
+    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+void menuHandler::hapticToggleMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Vibration";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.InitialSelected = hapticFeedback && hapticFeedback->isEnabled() ? 1 : 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1 && hapticFeedback)
+            hapticFeedback->setEnabled(true);
+        else if (selected == 2 && hapticFeedback)
+            hapticFeedback->setEnabled(false);
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+#endif
+
 void menuHandler::BrightnessPickerMenu()
 {
     static const char *optionsArray[] = {"Back", "Low", "Medium", "High"};
@@ -2959,6 +3029,17 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case BuzzerModeMenuPicker:
         BuzzerModeMenu();
         break;
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+    case A7682AudioVolumeMenu:
+        a7682AudioVolumeMenu();
+        break;
+#endif
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
+    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+    case HapticToggleMenu:
+        hapticToggleMenu();
+        break;
+#endif
     case MuiPicker:
         switchToMUIMenu();
         break;

@@ -2,6 +2,9 @@
 
 #ifdef T_DECK_PRO
 
+#if defined(_VARIANT_T_DECK_PRO_V1_1) && defined(HAS_A7682_AUDIO)
+#include "audio/A7682Audio.h"
+#endif
 #include "input/TouchScreenImpl1.h"
 #include <CSE_CST328.h>
 #include <Wire.h>
@@ -226,4 +229,12 @@ void lateInitVariant()
     touchScreenImpl1 = new TouchScreenImpl1(EINK_WIDTH, EINK_HEIGHT, readTouch);
     touchScreenImpl1->init();
 }
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1) && defined(HAS_A7682_AUDIO)
+void variant_shutdown()
+{
+    if (a7682Audio)
+        a7682Audio->shutdown();
+}
+#endif
 #endif
