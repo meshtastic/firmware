@@ -102,7 +102,10 @@ bool ButtonThread::initButton(const ButtonConfig &config)
 #endif
     userButton.setPressMs(_longPressTime);
 
-    if (screen) {
+    // A screen makes the single click feel sluggish unless the click window is short, but a 20ms
+    // window closes long before a second click can land. Boards that bind a double or multi click
+    // need the full window, screen or not, otherwise those events never fire.
+    if (screen && _doublePress == INPUT_BROKER_NONE && _triplePress == INPUT_BROKER_NONE) {
         userButton.setClickMs(20);
     } else {
         userButton.setClickMs(BUTTON_CLICK_MS);
@@ -225,15 +228,8 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
-        case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
+        case BUTTON_EVENT_DOUBLE_PRESSED: { // only fires on boards that bind ButtonConfig::doublePress
             LOG_INFO("Double press");
-#if defined(ELECROW_ThinkNode_M8)
-            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
-                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED;
-            else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
-                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
-            service->reloadConfig(SEGMENT_CONFIG);
-#endif
             // Reset combination tracking
             waitingForLongPress = false;
 

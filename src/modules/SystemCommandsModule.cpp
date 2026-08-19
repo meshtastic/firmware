@@ -86,18 +86,31 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     }
 
     switch (event->inputEvent) {
-        // GPS
+        // GPS, on its own or together with the buzzer
     case INPUT_BROKER_GPS_TOGGLE:
+    case INPUT_BROKER_PRIVACY_TOGGLE:
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
-            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
-                config.position.fixed_position == false) {
+            const bool withBuzzer = event->inputEvent == INPUT_BROKER_PRIVACY_TOGGLE;
+            const bool wasEnabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+            if (wasEnabled && config.position.fixed_position == false) {
                 nodeDB->clearLocalPosition();
                 nodeDB->saveToDisk();
             }
+            // Unmute ahead of the toggle so its confirmation beep is audible; the matching mute happens
+            // after it, so the "GPS off" beep still plays on the way down.
+            if (withBuzzer && !wasEnabled)
+                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
             gps->toggleGpsMode();
-            const char *msg =
-                (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? "GPS Enabled" : "GPS Disabled";
+            const bool nowEnabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+            if (withBuzzer) {
+                // Follow whatever the GPS settled on - toggleGpsMode() is a no-op on GpsMode_NOT_PRESENT.
+                config.device.buzzer_mode = nowEnabled ? meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
+                                                       : meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED;
+                nodeDB->saveToDisk(SEGMENT_CONFIG);
+            }
+            const char *msg = withBuzzer ? (nowEnabled ? "GPS + Buzzer\nEnabled" : "GPS + Buzzer\nDisabled")
+                                         : (nowEnabled ? "GPS Enabled" : "GPS Disabled");
             IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner(msg, 3000);)
         }
 #endif
