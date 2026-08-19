@@ -16,7 +16,7 @@
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
-#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
 #if HAS_TRAFFIC_MANAGEMENT
@@ -104,7 +104,7 @@ bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p)
 #endif
 }
 
-#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
 // A remote node's unicast position request to us. Only the reply is generated for these; the packet
 // itself is still dropped by the caller.
 static bool isEventChannelPositionRequestForUs(const meshtastic_MeshPacket *p)
@@ -1549,8 +1549,12 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             // channel's precision, so "request position" from a node that only shares the event channel
             // with us resolves where positions actually live. The requester's own coordinates are
             // still dropped: not stored, not forwarded to the phone, not relayed, not published.
+            // Builds without the position module (MESHTASTIC_EXCLUDE_GPS, e.g. repeaters) have nothing
+            // to answer with, and neither the symbol nor the global exists to link against.
+#if !MESHTASTIC_EXCLUDE_GPS
             if (isEventChannelPositionRequestForUs(p) && positionModule)
                 positionModule->replyOnPositionChannel(*p);
+#endif
             LOG_DEBUG("Drop coordinate packet on event (everyone) channel");
             cancelSending(p->from, p->id);
             skipHandle = true;
