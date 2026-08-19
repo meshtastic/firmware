@@ -4341,10 +4341,13 @@ bool NodeDB::createNewIdentity()
 
     myNodeInfo.my_node_num = newNodeNum;
 
+    // The number has moved, so the caller must persist it whatever happens next. Returning false here
+    // would leave the new key saved against the old number, which is the break this exists to prevent.
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    if (!info)
-        return false;
-    TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    if (info)
+        TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    else
+        LOG_ERROR("No room for our own node 0x%08x, identity moved without a self record", newNodeNum);
 
     return true;
 }
