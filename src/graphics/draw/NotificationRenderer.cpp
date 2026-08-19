@@ -7,11 +7,18 @@
 #include "UIRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#include "graphics/TouchLayout.h"
+#endif
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#if defined(_VARIANT_T_DECK_MAX)
+#include "MenuHandler.h"
+#include "platform/extra_variants/t_deck_max/TDeckMaxTouch.h"
+#endif
 #include "mesh/Throttle.h"
 #if HAS_BUTTON
 #include "input/ButtonThread.h"
@@ -45,6 +52,9 @@ namespace graphics
 int bannerSignalBars = -1;
 InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+bool NotificationRenderer::touchSelectionPending = false;
+#endif
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
 uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are selectable options
@@ -231,6 +241,9 @@ void NotificationRenderer::resetBanner()
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
     curSelected = 0;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    touchSelectionPending = false;
+#endif
     alertBannerOptions = 0; // last x lines are selectable options
     optionsArrayPtr = nullptr;
     optionsEnumPtr = nullptr;
@@ -248,6 +261,73 @@ void NotificationRenderer::resetBanner()
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
     }
 }
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+bool NotificationRenderer::handleTouchTarget(uint32_t value)
+{
+    if (alertBannerOptions == 0 || value >= alertBannerOptions)
+        return false;
+
+    meshtastic_NodeInfoLite *node = nullptr;
+    if (current_notification_type == notificationTypeEnum::node_picker) {
+        node = nodeDB->getMeshNodeByIndex(value + 1);
+        if (!node)
+            return false;
+    }
+
+    const int8_t requestedSelection = static_cast<int8_t>(value);
+    if (!touchSelectionPending || curSelected != requestedSelection) {
+        curSelected = requestedSelection;
+        touchSelectionPending = true;
+        return true;
+    }
+
+    if (node) {
+        if (alertBannerCallback)
+            alertBannerCallback(node->num);
+    } else if (optionsEnumPtr != nullptr) {
+        if (alertBannerCallback)
+            alertBannerCallback(optionsEnumPtr[value]);
+    } else if (alertBannerCallback) {
+        alertBannerCallback(static_cast<int>(value));
+    }
+
+    resetBanner();
+    return true;
+}
+#endif
+
+#if defined(_VARIANT_T_DECK_MAX)
+bool NotificationRenderer::handleMaxTouchKeyRight(const InputEvent *event)
+{
+    if (event == nullptr || event->inputEvent != INPUT_BROKER_RIGHT ||
+        !t_deck_max::isMaxTouchKeySource(event->source))
+        return false;
+
+    if (current_notification_type == notificationTypeEnum::text_input ||
+        current_notification_type == notificationTypeEnum::number_picker ||
+        current_notification_type == notificationTypeEnum::hex_picker ||
+        current_notification_type == notificationTypeEnum::alphanumeric_picker) {
+        return false;
+    }
+
+    if (current_notification_type == notificationTypeEnum::node_picker) {
+        resetBanner();
+        menuHandler::menuQueue = menuHandler::NodeBaseMenu;
+        return true;
+    }
+
+    if (alertBannerOptions == 0 || optionsArrayPtr == nullptr ||
+        !t_deck_max::isSafeMaxMenuBackLabel(optionsArrayPtr[0]))
+        return false;
+
+    if (alertBannerCallback) {
+        alertBannerCallback(optionsEnumPtr != nullptr ? optionsEnumPtr[0] : 0);
+    }
+    resetBanner();
+    return true;
+}
+#endif
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
@@ -633,8 +713,20 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
 
     uint16_t totalLines = lineCount + alertBannerOptions;
     uint16_t screenHeight = display->height();
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    constexpr uint8_t menuTitleHeight = 25;
+    constexpr uint8_t menuRowHeight = 30;
+    constexpr uint8_t menuBottomPadding = 7;
+    constexpr uint8_t menuScreenMargin = 4;
+    const uint8_t maxOptionRows =
+        std::max<uint8_t>(1, (screenHeight > menuTitleHeight + menuBottomPadding + menuScreenMargin * 2
+                                   ? (screenHeight - menuTitleHeight - menuBottomPadding - menuScreenMargin * 2) / menuRowHeight
+                                   : 1));
+    uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, static_cast<uint8_t>(1 + maxOptionRows));
+#else
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
     uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
+#endif
     uint8_t linesShown = lineCount;
     const char *linePointers[visibleTotalLines + 1] = {0}; // this is sort of a dynamic allocation
 
@@ -855,6 +947,10 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
                                                uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth)
 {
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (screen)
+        screen->markTouchFrameMapped();
+#endif
 
     bool is_picker = false;
     uint16_t lineCount = 0;
@@ -921,6 +1017,154 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         }
         lineCount++;
     }
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    // Keep the legacy menu callbacks and touch values, but give T-Deck Pro menus
+    // a self-contained Field console-style card so the frame underneath cannot show through.
+    const bool isNodePicker = current_notification_type == notificationTypeEnum::node_picker;
+    if (alertBannerOptions > 0 && (optionsArrayPtr != nullptr || isNodePicker) && lineCount > 0) {
+        constexpr uint16_t menuWidth = 218;
+        constexpr uint16_t menuTitleHeight = 25;
+        constexpr uint16_t menuRowHeight = 30;
+        constexpr uint16_t menuMessageRowHeight = 18;
+        constexpr uint16_t menuBottomPadding = 7;
+        constexpr uint16_t menuScreenMargin = 4;
+
+        const uint16_t screenWidth = display->getWidth();
+        const uint16_t screenHeight = display->getHeight();
+        const uint16_t boxWidth = std::min<uint16_t>(menuWidth, screenWidth > 12 ? screenWidth - 12 : screenWidth);
+        const uint16_t menuOptionStartLine =
+            (totalLines >= alertBannerOptions) ? totalLines - alertBannerOptions : totalLines;
+        const uint16_t messageLineCount = std::min<uint16_t>(menuOptionStartLine, lineCount);
+        const uint16_t messageRows = messageLineCount > 0 ? messageLineCount - 1 : 0;
+        const int fixedHeight = menuTitleHeight + messageRows * menuMessageRowHeight + menuBottomPadding;
+        const int availableHeight = std::max(1, static_cast<int>(screenHeight) - menuScreenMargin * 2);
+        int maxOptionRows = (availableHeight - fixedHeight) / menuRowHeight;
+        if (maxOptionRows < 1)
+            maxOptionRows = 1;
+
+        const uint16_t visibleOptionCount =
+            std::min<uint16_t>(alertBannerOptions, static_cast<uint16_t>(maxOptionRows));
+        const uint16_t boxHeight = static_cast<uint16_t>(fixedHeight + visibleOptionCount * menuRowHeight);
+        const int16_t boxLeft = static_cast<int16_t>((screenWidth - boxWidth) / 2);
+        int16_t boxTop = static_cast<int16_t>((static_cast<int>(screenHeight) - boxHeight) / 2);
+        const int16_t minBoxTop = static_cast<int16_t>(menuScreenMargin / 2);
+        const int16_t maxBoxTop = static_cast<int16_t>(screenHeight > boxHeight + minBoxTop
+                                                            ? screenHeight - boxHeight - minBoxTop
+                                                            : minBoxTop);
+        if (boxTop < minBoxTop)
+            boxTop = minBoxTop;
+        if (boxTop > maxBoxTop)
+            boxTop = maxBoxTop;
+
+        // E-Ink color constants are inverted by the legacy display layer:
+        // BLACK paints the paper and WHITE paints the ink.
+        display->setColor(BLACK);
+        display->fillRect(boxLeft, boxTop, boxWidth, boxHeight);
+        display->setColor(WHITE);
+        display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+
+        char headerBuffer[64] = {0};
+        const uint16_t headerLength = std::min<uint16_t>(lineLengths[0], sizeof(headerBuffer) - 1);
+        memcpy(headerBuffer, renderLines[0], headerLength);
+        headerBuffer[headerLength] = '\0';
+
+        display->setColor(WHITE);
+        display->fillRect(boxLeft + 1, boxTop + 1, boxWidth > 2 ? boxWidth - 2 : 1, menuTitleHeight - 1);
+        display->setColor(BLACK);
+        display->setFont(fontForBannerLine(lineFonts[0]));
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->drawString(boxLeft + 10, boxTop + 4, headerBuffer);
+
+        const int16_t optionsTop = static_cast<int16_t>(boxTop + menuTitleHeight + messageRows * menuMessageRowHeight);
+        for (uint16_t i = 1; i < messageLineCount; i++) {
+            char messageBuffer[64] = {0};
+            const uint16_t messageLength = std::min<uint16_t>(lineLengths[i], sizeof(messageBuffer) - 1);
+            memcpy(messageBuffer, renderLines[i], messageLength);
+            messageBuffer[messageLength] = '\0';
+            display->setColor(WHITE);
+            display->setFont(fontForBannerLine(lineFonts[i]));
+            display->drawString(boxLeft + 10, boxTop + menuTitleHeight + (i - 1) * menuMessageRowHeight + 2,
+                                messageBuffer);
+        }
+
+        const uint16_t maxFirstOption =
+            alertBannerOptions > visibleOptionCount ? alertBannerOptions - visibleOptionCount : 0;
+        uint16_t firstMenuOption = std::min<uint16_t>(firstOptionToShow, maxFirstOption);
+        if (!isNodePicker && curSelected >= 0) {
+            const uint16_t selected = static_cast<uint16_t>(curSelected);
+            if (selected < firstMenuOption) {
+                firstMenuOption = selected;
+            } else if (selected >= firstMenuOption + visibleOptionCount) {
+                firstMenuOption = selected - visibleOptionCount + 1;
+            }
+            if (firstMenuOption > maxFirstOption)
+                firstMenuOption = maxFirstOption;
+        }
+
+        display->setColor(WHITE);
+        display->drawLine(boxLeft + 7, optionsTop, boxLeft + boxWidth - 8, optionsTop);
+        for (uint16_t row = 0; row < visibleOptionCount; row++) {
+            const uint16_t optionIndex = firstMenuOption + row;
+            const int16_t rowY = static_cast<int16_t>(optionsTop + row * menuRowHeight + 1);
+            const bool selected = optionIndex == static_cast<uint16_t>(std::max<int8_t>(curSelected, 0));
+
+            if (selected) {
+                display->setColor(WHITE);
+                display->fillRect(boxLeft + 6, rowY, boxWidth > 12 ? boxWidth - 12 : 1, menuRowHeight - 2);
+            }
+
+            display->setFont(FONT_SMALL);
+            display->setColor(selected ? BLACK : WHITE);
+            if (!isNodePicker) {
+                char optionNumber[4] = {0};
+                snprintf(optionNumber, sizeof(optionNumber), "%02u", static_cast<unsigned>(optionIndex + 1));
+                display->drawString(boxLeft + 12, rowY + 5, optionNumber);
+            }
+
+            const uint16_t renderedOptionLine = static_cast<uint16_t>(messageLineCount + row);
+            const char *optionText = "";
+            if (isNodePicker) {
+                if (renderedOptionLine < lineCount)
+                    optionText = renderLines[renderedOptionLine];
+            } else if (optionsArrayPtr[optionIndex]) {
+                optionText = optionsArrayPtr[optionIndex];
+            }
+            char optionBuffer[64] = {0};
+            const int labelLeft = isNodePicker ? 12 : 45;
+            const int labelMaxWidth = std::max(1, static_cast<int>(boxWidth) - labelLeft - 13);
+            UIRenderer::truncateStringWithEmotes(display, optionText, optionBuffer, sizeof(optionBuffer), labelMaxWidth);
+            display->drawString(boxLeft + labelLeft, rowY + 5, optionBuffer);
+
+            if (screen) {
+                screen->addTouchTarget(touchExpandedRect(boxLeft + 4, rowY, boxWidth - 8, menuRowHeight, 2),
+                                       meshtastic::TouchTargetKind::NotificationOption, optionIndex,
+                                       INPUT_BROKER_NONE);
+            }
+
+            display->setColor(WHITE);
+            display->drawLine(boxLeft + 8, rowY + menuRowHeight - 1, boxLeft + boxWidth - 8,
+                              rowY + menuRowHeight - 1);
+        }
+
+        if (alertBannerOptions > visibleOptionCount) {
+            const int16_t scrollTrackX = static_cast<int16_t>(boxLeft + boxWidth - 5);
+            const int16_t scrollTrackY = static_cast<int16_t>(optionsTop + 3);
+            const int16_t scrollTrackHeight = static_cast<int16_t>(visibleOptionCount * menuRowHeight - 6);
+            const int16_t thumbHeight =
+                static_cast<int16_t>(std::max(8, (scrollTrackHeight * visibleOptionCount) / alertBannerOptions));
+            const int16_t scrollRange = std::max<int16_t>(0, scrollTrackHeight - thumbHeight);
+            const int16_t thumbY = static_cast<int16_t>(
+                scrollTrackY + (maxFirstOption > 0 ? (scrollRange * firstMenuOption) / maxFirstOption : 0));
+            display->setColor(WHITE);
+            display->drawRect(scrollTrackX, scrollTrackY, 3, scrollTrackHeight);
+            display->fillRect(scrollTrackX, thumbY, 3, thumbHeight);
+        }
+
+        display->setColor(BLACK);
+        return;
+    }
+#endif
+
     // count lines
 
     // Ensure box accounts for signal bars if present
@@ -1005,7 +1249,15 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
     // Draw Content
     int16_t lineY = boxTop + vPadding;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    const uint16_t optionStartLine = (alertBannerOptions > 0 && totalLines >= alertBannerOptions)
+                                         ? totalLines - alertBannerOptions
+                                         : totalLines;
+#endif
     for (int i = 0; i < visibleTotalLines; i++) {
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        const int16_t rowY = lineY;
+#endif
         display->setFont(fontForBannerLine(lineFonts[i]));
         int16_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
@@ -1108,8 +1360,22 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                     display->drawString(textX, lineY, lineBuffer);
                 }
             }
-            lineY += thisLineHeight;
         }
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        if (alertBannerOptions > 0 && i >= optionStartLine && screen) {
+            const uint32_t optionIndex = static_cast<uint32_t>(firstOptionToShow + i - optionStartLine);
+            if (optionIndex < alertBannerOptions) {
+                screen->addTouchTarget(touchExpandedRect(boxLeft, rowY, boxWidth, thisLineHeight, 2),
+                                       meshtastic::TouchTargetKind::NotificationOption, optionIndex,
+                                       INPUT_BROKER_NONE);
+            }
+        }
+        if (!(alertBannerOptions > 0 && i == 0))
+            lineY += thisLineHeight;
+#else
+        lineY += thisLineHeight;
+#endif
     }
 
     // Scroll Bar (Thicker, inside box, not over title)

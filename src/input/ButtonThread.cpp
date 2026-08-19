@@ -181,7 +181,7 @@ int32_t ButtonThread::runOnce()
 
     // new behavior
     if (btnEvent != BUTTON_EVENT_NONE) {
-        InputEvent evt;
+        InputEvent evt = {};
         evt.source = _originName;
         evt.kbchar = 0;
         evt.touchX = 0;
