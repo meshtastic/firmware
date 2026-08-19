@@ -821,7 +821,7 @@ class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Bus_SPI _bus_instance;
 
-    lgfx::ITouch *_touch_instance;
+    lgfx::ITouch *_touch_instance = nullptr;
 
   public:
     lgfx::Panel_Device *_panel_instance;
@@ -851,7 +851,7 @@ class LGFX : public lgfx::LGFX_Device
 #endif
         else {
             _panel_instance = new lgfx::Panel_NULL;
-            LOG_ERROR("Unknown display panel configured!");
+            LOG_ERROR("Unknown display panel configured");
         }
 
         auto buscfg = _bus_instance.config();
@@ -891,24 +891,28 @@ class LGFX : public lgfx::LGFX_Device
             } else if (portduino_config.touchscreenModule == ft5x06) {
                 _touch_instance = new lgfx::Touch_FT5x06;
             }
-            auto touch_cfg = _touch_instance->config();
+            // Not every module in the config enum has a branch above (gt911 is handled by the
+            // color-UI path in tftSetup.cpp), so the pointer can legitimately still be null here.
+            if (_touch_instance) {
+                auto touch_cfg = _touch_instance->config();
 
-            touch_cfg.pin_cs = portduino_config.touchscreenCS.pin;
-            touch_cfg.x_min = 0;
-            touch_cfg.x_max = portduino_config.displayHeight - 1;
-            touch_cfg.y_min = 0;
-            touch_cfg.y_max = portduino_config.displayWidth - 1;
-            touch_cfg.pin_int = portduino_config.touchscreenIRQ.pin;
-            touch_cfg.bus_shared = true;
-            touch_cfg.offset_rotation = portduino_config.touchscreenRotate;
-            if (portduino_config.touchscreenI2CAddr != -1) {
-                touch_cfg.i2c_addr = portduino_config.touchscreenI2CAddr;
-            } else {
-                touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
+                touch_cfg.pin_cs = portduino_config.touchscreenCS.pin;
+                touch_cfg.x_min = 0;
+                touch_cfg.x_max = portduino_config.displayHeight - 1;
+                touch_cfg.y_min = 0;
+                touch_cfg.y_max = portduino_config.displayWidth - 1;
+                touch_cfg.pin_int = portduino_config.touchscreenIRQ.pin;
+                touch_cfg.bus_shared = true;
+                touch_cfg.offset_rotation = portduino_config.touchscreenRotate;
+                if (portduino_config.touchscreenI2CAddr != -1) {
+                    touch_cfg.i2c_addr = portduino_config.touchscreenI2CAddr;
+                } else {
+                    touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
+                }
+
+                _touch_instance->config(touch_cfg);
+                _panel_instance->setTouch(_touch_instance);
             }
-
-            _touch_instance->config(touch_cfg);
-            _panel_instance->setTouch(_touch_instance);
         }
 #if defined(SDL_h_)
         if (portduino_config.displayPanel == x11) {
@@ -1187,7 +1191,7 @@ static inline uint16_t getThemeDefaultOffColor()
 
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
-    LOG_DEBUG("TFTDisplay!");
+    LOG_DEBUG("TFTDisplay");
 
 #ifdef TFT_BL
     GpioPin *p = new GpioHwPin(TFT_BL);
@@ -1441,7 +1445,7 @@ void TFTDisplay::sdlLoop()
     if (portduino_config.displayPanel == x11) {
         lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)tft->_panel_instance;
         if (sdl_panel_->loop() && !shuttingDown) {
-            LOG_WARN("Window Closed!");
+            LOG_WARN("Window Closed");
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
@@ -1625,9 +1629,9 @@ bool TFTDisplay::connect()
 #ifdef HACKADAY_COMMUNICATOR
     bool beginStatus = tft->begin();
     if (beginStatus)
-        LOG_DEBUG("TFT Success!");
+        LOG_DEBUG("TFT Success");
     else
-        LOG_ERROR("TFT Fail!");
+        LOG_ERROR("TFT Fail");
 #else
     tft->init();
 #endif
@@ -1656,7 +1660,7 @@ bool TFTDisplay::connect()
         this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth);
 
         if (!this->linePixelBuffer) {
-            LOG_ERROR("Not enough memory to create TFT line buffer\n");
+            LOG_ERROR("Not enough memory to create TFT line buffer");
             return false;
         }
         memaudit::add("display", sizeof(uint16_t) * displayWidth);
@@ -1665,7 +1669,7 @@ bool TFTDisplay::connect()
         this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
 
         if (!this->repaintChunkBuffer) {
-            LOG_ERROR("Not enough memory to create TFT repaint chunk buffer\n");
+            LOG_ERROR("Not enough memory to create TFT repaint chunk buffer");
             return false;
         }
         memaudit::add("display", sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);

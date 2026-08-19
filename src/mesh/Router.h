@@ -11,8 +11,22 @@
 #include "concurrency/OSThread.h"
 #include <memory>
 
+inline bool isCoordinatePortnum(meshtastic_PortNum portnum)
+{
+    return portnum == meshtastic_PortNum_POSITION_APP || portnum == meshtastic_PortNum_WAYPOINT_APP ||
+           portnum == meshtastic_PortNum_MAP_REPORT_APP;
+}
+
+bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p);
+/// Retarget a locally-originated coordinate packet that would be blocked on the event channel onto the
+/// position channel (see findPositionChannel). Returns true if p->channel was changed; false when the
+/// packet is not a blocked event coordinate packet or no channel carries positions.
+bool coerceCoordinatePacketToPositionChannel(meshtastic_MeshPacket *p);
+bool willUsePki(const meshtastic_MeshPacket *p);
+
 /// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
-/// Time::getMillis() placeholder with valid=false.
+/// Time::getUptimeSecs() placeholder with valid=false. Uptime seconds are monotonic, so
+/// reconciliation against a later epoch is exact at any age.
 struct RxTimeStamp {
     uint32_t time;
     bool valid;
@@ -126,6 +140,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
     /** Relay an opaque packet without admitting it to local routing/history state. */
     virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
+
+    /**
+     * Generate the implicit ACK for our own transmission overheard being rebroadcast, using header
+     * fields only (from/id). Split out of shouldFilterReceived() so it can also run when the auth
+     * gate short-circuits a packet we cannot decrypt (a PKI DM we originated is opaque to us, so
+     * without this the client never sees "Delivered to mesh" for DMs).
+     */
+    virtual void perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *) {}
 
     /**
      * Determine if hop_limit should be decremented for a relay operation.
@@ -247,6 +269,8 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p);
 #ifdef PIO_UNIT_TESTING
 uint32_t routingAuthEvaluationCount();
 void resetRoutingAuthEvaluationCount();
+/** Refill the admin-key fallback budget and re-stamp it against the clock in use right now. */
+void resetAdminKeyFallbackBudget();
 #endif
 
 /** Return 0 for success or a Routing_Error code for failure

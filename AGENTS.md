@@ -81,7 +81,19 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 - **Never edit or commit files under `src/mesh/generated/`.** They are regenerated from the [`meshtastic/protobufs`](https://github.com/meshtastic/protobufs) repo by the `update_protobufs.yml` workflow (entry point: `bin/regen-protos.sh`). Local edits will be overwritten and create merge conflicts. If a `.proto` change is needed, open a PR against the protobufs repo first, then let the workflow re-sync this repo.
 - **`confirm=True` on destructive MCP tools is a real gate, not a formality.** Don't bypass it via auto-approve settings.
 - **Keep code comments minimal - one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
-- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check - raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
+- **Documentation does not live in this repo. Do not add it here.** This repository holds firmware code. There is no `docs/` directory - the design documents that used to sit there were published to [meshtastic/meshtastic](https://github.com/meshtastic/meshtastic) in #11488 and the directory was deleted - and it must not come back. Do not create a `.md` file to describe a feature, a configuration surface, an API, a wire format, or a design; write it in the docs repo and link that PR instead. Never leave a write-up behind in the tree: no investigation notes, no mitigation plans, no migration checklists, no "how we got here" narrative, no summaries of what a change did. That is what the PR description and the commit message are for, and they are the only place it belongs. When you do write documentation upstream, write a technical manual, not a novel - what the feature does, the settings it exposes in the user's terms, and the exact API or protocol a client speaks. No story of the debugging journey, no rationale essays, no changelog prose. Concise and factual, as short as the facts allow.
+- **Never compare against `millis()` directly. Use `Throttle`.** `src/mesh/Throttle.h` is the sanctioned way to ask about time, and CI enforces this (`millis-deadline-check` in `.github/workflows/test_native.yml` fails the PR on a new `millis() >` / `< millis()` comparison).
+  - `Throttle::isWithinTimespanMs(lastMs, intervalMs)` - true while still inside the cooldown.
+  - `Throttle::hasElapsed(lastMs, intervalMs)` - its complement, true once the interval has passed (inclusive `>=`). Prefer this to spelling `!isWithinTimespanMs(...)`.
+  - `Throttle::execute(&lastMs, intervalMs, func)` - function-pointer form that updates the timestamp on fire.
+  - `Throttle::deadlinePassed(deadlineMs)` - for a stored absolute deadline that cannot be re-expressed as "interval since an event".
+  - `Throttle::deadlinePassedAt(nowMs, deadlineMs)` - the same test against a caller-supplied `now`, for a loop that snapshots the clock once and tests many deadlines. Snapshot from `Time::getMillis()`.
+
+  Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: the comparison inverts while the deadline sits on the far side of the 32-bit wrap, so the action fires immediately or blocks for roughly the interval it should have waited. All five helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), so all ~94 of its call sites are time-injectable and a native test can drive the wrap with `Time::setTestMillis()`.
+
+  **Sentinel hazard.** If a deadline variable also encodes "inactive" (`0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff`), test that sentinel _before_ the elapsed comparison - every such value is arithmetically far in the past, so a correct comparison fires on it immediately. Match the test to the sentinel in use: `if (deadline && Throttle::deadlinePassed(deadline))` covers the `0` family, `nagCycleCutoff` needs `deadline != UINT32_MAX` or a separate armed flag (`isNagging`).
+
+  Then decide which way the sentinel should fall - "inactive" does not always mean "suppress". At the GPS fix-hold site `fixHoldEnds == 0` means _no hold is in force_, which is exactly when one must be armed; guarding it with `fixHoldEnds != 0 &&` looks like this rule and inverts the site. See `fixHoldInForce()` in `src/gps/GPS.cpp` and `test/test_gps_fix_hold/`.
 
 ## Typical agent workflows
 
@@ -107,7 +119,16 @@ Sequence these; don't parallelize on the same port.
 4. On failure, open the run's `tests/report.html` → `Meshtastic debug` section for the firmware log tail + device state dump
 5. Iterate
 
-### Debugging a flaky test
+### Debugging a native unit-test failure
+
+1. **Run the full suite before believing a filtered one.** `-f` is not a gate: it removes the suites that _create_ the shared state a later suite trips over.
+2. **A signal name is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting `[ERRORED]`. Match it against the failure count first.
+3. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
+4. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
+5. **Reproduce a shuffled order.** `--shuffle` prints its seed and puts it on the `RESULT:` line; `--seed <n>` replays that exact order. One green seed proves nothing about order independence.
+6. **Exit 2 with "Linux-only" is the host, not the tests.** The harness needs bash 4+ and GNU coreutils/find and rejects any other `uname` rather than degrade quietly. `native-macos` is a build target, not a test host; elsewhere use `./bin/test-native-docker.sh`.
+
+### Debugging a flaky hardware test
 
 1. `/repro <test-node-id> [count]` - re-runs the test N times, diffs firmware logs between passes and failures
 2. If the first attempt always fails and the rest pass, that's a state-leak pattern → suggest `--force-bake` or a clean device state, don't chase the first failure
@@ -122,7 +143,7 @@ Sequence these; don't parallelize on the same port.
 | `src/modules/`                                                 | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                                                                                                |
 | `variants/`                                                    | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                                                                                                   |
 | `protobufs/`                                                   | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                                                                                                    |
-| `test/`                                                        | Firmware unit tests (19 suites; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                                                                                            |
+| `test/`                                                        | Firmware unit tests (count = the `test_*` dirs, detected on the fly; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                                                       |
 | [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) | Standalone MCP server + tiered pytest hardware harness (`unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/`) - registered here via `.mcp.json` |
 | `.github/prompts/`                                             | Copilot prompt bodies (firmware scaffolding: new module / sensor / variant)                                                                                                                    |
 | `.github/copilot-instructions.md`                              | **Primary agent instructions - read this**                                                                                                                                                     |

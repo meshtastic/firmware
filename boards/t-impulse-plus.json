@@ -7,7 +7,10 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_NRF52840_T_IMPULSE_PLUS -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [["0x239A", "0x8029"]],
+    "hwids": [
+      ["0x239A", "0x8029"],
+      ["0x239A", "0x00DA"]
+    ],
     "usb_product": "T-Impulse-Plus-nRF52840",
     "mcu": "nrf52840",
     "variant": "t-impulse-plus",
@@ -37,6 +40,8 @@
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
     "require_upload_port": true,
+    "wait_for_upload_port": true,
+    "use_1200bps_touch": true,
     "speed": 115200,
     "protocol": "nrfutil",
     "protocols": [

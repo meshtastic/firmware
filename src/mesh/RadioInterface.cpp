@@ -414,7 +414,7 @@ std::unique_ptr<RadioInterface> initLoRa()
     LOG_DEBUG("Activate %s radio on SPI port %s", portduino_config.loraModules[portduino_config.lora_module].c_str(),
               portduino_config.lora_spi_dev.c_str());
     if (portduino_config.lora_spi_dev == "ch341") {
-        RadioLibHAL = ch341Hal;
+        RadioLibHAL = ch341Hal.get(); // non-owning: the ch341 HAL stays owned by the global unique_ptr
     } else {
         if (RadioLibHAL != nullptr) {
             delete RadioLibHAL;
@@ -672,6 +672,19 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     return r;
 }
 
+bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    // Walks profile->presets directly rather than RegionInfo::supportsPreset(), which calls
+    // back here for the UNSET entry. UNSET terminates the table, so it is checked last.
+    for (const RegionInfo *r = regions;; r++) {
+        for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END; i++)
+            if (r->profile->presets[i] == preset)
+                return true;
+        if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            return false;
+    }
+}
+
 void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
 {
     map = meshtastic_LoRaRegionPresetMap_init_zero;
@@ -692,7 +705,7 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
         // log once and stop. An incomplete map means clients won't constrain the
         // omitted regions, so this must be discoverable rather than silent.
         if (map.region_groups_count >= maxRegions) {
-            LOG_ERROR("Region preset map full at %u regions; remaining regions omitted", (unsigned)maxRegions);
+            LOG_ERROR("Region preset map full at %u regions; rest omitted", (unsigned)maxRegions);
             break;
         }
 
@@ -832,11 +845,11 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
     if (shouldRebroadcastEarlyLikeRouter(p)) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
-        LOG_DEBUG("rx_snr found in packet. Router: setting tx delay:%d", delay);
+        LOG_DEBUG("rx_snr in packet. Router: tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
         delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
-        LOG_DEBUG("rx_snr found in packet. Setting tx delay:%d", delay);
+        LOG_DEBUG("rx_snr in packet. Tx delay:%d", delay);
     }
 
     return delay;
@@ -1108,7 +1121,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                     // Validation must still fail so callers route into the clamp, but quietly:
                     // the clamp will accept this config by swapping regions, so don't record a
                     // critical error or alarm the user over a change that is about to succeed.
-                    LOG_INFO("Preset %s implies region swap %s to %s, deferring to clamp", presetName, newRegion->name,
+                    LOG_INFO("Preset %s implies region swap %s to %s, defer to clamp", presetName, newRegion->name,
                              swapRegion->name);
                     return false;
                 }
@@ -1263,7 +1276,7 @@ void RadioInterface::applyModemConfig()
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
             cr = newcr;
-            LOG_INFO("Default Coding Rate is higher than custom setting, using %u", cr);
+            LOG_INFO("Default Coding Rate above custom setting, use %u", cr);
         }
         // If the custom CR is higher than the preset, use it
         else if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate > newcr) {
@@ -1276,8 +1289,7 @@ void RadioInterface::applyModemConfig()
     } else { // if not using preset, then just use the custom settings
         if (validateConfigLora(loraConfig)) {
         } else {
-            LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
-                     newRegion->name);
+            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
             clampConfigLora(loraConfig);
         }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
@@ -1370,9 +1382,9 @@ void RadioInterface::applyModemConfig()
              newRegion->freqEnd - newRegion->freqStart);
     LOG_INFO("numFreqSlots: %u x %.3fkHz", numFreqSlots, bw);
     if (newRegion->overrideSlot > 0) {
-        LOG_INFO("Using region explicit override slot: %d", newRegion->overrideSlot);
+        LOG_INFO("Region explicit override slot: %d", newRegion->overrideSlot);
     } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
-        LOG_INFO("Using region preset name hash for slot selection");
+        LOG_INFO("Use region preset name hash for slot");
     }
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
@@ -1410,7 +1422,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         maxPower = myRegion->powerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
-        LOG_INFO("Lower transmit power because of regulatory limits");
+        LOG_INFO("Lower Tx power: regulatory limits");
         power = maxPower;
     }
 
@@ -1477,7 +1489,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     radioBuffer.header.next_hop = p->next_hop;
     radioBuffer.header.relay_node = p->relay_node;
     if (p->hop_limit > HOP_MAX) {
-        LOG_WARN("hop limit %d is too high, setting to %d", p->hop_limit, HOP_RELIABLE);
+        LOG_WARN("hop limit %d too high, set to %d", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;
     }
     radioBuffer.header.flags =

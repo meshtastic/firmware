@@ -61,6 +61,16 @@ static mbedtls_ssl_config sslConf;
 static mbedtls_ssl_context ssl;
 static bool tlsReady = false;
 
+// Free all TLS contexts, including partially initialized ones - initTlsContext's failure
+// paths must use this, because deInit's cleanup only runs once tlsReady is set.
+static void freeTlsContexts()
+{
+    mbedtls_ssl_free(&ssl);
+    mbedtls_ssl_config_free(&sslConf);
+    mbedtls_pk_free(&pkKey);
+    mbedtls_x509_crt_free(&certChain);
+}
+
 // Adapter: route mbedtls_ssl_set_bio() through the EthernetClient instance
 // that runOnce() is currently servicing. The void* ctx we hand mbedtls is a
 // pointer to the EthernetClient.
@@ -243,12 +253,14 @@ class EthTlsApiServerThread : public concurrency::OSThread
         ret = mbedtls_x509_crt_parse_der(&certChain, cert.certDer.data(), cert.certDer.size());
         if (ret != 0) {
             LOG_ERROR("ETH TLS: x509_crt_parse_der failed -0x%04x", -ret);
+            freeTlsContexts();
             return false;
         }
 
         ret = mbedtls_pk_parse_key(&pkKey, cert.keyDer.data(), cert.keyDer.size(), nullptr, 0, picoRand, nullptr);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: pk_parse_key failed -0x%04x", -ret);
+            freeTlsContexts();
             return false;
         }
 
@@ -256,6 +268,7 @@ class EthTlsApiServerThread : public concurrency::OSThread
                                           MBEDTLS_SSL_PRESET_DEFAULT);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: ssl_config_defaults failed -0x%04x", -ret);
+            freeTlsContexts();
             return false;
         }
 
@@ -272,12 +285,14 @@ class EthTlsApiServerThread : public concurrency::OSThread
         ret = mbedtls_ssl_conf_own_cert(&sslConf, &certChain, &pkKey);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: conf_own_cert failed -0x%04x", -ret);
+            freeTlsContexts();
             return false;
         }
 
         ret = mbedtls_ssl_setup(&ssl, &sslConf);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: ssl_setup failed -0x%04x", -ret);
+            freeTlsContexts();
             return false;
         }
 
@@ -340,10 +355,7 @@ void deInitEthTlsApiServer()
         tlsServer = nullptr;
     }
     if (tlsReady) {
-        mbedtls_ssl_free(&ssl);
-        mbedtls_ssl_config_free(&sslConf);
-        mbedtls_pk_free(&pkKey);
-        mbedtls_x509_crt_free(&certChain);
+        freeTlsContexts();
         tlsReady = false;
     }
 }

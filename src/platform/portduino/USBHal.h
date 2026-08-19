@@ -89,7 +89,7 @@ class Ch341Hal : public RadioLibHal
         }
         auto res = pinedio_set_pin_mode(&pinedio, pin, mode);
         if (res < 0 && rebootAtMsec == 0) {
-            LOG_ERROR("USBHal pinMode: Could not set pin %u mode to %u: %d", pin, mode, res);
+            LOG_ERROR("USBHal pinMode: Can't set pin %u mode to %u: %d", pin, mode, res);
         }
     }
 
@@ -103,7 +103,7 @@ class Ch341Hal : public RadioLibHal
         }
         auto res = pinedio_digital_write(&pinedio, pin, value);
         if (res < 0 && rebootAtMsec == 0) {
-            LOG_ERROR("USBHal digitalWrite: Could not write pin %u: %d", pin, res);
+            LOG_ERROR("USBHal digitalWrite: Can't write pin %u: %d", pin, res);
             portduino_status.LoRa_in_error = true;
         }
     }
@@ -118,7 +118,7 @@ class Ch341Hal : public RadioLibHal
         }
         auto res = pinedio_digital_read(&pinedio, pin);
         if (res < 0 && rebootAtMsec == 0) {
-            LOG_ERROR("USBHal digitalRead: Could not read pin %u: %d", pin, res);
+            LOG_ERROR("USBHal digitalRead: Can't read pin %u: %d", pin, res);
             portduino_status.LoRa_in_error = true;
             return 0;
         }
