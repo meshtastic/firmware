@@ -158,7 +158,7 @@ class AccelerometerThread : public concurrency::OSThread
 #endif
 #ifdef HAS_BHI260AP
         case ScanI2C::DeviceType::BHI260AP:
-            sensor = new BHI260APSensor(device);
+            sensor.reset(new BHI260APSensor(device));
             break;
 #endif
         default:
