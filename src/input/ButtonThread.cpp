@@ -102,9 +102,8 @@ bool ButtonThread::initButton(const ButtonConfig &config)
 #endif
     userButton.setPressMs(_longPressTime);
 
-    // A screen makes the single click feel sluggish unless the click window is short, but a 20ms
-    // window closes long before a second click can land. Boards that bind a double or multi click
-    // need the full window, screen or not, otherwise those events never fire.
+    // The 20ms window a screen normally gets closes before a second click can land, so boards
+    // binding double or multi click need the full one.
     if (screen && _doublePress == INPUT_BROKER_NONE && _triplePress == INPUT_BROKER_NONE) {
         userButton.setClickMs(20);
     } else {
@@ -228,7 +227,7 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
-        case BUTTON_EVENT_DOUBLE_PRESSED: { // only fires on boards that bind ButtonConfig::doublePress
+        case BUTTON_EVENT_DOUBLE_PRESSED: { // only on boards binding ButtonConfig::doublePress
             LOG_INFO("Double press");
             // Reset combination tracking
             waitingForLongPress = false;

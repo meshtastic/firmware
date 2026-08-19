@@ -97,14 +97,13 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
                 nodeDB->clearLocalPosition();
                 nodeDB->saveToDisk();
             }
-            // Unmute ahead of the toggle so its confirmation beep is audible; the matching mute happens
-            // after it, so the "GPS off" beep still plays on the way down.
+            // Unmute before the toggle and mute after it, so the confirmation beep is audible both ways.
             if (withBuzzer && !wasEnabled)
                 config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
             gps->toggleGpsMode();
             const bool nowEnabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
             if (withBuzzer) {
-                // Follow whatever the GPS settled on - toggleGpsMode() is a no-op on GpsMode_NOT_PRESENT.
+                // Follow the GPS, which does not move on GpsMode_NOT_PRESENT.
                 config.device.buzzer_mode = nowEnabled ? meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
                                                        : meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED;
                 nodeDB->saveToDisk(SEGMENT_CONFIG);
