@@ -622,6 +622,9 @@ The project uses GitHub Actions extensively for CI/CD. Key workflows are in `.gi
   - Uses `bin/generate_ci_matrix.py` to dynamically generate build targets
   - Builds all supported hardware variants
   - PRs build a subset (`--level pr`) for faster feedback
+  - The generator runs **once**; the resulting board list drives both the `build` and the
+    `check` (static-analysis, `pio check`) jobs, so every board that is built is also
+    checked. There is no per-variant opt-in for the check leg.
 
 - **`trunk_check.yml`** - Code quality checks on PRs
   - Runs Trunk.io for linting and formatting

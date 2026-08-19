@@ -231,8 +231,16 @@ def check_budgets(new_sizes, budgets, fail_on_missing=False):
 
     With fail_on_missing=False a budgeted env (or metric) absent from the
     measured sizes is reported as "n/a" but does not fail - right for the
-    informational report. The enforcing gate passes fail_on_missing=True so
-    missing data fails closed instead of trivially passing.
+    informational report. The enforcing gate passes fail_on_missing=True.
+
+    Under enforcement a budgeted env *entirely* absent from the measured sizes
+    is skipped, not failed: the CI matrix is narrowed per-PR
+    (bin/generate_ci_matrix.py) and only rebuilds an env a change can actually
+    affect, so an absent env was deliberately not built and its binary is
+    unchanged from base - it cannot have regressed. The gate runs only after the
+    build job succeeds, so "absent" never masks a failed build. But an env that
+    *was* built (present in the sizes) yet lacks a budgeted metric means a
+    broken/incomplete manifest, which still fails closed.
     Returns (violations, rows): violations is a list of human-readable failure
     strings; rows is a list of (env, metric_label, measured, budget, over)
     tuples for reporting, with measured=None when the data is unavailable.
@@ -248,15 +256,13 @@ def check_budgets(new_sizes, budgets, fail_on_missing=False):
             value = measured.get(key) if measured is not None else None
             if value is None:
                 rows.append((env, label, None, budget, False))
-                if fail_on_missing:
-                    reason = (
-                        "env was not built in this run"
-                        if measured is None
-                        else "manifest is missing this metric"
-                    )
+                # measured is None => env narrowed out of this run's matrix
+                # (unchanged, can't regress) => skip. measured present but this
+                # metric missing => built with an incomplete manifest => fail.
+                if fail_on_missing and measured is not None:
                     violations.append(
-                        f"{env} {label}: no measurement to check against the "
-                        f"budget ({reason}); refusing to pass the gate blind"
+                        f"{env} {label}: env was built but its manifest is "
+                        f"missing this metric; refusing to pass the gate blind"
                     )
                 continue
             over = value > budget

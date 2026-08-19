@@ -55,18 +55,48 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history so tj-actions/changed-files diffs the PR reliably; an
+          # incomplete diff could under-build, and this job compiles nothing so the
+          # extra clone is cheap.
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
           cache: pip
       - run: pip install -U platformio
+      # On pull requests, list the changed files so the build matrix can be narrowed
+      # to the affected variants (bin/generate_ci_matrix.py --changed-files). Skipped
+      # on a 'ci:full-build'-labelled PR; on any failure the output file is absent and
+      # the generator builds the full pr set. all_modified_files is ACMRD, so file
+      # deletions count too (and force the safe full-build fallback).
+      - name: Detect changed files
+        id: changed
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-build')
+        # Never let detection break CI: on failure the file is absent and the matrix
+        # falls back to the full pr set.
+        continue-on-error: true
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          separator: "\n"
+          write_output_files: true
+          output_dir: .github/outputs
       - name: Generate matrix
         id: jsonStep
         run: |
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
+          #
+          # This single list drives both the build and the check jobs, so narrowing to
+          # the PR's affected variants narrows both. An absent/empty file (non-PR,
+          # 'ci:full-build' label, or diff failure) leaves EXTRA empty => the full set.
+          CHANGED=.github/outputs/all_modified_files.txt
+          EXTRA=""
+          if [[ -s "$CHANGED" ]]; then
+            EXTRA="--changed-files $CHANGED"
+          fi
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py all --level pr)
+            TARGETS=$(./bin/generate_ci_matrix.py all --level pr $EXTRA)
           else
             TARGETS=$(./bin/generate_ci_matrix.py all)
           fi
@@ -93,6 +123,8 @@ jobs:
 
   check:
     needs: setup
+    # Same board list as `build`: every board in the matrix is statically analysed, so
+    # the checked set can never drift from the built set.
     strategy:
       fail-fast: false
       matrix:
@@ -436,8 +468,10 @@ jobs:
       - uses: actions/checkout@v7
 
       # No continue-on-error / empty-dir fallback: the gate must fail closed when
-      # the data it enforces on cannot be fetched (size_report.py additionally
-      # fails on missing budgeted envs under --enforce-budgets).
+      # the data it enforces on cannot be fetched. A budgeted env narrowed out of
+      # this PR's matrix is legitimately absent (its binary is unchanged, so it
+      # cannot regress) and size_report.py skips it; an env that WAS built but has
+      # an incomplete manifest still fails closed under --enforce-budgets.
       - name: Download current manifests
         uses: actions/download-artifact@v8
         with:
