@@ -670,6 +670,10 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 Screen::~Screen()
 {
     delete[] graphics::normalFrames;
+    // Owned by the constructor; Screen is genuinely destroyed on the portduino reboot path
+    // (screen = nullptr in Power.cpp), which previously leaked the display and UI objects.
+    delete ui;
+    delete dispdev;
 }
 
 #if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)

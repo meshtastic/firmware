@@ -18,6 +18,10 @@ inline bool isCoordinatePortnum(meshtastic_PortNum portnum)
 }
 
 bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p);
+/// Retarget a locally-originated coordinate packet that would be blocked on the event channel onto the
+/// position channel (see findPositionChannel). Returns true if p->channel was changed; false when the
+/// packet is not a blocked event coordinate packet or no channel carries positions.
+bool coerceCoordinatePacketToPositionChannel(meshtastic_MeshPacket *p);
 bool willUsePki(const meshtastic_MeshPacket *p);
 
 /// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
