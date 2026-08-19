@@ -304,6 +304,9 @@ static meshtastic_MeshPacket makeDecodedPacket(meshtastic_PortNum portnum, uint8
     packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     packet.decoded.portnum = portnum;
     packet.channel = channelIndex;
+    // A real destination: this suite never sets a node number, so a default to=0 would read as
+    // "to us" (getNodeNum()==0) and take the from-us-to-us loopback exemption.
+    packet.to = NODENUM_BROADCAST;
     return packet;
 }
 
@@ -373,7 +376,12 @@ static void test_eventCoordinatePolicy_usesResolvedUnicastChannel()
     configureEventChannels(false, false);
     meshtastic_NodeInfoLite *node =
         nodeDB->getNumMeshNodes() > 1 ? nodeDB->getMeshNodeByIndex(1) : nodeDB->getOrCreateMeshNode(0x12345678);
+    // A persisted DB (unsandboxed host run) can hand back our own entry here; a from-us-to-us packet is
+    // loopback-exempt, which is not the policy under test. Insist on a remote destination.
+    if (node && node->num == nodeDB->getNodeNum())
+        node = nodeDB->getOrCreateMeshNode(0x12345678);
     TEST_ASSERT_NOT_NULL(node);
+    TEST_ASSERT_NOT_EQUAL(nodeDB->getNodeNum(), node->num);
     const NodeNum destination = node->num;
     const uint8_t savedChannel = node->channel;
 
@@ -394,6 +402,38 @@ static void test_eventCoordinatePolicy_usesResolvedUnicastChannel()
 #else
     TEST_ASSERT_TRUE(true);
 #endif
+}
+
+static void test_findPositionChannel_skipsEventAndDisabledChannels()
+{
+    // Both channels store precision 16. Under the block gate the event channel never carries
+    // positions, so the private one (index 1) is the position channel; otherwise index 0 wins.
+    configureEventChannels(false, false);
+    uint8_t positionChannel = 0xff;
+    TEST_ASSERT_TRUE(findPositionChannel(positionChannel));
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    TEST_ASSERT_EQUAL_UINT8(1, positionChannel);
+#else
+    TEST_ASSERT_EQUAL_UINT8(0, positionChannel);
+#endif
+
+    // Reordering follows the effective key, not the index.
+    configureEventChannels(true, false);
+    TEST_ASSERT_TRUE(findPositionChannel(positionChannel));
+    TEST_ASSERT_EQUAL_UINT8(0, positionChannel);
+
+    // Precision 0 everywhere: nothing to pick.
+    configureEventChannels(false, false);
+    channelFile.channels[0].settings.module_settings.position_precision = 0;
+    channelFile.channels[1].settings.module_settings.position_precision = 0;
+    channels.onConfigChanged();
+    TEST_ASSERT_FALSE(findPositionChannel(positionChannel));
+
+    // A disabled channel does not count even with a stored precision.
+    channelFile.channels[1].settings.module_settings.position_precision = 32;
+    channelFile.channels[1].role = meshtastic_Channel_Role_DISABLED;
+    channels.onConfigChanged();
+    TEST_ASSERT_FALSE(findPositionChannel(positionChannel));
 }
 
 static void test_getPositionPrecisionForChannel_nonEventFullKeyIsHonored()
@@ -439,6 +479,7 @@ void setup()
     RUN_TEST(test_eventCoordinatePolicy_coversPortsAndExcludesPki);
     RUN_TEST(test_eventCoordinatePolicy_doesNotClassifyOpaquePacketsByHash);
     RUN_TEST(test_eventCoordinatePolicy_usesResolvedUnicastChannel);
+    RUN_TEST(test_findPositionChannel_skipsEventAndDisabledChannels);
     RUN_TEST(test_getPositionPrecisionForChannel_nonEventFullKeyIsHonored);
     exit(UNITY_END());
 }

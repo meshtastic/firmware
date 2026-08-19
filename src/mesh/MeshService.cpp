@@ -419,27 +419,17 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 LOG_DEBUG("Skip position ping; no fresh position since boot");
                 return false;
             }
-            // Prefer the node's current channel, but fall back to the first channel with
-            // position enabled (matching PositionModule::sendOurPosition() behavior).
+            // Prefer the node's current channel, but fall back to the position channel
+            // (matching PositionModule::sendOurPosition() behavior).
             uint8_t sendChan = node->channel;
-            if (getPositionPrecisionForChannel(sendChan) == 0) {
-                bool found = false;
-                for (uint8_t ch = 0; ch < 8; ++ch) {
-                    if (getPositionPrecisionForChannel(ch) != 0) {
-                        sendChan = ch;
-                        found = true;
-                        break;
-                    }
+            if (getPositionPrecisionForChannel(sendChan) == 0 && !findPositionChannel(sendChan)) {
+                // No channel with position enabled: fall back to sending nodeinfo, as before.
+                if (nodeInfoModule) {
+                    LOG_INFO("No position-enabled channel; send nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d", dest,
+                             wantReplies, node->channel);
+                    nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
                 }
-                if (!found) {
-                    // No channel with position enabled: fall back to sending nodeinfo, as before.
-                    if (nodeInfoModule) {
-                        LOG_INFO("No position-enabled channel; send nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d", dest,
-                                 wantReplies, node->channel);
-                        nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
-                    }
-                    return false;
-                }
+                return false;
             }
             LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
             positionModule->sendOurPosition(dest, wantReplies, sendChan);
