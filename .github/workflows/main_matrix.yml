@@ -55,6 +55,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Needed to diff against the base branch for newly added variants.
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -62,11 +65,24 @@ jobs:
       - run: pip install -U platformio
       - name: Generate matrix
         id: jsonStep
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
+          # A new board is normally 'release', so it would otherwise get no CI until
+          # after merge. Force-build the first env of each added variant config.
+          # Only added files count; a new env in an existing config does not.
+          ADDED_ARGS=()
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            while IFS= read -r cfg; do
+              [[ -n "$cfg" ]] && ADDED_ARGS+=(--added-config "$cfg")
+            done < <(git diff --name-only --diff-filter=A \
+              "$(git merge-base FETCH_HEAD HEAD)" HEAD -- 'variants/**/platformio.ini')
+          fi
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py all --level pr)
+            TARGETS=$(./bin/generate_ci_matrix.py all --level pr "${ADDED_ARGS[@]}")
           else
             TARGETS=$(./bin/generate_ci_matrix.py all)
           fi
