@@ -148,7 +148,7 @@ class AccelerometerThread : public concurrency::OSThread
 #endif
 #if defined(T_DECK_MAX) && defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
         case ScanI2C::DeviceType::BHI260AP:
-            sensor = new BHI260APSensor(device);
+            sensor.reset(new BHI260APSensor(device));
             break;
 #endif
 #ifdef HAS_QMA6100P
