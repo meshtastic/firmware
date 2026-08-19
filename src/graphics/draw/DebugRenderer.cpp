@@ -224,74 +224,82 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
 #if !defined(OLED_TINY)
     // === Fifth Row: Channel Utilization ===
-    const char *chUtil = "ChUtil:";
-    char chUtilPercentage[10];
-    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
-
-    int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
-                                                                 : display->getStringWidth(chUtil) + 5;
-    int chUtil_y = getTextPositions(display)[line] + 3;
-
-    int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
-    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
-    int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
-    int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
-    int chutil_percent = airTime->channelUtilizationPercent();
-    const int raw_chutil_percent = chutil_percent;
-
-    int centerofscreen = SCREEN_WIDTH / 2;
-    int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
-    int starting_position = centerofscreen - total_line_content_width;
-
-    display->drawString(starting_position, getTextPositions(display)[line], chUtil);
-
-    // Force 61% or higher to show a full 100% bar, text would still show related percent.
-    if (chutil_percent >= 61) {
-        chutil_percent = 100;
-    }
-
-    // Weighting for nonlinear segments
-    float milestone1 = 25;
-    float milestone2 = 40;
-    float weight1 = 0.45; // Weight for 0-25%
-    float weight2 = 0.35; // Weight for 25-40%
-    float weight3 = 0.20; // Weight for 40-100%
-    float totalWeight = weight1 + weight2 + weight3;
-
-    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
-    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
-    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
-
-    int fillRight = 0;
-
-    if (chutil_percent <= milestone1) {
-        fillRight = (seg1 * (chutil_percent / milestone1));
-    } else if (chutil_percent <= milestone2) {
-        fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
+    if (!config.lora.tx_enabled) {
+        const char *txdisabled = "Transmit Disabled";
+        textWidth = display->getStringWidth(txdisabled);
+        display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line], txdisabled);
     } else {
-        fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
-    }
 
-    // Draw outline
-    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+        const char *chUtil = "ChUtil:";
+        char chUtilPercentage[10];
+        snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
 
-    // Fill progress
-    if (fillRight > 0) {
-#if GRAPHICS_TFT_COLORING_ENABLED
-        uint16_t UtilizationFillColor = TFTPalette::Good;
-        if (raw_chutil_percent >= 60) {
-            UtilizationFillColor = TFTPalette::Bad;
-        } else if (raw_chutil_percent >= 35) {
-            UtilizationFillColor = TFTPalette::Medium;
+        int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
+                                                                     : display->getStringWidth(chUtil) + 5;
+        int chUtil_y = getTextPositions(display)[line] + 3;
+
+        int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+        int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
+        int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
+        int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
+        int chutil_percent = airTime->channelUtilizationPercent();
+        const int raw_chutil_percent = chutil_percent;
+
+        int centerofscreen = SCREEN_WIDTH / 2;
+        int total_line_content_width =
+            (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
+        int starting_position = centerofscreen - total_line_content_width;
+
+        display->drawString(starting_position, getTextPositions(display)[line], chUtil);
+
+        // Force 61% or higher to show a full 100% bar, text would still show related percent.
+        if (chutil_percent >= 61) {
+            chutil_percent = 100;
         }
-        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
-                                   starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
-#endif
-        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
-    }
 
-    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
-                        chUtilPercentage);
+        // Weighting for nonlinear segments
+        float milestone1 = 25;
+        float milestone2 = 40;
+        float weight1 = 0.45; // Weight for 0-25%
+        float weight2 = 0.35; // Weight for 25-40%
+        float weight3 = 0.20; // Weight for 40-100%
+        float totalWeight = weight1 + weight2 + weight3;
+
+        int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
+        int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
+        int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
+
+        int fillRight = 0;
+
+        if (chutil_percent <= milestone1) {
+            fillRight = (seg1 * (chutil_percent / milestone1));
+        } else if (chutil_percent <= milestone2) {
+            fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
+        } else {
+            fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
+        }
+
+        // Draw outline
+        display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+
+        // Fill progress
+        if (fillRight > 0) {
+#if GRAPHICS_TFT_COLORING_ENABLED
+            uint16_t UtilizationFillColor = TFTPalette::Good;
+            if (raw_chutil_percent >= 60) {
+                UtilizationFillColor = TFTPalette::Bad;
+            } else if (raw_chutil_percent >= 35) {
+                UtilizationFillColor = TFTPalette::Medium;
+            }
+            setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
+                                       starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+#endif
+            display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+        }
+
+        display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
+                            chUtilPercentage);
+    }
 #endif
     graphics::drawCommonFooter(display, x, y);
 }

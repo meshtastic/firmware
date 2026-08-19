@@ -16,6 +16,7 @@
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
@@ -316,11 +317,13 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-void lateInitVariant() __attribute__((weak));
-void lateInitVariant() {}
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. nrf52_lto.py's _VARIANT_OVERRIDES guards this.
+__attribute__((noinline)) void lateInitVariant() __attribute__((weak));
+__attribute__((noinline)) void lateInitVariant() {}
 
-void earlyInitVariant() __attribute__((weak));
-void earlyInitVariant() {}
+__attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
+__attribute__((noinline)) void earlyInitVariant() {}
 
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
@@ -388,6 +391,11 @@ void setup()
 #ifdef LED_NOTIFICATION
     pinMode(LED_NOTIFICATION, OUTPUT);
     digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
+#endif
+
+#ifdef LED_LORA
+    pinMode(LED_LORA, OUTPUT);
+    digitalWrite(LED_LORA, HIGH ^ LED_STATE_ON);
 #endif
 
 #ifdef WIFI_LED
@@ -544,9 +552,9 @@ void setup()
     EncryptedStorage::initLocked();
     if (!EncryptedStorage::isUnlocked()) {
         if (!EncryptedStorage::isProvisioned()) {
-            LOG_WARN("Lockdown: Device not provisioned - connect and set a passphrase to unlock storage");
+            LOG_WARN("Lockdown: Device not provisioned - set passphrase to unlock storage");
         } else {
-            LOG_WARN("Lockdown: Device locked - connect and provide passphrase to unlock storage");
+            LOG_WARN("Lockdown: Device locked - provide passphrase to unlock storage");
         }
     }
 #endif
@@ -563,7 +571,7 @@ void setup()
     if (EncryptedStorage::isProvisioned()) {
         enableAPProtect();
     } else {
-        LOG_INFO("APPROTECT deferred: device not yet provisioned");
+        LOG_INFO("APPROTECT deferred: not provisioned");
     }
 #elif defined(MESHTASTIC_ENABLE_APPROTECT)
     // Lockdown without encrypted storage shouldn't be reachable per
@@ -650,7 +658,7 @@ void setup()
     // the bus behind it is scanned right below and its devices are registered
     // once, so the link has to be up by then
     if (!sensecapIndicator->wait_ready(5000))
-        LOG_ERROR("RP2040 co-processor did not answer, its sensors, GPS and SD card are unavailable this session");
+        LOG_ERROR("RP2040 co-processor no reply; sensors, GPS, SD card unavailable this session");
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -693,7 +701,7 @@ void setup()
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
-        LOG_DEBUG("suppress screen wake because this is a headless timer wakeup");
+        LOG_DEBUG("suppress screen wake: headless timer wakeup");
         i2cScanner->setSuppressScreen();
     }
 #endif
@@ -753,9 +761,13 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x84;
             break;
+        case ScanI2C::DeviceType::STC8HKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x12;
+            break;
         default:
             // use this as default since it's also just zero
-            LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);
+            LOG_WARN("kb_info.type unknown(0x%02x), set kb_model=0x00", kb_info.type);
             kb_model = 0x00;
         }
     }
@@ -1358,12 +1370,15 @@ void loop()
 {
     runASAP = false;
 
+    // The single writer of the monotonic wrap carry; every other caller only reads it.
+    Time::serviceMonotonic();
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
     if (lockdownDisablePending) {
         lockdownDisablePending = false;
         LOG_INFO("Lockdown: disabling - reverting encrypted storage to plaintext");
         if (nodeDB->disableLockdownToPlaintext()) {
-            LOG_INFO("Lockdown: disabled, rebooting into normal mode");
+            LOG_INFO("Lockdown: disabled, reboot to normal mode");
             PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         } else {
@@ -1371,14 +1386,14 @@ void loop()
             // The DEK file is still present (it's deleted last), so the device
             // stays in lockdown and the operator can retry disable. Surface
             // the failure rather than leaving the client hanging.
-            LOG_ERROR("Lockdown: disable revert failed - device remains in lockdown");
+            LOG_ERROR("Lockdown: disable revert failed - still in lockdown");
             PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "disable_failed", 0, 0, 0);
         }
     }
 
     if (lockdownReloadPending) {
         lockdownReloadPending = false;
-        LOG_INFO("Lockdown: reloading config from disk after unlock");
+        LOG_INFO("Lockdown: reload config after unlock");
         bool reloadOk = nodeDB->reloadFromDisk();
         if (!reloadOk) {
             // Storage decrypt/decode failed during reload. Treat as
@@ -1389,7 +1404,7 @@ void loop()
             // might have), and notify clients. Storage will be locked
             // on next boot anyway; deferring to the user-visible
             // notification path is sufficient for now.
-            LOG_ERROR("Lockdown: reload failed - locking and notifying clients");
+            LOG_ERROR("Lockdown: reload failed - lock and notify clients");
             EncryptedStorage::lockNow();
             PhoneAPI::revokeAllAuth();
         }
@@ -1415,14 +1430,14 @@ void loop()
             //      sessions to grant. Hard lock (token deleted, DEK
             //      zeroed) and reboot. Operator must re-enter passphrase.
             if (EncryptedStorage::getBootsRemaining() == 0) {
-                LOG_WARN("Lockdown: session limit reached and boot budget exhausted, locking and rebooting");
+                LOG_WARN("Lockdown: session limit hit, boot budget exhausted - lock and reboot");
                 EncryptedStorage::lockNow();
                 PhoneAPI::revokeAllAuth();
                 PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
             } else {
                 uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
-                LOG_WARN("Lockdown: session expired, rolled to next budget slot (boots=%u remaining)", newBoots);
+                LOG_WARN("Lockdown: session expired, next budget slot (boots=%u left)", newBoots);
                 PhoneAPI::revokeAllAuth();
                 meshtastic_security::lockScreen();
                 // Signal clients that they need to re-auth on this
@@ -1484,17 +1499,16 @@ void loop()
         ch341Hal->checkError();
     }
     if (portduino_status.LoRa_in_error && rebootAtMsec == 0) {
-        LOG_ERROR("LoRa in error detected, attempting to recover");
+        LOG_ERROR("LoRa error detected, recovering");
         router->addInterface(nullptr);
         if (portduino_config.lora_spi_dev == "ch341") {
-            if (ch341Hal != nullptr) {
-                delete ch341Hal;
-                ch341Hal = nullptr;
+            if (ch341Hal) {
+                ch341Hal.reset();
                 sleep(3);
             }
             try {
-                ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                        portduino_config.lora_usb_pid);
+                ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                                      portduino_config.lora_usb_pid);
             } catch (std::exception &e) {
                 std::cerr << e.what() << std::endl;
                 std::cerr << "Could not initialize CH341 device!" << std::endl;

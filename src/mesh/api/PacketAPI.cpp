@@ -92,7 +92,7 @@ bool PacketAPI::receivePacket(void)
             }
             break;
         default:
-            LOG_ERROR("Error: unhandled meshtastic_ToRadio variant: %d", mr->which_payload_variant);
+            LOG_ERROR("Unhandled meshtastic_ToRadio variant: %d", mr->which_payload_variant);
             break;
         }
     }

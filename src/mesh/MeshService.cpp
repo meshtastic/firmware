@@ -13,6 +13,7 @@
 #include "PowerFSM.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
+#include "gps/GPSLog.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
@@ -95,7 +96,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
                   meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
-        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
+        LOG_DEBUG("Got telemetry response. Skip our NodeInfo");
         //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
                !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
@@ -103,14 +104,22 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
-                LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+                LOG_DEBUG("Skip send NodeInfo: %d hops too far", hopsUsed);
             } else {
-                LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
+                LOG_INFO("Heard new node on ch. %d, send NodeInfo, ask response", mp->channel);
                 nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
             }
         } else {
-            LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
+            LOG_DEBUG("Skip NodeInfo > 25%% ch. util");
         }
+    }
+
+    // Our own packet heard back off the mesh, which the duplicate cache only suppresses best-effort.
+    // Clients can't tell an echo from genuine ingress, so it surfaces as an incoming message. Packets
+    // addressed to us are locally-generated feedback (implicit ACK, NAK, routing error), not an echo.
+    if (isFromUs(mp) && !isToUs(mp)) {
+        LOG_DEBUG("Skip phone echo of our own packet 0x%08x", mp->id);
+        return 0;
     }
 
     printPacket("Forwarding to phone", mp);
@@ -181,14 +190,14 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     return nodenum;
 }
 
-// Back-calculate the real epoch for any queued packet still carrying a millis() rx_time
+// Back-calculate the real epoch for any queued packet still carrying an uptime-seconds rx_time
 // placeholder, now that the clock is trustworthy.
 void MeshService::reconcilePendingRxTimes()
 {
     const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
     if (nowEpoch == 0) // called before the clock was actually valid - nothing to reconcile against
         return;
-    const uint32_t nowMillis = Time::getMillis();
+    const uint32_t nowUptimeSecs = Time::getUptimeSecs();
 
     // Rotate the queue once. TypedQueue is strictly FIFO on both backends, so dequeueing and
     // re-enqueueing every element in turn leaves the delivery order unchanged.
@@ -197,14 +206,16 @@ void MeshService::reconcilePendingRxTimes()
         if (!p) // drained from under us - nothing left to rotate
             break;
         if (!p->has_rx_time) {
-            // Unsigned subtraction is wraparound-safe; rx_time is a 32-bit wire field, so the
-            // placeholder was never wider than 32 bits to begin with.
-            const uint32_t elapsedMs = nowMillis - p->rx_time;
-            p->rx_time = nowEpoch - (elapsedMs / 1000);
-            p->has_rx_time = true;
+            // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
+            // If it somehow exceeds the epoch, leave the packet un-dated rather than pre-1970.
+            const uint32_t elapsedSecs = nowUptimeSecs - p->rx_time;
+            if (elapsedSecs < nowEpoch) {
+                p->rx_time = nowEpoch - elapsedSecs;
+                p->has_rx_time = true;
+            }
         }
         if (!toPhoneQueue.enqueue(p, 0)) { // mirrors sendToPhone()'s degrade-on-failure path
-            LOG_CRIT("Failed to requeue a packet into toPhoneQueue!");
+            LOG_CRIT("Requeue to toPhoneQueue failed");
             releaseToPool(p);
             fromNum++; // notify observers so the phone can resync
         }
@@ -232,14 +243,14 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
                 p.decoded.portnum = scratch.portnum;
             }
         } else {
-            LOG_ERROR("inject: could not decode Compressed envelope, dropping");
+            LOG_ERROR("inject: can't decode Compressed envelope, drop");
             return;
         }
     }
     // The real RX path (RadioLibInterface::handleReceiveInterrupt) drops sender==0; mirror it so injection
     // behaves identically to an over-the-air frame.
     if (p.from == 0) {
-        LOG_WARN("inject: dropping frame with from==0 (matches real LoRa RX)");
+        LOG_WARN("inject: drop frame with from==0 (matches real LoRa RX)");
         return;
     }
     meshtastic_MeshPacket *mp = packetPool.allocCopy(p);
@@ -341,7 +352,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     copied->mesh_packet_id = mesh_packet_id;
 
     if (toPhoneQueueStatusQueue.numFree() == 0) {
-        LOG_INFO("tophone queue status queue is full, discard oldest");
+        LOG_INFO("tophone queue status queue full, discard oldest");
         meshtastic_QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
         if (d)
             releaseQueueStatusToPool(d);
@@ -350,6 +361,8 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     lastQueueStatus = *copied;
 
     res = toPhoneQueueStatusQueue.enqueue(copied, 0);
+    if (!res)
+        releaseQueueStatusToPool(copied);
     fromNum++;
 
     return res ? ERRNO_OK : ERRNO_UNKNOWN;
@@ -406,28 +419,17 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 LOG_DEBUG("Skip position ping; no fresh position since boot");
                 return false;
             }
-            // Prefer the node's current channel, but fall back to the first channel with
-            // position enabled (matching PositionModule::sendOurPosition() behavior).
+            // Prefer the node's current channel, but fall back to the position channel
+            // (matching PositionModule::sendOurPosition() behavior).
             uint8_t sendChan = node->channel;
-            if (getPositionPrecisionForChannel(sendChan) == 0) {
-                bool found = false;
-                for (uint8_t ch = 0; ch < 8; ++ch) {
-                    if (getPositionPrecisionForChannel(ch) != 0) {
-                        sendChan = ch;
-                        found = true;
-                        break;
-                    }
+            if (getPositionPrecisionForChannel(sendChan) == 0 && !findPositionChannel(sendChan)) {
+                // No channel with position enabled: fall back to sending nodeinfo, as before.
+                if (nodeInfoModule) {
+                    LOG_INFO("No position-enabled channel; send nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d", dest,
+                             wantReplies, node->channel);
+                    nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
                 }
-                if (!found) {
-                    // No channel with position enabled: fall back to sending nodeinfo, as before.
-                    if (nodeInfoModule) {
-                        LOG_INFO(
-                            "No channel with position enabled; sending nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d",
-                            dest, wantReplies, node->channel);
-                        nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
-                    }
-                    return false;
-                }
+                return false;
             }
             LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
             positionModule->sendOurPosition(dest, wantReplies, sendChan);
@@ -470,7 +472,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     // Withhold decoded nested payloads a strict phone decoder would reject; still-encrypted packets
     // pass through (the phone may hold the key).
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !phonePayloadIsDecodable(p->decoded)) {
-        LOG_WARN("Dropping undecodable portnum=%d payload from phone delivery (from=0x%08x)", p->decoded.portnum, p->from);
+        LOG_WARN("Drop undecodable portnum=%d payload from phone delivery (from=0x%08x)", p->decoded.portnum, p->from);
         releaseToPool(p);
         fromNum++; // notify observers so the phone can resync
         return;
@@ -488,14 +490,17 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
-        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
-            LOG_WARN("ToPhone queue is full, discard oldest");
+        // ROUTING_APP is the phone's only delivery confirmation, so it displaces the oldest like
+        // text does. Gate the variant: decoded.portnum aliases encrypted.size in the union.
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP || p->decoded.portnum == meshtastic_PortNum_ROUTING_APP)) {
+            LOG_WARN("ToPhone queue full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
                 releaseToPool(d);
         } else {
-            LOG_WARN("ToPhone queue is full, drop packet");
+            LOG_WARN("ToPhone queue full, drop packet");
             releaseToPool(p);
             fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
             return;
@@ -503,7 +508,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     }
 
     if (toPhoneQueue.enqueue(p, 0) == false) {
-        LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
+        LOG_CRIT("Queue to toPhoneQueue failed");
         releaseToPool(p);
         fromNum++; // notify observers so phone can resync
         return;
@@ -513,16 +518,16 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
-    LOG_DEBUG("Send mqtt message on topic '%s' to client for proxy", m->topic);
+    LOG_DEBUG("Send mqtt msg on topic '%s' to proxy client", m->topic);
     if (toPhoneMqttProxyQueue.numFree() == 0) {
-        LOG_WARN("MqttClientProxyMessagePool queue is full, discard oldest");
+        LOG_WARN("MqttClientProxyMessagePool queue full, discard oldest");
         meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
         if (d)
             releaseMqttClientProxyMessageToPool(d);
     }
 
     if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
-        LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
+        LOG_CRIT("Queue to toPhoneMqttProxyQueue failed");
         releaseMqttClientProxyMessageToPool(m);
         return;
     }
@@ -532,7 +537,7 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
 void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp)
 {
     if (!mp) {
-        LOG_WARN("Cannot send routing error response: null packet");
+        LOG_WARN("Can't send routing error response: null packet");
         return;
     }
 
@@ -540,7 +545,7 @@ void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const
     if (routingModule) {
         routingModule->sendAckNak(error, mp->from, mp->id, mp->channel);
     } else {
-        LOG_ERROR("Cannot send routing error response: no routing module");
+        LOG_ERROR("Can't send routing error response: no routing module");
     }
 }
 
@@ -548,14 +553,14 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 {
     LOG_DEBUG("Send client notification to phone");
     if (toPhoneClientNotificationQueue.numFree() == 0) {
-        LOG_WARN("ClientNotification queue is full, discard oldest");
+        LOG_WARN("ClientNotification queue full, discard oldest");
         meshtastic_ClientNotification *d = toPhoneClientNotificationQueue.dequeuePtr(0);
         if (d)
             releaseClientNotificationToPool(d);
     }
 
     if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
-        LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
+        LOG_CRIT("Queue to toPhoneClientNotificationQueue failed");
         releaseClientNotificationToPool(n);
         return;
     }
@@ -597,9 +602,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         pos = gps->p;
     } else {
         // The GPS has lost lock
-#ifdef GPS_DEBUG
-        LOG_DEBUG("onGPSchanged() - lost validLocation");
-#endif
+        LOG_DEBUG_GPS("onGPSchanged() - lost validLocation");
     }
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
@@ -629,7 +632,7 @@ bool MeshService::isToPhoneQueueEmpty()
 
 uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // rx_time may be an uptime-seconds placeholder while has_rx_time is false - don't age it as
     // wall-clock, and don't pass it off as "just now" either.
     if (!mp->has_rx_time)
         return SINCE_UNKNOWN;
