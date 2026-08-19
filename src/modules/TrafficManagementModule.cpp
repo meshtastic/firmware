@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstring>
 
+#define TM_LOG_TRACE(fmt, ...) LOG_TRACE("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_DEBUG(fmt, ...) LOG_DEBUG("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_INFO(fmt, ...) LOG_INFO("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_WARN(fmt, ...) LOG_WARN("[TM] " fmt, ##__VA_ARGS__)
@@ -148,7 +149,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     if (cache) {
         cacheFromPsram = true;
     } else {
-        TM_LOG_WARN("PSRAM allocation failed, falling back to heap");
+        TM_LOG_WARN("PSRAM alloc failed, fall back to heap");
         cache = new UnifiedCacheEntry[allocSize]();
     }
 #else
@@ -171,7 +172,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
         nodeInfoPayloadFromPsram = true;
         TM_LOG_INFO("NodeInfo PSRAM cache ready");
     } else {
-        TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
+        TM_LOG_WARN("NodeInfo PSRAM payload alloc failed; direct responses fall back to NodeDB");
     }
 #else
     // Native unit-test build (see TMM_HAS_NODEINFO_CACHE): plain heap, so the cache paths
@@ -585,7 +586,8 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
 
     // Membership refresh (this hourly pass owns it): clear every isMember bit, then re-mark from
     // both NodeDB tiers. Runs AFTER seeding so the upsert still sees last pass's bits (spareMembers).
-    // Cost/lag rationale in docs/node_info_stores.md "Consistency with NodeDB (anti-entropy)".
+    // Cost/lag rationale in https://meshtastic.org/docs/development/reference/node-info-stores "Consistency with NodeDB
+    // (anti-entropy)".
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++)
         nodeInfoPayload[i].isMember = false;
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
@@ -634,7 +636,7 @@ void TrafficManagementModule::maintainNodeInfoCacheLocked()
         // O(entries x members) every 60 s under cacheLock. The hourly reconcile pass
         // owns it (see reconcileNodeInfoFromNodeDBLocked).
     }
-    TM_LOG_DEBUG("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
+    TM_LOG_TRACE("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
                  static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoSaturated));
 
     // Anti-entropy: seed identities NodeDB knows but this cache lacks - a full pass at
@@ -728,7 +730,8 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
 {
     // Same enable gate as the write-through hooks and maintenance: a disabled module stops
     // updating and sweeping the cache, so its frozen contents must not keep feeding PKI key
-    // resolution either. Enforces the "superset only while enabled" corollary (node_info_stores.md).
+    // resolution either. Enforces the "superset only while enabled" corollary
+    // (https://meshtastic.org/docs/development/reference/node-info-stores).
     if (!moduleConfig.has_traffic_management)
         return false;
     if (!nodeInfoPayload || node == 0 || !out)
@@ -1323,7 +1326,7 @@ int32_t TrafficManagementModule::runOnce()
         }
     }
 
-    TM_LOG_DEBUG("Maintenance: %u active, %u expired, %u/%u slots, %lums elapsed", activeEntries, expiredEntries,
+    TM_LOG_TRACE("Maintenance: %u active, %u expired, %u/%u slots, %lums elapsed", activeEntries, expiredEntries,
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
                  static_cast<unsigned long>(TrafficManagementModule::clockMs() - sweepStartMs));
 
@@ -1400,7 +1403,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const bool withinInterval =
         hasPositionState && (windowTicks != 0) && (static_cast<uint8_t>(nowPosTick - entry->pos_time) < windowTicks);
 
-    TM_LOG_DEBUG("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
+    TM_LOG_TRACE("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
                  entry->pos_fingerprint, samePosition, withinInterval, isNew);
 
     // Update cache entry (raw tick; 0 is a valid tick value)
@@ -1513,9 +1516,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     // Throttle the spoofed reply (per requester + per target + 1 s global floor; checked here so a
     // request declined above never spends the budget). false forwards the request instead of consuming
-    // it. Rationale in docs/traffic_management_module.md "Throttling direct responses".
+    // it. Rationale in https://meshtastic.org/docs/development/reference/traffic-management-internals "Throttling direct
+    // responses".
     if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
-        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request instead", getFrom(p));
+        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request", getFrom(p));
         return false;
     }
 

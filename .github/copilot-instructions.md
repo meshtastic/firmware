@@ -218,7 +218,8 @@ On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node e
 - **Write:** `getOrCreateMeshNode`'s eviction and `demoteOldestHotNodesToWarm` (the over-cap boot migration) call `warmStore.absorb(num, last_heard, key)` _before_ the node leaves the header.
 - **Read-back:** `getOrCreateMeshNode` calls `warmStore.take()` to rehydrate `last_heard` + key when a warm node is re-admitted; `copyPublicKey()` falls back to the warm tier so the PKI send path finds keys for evicted peers.
 - **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Everywhere else: a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
-- **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap - 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 keeps its flash-scaled 100/200/250, portduino 250). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
+- **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap - 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 picks 100/200/250 at boot from its flash size). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
+- **`MAX_NUM_NODES` on native is not in that header and is not a constant.** `variants/native/portduino{,-buildroot}/variant.h` define it as `portduino_config.MaxNodes` - resolved at **runtime**, default **200**, overridable per-host with `General: MaxNodes` in the portduino YAML. `variant.h` is reached first, so the `ARCH_PORTDUINO` branch in `mesh-pb-constants.h` never fires; it is now `#error`-guarded rather than holding a plausible-looking `250`. Reading 250 there yields a protected-node cap of 248 when the real one is 198 (`numProtectedNodes() < MAX_NUM_NODES - 2`), which has already produced one wrong diagnosis. The separate 250 in `NodeDB::getMaxNodesAllocatedSize()` is `NODEDB_MIGRATION_LOAD_CEILING`, a decode allowance for files from larger-cap firmware - not a cap.
 
 ### Satellite caps
 
@@ -312,7 +313,7 @@ firmware/
 │   └── native/           # Linux/Portduino variants
 ├── protobufs/            # Protocol buffer definitions
 ├── boards/               # Custom PlatformIO board definitions
-├── test/                 # Unit tests (12 test suites)
+├── test/                 # Native unit-test suites (count = the test_* dirs, detected on the fly)
 └── bin/                  # Build and utility scripts
 ```
 
@@ -331,12 +332,25 @@ firmware/
 
 - Follow existing code style - run `trunk fmt` before commits
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
+- **Three logging tiers for diagnostics.** `LOG_TRACE` is the per-packet/per-poll firehose - compiled out by default (`MESHTASTIC_TRACE_LOGGING=1` enables; always on for portduino). Subsystem bring-up detail routes through a per-subsystem gate macro instead, e.g. `LOG_DEBUG_GPS(...)` in `src/gps/GPSLog.h` (`GPS_DEBUG=1` enables; costs no flash when off) - model new subsystem gates on it or on `LOG_MIGRATION` (`src/mesh/WarmNodeStore.h`): `#ifndef` value-default, `#if SYM` value test, `((void)0)` off-branch. Genuine anomalies stay unconditional `LOG_WARN`/`LOG_ERROR`.
 - **Format node IDs and packet IDs as `0x%08x` in logs.** This covers `NodeNum`/`PacketId` and the `uint32_t` packet fields `from`, `to`, `id`, `dest`, `source`, `request_id`, and `node_id`. They are 32-bit, so 8 hex digits is exact - `%08x` never truncates or leaves a value ragged. Do **not** use `%x` (variable width) or `%0x` (a no-op typo for `%08x` - the `0` flag does nothing without a width). User-facing display uses `!%08x` (the `!xxxxxxxx` convention), e.g. `Applet::hexifyNodeNum`.
 - **Do not zero-pad one-byte values to 8.** `next_hop`, `relay_node`, and the next-hop hint are `uint8_t` last-byte route hints, and `channel` is a one-byte hash/index - log these as `0x%x` (or `%d`). Padding a byte to `0x000000ab` falsely implies a full node number. The same goes for I2C addresses, register values, flags/bitmasks, and error/reason codes: they are not IDs, so leave them `0x%x`.
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
 - **Keep code comments minimal - one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
-- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check - raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
+- **Documentation does not live in this repo. Do not add it here.** This repository holds firmware code. There is no `docs/` directory - the design documents that used to sit there were published to [meshtastic/meshtastic](https://github.com/meshtastic/meshtastic) in #11488 and the directory was deleted - and it must not come back. Do not create a `.md` file to describe a feature, a configuration surface, an API, a wire format, or a design; write it in the docs repo and link that PR instead. Never leave a write-up behind in the tree: no investigation notes, no mitigation plans, no migration checklists, no "how we got here" narrative, no summaries of what a change did. That is what the PR description and the commit message are for, and they are the only place it belongs. When you do write documentation upstream, write a technical manual, not a novel - what the feature does, the settings it exposes in the user's terms, and the exact API or protocol a client speaks. No story of the debugging journey, no rationale essays, no changelog prose. Concise and factual, as short as the facts allow.
+- **Never compare against `millis()` directly. Use `Throttle`.** `src/mesh/Throttle.h` is the sanctioned way to ask about time, and CI enforces this (`millis-deadline-check` in `.github/workflows/test_native.yml` fails the PR on a new `millis() >` / `< millis()` comparison).
+  - `Throttle::isWithinTimespanMs(lastMs, intervalMs)` - true while still inside the cooldown.
+  - `Throttle::hasElapsed(lastMs, intervalMs)` - its complement, true once the interval has passed (inclusive `>=`). Prefer this to spelling `!isWithinTimespanMs(...)`.
+  - `Throttle::execute(&lastMs, intervalMs, func)` - function-pointer form that updates the timestamp on fire.
+  - `Throttle::deadlinePassed(deadlineMs)` - for a stored absolute deadline that cannot be re-expressed as "interval since an event". Uses an unsigned half-range compare; reads deadlines more than ~24.8 days out as already passed, which no interval in this firmware approaches (the longest is 24 h).
+  - `Throttle::deadlinePassedAt(nowMs, deadlineMs)` - the same test against a caller-supplied `now`, for a loop that snapshots the clock once and then tests many deadlines (`NextHopRouter::doRetransmissions()`). Take the snapshot from `Time::getMillis()`, not `millis()`.
+
+  Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: the comparison inverts while the deadline sits on the far side of the 32-bit wrap, so the action fires immediately (losing its whole wait) or blocks for roughly the interval it should have waited - days, for the nRF52 flash-corruption backoff. All five helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), which means every one of its ~94 call sites is time-injectable - a native test can drive `Time::setTestMillis(0xFFFFFF00)` across the wrap. For _timestamps_ (not deadlines) there is `Time::getMillisMonotonic()` / `Time::getUptimeSecs()` - a 64-bit monotonic uptime read. Readers are pure: they add their own wrap-immune elapsed time to a snapshot published by `Time::serviceMonotonic()`, which the main loop calls every iteration and which is **the only writer**. Never call `serviceMonotonic()` from anywhere else - two writers can count one wrap twice, putting every uptime and wall-clock reading ~49.7 days into the future for the rest of the boot. Not ISR-safe (the snapshot is read under a seqlock); see the contract in `UptimeClock.h`. Deadline and interval checks should still use `Throttle`, which needs no carry state at all.
+
+  **Sentinel hazard.** If a deadline variable also encodes "inactive" - `0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff` - test that sentinel _before_ the elapsed comparison, and match the test to the sentinel actually in use. `if (deadline && Throttle::deadlinePassed(deadline))` covers the `0` family only; `nagCycleCutoff` needs `deadline != UINT32_MAX`, or a separate armed flag as `ExternalNotificationModule` does with `isNagging`. Every sentinel value is arithmetically far in the past, so a correct comparison reads it as "expired" and fires immediately: `rebootAtMsec = -1` meaning "never" is what would have become a reboot loop. Never fold the sentinel into the helper.
+
+  **And decide which way the sentinel should fall.** "Inactive" does not always mean "suppress". At the GPS fix-hold site `fixHoldEnds == 0` means _no hold is in force_, which is exactly when a new hold must be armed - the naive comparison it replaced was `(fixHoldEnds + GPS_THREAD_INTERVAL) < millis()`, always true when nothing was armed. Guarding it with `fixHoldEnds != 0 &&` looks like this rule and inverts the site: nothing re-arms, nothing publishes, and the receiver stays powered until the search timeout. Read the surrounding logic before adding the guard. `fixHoldInForce()` in `src/gps/GPS.cpp` is the worked example - state the predicate positively, so the sentinel has an honest answer, and derive both decisions from it - with `test/test_gps_fix_hold/` pinning both directions.
 
 ### Naming Conventions
 
@@ -662,9 +676,10 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count` and is cross-checked on every full run. Current suites:
+Unit tests in `test/` directory. The canonical suite count is detected on the fly: the `test_*` directories under `test/` are the register, and `bin/run-tests.sh` cross-checks the suites that actually ran against them on every full run. **Never state the count as a literal anywhere** - it is whatever `test/test_*` contains right now. In CI, the `suite-shrinkage-check` job (`test_native.yml`) fails a PR that loses a `test_*` directory relative to its merge base unless the suite is named in the PR title, body, or a commit message - deleting a suite therefore requires saying so. The list below is a partial description of what suites cover, not an inventory:
 
-- `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
+- `test_admin_radio/` - LoRa region/config validation, AdminModule dispatch, node-DB metadata saves
+- `test_fscommon_getfiles/` - bounded file-manifest walk (cap, depth, truncation reporting)
 - `test_atak/` - ATAK integration
 - `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
@@ -691,27 +706,37 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 - `test_utf8/` - UTF-8 utilities
 - `test_warm_store/` - Warm-tier node store
 
-**Preferred run command - `bin/run-tests.sh`** (uses the `coverage` env with ASan/LSan sanitizers; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
+**Preferred run command - `bin/run-tests.sh`** (defaults to the `coverage` env; emits a machine-readable verdict on the final line; new `test_*` directories are picked up automatically):
 
 ```bash
 ./bin/run-tests.sh                             # all suites
 ./bin/run-tests.sh -f test_traffic_management  # single suite (yields FILTERED, not GREEN)
 ```
 
+**The harness is Linux-only, and rejects anything else.** `bin/run-tests.sh` needs bash 4+ and GNU coreutils/find (`find -printf`, `md5sum`, `-executable`), so it exits 2 on a non-Linux `uname` rather than degrade quietly - a state check that silently mis-hashes a sandbox still prints a verdict, and that verdict would be worthless. The `native-macos` PlatformIO env is a **build** target for `meshtasticd`, not a test host. On macOS or Windows use `./bin/test-native-docker.sh`.
+
+**Sanitizer coverage is per env, and only one env has any.** `coverage` (the default) adds gcov + ASan/LSan on top of `native`. **`native` itself has none** - verified, zero ASan symbols in the built binary. A `-e native` run is _not_ sanitized, so do not reason from "run-tests.sh uses ASan" when you passed `-e native`.
+
+**A signal name from the runner is not a crash.** `exit(UNITY_END())` returns the failure count, and PlatformIO's native runner renders a non-zero exit code as a POSIX signal - 4 failures prints `Program received signal SIGILL`, 5 prints `SIGTRAP`, and the suite is reported `[ERRORED]` instead of `[FAILED]`. Check the exit code against the failure count before theorising about memory bugs; confirm any real crash under a debugger.
+
+**Suite order is randomisable.** `./bin/run-tests.sh --shuffle` runs suites in a seeded random order; `--seed <n>` replays one. The seed defaults to the commit SHA (deterministic per commit, varied across commits), is printed at the start and on the `RESULT:` line, and the full order is printed on failure. CI shuffles its area order the same way, seeded from `GITHUB_SHA`. A single green seed is not evidence of order independence.
+
+**`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
+
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-| Exit | Verdict    | Meaning                                                                                                                                                                                                               |
-| ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                           |
-| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                 |
-| 2    | `AMBER`    | All that ran passed, but something was lost: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or `test/native-suite-count` disagrees with the `test/` directory count |
-| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                    |
+| Exit | Verdict    | Meaning                                                                                                                                                                                                              |
+| ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                          |
+| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                |
+| 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or a suite left behind shared state it does not declare |
+| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                   |
 
 Examples - exact counts will vary by suite count and env:
 
 ```text
 # GREEN: all suites ran and passed
-RESULT: GREEN N/N suites passed [canonical: N/N]
+RESULT: GREEN N/N suites passed, all CLEAN
 
 # RED: real test failure
 RESULT: RED 1 failed
@@ -719,14 +744,11 @@ RESULT: RED 1 failed
 # RED: sanitizer exit-time abort (all tests passed but process aborted at exit)
 RESULT: RED exit-time abort (tests passed; likely sanitizer - see hint above)
 
-# AMBER: native-suite-count disagrees with test/ directory count (too low)
-RESULT: AMBER test/ has 24 suite directories but native-suite-count says 5 - update test/native-suite-count after registering new suites
-
-# AMBER: native-suite-count disagrees with test/ directory count (too high)
-RESULT: AMBER test/ has 24 suite directories but native-suite-count says 99 - update test/native-suite-count after removing suites
+# AMBER: a suite silently went missing on a full run
+RESULT: AMBER 23/24 suites ran (missing: test_radio) - all that ran passed
 
 # FILTERED: single suite run completed cleanly
-RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) - filtered: test_serial [canonical: 1/24]
+RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) - filtered: test_serial
 ```
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
@@ -744,6 +766,30 @@ Do **not** pipe `pio test` - line-buffering makes the terminal appear hung and h
 Simulation testing: `bin/test-simulator.sh`
 
 Quick entry point for new test modules: `test/README.md` (native unit-test authoring guide, skeleton, pitfalls, and setup checklist).
+
+### Shared state: every suite gets a clean sandbox
+
+Each suite runs inside its own scratch `$HOME` (`bin/pio-test-isolate.sh`, wired in per env as `test_testing_command`, so a bare `pio test` and CI get it too). **State never crosses a suite boundary.** Mutation _inside_ a suite is free; carrying state _out_ of one is impossible by construction, not by policy.
+
+The state in question lives in `~/.portduino/default/prefs/` - `nodes.proto`, `config.proto`, `channels.proto`, `module.proto`, `device.proto`, `warm.dat`, `transmit_history.dat`. `NodeDB`'s constructor calls `loadFromDisk()`, so any suite that constructs one reads it, and several `NodeDB` paths (`removeNodeByNum()`, `resetNodes()`, `nodeDBSelfCare()`, and the constructor when the file is absent) write it without being asked.
+
+Two orthogonal axes: **PASS/FAIL x CLEAN/DIRTY**.
+
+- **CLEAN** - nothing changed, or everything that changed is declared.
+- **DIRTY** - an undeclared path changed. Graded **AMBER**: with isolation in place it means "undeclared", not "dangerous".
+- **MISSING** - a declared write did not happen. A warning only; it catches persistence that silently stopped working.
+
+Declare deliberate writes in **`test/state-manifest.tsv`** - one central file, `<suite>` / `<flags>` / `<reason>`, with the reason mandatory and reviewed on change. Central so every opt-out is visible in one diffable list; per-suite files hide growth. `run-tests.sh` prints how many suites declare non-default handling on every run.
+
+| Flag              | Meaning                                                                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(no entry)_      | the default: fresh state in, contents discarded out                                                                                                                                                         |
+| `writes=<a,b>`    | files this suite mutates on purpose; matched on the path relative to the sandbox `$HOME` or just the basename                                                                                               |
+| `state=per-suite` | state persists across this suite's own test cases (persistence round-trips, migration ladders). Only the suite boundary is checked; the default is per-test, which names the exact test that dirtied things |
+
+No flag grants cross-suite carry. A suite that needs another suite's output needs an explicit fixture, not inheritance.
+
+`./bin/run-tests.sh --write-manifest` prints the entries a run would need, for a human to paste and justify - it never applies them, and neither does CI. `bin/test-state-check.sh` is the checker's own self-test: fixtures asserting CLEAN / CLEAN / DIRTY / MISSING, plus the before-empty assertion.
 
 ### Hardware-in-the-loop tests ([meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp))
 
