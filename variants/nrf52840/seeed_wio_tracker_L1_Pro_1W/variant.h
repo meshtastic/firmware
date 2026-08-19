@@ -45,7 +45,7 @@
 #define D2 2   // P1.07 LORA_RESET
 #define D3 3   // P1.10 LORA_BUSY
 #define D4 4   // P1.14 LORA_CS
-#define D5 5   // P0.29 LORA_VDET (AIN5)        鈥?Pro 1W: P0.29 VDET, P1.08 
+#define D5 5   // P0.29 LORA_VDET (AIN5), replaces the stock L1 LORA_SW on P1.08
 #define D6 6   // P0.27 GNSS_TX
 #define D7 7   // P0.26 GNSS_RX
 #define D8 8   // P0.30 SPI_SCK
@@ -59,9 +59,9 @@
 #define D16 16 // P0.31 VBAT_ADC
 #define D17 17 // P1.11 Grove I2C1 SCL
 #define D18 18 // P1.12 Grove I2C1 SDA
-#define D31 31 // P0.13 BOOST_EN (Grove 5V Boost 浣胯兘) 鈥?Pro 1W 鏂板
-#define D32 32 // P1.15 nRF_Sig_Charge_State (BQ25616 STAT) 鈥?Pro 1W 鏂板
-#define D33 33 // P0.14 LORA_PWR_EN (SX1262 + 1 W PA LDO) 鈥?Pro 1W 鏂板
+#define D31 31 // P0.13 BOOST_EN (Grove 5V Boost enable), new on Pro 1W
+#define D32 32 // P1.15 nRF_Sig_Charge_State (BQ25616 STAT), new on Pro 1W
+#define D33 33 // P0.14 LORA_PWR_EN (SX1262 + 1 W PA LDO), new on Pro 1W
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Analog Pin Definitions
@@ -117,7 +117,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#define BAT_READ 30       // D30 = P0.04  Battery divider enable (BAT_CTL) on signal board.
+#define BAT_READ 30 // D30 = P0.04  Battery divider enable (BAT_CTL) on signal board.
 #define ADC_CTRL BAT_READ
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_SENSE_RESOLUTION_BITS 12
@@ -128,8 +128,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define NRF_APM
 
 // BQ25616 single-wire charge status (Pro 1W)
-#define PIN_BOOST_EN D31           // D31 / P0.13 鈥?Grove 5V Boost enable
-#define EXT_CHRG_DETECT D32       // D32 / P1.15 鈥?BQ25616 STAT
+#define PIN_BOOST_EN D31          // D31 / P0.13, Grove 5V Boost enable
+#define EXT_CHRG_DETECT D32       // D32 / P1.15, BQ25616 STAT
 #define EXT_CHRG_DETECT_VALUE LOW // 0 = charging, 1 = full / charger sleep
 #define BOOST_EN_ACTIVE HIGH      // HIGH enables Grove 5V Boost
 
@@ -157,12 +157,13 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  On-board QSPI Flash
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#define PIN_QSPI_SCK (21)
-#define PIN_QSPI_CS (22)
-#define PIN_QSPI_IO0 (23)
-#define PIN_QSPI_IO1 (24)
-#define PIN_QSPI_IO2 (25)
-#define PIN_QSPI_IO3 (26)
+// Logical pin indices; the QSPI block is at D19-D24 in variant.cpp.
+#define PIN_QSPI_SCK (19)
+#define PIN_QSPI_CS (20)
+#define PIN_QSPI_IO0 (21)
+#define PIN_QSPI_IO1 (22)
+#define PIN_QSPI_IO2 (23)
+#define PIN_QSPI_IO3 (24)
 
 #define EXTERNAL_FLASH_DEVICES P25Q16H
 #define EXTERNAL_FLASH_USE_QSPI
