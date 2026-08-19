@@ -28,6 +28,7 @@ class NodeDBTestShim : public NodeDB
 
     // Read back the role + protected category the warm tier cached for a node.
     bool warmMeta(NodeNum n, uint8_t &role, uint8_t &prot) { return warmStore.lookupMeta(n, role, prot); }
+    bool warmTake(NodeNum n, WarmNodeEntry &out) { return warmStore.take(n, out); }
 
     void clearHot()
     {
@@ -174,9 +175,12 @@ static void test_migration_dropsShortKeyOnDemotion(void)
     const NodeNum shortKeyNum = 2000 + 3;
     const NodeNum fullKeyNum = 2000 + 4;
     const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected are demoted
+    // Warm entries steal the low 7 bits of last_heard for role and protected-category metadata
+    // (WARM_TIME_MASK), so seed multiples of 128 to keep the values representable once demoted.
     for (int i = 1; i <= extra; i++)
-        db->push(2000 + i, /*last_heard=*/i, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true, /*withKey=*/true,
-                 meshtastic_Config_DeviceConfig_Role_CLIENT, /*keySize=*/(NodeNum)(2000 + i) == shortKeyNum ? 31 : 32);
+        db->push(2000 + i, /*last_heard=*/(uint32_t)i * 128, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true,
+                 /*withKey=*/true, meshtastic_Config_DeviceConfig_Role_CLIENT,
+                 /*keySize=*/(NodeNum)(2000 + i) == shortKeyNum ? 31 : 32);
 
     db->runDemote();
 
@@ -189,6 +193,9 @@ static void test_migration_dropsShortKeyOnDemotion(void)
     // The short-key node is still held, just keyless, so re-admission restores its last_heard.
     uint8_t role = 0xFF, prot = 0xFF;
     TEST_ASSERT_TRUE_MESSAGE(db->warmMeta(shortKeyNum, role, prot), "keyless placeholder row must still be present");
+    WarmNodeEntry placeholder = {};
+    TEST_ASSERT_TRUE_MESSAGE(db->warmTake(shortKeyNum, placeholder), "placeholder must be readable from the warm tier");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(3u * 128, warmTimeOf(placeholder), "the keyless placeholder must carry last_heard");
 }
 
 // Favourite handling: a favourite is never the eviction victim, even when it is
