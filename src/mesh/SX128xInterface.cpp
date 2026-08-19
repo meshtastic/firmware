@@ -154,7 +154,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 template <typename T> void SX128xInterface<T>::disableInterrupt()
