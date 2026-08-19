@@ -205,6 +205,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
+#ifdef SEEED_WIO_TRACKER_L1_PRO_1W
+// Indexed by SX1262 output power in dBm, matching RadioInterface::limitPower().
+// TODO: verify against measured output.
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10
+#endif
+
 // Default system gain to 0 if not defined
 #ifndef NUM_PA_POINTS
 #define NUM_PA_POINTS 1
@@ -234,7 +241,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SSD1306_ADDRESS_L 0x3C // Addr = 0
 #define SSD1306_ADDRESS_H 0x3D // Addr = 1
 
-#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
+#if (defined(SEEED_WIO_TRACKER_L1) || defined(SEEED_WIO_TRACKER_L1_PRO_1W)) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS SSD1306_ADDRESS_H
 #define USE_SH1106
 #endif
@@ -317,6 +324,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
 #define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 #define HM330X_ADDR 0x40
+#define AS3935_ADDR 0x03 // both address pins tied high, the common breakout-board default
+#define AS3935_ADDR_ALT 0x01
+#define AS3935_ADDR_ALT2 0x02
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
