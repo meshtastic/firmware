@@ -572,13 +572,8 @@ class NodeDB
 
     bool createNewIdentity();
 
-    /// Mint (or re-derive) the identity keypair *outside* the boot path - i.e. when the user sets a LoRa
-    /// region, which is what unblocks keygen - and re-seat the identity that key defines. A node's mesh
-    /// address is its key (my_node_num == crc32Buffer(config.security.public_key)), so
-    /// CryptoEngine::ensurePkiKeys() must never be called on its own: it writes key material only. Call
-    /// this instead, so the invariant can't be left broken.
-    /// @return true if my_node_num moved. The caller must then persist SEGMENT_DEVICESTATE |
-    ///         SEGMENT_NODEDATABASE alongside the SEGMENT_CONFIG that holds the new key.
+    /// Mint the identity keypair outside the boot path and re-seat my_node_num == crc32(public_key).
+    /// @return true if my_node_num moved; the caller must then also persist SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE.
     bool ensurePkiIdentity();
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);

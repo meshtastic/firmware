@@ -1117,10 +1117,8 @@ static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
     TEST_ASSERT_EQUAL(32, owner.public_key.size);
 }
 
-// The unlicensed twin of the test above: setting a region for the first time is what unblocks keygen, and
-// the minted key *is* the node's mesh address. If the node num is not re-derived with it, the node signs
-// broadcasts that every receiver drops (verifyFirstContactNodeInfo: crc32(user.public_key) != from), and if
-// the widened segment mask is not persisted the repair is lost at the next boot.
+// Unlicensed twin of the test above. Without the re-derivation the node signs broadcasts every receiver
+// drops (verifyFirstContactNodeInfo: crc32(user.public_key) != from).
 static void test_handleSetConfig_persistsUnlicensedFirstRegionIdentity()
 {
     owner = meshtastic_User_init_zero;

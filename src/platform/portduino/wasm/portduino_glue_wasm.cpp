@@ -263,9 +263,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
     bool wasUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     if (wasUnset && newRegion > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-        // First real region -> generate keys. That moves our node num with them
-        // (my_node_num == crc32(public_key)), so persist devicestate + the node DB too.
-        if (nodeDB->ensurePkiIdentity())
+        // Minting the key moves our node num with it, so persist devicestate + the node DB too.
+        if (nodeDB && nodeDB->ensurePkiIdentity())
             changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
 #endif
         validated.tx_enabled = true;
