@@ -8,8 +8,6 @@ plugins:
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
-    - ascii-dash@SYSTEM
-    - too-many-defined@SYSTEM
     - checkov@3.3.8
     - renovate@43.278.4
     - prettier@3.9.6
