@@ -39,6 +39,9 @@ struct PendingPacket {
     /** Starts at NUM_RETRANSMISSIONS -1 and counts down.  Once zero it will be removed from the list */
     uint8_t numRetransmissions = 0;
 
+    /** Initial remaining retry count, used to detect whether a retry has fired. */
+    uint8_t initialNumRetransmissions = 0;
+
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };
@@ -77,8 +80,8 @@ class GlobalPacketIdHashFunction
   Namely, in the PacketHistory, we keep track of (up to 3) relayers of a packet. When the ACK is delivered back to us via a node
   that also relayed the original packet, we use that node as next hop for the destination from then on. This makes sure that only
   when there’s a two-way connection, we assign a next hop. Both the ReliableRouter and NextHopRouter will do retransmissions (the
-  NextHopRouter only 1 time). For the final retry, if no one actually relayed the packet, it will reset the next hop in order to
-  fall back to the FloodingRouter again. Note that thus also intermediate hops will do a single retransmission if the intended
+  NextHopRouter only a small number of times). For the final retry, if no one actually relayed the packet, it will reset the next
+  hop in order to fall back to the FloodingRouter again. Intermediate hops also do bounded retransmissions if the intended
   next-hop didn’t relay, in order to fix changes in the middle of the route.
 */
 class NextHopRouter : public FloodingRouter
@@ -109,15 +112,19 @@ class NextHopRouter : public FloodingRouter
         return min(d, r);
     }
 
-    // The number of retransmissions intermediate nodes will do (actually 1 less than this)
-    constexpr static uint8_t NUM_INTERMEDIATE_RETX = 2;
-    // The number of retransmissions the original sender will do
+    // Total attempts for directed hop-level delivery, including the initial send.
+    constexpr static uint8_t NUM_INTERMEDIATE_RETX = 3;
+    // Existing reliable broadcast budget, including the initial send.
     constexpr static uint8_t NUM_RELIABLE_RETX = 3;
+    // Total attempts for acknowledged unicast from the originating node.
+    constexpr static uint8_t NUM_RELIABLE_UNICAST_ATTEMPTS = 5;
 
     // M3: bounded RAM route-health table (reuse-oldest eviction, like PacketHistory)
     constexpr static uint8_t ROUTE_HEALTH_MAX = 32;              // ~12B/slot -> ~384B
     constexpr static uint32_t ROUTE_TTL_MSEC = 30UL * 60 * 1000; // re-discover a route unconfirmed for 30 min
     constexpr static uint8_t ROUTE_FAILURE_THRESHOLD = 3;        // consecutive un-ACKed directed deliveries -> dead
+
+    constexpr static uint8_t OPAQUE_SEEN_MAX = 32; // opaque-relay dedup slots (see relayOpaquePacket); ~8B/slot -> ~256B
 
   protected:
     /**
@@ -131,6 +138,21 @@ class NextHopRouter : public FloodingRouter
     RouteHealth routeHealth[ROUTE_HEALTH_MAX] = {};
 
     /**
+     * Recently-seen opaque (undecryptable) frames, keyed on the outer (from,id) header. A second,
+     * isolated PacketHistory-style dedup: it bounds broadcast amplification of frames we can't decrypt
+     * WITHOUT admitting them to the real PacketHistory/NodeDB, so unauthenticated traffic can never
+     * influence routing / ACK / next-hop decisions. Fixed-size ring, round-robin (FIFO) eviction, no
+     * timestamps (a stale (from,id) can't false-match: packet ids are effectively random, and a real
+     * entry never has id 0 - relayOpaquePacket drops id 0 before this). RAM-only.
+     */
+    struct OpaqueSeen {
+        NodeNum sender = 0;
+        PacketId id = 0; // 0 == empty/unused slot
+    };
+    OpaqueSeen opaqueSeen[OPAQUE_SEEN_MAX] = {};
+    uint8_t opaqueSeenNext = 0; // ring write cursor (round-robin eviction)
+
+    /**
      * Should this incoming filter be dropped?
      *
      * Called immediately on reception, before any further processing.
@@ -138,6 +160,9 @@ class NextHopRouter : public FloodingRouter
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
     bool relayOpaquePacket(const meshtastic_MeshPacket *p) override;
+    // Dedup helper for relayOpaquePacket: true if (from,id) is already recorded; otherwise records it
+    // (round-robin eviction) and returns false. Pure function of the table - no clock.
+    bool opaqueWasSeenRecently(NodeNum from, PacketId id);
 
     /**
      * Look for packets we need to relay
@@ -154,6 +179,8 @@ class NextHopRouter : public FloodingRouter
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
      */
     PendingPacket *startRetransmission(meshtastic_MeshPacket *p, uint8_t numReTx = NUM_INTERMEDIATE_RETX);
+
+    ErrorCode sendWithNextHop(meshtastic_MeshPacket *p, bool trackRetransmission);
 
     // Return true if we're allowed to cancel a packet in the txQueue (so we may never transmit it even once)
     bool roleAllowsCancelingFromTxQueue(const meshtastic_MeshPacket *p);

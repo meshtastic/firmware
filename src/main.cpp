@@ -16,6 +16,7 @@
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
@@ -392,6 +393,11 @@ void setup()
     digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
 #endif
 
+#ifdef LED_LORA
+    pinMode(LED_LORA, OUTPUT);
+    digitalWrite(LED_LORA, HIGH ^ LED_STATE_ON);
+#endif
+
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
     digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
@@ -754,6 +760,10 @@ void setup()
         case ScanI2C::DeviceType::TCA8418KB:
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x84;
+            break;
+        case ScanI2C::DeviceType::STC8HKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x12;
             break;
         default:
             // use this as default since it's also just zero
@@ -1360,6 +1370,9 @@ void loop()
 {
     runASAP = false;
 
+    // The single writer of the monotonic wrap carry; every other caller only reads it.
+    Time::serviceMonotonic();
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
     if (lockdownDisablePending) {
         lockdownDisablePending = false;
@@ -1489,14 +1502,13 @@ void loop()
         LOG_ERROR("LoRa error detected, recovering");
         router->addInterface(nullptr);
         if (portduino_config.lora_spi_dev == "ch341") {
-            if (ch341Hal != nullptr) {
-                delete ch341Hal;
-                ch341Hal = nullptr;
+            if (ch341Hal) {
+                ch341Hal.reset();
                 sleep(3);
             }
             try {
-                ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                        portduino_config.lora_usb_pid);
+                ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                                      portduino_config.lora_usb_pid);
             } catch (std::exception &e) {
                 std::cerr << e.what() << std::endl;
                 std::cerr << "Could not initialize CH341 device!" << std::endl;

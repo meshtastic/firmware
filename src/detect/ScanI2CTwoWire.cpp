@@ -160,10 +160,17 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 #include "../modules/Telemetry/Sensor/SEN5XSensor.h"
+#include "../modules/Telemetry/Sensor/SEN6XSensor.h"
 bool probeSEN5X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
 {
     SEN5XSensor sen5xsensor;
     return sen5xsensor.probe(i2cBus, address, port);
+}
+
+bool probeSEN6X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
+{
+    SEN6XSensor sen6xsensor;
+    return sen6xsensor.probe(i2cBus, address, port);
 }
 
 bool probeHM330x(TwoWire *i2cBus, uint8_t address)
@@ -437,6 +444,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = BBQ10KB;
                 logFoundDevice("BB Q10", (uint8_t)addr.address);
                 break;
+                SCAN_SIMPLE_CASE(TSTC8_KB_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
@@ -700,7 +708,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 logFoundDevice("QMC6310U", (uint8_t)addr.address);
                 break;
 
-            case QMI8658_ADDR:
+            case QMI8658_ADDR: // same as BQ25896_ADDR and SEN6X_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
                 if (registerValue == 0xC0) {
                     type = BQ24295;
@@ -721,6 +729,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = ISM330DHCX;
                     logFoundDevice("ISM330DHCX", (uint8_t)addr.address);
                 } else {
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+                    if (probeSEN6X(i2cBus, addr.address, port)) {
+                        type = SEN6X;
+                        logFoundDevice("SEN6X", addr.address);
+                        break;
+                    }
+#endif
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
                 }
@@ -1040,15 +1055,29 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     break;
                 }
 
+                // ADS1X15 default config register is 8583h
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580) {
-                    type = ADS1115;
-                    logFoundDevice("ADS1115 ADC", (uint8_t)addr.address);
+                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
+                    type = ADS1X15;
+                    logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
                     break;
                 }
 
                 LOG_INFO("FT6336U touchscreen found");
                 type = FT6336U;
+                break;
+            }
+
+            case ADS1X15_ADDR_ALT1:
+            case ADS1X15_ADDR_ALT2:
+            case ADS1X15_ADDR_ALT3: {
+                // ADS1X15 default config register is 8583h
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
+                    type = ADS1X15_ALT;
+                    logFoundDevice("ADS1X15_ALT", (uint8_t)addr.address);
+                    break;
+                }
                 break;
             }
 
@@ -1065,6 +1094,54 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             foundDevices[addr] = type;
         }
     }
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // AS3935 addresses (0x01-0x03) fall in the reserved range the loop above skips; probe
+    // them separately rather than widening that loop for every board.
+    static const uint8_t as3935Candidates[] = {AS3935_ADDR_ALT, AS3935_ADDR_ALT2, AS3935_ADDR};
+    for (uint8_t i = 0; i < sizeof(as3935Candidates); i++) {
+        // Respect the caller's address filter, same as the main loop above (line ~269).
+        if (asize != 0 && !in_array(address, asize, as3935Candidates[i]))
+            continue;
+
+        DeviceAddress as3935Addr(port, as3935Candidates[i]);
+        i2cBus->beginTransmission(as3935Candidates[i]);
+        uint8_t as3935Err = i2cBus->endTransmission();
+        if (as3935Err == 0) {
+            // No WHOAMI, and a POR-only check can't survive a warm reboot (initDevice rewrites
+            // REG0x00). Write a test pattern to bits[5:1] instead and confirm it reads back.
+            constexpr uint8_t AS3935_PROBE_PATTERN = 0b01010; // arbitrary, bits[5:1]
+            i2cBus->beginTransmission(as3935Candidates[i]);
+            i2cBus->write((uint8_t)0x00);                        // REG0x00 (AFE_GAIN)
+            i2cBus->write((uint8_t)(AS3935_PROBE_PATTERN << 1)); // PWD=0, gain bits = pattern
+            if (i2cBus->endTransmission() == 0) {
+                uint16_t reg0 = getRegisterValue(ScanI2CTwoWire::RegisterLocation(as3935Addr, 0x00), 1);
+                if (((reg0 >> 1) & 0x1F) == AS3935_PROBE_PATTERN) {
+                    logFoundDevice("AS3935", as3935Candidates[i]);
+                    deviceAddresses[AS3935] = as3935Addr;
+                    foundDevices[as3935Addr] = AS3935;
+                    break; // only one AS3935 expected per bus
+                } else {
+                    LOG_DEBUG("Unexpected REG0x00 readback for AS3935: addr=0x%x val=0x%x", as3935Candidates[i], reg0);
+                }
+            }
+        }
+    }
+#endif
+
+    // The QMC6309 magnetometer sits at 0x7C, above the general scan ceiling (the loop above stops at 0x77 to
+    // avoid the reserved 0x78-0x7F block). Probe it explicitly. Gated on the SensorLib driver being present so
+    // only boards that can actually drive the chip poke this reserved address.
+#if __has_include(<SensorQMC6309.hpp>)
+    addr.address = QMC6309_ADDR;
+    i2cBus->beginTransmission(addr.address);
+    if (i2cBus->endTransmission() == 0 &&
+        getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1) == 0x90 /* QMC6309 chip id */) {
+        deviceAddresses[QMC6309] = addr;
+        foundDevices[addr] = QMC6309;
+        logFoundDevice("QMC6309", (uint8_t)addr.address);
+    }
+#endif
 }
 
 void ScanI2CTwoWire::scanPort(I2CPort port)

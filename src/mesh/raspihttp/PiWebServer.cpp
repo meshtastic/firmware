@@ -206,6 +206,10 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
                     if (ulfius_set_stream_response(response, 200, callback_static_file_stream, callback_static_file_stream_free,
                                                    length, STATIC_FILE_CHUNK, f) != U_OK) {
                         LOG_DEBUG("callback_static_file - Error ulfius_set_stream_response");
+                        // The stream-free callback only runs when the stream was accepted, so the
+                        // file must be closed here or the FILE and its fd leak on every failure.
+                        fclose(f);
+                        ulfius_set_string_body_response(response, 500, "Internal server error");
                     }
                 }
             } else {
@@ -256,9 +260,13 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
     }
 
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
-    size_t s = req->binary_body_length;
-
-    memcpy(buffer, req->binary_body, MAX_TO_FROM_RADIO_SIZE);
+    // ulfius allocates binary_body at exactly binary_body_length bytes (NULL for a body-less
+    // PUT), and the framework accepts bodies larger than our buffer, so clamp both directions.
+    size_t s = req->binary_body ? req->binary_body_length : 0;
+    if (s > sizeof(buffer))
+        s = sizeof(buffer);
+    if (s > 0)
+        memcpy(buffer, req->binary_body, s);
 
     // FIXME* Problem with portdunio loosing mountpoint maybe because of running in a real sep. thread
 
@@ -327,12 +335,11 @@ int generate_rsa_key(EVP_PKEY **pkey)
     EVP_PKEY_CTX *pkey_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
     if (!pkey_ctx)
         return -1;
-    if (EVP_PKEY_keygen_init(pkey_ctx) <= 0)
+    if (EVP_PKEY_keygen_init(pkey_ctx) <= 0 || EVP_PKEY_CTX_set_rsa_keygen_bits(pkey_ctx, 2048) <= 0 ||
+        EVP_PKEY_keygen(pkey_ctx, pkey) <= 0) {
+        EVP_PKEY_CTX_free(pkey_ctx);
         return -1;
-    if (EVP_PKEY_CTX_set_rsa_keygen_bits(pkey_ctx, 2048) <= 0)
-        return -1;
-    if (EVP_PKEY_keygen(pkey_ctx, pkey) <= 0)
-        return -1;
+    }
     EVP_PKEY_CTX_free(pkey_ctx);
     return 0; // SUCCESS
 }
@@ -413,6 +420,10 @@ int PiWebServerThread::CheckSSLandLoad()
     key_pem = read_file_into_string(KEY_PATH);
     if (key_pem == NULL) {
         LOG_ERROR("File private_key can't be loaded or missing");
+        // The constructor retries CheckSSLandLoad() after regenerating, which would overwrite
+        // (and leak) the cert buffer loaded above.
+        free(cert_pem);
+        cert_pem = NULL;
         return 2;
     }
 
@@ -432,6 +443,9 @@ int PiWebServerThread::CreateSSLCertificate()
 
     if (generate_self_signed_x509(pkey, &x509) != 0) {
         LOG_ERROR("Error generating X509-Cert");
+        // generate_self_signed_x509 can fail after allocating *x509; X509_free(NULL) is a no-op
+        X509_free(x509);
+        EVP_PKEY_free(pkey);
         return 2;
     }
 
@@ -439,6 +453,8 @@ int PiWebServerThread::CreateSSLCertificate()
     FILE *pkey_file = fopen(KEY_PATH, "wb");
     if (!pkey_file) {
         LOG_ERROR("Error opening private key file");
+        X509_free(x509);
+        EVP_PKEY_free(pkey);
         return 3;
     }
     // write private key file
@@ -449,6 +465,8 @@ int PiWebServerThread::CreateSSLCertificate()
     FILE *x509_file = fopen(CERT_PATH, "wb");
     if (!x509_file) {
         LOG_ERROR("Error opening cert");
+        X509_free(x509);
+        EVP_PKEY_free(pkey);
         return 4;
     }
     // write certificate

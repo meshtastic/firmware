@@ -339,6 +339,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_RC52 = 142,
     /* Heltec ESP32C6 + SX1262 */
     meshtastic_HardwareModel_HELTEC_RCC6 = 143,
+    /* Seeed Wio Tracker L1 Pro 1W, nRF52840 + SX1262 with 1 W external PA */
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W = 144,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -414,6 +416,10 @@ typedef enum _meshtastic_FirmwareEdition {
     meshtastic_FirmwareEdition_HAMVENTION = 19,
     /* FAB, the international Fab Lab digital fabrication conference */
     meshtastic_FirmwareEdition_FAB = 20,
+    /* Dragon Con, the yearly pop culture convention in Atlanta, GA */
+    meshtastic_FirmwareEdition_DRAGON_CON = 21,
+    /* Chaos Communication Congress, the hacker conference held yearly in Germany */
+    meshtastic_FirmwareEdition_CCC = 22,
     /* Placeholder for DIY and unofficial events */
     meshtastic_FirmwareEdition_DIY_EDITION = 127
 } meshtastic_FirmwareEdition;
