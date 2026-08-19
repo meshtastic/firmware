@@ -1,19 +1,6 @@
 /*
- * variant.cpp - Digital pin mapping for Seeed Wio Tracker L1 Pro 1W
- *
- * Defines `g_ADigitalPinMap[]` (logical Dx 鈫?nRF Port.Pin) and `initVariant()`.
- *
- * Differences from the stock L1 (see variants/nrf52840/seeed_wio_tracker_L1):
- *   D5  = P0.29 (LORA_VDET / AIN5) instead of P1.08 (LORA_SW)
- *   D11 = P1.01 (Mesh_LED, orange) instead of P1.15 (PCB-LED)
- *   D31 = P0.13 (BOOST_EN) 鈥?new
- *   D32 = P1.15 (nRF_Sig_Charge_State) 鈥?new
- *   PINS_COUNT = 33 instead of 31
- *   initVariant() drives PIN_BOOST_EN (Grove 5V Boost) at boot
- *
- * Migrated from seeed_meshtastic-firmware-private/variants/seeed_wio_tracker_L1_Pro_1W
- * to upstream firmware layout (variants/nrf52840/...) with the new X-macro PA
- * mapping scheme (NUM_PA_POINTS + TX_GAIN_LORA LUT) declared in variant.h.
+ * Digital pin mapping (logical Dx to nRF Port.Pin) and initVariant() for the
+ * Seeed Wio Tracker L1 Pro 1W.
  */
 
 #include "variant.h"
@@ -34,7 +21,7 @@ const uint32_t g_ADigitalPinMap[] = {
     39, // D2  P1.07     LORA_RESET
     42, // D3  P1.10     LORA_BUSY
     46, // D4  P1.14     LORA_CS
-    29, // D5  P0.29 (AIN5) LORA_VDET          鈥?Pro 1W: P0.29 (not P1.08)
+    29, // D5  P0.29 (AIN5) LORA_VDET, Pro 1W uses P0.29 not P1.08
     27, // D6  P0.27     GNSS_TX
     26, // D7  P0.26     GNSS_RX
     30, // D8  P0.30     SPI_SCK
@@ -42,8 +29,8 @@ const uint32_t g_ADigitalPinMap[] = {
     28, // D10 P0.28     SPI_MOSI
 
     // D11-D12 - LED outputs / Buzzer
-    33, // D11 P1.01     Mesh_LED (orange)   鈥?Pro 1W: P1.01 (not P1.15)
-    32, // D12 P1.00     Buzzer              鈥?shared with `LED_BLUE` macro alias
+    33, // D11 P1.01     Mesh_LED (orange), Pro 1W uses P1.01 not P1.15
+    32, // D12 P1.00     Buzzer, shared with the LED_BLUE macro alias
 
     // D13 - User input
     8, // D13 P0.08     User Button
@@ -101,7 +88,6 @@ void initVariant()
     // LED: default off
     pinMode(PIN_LED1, OUTPUT);
     digitalWrite(PIN_LED1, LOW);
-    // Note: PIN_LED2 (D12) intentionally not initialized here 鈥?it shares the
-    // pin with the buzzer, and the ExternalNotification module configures it
-    // when needed. Forcing it LOW here could prevent PWM output.
+    // PIN_LED2 (D12) shares the buzzer pin; ExternalNotification configures it.
+    // Forcing it LOW here would prevent PWM output.
 }
