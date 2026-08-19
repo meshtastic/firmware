@@ -18,7 +18,12 @@ static File openFile(const char *filename, bool fullAtomic)
     // write must go first. exists() guards it: a bare remove() of a missing file logs on Portduino.
     if (FSCom.exists(filenameTmp.c_str())) {
         LOG_DEBUG("Remove stale %s", filenameTmp.c_str());
-        FSCom.remove(filenameTmp.c_str());
+        // Opening anyway would append to the stale bytes, and the XOR readback is 8 bits wide, so
+        // polluted content has a real chance of verifying and being renamed over the good file.
+        if (!FSCom.remove(filenameTmp.c_str())) {
+            LOG_ERROR("Can't remove stale %s", filenameTmp.c_str());
+            return File();
+        }
     }
 
     // clear any previous LFS errors

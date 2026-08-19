@@ -101,7 +101,8 @@ void test_save_replaces_previous_contents(void)
 }
 
 // The premise of the suite, asserted rather than assumed: this host truncates on FILE_O_WRITE.
-// If it ever fails, the host has gained the append behaviour and the tests above become real.
+// Portduino only, since it is false by design on the append-on-write backends the fix is aimed at.
+#ifdef ARCH_PORTDUINO
 void test_write_open_truncates_on_this_host(void)
 {
     writeRaw(kFile, "AAAAAAAA");
@@ -109,6 +110,7 @@ void test_write_open_truncates_on_this_host(void)
 
     TEST_ASSERT_EQUAL_STRING("B", readAll(kFile).c_str());
 }
+#endif
 
 #endif // FSCom
 
@@ -123,7 +125,9 @@ void setup()
     RUN_TEST(test_stale_tmp_is_not_appended_to_when_not_full_atomic);
     RUN_TEST(test_completed_save_leaves_no_tmp);
     RUN_TEST(test_save_replaces_previous_contents);
+#ifdef ARCH_PORTDUINO
     RUN_TEST(test_write_open_truncates_on_this_host);
+#endif
 #endif
     exit(UNITY_END());
 }
