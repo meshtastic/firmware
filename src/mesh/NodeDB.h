@@ -223,6 +223,18 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 #endif
 }
 
+/// Post-decode, the encrypted bitfield makes MISSING_OR_UNKNOWN decidable.
+/// Local packets are exempt; Router::dispatchReceived uses this predicate to set skipHandle.
+inline bool shouldSkipHandleForPostDecodeHop(const meshtastic_MeshPacket &p)
+{
+#if !MESHTASTIC_PREHOP_DROP
+    (void)p;
+    return false;
+#else
+    return !isFromUs(&p) && classifyHopStart(p) != HopStartStatus::VALID;
+#endif
+}
+
 /// Rate-limited debug log when hop_start is invalid/missing and packet is dropped.
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
 
@@ -247,6 +259,14 @@ enum LoadFileResult {
 };
 
 enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
+
+// RAM-only arrival stamp (monotonic uptime secs) for nodes heard before the wall clock was trusted,
+// backfilled into last_heard as an epoch once it is. last_heard persists, so it cannot hold this.
+// Bounded, linear-scan, reuse-oldest, never persisted - dies with the boot, as does its timebase.
+struct NodeHeardAt {
+    NodeNum num = 0;                ///< node this stamp describes; 0 == empty slot
+    uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard
+};
 
 class NodeDB
 {
@@ -307,6 +327,10 @@ class NodeDB
     void updateFrom(const meshtastic_MeshPacket &p);
 
     void addFromContact(const meshtastic_SharedContact);
+
+    /// On the clock-becoming-trusted transition (see RTC.cpp): convert every RAM arrival stamp into
+    /// a real last_heard epoch, never backwards, then empty the table. updateFrom() takes over.
+    void backfillHeardAt();
 
     /** Update position info for this node based on received position data
      */
@@ -641,6 +665,31 @@ class NodeDB
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;           // When last sorted the nodeDB
+
+    /// See NodeHeardAt. Caps how many distinct nodes can be dated once the clock arrives; a node
+    /// pushed out by reuse-oldest just stays "last heard: unknown", the same as before this table.
+    static constexpr size_t kMaxHeardAt = 32;
+    NodeHeardAt heardAt[kMaxHeardAt] = {};
+
+    /// Stamp (or re-stamp) a node's RAM arrival record; used instead of writing a non-epoch into
+    /// last_heard whenever the wall clock is untrusted.
+    void recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptimeSecs);
+
+    /// addFromContact's anti-eviction stamp: a real epoch when the clock is trusted, otherwise a
+    /// RAM arrival stamp that evictionRecency() honours - never a boot-relative last_heard.
+    void stampContactHeardNow(meshtastic_NodeInfoLite *info);
+
+    /// Read the node's RAM arrival stamp. The boolean carries presence because uptime second 0 is valid.
+    bool getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const;
+
+    struct EvictionRecency {
+        uint32_t value;
+        bool heardThisBoot;
+    };
+
+    /// Eviction ranking with current-boot stamps newer than every persisted epoch.
+    EvictionRecency evictionRecency(const meshtastic_NodeInfoLite *n) const;
+    static bool evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent);
 
     /*
      * Internal boolean to track sorting paused

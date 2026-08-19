@@ -6,6 +6,7 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
@@ -571,7 +572,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         } else if (m.timestamp > 0 && nowSecs == 0) {
             // RTC not valid: only trust boot-relative if same boot
-            uint32_t bootNow = millis() / 1000;
+            uint32_t bootNow = Time::getUptimeSecs();
             if (m.isBootRelative && m.timestamp <= bootNow) {
                 seconds = bootNow - m.timestamp;
                 invalidTime = false;
