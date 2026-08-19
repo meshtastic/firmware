@@ -317,6 +317,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
 #define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 #define HM330X_ADDR 0x40
+#define AS3935_ADDR 0x03 // both address pins tied high, the common breakout-board default
+#define AS3935_ADDR_ALT 0x01
+#define AS3935_ADDR_ALT2 0x02
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
