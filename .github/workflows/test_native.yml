@@ -2,6 +2,16 @@ name: Run Tests on Native platform
 
 on:
   workflow_call:
+    inputs:
+      suite_order_seed:
+        description: >-
+          Seed for shuffling the test-area order. Empty (the default) means: fixed declared order on
+          pull_request, so a contributor's PR never turns red because of an order they did not
+          choose; commit-SHA-derived elsewhere. Set a number to force that exact order anywhere -
+          that is how you replay a shuffled failure.
+        type: string
+        required: false
+        default: ""
   workflow_dispatch:
 
 permissions: {}
@@ -13,13 +23,19 @@ env:
   LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
 
 jobs:
-  # Guard the registered native-suite total. `platformio test` discovers and runs whatever
-  # test_* directories exist, so it never notices when test/native-suite-count drifts from the
-  # actual directory count (a suite added without registering it, or the file left stale). That
-  # reconciliation only lives in bin/run-tests.sh, which CI does not invoke - so mirror the exact
-  # check here and fail the PR on a mismatch, keeping the manual count honest.
-  suite-count-check:
-    name: Native Suite Count
+  # Tripwire against the native suite set shrinking by accident. `platformio test` discovers and
+  # runs whatever test_* directories exist, and bin/run-tests.sh derives its expected count from
+  # the same walk - so a suite directory lost in a bad rebase or an overzealous cleanup just means
+  # fewer suites run, and every remaining check stays green. Compare the test_* directory list
+  # against the PR's merge base and fail when a suite vanished without the PR saying so: a removed
+  # suite's name must appear in the PR title, the PR body, or a commit message in the PR's range.
+  # A deliberate removal satisfies that by stating what it removes; an accidental loss cannot.
+  # Only pull_request runs have a base to compare against (and PRs are where accidents arrive);
+  # every other event skips. No job depends on this one: a skipped job would skip its dependents,
+  # and the expensive jobs should not wait on a full-history clone.
+  suite-shrinkage-check:
+    name: Native Suite Shrinkage
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -27,40 +43,111 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # Full history: the merge base must be computed, not guessed from a possibly stale
+          # event payload, and the acknowledgment scan reads every commit message in the range.
+          fetch-depth: 0
 
-      - name: Reconcile native-suite-count with test/ directories
+      - name: Fail if a test_* suite vanished unacknowledged
+        shell: bash
+        # PR title/body are attacker-controlled text; they reach the script through env: only,
+        # never spliced into the shell source (same rule as the suite-order seed below).
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin "$BASE_REF"
+          base=$(git merge-base FETCH_HEAD HEAD)
+          # Same canonical set every other consumer derives: directories named test_* directly
+          # under test/, read from the git trees so the comparison is exact at both endpoints.
+          list_suites() { git ls-tree -d --name-only "$1" test/ | sed 's#^test/##' | grep '^test_' | sort; }
+          removed=$(comm -23 <(list_suites "$base") <(list_suites HEAD))
+          if [[ -z $removed ]]; then
+            echo "No suite removed: $(list_suites HEAD | wc -l) test_* directories, none lost since merge base ${base:0:8}."
+            exit 0
+          fi
+          messages=$(git log --format=%B "$base..HEAD")
+          fail=0
+          while IFS= read -r suite; do
+            if printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BODY" "$messages" | grep -qF "$suite"; then
+              echo "Removed suite $suite is named in the PR title/body or a commit message - acknowledged."
+            else
+              echo "::error title=Native suite vanished::test/$suite exists on the merge base but is gone from this PR, and nothing in the PR title, body, or commit messages mentions it. If the removal is deliberate, name $suite in the PR description or a commit message; if not, restore the directory - platformio test would silently run without it."
+              fail=1
+            fi
+          done <<<"$removed"
+          exit $fail
+
+  # Reject naive deadline comparisons against the 32-bit uptime clocks. `millis() > deadline` and
+  # `deadline < millis()` invert while the deadline sits on the far side of the 32-bit wrap: the
+  # action fires immediately, or blocks for about the interval it should have waited. The correct
+  # forms are
+  # Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
+  # Throttle::deadlinePassed (an absolute deadline). See .github/copilot-instructions.md.
+  millis-deadline-check:
+    # Name is load-bearing: upstream branch protection matches the check by name. Widen the guard,
+    # not this string.
+    name: Naive millis() Deadline Compare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Reject 32-bit uptime clocks used directly in a deadline comparison
         shell: bash
         run: |
           set -euo pipefail
-          count_file="test/native-suite-count"
-          if [[ ! -f $count_file ]]; then
-            echo "::error title=Missing native-suite-count::$count_file not found - it must record the number of test_* suite directories."
-            exit 1
+          allowlist=".github/millis-deadline-allowlist.txt"
+
+          # Flag millis() or its Time::getMillis() wrapper directly adjacent to a comparison
+          # operator, in either order. The correct idioms subtract first, so they are not matched.
+          #
+          # Line comments are stripped before matching, so prose may name the broken idiom (this
+          # guard's own documentation does). Block comments are not stripped; keep `millis() >` out
+          # of /* */ blocks. mawk-compatible - ubuntu-latest has no gawk.
+          find src -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.ino' \) \
+               ! -path 'src/mesh/generated/*' -print0 |
+            xargs -0 awk '
+              {
+                line = $0
+                sub(/\/\/.*/, "", line)
+                if (line ~ /((millis|getMillis)\(\)[ \t]*[<>]=?)|([<>]=?[ \t]*(millis|getMillis)\(\))/) {
+                  code = line
+                  sub(/^[ \t]+/, "", code); sub(/[ \t]+$/, "", code)
+                  printf "%s\t%s\t%s\n", FILENAME, FNR, code
+                }
+              }' > /tmp/millis-hits.tsv
+
+          # Allowlisted entries are keyed on file + exact source text, deliberately without a line
+          # number, so unrelated edits above them do not invalidate the entry.
+          : > /tmp/millis-allowed.tsv
+          if [[ -f $allowlist ]]; then
+            grep -vE '^[[:space:]]*(#|$)' "$allowlist" > /tmp/millis-allowed.tsv || true
           fi
-          # Same canonical set as bin/run-tests.sh: directories named test_* directly under test/.
-          expected_count=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | wc -l)
-          canonical_count=$(tr -d '[:space:]' <"$count_file")
-          if ! [[ $canonical_count =~ ^[0-9]+$ ]]; then
-            echo "::error title=Invalid native-suite-count::$count_file must contain a single integer, got '$canonical_count'."
-            exit 1
-          fi
-          echo "test/ directories: $expected_count"
-          echo "native-suite-count: $canonical_count"
-          if [[ $expected_count -ne $canonical_count ]]; then
-            if [[ $expected_count -gt $canonical_count ]]; then
-              hint="a suite was added - bump $count_file to $expected_count"
-            else
-              hint="a suite was removed - lower $count_file to $expected_count"
+
+          violations=0
+          while IFS=$'\t' read -r file line code; do
+            [[ -n ${file:-} ]] || continue
+            if grep -qxF "$(printf '%s\t%s' "$file" "$code")" /tmp/millis-allowed.tsv; then
+              continue
             fi
-            echo "::error title=native-suite-count mismatch::test/ has $expected_count suite directories but $count_file says $canonical_count ($hint)."
+            echo "$file:$line: $code"
+            violations=$((violations + 1))
+          done < /tmp/millis-hits.tsv
+
+          if [[ $violations -gt 0 ]]; then
+            echo "::error title=Naive uptime deadline compare::$violations line(s) compare a 32-bit uptime clock directly, which inverts while the deadline is on the far side of the 32-bit wrap - the action fires immediately, or blocks for about the interval it should have waited. Use Throttle::deadlinePassed(deadline) for a stored absolute deadline, or Throttle::hasElapsed(lastEvent, intervalMs) for an interval. If a match genuinely is not a deadline test (an uptime threshold, say), add it to $allowlist with a reason."
             exit 1
           fi
-          echo "native-suite-count matches the $expected_count suite directories."
+          echo "No naive 32-bit uptime deadline comparisons in src/ (allowlist: $(wc -l < /tmp/millis-allowed.tsv) entr(y/ies))."
 
   simulator-tests:
     name: Native Simulator Tests
     runs-on: ubuntu-24.04-arm
-    needs: suite-count-check
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -107,6 +194,13 @@ jobs:
         # and a failure here explains a lot of downstream weirdness.
         timeout-minutes: 5
         run: ./bin/test-config-check.sh .pio/build/coverage/meshtasticd
+
+      - name: Shared-state checker self-test
+        # Fixtures that write nothing / exactly what they declare / something undeclared /
+        # a declared write they never make, asserting CLEAN / CLEAN / DIRTY / MISSING. A
+        # checker that has silently stopped matching looks identical to a clean codebase.
+        timeout-minutes: 5
+        run: ./bin/test-state-check.sh
 
       - name: Integration test
         # Cap the whole step: if the simulator ever fails to exit (e.g. the
@@ -159,7 +253,6 @@ jobs:
   platformio-tests:
     name: Native PlatformIO Tests
     runs-on: ubuntu-24.04-arm
-    needs: suite-count-check
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -187,9 +280,12 @@ jobs:
           restore-keys: |
             pio-coverage-tests-
 
-      - name: Build test programs once
-        # One shared build of src + every test program. This is the single source build; gcov then
-        # accumulates coverage counts into this shared .pio/build/coverage/src as the chunks run.
+      - name: Warm the shared test build
+        # Compiles src + every test program once so no single area absorbs the whole src build in
+        # its reported duration; gcov then accumulates counts into this shared
+        # .pio/build/coverage/src as the areas run. NOT a substitute for building in the run step:
+        # PlatformIO links every test program to the one .pio/build/coverage/meshtasticd path, so a
+        # --without-building run executes whichever suite was linked last under every suite's name.
         run: platformio test -e coverage --without-testing
 
       - name: Save PlatformIO cache
@@ -201,6 +297,11 @@ jobs:
 
       - name: Run tests one area at a time
         shell: bash
+        # Both values reach the script through env: rather than ${{ }} inside run:, so nothing from
+        # the event payload is ever spliced into the shell text.
+        env:
+          SUITE_ORDER_SEED: ${{ inputs.suite_order_seed }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -uo pipefail
           # One runner, no matrix, no concurrency. Group the test_* suites by area and run each
@@ -236,18 +337,62 @@ jobs:
           for rule in "${area_rules[@]}"; do run_order+=("${rule%%:*}"); done
           run_order+=("misc")
 
+          # Area order. The rule order above is an accident of how the areas were written, and
+          # running it fixed forever means order dependence between areas is never observed - but
+          # randomising it on a contributor's PR would turn their run red for an order they did not
+          # choose, which is how a randomisation gets reverted instead of the coupling fixed.
+          #
+          # So: pull_request keeps the fixed declared order. Everywhere else (push, schedule) the
+          # order is shuffled, seeded from the commit SHA - deterministic per commit, replayable,
+          # attributable, and it never blocks someone else's PR. An explicit seed input overrides
+          # both, which is how you replay a specific failing order anywhere.
+          #
+          # Intra-area order stays PlatformIO's: filters select suites, they do not order them
+          # (list_test_names() walks test/ with os.walk()), so controlling it needs one invocation
+          # per suite. bin/run-tests.sh --shuffle does exactly that locally.
+          seed_input="${SUITE_ORDER_SEED:-}"
+          if [ -n "$seed_input" ]; then
+            seed="$seed_input"
+            echo "area order: shuffled with explicitly supplied seed $seed"
+          elif [ "${EVENT_NAME:-}" = "pull_request" ]; then
+            seed=""
+            echo "area order: fixed declared order (pull_request) - ${run_order[*]}"
+            echo "  to exercise a different order, re-run this workflow with a suite_order_seed input"
+          else
+            seed=$((16#${GITHUB_SHA:0:8}))
+            echo "area order: shuffled with seed $seed (from ${GITHUB_SHA:0:8})"
+          fi
+
+          if [ -n "$seed" ]; then
+            # Same shuffle_suites() bin/run-tests.sh uses, so the replay hint below is true by
+            # construction rather than by two copies happening to agree.
+            source bin/lib/shuffle.sh
+            mapfile -t run_order < <(shuffle_suites "$seed" "${run_order[@]}")
+            echo "area order: ${run_order[*]}"
+            echo "  replay locally: ./bin/run-tests.sh --shuffle --seed $seed"
+          fi
+
           fail=0
           for a in "${run_order[@]}"; do
             [ -n "${group[$a]:-}" ] || continue
             echo "::group::area $a (${group[$a]# })"
             # Capture platformio's real exit status (not grep's) via a log file, then show the log
             # with the noisy per-variant SKIPPED rows filtered out.
-            if ! platformio test -e coverage --without-building -v ${group[$a]# } \
+            if ! platformio test -e coverage -v ${group[$a]# } \
                  --junit-output-path "testreport-$a.xml" > "area-$a.log" 2>&1; then
               fail=1
               echo "::error::area $a had test failures"
             fi
+            # Suites outside this area are reported SKIPPED by design (PlatformIO lists every suite
+            # in the env and marks the unselected ones finished), so those rows are noise here. The
+            # attribution check below is what catches a suite that was selected and did not run.
             grep -v "[[:space:]]SKIPPED$" "area-$a.log" || true
+            # Per area, so a mismatch names the area it happened in rather than the whole run.
+            if ! ./bin/check-test-attribution.py --label "area $a" \
+                 --expect "${group[$a]# }" "testreport-$a.xml"; then
+              fail=1
+              echo "::error::area $a ran suites that did not match their own test binaries"
+            fi
             echo "::endgroup::"
           done
           exit $fail
@@ -272,6 +417,18 @@ jobs:
           ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
           PY
 
+      - name: Verify every suite ran its own tests
+        # Whole-run gate over the merged report: every test_* directory must appear with at least
+        # one test case, and every case must come from the suite that reported it. The per-area
+        # check above cannot see an area that never executed - this can.
+        if: always() # a suite going missing is the finding; do not hide it behind an earlier failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t suites < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
+          ./bin/check-test-attribution.py --label "coverage (all areas)" \
+            --expect "${suites[*]}" testreport.xml
+
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
         run: |
@@ -279,13 +436,38 @@ jobs:
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
           sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
 
+      - name: Attribution canary
+        # Guards the guard above: runs two suites the broken way (--without-building, so PlatformIO
+        # does not relink and both execute the same leftover binary) and requires the checker to
+        # catch it. Fails if the checker regressed, or if the reproduction stops reproducing - in
+        # which case the reason both harnesses stopped passing that flag no longer holds.
+        #
+        # Lives in this job, not simulator-tests: it relinks $BUILD_DIR/$PROGNAME, and there that
+        # replaced the daemon binary with a test suite, so the integration test waited for a socket
+        # a test binary never opens. Here the binary is already per-suite and nothing later needs it.
+        timeout-minutes: 15
+        run: ./bin/test-attribution-canary.sh -e coverage
+
+      - name: Event channel policy tests
+        run: platformio test -e coverage-event-policy -v --junit-output-path event-policy-testreport.xml
+
+      - name: Verify the event-policy suites ran their own tests
+        # Expected set read through PlatformIO's own config parser, so it cannot drift from the
+        # env's test_filter the way a second hand-maintained list would.
+        run: |
+          set -euo pipefail
+          expect=$(python3 -c "from platformio.project.config import ProjectConfig; \
+            print(' '.join(ProjectConfig().get('env:coverage-event-policy', 'test_filter', [])))")
+          ./bin/check-test-attribution.py --label coverage-event-policy \
+            --expect "$expect" event-policy-testreport.xml
+
       - name: Save test results
         if: always() # run this step even if previous step failed
         uses: actions/upload-artifact@v7
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./testreport.xml
+          path: ./*testreport.xml
 
       - name: Save coverage information
         uses: actions/upload-artifact@v7

@@ -33,6 +33,7 @@
 #endif
 #endif
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
@@ -50,6 +51,10 @@ bool ascending = true;
 
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
+#endif
+
+#if defined(HAS_I2S_SPEAKER_NRF52)
+#include "platform/nrf52/NRF52RtttlPlayer.h"
 #endif
 
 /*
@@ -93,10 +98,16 @@ int32_t ExternalNotificationModule::runOnce()
 #ifdef HAS_I2S
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        const bool notificationTimedOut = (nagCycleCutoff < millis()) && !isRtttlPlaying;
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
+#endif
+        // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
+        // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
+        const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
+        const bool notificationTimedOut = nagWindowExpired && !isRtttlPlaying;
 #endif
         if (notificationTimedOut) {
-            // Haptic and GPIO notification outputs must honor the deadline even if audio is still playing.
+            // T-Deck haptic and GPIO outputs must honor the deadline even if audio is still playing.
             nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
             isNagging = false;
@@ -110,7 +121,8 @@ int32_t ExternalNotificationModule::runOnce()
 #if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
             if (!Throttle::isWithinTimespanMs(externalTurnedOn[0], delay)) {
 #else
-            if (externalTurnedOn[0] + delay < millis()) {
+            // externalTurnedOn[] is when each output was last toggled, so these are intervals.
+            if (Throttle::hasElapsed(externalTurnedOn[0], delay)) {
 #endif
                 setExternalState(0, !getExternal(0));
             }
@@ -118,7 +130,7 @@ int32_t ExternalNotificationModule::runOnce()
             if (shouldDriveHapticNotification(hapticShouldAlert, isNagging) &&
                 !Throttle::isWithinTimespanMs(externalTurnedOn[1], delay)) {
 #else
-            if (externalTurnedOn[1] + delay < millis()) {
+            if (Throttle::hasElapsed(externalTurnedOn[1], delay)) {
 #endif
                 setExternalState(1, !getExternal(1));
             }
@@ -127,7 +139,7 @@ int32_t ExternalNotificationModule::runOnce()
             if (!moduleConfig.external_notification.use_pwm && !Throttle::isWithinTimespanMs(externalTurnedOn[2], delay)) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + delay, now);
 #else
-            if (!moduleConfig.external_notification.use_pwm && externalTurnedOn[2] + delay < millis()) {
+            if (!moduleConfig.external_notification.use_pwm && Throttle::hasElapsed(externalTurnedOn[2], delay)) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
 #endif
@@ -168,6 +180,17 @@ int32_t ExternalNotificationModule::runOnce()
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+        }
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        // Play RTTTL over the I2S speaker (no piezo on this board).
+        if (canBuzz() && buzzerShouldAlert) {
+            if (nrf52RtttlPlayer.isPlaying()) {
+                nrf52RtttlPlayer.play();
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+                nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
+            }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
@@ -302,6 +325,9 @@ void ExternalNotificationModule::stopNow()
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+    nrf52RtttlPlayer.stop();
 #endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
@@ -500,7 +526,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (buzzerShouldAlert) {
                 LOG_INFO("externalNotificationModule - Buzzer alert");
                 if (buzzerModeIsDirectOnly && !isDmToUs && !containsBell) {
-                    LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
+                    LOG_INFO("Buzzer suppressed: mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {

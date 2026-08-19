@@ -154,7 +154,6 @@ bool EInkDisplay::forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t m
     // End the update process
     endUpdate();
 
-    LOG_DEBUG("done");
     return true;
 }
 #endif

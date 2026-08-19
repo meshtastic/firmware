@@ -14,11 +14,11 @@ NOTE: For debugging only
 */
 void NeighborInfoModule::printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("%s NEIGHBORINFO PACKET from Node 0x%08x to Node 0x%08x (last sent by 0x%08x)", header, np->node_id,
+    LOG_TRACE("%s NEIGHBORINFO PACKET from Node 0x%08x to Node 0x%08x (last sent by 0x%08x)", header, np->node_id,
               nodeDB->getNodeNum(), np->last_sent_by_id);
-    LOG_DEBUG("Packet contains %d neighbors", np->neighbors_count);
+    LOG_TRACE("Packet contains %d neighbors", np->neighbors_count);
     for (int i = 0; i < np->neighbors_count; i++) {
-        LOG_DEBUG("Neighbor %d: node_id=0x%08x, snr=%.2f", i, np->neighbors[i].node_id, np->neighbors[i].snr);
+        LOG_TRACE("Neighbor %d: node_id=0x%08x, snr=%.2f", i, np->neighbors[i].node_id, np->neighbors[i].snr);
     }
 }
 
@@ -28,9 +28,9 @@ NOTE: for debugging only
 */
 void NeighborInfoModule::printNodeDBNeighbors()
 {
-    LOG_DEBUG("Our NodeDB contains %d neighbors", neighbors.size());
+    LOG_TRACE("Our NodeDB contains %u neighbors", (unsigned)neighbors.size());
     for (size_t i = 0; i < neighbors.size(); i++) {
-        LOG_DEBUG("Node %d: node_id=0x%08x, snr=%.2f", i, neighbors[i].node_id, neighbors[i].snr);
+        LOG_TRACE("Node %u: node_id=0x%08x, snr=%.2f", (unsigned)i, neighbors[i].node_id, neighbors[i].snr);
     }
 }
 
@@ -138,7 +138,7 @@ int32_t NeighborInfoModule::runOnce()
 
 meshtastic_MeshPacket *NeighborInfoModule::allocReply()
 {
-    LOG_INFO("NeighborInfoRequested.");
+    LOG_INFO("NeighborInfoRequested");
     if (lastSentReply && Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
         LOG_DEBUG("Skip Neighbors reply since we sent a reply <3min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule
@@ -162,18 +162,18 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("NeighborInfo: handleReceivedProtobuf");
+    LOG_TRACE("NeighborInfo: handleReceivedProtobuf");
     if (np) {
         printNeighborInfo("RECEIVED", np);
         // Ignore dummy/interceptable packets: single neighbor with nodeId 0 and snr 0
         if (np->neighbors_count != 1 || np->neighbors[0].node_id != 0 || np->neighbors[0].snr != 0.0f) {
-            LOG_DEBUG("  Updating neighbours");
+            LOG_TRACE("  Updating neighbours");
             updateNeighbors(mp, np);
         } else {
             LOG_DEBUG("  Ignoring dummy neighbor info packet (single neighbor with nodeId 0, snr 0)");
         }
     } else if (getHopsAway(mp) == 0) {
-        LOG_DEBUG("Get or create neighbor: %u with snr %f", mp.from, mp.rx_snr);
+        LOG_TRACE("Get or create neighbor: 0x%08x with snr %f", mp.from, mp.rx_snr);
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0,
                             mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
@@ -202,7 +202,6 @@ void NeighborInfoModule::resetNeighbors()
 
 void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("updateNeighbors");
     // The last sent ID will be 0 if the packet is from the phone, which we don't
     // count as an edge. So we assume that if it's zero, then this packet is from
     // our node.

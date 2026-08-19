@@ -170,7 +170,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
                         pi.sendResponse(mp);
                         LOG_INFO("Asked module '%s' to send a response", pi.name);
                     } else {
-                        LOG_DEBUG("Module '%s' cannot respond on portnum=%d", pi.name, mp.decoded.portnum);
+                        LOG_DEBUG("Module '%s' can't respond on portnum=%d", pi.name, mp.decoded.portnum);
                     }
                     ignoreRequest = ignoreRequest || pi.ignoreRequest; // If at least one module asks it, we may ignore a request
                 } else {
