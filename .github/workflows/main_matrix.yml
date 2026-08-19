@@ -67,17 +67,24 @@ jobs:
         id: jsonStep
         env:
           BASE_REF: ${{ github.base_ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           # A new board is normally 'release', so it would otherwise get no CI until
           # after merge. Force-build the first env of each added variant config.
           # Only added files count; a new env in an existing config does not.
-          ADDED_ARGS=()
+          DIFF_BASE=""
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             git fetch --no-tags --depth=1 origin "$BASE_REF"
+            DIFF_BASE=$(git merge-base FETCH_HEAD HEAD)
+          elif [[ "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
+            DIFF_BASE="$MERGE_GROUP_BASE_SHA"
+          fi
+          ADDED_ARGS=()
+          if [[ -n "$DIFF_BASE" ]]; then
             while IFS= read -r cfg; do
               [[ -n "$cfg" ]] && ADDED_ARGS+=(--added-config "$cfg")
             done < <(git diff --name-only --diff-filter=A \
-              "$(git merge-base FETCH_HEAD HEAD)" HEAD -- 'variants/**/platformio.ini')
+              "$DIFF_BASE" HEAD -- 'variants/**/platformio.ini')
           fi
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
