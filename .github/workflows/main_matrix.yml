@@ -69,9 +69,8 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
-          # A new board is normally 'release', so it would otherwise get no CI until
-          # after merge. Force-build the first env of each added variant config.
-          # Only added files count; a new env in an existing config does not.
+          # A new board is 'release' and gets no CI until after merge, so force-build the
+          # first env of each ADDED variant config. A new env in an existing one does not count.
           DIFF_BASE=""
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             git fetch --no-tags --depth=1 origin "$BASE_REF"
@@ -81,10 +80,13 @@ jobs:
           fi
           ADDED_ARGS=()
           if [[ -n "$DIFF_BASE" ]]; then
+            # Assign rather than pipe: a failing diff must abort the step under 'set -e',
+            # not silently yield an empty list and drop the new board from the matrix.
+            ADDED_CONFIGS=$(git diff --name-only --diff-filter=A \
+              "$DIFF_BASE" HEAD -- 'variants/**/platformio.ini')
             while IFS= read -r cfg; do
               [[ -n "$cfg" ]] && ADDED_ARGS+=(--added-config "$cfg")
-            done < <(git diff --name-only --diff-filter=A \
-              "$DIFF_BASE" HEAD -- 'variants/**/platformio.ini')
+            done <<<"$ADDED_CONFIGS"
           fi
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
