@@ -652,6 +652,10 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 Screen::~Screen()
 {
     delete[] graphics::normalFrames;
+    // Owned by the constructor; Screen is genuinely destroyed on the portduino reboot path
+    // (screen = nullptr in Power.cpp), which previously leaked the display and UI objects.
+    delete ui;
+    delete dispdev;
 }
 
 /**
@@ -1112,7 +1116,7 @@ int32_t Screen::runOnce()
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
+    if (showingBootScreen && Throttle::hasElapsed(serialSinceMsec, logo_timeout)) {
         LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;
@@ -1120,8 +1124,8 @@ int32_t Screen::runOnce()
 
 #ifdef USERPREFS_OEM_TEXT
     static bool showingOEMBootScreen = true;
-    if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
-        LOG_INFO("Switch to OEM screen");
+    if (showingOEMBootScreen && Throttle::hasElapsed(serialSinceMsec, logo_timeout / 2)) {
+        LOG_INFO("Switch to OEM screen...");
         // Change frames.
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
         static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
