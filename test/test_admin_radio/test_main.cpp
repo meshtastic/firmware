@@ -1090,6 +1090,9 @@ static void test_restorePreferences_corruptBackupIsNotSuccess()
     NodeDB *savedNodeDB = nodeDB;
     nodeDB = new NodeDB();
     const meshtastic_LocalConfig savedConfig = config;
+    const meshtastic_LocalModuleConfig savedModuleConfig = moduleConfig;
+    const meshtastic_DeviceState savedDeviceState = devicestate;
+    const meshtastic_ChannelFile savedChannelFile = channelFile;
 
     config = meshtastic_LocalConfig_init_zero;
     config.has_security = true;
@@ -1110,14 +1113,26 @@ static void test_restorePreferences_corruptBackupIsNotSuccess()
         TEST_ASSERT_EQUAL_MESSAGE(sizeof(garbage), wrote, "short write of corrupt backup");
     }
 
-    TEST_ASSERT_FALSE_MESSAGE(nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_CONFIG),
+    // Every segment the caller could ask for, so a future regression that clobbers one of the other
+    // three still fails here rather than only the one this bug happened to reach.
+    const int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS;
+    TEST_ASSERT_FALSE_MESSAGE(nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, restoreWhat),
                               "restore from an undecodable backup must fail");
     TEST_ASSERT_EQUAL_MESSAGE(32, config.security.private_key.size, "failed restore must not clear the private key");
     for (size_t i = 0; i < config.security.private_key.size; i++)
         TEST_ASSERT_EQUAL_MESSAGE(0x7C, config.security.private_key.bytes[i], "failed restore must not overwrite live config");
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(&savedModuleConfig, &moduleConfig, sizeof(moduleConfig),
+                                     "failed restore must not overwrite moduleConfig");
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(&savedDeviceState, &devicestate, sizeof(devicestate),
+                                     "failed restore must not overwrite devicestate");
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(&savedChannelFile, &channelFile, sizeof(channelFile),
+                                     "failed restore must not overwrite channelFile");
 
     config = savedConfig;
-    nodeDB->saveToDisk(SEGMENT_CONFIG);
+    moduleConfig = savedModuleConfig;
+    devicestate = savedDeviceState;
+    channelFile = savedChannelFile;
+    nodeDB->saveToDisk(restoreWhat);
     FSCom.remove(backupFileName);
     delete nodeDB;
     nodeDB = savedNodeDB;
