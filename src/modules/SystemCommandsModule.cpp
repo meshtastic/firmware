@@ -91,19 +91,19 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_PRIVACY_TOGGLE:
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
-            const bool withBuzzer = event->inputEvent == INPUT_BROKER_PRIVACY_TOGGLE;
             const bool wasEnabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+            // toggleGpsMode() only moves between ENABLED and DISABLED, so leave the buzzer alone otherwise.
+            const bool withBuzzer = event->inputEvent == INPUT_BROKER_PRIVACY_TOGGLE &&
+                                    (wasEnabled || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED);
             if (wasEnabled && config.position.fixed_position == false) {
                 nodeDB->clearLocalPosition();
                 nodeDB->saveToDisk();
             }
-            // Unmute before the toggle and mute after it, so the confirmation beep is audible both ways.
-            if (withBuzzer && !wasEnabled)
+            if (withBuzzer) // unmute first, so the confirmation beep is audible in both directions
                 config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
             gps->toggleGpsMode();
             const bool nowEnabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
             if (withBuzzer) {
-                // Follow the GPS, which does not move on GpsMode_NOT_PRESENT.
                 config.device.buzzer_mode = nowEnabled ? meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
                                                        : meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED;
                 nodeDB->saveToDisk(SEGMENT_CONFIG);
