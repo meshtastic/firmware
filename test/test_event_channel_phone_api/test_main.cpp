@@ -1,4 +1,5 @@
 #include "Channels.h"
+#include "MeshModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
@@ -15,9 +16,27 @@ namespace
 {
 constexpr PacketId BLOCKED_PACKET_ID = 0x10203040;
 constexpr PacketId FOLLOWUP_PACKET_ID = 0x50607080;
+constexpr PacketId WAYPOINT_PACKET_ID = 0x0a0b0c0d;
 constexpr ChannelIndex EVENT_CHANNEL = 0;
 constexpr ChannelIndex PRIVATE_CHANNEL = 1;
+constexpr NodeNum LOCAL_NODE = 0x87654321;
 constexpr NodeNum REMOTE_NODE = 0x12345678;
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+// Where a coordinate packet the phone aimed at the event channel actually goes once a channel carries positions.
+constexpr ChannelIndex COERCED_CHANNEL = PRIVATE_CHANNEL;
+#else
+constexpr ChannelIndex COERCED_CHANNEL = EVENT_CHANNEL;
+#endif
+
+// Router::sendLocal() loops a to-self packet through MeshModule::callModules(), which walks the module
+// list; construct one so the list exists in this otherwise module-free binary.
+class NoopModule : public MeshModule
+{
+  public:
+    NoopModule() : MeshModule("event-phone-api-noop") {}
+    bool wantPacket(const meshtastic_MeshPacket *) override { return false; }
+};
 
 class MockRadioInterface : public RadioInterface
 {
@@ -106,6 +125,7 @@ MockMeshService *mockService;
 MockRouter *mockRouter;
 NodeDB *mockNodeDB;
 TestStreamAPI *streamAPI;
+NoopModule *noopModule;
 
 void configureChannels()
 {
@@ -135,18 +155,33 @@ void configureChannels()
     channels.onConfigChanged();
 }
 
-meshtastic_ToRadio makePositionToRadio(PacketId id, ChannelIndex channel)
+// configureChannels() leaves both channels without module_settings, i.e. position sharing off everywhere
+// (getPositionPrecisionForChannel fails closed). Opt the private channel in so it becomes the position channel.
+void enablePositionOnPrivateChannel()
+{
+    auto &privateChannel = channelFile.channels[PRIVATE_CHANNEL];
+    privateChannel.settings.has_module_settings = true;
+    privateChannel.settings.module_settings.position_precision = 32;
+    channels.onConfigChanged();
+}
+
+meshtastic_ToRadio makeCoordinateToRadio(PacketId id, ChannelIndex channel, meshtastic_PortNum portnum, NodeNum to)
 {
     meshtastic_ToRadio message = meshtastic_ToRadio_init_default;
     const meshtastic_MeshPacket defaultPacket = meshtastic_MeshPacket_init_default;
     message.which_payload_variant = meshtastic_ToRadio_packet_tag;
     message.packet = defaultPacket;
-    message.packet.to = REMOTE_NODE;
+    message.packet.to = to;
     message.packet.id = id;
     message.packet.channel = channel;
     message.packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    message.packet.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    message.packet.decoded.portnum = portnum;
     return message;
+}
+
+meshtastic_ToRadio makePositionToRadio(PacketId id, ChannelIndex channel)
+{
+    return makeCoordinateToRadio(id, channel, meshtastic_PortNum_POSITION_APP, REMOTE_NODE);
 }
 
 bool sendToRadio(const meshtastic_ToRadio &message)
@@ -160,13 +195,14 @@ bool sendToRadio(const meshtastic_ToRadio &message)
     return streamAPI->handleToRadio(encoded, encodedSize);
 }
 
-void assertSentPacket(size_t index, PacketId id, ChannelIndex channel)
+void assertSentPacket(size_t index, PacketId id, ChannelIndex channel,
+                      meshtastic_PortNum portnum = meshtastic_PortNum_POSITION_APP)
 {
     TEST_ASSERT_GREATER_THAN(index, mockRouter->sentPackets.size());
     const auto &packet = mockRouter->sentPackets[index];
     TEST_ASSERT_EQUAL_UINT32(id, packet.id);
     TEST_ASSERT_EQUAL_UINT8(channel, packet.channel);
-    TEST_ASSERT_EQUAL(meshtastic_PortNum_POSITION_APP, packet.decoded.portnum);
+    TEST_ASSERT_EQUAL(portnum, packet.decoded.portnum);
 }
 } // namespace
 
@@ -177,16 +213,19 @@ void setUp(void)
 
     service = mockService = new MockMeshService();
     nodeDB = mockNodeDB = new NodeDB();
-    myNodeInfo.my_node_num = 0x87654321;
+    myNodeInfo.my_node_num = LOCAL_NODE;
     configureChannels();
     cryptLock = nullptr; // Router's ctor asserts this is unset before allocating its own.
     router = mockRouter = new MockRouter();
     streamAPI = new TestStreamAPI();
+    noopModule = new NoopModule();
     testDelay(1);
 }
 
 void tearDown(void)
 {
+    delete noopModule;
+    noopModule = nullptr;
     delete streamAPI;
     streamAPI = nullptr;
     delete mockRouter;
@@ -250,12 +289,62 @@ static void test_event_position_ingress_does_not_poison_retry_state()
 #endif
 }
 
+// The apps feed the node its phone GPS fix as a POSITION packet addressed to the node itself on channel 0.
+// That packet never leaves the device, so it must pass regardless of the event policy and without a
+// notification, on any channel configuration (here: no channel carries positions at all).
+static void test_phone_position_to_self_is_never_blocked()
+{
+    const auto toSelf = makeCoordinateToRadio(BLOCKED_PACKET_ID, EVENT_CHANNEL, meshtastic_PortNum_POSITION_APP, LOCAL_NODE);
+
+    TEST_ASSERT_TRUE(sendToRadio(toSelf));
+    TEST_ASSERT_EQUAL(0, mockRouter->sentPackets.size()); // delivered locally, never on the air
+    mockService->assertQueueStatus(BLOCKED_PACKET_ID);
+    TEST_ASSERT_EQUAL(0, mockService->notifications.size());
+}
+
+// A coordinate the phone aims at the event channel is moved onto the position channel (the first channel
+// with position sharing enabled) instead of being rejected, and the phone is not told anything went wrong.
+// Without the event policy the packet stays on the channel the phone chose.
+static void test_phone_coordinates_on_event_channel_move_to_position_channel()
+{
+    enablePositionOnPrivateChannel();
+    const auto positionRequest = makePositionToRadio(BLOCKED_PACKET_ID, EVENT_CHANNEL); // DM (e.g. "request position")
+    const auto waypointBroadcast =
+        makeCoordinateToRadio(WAYPOINT_PACKET_ID, EVENT_CHANNEL, meshtastic_PortNum_WAYPOINT_APP, NODENUM_BROADCAST);
+
+    TEST_ASSERT_TRUE(sendToRadio(positionRequest));
+    TEST_ASSERT_EQUAL(1, mockRouter->sentPackets.size());
+    assertSentPacket(0, BLOCKED_PACKET_ID, COERCED_CHANNEL);
+    mockService->assertQueueStatus(BLOCKED_PACKET_ID);
+    TEST_ASSERT_EQUAL(0, mockService->notifications.size());
+
+    TEST_ASSERT_TRUE(sendToRadio(waypointBroadcast));
+    TEST_ASSERT_EQUAL(2, mockRouter->sentPackets.size());
+    assertSentPacket(1, WAYPOINT_PACKET_ID, COERCED_CHANNEL, meshtastic_PortNum_WAYPOINT_APP);
+    mockService->assertQueueStatus(WAYPOINT_PACKET_ID);
+    TEST_ASSERT_EQUAL(0, mockService->notifications.size());
+}
+
+// A coordinate already on the position channel is left alone.
+static void test_phone_coordinates_on_position_channel_are_untouched()
+{
+    enablePositionOnPrivateChannel();
+
+    TEST_ASSERT_TRUE(sendToRadio(makePositionToRadio(FOLLOWUP_PACKET_ID, PRIVATE_CHANNEL)));
+    TEST_ASSERT_EQUAL(1, mockRouter->sentPackets.size());
+    assertSentPacket(0, FOLLOWUP_PACKET_ID, PRIVATE_CHANNEL);
+    TEST_ASSERT_EQUAL(0, mockService->notifications.size());
+}
+
 extern "C" {
 void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
     RUN_TEST(test_event_position_ingress_does_not_poison_retry_state);
+    RUN_TEST(test_phone_position_to_self_is_never_blocked);
+    RUN_TEST(test_phone_coordinates_on_event_channel_move_to_position_channel);
+    RUN_TEST(test_phone_coordinates_on_position_channel_are_untouched);
     exit(UNITY_END());
 }
 

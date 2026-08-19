@@ -325,10 +325,10 @@ void PhoneAPI::handleStartConfig()
             filesManifest = getFiles("/", FILES_MANIFEST_LEVELS, FILES_MANIFEST_MAX_COUNT, &filesManifestLimited);
         }
         if (filesManifestLimited) {
-            LOG_WARN("Got %zu files in manifest (limited to %zu entries/depth %u)", filesManifest.size(),
-                     FILES_MANIFEST_MAX_COUNT, static_cast<unsigned>(FILES_MANIFEST_LEVELS));
+            LOG_WARN("Got %u files in manifest (limited to %u entries/depth %u)", (unsigned)filesManifest.size(),
+                     (unsigned)FILES_MANIFEST_MAX_COUNT, static_cast<unsigned>(FILES_MANIFEST_LEVELS));
         } else {
-            LOG_DEBUG("Got %zu files in manifest", filesManifest.size());
+            LOG_DEBUG("Got %u files in manifest", (unsigned)filesManifest.size());
         }
     } else {
         releaseFilesManifest(filesManifest);
@@ -1826,8 +1826,11 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     }
 #endif
 
-    // Reject before recording duplicate or per-port cooldown state, so a blocked
-    // attempt cannot throttle a valid private-channel position retry.
+    // Coordinates aimed at the event channel go out on the position channel instead (the phone picks the
+    // channel it last heard the node on, which is the event channel for everyone). Only when there is no
+    // channel to move them to is the send rejected. Reject before recording duplicate or per-port cooldown
+    // state, so a blocked attempt cannot throttle a valid private-channel position retry.
+    coerceCoordinatePacketToPositionChannel(&p);
     if (isBlockedEventCoordinatePacket(&p)) {
         LOG_DEBUG("Suppress phone coordinate send on event (everyone) channel");
         meshtastic_QueueStatus qs = router->getQueueStatus();
