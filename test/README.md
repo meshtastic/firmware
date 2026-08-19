@@ -372,7 +372,7 @@ If your suite touches globals the code under test writes - `nodeDB`, `config`, `
 ```cpp
 void setUp(void) {
     // ...
-    replaceAdminRadioGlobals();   // saves the globals, installs a fresh NodeDB
+    replaceAdminRadioGlobals();   // drops nodes.proto, saves the globals, installs a fresh NodeDB
 }
 void tearDown(void) {
     restoreAdminRadioGlobals();   // restores them, deletes the NodeDB, re-runs initRegion()
@@ -381,6 +381,8 @@ void tearDown(void) {
 ```
 
 A fresh `NodeDB` per test costs real time (`loadFromDisk()` plus, when the region is set, key generation) - in that suite roughly 7% of a ~7½-minute run. Pay it. If a test genuinely needs to observe the previous test's state, that is what `state=per-suite` in `test/state-manifest.tsv` is for; say so there rather than achieving it by omission.
+
+Note the `nodes.proto` delete. "A fresh `NodeDB`" is only fresh if the file it loads is gone: the constructor calls `loadFromDisk()`, and the per-suite sandbox is the boundary against the _next_ suite, not against earlier tests in this one. Without the delete this suite reaches `MAX_NUM_NODES` with every entry protected, and `getOrCreateMeshNode()` then returns NULL for whichever test needs a new node last.
 
 ### 3. File-Scope Mutable Globals Persist Across Tests
 

@@ -129,8 +129,12 @@ class menuHandler
     static void LoRaFEMLNAToggleMenu();
 #endif
 
-    // Lifted out of its banner-callback lambda so it is reachable without a Screen. The lambda only
-    // ever runs via screen->showOverlayBanner(), which is why nothing here was unit-testable.
+    // Config actions, lifted out of their banner-callback lambdas so they are reachable without a
+    // Screen. The lambdas only ever run via screen->showOverlayBanner(), which is why none of this
+    // was unit-testable before. Each owns the whole decision: which segment to persist, whether
+    // the radio needs reconfiguring, and whether a reboot is required.
+    static void toggleTelemetryScreen(bool &flag);
+    static void setSmartPositionEnabled(bool enabled);
     static void toggleNodeMuted(uint32_t nodeNum); // uint32_t, matching pickedNodeNum above
 
   private:

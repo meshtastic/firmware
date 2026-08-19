@@ -24,6 +24,18 @@
 #endif
 #endif
 
+/** Flags for MeshService::applyConfigChange().
+ *
+ * A flags enum rather than a pair of bools on purpose: `reboot` and `radioAffected` are both
+ * bools, sit in different positions in the helpers this replaced, and transposing them compiles
+ * silently while doing the opposite of what was meant.
+ */
+enum ConfigApplyFlags : uint8_t {
+    CONFIG_APPLY_NONE = 0,        // persist only
+    CONFIG_APPLY_RADIO = 1 << 0,  // region/preset/freq/channel/PSK - re-init the LoRa chip
+    CONFIG_APPLY_REBOOT = 1 << 1, // field only takes effect after a restart
+};
+
 extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
 extern Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool;
 extern Allocator<meshtastic_ClientNotification> &clientNotificationPool;
@@ -170,9 +182,27 @@ class MeshService
 #endif
 
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
-     * @return true if client devices should be sent a new set of radio configs
+     * @param radioAffected when false, suppresses the live LoRa reconfigure even if saveWhat
+     *        includes SEGMENT_CONFIG/SEGMENT_CHANNELS; the save-to-disk always happens. Defaults
+     *        to true so callers that only pass saveWhat keep the historical bitmask behavior.
      */
-    void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    virtual void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS,
+                              bool radioAffected = true);
+
+    /** Persist `saveWhat`, then optionally reconfigure the radio and/or schedule a reboot.
+     *
+     * The single entry point for applying a config change. `flags` is mandatory so every call
+     * site states whether the LoRa chip needs re-initialising and whether the field only takes
+     * effect after a restart - neither is inferable from the segment mask, because SEGMENT_CONFIG
+     * is one monolithic file covering all eight sub-messages.
+     *
+     * `rebootSeconds` is ignored unless CONFIG_APPLY_REBOOT is set. It exists because one caller
+     * (InkHUD's wifi-recovery path) deliberately uses a shorter delay than the default.
+     *
+     * AdminModule must not call this directly - it goes through saveChanges(), which additionally
+     * defers the write while a remote-admin edit transaction is open.
+     */
+    void applyConfigChange(int saveWhat, uint8_t flags, int32_t rebootSeconds = DEFAULT_REBOOT_SECONDS);
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);

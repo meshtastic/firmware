@@ -93,6 +93,16 @@ extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
 
+/** Schedule a reboot `seconds` from now. A negative `seconds` *cancels* a pending reboot, matching
+ * admin.proto's reboot_seconds ("<0 to cancel reboot") - it does not reboot immediately.
+ *
+ * Deliberately carries no UI: BaseUI already renders the notice at draw time whenever
+ * rebootAtMsec is set and suppressRebootBanner is clear (see Screen.cpp), so raising a banner
+ * here would double up with that on every menu-driven reboot. Callers that want extra UI (an
+ * explicit banner, InkHUD's notifyApplyingChanges) still do it themselves.
+ */
+void requestReboot(int32_t seconds = DEFAULT_REBOOT_SECONDS);
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 // Set by PhoneAPI::handleLockdownAuthInline after a successful unlock.
 // Serviced on the main loop thread because NodeDB::reloadFromDisk() is

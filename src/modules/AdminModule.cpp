@@ -10,11 +10,13 @@
 #include "SPILock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
+#include "mesh/mesh-pb-constants.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <FSCommon.h>
 #include <Throttle.h>
-#include <ctype.h> // for better whitespace handling
+#include <ctype.h>     // for better whitespace handling
+#include <pb_encode.h> // protobufsEqual() reads the stream result, which pb_encode_to_bytes() hides
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "MeshtasticOTA.h"
 #endif
@@ -68,6 +70,10 @@
 
 AdminModule *adminModule;
 
+#ifdef PIO_UNIT_TESTING
+uint32_t disableBluetoothCallCountForTest = 0;
+#endif
+
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 static bool licensedIdentityWillMigrate()
 {
@@ -90,6 +96,50 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
     if (strcmp(buf, secretReserved) == 0) {
         strncpy(buf, currentVal, bufsz);
     }
+}
+
+// Compare two messages by their canonical encoding. Fails toward "changed": every caller uses
+// equality to *skip* a reboot or a radio reload, so a comparison we can't complete must fall
+// through to doing the work rather than silently suppressing it.
+//
+// This encodes directly instead of calling pb_encode_to_bytes(), because that helper returns 0
+// both for a failed encode and for a message whose every field is at its default - and the latter
+// is a legitimate comparison here (a zeroed SecurityConfig encodes to zero bytes). Reading the
+// stream result tells the two apart.
+template <size_t MaxSize> static NOINLINE bool protobufsEqual(const pb_msgdesc_t *fields, const void *left, const void *right)
+{
+    // NOINLINE limits peak stack use to this frame: two MaxSize encode buffers.
+    uint8_t leftBytes[MaxSize], rightBytes[MaxSize];
+    pb_ostream_t leftStream = pb_ostream_from_buffer(leftBytes, sizeof(leftBytes));
+    pb_ostream_t rightStream = pb_ostream_from_buffer(rightBytes, sizeof(rightBytes));
+    // MaxSize is the nanopb-generated _size for the message, so this cannot fail for want of room.
+    if (!pb_encode(&leftStream, fields, left) || !pb_encode(&rightStream, fields, right)) {
+        LOG_ERROR("Can't encode config for comparison; assuming it changed");
+        return false;
+    }
+    return leftStream.bytes_written == rightStream.bytes_written && memcmp(leftBytes, rightBytes, leftStream.bytes_written) == 0;
+}
+
+static NOINLINE bool loraRadioConfigChanged(const meshtastic_Config_LoRaConfig &oldConfig,
+                                            const meshtastic_Config_LoRaConfig &newConfig)
+{
+    auto oldEffective = oldConfig;
+    auto newEffective = newConfig;
+    if (oldEffective.use_preset && newEffective.use_preset) {
+        oldEffective.bandwidth = newEffective.bandwidth = 0;
+        oldEffective.spread_factor = newEffective.spread_factor = 0;
+        oldEffective.coding_rate = newEffective.coding_rate = 0;
+    }
+    newEffective.hop_limit = oldEffective.hop_limit;
+    newEffective.tx_enabled = oldEffective.tx_enabled;
+    newEffective.override_duty_cycle = oldEffective.override_duty_cycle;
+    // The admin setter applies this immediately through RF95_FAN_EN where supported.
+    newEffective.pa_fan_disabled = oldEffective.pa_fan_disabled;
+    newEffective.ignore_incoming_count = oldEffective.ignore_incoming_count;
+    memcpy(newEffective.ignore_incoming, oldEffective.ignore_incoming, sizeof(newEffective.ignore_incoming));
+    newEffective.ignore_mqtt = oldEffective.ignore_mqtt;
+    newEffective.config_ok_to_mqtt = oldEffective.config_ok_to_mqtt;
+    return !protobufsEqual<meshtastic_Config_LoRaConfig_size>(&meshtastic_Config_LoRaConfig_msg, &oldEffective, &newEffective);
 }
 
 /**
@@ -428,9 +478,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             sendWarningAndLog("Unable to switch to the OTA partition.");
         }
 #endif
-        int s = 1; // Reboot in 1 second, hard coded
-        LOG_INFO("Reboot in %d seconds", s);
-        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        // requestReboot() rather than this->reboot(): the OTA handoff has already raised its own
+        // firmware-update screen and set suppressRebootBanner, so it must not get the banner too.
+        requestReboot(1); // 1 second, hard coded
         break;
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
@@ -480,16 +530,34 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
         LOG_INFO("Begin settings edit transaction");
+        if (!hasOpenEditTransaction) {
+            deferredEditSegments = 0;
+            deferredShouldReboot = false;
+            deferredRadioAffected = false;
+        }
         hasOpenEditTransaction = true;
         editTransactionActivityMs = millis();
+        enabled = true;
+        setIntervalFromNow(EDIT_TRANSACTION_IDLE_MS);
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
-        disableBluetooth();
+        // No unconditional disableBluetooth() here: this branch narrows it to the commits that
+        // actually reboot, a few lines below. Keeping develop's eager call as well would disable
+        // the radio on every commit and double-count it.
         LOG_INFO("Commit settings edit transaction");
         hasOpenEditTransaction = false;
         deferredEditSegments = 0;
-        saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
+        // Consume the accumulated decisions, then clear them: a stray second commit, or one with no
+        // matching begin, must not inherit the previous transaction's answer.
+        const bool commitReboot = deferredShouldReboot, commitRadio = deferredRadioAffected;
+        deferredShouldReboot = false;
+        deferredRadioAffected = false;
+        disable();
+        if (commitReboot)
+            disableBluetooth();
+        saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE,
+                    commitReboot, commitRadio);
         flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
     }
@@ -522,7 +590,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
             if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
-                saveChanges(SEGMENT_NODEDATABASE, false);
+                saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
             } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
@@ -538,7 +606,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
@@ -556,7 +624,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
                 messageStore.deleteAllMessagesFromNode(node->num);
 #endif
-                saveChanges(SEGMENT_NODEDATABASE, false);
+                saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
 #if HAS_SCREEN
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -574,7 +642,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_ignored_node);
         if (node != NULL) {
             nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
         }
         break;
     }
@@ -583,7 +651,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
         if (node != NULL) {
             nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_MUTED_MASK, !nodeInfoLiteIsMuted(node));
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
         }
         break;
     }
@@ -597,7 +665,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         nodeDB->updatePosition(node->num, r->set_fixed_position, RX_SRC_LOCAL);
         nodeDB->setLocalPosition(r->set_fixed_position);
         config.position.fixed_position = true;
-        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps != nullptr)
             gps->enable();
@@ -610,7 +678,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client got remove_fixed_position");
         nodeDB->clearLocalPosition();
         config.position.fixed_position = false;
-        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
@@ -830,8 +898,11 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
+        // shouldReboot=true is pre-existing behaviour for a name/licence change and is left alone
+        // here; radioAffected is false because none of the owner record feeds the modem.
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
-                    (channelsSanitized ? SEGMENT_CHANNELS : 0));
+                        (channelsSanitized ? SEGMENT_CHANNELS : 0),
+                    /*shouldReboot=*/true, /*radioAffected=*/false);
     }
 }
 
@@ -856,6 +927,16 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
 }
 #endif
 
+// Only ENABLED <-> DISABLED can be applied live: the GPS object is built once at boot, and only
+// when gps_mode is not NOT_PRESENT (main.cpp), so NOT_PRESENT transitions need the reboot.
+static bool isLiveGpsModeToggle(meshtastic_Config_PositionConfig_GpsMode from, meshtastic_Config_PositionConfig_GpsMode to)
+{
+    auto runnable = [](meshtastic_Config_PositionConfig_GpsMode m) {
+        return m == meshtastic_Config_PositionConfig_GpsMode_ENABLED || m == meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    };
+    return from != to && runnable(from) && runnable(to);
+}
+
 // A "regenerate keys" client sends a blank SecurityConfig holding only the new private key, rather than the
 // config it read from us. Detect that shape - new private key, every other field at its proto default - so it
 // isn't mistaken for "and clear everything else".
@@ -879,6 +960,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
+    // Config is a monolithic segment: only the lora sub-message actually affects the radio, so only
+    // that case sets radioAffected. Every other sub-message still persists SEGMENT_CONFIG but must not
+    // trigger the live SX126x reconfigure (see MeshService::reloadConfig).
+    bool radioAffected = false;
     bool loraPresetWarnPending = false;
     meshtastic_Config_LoRaConfig pendingOldLora = {}, pendingNewLora = {};
 
@@ -934,21 +1019,52 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
         break;
     } // case meshtastic_Config_device_tag
-    case meshtastic_Config_position_tag:
+    case meshtastic_Config_position_tag: {
         LOG_INFO("Set config: Position");
         config.has_position = true;
+        // Reboot only when a field that can't be applied live changed. PositionModule reads these fields
+        // directly from config every send/schedule cycle (verified in PositionModule.cpp), so changing
+        // only them takes effect with no restart; gps_mode joins them when the driver call below applies
+        // it. Everything else - GPS timing and GPIO pin assignments - stays on the reboot path.
+        // Fails safe: neutralize the known-live fields in a copy,
+        // then reboot if any *other* byte differs, so a newly-added PositionConfig field reboots until it
+        // is explicitly cleared as live here. See docs/admin-config-save-gating.md.
+        const bool gpsToggledLive = isLiveGpsModeToggle(config.position.gps_mode, c.payload_variant.position.gps_mode);
+        {
+            meshtastic_Config_PositionConfig live = config.position, incoming = c.payload_variant.position;
+            incoming.position_broadcast_secs = live.position_broadcast_secs;
+            incoming.position_broadcast_smart_enabled = live.position_broadcast_smart_enabled;
+            incoming.broadcast_smart_minimum_distance = live.broadcast_smart_minimum_distance;
+            incoming.position_flags = live.position_flags;
+            incoming.fixed_position = live.fixed_position;
+            if (gpsToggledLive)
+                incoming.gps_mode = live.gps_mode;
+            requiresReboot = (memcmp(&live, &incoming, sizeof(live)) != 0);
+        }
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
         // clear the stored position since it may not get updated
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
             c.payload_variant.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
             config.position.fixed_position == false && c.payload_variant.position.fixed_position == false) {
             nodeDB->clearLocalPosition();
-            saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+            // SEGMENT_CONFIG is deliberately omitted here: config.position hasn't been updated to the
+            // incoming value yet, so saving it now would persist stale data. The final saveChanges()
+            // below re-saves SEGMENT_CONFIG once config.position is current.
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
         }
         config.position = c.payload_variant.position;
-
-        // Save nodedb as well in case we got a fixed position packet
+#if !MESHTASTIC_EXCLUDE_GPS
+        // Driving the driver is what earns the suppressed reboot: writing gps_mode alone leaves the
+        // receiver in its old state until next boot. As MenuHandler::GPSToggleMenu(), minus the beep.
+        if (gpsToggledLive && gps) {
+            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                gps->enable();
+            else
+                gps->disable();
+        }
+#endif
         break;
+    } // case meshtastic_Config_position_tag
     case meshtastic_Config_power_tag:
         LOG_INFO("Set config: Power");
         config.has_power = true;
@@ -972,10 +1088,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_network_tag: {
         LOG_INFO("Set config: WiFi");
         config.has_network = true;
-        char prevPsk[sizeof(config.network.wifi_psk)];
-        memcpy(prevPsk, config.network.wifi_psk, sizeof(prevPsk));
-        config.network = c.payload_variant.network;
-        writeSecret(config.network.wifi_psk, sizeof(config.network.wifi_psk), prevPsk);
+        auto incoming = c.payload_variant.network;
+        writeSecret(incoming.wifi_psk, sizeof(incoming.wifi_psk), config.network.wifi_psk);
+        // No-op set must not reboot; any real change still restarts the network stack. memcmp fails safe.
+        if (memcmp(&config.network, &incoming, sizeof(config.network)) == 0)
+            requiresReboot = false;
+        config.network = incoming;
         break;
     }
     case meshtastic_Config_display_tag:
@@ -1151,6 +1269,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
 
+        radioAffected = loraRadioConfigChanged(oldLoraConfig, validatedLora);
         config.lora = validatedLora; // Finally, return the validated config back to the main config
         if (validatedLora.modem_preset != oldLoraConfig.modem_preset) {
             pendingOldLora = oldLoraConfig;
@@ -1163,10 +1282,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_bluetooth_tag:
         LOG_INFO("Set config: Bluetooth");
         config.has_bluetooth = true;
+        // No-op set must not reboot the very BLE link the phone is using; any real change still reboots.
+        if (memcmp(&config.bluetooth, &c.payload_variant.bluetooth, sizeof(config.bluetooth)) == 0)
+            requiresReboot = false;
         config.bluetooth = c.payload_variant.bluetooth;
         break;
     case meshtastic_Config_security_tag: {
         LOG_INFO("Set config: Security");
+        const auto oldSecurity = config.security;
         meshtastic_Config_SecurityConfig incoming = c.payload_variant.security;
         // Preserve our keypair when a SET omits the private key but we already hold one: regenerating would
         // change our NodeNum (== crc32(public_key)) and orphan us on the mesh. A SET without the key is a
@@ -1213,10 +1336,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             LOG_WARN(warning);
             sendWarning(warning);
         }
+        requiresReboot = !protobufsEqual<meshtastic_Config_SecurityConfig_size>(&meshtastic_Config_SecurityConfig_msg,
+                                                                                &oldSecurity, &config.security);
 
         changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
-
-        requiresReboot = true;
 
         break;
     }
@@ -1228,7 +1351,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         disableBluetooth();
     } // end of switch case which_payload_variant
 
-    saveChanges(changes, requiresReboot);
+    saveChanges(changes, requiresReboot, radioAffected);
     if (loraPresetWarnPending)
         warnOnLoraPresetChange(pendingOldLora, pendingNewLora);
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
@@ -1239,12 +1362,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
-    // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
-    // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
-                                              meshtastic_ModuleConfig_serial_tag, meshtastic_ModuleConfig_statusmessage_tag)) {
-        disableBluetooth();
-    }
 
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
@@ -1256,27 +1373,29 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (!MQTT::isValidConfig(c.payload_variant.mqtt)) {
             return false;
         }
-        // Disable Bluetooth to prevent interference during MQTT configuration
-        disableBluetooth();
         moduleConfig.has_mqtt = true;
         {
-            char prevPass[sizeof(moduleConfig.mqtt.password)];
-            memcpy(prevPass, moduleConfig.mqtt.password, sizeof(prevPass));
-            moduleConfig.mqtt = c.payload_variant.mqtt;
-            writeSecret(moduleConfig.mqtt.password, sizeof(moduleConfig.mqtt.password), prevPass);
+            auto incoming = c.payload_variant.mqtt;
+            writeSecret(incoming.password, sizeof(incoming.password), moduleConfig.mqtt.password);
+            shouldReboot = !protobufsEqual<meshtastic_ModuleConfig_MQTTConfig_size>(&meshtastic_ModuleConfig_MQTTConfig_msg,
+                                                                                    &moduleConfig.mqtt, &incoming);
+            moduleConfig.mqtt = incoming;
         }
 #endif
         break;
     case meshtastic_ModuleConfig_serial_tag:
         LOG_INFO("Set module config: Serial");
         // No architecture guard: the check and the store below must agree on every platform.
-        // disableBluetooth() self-guards on HAS_BLUETOOTH, so it is empty where there is no radio.
         if (!serialConfigIsValid(c.payload_variant.serial)) {
             LOG_ERROR("Invalid serial config");
             return false;
         }
-        disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
+        // No disableBluetooth() here. It is driven by shouldReboot at the end of this function, so
+        // a real serial change still disables the radio while a no-op write leaves it alone -
+        // calling it eagerly here would disable Bluetooth even when nothing changed.
         moduleConfig.has_serial = true;
+        shouldReboot = !protobufsEqual<meshtastic_ModuleConfig_SerialConfig_size>(
+            &meshtastic_ModuleConfig_SerialConfig_msg, &moduleConfig.serial, &c.payload_variant.serial);
         moduleConfig.serial = c.payload_variant.serial;
         break;
     case meshtastic_ModuleConfig_external_notification_tag:
@@ -1296,6 +1415,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_telemetry_tag:
         LOG_INFO("Set module config: Telemetry");
+        shouldReboot = !moduleConfig.has_telemetry ||
+                       !protobufsEqual<meshtastic_ModuleConfig_TelemetryConfig_size>(
+                           &meshtastic_ModuleConfig_TelemetryConfig_msg, &moduleConfig.telemetry, &c.payload_variant.telemetry);
         moduleConfig.has_telemetry = true;
         moduleConfig.telemetry = c.payload_variant.telemetry;
         break;
@@ -1440,12 +1562,25 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     }
 #endif
     }
-    saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
+    if (shouldReboot && !hasOpenEditTransaction)
+        disableBluetooth();
+    // No module config feeds RadioInterface::reconfigure() - that reads config.lora only.
+    saveChanges(SEGMENT_MODULECONFIG, shouldReboot, /*radioAffected=*/false);
     return true;
 }
 
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
+    const ChannelIndex oldPrimaryIndex = channels.getPrimaryIndex();
+    // Snapshot the primary name before setChannel() overwrites it. getName() returns either the
+    // stored name or, for an unnamed channel, a modem-preset display name ("MediumTurbo", 11 chars,
+    // is the longest today), so this is sized well clear of both. Truncation here would compare
+    // equal on a name change and silently skip a needed radio reload, so keep the headroom.
+    char oldPrimaryName[32];
+    static_assert(sizeof(meshtastic_ChannelSettings::name) <= sizeof(oldPrimaryName),
+                  "oldPrimaryName must hold any stored channel name without truncating");
+    snprintf(oldPrimaryName, sizeof(oldPrimaryName), "%s", channels.getName(oldPrimaryIndex));
+
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();
@@ -1470,7 +1605,12 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS, false);
+    const ChannelIndex newPrimaryIndex = channels.getPrimaryIndex();
+    const bool usesChannelNameForFrequency = config.lora.override_frequency == 0 && RadioInterface::uses_default_frequency_slot &&
+                                             getRegion(config.lora.region)->overrideSlot == OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH;
+    const bool radioAffected = usesChannelNameForFrequency && (oldPrimaryIndex != newPrimaryIndex ||
+                                                               strcmp(oldPrimaryName, channels.getName(newPrimaryIndex)) != 0);
+    saveChanges(SEGMENT_CHANNELS, false, radioAffected);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
@@ -1870,10 +2010,9 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
 
 void AdminModule::reboot(int32_t seconds)
 {
-    LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
         screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    requestReboot(seconds);
 }
 
 // Without this, a commit that never arrives leaves the transaction open forever and every later
@@ -1887,26 +2026,65 @@ void AdminModule::expireStaleEditTransaction()
     hasOpenEditTransaction = false;
     int segments = deferredEditSegments;
     deferredEditSegments = 0;
-    // No reboot: the settings are already live in RAM and the client that would expect one is gone.
+    // Same consume-and-clear as a real commit: an abandoned transaction must not leave its
+    // decisions behind for the next one.
+    const bool expiredReboot = deferredShouldReboot, expiredRadio = deferredRadioAffected;
+    deferredShouldReboot = false;
+    deferredRadioAffected = false;
+    disable();
+    // Boot-only changes must still take effect if the client disappears. Persisting without this
+    // reboot would leave runtime behavior out of sync with the stored configuration.
+    if (expiredReboot)
+        disableBluetooth();
     if (segments)
-        saveChanges(segments, false);
+        saveChanges(segments, expiredReboot, expiredRadio);
     flushChannelWarnings();
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
+int32_t AdminModule::runOnce()
+{
+    expireStaleEditTransaction();
+    if (!hasOpenEditTransaction)
+        return disable();
+
+    // Sleep out whatever is left of the idle window. Subtraction-first, so this is exact across the
+    // millis() wrap; Throttle has no "time remaining" helper, only the boolean predicates, and the
+    // remainder is what OSThread wants back.
+    //
+    // The 1ms fallback is not dead: expireStaleEditTransaction() above read millis() a moment
+    // earlier, so the window can tip over between its read and this one, leaving the transaction
+    // open with elapsed >= the window. Without the guard that subtraction underflows to ~49.7 days.
+    // Rescheduling 1ms out lets the next tick see it as expired and close it.
+    const uint32_t elapsed = millis() - editTransactionActivityMs;
+    return elapsed < EDIT_TRANSACTION_IDLE_MS ? EDIT_TRANSACTION_IDLE_MS - elapsed : 1;
+}
+
+// radioAffected is mandatory here - see the note on the declaration in AdminModule.h for why it
+// must not be allowed to default now that the deferred transaction flags accumulate it.
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool radioAffected)
 {
 #ifdef PIO_UNIT_TESTING
     lastSaveWhatForTest = saveWhat;
 #endif
-    if (!hasOpenEditTransaction) {
-        LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
-    } else {
-        LOG_INFO("Delay disk save until open transaction commits");
+    // The one thing menus have no concept of: while a remote-admin edit transaction is open the
+    // write is deferred to the commit, so a multi-field set doesn't hit flash once per field.
+    // Remember what the deferred sets asked for, so the commit can honour it rather than falling
+    // back to the parameter defaults and rebooting for e.g. a display-only batch.
+    if (hasOpenEditTransaction) {
+        deferredShouldReboot |= shouldReboot;
+        deferredRadioAffected |= radioAffected;
+        LOG_INFO("Delay save of changes to disk until the open transaction is committed");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
+        enabled = true;
+        setIntervalFromNow(EDIT_TRANSACTION_IDLE_MS);
         deferredEditSegments |= saveWhat;
+        return;
     }
-    if (shouldReboot && !hasOpenEditTransaction) {
+    LOG_INFO("Save changes to disk");
+    // reboot() rather than the CONFIG_APPLY_REBOOT flag: AdminModule also raises its own
+    // "Rebooting..." banner, which applyConfigChange() deliberately knows nothing about.
+    service->applyConfigChange(saveWhat, radioAffected ? CONFIG_APPLY_RADIO : CONFIG_APPLY_NONE);
+    if (shouldReboot) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
 }
@@ -1974,11 +2152,15 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     }
 
     service->reloadOwner(false);
-    saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    // HAM mode rewrites config.lora.tx_enabled and strips channel PSKs - genuinely a radio change.
+    saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS, /*shouldReboot=*/true,
+                /*radioAffected=*/true);
 }
 
-AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
+AdminModule::AdminModule()
+    : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg), concurrency::OSThread("AdminTimeout")
 {
+    disable();
     // restrict to the admin channel for rx
     // boundChannel = Channels::adminChannel;
 }
@@ -2484,6 +2666,9 @@ void AdminModule::warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &old
 
 void disableBluetooth()
 {
+#ifdef PIO_UNIT_TESTING
+    disableBluetoothCallCountForTest++;
+#endif
 #if HAS_BLUETOOTH
 #ifdef ARCH_ESP32
     if (nimbleBluetooth)

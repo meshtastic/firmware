@@ -34,6 +34,7 @@
 
 // hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
 extern uint32_t hash(const char *str);
+extern uint32_t disableBluetoothCallCountForTest;
 
 // Every client notification the AdminModule emits flows through sendClientNotification();
 // capture each formatted message so the warning/coalescing tests can assert on the exact
@@ -48,6 +49,17 @@ class MockMeshService : public MeshService
     {
         capturedWarnings.push_back(n->message);
         releaseClientNotificationToPool(n);
+    }
+
+    // Counts entries into reloadConfig(). Lets a test assert a code path writes *once*, which
+    // configChanged alone cannot show (a suppressed reload still persists).
+    int reloadCalls = 0;
+    bool lastRadioAffected = false;
+    void reloadConfig(int saveWhat, bool radioAffected) override
+    {
+        reloadCalls++;
+        lastRadioAffected = radioAffected;
+        MeshService::reloadConfig(saveWhat, radioAffected);
     }
 };
 
@@ -1011,6 +1023,13 @@ static void replaceAdminRadioGlobals()
     savedOwner = owner;
     savedConfig = config;
     savedChannelFile = channelFile;
+    // Drop the persisted node database first: NodeDB's constructor reloads it, so without this the
+    // "own NodeDB" is seeded with every node its predecessors left on disk - the per-suite sandbox
+    // is the boundary against the *next* suite, not against earlier tests in this one. Observed
+    // without it: getOrCreateMeshNode() eventually returns NULL, which it only does when the DB is
+    // at MAX_NUM_NODES with no evictable (non-favorite/ignored/verified) candidate, and the test
+    // that happens to run last fails. The exact accumulation path is not yet pinned down.
+    FSCom.remove(nodeDatabaseFileName);
     replacementNodeDB = new NodeDB();
     nodeDB = replacementNodeDB;
 }
@@ -1853,6 +1872,41 @@ static void test_setFavoriteNode_skipsRadioReload_butPersists()
     TEST_ASSERT_TRUE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TEST_NODE_NUM)));
 }
 
+// The clear-side twin of each set: removal is a node-DB write too, so it must not reconfigure
+// the radio either. Set and clear travel different admin tags, so one holding says nothing
+// about the other.
+static void test_removeFavoriteNode_skipsRadioReload()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_favorite_node_tag;
+    m.remove_favorite_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_removeIgnoredNode_skipsRadioReload()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_ignored_node_tag;
+    m.remove_ignored_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsIgnored(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
 static void test_setIgnoredNode_skipsRadioReload_butPersists()
 {
     nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
@@ -1881,6 +1935,1175 @@ static void test_toggleMutedNode_skipsRadioReload_butPersists()
 
     TEST_ASSERT_EQUAL_INT(0, counter.count);
     TEST_ASSERT_TRUE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+// handleSetConfig() radio-reload gating (non-LoRa Config sub-messages)
+//
+// Config is a monolithic disk segment, so every handleSetConfig() sub-message persists
+// SEGMENT_CONFIG. Only the lora sub-message actually feeds RadioInterface::reconfigure()
+// (which reads config.lora); every other sub-message - device/position/power/network/
+// display/bluetooth/security - must persist without firing the live SX126x reconfigure.
+// This is the same crash class as the WisMesh Tag favorite-node bug, reached through a
+// different admin message (a WiFi PSK change, a Bluetooth toggle, a keypair rotation, ...).
+// See docs/admin-config-save-gating.md. As with the node-DB tests above, these run
+// outside an edit transaction so saveChanges() reaches reloadConfig() directly; the
+// deferred-transaction equivalents are further down.
+// -----------------------------------------------------------------------
+
+// Dispatch a set_config admin message carrying one Config sub-message.
+static void sendSetConfig(const meshtastic_Config &c)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config = c;
+    sendAdmin(m);
+}
+
+static void test_setConfigDevice_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_device_tag;
+    c.payload_variant.device = config.device; // no-op change; role stays put
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigPosition_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// position_tag has a second, nested saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, ...)
+// when the GPS is turned off while not using a fixed position; that nested save must also
+// skip the reload, so exercise it explicitly (not just the end-of-case save).
+static void test_setConfigPosition_gpsOffNestedSave_skipsRadioReload()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    config.position.fixed_position = false;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    c.payload_variant.position.fixed_position = false;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigPower_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_power_tag;
+    c.payload_variant.power = config.power;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigNetwork_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    strncpy(c.payload_variant.network.wifi_psk, "hunter2hunter2", sizeof(c.payload_variant.network.wifi_psk) - 1);
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigDisplay_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_display_tag;
+    c.payload_variant.display = config.display;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigBluetooth_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    c.payload_variant.bluetooth.enabled = !config.bluetooth.enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigSecurity_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    // Supply a full keypair (both keys present) so the handler takes neither keygen branch -
+    // keeps the test deterministic and off the crypto path; radioAffected is what's under test.
+    c.payload_variant.security.private_key.size = 32;
+    c.payload_variant.security.public_key.size = 32;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// remove_fixed_position rides SEGMENT_CONFIG only because config.position.fixed_position
+// shares the monolithic Config segment with config.lora; it must not reload the radio.
+// (set_fixed_position is intentionally not covered here - it dereferences the global
+// positionModule, which this unit-test harness does not construct.)
+static void test_removeFixedPosition_skipsRadioReload()
+{
+    config.position.fixed_position = true;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_fixed_position_tag;
+    m.remove_fixed_position = true;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(config.position.fixed_position);
+}
+
+// Default-preservation guard: reloadConfig() callers that pass only saveWhat (MenuHandler,
+// MenuApplet, portduino - ~35 sites) rely on radioAffected defaulting to true. Pin that: a
+// SEGMENT_CONFIG or SEGMENT_CHANNELS save with the argument omitted must still reload.
+static void test_reloadConfig_defaultRadioAffected_stillReloads()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    service->reloadConfig(SEGMENT_CONFIG);   // radioAffected defaulted
+    service->reloadConfig(SEGMENT_CHANNELS); // radioAffected defaulted
+
+    TEST_ASSERT_EQUAL_INT(2, counter.count);
+}
+
+// ...and the explicit opt-out must suppress the reload even with SEGMENT_CONFIG set,
+// while the save-to-disk still happens (the whole point of separating the two concerns).
+static void test_reloadConfig_radioAffectedFalse_skipsReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigBluetooth_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigBluetooth_realChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    c.payload_variant.bluetooth.enabled = !config.bluetooth.enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigNetwork_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigNetwork_realChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    c.payload_variant.network.wifi_enabled = !config.network.wifi_enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// A boot-only field (GPIO) must still reboot - this stays true through Tier 2.
+static void test_setConfigPosition_gpioChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = config.position.rx_gpio + 1;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position; // byte-identical to current
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_liveFieldChange_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.position_broadcast_secs = config.position.position_broadcast_secs + 60;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// A module-config-only save must never touch the radio. The frame-toggle menu persists
+// moduleConfig.telemetry.*_screen_enabled this way; passing the mask without the explicit
+// radioAffected=false would inherit the default of true and needlessly re-init the LoRa chip
+// for a screen preference.
+static void test_reloadConfig_moduleConfigSegment_skipsReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    service->reloadConfig(SEGMENT_MODULECONFIG, /*radioAffected=*/false);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// reloadConfig() ends with an unconditional nodeDB->saveToDisk(saveWhat), *outside* the
+// radioAffected guard. So with the flag false it is exactly equivalent to calling
+// saveToDisk(saveWhat) directly - which is what licenses deleting the nine
+// `saveToDisk(X); reloadConfig(X, ...)` double-writes from the InkHUD menu. If that
+// equivalence ever stops holding, those deletions become silent data loss, so assert it here
+// rather than trusting the reading of the code.
+static void test_reloadConfig_radioAffectedFalse_isEquivalentToSaveToDisk()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    // Distinguishable value so we can tell a write happened at all.
+    config.position.position_broadcast_secs = 4321;
+
+    const int savesBefore = mockMeshService->reloadCalls;
+    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false);
+
+    // No radio reconfigure...
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    // ...and exactly one pass through reloadConfig, i.e. one save, not two.
+    TEST_ASSERT_EQUAL_INT(savesBefore + 1, mockMeshService->reloadCalls);
+    // The in-memory value survives the call (nothing clobbers config on the save path).
+    TEST_ASSERT_EQUAL_UINT32(4321, config.position.position_broadcast_secs);
+}
+
+// The explicit shorter delay exists for one caller (InkHUD's wifi-recovery path). Assert the
+// trailing parameter actually shortens the schedule rather than being silently ignored.
+static void test_applyConfigChange_customRebootSeconds_isHonoured()
+{
+    rebootAtMsec = 0;
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT, 2);
+    const uint32_t shortDelay = rebootAtMsec;
+
+    rebootAtMsec = 0;
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
+    const uint32_t defaultDelay = rebootAtMsec;
+
+    TEST_ASSERT_NOT_EQUAL(0, shortDelay);
+    TEST_ASSERT_TRUE(shortDelay < defaultDelay);
+}
+
+static void test_applyConfigChange_none_persists_andDoesNotReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+    const int before = mockMeshService->reloadCalls;
+
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);                         // no radio reconfigure
+    TEST_ASSERT_EQUAL_INT(before + 1, mockMeshService->reloadCalls); // did persist, once
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);                       // no reboot
+}
+
+static void test_applyConfigChange_noRebootFlag_leavesRebootAtMsecClear()
+{
+    rebootAtMsec = 0;
+
+    service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_applyConfigChange_radioAndRebootCompose()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_RADIO | CONFIG_APPLY_REBOOT);
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_applyConfigChange_radioFlag_triggersReload()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_RADIO);
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec); // radio flag alone must not reboot
+}
+
+static void test_applyConfigChange_rebootFlag_setsRebootAtMsec()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count); // reboot flag alone must not touch the radio
+}
+
+// Read live by PositionModule every send, so this must persist without rebooting - that reboot
+// is what PR #11181 removed, and this pins it down.
+static void test_setSmartPositionEnabled_persistsWithoutReboot()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+    config.position.position_broadcast_smart_enabled = false;
+
+    graphics::menuHandler::setSmartPositionEnabled(true);
+
+    TEST_ASSERT_TRUE(config.position.position_broadcast_smart_enabled);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+
+    graphics::menuHandler::setSmartPositionEnabled(false);
+    TEST_ASSERT_FALSE(config.position.position_broadcast_smart_enabled);
+}
+
+// The bug fixed in commit 1: this used to change the flag and never persist it.
+static void test_toggleTelemetryScreen_persistsWithoutRadioReloadOrReboot()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+    moduleConfig.telemetry.environment_screen_enabled = false;
+    const int before = mockMeshService->reloadCalls;
+
+    graphics::menuHandler::toggleTelemetryScreen(moduleConfig.telemetry.environment_screen_enabled);
+
+    TEST_ASSERT_TRUE(moduleConfig.telemetry.environment_screen_enabled); // flipped
+    TEST_ASSERT_EQUAL_INT(before + 1, mockMeshService->reloadCalls);     // and persisted
+    TEST_ASSERT_EQUAL_INT(0, counter.count);                             // a screen pref is not a radio change
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);                           // and needs no reboot
+}
+
+static void test_toggleTelemetryScreen_togglesBackOffAgain()
+{
+    moduleConfig.telemetry.power_screen_enabled = true;
+    graphics::menuHandler::toggleTelemetryScreen(moduleConfig.telemetry.power_screen_enabled);
+    TEST_ASSERT_FALSE(moduleConfig.telemetry.power_screen_enabled);
+}
+
+// saveToDisk(SEGMENT_MODULECONFIG) only serialises a sub-message whose has_* flag is set, so a
+// field can be assigned, "saved", and still never reach disk - exactly the TAK bug fixed upstream
+// in #11216. Drive the real toggle and assert the save path sets has_telemetry, rather than
+// asserting values the test itself just wrote.
+static void test_toggleTelemetryScreen_savePathSetsHasTelemetry()
+{
+    moduleConfig.has_telemetry = false;
+
+    graphics::menuHandler::toggleTelemetryScreen(moduleConfig.telemetry.air_quality_screen_enabled);
+
+    TEST_ASSERT_TRUE(moduleConfig.has_telemetry);
+}
+
+// A GPIO reassignment is boot-only however it arrives: the pin is claimed during GPS construction.
+static void test_setConfigPosition_gpioChangeStillReboots()
+{
+    config.position.rx_gpio = 0; // known start state
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_gpsDisableIsLive_doesNotReboot()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED; // known start state
+    config.position.fixed_position = true; // keep the nested clearLocalPosition save out of this test
+    rebootAtMsec = 0;
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(meshtastic_Config_PositionConfig_GpsMode_DISABLED, (int)config.position.gps_mode);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_gpsEnableIsLive_doesNotReboot()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED; // known start state
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(meshtastic_Config_PositionConfig_GpsMode_ENABLED, (int)config.position.gps_mode); // persisted
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count); // and still no reason to touch the radio
+}
+
+// ...and so does the reverse: there is no driver to enable until a boot has constructed one.
+static void test_setConfigPosition_gpsFromNotPresent_stillReboots()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT; // known start state
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// The exemption is for gps_mode alone - it must not smuggle a genuinely boot-only field past the
+// memcmp fail-safe when both change in the same set.
+static void test_setConfigPosition_gpsToggleWithGpioChange_stillReboots()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED; // known start state
+    config.position.rx_gpio = 0;
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// The live exemption is exactly one pair. Declaring the GPS absent tears down state that only
+// boot rebuilds, so it stays on the reboot path...
+static void test_setConfigPosition_gpsToNotPresent_stillReboots()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED; // known start state
+    config.position.fixed_position = true;
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// ...and the reboot axis on its own: a boot-only field inside a transaction reboots at the commit
+// without dragging the radio reconfigure along with it. rx_gpio rather than gps_mode - the latter
+// is applied live now, so it would no longer exercise the reboot axis at all.
+static void test_transaction_gpioSet_reboots_butDoesNotReloadRadio()
+{
+    config.position.rx_gpio = 0; // known start state
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec); // deferred until the commit
+
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// Boot-only settings are not actually live in RAM. Expiry must finish the same reboot the commit
+// would have requested, or it persists a value that cannot take effect until some unrelated reboot.
+static void test_abandonedTransaction_rebootingFieldRebootsOnExpiry()
+{
+    config.position.rx_gpio = 0; // a genuinely boot-only field, so the drop is a real drop
+    rebootAtMsec = 0;
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+}
+
+static void test_abandonedTransaction_timerExpiresWithoutAdminTraffic()
+{
+    config.position.rx_gpio = 0;
+    rebootAtMsec = 0;
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    testAdmin->ageEditTransaction();
+    testAdmin->runTransactionTimer();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+}
+
+static void test_editTransactionTimer_isDormantUntilTransactionBegins()
+{
+    TEST_ASSERT_FALSE(testAdmin->editTransactionTimerEnabled());
+    TEST_ASSERT_EQUAL_UINT32(INT32_MAX, testAdmin->editTransactionTimerInterval());
+    TEST_ASSERT_EQUAL_INT32(INT32_MAX, testAdmin->runTransactionTimer());
+
+    sendBeginEdit();
+    TEST_ASSERT_TRUE(testAdmin->editTransactionTimerEnabled());
+    TEST_ASSERT_EQUAL_UINT32(60 * 1000, testAdmin->editTransactionTimerInterval());
+
+    sendCommitEdit();
+    TEST_ASSERT_FALSE(testAdmin->editTransactionTimerEnabled());
+    TEST_ASSERT_EQUAL_UINT32(INT32_MAX, testAdmin->editTransactionTimerInterval());
+    TEST_ASSERT_EQUAL_INT32(INT32_MAX, testAdmin->runTransactionTimer());
+}
+
+static meshtastic_Channel makePlainPrimaryChannel(const char *name)
+{
+    meshtastic_Channel channel = makeChannel(0, meshtastic_Channel_Role_PRIMARY, name, DEFAULT_KEY, 1);
+    channel.settings.psk.size = 0;
+    return channel;
+}
+
+static void sendSetConfig(const meshtastic_Config &c);
+static void sendSetModuleConfig(const meshtastic_ModuleConfig &mc);
+
+static void useLicensedHamNarrowSlow()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    owner.is_licensed = true;
+    initRegion();
+    RadioInterface::uses_default_frequency_slot = true;
+}
+
+static void test_setChannel_hamDefaultNameExplicitToImplicit_doesNotReloadRadio()
+{
+    useLicensedHamNarrowSlow();
+    sendSetChannel(makePlainPrimaryChannel("NarrowSlow"));
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(makePlainPrimaryChannel(""));
+
+    TEST_ASSERT_EQUAL_STRING("NarrowSlow", channels.getName(channels.getPrimaryIndex()));
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setChannel_hamDefaultNameImplicitToExplicit_doesNotReloadRadio()
+{
+    useLicensedHamNarrowSlow();
+    sendSetChannel(makePlainPrimaryChannel(""));
+    TEST_ASSERT_EQUAL_STRING("NarrowSlow", channels.getName(channels.getPrimaryIndex()));
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(makePlainPrimaryChannel("NarrowSlow"));
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setChannel_mqttFlagChange_doesNotReloadRadio()
+{
+    usePresetLongFast();
+    meshtastic_Channel channel = makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1);
+    sendSetChannel(channel);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    channel.settings.uplink_enabled = !channel.settings.uplink_enabled;
+    sendSetChannel(channel);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setChannel_noop_doesNotReloadRadio()
+{
+    usePresetLongFast();
+    const meshtastic_Channel channel = makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1);
+    sendSetChannel(channel);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(channel);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setChannel_primaryNameChange_triggersRadioReload()
+{
+    usePresetLongFast();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1));
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "FieldTest", DEFAULT_KEY, 1));
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+static void test_setChannel_primaryNameChangeWithExplicitFrequency_doesNotReloadRadio()
+{
+    usePresetLongFast();
+    config.lora.override_frequency = 915.0f;
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1));
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "FieldTest", DEFAULT_KEY, 1));
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setChannel_primaryNameChangeWithPersistedHashSlot_reloadsRadio()
+{
+    usePresetLongFast();
+    config.lora.channel_num = 1;
+    // Native tests do not initialize the radio-derived default-slot flag.
+    RadioInterface::uses_default_frequency_slot = true;
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1));
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "FieldTest", DEFAULT_KEY, 1));
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+static void test_setChannel_pskChange_doesNotReloadRadio()
+{
+    usePresetLongFast();
+    meshtastic_Channel channel = makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1);
+    sendSetChannel(channel);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    channel.settings.psk.size = sizeof(CUSTOM_KEY);
+    memcpy(channel.settings.psk.bytes, CUSTOM_KEY, sizeof(CUSTOM_KEY));
+    sendSetChannel(channel);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigLora_noop_doesNotReloadRadio()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    sendSetConfig(c);
+
+    TEST_ASSERT_FALSE(mockMeshService->lastRadioAffected);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// A LoRa field the modem derives nothing from, and the mutation that changes it. Driven one field
+// per set: bundling them into a single message passes as long as *none* fires, so a field that gets
+// mis-classified later hides behind its neighbours instead of naming itself.
+struct LoraNonRadioField {
+    const char *name;
+    void (*mutate)(meshtastic_Config_LoRaConfig &);
+};
+
+// Persisted policy: read by the router, MQTT and duty-cycle logic, never by RadioInterface.
+static const LoraNonRadioField loraPolicyFields[] = {
+    {"hop_limit", [](meshtastic_Config_LoRaConfig &l) { l.hop_limit = l.hop_limit + 1; }},
+    {"ignore_mqtt", [](meshtastic_Config_LoRaConfig &l) { l.ignore_mqtt = !l.ignore_mqtt; }},
+    {"config_ok_to_mqtt", [](meshtastic_Config_LoRaConfig &l) { l.config_ok_to_mqtt = !l.config_ok_to_mqtt; }},
+    {"override_duty_cycle", [](meshtastic_Config_LoRaConfig &l) { l.override_duty_cycle = !l.override_duty_cycle; }},
+    {"ignore_incoming",
+     [](meshtastic_Config_LoRaConfig &l) {
+         l.ignore_incoming_count = 1;
+         l.ignore_incoming[0] = 0x12345678;
+     }},
+};
+
+// Applied live by the admin setter itself, so a full modem reconfigure would be redundant.
+static const LoraNonRadioField loraLiveHardwareFields[] = {
+    {"tx_enabled", [](meshtastic_Config_LoRaConfig &l) { l.tx_enabled = !l.tx_enabled; }},
+    {"pa_fan_disabled", [](meshtastic_Config_LoRaConfig &l) { l.pa_fan_disabled = !l.pa_fan_disabled; }},
+};
+
+static void assertLoraFieldsDoNotReloadRadio(const LoraNonRadioField *fields, size_t count)
+{
+    for (size_t i = 0; i < count; i++) {
+        usePresetLongFast(); // reset, so the previous iteration's write doesn't carry over
+        ConfigChangedCounter counter;
+        counter.observe(&service->configChanged);
+
+        meshtastic_Config c = meshtastic_Config_init_zero;
+        c.which_payload_variant = meshtastic_Config_lora_tag;
+        c.payload_variant.lora = config.lora;
+        fields[i].mutate(c.payload_variant.lora);
+        sendSetConfig(c);
+
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, fields[i].name);
+    }
+}
+
+static void test_setConfigLora_policyOnlyChange_doesNotReloadRadio()
+{
+    assertLoraFieldsDoNotReloadRadio(loraPolicyFields, sizeof(loraPolicyFields) / sizeof(loraPolicyFields[0]));
+}
+
+static void test_setConfigLora_liveHardwareFields_dontReloadRadio()
+{
+    assertLoraFieldsDoNotReloadRadio(loraLiveHardwareFields, sizeof(loraLiveHardwareFields) / sizeof(loraLiveHardwareFields[0]));
+}
+
+static void test_setConfigLora_realChange_triggersRadioReload()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+static void test_setConfigNetwork_redactedSecretNoop_doesNotReboot()
+{
+    strncpy(config.network.wifi_psk, "existing-test-secret", sizeof(config.network.wifi_psk) - 1);
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    strncpy(c.payload_variant.network.wifi_psk, "sekrit", sizeof(c.payload_variant.network.wifi_psk) - 1);
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_STRING("existing-test-secret", config.network.wifi_psk);
+}
+
+static void test_setConfigSecurity_noopSet_doesNotReboot()
+{
+    config.has_security = true;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.private_key.size = 32;
+    config.security.public_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    memset(config.security.public_key.bytes, 0x22, 32);
+    rebootAtMsec = 0;
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security = config.security;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigSecurity_realChange_schedulesReboot()
+{
+    config.has_security = true;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.private_key.size = 32;
+    config.security.public_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    memset(config.security.public_key.bytes, 0x22, 32);
+    rebootAtMsec = 0;
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security = config.security;
+    c.payload_variant.security.debug_log_api_enabled = true;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigSecurity_rejectedManagedNoop_doesNotReboot()
+{
+    config.has_security = true;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.private_key.size = 32;
+    config.security.public_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    memset(config.security.public_key.bytes, 0x22, 32);
+    rebootAtMsec = 0;
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security = config.security;
+    c.payload_variant.security.is_managed = true;
+    sendSetConfig(c);
+
+    TEST_ASSERT_FALSE(config.security.is_managed);
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setModuleConfigMqtt_realChangeRebootsAndDisablesBluetooth()
+{
+    moduleConfig.has_mqtt = true;
+    moduleConfig.mqtt = meshtastic_ModuleConfig_MQTTConfig_init_zero;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
+    mc.payload_variant.mqtt = moduleConfig.mqtt;
+    mc.payload_variant.mqtt.encryption_enabled = true;
+    rebootAtMsec = 0;
+
+    sendSetModuleConfig(mc);
+
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setModuleConfigMqtt_redactedSecretNoop_doesNotRebootOrDisableBluetooth()
+{
+    moduleConfig.has_mqtt = true;
+    moduleConfig.mqtt = meshtastic_ModuleConfig_MQTTConfig_init_zero;
+    strncpy(moduleConfig.mqtt.password, "actual-password", sizeof(moduleConfig.mqtt.password) - 1);
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
+    mc.payload_variant.mqtt = moduleConfig.mqtt;
+    strncpy(mc.payload_variant.mqtt.password, "sekrit", sizeof(mc.payload_variant.mqtt.password) - 1);
+    rebootAtMsec = 0;
+
+    sendSetModuleConfig(mc);
+
+    TEST_ASSERT_EQUAL_STRING("actual-password", moduleConfig.mqtt.password);
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setModuleConfigSerial_noop_doesNotRebootOrDisableBluetooth()
+{
+    moduleConfig.has_serial = true;
+    moduleConfig.serial = meshtastic_ModuleConfig_SerialConfig_init_zero;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_serial_tag;
+    mc.payload_variant.serial = moduleConfig.serial;
+    rebootAtMsec = 0;
+
+    sendSetModuleConfig(mc);
+
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setModuleConfigSerial_realChangeRebootsAndDisablesBluetooth()
+{
+    moduleConfig.has_serial = true;
+    moduleConfig.serial = meshtastic_ModuleConfig_SerialConfig_init_zero;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_serial_tag;
+    mc.payload_variant.serial = moduleConfig.serial;
+    mc.payload_variant.serial.echo = true;
+    rebootAtMsec = 0;
+
+    sendSetModuleConfig(mc);
+
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setModuleConfigTelemetry_noop_doesNotRebootOrDisableBluetooth()
+{
+    moduleConfig.has_telemetry = true;
+    moduleConfig.telemetry = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    moduleConfig.telemetry.device_update_interval = 300;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
+    mc.payload_variant.telemetry = moduleConfig.telemetry;
+    rebootAtMsec = 0;
+
+    sendSetModuleConfig(mc);
+
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setModuleConfigTelemetry_realChangeRebootsAndDisablesBluetooth()
+{
+    moduleConfig.has_telemetry = true;
+    moduleConfig.telemetry = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    moduleConfig.telemetry.device_update_interval = 300;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
+    mc.payload_variant.telemetry = moduleConfig.telemetry;
+    mc.payload_variant.telemetry.device_update_interval = 600;
+    rebootAtMsec = 0;
+
+    sendSetModuleConfig(mc);
+
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_transaction_duplicateBegin_preservesRadioReload()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+    sendBeginEdit();
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+static void test_transaction_duplicateBegin_preservesReboot()
+{
+    config.position.rx_gpio = 0;
+    rebootAtMsec = 0;
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+    sendBeginEdit();
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_transaction_liveOnlyCommit_doesNotDisableBluetooth()
+{
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.position_broadcast_secs = config.position.position_broadcast_secs + 60;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+}
+
+static void test_transaction_mqttNoop_keepsBluetoothUntilCommit()
+{
+    moduleConfig.has_mqtt = true;
+    moduleConfig.mqtt = meshtastic_ModuleConfig_MQTTConfig_init_zero;
+    strncpy(moduleConfig.mqtt.password, "actual-password", sizeof(moduleConfig.mqtt.password) - 1);
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
+    mc.payload_variant.mqtt = moduleConfig.mqtt;
+    strncpy(mc.payload_variant.mqtt.password, "sekrit", sizeof(mc.payload_variant.mqtt.password) - 1);
+
+    sendBeginEdit();
+    sendSetModuleConfig(mc);
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+}
+
+static void test_transaction_mqttRealChange_disablesBluetoothAtCommit()
+{
+    moduleConfig.has_mqtt = true;
+    moduleConfig.mqtt = meshtastic_ModuleConfig_MQTTConfig_init_zero;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
+    mc.payload_variant.mqtt = moduleConfig.mqtt;
+    mc.payload_variant.mqtt.encryption_enabled = true;
+    rebootAtMsec = 0;
+
+    sendBeginEdit();
+    sendSetModuleConfig(mc);
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_transaction_rebootingCommit_disablesBluetooth()
+{
+    config.position.rx_gpio = 0;
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+}
+
+static void test_transaction_serialNoop_keepsBluetoothUntilCommit()
+{
+    moduleConfig.has_serial = true;
+    moduleConfig.serial = meshtastic_ModuleConfig_SerialConfig_init_zero;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_serial_tag;
+    mc.payload_variant.serial = moduleConfig.serial;
+
+    sendBeginEdit();
+    sendSetModuleConfig(mc);
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+}
+
+static void test_transaction_serialRealChange_disablesBluetoothAtCommit()
+{
+    moduleConfig.has_serial = true;
+    moduleConfig.serial = meshtastic_ModuleConfig_SerialConfig_init_zero;
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_serial_tag;
+    mc.payload_variant.serial = moduleConfig.serial;
+    mc.payload_variant.serial.echo = true;
+    rebootAtMsec = 0;
+
+    sendBeginEdit();
+    sendSetModuleConfig(mc);
+    TEST_ASSERT_EQUAL_UINT32(0, disableBluetoothCallCountForTest);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(1, disableBluetoothCallCountForTest);
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void assertUsToHamTransactionReloadsOnce(const char *channelName)
+{
+    usePresetLongFast();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", DEFAULT_KEY, 1));
+    owner.is_licensed = true;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    sendSetConfig(c);
+    sendSetChannel(makePlainPrimaryChannel(channelName));
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM, config.lora.region);
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+static void test_transaction_usToHamWithExplicitDefaultName_reloadsRadioOnce()
+{
+    assertUsToHamTransactionReloadsOnce("NarrowSlow");
+}
+
+static void test_transaction_usToHamWithImplicitDefaultName_reloadsRadioOnce()
+{
+    assertUsToHamTransactionReloadsOnce("");
 }
 
 // -----------------------------------------------------------------------
@@ -1917,28 +3140,303 @@ static void test_toggleNodeMuted_unknownNodeDoesNothing()
     TEST_ASSERT_NULL(nodeDB->getMeshNode(0xDEADBEEF));
 }
 
-// CHARACTERIZATION OF A KNOWN DEFECT, not an endorsement. Flipping one NodeInfoLite bit currently
-// calls bare nodeDB->saveToDisk(), which rewrites all five segments. saveToDisk() is not virtual,
-// so the mask is observed through its effect: every prefs file reappears after being removed.
-//
-// A pending fix narrows this to SEGMENT_NODEDATABASE. When it lands, only nodes.proto should come
-// back and this assertion is EXPECTED to change - that diff is the point, so the improvement is
-// visible instead of silent.
-static void test_toggleNodeMuted_currentlyRewritesEverySegment()
+// This was a characterization of a known defect: flipping one NodeInfoLite bit called bare
+// nodeDB->saveToDisk(), rewriting all five segments. That fix has now landed, so the assertion
+// is inverted as its earlier form said it would be - only nodes.proto comes back, and the other
+// four stay gone. saveToDisk() is not virtual, so the mask is still observed through its effect.
+static void test_toggleNodeMuted_writesOnlyTheNodeDatabase()
 {
     nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
 
-    const char *segmentFiles[] = {configFileName, moduleConfigFileName, deviceStateFileName, channelFileName,
-                                  nodeDatabaseFileName};
-    for (const char *f : segmentFiles)
+    const char *otherSegments[] = {configFileName, moduleConfigFileName, deviceStateFileName, channelFileName};
+    for (const char *f : otherSegments)
         FSCom.remove(f);
+    FSCom.remove(nodeDatabaseFileName);
 
     graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
 
-    for (const char *f : segmentFiles)
-        TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(f), f);
+    TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(nodeDatabaseFileName), nodeDatabaseFileName);
+    for (const char *f : otherSegments)
+        TEST_ASSERT_FALSE_MESSAGE(FSCom.exists(f), f);
 }
 #endif // HAS_SCREEN
+
+// -----------------------------------------------------------------------
+// Edit-transaction deferral: the per-field radio/reboot decisions must survive it
+//
+// Every test above runs outside a transaction, where reloadConfig()'s
+// `saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)` bitmask independently blocks a node-DB-only
+// save from reaching the radio. Inside a transaction that safety net is gone: saveChanges()
+// defers, and the commit persists under a fixed full-segment mask, so the bitmask passes and
+// the only thing left deciding whether the SX126x is reconfigured is the accumulated
+// radioAffected flag. Phone apps write config through transactions, so this is the path that
+// matters most - and the one where an accidentally-defaulted `radioAffected = true` would
+// silently reopen the WisMesh Tag favorite crash (#11146).
+//
+// These assert both axes independently: reloadCalls (did we write at all, and once) and
+// configChanged (did the radio actually get reconfigured).
+// -----------------------------------------------------------------------
+
+static const NodeNum TXN_NODE_NUM = 0x0BADF00D;
+
+// Dispatch a set_module_config admin message carrying one ModuleConfig sub-message.
+static void sendSetModuleConfig(const meshtastic_ModuleConfig &mc)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_module_config_tag;
+    m.set_module_config = mc;
+    sendAdmin(m);
+}
+
+// The headline guard: favoriting a node inside a transaction must not reconfigure the radio when
+// the transaction commits. Outside a transaction the segment bitmask makes this unreachable; here
+// it is reachable, and only radioAffected=false keeps it shut.
+static void test_transaction_favoriteNode_doesNotReloadRadioAtCommit()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TXN_NODE_NUM);
+    nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false); // known start state
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_favorite_node_tag;
+    m.set_favorite_node = TXN_NODE_NUM;
+    sendAdmin(m);
+
+    // Deferred: nothing written, nothing reconfigured, while the transaction is open.
+    TEST_ASSERT_EQUAL_INT(0, mockMeshService->reloadCalls);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, mockMeshService->reloadCalls); // written exactly once, at the commit
+    TEST_ASSERT_EQUAL_INT(0, counter.count);                // ...but the radio was left alone
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);              // ...and so was the reboot
+    TEST_ASSERT_TRUE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TXN_NODE_NUM)));
+}
+
+// Same shape via the muted-node handler, which flips unconditionally (no protected-cap gate).
+static void test_transaction_toggleMutedNode_doesNotReloadRadioAtCommit()
+{
+    nodeDB->getOrCreateMeshNode(TXN_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_toggle_muted_node_tag;
+    m.toggle_muted_node = TXN_NODE_NUM;
+    sendAdmin(m);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// Module config never feeds RadioInterface::reconfigure() (which reads config.lora), so a
+// module-config set inside a transaction must not reconfigure at commit either.
+static void test_transaction_moduleConfigSet_doesNotReloadRadioAtCommit()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
+    mc.payload_variant.telemetry = moduleConfig.telemetry;
+    mc.payload_variant.telemetry.device_update_interval = moduleConfig.telemetry.device_update_interval + 60;
+    sendSetModuleConfig(mc);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// The position case makes a *nested* saveChanges() call when the GPS is switched off with no
+// fixed position. That inner call must not opt the whole transaction into a radio reload.
+static void test_transaction_positionGpsOffNestedSave_doesNotReloadRadioAtCommit()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED; // known start state
+    config.position.fixed_position = false;                                      // required for the nested-save branch
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// Regression guard the other way: a real LoRa change inside a transaction must still reconfigure
+// the radio - once, at the commit. Narrowing must not have swallowed the legitimate case.
+static void test_transaction_loraSet_stillReloadsRadioAtCommit()
+{
+    usePresetLongFast();
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count); // still deferred
+
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+    // LoRa applies live via the configChanged observer, so the region-already-set case must not
+    // also reboot - the two axes are decided separately.
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// A batch whose every member is live-appliable must come out of the commit doing neither.
+static void test_transaction_liveOnlyBatch_neitherRebootsNorReloads()
+{
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.position_broadcast_secs = config.position.position_broadcast_secs + 60;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// The accumulated decisions are per-transaction: a LoRa transaction must not leave the next,
+// node-DB-only transaction reconfiguring the radio.
+static void test_transaction_flagsDoNotLeakIntoTheNextTransaction()
+{
+    usePresetLongFast();
+    nodeDB->getOrCreateMeshNode(TXN_NODE_NUM);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    // Second transaction: node-DB metadata only. Start counting after the first commit.
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_toggle_muted_node_tag;
+    m.toggle_muted_node = TXN_NODE_NUM;
+    sendAdmin(m);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// A commit with no matching begin still persists (harmless), but must not invent a radio reload
+// or a reboot out of the parameter defaults.
+static void test_commitWithoutBegin_persistsButDoesNotReloadOrReboot()
+{
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, mockMeshService->reloadCalls);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// The abandonment path retires a transaction *outside* commit_edit_settings, so it decides both
+// axes on its own. It must reach the same answers the commit would have, not fall back to the
+// old implicit "reload the radio" - an abandoned display-only batch has no more business
+// reprogramming the SX126x than a committed one does.
+static void test_abandonedTransaction_liveOnlyBatch_expiresWithoutReloadOrReboot()
+{
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.position_broadcast_secs = config.position.position_broadcast_secs + 60;
+    sendSetConfig(c);
+
+    const int before = mockMeshService->reloadCalls;
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata(); // any later admin message retires the stale transaction
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(before + 1, mockMeshService->reloadCalls); // the deferred write still lands
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// The guard the other way: abandonment must not lose a real LoRa change's reconfigure either.
+static void test_abandonedTransaction_loraSet_stillReloadsRadioOnExpiry()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count); // deferred, as for any open transaction
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+// Expiry must consume-and-clear the accumulated decisions, not just read them. A begin would reset
+// them anyway, so the leak only shows through the one path that consumes them without a begin: a
+// stray commit. Left uncleared, it inherits the abandoned LoRa transaction's answer and reloads.
+static void test_abandonedTransaction_flagsDoNotLeakIntoAStrayCommit()
+{
+    usePresetLongFast();
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata(); // abandoned, not committed - this is where the flags must be cleared
+
+    // Start counting after the expiry, so only the stray commit's reload would register.
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendCommitEdit(); // no matching begin
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
 
 // -----------------------------------------------------------------------
 // Test runner
@@ -1949,6 +3447,7 @@ void setUp(void)
     mockMeshService = new MockMeshService();
     service = mockMeshService;
     testAdmin = new AdminModuleTestShim();
+    disableBluetoothCallCountForTest = 0;
     capturedWarnings.clear();
     // Every test gets its own NodeDB and its own copy of the globals the admin handlers write.
     replaceAdminRadioGlobals();
@@ -2085,15 +3584,104 @@ void setup()
 
     // Node-DB metadata saves must not reconfigure the radio
     RUN_TEST(test_setFavoriteNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_removeFavoriteNode_skipsRadioReload);
     RUN_TEST(test_setIgnoredNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_removeIgnoredNode_skipsRadioReload);
     RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
 
+    // handleSetConfig() radio-reload gating (non-LoRa Config sub-messages)
+    RUN_TEST(test_setConfigDevice_skipsRadioReload);
+    RUN_TEST(test_setConfigPosition_skipsRadioReload);
+    RUN_TEST(test_setConfigPosition_gpsOffNestedSave_skipsRadioReload);
+    RUN_TEST(test_setConfigPower_skipsRadioReload);
+    RUN_TEST(test_setConfigNetwork_skipsRadioReload);
+    RUN_TEST(test_setConfigDisplay_skipsRadioReload);
+    RUN_TEST(test_setConfigBluetooth_skipsRadioReload);
+    RUN_TEST(test_setConfigSecurity_skipsRadioReload);
+    RUN_TEST(test_removeFixedPosition_skipsRadioReload);
+    RUN_TEST(test_reloadConfig_defaultRadioAffected_stillReloads);
+    RUN_TEST(test_reloadConfig_radioAffectedFalse_skipsReload);
+
+    RUN_TEST(test_setConfigPosition_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpioChange_schedulesReboot);
+    RUN_TEST(test_setConfigNetwork_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigNetwork_realChange_schedulesReboot);
+    RUN_TEST(test_setConfigBluetooth_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigBluetooth_realChange_schedulesReboot);
+    RUN_TEST(test_setConfigPosition_liveFieldChange_doesNotReboot);
+    RUN_TEST(test_reloadConfig_moduleConfigSegment_skipsReload);
+    RUN_TEST(test_reloadConfig_radioAffectedFalse_isEquivalentToSaveToDisk);
+    RUN_TEST(test_applyConfigChange_none_persists_andDoesNotReload);
+    RUN_TEST(test_applyConfigChange_radioFlag_triggersReload);
+    RUN_TEST(test_applyConfigChange_rebootFlag_setsRebootAtMsec);
+    RUN_TEST(test_applyConfigChange_noRebootFlag_leavesRebootAtMsecClear);
+    RUN_TEST(test_applyConfigChange_radioAndRebootCompose);
+    RUN_TEST(test_applyConfigChange_customRebootSeconds_isHonoured);
+    RUN_TEST(test_toggleTelemetryScreen_persistsWithoutRadioReloadOrReboot);
+    RUN_TEST(test_toggleTelemetryScreen_togglesBackOffAgain);
+    RUN_TEST(test_setSmartPositionEnabled_persistsWithoutReboot);
+    RUN_TEST(test_toggleTelemetryScreen_savePathSetsHasTelemetry);
+    RUN_TEST(test_setConfigPosition_gpioChangeStillReboots);
+    RUN_TEST(test_setConfigPosition_gpsEnableIsLive_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpsDisableIsLive_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpsToNotPresent_stillReboots);
+    RUN_TEST(test_setConfigPosition_gpsFromNotPresent_stillReboots);
+    RUN_TEST(test_setConfigPosition_gpsToggleWithGpioChange_stillReboots);
+    RUN_TEST(test_transaction_gpioSet_reboots_butDoesNotReloadRadio);
+    RUN_TEST(test_setChannel_primaryNameChange_triggersRadioReload);
+    RUN_TEST(test_setChannel_primaryNameChangeWithExplicitFrequency_doesNotReloadRadio);
+    RUN_TEST(test_setChannel_primaryNameChangeWithPersistedHashSlot_reloadsRadio);
+    RUN_TEST(test_setChannel_noop_doesNotReloadRadio);
+    RUN_TEST(test_setChannel_mqttFlagChange_doesNotReloadRadio);
+    RUN_TEST(test_setChannel_pskChange_doesNotReloadRadio);
+    RUN_TEST(test_setChannel_hamDefaultNameImplicitToExplicit_doesNotReloadRadio);
+    RUN_TEST(test_setChannel_hamDefaultNameExplicitToImplicit_doesNotReloadRadio);
+    RUN_TEST(test_transaction_usToHamWithExplicitDefaultName_reloadsRadioOnce);
+    RUN_TEST(test_transaction_usToHamWithImplicitDefaultName_reloadsRadioOnce);
+    RUN_TEST(test_setConfigLora_realChange_triggersRadioReload);
+    RUN_TEST(test_setConfigLora_noop_doesNotReloadRadio);
+    RUN_TEST(test_setConfigLora_policyOnlyChange_doesNotReloadRadio);
+    RUN_TEST(test_setConfigLora_liveHardwareFields_dontReloadRadio);
+    RUN_TEST(test_setConfigNetwork_redactedSecretNoop_doesNotReboot);
+    RUN_TEST(test_setConfigSecurity_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigSecurity_realChange_schedulesReboot);
+    RUN_TEST(test_setConfigSecurity_rejectedManagedNoop_doesNotReboot);
+    RUN_TEST(test_setModuleConfigMqtt_redactedSecretNoop_doesNotRebootOrDisableBluetooth);
+    RUN_TEST(test_setModuleConfigSerial_noop_doesNotRebootOrDisableBluetooth);
+    RUN_TEST(test_setModuleConfigTelemetry_noop_doesNotRebootOrDisableBluetooth);
+    RUN_TEST(test_setModuleConfigTelemetry_realChangeRebootsAndDisablesBluetooth);
+    RUN_TEST(test_setModuleConfigMqtt_realChangeRebootsAndDisablesBluetooth);
+    RUN_TEST(test_setModuleConfigSerial_realChangeRebootsAndDisablesBluetooth);
+    RUN_TEST(test_transaction_mqttNoop_keepsBluetoothUntilCommit);
+    RUN_TEST(test_transaction_mqttRealChange_disablesBluetoothAtCommit);
+    RUN_TEST(test_transaction_serialNoop_keepsBluetoothUntilCommit);
+    RUN_TEST(test_transaction_serialRealChange_disablesBluetoothAtCommit);
+    RUN_TEST(test_transaction_liveOnlyCommit_doesNotDisableBluetooth);
+    RUN_TEST(test_transaction_rebootingCommit_disablesBluetooth);
+    RUN_TEST(test_transaction_duplicateBegin_preservesRadioReload);
+    RUN_TEST(test_transaction_duplicateBegin_preservesReboot);
+    RUN_TEST(test_abandonedTransaction_rebootingFieldRebootsOnExpiry);
+    RUN_TEST(test_abandonedTransaction_timerExpiresWithoutAdminTraffic);
+    RUN_TEST(test_editTransactionTimer_isDormantUntilTransactionBegins);
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
     RUN_TEST(test_toggleNodeMuted_unknownNodeDoesNothing);
-    RUN_TEST(test_toggleNodeMuted_currentlyRewritesEverySegment);
+    RUN_TEST(test_toggleNodeMuted_writesOnlyTheNodeDatabase);
 #endif
+
+    // Edit-transaction deferral (the path phone apps use)
+    RUN_TEST(test_transaction_favoriteNode_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_toggleMutedNode_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_moduleConfigSet_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_positionGpsOffNestedSave_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_loraSet_stillReloadsRadioAtCommit);
+    RUN_TEST(test_transaction_liveOnlyBatch_neitherRebootsNorReloads);
+    RUN_TEST(test_transaction_flagsDoNotLeakIntoTheNextTransaction);
+    RUN_TEST(test_commitWithoutBegin_persistsButDoesNotReloadOrReboot);
+    RUN_TEST(test_abandonedTransaction_liveOnlyBatch_expiresWithoutReloadOrReboot);
+    RUN_TEST(test_abandonedTransaction_loraSet_stillReloadsRadioOnExpiry);
+    RUN_TEST(test_abandonedTransaction_flagsDoNotLeakIntoAStrayCommit);
 
     exit(UNITY_END());
 }

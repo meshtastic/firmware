@@ -83,17 +83,24 @@ static const char LOW_ENTROPY_WARNING[] = "Compromised keys were detected and re
 #endif
 static const char LICENSED_IDENTITY_MIGRATION_WARNING[] =
     "Licensed signing generated a new identity key; this node identity changed.";
-/*
-DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
-#define here.
-*/
 
+// Persistence segments. Each SEGMENT_* is a bit selecting which on-disk proto file to edit.
+// saveToDisk(mask) rewrites exactly the files whose bits are set (see NodeDB::saveToDiskNoRetry).
+//
+// SEGMENT_CONFIG is the whole LocalConfig proto in a single file: it covers all eight
+// sub-messages (device/display/lora/position/power/network/bluetooth/security), and writing it
+// reserializes the entire struct. So the mask says *which file* to persist, never *which
+// sub-message* changed - it cannot tell a LoRa change from a Bluetooth one. Do not infer "the
+// radio needs reconfiguring" from SEGMENT_CONFIG; that is a separate axis, radioAffected (see
+// MeshService::reloadConfig).
 #define SEGMENT_CONFIG 1
 #define SEGMENT_MODULECONFIG 2
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
 #define SEGMENT_NODEDATABASE 16
 
+// DeviceState versions used to be defined in the .proto file but really only this function cares.
+// So changed to a #define here.
 #define DEVICESTATE_CUR_VER 25
 // Lowest on-disk version we still know how to load. v24 saves are migrated
 // at boot via the parallel deviceonly_legacy descriptor and re-saved as v25.
