@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <meshUtils.h>
+#include <type_traits>
 #define ONE_DAY 24 * 60 * 60
 #define ONE_MINUTE_MS 60 * 1000
 #define THIRTY_SECONDS_MS 30 * 1000
@@ -32,6 +33,7 @@
 #define default_screen_on_secs IF_ROUTER(1, 60 * 10)
 #define default_node_info_broadcast_secs 3 * 60 * 60
 #define default_neighbor_info_broadcast_secs 6 * 60 * 60
+#define default_mesh_beacon_min_broadcast_interval_secs 3600
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
@@ -76,7 +78,20 @@ enum class TrafficType { POSITION, TELEMETRY };
 
 class Default
 {
+#if USERPREFS_EVENT_MODE && defined(USERPREFS_EVENT_MODE_HOP_LIMIT)
+    static constexpr auto eventModeHopLimitSetting = USERPREFS_EVENT_MODE_HOP_LIMIT;
+#else
+    static constexpr auto eventModeHopLimitSetting = HOP_RELIABLE;
+#endif
+    using EventModeHopLimitType = typename std::remove_cv<decltype(eventModeHopLimitSetting)>::type;
+    static_assert(std::is_integral<EventModeHopLimitType>::value && !std::is_same<EventModeHopLimitType, bool>::value &&
+                      eventModeHopLimitSetting >= 0 && eventModeHopLimitSetting <= HOP_MAX,
+                  "USERPREFS_EVENT_MODE_HOP_LIMIT must be an integer between 0 and 7");
+
   public:
+    static constexpr uint8_t eventModeHopLimit = static_cast<uint8_t>(eventModeHopLimitSetting);
+    static constexpr uint8_t eventModeRelayHopLimit = eventModeHopLimit > 0 ? eventModeHopLimit - 1 : 0;
+
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
     static uint32_t getTimeoutMs(uint32_t configuredInterval, uint32_t defaultInterval);

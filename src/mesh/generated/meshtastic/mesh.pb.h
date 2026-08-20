@@ -78,10 +78,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
     meshtastic_HardwareModel_RAK11310 = 26,
-    /* Makerfabs SenseLoRA Receiver (RP2040 + RFM96) */
-    meshtastic_HardwareModel_SENSELORA_RP2040 = 27,
-    /* Makerfabs SenseLoRA Industrial Monitor (ESP32-S3 + RFM96) */
-    meshtastic_HardwareModel_SENSELORA_S3 = 28,
+    /* Makerfabs Tracker Reserved */
+    meshtastic_HardwareModel_MAKERFABS_TRACKER = 27,
+    /* Makerfabs Reserved */
+    meshtastic_HardwareModel_MAKERFABS_RESERVED = 28,
     /* Canary Radio Company - CanaryOne: https://canaryradio.io/products/canaryone */
     meshtastic_HardwareModel_CANARYONE = 29,
     /* Waveshare RP2040 LoRa - https://www.waveshare.com/rp2040-lora.htm */
@@ -308,9 +308,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TDISPLAY_S3_PRO = 126,
     /* Heltec Mesh Node T096 board features an nRF52840 CPU and a TFT screen. */
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T096 = 127,
-    /* Seeed studio T1000-E Pro tracker card. NRF52840 w/ LR2021 radio,
+    /* Seeed studio Mesh Tracker X1card. NRF52840 w/ LR2021 radio,
  GPS, button, buzzer, and sensors. */
-    meshtastic_HardwareModel_TRACKER_T1000_E_PRO = 128,
+    meshtastic_HardwareModel_MESH_TRACKER_X1 = 128,
     /* Elecrow ThinkNode M7, M8 and M9 */
     meshtastic_HardwareModel_THINKNODE_M7 = 129,
     meshtastic_HardwareModel_THINKNODE_M8 = 130,
@@ -333,6 +333,14 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2 = 139,
     /* Meshnology W10 */
     meshtastic_HardwareModel_MESHNOLOGY_W10 = 140,
+    /* Heltec ESP32S3 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RC32 = 141,
+    /* Heltec NRF52840 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RC52 = 142,
+    /* Heltec ESP32C6 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RCC6 = 143,
+    /* Seeed Wio Tracker L1 Pro 1W, nRF52840 + SX1262 with 1 W external PA */
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W = 144,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -406,6 +414,12 @@ typedef enum _meshtastic_FirmwareEdition {
     meshtastic_FirmwareEdition_BURNING_MAN = 18,
     /* Hamvention, the Dayton amateur radio convention */
     meshtastic_FirmwareEdition_HAMVENTION = 19,
+    /* FAB, the international Fab Lab digital fabrication conference */
+    meshtastic_FirmwareEdition_FAB = 20,
+    /* Dragon Con, the yearly pop culture convention in Atlanta, GA */
+    meshtastic_FirmwareEdition_DRAGON_CON = 21,
+    /* Chaos Communication Congress, the hacker conference held yearly in Germany */
+    meshtastic_FirmwareEdition_CCC = 22,
     /* Placeholder for DIY and unofficial events */
     meshtastic_FirmwareEdition_DIY_EDITION = 127
 } meshtastic_FirmwareEdition;
@@ -948,6 +962,23 @@ typedef struct _meshtastic_RemoteShell {
     uint32_t last_rx_seq;
 } meshtastic_RemoteShell;
 
+/* A rectangular, axis-aligned geographic bounding box.
+ Used to define a rectangular geofence region for a Waypoint.
+ Fields are ordered west, south, east, north to match the standard bounding box
+ convention used by GeoJSON and PMTiles (min longitude, min latitude, max longitude, max latitude),
+ so the box can drive an offline map extract directly.
+ All coordinates are in degrees scaled by 1e-7 (same convention as Position and Waypoint). */
+typedef struct _meshtastic_BoundingBox {
+    /* Western edge of the box - minimum longitude (south-west corner) */
+    int32_t longitude_west_i;
+    /* Southern edge of the box - minimum latitude (south-west corner) */
+    int32_t latitude_south_i;
+    /* Eastern edge of the box - maximum longitude (north-east corner) */
+    int32_t longitude_east_i;
+    /* Northern edge of the box - maximum latitude (north-east corner) */
+    int32_t latitude_north_i;
+} meshtastic_BoundingBox;
+
 /* Waypoint message, used to share arbitrary locations across the mesh */
 typedef struct _meshtastic_Waypoint {
     /* Id of the waypoint */
@@ -969,6 +1000,25 @@ typedef struct _meshtastic_Waypoint {
     char description[100];
     /* Designator icon for the waypoint in the form of a unicode emoji */
     uint32_t icon;
+    /* If greater than zero, defines a circular geofence centred on this waypoint's
+ location (latitude_i / longitude_i) with this radius in meters.
+ Zero means the waypoint has no circular geofence. */
+    uint32_t geofence_radius;
+    /* Optional rectangular geofence region for this waypoint.
+ May be used instead of, or in addition to, geofence_radius. */
+    bool has_bounding_box;
+    meshtastic_BoundingBox bounding_box;
+    /* If true, a notification should be raised when a tracked node enters this
+ waypoint's geofence (the circular radius and/or the bounding box). */
+    bool notify_on_enter;
+    /* If true, a notification should be raised when a tracked node exits this
+ waypoint's geofence (the circular radius and/or the bounding box). */
+    bool notify_on_exit;
+    /* If true, only raise geofence enter/exit notifications for nodes that are
+ marked as favorites on the receiving device. Applies to both notify_on_enter
+ and notify_on_exit. Favorite status is resolved locally per receiver, so the
+ same waypoint alerts each node only for its own favorites. */
+    bool notify_favorites_only;
 } meshtastic_Waypoint;
 
 /* Message for node status */
@@ -1035,7 +1085,14 @@ typedef struct _meshtastic_MeshPacket {
     /* The time this message was received by the esp32 (secs since 1970).
  Note: this field is _never_ sent on the radio link itself (to save space) Times
  are typically not sent over the mesh, but they will be added to any Packet
- (chain of SubPacket) sent to the phone (so the phone can know exact time of reception) */
+ (chain of SubPacket) sent to the phone (so the phone can know exact time of reception)
+ Explicit presence: firmware cannot always attach a trustworthy wall-clock timestamp at the
+ moment of reception - a node with no GPS and no phone connected yet has no time source at
+ all. has_rx_time disambiguates that state from a genuine (if coincidental) 1970-01-01
+ reading. A packet delivered with this field absent may still be re-timestamped once a valid
+ clock becomes available, before the phone ever sees it - "absent" is not guaranteed
+ permanent, only "not yet known at last observation". */
+    bool has_rx_time;
     uint32_t rx_time;
     /* *Never* sent over the radio links.
  Set during reception to indicate the SNR of this packet.
@@ -1059,14 +1116,22 @@ typedef struct _meshtastic_MeshPacket {
     /* The priority of this message for sending.
  See MeshPacket.Priority description for more details. */
     meshtastic_MeshPacket_Priority priority;
-    /* rssi of received packet. Only sent to phone for dispay purposes. */
+    /* rssi of received packet. Only sent to phone for dispay purposes.
+ Explicit presence: rssi 0 is a legitimate reading on some radios (SX126x can report exactly
+ 0 dBm; SX127x's formula can even go positive). has_rx_rssi disambiguates; a replayed packet
+ built from history should leave this field absent rather than emitting 0. */
+    bool has_rx_rssi;
     int32_t rx_rssi;
     /* Describe if this message is delayed */
     meshtastic_MeshPacket_Delayed delayed;
     /* Describes whether this packet passed via MQTT somewhere along the path it currently took. */
     bool via_mqtt;
     /* Hop limit with which the original packet started. Sent via LoRa using three bits in the unencrypted header.
- When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled. */
+ When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled.
+ hop_start == 0 does not necessarily mean a direct (0-hop) neighbor: firmware prior to 2.3.0
+ never populated this field, so a receiver can only trust hop_start == 0 as genuine once it has
+ decoded the packet and confirmed the sender's bitfield is present (added in 2.5.0). Until then,
+ or for a sender that never sets that bitfield, treat hop_start == 0 as unknown, not direct. */
     uint8_t hop_start;
     /* Records the public key the packet was encrypted with, if applicable. */
     meshtastic_MeshPacket_public_key_t public_key;
@@ -1353,6 +1418,9 @@ typedef struct _meshtastic_DeviceMetadata {
     /* Bit field of boolean for excluded modules
  (bitwise OR of ExcludedModules) */
     uint32_t excluded_modules;
+    /* Indicates whether this firmware build includes XEdDSA packet signature verification.
+ This is a read-only capability and must be false when XEdDSA is not compiled in. */
+    bool has_xeddsa;
 } meshtastic_DeviceMetadata;
 
 /* A distinct set of legal modem presets shared by one or more LoRa regions.
@@ -1628,6 +1696,7 @@ extern "C" {
 
 
 
+
 #define meshtastic_MeshPacket_priority_ENUMTYPE meshtastic_MeshPacket_Priority
 #define meshtastic_MeshPacket_delayed_ENUMTYPE meshtastic_MeshPacket_Delayed
 #define meshtastic_MeshPacket_transport_mechanism_ENUMTYPE meshtastic_MeshPacket_TransportMechanism
@@ -1678,10 +1747,11 @@ extern "C" {
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
+#define meshtastic_BoundingBox_init_default      {0, 0, 0, 0}
+#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1699,7 +1769,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0}
 #define meshtastic_LoRaPresetGroup_init_default  {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_default {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
 #define meshtastic_LoRaRegionPresetMap_init_default {0, {meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default}, 0, {meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default}}
@@ -1716,10 +1786,11 @@ extern "C" {
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
+#define meshtastic_BoundingBox_init_zero         {0, 0, 0, 0}
+#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1737,7 +1808,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0}
 #define meshtastic_LoRaPresetGroup_init_zero     {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_zero   {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
 #define meshtastic_LoRaRegionPresetMap_init_zero {0, {meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero}, 0, {meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero}}
@@ -1820,6 +1891,10 @@ extern "C" {
 #define meshtastic_RemoteShell_flags_tag         8
 #define meshtastic_RemoteShell_last_tx_seq_tag   9
 #define meshtastic_RemoteShell_last_rx_seq_tag   10
+#define meshtastic_BoundingBox_longitude_west_i_tag 1
+#define meshtastic_BoundingBox_latitude_south_i_tag 2
+#define meshtastic_BoundingBox_longitude_east_i_tag 3
+#define meshtastic_BoundingBox_latitude_north_i_tag 4
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1828,6 +1903,11 @@ extern "C" {
 #define meshtastic_Waypoint_name_tag             6
 #define meshtastic_Waypoint_description_tag      7
 #define meshtastic_Waypoint_icon_tag             8
+#define meshtastic_Waypoint_geofence_radius_tag  9
+#define meshtastic_Waypoint_bounding_box_tag     10
+#define meshtastic_Waypoint_notify_on_enter_tag  11
+#define meshtastic_Waypoint_notify_on_exit_tag   12
+#define meshtastic_Waypoint_notify_favorites_only_tag 13
 #define meshtastic_StatusMessage_status_tag      1
 #define meshtastic_MqttClientProxyMessage_topic_tag 1
 #define meshtastic_MqttClientProxyMessage_data_tag 2
@@ -1931,6 +2011,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hasRemoteHardware_tag 10
 #define meshtastic_DeviceMetadata_hasPKC_tag     11
 #define meshtastic_DeviceMetadata_excluded_modules_tag 12
+#define meshtastic_DeviceMetadata_has_xeddsa_tag 14
 #define meshtastic_LoRaPresetGroup_presets_tag   1
 #define meshtastic_LoRaPresetGroup_default_preset_tag 2
 #define meshtastic_LoRaPresetGroup_licensed_only_tag 3
@@ -2083,6 +2164,14 @@ X(a, STATIC,   SINGULAR, UINT32,   last_rx_seq,      10)
 #define meshtastic_RemoteShell_CALLBACK NULL
 #define meshtastic_RemoteShell_DEFAULT NULL
 
+#define meshtastic_BoundingBox_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_west_i,   1) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_south_i,   2) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_east_i,   3) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_north_i,   4)
+#define meshtastic_BoundingBox_CALLBACK NULL
+#define meshtastic_BoundingBox_DEFAULT NULL
+
 #define meshtastic_Waypoint_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   OPTIONAL, SFIXED32, latitude_i,        2) \
@@ -2091,9 +2180,15 @@ X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
 X(a, STATIC,   SINGULAR, UINT32,   locked_to,         5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
 X(a, STATIC,   SINGULAR, STRING,   description,       7) \
-X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
+X(a, STATIC,   SINGULAR, FIXED32,  icon,              8) \
+X(a, STATIC,   SINGULAR, UINT32,   geofence_radius,   9) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  bounding_box,     10) \
+X(a, STATIC,   SINGULAR, BOOL,     notify_on_enter,  11) \
+X(a, STATIC,   SINGULAR, BOOL,     notify_on_exit,   12) \
+X(a, STATIC,   SINGULAR, BOOL,     notify_favorites_only,  13)
 #define meshtastic_Waypoint_CALLBACK NULL
 #define meshtastic_Waypoint_DEFAULT NULL
+#define meshtastic_Waypoint_bounding_box_MSGTYPE meshtastic_BoundingBox
 
 #define meshtastic_StatusMessage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   status,            1)
@@ -2115,12 +2210,12 @@ X(a, STATIC,   SINGULAR, UINT32,   channel,           3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,decoded,decoded),   4) \
 X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,encrypted,encrypted),   5) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                6) \
-X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           7) \
+X(a, STATIC,   OPTIONAL, FIXED32,  rx_time,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
-X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
+X(a, STATIC,   OPTIONAL, INT32,    rx_rssi,          12) \
 X(a, STATIC,   SINGULAR, UENUM,    delayed,          13) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,         14) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_start,        15) \
@@ -2335,7 +2430,8 @@ X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9) \
 X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10) \
 X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11) \
-X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12)
+X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12) \
+X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
@@ -2402,6 +2498,7 @@ extern const pb_msgdesc_t meshtastic_Data_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerification_msg;
 extern const pb_msgdesc_t meshtastic_StoreForwardPlusPlus_msg;
 extern const pb_msgdesc_t meshtastic_RemoteShell_msg;
+extern const pb_msgdesc_t meshtastic_BoundingBox_msg;
 extern const pb_msgdesc_t meshtastic_Waypoint_msg;
 extern const pb_msgdesc_t meshtastic_StatusMessage_msg;
 extern const pb_msgdesc_t meshtastic_MqttClientProxyMessage_msg;
@@ -2442,6 +2539,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_KeyVerification_fields &meshtastic_KeyVerification_msg
 #define meshtastic_StoreForwardPlusPlus_fields &meshtastic_StoreForwardPlusPlus_msg
 #define meshtastic_RemoteShell_fields &meshtastic_RemoteShell_msg
+#define meshtastic_BoundingBox_fields &meshtastic_BoundingBox_msg
 #define meshtastic_Waypoint_fields &meshtastic_Waypoint_msg
 #define meshtastic_StatusMessage_fields &meshtastic_StatusMessage_msg
 #define meshtastic_MqttClientProxyMessage_fields &meshtastic_MqttClientProxyMessage_msg
@@ -2477,11 +2575,12 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 /* meshtastic_resend_chunks_size depends on runtime parameters */
 /* meshtastic_ChunkedPayloadResponse_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
+#define meshtastic_BoundingBox_size              20
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
-#define meshtastic_DeviceMetadata_size           54
+#define meshtastic_DeviceMetadata_size           56
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
@@ -2512,7 +2611,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
-#define meshtastic_Waypoint_size                 165
+#define meshtastic_Waypoint_size                 199
 
 #ifdef __cplusplus
 } /* extern "C" */

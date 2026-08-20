@@ -76,7 +76,7 @@ uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t d
     int8_t throttle =
         (type == TrafficType::POSITION) ? myRegion->profile->positionThrottle : myRegion->profile->telemetryThrottle;
 
-    // throttle <= 0 means unset; 1 is the neutral multiplier — skip the multiply for performance
+    // throttle <= 0 means unset; 1 is the neutral multiplier - skip the multiply for performance
     if (throttle <= 1)
         return baseMs;
 
@@ -97,7 +97,7 @@ uint32_t Default::getConfiguredOrMinimumValue(uint32_t configured, uint32_t minV
 uint8_t Default::getConfiguredOrDefaultHopLimit(uint8_t configured)
 {
 #if USERPREFS_EVENT_MODE
-    return (configured > HOP_RELIABLE) ? HOP_RELIABLE : config.lora.hop_limit;
+    return (configured >= eventModeHopLimit) ? eventModeHopLimit : config.lora.hop_limit;
 #else
     return (configured >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
 #endif

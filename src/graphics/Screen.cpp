@@ -2,9 +2,9 @@
 BaseUI
 
 Developed and Maintained By:
-- Ronald Garcia (HarukiToreda) – Lead development and implementation.
-- JasonP (Xaositek)  – Screen layout and icon design, UI improvements and testing.
-- TonyG (Tropho) – Project management, structural planning, and testing
+- Ronald Garcia (HarukiToreda) - Lead development and implementation.
+- JasonP (Xaositek)  - Screen layout and icon design, UI improvements and testing.
+- TonyG (Tropho) - Project management, structural planning, and testing
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,6 +29,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if HAS_SCREEN
 #include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+// Provided by each niche-enabled variant's nicheGraphics.h (defined once, in the main.cpp TU).
+extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
+#endif
+#if defined(USE_HUB75)
+#include "graphics/HUB75Display.h" // ESP32 HUB75 (I2S-DMA)
+#endif
+#if defined(HAS_HUB75_NATIVE)
+#include "HUB75Native.h" // native/Portduino HUB75 (rpi-rgb-led-matrix), from variants/native/portduino
+#endif
 
 #include "DisplayFormatters.h"
 #include "TimeFormatters.h"
@@ -41,6 +51,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/EnvironmentTelemetry.h"
+#endif
 #include "security/LockdownDisplay.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -55,6 +68,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
+#include "graphics/Backlight.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTPalette.h"
@@ -67,6 +81,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
+#if BASEUI_HAS_GAMES
+#include "modules/games/GamesModule.h"
+#endif
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -99,7 +116,11 @@ namespace graphics
 #define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
+#if BASEUI_HAS_GAMES
+#define NUM_EXTRA_FRAMES 4 // text message, debug frame, and the always-present games frame
+#else
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
+#endif
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
 #define ASCII_BELL '\x07'
@@ -126,7 +147,7 @@ static inline void prepareFrameColorRegions()
 // "LOCKED" plus battery so the operator can see the device is alive and
 // charged without leaking any node/channel/message/position content.
 // Draw the LOCKED frame into the host-side framebuffer. Does NOT commit
-// to the panel — the caller is responsible for calling display->display()
+// to the panel - the caller is responsible for calling display->display()
 // once it has composited any overlays on top. Committing here would cause
 // visible flicker between "just LOCKED" and "LOCKED + banner overlay" when
 // the pairing-PIN special-case in updateUiFrame paints the overlay after
@@ -166,8 +187,8 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
         OLEDDisplay *display = screen->getDisplayDevice();
         // Paint LOCKED into the framebuffer WITHOUT committing. We commit
-        // exactly once at the bottom — after any overlay has been composed
-        // on top — so the panel never visibly transitions from "just LOCKED"
+        // exactly once at the bottom - after any overlay has been composed
+        // on top - so the panel never visibly transitions from "just LOCKED"
         // to "LOCKED + overlay" mid-frame. Committing twice per cycle was
         // the source of the H13 flicker.
         drawLockdownLockScreenIntoBuffer(display);
@@ -343,7 +364,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
+void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
                               std::function<void(uint32_t)> bannerCallback)
 {
 #ifdef USE_EINK
@@ -356,9 +377,49 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
-    NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
+    if (useBase16)
+        NotificationRenderer::current_notification_type = notificationTypeEnum::hex_picker;
+    else
+        NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
     NotificationRenderer::numDigits = digits;
     NotificationRenderer::currentNumber = 0;
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, 2);
+    ui->setTargetFPS(60);
+    updateUiFrame(ui);
+}
+
+// Called to trigger an arcade-style initials picker (see showNumberPicker for the sibling flow).
+void Screen::showAlphanumericPicker(const char *message, const char *initialText, uint32_t durationMs, uint8_t length,
+                                    std::function<void(const std::string &)> bannerCallback)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    if (length >= sizeof(NotificationRenderer::alphanumericValue))
+        length = sizeof(NotificationRenderer::alphanumericValue) - 1;
+
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::textInputCallback = bannerCallback;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::alphanumeric_picker;
+    NotificationRenderer::numDigits = length;
+
+    // Seed each position from initialText (uppercased & filtered to A-Z/0-9), defaulting to 'A'.
+    const size_t seedLen = initialText ? strnlen(initialText, length) : 0;
+    for (uint8_t i = 0; i < length; i++) {
+        char c = (i < seedLen) ? initialText[i] : 'A';
+        if (c >= 'a' && c <= 'z')
+            c = static_cast<char>(c - 'a' + 'A');
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')))
+            c = 'A';
+        NotificationRenderer::alphanumericValue[i] = c;
+    }
+    NotificationRenderer::alphanumericValue[length] = '\0';
 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, 2);
@@ -369,7 +430,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                            std::function<void(const std::string &)> textCallback)
 {
-    LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+    LOG_INFO("showTextInput header='%s', durationMs=%d", header ? header : "NULL", durationMs);
 
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
@@ -408,6 +469,17 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
+
+#if BASEUI_HAS_GAMES
+// The games frame is a dedicated, always-present frame (unlike generic module frames it is placed
+// at a fixed position right after home), so it draws through its own trampoline rather than the
+// moduleFrames lockstep used by drawModuleFrame.
+static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    if (gamesModule)
+        gamesModule->drawFrame(display, state, x, y);
+}
+#endif
 
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
@@ -481,6 +553,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isI2cScreen = true;
 #elif defined(USE_ST7789)
 #ifdef ESP_PLATFORM
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
@@ -495,26 +568,54 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #else
     dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
+#elif defined(USE_HUB75)
+    dispdev = new HUB75Display(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #if defined(OLED_Y_OFFSET_PAGES)
-    // Panels whose active window does not start at GDDRAM row 0 (e.g. 72x40
-    // modules on pages 3..7) need a fixed vertical page shift on every write.
+    // Shift writes to the panel's visible GDDRAM pages.
     static_cast<SSD1306Wire *>(dispdev)->setYOffset(OLED_Y_OFFSET_PAGES);
 #endif
+    isI2cScreen = true;
 #elif defined(USE_SPISSD1306)
     dispdev = new SSD1306Spi(SSD1306_RESET, SSD1306_RS, SSD1306_NSS, GEOMETRY_64_48);
     if (!dispdev->init()) {
-        LOG_DEBUG("Error: SSD1306 not detected!");
+        LOG_DEBUG("SSD1306 not detected");
     } else {
         static_cast<SSD1306Spi *>(dispdev)->setHorizontalOffset(32);
         LOG_INFO("SSD1306 init success");
     }
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||    \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
+#elif ARCH_PORTDUINO
+
+    // HUB75 RGB matrix (hzeller/rpi-rgb-led-matrix) is a BaseUI framebuffer panel, selected at
+    // runtime via config.yaml Display: Panel: HUB75.
+    if (portduino_config.displayPanel == hub75) {
+#if defined(HAS_HUB75_NATIVE)
+        LOG_DEBUG("Make HUB75Native");
+        dispdev = new HUB75Native(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
+#else
+        LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in");
+#endif
+    } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        if (portduino_config.displayPanel != no_screen) {
+            LOG_DEBUG("Make TFTDisplay");
+            dispdev = new TFTDisplay(address.address, -1, -1, geometry,
+                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+        } else {
+            dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
+                                       (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+            isAUTOOled = true;
+            isI2cScreen = true;
+        }
+    }
+#elif USE_TFTDISPLAY
+    LOG_DEBUG("Make TFTDisplay");
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+    // NicheGraphics-backed BaseUI E-Ink path. Variant provides setupNicheGraphicsBaseUI() in its nicheGraphics.h.
+    dispdev = setupNicheGraphicsBaseUI();
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
     dispdev = new EInkDisplay(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -526,22 +627,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        if (portduino_config.displayPanel != no_screen) {
-            LOG_DEBUG("Make TFTDisplay!");
-            dispdev = new TFTDisplay(address.address, -1, -1, geometry,
-                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-        } else {
-            dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
-                                       (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-            isAUTOOled = true;
-        }
-    }
+    isI2cScreen = true;
 #else
     dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
                                (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     isAUTOOled = true;
+    isI2cScreen = true;
 #endif
 
 #if defined(USE_ST7789)
@@ -561,6 +652,10 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 Screen::~Screen()
 {
     delete[] graphics::normalFrames;
+    // Owned by the constructor; Screen is genuinely destroyed on the portduino reboot path
+    // (screen = nullptr in Power.cpp), which previously leaked the display and UI objects.
+    delete ui;
+    delete dispdev;
 }
 
 /**
@@ -610,7 +705,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
-#ifdef PIN_EINK_EN
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightOn();
+#elif defined(PIN_EINK_EN)
             if (uiconfig.screen_brightness == 1)
                 digitalWrite(PIN_EINK_EN, HIGH);
 #elif defined(PCA_PIN_EINK_EN)
@@ -648,6 +745,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
+#if defined(OLED_COMPACT_UI)
+            if (graphics::isCompactPanel(dispdev))
+                graphics::UIRenderer::notifyScreenWoke();
+#endif
         } else {
             powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
 #ifdef USE_EINK
@@ -663,14 +764,16 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // 16-50 ms before the next ui->update() lands. Painting the
             // LOCKED frame now ensures the only thing the operator (or
             // someone over their shoulder) can see on wake is the redacted
-            // view. Gated on lockdown — non-lockdown builds keep the
+            // view. Gated on lockdown - non-lockdown builds keep the
             // previous frame as a UX cue that the display is just dimmed.
             // dispdev is dereferenced unguarded throughout this file (incl.
             // displayOff() just below), so no null check here.
             drawLockdownLockScreen(dispdev);
 #endif
 
-#ifdef PIN_EINK_EN
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightOff();
+#elif defined(PIN_EINK_EN)
             digitalWrite(PIN_EINK_EN, LOW);
 #elif defined(PCA_PIN_EINK_EN)
             io.digitalWrite(PCA_PIN_EINK_EN, LOW);
@@ -793,14 +896,16 @@ void Screen::setup()
     // M20: e-ink panels physically retain the last-rendered image without
     // power, so a power-cycled lockdown handheld would keep showing
     // operator-identifying content (position, messages, node info) until
-    // the firmware's first natural refresh — which on e-ink can be seconds
+    // the firmware's first natural refresh - which on e-ink can be seconds
     // into boot. Force a full refresh to the LOCKED frame here, immediately
     // after the display is initialised and before any other rendering, so
     // the persistent pixels are wiped to the redacted view before an
     // observer can see them.
     if (meshtastic_security::shouldRedactDisplay()) {
         drawLockdownLockScreen(dispdev);
-#if defined(USE_EINK_PARALLELDISPLAY)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+        static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay();
+#elif defined(USE_EINK_PARALLELDISPLAY)
         // Parallel-display variants drive refresh through a different path;
         // a bare drawLockdownLockScreen above lands the frame into the
         // panel buffer and the next ui->update() commits it as normal.
@@ -847,8 +952,7 @@ void Screen::setup()
     dispdev->mirrorScreen();
 #else
     if (!config.display.flip_screen) {
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
+#if USE_TFTDISPLAY && !ARCH_PORTDUINO
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
@@ -886,7 +990,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !HAS_CST226SE
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !VARIANT_TOUCHSCREEN
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
@@ -962,7 +1066,9 @@ void Screen::forceDisplay(bool forceUiUpdate)
     }
 
     // Tell EInk class to update the display
-#if defined(USE_EINK_PARALLELDISPLAY)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+    static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay();
+#elif defined(USE_EINK_PARALLELDISPLAY)
     static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay();
 #elif defined(USE_EINK)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
@@ -1010,7 +1116,7 @@ int32_t Screen::runOnce()
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
+    if (showingBootScreen && Throttle::hasElapsed(serialSinceMsec, logo_timeout)) {
         LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;
@@ -1018,7 +1124,7 @@ int32_t Screen::runOnce()
 
 #ifdef USERPREFS_OEM_TEXT
     static bool showingOEMBootScreen = true;
-    if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
+    if (showingOEMBootScreen && Throttle::hasElapsed(serialSinceMsec, logo_timeout / 2)) {
         LOG_INFO("Switch to OEM screen...");
         // Change frames.
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
@@ -1036,7 +1142,7 @@ int32_t Screen::runOnce()
     bool suppressRegionOnboard = false;
 #ifdef MESHTASTIC_LOCKDOWN
     // While lockdown is active and storage is still locked, config.lora.region
-    // is a deliberate UNSET placeholder — the real region lives in encrypted
+    // is a deliberate UNSET placeholder - the real region lives in encrypted
     // storage and is restored on unlock (see NodeDB's locked-boot path). Don't
     // pop the region picker over the lock screen: it would trap input, and the
     // operator can't set a region until they unlock anyway.
@@ -1164,11 +1270,12 @@ int32_t Screen::runOnce()
 
             // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
             // Carousel is potentially a major source of E-Ink display wear
-#if !defined(EINK_BACKGROUND_USES_FAST)
+            // (NicheGraphics BaseUI variants leave this to the shared DisplayHealth model instead)
+#if !defined(EINK_BACKGROUND_USES_FAST) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
 
-            LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums, next frame", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
@@ -1201,7 +1308,8 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     static FrameCallback screensaverFrame;
     static OverlayCallback screensaverOverlay;
 
-#if defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)
+#if (defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)) ||                                                         \
+    (defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD))
     // Join (await) a currently running async refresh, then run the post-update code.
     // Avoid skipping of screensaver frame. Would otherwise be handled by NotifiedWorkerThread.
     EINK_JOIN_ASYNCREFRESH(dispdev);
@@ -1228,7 +1336,9 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
         updateUiFrame(ui);
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
-#if defined(USE_EINK_PARALLELDISPLAY)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+    static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay(0);
+#elif defined(USE_EINK_PARALLELDISPLAY)
     static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay(0);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
     // Old EInkDisplay class
@@ -1243,13 +1353,22 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 #ifdef EINK_HASQUIRK_GHOSTING
     EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Really ugly to see ghosting from "screen paused"
 #else
-    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE);              // Really nice to wake screen with a fast-refresh
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE); // Really nice to wake screen with a fast-refresh
 #endif
 }
 #endif
 
 // Regenerate the normal set of frames, focusing a specific frame if requested
 // Called when a frame should be added / removed, or custom frames should be cleared
+// No-op on other boards, so this costs them no flash/RAM.
+#if defined(OLED_COMPACT_UI)
+#define PUSH_FRAME_TITLE(x) frameTitles.push_back(x)
+#define CLEAR_FRAME_TITLES() frameTitles.clear()
+#else
+#define PUSH_FRAME_TITLE(x)
+#define CLEAR_FRAME_TITLES()
+#endif
+
 void Screen::setFrames(FrameFocus focus)
 {
     // Block setFrames calls when virtual keyboard is active to prevent overlay interference
@@ -1267,6 +1386,7 @@ void Screen::setFrames(FrameFocus focus)
     showingNormalScreen = true;
 
     indicatorIcons.clear();
+    CLEAR_FRAME_TITLES();
 
     size_t numframes = 0;
 
@@ -1275,19 +1395,23 @@ void Screen::setFrames(FrameFocus focus)
     if (error_code) {
         normalFrames[numframes++] = NotificationRenderer::drawCriticalFaultFrame;
         indicatorIcons.push_back(icon_error);
+        PUSH_FRAME_TITLE("Alert");
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
 
 #if defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
-#if defined(OLED_TINY)
+#if defined(OLED_COMPACT_UI)
+        normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
+#elif defined(OLED_TINY)
         normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
 #else
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
 #endif
         indicatorIcons.push_back(digital_icon_clock);
+        PUSH_FRAME_TITLE("Clock");
     }
 #endif
 
@@ -1295,22 +1419,36 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.home = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
         indicatorIcons.push_back(icon_home);
+        PUSH_FRAME_TITLE("Home");
     }
+
+#if BASEUI_HAS_GAMES
+    // Games frame: always present (even with no game running), positioned directly after home.
+    if (gamesModule) {
+        fsi.positions.games = numframes;
+        normalFrames[numframes++] = drawGamesFrame;
+        indicatorIcons.push_back(joystick_small);
+        PUSH_FRAME_TITLE("Games");
+    }
+#endif
 
     fsi.positions.textMessage = numframes;
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
+    PUSH_FRAME_TITLE("Messages");
 
 #ifndef USE_EINK
     if (!hiddenFrames.nodelist_nodes) {
         fsi.positions.nodelist_nodes = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Nodes;
         indicatorIcons.push_back(icon_nodes);
+        PUSH_FRAME_TITLE("Nodes");
     }
     if (!hiddenFrames.nodelist_location) {
         fsi.positions.nodelist_location = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Location;
         indicatorIcons.push_back(icon_list);
+        PUSH_FRAME_TITLE("Node List");
     }
 #endif
 
@@ -1320,16 +1458,19 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.nodelist_lastheard = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
         indicatorIcons.push_back(icon_nodes);
+        PUSH_FRAME_TITLE("Nodes");
     }
     if (!hiddenFrames.nodelist_hopsignal) {
         fsi.positions.nodelist_hopsignal = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
         indicatorIcons.push_back(icon_signal);
+        PUSH_FRAME_TITLE("Signal");
     }
     if (!hiddenFrames.nodelist_distance) {
         fsi.positions.nodelist_distance = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
         indicatorIcons.push_back(icon_distance);
+        PUSH_FRAME_TITLE("Distance");
     }
 #endif
 #if HAS_GPS
@@ -1338,43 +1479,54 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.nodelist_bearings = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
         indicatorIcons.push_back(icon_list);
+        PUSH_FRAME_TITLE("Bearings");
     }
 #endif
     if (!hiddenFrames.gps) {
         fsi.positions.gps = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
         indicatorIcons.push_back(icon_compass);
+        PUSH_FRAME_TITLE("GPS");
     }
 #endif
     if (RadioLibInterface::instance && !hiddenFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);
+        PUSH_FRAME_TITLE("LoRa");
     }
     if (!hiddenFrames.system) {
         fsi.positions.system = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawSystemScreen;
         indicatorIcons.push_back(icon_system);
+        PUSH_FRAME_TITLE("System");
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
+#if defined(OLED_COMPACT_UI)
+        normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
+#else
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
+#endif
         indicatorIcons.push_back(digital_icon_clock);
+        PUSH_FRAME_TITLE("Clock");
     }
 #endif
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
         indicatorIcons.push_back(chirpy_small);
+        PUSH_FRAME_TITLE("Chirpy");
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!hiddenFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoWiFiTrampoline;
+        normalFrames[numframes++] = graphics::DebugRenderer::drawFrameWiFi;
         indicatorIcons.push_back(icon_wifi);
+        PUSH_FRAME_TITLE("WiFi");
     }
 #endif
 
@@ -1402,6 +1554,7 @@ void Screen::setFrames(FrameFocus focus)
                 fsi.positions.waypoint = numframes;
 
             indicatorIcons.push_back(icon_module);
+            PUSH_FRAME_TITLE("Module");
             numframes++;
         }
     }
@@ -1430,6 +1583,7 @@ void Screen::setFrames(FrameFocus focus)
             for (const auto &f : favoriteFrames) {
                 normalFrames[numframes++] = f;
                 indicatorIcons.push_back(icon_node);
+                PUSH_FRAME_TITLE("Favorite");
             }
             fsi.positions.lastFavorite = numframes - 1;
         } else {
@@ -1474,7 +1628,7 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        //  No more adjustment — force stay on same index
+        //  No more adjustment - force stay on same index
         if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
@@ -1757,44 +1911,14 @@ void Screen::handleStartFirmwareUpdateScreen()
     setFrameImmediateDraw(frames);
 }
 
-void Screen::blink()
-{
-#ifdef MESHTASTIC_LOCKDOWN
-    // L4: defensive guard. blink() paints arbitrary geometry, not node
-    // data, so it doesn't actually leak today. But it bypasses the normal
-    // ui->update() path that the lockdown short-circuit gates, so any
-    // future change that puts content into blink would silently leak past
-    // redaction. Refuse to draw when the redaction latch is set.
-    if (meshtastic_security::shouldRedactDisplay())
-        return;
-#endif
-    setFastFramerate();
-    uint8_t count = 10;
-    dispdev->setBrightness(254);
-    while (count > 0) {
-        dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
-#if GRAPHICS_TFT_COLORING_ENABLED
-        prepareFrameColorRegions();
-#endif
-        dispdev->display();
-        delay(50);
-        dispdev->clear();
-#if GRAPHICS_TFT_COLORING_ENABLED
-        prepareFrameColorRegions();
-#endif
-        dispdev->display();
-        delay(50);
-        count = count - 1;
-    }
-    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in
-    // OLEDDisplay.
-    dispdev->setBrightness(brightness);
-}
-
 void Screen::increaseBrightness()
 {
+#if HAS_PWM_BACKLIGHT
+    graphics::backlightStepUp();
+    brightness = graphics::backlightGet();
+#else
     brightness = ((brightness + 62) > 254) ? brightness : (brightness + 62);
-
+#endif
 #if defined(ST7789_CS)
     // run the setDisplayBrightness function. This works on t-decks
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
@@ -1805,8 +1929,12 @@ void Screen::increaseBrightness()
 
 void Screen::decreaseBrightness()
 {
+#if HAS_PWM_BACKLIGHT
+    graphics::backlightStepDown();
+    brightness = graphics::backlightGet();
+#else
     brightness = (brightness < 70) ? brightness : (brightness - 62);
-
+#endif
 #if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
@@ -1829,7 +1957,7 @@ void Screen::handleOnPress()
 void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
 {
     // Reverse-map an index to a stable name string keyed off FramePositions
-    // field names — so the pytest harness can assert `name=nodelist_nodes`
+    // field names - so the pytest harness can assert `name=nodelist_nodes`
     // without caring about how the positions were ordered this boot.
     const auto &p = framesetInfo.positions;
     const char *name = "unknown";
@@ -2002,10 +2130,18 @@ int Screen::handleInputEvent(const InputEvent *event)
     }
 
 #ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
-    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
-    setFastFramerate();                       // Draw ASAP
+#if HAS_PWM_BACKLIGHT
+    // A PWM backlight change leaves the frame identical, and the refresh is blocking.
+    const bool backlightOnly =
+        event->kbchar == INPUT_BROKER_MSG_BRIGHTNESS_UP || event->kbchar == INPUT_BROKER_MSG_BRIGHTNESS_DOWN;
+    if (!backlightOnly)
+#endif
+    {
+        EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+        EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+        handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+        setFastFramerate();                       // Draw ASAP
+    }
 #endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = *event;
@@ -2021,7 +2157,7 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
 
         if (event->inputEvent == INPUT_BROKER_UP) {
-            if (messageStore.getMessages().empty()) {
+            if (!messageStore.hasVisibleMessages()) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
             } else {
                 graphics::MessageRenderer::scrollUp();
@@ -2031,7 +2167,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         }
 
         if (event->inputEvent == INPUT_BROKER_DOWN) {
-            if (messageStore.getMessages().empty()) {
+            if (!messageStore.hasVisibleMessages()) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
             } else {
                 graphics::MessageRenderer::scrollDown();
@@ -2059,6 +2195,36 @@ int Screen::handleInputEvent(const InputEvent *event)
             return 0;
         }
     }
+#if defined(OLED_COMPACT_UI)
+    // UP/DOWN on the compact position screen toggles compass vs coordinates+elevation
+    if (graphics::isCompactPanel(dispdev) && ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            graphics::UIRenderer::scrollPositionUp();
+            setFastFramerate();
+            return 0;
+        }
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            graphics::UIRenderer::scrollPositionDown();
+            setFastFramerate();
+            return 0;
+        }
+    }
+    // UP/DOWN on the compact favorite-node screen toggles compass+distance vs status/telemetry
+    if (graphics::isCompactPanel(dispdev) && framesetInfo.positions.firstFavorite != 255 &&
+        ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
+        ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            graphics::UIRenderer::scrollFavoriteUp();
+            setFastFramerate();
+            return 0;
+        }
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            graphics::UIRenderer::scrollFavoriteDown();
+            setFastFramerate();
+            return 0;
+        }
+    }
+#endif
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {
@@ -2069,14 +2235,20 @@ int Screen::handleInputEvent(const InputEvent *event)
             if (module && module->interceptingKeyboardInput())
                 inputIntercepted = true;
         }
+#if BASEUI_HAS_GAMES
+        // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
+        // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
+        if (gamesModule && gamesModule->interceptingKeyboardInput())
+            inputIntercepted = true;
+#endif
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
 #if defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2
             bool handledEncoderScroll = false;
-            const bool isTextMessageFrame = (framesetInfo.positions.textMessage != 255 &&
-                                             this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
-                                             !messageStore.getMessages().empty());
+            const bool isTextMessageFrame =
+                (framesetInfo.positions.textMessage != 255 &&
+                 this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage && messageStore.hasVisibleMessages());
             if (isTextMessageFrame) {
                 if (event->inputEvent == INPUT_BROKER_UP_LONG) {
                     graphics::MessageRenderer::nudgeScroll(-1);
@@ -2143,6 +2315,11 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
+#if BASEUI_HAS_GAMES
+                } else if (gamesModule && framesetInfo.positions.games != 255 &&
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.games) {
+                    gamesModule->launchGame(); // launch the game shown on the attract screen
+#endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.system) {
                     menuHandler::systemBaseMenu();
 #if HAS_GPS
@@ -2154,7 +2331,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::loraMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
-                    if (!messageStore.getMessages().empty()) {
+                    if (messageStore.hasVisibleMessages()) {
                         menuHandler::messageResponseMenu();
                     } else {
                         if (currentResolution == ScreenResolution::UltraLow) {
@@ -2163,6 +2340,16 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
+                    // moduleFrames.size() bounds the module-frame region, before favorites are appended; its leading
+                    // slots are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
+                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
+                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+                    const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
+                    if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
+                        menuHandler::environmentTelemetryMenu();
+                    }
+#endif
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
@@ -2208,6 +2395,11 @@ int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
 bool Screen::isOverlayBannerShowing()
 {
     return NotificationRenderer::isOverlayBannerShowing();
+}
+
+bool Screen::isGamesFrameShown()
+{
+    return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
 }
 
 } // namespace graphics

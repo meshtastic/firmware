@@ -10,6 +10,9 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     meshtastic_NodeInfo info = meshtastic_NodeInfo_init_default;
 
     info.num = lite->num;
+    // NodeInfo.snr (wire) is still proto3 singular float - unlike NodeInfoLite.snr_q4, it has no
+    // presence bit and cannot distinguish a genuine 0 dB from "unknown". nodeInfoLiteHasSnr(lite)
+    // is available if a future NodeInfo revision needs to carry that distinction to clients.
     info.snr = lite->snr;
     info.last_heard = lite->last_heard;
     info.channel = lite->channel;
@@ -94,7 +97,7 @@ meshtastic_Position TypeConversions::ConvertToPosition(meshtastic_PositionLite l
     position.time = lite.time;
     // Preserve the peer's broadcast precision; falls back to 0 for entries cached
     // before the precision_bits field existed in PositionLite (pre-migration data).
-    // iOS treats 0 as "unspecified precision" and won't render the pin — so for
+    // iOS treats 0 as "unspecified precision" and won't render the pin - so for
     // unset values, declare full precision so the stored lat/lon renders as a point.
     position.precision_bits = lite.precision_bits == 0 ? 32 : lite.precision_bits;
 

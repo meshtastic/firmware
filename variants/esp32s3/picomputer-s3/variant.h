@@ -27,6 +27,7 @@
 #define LORA_DIO2 RADIOLIB_NC
 
 // Default SPI1 will be mapped to the display
+#define HAS_SPI_TFT 1
 #define ST7789_SDA 4
 #define ST7789_SCK 3
 #define ST7789_CS 6

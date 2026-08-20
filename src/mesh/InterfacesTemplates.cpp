@@ -8,8 +8,10 @@
 #include "SX126xInterface.h"
 #include "SX128xInterface.cpp"
 #include "SX128xInterface.h"
+#ifndef ARCH_PORTDUINO_WASM // TCP socket API server excluded in the browser/wasm build
 #include "api/ServerAPI.cpp"
 #include "api/ServerAPI.h"
+#endif
 
 // We need this declaration for proper linking in derived classes
 #if RADIOLIB_EXCLUDE_SX126X != 1
@@ -25,7 +27,7 @@ template class LR11x0Interface<LR1110>;
 template class LR11x0Interface<LR1120>;
 template class LR11x0Interface<LR1121>;
 #endif
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#if (defined(USE_LR2021) || defined(ARCH_PORTDUINO)) && RADIOLIB_EXCLUDE_LR2021 != 1
 template class LR20x0Interface<LR2021>;
 #endif
 #ifdef ARCH_STM32WL

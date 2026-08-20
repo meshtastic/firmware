@@ -43,7 +43,7 @@ void setupNicheGraphics()
 
     // E-Ink Driver
     // -----------------------------
-    // The ED047TC1 is a parallel display — no SPI bus setup needed.
+    // The ED047TC1 is a parallel display - no SPI bus setup needed.
     // begin() args are part of the EInk interface but are ignored for parallel displays.
 
     Drivers::EInk *driver = new Drivers::ED047TC1;
@@ -61,7 +61,7 @@ void setupNicheGraphics()
     // Set how unhealthy additional FAST updates beyond this number are
     inkhud->setDisplayResilience(7, 1.5);
 
-    // Prepare fonts — use larger sizes to suit the 4.7" screen at ~234 DPI
+    // Prepare fonts - use larger sizes to suit the 4.7" screen at ~234 DPI
     InkHUD::Applet::fontLarge = FREESANS_24PT_WIN1253;
     InkHUD::Applet::fontMedium = FREESANS_18PT_WIN1253;
     InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
