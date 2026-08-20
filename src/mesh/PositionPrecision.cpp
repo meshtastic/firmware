@@ -32,6 +32,17 @@ uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
     return precision;
 }
 
+bool findPositionChannel(uint8_t &channelIndex)
+{
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        if (getPositionPrecisionForChannel(i) != 0) {
+            channelIndex = i;
+            return true;
+        }
+    }
+    return false;
+}
+
 int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
 {
     if (precision == 0 || precision >= 32)

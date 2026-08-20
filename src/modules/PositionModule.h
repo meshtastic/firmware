@@ -36,6 +36,13 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     void sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
     void sendOurPosition();
 
+    /**
+     * Answer a position request that arrived on a channel we never share position on (the event channel):
+     * the reply goes out on the position channel at that channel's precision, tagged as a reply to req.
+     * Subject to the same reply throttle as allocReply(). No-op when no channel carries positions.
+     */
+    void replyOnPositionChannel(const meshtastic_MeshPacket &req);
+
     void handleNewPosition();
 
     // Pure broadcast-policy helpers, split out so they're unit-testable without the module.

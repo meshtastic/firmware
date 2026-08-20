@@ -255,6 +255,11 @@ class SENXXSensor : public TelemetrySensor, public CO2CalibrationSensor
     bool readPNValues(bool cumulative);
     bool readValues();
 
+    // Actual wakeUp() logic, factored out so handleAdminMessage() can resume
+    // measurement after a calibration pause without nesting a second I2C-clock
+    // guard inside its own (see ReClockI2CGuard's reentrancy note).
+    uint32_t wakeUpInternal();
+
     // Monotonic (millis()) timers for warmup/poll intervals. Deliberately not
     // wall-clock (getTime()) based: getTime() can jump discontinuously the moment the RTC
     // quality improves mid-session (see checkRTCQualityImproved()), which would corrupt

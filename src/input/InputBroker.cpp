@@ -382,7 +382,7 @@ void InputBroker::Init()
         userConfig.singlePress = INPUT_BROKER_SEND_PING;
         userConfig.longPress = INPUT_BROKER_SHUTDOWN;
         userConfig.longPressTime = 5000;
-        userConfig.doublePress = INPUT_BROKER_GPS_TOGGLE;
+        userConfig.doublePress = INPUT_BROKER_PRIVACY_TOGGLE;
         UserButtonThread->initButton(userConfig);
     }
 #else

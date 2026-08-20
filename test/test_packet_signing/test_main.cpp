@@ -1391,7 +1391,7 @@ void test_C8_trusted_local_decoded_delivery_is_not_filtered(void)
     packetPool.release(local);
 }
 
-void test_C9_known_channel_malformed_plaintext_is_not_relayed_as_opaque(void)
+void test_C9_known_channel_malformed_plaintext_has_no_pipeline_effects(void)
 {
     meshtastic_MeshPacket malformed = meshtastic_MeshPacket_init_zero;
     malformed.from = REMOTE_NODE;
@@ -1404,6 +1404,12 @@ void test_C9_known_channel_malformed_plaintext_is_not_relayed_as_opaque(void)
     malformed.encrypted.bytes[2] = 0xFF;
     malformed.channel = channels.setActiveByIndex(0);
     crypto->encryptPacket(malformed.from, malformed.id, malformed.encrypted.size, malformed.encrypted.bytes);
+
+    // Verdict is opaque-relay-eligible now (see test_C17); hop_limit 0 is what keeps this a no-op.
+    meshtastic_MeshPacket verdictCopy = malformed;
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY),
+                      static_cast<int>(passesRoutingAuthGate(&verdictCopy)));
+
     mockNodeDB->addNode(REMOTE_NODE);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(REMOTE_NODE)->last_heard;
     runPipelineIngress(malformed);
@@ -1468,9 +1474,12 @@ void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass
     runPipelineIngress(valid);
     TEST_ASSERT_EQUAL_MESSAGE(2, routingAuthEvaluationCount(), "consumed verdict must not authenticate a later replay");
 
+    // Broadcast, so isToUs() is false like any colliding-hash foreign broadcast (see test_C17);
+    // this still guards that the cache is reevaluated per exact bytes, not reused for a same-ID replay.
     meshtastic_MeshPacket collision = valid;
     collision.encrypted.bytes[0] ^= 0x80;
-    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&collision)));
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY),
+                      static_cast<int>(passesRoutingAuthGate(&collision)));
     TEST_ASSERT_EQUAL_MESSAGE(3, routingAuthEvaluationCount(), "same packet ID with different bytes must be reevaluated");
 }
 
@@ -1571,6 +1580,33 @@ void test_C16_reliable_broadcast_keeps_three_total_attempts(void)
 
     TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
     TEST_ASSERT_EQUAL_UINT8(3, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
+}
+
+void test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only(void)
+{
+    // Foreign channel whose PSK collides with our channel 0's one-byte hash (see test_C9/test_C12
+    // for the paired tradeoff): indistinguishable from tampering, so it must relay opaquely.
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket foreign = meshtastic_MeshPacket_init_zero;
+    foreign.from = REMOTE_NODE;
+    foreign.to = NODENUM_BROADCAST;
+    foreign.id = 0xC1700017;
+    foreign.hop_limit = 1;
+    foreign.hop_start = 2;
+    foreign.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    const int16_t hash = channels.setActiveByIndex(0);
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(0, hash, "no usable primary channel");
+    foreign.channel = (uint8_t)hash; // collides with our channel 0, but the ciphertext below is not ours
+    foreign.encrypted.size = 16;
+    memset(foreign.encrypted.bytes, 0xA5, foreign.encrypted.size);
+
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&foreign)));
+
+    // Same undecodable frame claiming to be from us must still be dropped: OPAQUE_RELAY_ONLY would
+    // reach perhapsGenerateImplicitAckForOwnOverheard, which acts on header bytes alone.
+    meshtastic_MeshPacket spoofed = foreign;
+    spoofed.from = LOCAL_NODE;
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&spoofed)));
 }
 
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
@@ -2142,7 +2178,7 @@ void setup()
     RUN_TEST(test_C6_opaque_unknown_channel_is_relay_only);
     RUN_TEST(test_C7_strict_rejects_unsigned_decoded_simradio_ingress);
     RUN_TEST(test_C8_trusted_local_decoded_delivery_is_not_filtered);
-    RUN_TEST(test_C9_known_channel_malformed_plaintext_is_not_relayed_as_opaque);
+    RUN_TEST(test_C9_known_channel_malformed_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C10_legacy_channel_dm_failure_has_no_pipeline_effects);
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
@@ -2150,6 +2186,7 @@ void setup()
     RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
+    RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
