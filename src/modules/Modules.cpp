@@ -96,10 +96,10 @@
 #include "modules/GenericThreadModule.h"
 #endif
 
-#ifdef ARCH_ESP32
-#if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
-#include "modules/esp32/AudioModule.h"
+#if defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
+#include "modules/Audio/AudioModule.h"
 #endif
+#ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
 #include "modules/esp32/PaxcounterModule.h"
 #endif
@@ -303,11 +303,11 @@ void setupModules()
     }
 #endif
 #endif
-#ifdef ARCH_ESP32
-    // Only run on an esp32 based device.
-#if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
+#if defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
     audioModule = new AudioModule();
 #endif
+#ifdef ARCH_ESP32
+    // Only run on an esp32 based device.
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
     if (moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled) {
         paxcounterModule = new PaxcounterModule();
