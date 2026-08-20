@@ -54,6 +54,15 @@ extern "C" {
 // Buttons
 #define PIN_BUTTON1 (32 + 10) // KEY_1: P1.10
 
+// Second button, shares the bootloader's DFU pin (nRF52840_BOOT/P0.24) - safe to read
+// as a normal GPIO once the app is running. Wired as literal DOWN (see DOWN_BUTTON_PIN
+// in InputBroker.cpp), not ALT_BUTTON_PIN, since message/nodelist scroll needs UP/DOWN.
+// Not named PIN_BUTTON2 - configuration.h auto-maps that to ALT_BUTTON_PIN (conflict).
+#define PIN_BUTTON_DOWN (0 + 24) // nRF52840_BOOT
+#define DOWN_BUTTON_PIN PIN_BUTTON_DOWN
+#define DOWN_BUTTON_ACTIVE_LOW true
+#define DOWN_BUTTON_ACTIVE_PULLUP true
+
 #define BUTTON_CLICK_MS 400
 
 // Analog pins
@@ -78,6 +87,10 @@ static const uint8_t A0 = PIN_A0;
 
 #define PIN_WIRE_SDA (32 + 4) // IIC_1_SDA: P1.4
 #define PIN_WIRE_SCL (32 + 2) // IIC_1_SCL: P1.2
+
+// ICM20948 IMU + magnetometer, same I2C bus as the OLED. Skips the generic auto-probe
+// heuristic (register value can be misread as BMI270/MPU6050) and forces the known chip.
+#define HAS_ICM20948
 
 // External serial flash ZD25WQ32CEIGR
 // QSPI Pins
@@ -104,25 +117,19 @@ static const uint8_t A0 = PIN_A0;
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // ───────────────────────────────────────────────────────────────────────────
-// OLED display: SSD1315 on I2C @ 0x3C (IIC_1). SSD1315 is register-compatible
-// with SSD1306, so USE_SSD1306 initializes the controller correctly.
+// OLED display: SSD1315 on I2C @ 0x3C (IIC_1).
 //
 // Viewport: the physical panel is 72×40, mapped into the SSD1315's 128×64
-// GDDRAM at columns 28..99, pages 3..7 (rows 24..63). The firmware handles
-// this by:
-//   * asking the library for GEOMETRY_72_40, which sets the framebuffer to
-//     72×40 and emits the right SETMULTIPLEX (39) / SETCOMPINS at init;
-//   * relying on SSD1306Wire's built-in horizontal auto-centering
-//     ((128 - width) / 2 = 28), so no horizontal shim is needed;
-//   * calling SSD1306Wire::setYOffset(3) in Screen.cpp when
-//     OLED_Y_OFFSET_PAGES is defined - this shifts every PAGEADDR write by
-//     three pages (24 rows) so data lands on the visible rows.
+// GDDRAM at columns 28..99, pages 3..7. The shared OLED driver centers the
+// 72×40 framebuffer and applies the page offset.
 // ───────────────────────────────────────────────────────────────────────────
 #define HAS_SCREEN 1
 #define USE_SSD1306
 #define OLED_GEOMETRY_OVERRIDE GEOMETRY_72_40
 #define OLED_Y_OFFSET_PAGES 3
+#define SSD1306_WIRE_I2C_FREQUENCY 100000
 #define OLED_TINY
+#define OLED_COMPACT_UI // No header/nav bar - centered icon+title splash, full-screen content
 
 // Controls power 3V3 for all peripherals (GPS + LoRa + Sensor)
 #define PIN_POWER_EN (0 + 30) // RT9080_EN
@@ -137,13 +144,15 @@ static const uint8_t A0 = PIN_A0;
 #define GPS_BAUDRATE 9600
 #define HAS_GPS 1
 
-#define PIN_GPS_EN (32 + 15) // GPS_EN: P1.15 - GPS power enable
-#define GPS_EN_ACTIVE 1
+#define PIN_GPS_EN (32 + 15)     // GPS_EN: P1.15 - GPS power enable
+#define GPS_EN_ACTIVE LOW        // Active-low on this board, was wrongly HIGH
 #define PIN_GPS_STANDBY (0 + 25) // GPS_WAKE_UP: P0.25 - wakeup pin
+#define GPS_FORCE_SOFT_SLEEP     // Vendor firmware uses L76K standby rather than cycling its main rail
 #define PIN_GPS_PPS (0 + 23)     // GPS_1PPS: P0.23
 #define GPS_RX_PIN (0 + 19)      // MCU RX ← GPS's TX (vendor GPS_UART_TX / P0.19)
 #define GPS_TX_PIN (0 + 21)      // MCU TX → GPS's RX (vendor GPS_UART_RX / P0.21)
-#define PIN_GPS_RESET (0 + 29)   // GPS_RF_EN: GPS RF enable / reset
+#define PIN_GPS_RF_EN (0 + 29)   // GPS_RF_EN: P0.29 - RF front-end enable, not a reset line
+#define GPS_RF_EN_ACTIVE HIGH
 
 #define GPS_THREAD_INTERVAL 50
 
@@ -167,13 +176,11 @@ static const uint8_t A0 = PIN_A0;
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
 
-// Buzzer (PWM output, passive piezo)
-#define PIN_BUZZER (32 + 6) // BUZZER_DATA: P1.6
+// No charge IC on this board - use native USB state as a charging proxy.
+#define NRF_APM
 
-// ───────────────────────────────────────────────────────────────────────────
-// I²S speaker (MAX98357 Class-D amp). Stereo I²S data path.
-// Not supported on nrf52. These defines exist for out-of-tree code only.
-// ───────────────────────────────────────────────────────────────────────────
+// No piezo on this board - sound goes via I2S speaker only.
+#define HAS_I2S_SPEAKER_NRF52    // MAX98357 amp, driven by NRF52I2SOutput (not HAS_I2S/ESP8266Audio)
 #define SPEAKER_EN (32 + 11)     // P1.11 - amp main enable
 #define SPEAKER_EN_2 (0 + 3)     // P0.3  - secondary enable (vendor firmware toggles both)
 #define SPEAKER_BCLK (0 + 16)    // P0.16 - I2S bit clock

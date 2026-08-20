@@ -12,6 +12,85 @@
 #include "SPILock.h"
 #include "configuration.h"
 
+#if defined(ARCH_PORTDUINO)
+#include <filesystem>
+#endif
+
+#if defined(ARCH_NRF52) || defined(ARCH_STM32)
+// Adafruit_LittleFS (nRF52) and STM32_LittleFS both wrap littlefs v1, which predates lfs_fs_size().
+// Count the blocks currently in use with lfs_traverse() instead.
+static int fsCountBlockCb(void *ctx, lfs_block_t)
+{
+    *static_cast<size_t *>(ctx) += 1;
+    return 0;
+}
+
+size_t fsTotalBytes()
+{
+    lfs_t *fs = FSCom._getFS();
+    if (!fs || !fs->cfg)
+        return 0;
+    return (size_t)fs->cfg->block_count * (size_t)fs->cfg->block_size;
+}
+
+size_t fsUsedBytes()
+{
+    lfs_t *fs = FSCom._getFS();
+    if (!fs || !fs->cfg)
+        return 0;
+    size_t blocks = 0;
+    FSCom._lockFS();
+    int err = lfs_traverse(fs, fsCountBlockCb, &blocks);
+    FSCom._unlockFS();
+    if (err < 0)
+        return fsTotalBytes(); // report "full" so capacity checks fail safe
+    return blocks * (size_t)fs->cfg->block_size;
+}
+#elif defined(ARCH_RP2040)
+// arduino-pico reports capacity through FSInfo rather than as methods.
+size_t fsTotalBytes()
+{
+    FSInfo info;
+    return FSCom.info(info) ? (size_t)info.totalBytes : 0;
+}
+
+size_t fsUsedBytes()
+{
+    FSInfo info;
+    return FSCom.info(info) ? (size_t)info.usedBytes : 0;
+}
+#elif defined(ARCH_PORTDUINO)
+// Portduino is backed by the host filesystem; ask the OS about the volume holding the working
+// directory. std::filesystem keeps this working on native-windows too, where statvfs() does not
+// exist. On error we report "full" so capacity checks fail safe.
+size_t fsTotalBytes()
+{
+    std::error_code ec;
+    const auto info = std::filesystem::space(".", ec);
+    return ec ? 0 : (size_t)info.capacity;
+}
+
+size_t fsUsedBytes()
+{
+    std::error_code ec;
+    const auto info = std::filesystem::space(".", ec);
+    if (ec || info.capacity < info.available)
+        return fsTotalBytes();
+    return (size_t)(info.capacity - info.available);
+}
+#else
+// ESP32 LittleFS and the nRF54L15 wrapper expose these directly.
+size_t fsTotalBytes()
+{
+    return FSCom.totalBytes();
+}
+
+size_t fsUsedBytes()
+{
+    return FSCom.usedBytes();
+}
+#endif
+
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 #include <SD.h>
@@ -50,10 +129,13 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
-#include <new>
-#include <stdexcept>
 #include <vector>
+#ifdef ARCH_ESP32
+#include <esp_heap_caps.h>
+#endif
 
 /**
  * @brief Platform-agnostic filesystem format / wipe.
@@ -171,6 +253,12 @@ void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vec
 } // namespace
 #endif
 
+#ifdef ARCH_ESP32
+// Headroom kept below the allocator's largest free block when sizing the manifest: the block reported
+// includes the allocator's own bookkeeping, and other tasks keep allocating while the SPI lock is held.
+static constexpr size_t FILES_MANIFEST_HEAP_MARGIN = 1024;
+#endif
+
 /**
  * @brief Get the list of files in a directory.
  *
@@ -189,18 +277,41 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, s
     if (wasLimited)
         *wasLimited = false;
 #ifdef FSCom
-#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
-    size_t reservedCount = maxCount;
+    // Size the vector once, up front, to what the heap can actually hand out, and cap the walk at that
+    // count so push_back() never has to grow it. Any allocation that fails here goes through operator
+    // new and raises std::bad_alloc; the ESP32 framework is built with CONFIG_COMPILER_CXX_EXCEPTIONS=n,
+    // so there is no unwinder and a throw is std::terminate() -> abort() -> reboot. That fires on the
+    // very first client handshake whenever the heap is fragmented (WiFi + TLS up, no PSRAM), which is
+    // exactly when this runs. So: never let reserve() be the thing that discovers there is no room.
+    // Cap at what a vector of FileInfo can hold at all: it keeps the probe's byte count from wrapping
+    // for a huge maxCount, and it is also the bound reserve() would otherwise reject with a throw.
+    size_t reservedCount = std::min(maxCount, filenames.max_size());
+#ifdef ARCH_ESP32
+    // Ask the allocator for the largest contiguous block malloc() could hand out. MALLOC_CAP_DEFAULT
+    // is the capability heap_caps_malloc_default() (what operator new resolves to) falls back to
+    // across every region, internal and PSRAM alike, so this is the "will new succeed" question
+    // asked directly. Nothing is freed before the reserve, so there is no hole for another task to
+    // take between the probe and the allocation.
+    const size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+    // Leave a margin below the largest block: the allocator's own overhead sits inside it, and other
+    // threads keep allocating while we hold the SPI lock.
+    const size_t usable = largest > FILES_MANIFEST_HEAP_MARGIN ? largest - FILES_MANIFEST_HEAP_MARGIN : 0;
+    reservedCount = std::min(reservedCount, usable / sizeof(meshtastic_FileInfo));
+#else
+    // Other targets have no largest-block query. Probe with malloc() - the allocation that returns
+    // nullptr on failure under every build (new(std::nothrow) is not that: libstdc++ implements it as
+    // a try/catch around the throwing form) - free the probe, and reserve the size that fit. Not
+    // airtight against a concurrent allocator, but the SPI lock the caller holds serialises the usual
+    // competitors and it is strictly better than letting reserve() be the first to find out.
     while (reservedCount > 0) {
-        try {
-            filenames.reserve(reservedCount);
+        void *probe = malloc(reservedCount * sizeof(meshtastic_FileInfo));
+        if (probe) {
+            free(probe);
             break;
-        } catch (const std::bad_alloc &) {
-            reservedCount /= 2;
-        } catch (const std::length_error &) {
-            reservedCount /= 2;
         }
+        reservedCount /= 2;
     }
+#endif
     if (reservedCount == 0) {
         if (wasLimited)
             *wasLimited = true;
@@ -211,7 +322,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, s
             *wasLimited = true;
         maxCount = reservedCount;
     }
-#endif
+    filenames.reserve(reservedCount);
     collectFiles(dirname, levels, maxCount, filenames, wasLimited);
 #endif
     return filenames;
@@ -261,7 +372,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)", filepath, file.size());
+                LOG_TRACE(" %s (%i Bytes)", filepath, file.size());
                 file.close();
             }
         }
@@ -315,7 +426,7 @@ void fsInit()
 #if defined(ARCH_ESP32)
     LOG_DEBUG("Filesystem files (%d/%d Bytes):", FSCom.usedBytes(), FSCom.totalBytes());
 #else
-    LOG_DEBUG("Filesystem files:");
+    LOG_TRACE("Filesystem files:");
 #endif
     listDir("/", 10);
 #endif

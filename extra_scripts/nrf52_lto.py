@@ -233,9 +233,26 @@ def _assert_isr_handlers_survived(source, target, env):
 # and the build stays green. Turn that into a red build:
 #   1. the linked variant.cpp.o must not be an LTO object (proves the -fno-lto recompile fired);
 #   2. any override the object defines strong must resolve strong in the ELF.
+#
+# The list must also cover Meshtastic's OWN weak variant hooks, not just the core's. Those have
+# a second, independent way to vanish: their weak default AND their call site sit in the same
+# LTO'd translation unit (src/main.cpp, src/platform/nrf52/main-nrf52.cpp), so GCC inlines the
+# empty body at the call site and never reaches for the variant's strong override -- the
+# -fno-lto middleware above cannot help, the caller is the problem. The definitions carry
+# __attribute__((noinline)) to prevent it; this guard is what catches a future one that forgets.
+# Regression that motivated the extension: 2.8 dropped earlyInitVariant() on the muzi R1 Neo, so
+# DCDC_EN_HOLD/NRF_ON were never driven and the IO controller read the nRF as stuck in DFU
+# (purple LED). The build stayed green because only _Z11initVariantv was listed here.
 _VARIANT_OVERRIDES = (
-    "_Z11initVariantv",
-)  # extend if the core grows more weak variant hooks
+    "_Z11initVariantv",  # core hook (cores/nRF5/main.cpp)
+    "_Z16earlyInitVariantv",  # src/main.cpp -- pre-peripheral board bring-up
+    "_Z15lateInitVariantv",  # src/main.cpp -- post-radio board bring-up
+    "_Z16variant_shutdownv",  # main-nrf52.cpp -- pin parking before System OFF
+    "_Z21variant_nrf52LoopHookv",  # main-nrf52.cpp -- per-loop variant hook
+    "_Z31variant_enableBatteryLpcompWakev",  # main-nrf52.cpp -- LPCOMP wake opt-out
+    "_Z20variantDefaultConfigv",  # NodeDB.cpp -- per-board config defaults
+    "_Z26variantDefaultModuleConfigv",  # NodeDB.cpp -- per-board module defaults
+)  # extend if the core (or Meshtastic) grows more weak variant hooks
 
 
 def _assert_variant_survived(source, target, env):
@@ -289,15 +306,19 @@ def _assert_variant_survived(source, target, env):
         ):
             problems.append(
                 "%s is strong in variant.cpp.o but weak/absent in the ELF "
-                "(LTO resolved the core's call to the empty weak stub)" % sym
+                "(LTO resolved the call to the empty weak stub)" % sym
             )
     if problems:
         sys.stderr.write(
-            "\n*** nrf52 LTO guard: board variant DROPPED from the image ***\n%s\n"
-            "The variant's early hardware setup (initVariant) will never run on this board.\n"
-            "Check _is_board_variant() in extra_scripts/nrf52_lto.py -- middleware nodes are\n"
-            "$BUILD_DIR-mirrored; match srcnode() paths, not node.get_abspath().\n\n"
-            % "\n".join("  - " + p for p in problems)
+            "\n*** nrf52 LTO guard: board variant override DROPPED from the image ***\n%s\n"
+            "That board hardware setup silently will not run. Two possible causes:\n"
+            "  1. The weak default and its CALL SITE share one LTO'd translation unit\n"
+            "     (src/main.cpp, src/platform/nrf52/main-nrf52.cpp, src/mesh/NodeDB.cpp), so GCC\n"
+            "     inlined the empty body and never reached the override. Fix: mark BOTH the weak\n"
+            "     declaration and definition __attribute__((noinline)) -- see earlyInitVariant().\n"
+            "  2. The -fno-lto middleware stopped matching the variant. Check _is_board_variant()\n"
+            "     below -- middleware nodes are $BUILD_DIR-mirrored, so match srcnode() paths,\n"
+            "     not node.get_abspath().\n\n" % "\n".join("  - " + p for p in problems)
         )
         from SCons.Script import Exit
 

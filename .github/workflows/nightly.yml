@@ -36,4 +36,4 @@ jobs:
       - name: Trunk Upgrade
         uses: trunk-io/trunk-action/upgrade@v1
         with:
-          base: master
+          base: develop

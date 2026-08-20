@@ -12,13 +12,17 @@
 //   Group E  decoded-ingress policy (checkXeddsaReceivePolicy, the plaintext-MQTT trust boundary)
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
+#include "NodeStatus.h"
 #include "TestUtil.h"
+#include "airtime.h"
+#include "support/MockMeshService.h"
 #include <unity.h>
 
 // The whole suite exercises XEdDSA sign/verify and checkXeddsaReceivePolicy, all of which are
 // compiled out unless both PKI and XEdDSA are enabled (e.g. stm32 sets MESHTASTIC_EXCLUDE_XEDDSA).
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
+#include "UptimeClock.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshRadio.h"
@@ -34,6 +38,7 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
 
@@ -55,6 +60,8 @@ static constexpr size_t OVERSIZED_PAYLOAD = 180;
 class MockNodeDB : public NodeDB
 {
   public:
+    void installDefaultsPreservingIdentity() { installDefaultConfig(true); }
+
     void clearTestNodes()
     {
         testNodes.clear();
@@ -115,7 +122,7 @@ class AuthPipelineRadio : public RadioInterface
     {
         sendCalls++;
         packetPool.release(p);
-        return ERRNO_OK;
+        return failSend ? ERRNO_DISABLED : ERRNO_OK;
     }
     bool cancelSending(NodeNum, PacketId) override
     {
@@ -133,8 +140,13 @@ class AuthPipelineRadio : public RadioInterface
         return true;
     }
     uint32_t getPacketTime(uint32_t, bool = false) override { return 7; }
-    void reset() { sendCalls = cancelCalls = findCalls = removeCalls = 0; }
+    void reset()
+    {
+        sendCalls = cancelCalls = findCalls = removeCalls = 0;
+        failSend = false;
+    }
 
+    bool failSend = false;
     uint32_t sendCalls = 0;
     uint32_t cancelCalls = 0;
     uint32_t findCalls = 0;
@@ -161,6 +173,11 @@ class AuthPipelineRouter : public ReliableRouter
     {
         PendingPacket *entry = findPendingPacket(from, id);
         return entry ? entry->nextTxMsec : 0;
+    }
+    uint8_t pendingTotalAttempts(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        return entry ? entry->initialNumRetransmissions + 1 : 0;
     }
     size_t pendingCount() const { return pending.size(); }
     void clearPending()
@@ -364,6 +381,8 @@ static meshtastic_MeshPacket makeBroadcastWithUnknownFields()
 // ---------------------------------------------------------------------------
 void setUp(void)
 {
+    service = pipelineService;
+
     // Construct the mock FIRST: the NodeDB constructor can reload persisted state from the
     // host filesystem (portduino VFS) and repopulate the globals - a saved private key
     // re-enables the PKI encrypt path and fails the unicast tests on hosts with leftover prefs.
@@ -398,14 +417,31 @@ void setUp(void)
     pipelineMqtt->clearQueue();
     while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
         packetPool.release(queued);
+    while (meshtastic_QueueStatus *queued = pipelineService->getQueueStatusForPhone())
+        pipelineService->releaseQueueStatusToPool(queued);
     resetRoutingAuthEvaluationCount();
 }
+
+// Set while C14's saturated AirTime is installed; see useDutyCycleSaturatedAirTime() below.
+static AirTime *c14SavedAirTime = nullptr;
 
 void tearDown(void)
 {
     delete mockNodeDB;
     mockNodeDB = nullptr;
     nodeDB = nullptr;
+
+    // Restore globals here, not at the end of a test body: an assertion aborts the body, and these
+    // would otherwise leak into every later case. The injected clock is the one the N8-N11
+    // suppression-window cases drive; the region and the AirTime swap are C14's duty-cycle setup.
+    Time::useRealClock();
+    Time::resetMonotonicForTests();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    if (c14SavedAirTime) {
+        airTime = c14SavedAirTime;
+        c14SavedAirTime = nullptr;
+    }
 }
 
 // ===========================================================================
@@ -923,6 +959,134 @@ void test_B7_infrastructure_port_signing_matrix(void)
     }
 }
 
+void test_B8_licensed_broadcast_and_unicast_are_signed(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+
+    meshtastic_MeshPacket broadcast =
+        makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&broadcast));
+    TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, broadcast.decoded.xeddsa_signature.size);
+    TEST_ASSERT_TRUE(broadcast.xeddsa_signed);
+
+    meshtastic_MeshPacket direct = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&direct));
+    TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, direct.decoded.xeddsa_signature.size);
+    TEST_ASSERT_TRUE(direct.xeddsa_signed);
+}
+
+void test_B9_licensed_unicast_never_uses_pki_encryption(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    crypto->setDHPrivateKey(localPriv);
+
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, perhapsEncode(&p));
+    TEST_ASSERT_FALSE(p.pki_encrypted);
+    meshtastic_Data plaintext = meshtastic_Data_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(p.encrypted.bytes, p.encrypted.size, &meshtastic_Data_msg, &plaintext));
+    TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, plaintext.xeddsa_signature.size);
+}
+
+void test_B10_licensed_oversized_unicast_remains_unsigned(void)
+{
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, OVERSIZED_PAYLOAD);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_EQUAL(0, p.decoded.xeddsa_signature.size);
+}
+
+void test_B11_normal_unicast_still_uses_pki(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, perhapsEncode(&p));
+    TEST_ASSERT_TRUE(p.pki_encrypted);
+
+    myNodeInfo.my_node_num = REMOTE_NODE;
+    crypto->setDHPrivateKey(remotePriv);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, perhapsDecode(&p));
+    TEST_ASSERT_TRUE(p.pki_encrypted);
+    TEST_ASSERT_EQUAL(0, p.decoded.xeddsa_signature.size);
+}
+
+void test_B12_licensed_receiver_does_not_decrypt_pki(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, perhapsEncode(&p));
+    TEST_ASSERT_TRUE(p.pki_encrypted);
+
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+    myNodeInfo.my_node_num = REMOTE_NODE;
+    crypto->setDHPrivateKey(remotePriv);
+    TEST_ASSERT_EQUAL(DECODE_FAILURE, perhapsDecode(&p));
+}
+
+void test_B13_licensed_port_and_destination_signing_matrix(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_ROUTING_APP,      meshtastic_PortNum_NODEINFO_APP,
+    };
+    const NodeNum destinations[] = {NODENUM_BROADCAST, REMOTE_NODE};
+    for (const auto port : ports) {
+        for (const auto destination : destinations) {
+            meshtastic_MeshPacket packet = makeDecoded(LOCAL_NODE, destination, port, SMALL_PAYLOAD);
+            TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&packet));
+            TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, packet.decoded.xeddsa_signature.size);
+            TEST_ASSERT_TRUE(packet.xeddsa_signed);
+            TEST_ASSERT_FALSE(packet.pki_encrypted);
+        }
+    }
+}
+
 // ===========================================================================
 // Group C - routing pipeline and NodeInfo authentication ordering
 // ===========================================================================
@@ -930,6 +1094,8 @@ void test_B7_infrastructure_port_signing_matrix(void)
 class NodeInfoTestShim : public NodeInfoModule
 {
   public:
+    using MeshModule::currentRequest; // allocReply() only suppresses while a request is in flight
+    using NodeInfoModule::allocReply;
     using NodeInfoModule::handleReceivedProtobuf;
 };
 
@@ -1077,14 +1243,18 @@ void test_C3_invalid_repeated_packet_cannot_ack_or_change_retry_state(void)
     prior.hop_start = 2;
     prior.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pipelineRouter->remember(&prior);
-    pipelineRouter->addPending(prior, UINT32_MAX);
+    // "Far future, so no retransmission is due." Must be a representable future time, not
+    // UINT32_MAX: doRetransmissions() compares with an unsigned half-range test, under which
+    // UINT32_MAX is ~1ms in the *past* and would fire a retransmit and rewrite nextTxMsec.
+    const uint32_t notDueTxMsec = Time::getMillis() + 3600000UL;
+    pipelineRouter->addPending(prior, notDueTxMsec);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(LOCAL_NODE)->last_heard;
 
     meshtastic_MeshPacket invalid = makeSignedWirePacket(LOCAL_NODE, NODENUM_BROADCAST, id, 2, 2, 0, 0x34, false);
     runPipelineIngress(invalid);
     assertNoRejectedPipelineEffects(LOCAL_NODE, lastHeard);
     TEST_ASSERT_EQUAL(1, pipelineRouter->pendingCount());
-    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, pipelineRouter->pendingNextTx(LOCAL_NODE, id));
+    TEST_ASSERT_EQUAL_UINT32(notDueTxMsec, pipelineRouter->pendingNextTx(LOCAL_NODE, id));
 }
 
 void test_C4_invalid_fallback_packet_cannot_relay(void)
@@ -1221,7 +1391,7 @@ void test_C8_trusted_local_decoded_delivery_is_not_filtered(void)
     packetPool.release(local);
 }
 
-void test_C9_known_channel_malformed_plaintext_is_not_relayed_as_opaque(void)
+void test_C9_known_channel_malformed_plaintext_has_no_pipeline_effects(void)
 {
     meshtastic_MeshPacket malformed = meshtastic_MeshPacket_init_zero;
     malformed.from = REMOTE_NODE;
@@ -1234,6 +1404,12 @@ void test_C9_known_channel_malformed_plaintext_is_not_relayed_as_opaque(void)
     malformed.encrypted.bytes[2] = 0xFF;
     malformed.channel = channels.setActiveByIndex(0);
     crypto->encryptPacket(malformed.from, malformed.id, malformed.encrypted.size, malformed.encrypted.bytes);
+
+    // Verdict is opaque-relay-eligible now (see test_C17); hop_limit 0 is what keeps this a no-op.
+    meshtastic_MeshPacket verdictCopy = malformed;
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY),
+                      static_cast<int>(passesRoutingAuthGate(&verdictCopy)));
+
     mockNodeDB->addNode(REMOTE_NODE);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(REMOTE_NODE)->last_heard;
     runPipelineIngress(malformed);
@@ -1298,10 +1474,139 @@ void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass
     runPipelineIngress(valid);
     TEST_ASSERT_EQUAL_MESSAGE(2, routingAuthEvaluationCount(), "consumed verdict must not authenticate a later replay");
 
+    // Broadcast, so isToUs() is false like any colliding-hash foreign broadcast (see test_C17);
+    // this still guards that the cache is reevaluated per exact bytes, not reused for a same-ID replay.
     meshtastic_MeshPacket collision = valid;
     collision.encrypted.bytes[0] ^= 0x80;
-    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&collision)));
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY),
+                      static_cast<int>(passesRoutingAuthGate(&collision)));
     TEST_ASSERT_EQUAL_MESSAGE(3, routingAuthEvaluationCount(), "same packet ID with different bytes must be reevaluated");
+}
+
+// A local reliable send that fails before reaching the radio must not outlive the error as a scheduled retransmission.
+void test_C13_failed_initial_reliable_send_does_not_retry(void)
+{
+    meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    initial.id = 0xC13C13C1;
+    initial.want_ack = true;
+    initial.channel = MAX_NUM_CHANNELS; // Out of range, so encoding returns NO_CHANNEL.
+
+    auto *packet = packetPool.allocCopy(initial);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    pipelineRouter->send(packet);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "initial encoding failure must be reported to the originating client");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "failed initial send must not leave a retransmission pending");
+
+    pipelineRadio->failSend = true;
+    meshtastic_MeshPacket interfaceFailure = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    interfaceFailure.id = 0xC13C13C2;
+    interfaceFailure.want_ack = true;
+    packet = packetPool.allocCopy(interfaceFailure);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    pipelineService->sendToMesh(packet, RX_SRC_USER);
+    meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone();
+    TEST_ASSERT_NOT_NULL(status);
+    TEST_ASSERT_EQUAL(ERRNO_DISABLED, status->res);
+    TEST_ASSERT_EQUAL_UINT32(interfaceFailure.id, status->mesh_packet_id);
+    pipelineService->releaseQueueStatusToPool(status);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "interface errors are reported to the client through QueueStatus, not a routing NAK");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "failed interface enqueue must not leave a retransmission pending");
+}
+
+// C14 needs a node that has used its whole hourly duty-cycle allowance. Swaps in a separate AirTime
+// rather than poking the global's buckets, which are private now.
+//
+// Deliberately NOT a scoped guard: Unity's TEST_ABORT() is longjmp, which does not run destructors
+// of automatic objects, so a guard would leave `airTime` dangling into an abandoned stack frame on
+// any assertion failure - and later cases dereference it (NodeInfoModule::allocReply). tearDown()
+// restores the global unconditionally instead. The instance is a function-local static so it
+// outlives the longjmp.
+//
+// Note it also parks channel utilisation at ~6000%, because logAirtime() credits that for every
+// report type. C14 gates on utilizationTXPercent() alone; do not reuse this for an
+// isTxAllowedChannelUtil() path, which would then pass for the wrong reason.
+static void useDutyCycleSaturatedAirTime()
+{
+    static AirTime saturated;
+    c14SavedAirTime = airTime;
+    airTime = &saturated;
+    saturated.logAirtime(TX_LOG, MS_IN_HOUR); // utilizationTXPercent() sums every bucket -> 100%
+}
+
+void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
+{
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.override_duty_cycle = false;
+    initRegion();
+    useDutyCycleSaturatedAirTime();
+
+    meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    initial.id = 0xC14C14C1;
+    initial.want_ack = true;
+    auto *packet = packetPool.allocCopy(initial);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(packet));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "duty-cycle rejection must still notify the originating client");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(),
+                                     "duty-cycle rejection must retain the retry for when airtime is available");
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+}
+
+void test_C15_reliable_unicast_tracks_five_total_attempts(void)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    p.id = 0x51530001;
+    p.want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_EQUAL_UINT8(5, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
+}
+
+void test_C16_reliable_broadcast_keeps_three_total_attempts(void)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    p.id = 0x51530002;
+    p.want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_EQUAL_UINT8(3, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
+}
+
+void test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only(void)
+{
+    // Foreign channel whose PSK collides with our channel 0's one-byte hash (see test_C9/test_C12
+    // for the paired tradeoff): indistinguishable from tampering, so it must relay opaquely.
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket foreign = meshtastic_MeshPacket_init_zero;
+    foreign.from = REMOTE_NODE;
+    foreign.to = NODENUM_BROADCAST;
+    foreign.id = 0xC1700017;
+    foreign.hop_limit = 1;
+    foreign.hop_start = 2;
+    foreign.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    const int16_t hash = channels.setActiveByIndex(0);
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(0, hash, "no usable primary channel");
+    foreign.channel = (uint8_t)hash; // collides with our channel 0, but the ciphertext below is not ours
+    foreign.encrypted.size = 16;
+    memset(foreign.encrypted.bytes, 0xA5, foreign.encrypted.size);
+
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&foreign)));
+
+    // Same undecodable frame claiming to be from us must still be dropped: OPAQUE_RELAY_ONLY would
+    // reach perhapsGenerateImplicitAckForOwnOverheard, which acts on header bytes alone.
+    meshtastic_MeshPacket spoofed = foreign;
+    spoofed.from = LOCAL_NODE;
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&spoofed)));
 }
 
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
@@ -1363,6 +1668,205 @@ void test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name(void)
     TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
     TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE),
                                      "non-signer identity learning must be unaffected");
+}
+
+// ---------------------------------------------------------------------------
+// N8-N11: the 12h reply-suppression window.
+//
+// The stamp is uptime SECONDS, not milliseconds: entries live for as long as the node stays in the
+// DB, so a 32-bit millisecond stamp aliased back into the window once uptime passed 49.7 days and
+// suppressed a legitimate reply for up to 12h. Driven through Time::setTestMillis() rather than by
+// waiting.
+// ---------------------------------------------------------------------------
+
+static constexpr uint32_t kSuppressSecs = 12 * 60 * 60;
+
+// Deliver a NodeInfo request from `sender` and report whether we would reply to it.
+static bool wouldReplyToNodeInfoRequest(NodeInfoTestShim &shim, NodeNum sender)
+{
+    meshtastic_MeshPacket mp = makeDecoded(sender, NODENUM_BROADCAST, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.decoded.want_response = true;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+
+    shim.handleReceivedProtobuf(mp, &user);
+
+    NodeInfoTestShim::currentRequest = &mp;
+    meshtastic_MeshPacket *reply = shim.allocReply();
+    NodeInfoTestShim::currentRequest = nullptr;
+
+    if (reply) {
+        packetPool.release(reply);
+        return true;
+    }
+    return false;
+}
+
+// Step the injected clock the way the main loop does - advance, then publish the wrap carry.
+static void advanceUptime(uint32_t deltaMs)
+{
+    Time::advanceTestMillis(deltaMs);
+    Time::serviceMonotonic();
+}
+
+void test_N8_second_request_inside_the_window_is_suppressed(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(60 * 1000);
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "first request must be answered");
+
+    advanceUptime(60 * 60 * 1000); // 1h later, well inside the 12h window
+    TEST_ASSERT_FALSE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "repeat request inside 12h must be suppressed");
+}
+
+void test_N9_request_after_the_window_is_answered(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(60 * 1000);
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+
+    advanceUptime((kSuppressSecs + 60) * 1000); // 12h + a minute
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "request after 12h must be answered");
+}
+
+// The regression. A stamp is only aliased by a counter that wraps underneath it, so the failure
+// needs a *full* 2^32 ms of uptime to elapse, not merely a crossing of the boundary: with 32-bit
+// millisecond stamps `now - stamp` then computes as 0 and the sender looks like it was answered
+// this instant. Uptime seconds do not wrap for 136 years, so the entry reads as ~49.7 days old.
+void test_N10_stale_stamp_does_not_alias_after_a_full_wrap(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(0x80000000u); // ~24.8 days of uptime
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+
+    // A whole millis() cycle, in two serviced halves - one publish per window is the contract.
+    advanceUptime(0x80000000u);
+    advanceUptime(0x80000000u);
+
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                             "a stamp one full wrap old must read as ~49.7 days, not as this instant");
+}
+
+// Suppression must still behave normally either side of the boundary: still suppressing inside the
+// window, and answering again once 12h have passed, with the stamp and the reading on opposite
+// sides of the wrap.
+void test_N11_window_still_applies_across_the_wrap(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    Time::setTestMillis(0xFFFF0000u); // just short of the wrap
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+
+    advanceUptime(0x20000u); // ~131s later, and now past the wrap
+    TEST_ASSERT_FALSE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                              "the window must still bite when the stamp sits the other side of the wrap");
+
+    advanceUptime((kSuppressSecs + 60) * 1000);
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                             "and must still release once 12h have passed across the wrap");
+}
+
+void test_L1_licensed_nodeinfo_publishes_public_key(void)
+{
+    owner.is_licensed = true;
+    owner.public_key.size = 32;
+    memset(owner.public_key.bytes, 0x5A, owner.public_key.size);
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket *reply = shim.allocReply();
+    TEST_ASSERT_NOT_NULL(reply);
+    meshtastic_User published = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_User_msg, &published));
+    TEST_ASSERT_TRUE(published.is_licensed);
+    TEST_ASSERT_EQUAL(32, published.public_key.size);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(owner.public_key.bytes, published.public_key.bytes, 32);
+    packetPool.release(reply);
+}
+
+void test_L2_licensed_identity_key_is_generated_and_preserved(void)
+{
+    owner.is_licensed = true;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+
+    TEST_ASSERT_TRUE(mockNodeDB->generateCryptoKeyPair());
+    uint8_t privateKey[32], publicKey[32];
+    memcpy(privateKey, config.security.private_key.bytes, sizeof(privateKey));
+    memcpy(publicKey, config.security.public_key.bytes, sizeof(publicKey));
+    const NodeNum migratedNodeNum = myNodeInfo.my_node_num;
+    TEST_ASSERT_NOT_EQUAL(LOCAL_NODE, migratedNodeNum);
+    TEST_ASSERT_TRUE(mockNodeDB->licensedIdentityMigrationPending);
+
+    MockMeshService mockService;
+    service = &mockService;
+    TEST_ASSERT_TRUE(mockNodeDB->notifyPendingLicensedIdentityMigration());
+    TEST_ASSERT_EQUAL(1, mockService.notificationCount);
+    TEST_ASSERT_FALSE(mockNodeDB->licensedIdentityMigrationPending);
+    TEST_ASSERT_FALSE(mockNodeDB->notifyPendingLicensedIdentityMigration());
+    TEST_ASSERT_EQUAL(1, mockService.notificationCount);
+    service = pipelineService;
+
+    config.security.public_key.size = 0;
+    owner.public_key.size = 0;
+    TEST_ASSERT_TRUE(mockNodeDB->generateCryptoKeyPair());
+    TEST_ASSERT_EQUAL(migratedNodeNum, myNodeInfo.my_node_num);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(privateKey, config.security.private_key.bytes, sizeof(privateKey));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(publicKey, config.security.public_key.bytes, sizeof(publicKey));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(publicKey, owner.public_key.bytes, sizeof(publicKey));
+}
+
+void test_L3_factory_config_reset_preserves_valid_identity_private_key(void)
+{
+    uint8_t publicKey[32], privateKey[32];
+    crypto->generateKeyPair(publicKey, privateKey);
+    config.has_security = true;
+    config.security.private_key.size = 32;
+    memcpy(config.security.private_key.bytes, privateKey, sizeof(privateKey));
+
+    mockNodeDB->installDefaultsPreservingIdentity();
+    TEST_ASSERT_EQUAL(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(privateKey, config.security.private_key.bytes, sizeof(privateKey));
+    TEST_ASSERT_EQUAL(0, config.security.public_key.size);
+
+    owner.is_licensed = true;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    TEST_ASSERT_TRUE(mockNodeDB->generateCryptoKeyPair());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(privateKey, config.security.private_key.bytes, sizeof(privateKey));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(publicKey, config.security.public_key.bytes, sizeof(publicKey));
+}
+
+void test_L4_licensed_low_entropy_identity_is_regenerated(void)
+{
+    static const uint8_t compromisedPublicKey[32] = {
+        0xac, 0xaf, 0x8c, 0x1c, 0x3c, 0x1c, 0x37, 0xac, 0x4f, 0x03, 0xa1, 0xe9, 0xfc, 0x37, 0x23, 0x29,
+        0xc8, 0xa3, 0x5d, 0x7f, 0x05, 0x26, 0xeb, 0x00, 0xbd, 0x26, 0xb8, 0x2e, 0xb1, 0x94, 0x7d, 0x24,
+    };
+    owner.is_licensed = true;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0xA5, 32);
+    config.security.public_key.size = 32;
+    memcpy(config.security.public_key.bytes, compromisedPublicKey, sizeof(compromisedPublicKey));
+    TEST_ASSERT_TRUE(mockNodeDB->checkLowEntropyPublicKey(config.security.public_key));
+
+    uint8_t oldPrivateKey[32];
+    memcpy(oldPrivateKey, config.security.private_key.bytes, sizeof(oldPrivateKey));
+    TEST_ASSERT_TRUE(mockNodeDB->generateCryptoKeyPair());
+    TEST_ASSERT_TRUE(mockNodeDB->keyIsLowEntropy);
+    TEST_ASSERT_FALSE(mockNodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_FALSE(memcmp(oldPrivateKey, config.security.private_key.bytes, sizeof(oldPrivateKey)) == 0);
 }
 
 // ===========================================================================
@@ -1605,6 +2109,12 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
 void setup()
 {
     initializeTestEnvironment();
+    AirTime *savedAirTime = airTime;
+    meshtastic::NodeStatus *savedNodeStatus = nodeStatus;
+    AirTime testAirTime;
+    meshtastic::NodeStatus testNodeStatus;
+    airTime = &testAirTime;
+    nodeStatus = &testNodeStatus;
 
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
@@ -1652,6 +2162,12 @@ void setup()
     RUN_TEST(test_B5_preset_signature_on_local_packet_cleared);
     RUN_TEST(test_B6_rich_shape_sweep_no_deadband);
     RUN_TEST(test_B7_infrastructure_port_signing_matrix);
+    RUN_TEST(test_B8_licensed_broadcast_and_unicast_are_signed);
+    RUN_TEST(test_B9_licensed_unicast_never_uses_pki_encryption);
+    RUN_TEST(test_B10_licensed_oversized_unicast_remains_unsigned);
+    RUN_TEST(test_B11_normal_unicast_still_uses_pki);
+    RUN_TEST(test_B12_licensed_receiver_does_not_decrypt_pki);
+    RUN_TEST(test_B13_licensed_port_and_destination_signing_matrix);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
@@ -1662,10 +2178,15 @@ void setup()
     RUN_TEST(test_C6_opaque_unknown_channel_is_relay_only);
     RUN_TEST(test_C7_strict_rejects_unsigned_decoded_simradio_ingress);
     RUN_TEST(test_C8_trusted_local_decoded_delivery_is_not_filtered);
-    RUN_TEST(test_C9_known_channel_malformed_plaintext_is_not_relayed_as_opaque);
+    RUN_TEST(test_C9_known_channel_malformed_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C10_legacy_channel_dm_failure_has_no_pipeline_effects);
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
+    RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
+    RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
+    RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
+    RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
+    RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
@@ -1674,6 +2195,16 @@ void setup()
     RUN_TEST(test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
     RUN_TEST(test_N6_signed_unicast_nodeinfo_from_signer_changes_name);
     RUN_TEST(test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name);
+    RUN_TEST(test_N8_second_request_inside_the_window_is_suppressed);
+    RUN_TEST(test_N9_request_after_the_window_is_answered);
+    RUN_TEST(test_N10_stale_stamp_does_not_alias_after_a_full_wrap);
+    RUN_TEST(test_N11_window_still_applies_across_the_wrap);
+
+    printf("\n=== Group L: licensed identity and plaintext signing ===\n");
+    RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);
+    RUN_TEST(test_L2_licensed_identity_key_is_generated_and_preserved);
+    RUN_TEST(test_L3_factory_config_reset_preserves_valid_identity_private_key);
+    RUN_TEST(test_L4_licensed_low_entropy_identity_is_regenerated);
 
     printf("\n=== Group D: encoding invariants ===\n");
     RUN_TEST(test_D1_signature_field_overhead_exact);
@@ -1692,7 +2223,10 @@ void setup()
     RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
     RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
 
-    exit(UNITY_END());
+    const int result = UNITY_END();
+    airTime = savedAirTime;
+    nodeStatus = savedNodeStatus;
+    exit(result);
 }
 
 void loop() {}

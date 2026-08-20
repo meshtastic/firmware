@@ -77,7 +77,7 @@ bool InternalFileSystem::begin()
     }
 
     // Mount failed: attempt to format (creates a fresh LittleFS)
-    LOG_WARN("LittleFS mount failed (%d), formatting storage partition...", rc);
+    LOG_WARN("LittleFS mount failed (%d), formatting storage partition", rc);
     int fmt_rc = fs_mkfs(FS_LITTLEFS, (uintptr_t)FIXED_PARTITION_ID(storage_partition), NULL, 0);
     if (fmt_rc != 0) {
         LOG_ERROR("LittleFS format failed (%d)", fmt_rc);
