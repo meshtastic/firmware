@@ -4,6 +4,7 @@
 
 #ifdef USE_EINK_PARALLELDISPLAY
 #include <OLEDDisplay.h>
+#include <memory>
 
 #include <atomic>
 #include <freertos/FreeRTOS.h>
@@ -38,7 +39,7 @@ class EInkParallelDisplay : public OLEDDisplay
 
   protected:
     uint32_t lastDrawMsec = 0;
-    FASTEPD *epaper;
+    std::unique_ptr<FASTEPD> epaper;
 
     // Set only when connect() fully succeeds; framebuffer-touching methods no-op while false.
     bool displayReady = false;
@@ -57,7 +58,7 @@ class EInkParallelDisplay : public OLEDDisplay
     void countGhostPixelsAndMaybePromote(int &newTop, int &newBottom, bool &forceFull);
 
     // per-bit dirty buffer (same format as epaper buffers): one bit == one pixel
-    uint8_t *dirtyPixels = nullptr;
+    std::unique_ptr<uint8_t[]> dirtyPixels;
     size_t dirtyPixelsSize = 0;
     uint32_t ghostPixelCount = 0;
     uint32_t ghostPixelLimit = EINK_LIMIT_GHOSTING_PX;

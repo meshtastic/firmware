@@ -18,6 +18,7 @@ Replaces the per-board branching in EInkDisplay2 / EInkDynamicDisplay / EInkPara
 #include "graphics/eink/Drivers/EInk.h"
 
 #include <OLEDDisplay.h>
+#include <memory>
 
 namespace NicheGraphics
 {
@@ -37,7 +38,6 @@ class BaseUIEInkDisplay : public OLEDDisplay
     };
 
     BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation);
-    ~BaseUIEInkDisplay() override;
 
     // OLEDDisplay overrides
     bool connect() override;
@@ -71,7 +71,7 @@ class BaseUIEInkDisplay : public OLEDDisplay
 
     Drivers::EInk *driver = nullptr;
     uint8_t rotation = 0; // 0=0°, 1=90°CW, 2=180°, 3=270°CW
-    uint8_t *panelBuffer = nullptr;
+    std::unique_ptr<uint8_t[]> panelBuffer;
     uint32_t panelBufferSize = 0;
     uint16_t panelRowBytes = 0;
 

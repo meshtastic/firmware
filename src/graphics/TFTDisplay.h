@@ -2,6 +2,7 @@
 
 #include <GpioLogic.h>
 #include <OLEDDisplay.h>
+#include <memory>
 
 /**
  * An adapter class that allows using the LovyanGFX library as if it was an OLEDDisplay implementation.
@@ -62,6 +63,6 @@ class TFTDisplay : public OLEDDisplay
     // Connect to the display
     virtual bool connect() override;
 
-    uint16_t *linePixelBuffer = nullptr;
-    uint16_t *repaintChunkBuffer = nullptr;
+    std::unique_ptr<uint16_t[]> linePixelBuffer;
+    std::unique_ptr<uint16_t[]> repaintChunkBuffer;
 };
