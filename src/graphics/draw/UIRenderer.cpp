@@ -17,6 +17,9 @@
 #include "gps/GeoCoord.h"
 #include "graphics/EmoteRenderer.h"
 #include "graphics/SharedUIDisplay.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#include "graphics/TouchLayout.h"
+#endif
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
@@ -735,6 +738,188 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // **********************
 // * Favorite Node Info *
 // **********************
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic_NodeInfoLite *node)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    const char *shortName = (nodeInfoLiteHasUser(node) && node->short_name[0]) ? node->short_name : "Node";
+    char title[40];
+    snprintf(title, sizeof(title), "*%s*", shortName);
+    graphics::drawCommonHeader(display, x, y, title, false, false, false, true, TFTPalette::Yellow);
+
+    const int screenW = display->getWidth();
+    const int screenH = display->getHeight();
+    const int contentLeft = x + 8;
+    const int contentRight = x + screenW - 8;
+    const int contentWidth = contentRight - contentLeft;
+    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int bodyBottom = y + screenH - footerReserve;
+
+    const int summaryY = y + FONT_HEIGHT_SMALL + 5;
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft, summaryY, "FAVORITE NODE");
+    const char *pinnedLabel = "PINNED";
+    const int pinnedWidth = display->getStringWidth(pinnedLabel);
+    display->drawString(contentRight - pinnedWidth, summaryY, pinnedLabel);
+    const int separatorY = summaryY + FONT_HEIGHT_SMALL + 3;
+    display->drawLine(contentLeft, separatorY, contentRight, separatorY);
+
+    const int cardTop = separatorY + 7;
+    const int cardHeight = 102;
+    const int compassColumnWidth = 72;
+    const int textLeft = contentLeft + 31;
+    const int textRight = contentRight - compassColumnWidth;
+    display->drawRect(contentLeft, cardTop, contentWidth, cardHeight);
+
+    if (currentResolution == ScreenResolution::High) {
+        NodeListRenderer::drawScaledXBitmap16x16(contentLeft + 8, cardTop + 12, 8, 8, imgUser, display);
+    } else {
+        display->drawXbm(contentLeft + 10, cardTop + 15, 8, 8, imgUser);
+    }
+
+    const char *nodeName = (nodeInfoLiteHasUser(node) && node->long_name[0]) ? node->long_name : shortName;
+    char clippedName[96];
+    display->setFont(FONT_SMALL);
+    UIRenderer::truncateStringWithEmotes(display, nodeName, clippedName, sizeof(clippedName), textRight - textLeft - 6);
+    UIRenderer::drawStringWithEmotes(display, textLeft, cardTop + 7, clippedName, FONT_HEIGHT_SMALL, 1, true);
+
+    char idLine[32];
+    snprintf(idLine, sizeof(idLine), "!%08lX / %s", static_cast<unsigned long>(node->num), shortName);
+    display->setFont(FONT_SMALL_LOCAL);
+    char clippedId[32];
+    UIRenderer::truncateStringWithEmotes(display, idLine, clippedId, sizeof(clippedId), textRight - textLeft - 6);
+    display->drawString(textLeft, cardTop + 34, clippedId);
+
+    char statusLine[96] = "";
+#if !MESHTASTIC_EXCLUDE_STATUS && !MESHTASTIC_EXCLUDE_STATUSDB
+    if (nodeDB) {
+        meshtastic_StatusMessage cachedStatus;
+        if (nodeDB->copyNodeStatus(node->num, cachedStatus) && cachedStatus.status[0]) {
+            UIRenderer::truncateStringWithEmotes(display, cachedStatus.status, statusLine, sizeof(statusLine), textRight - textLeft - 6);
+        }
+    }
+#endif
+    if (statusLine[0])
+        display->drawString(textLeft, cardTop + 56, statusLine);
+
+    char signalValue[24];
+    if (node->has_hops_away && node->hops_away > 0) {
+        snprintf(signalValue, sizeof(signalValue), "Hops: %u", static_cast<unsigned>(node->hops_away));
+    } else if (nodeInfoLiteHasSnr(node)) {
+        snprintf(signalValue, sizeof(signalValue), "SNR: %+.1f dB", node->snr);
+    } else {
+        snprintf(signalValue, sizeof(signalValue), "SNR: --");
+    }
+    display->drawString(textLeft, cardTop + 78, signalValue);
+
+    bool showCompass = false;
+    float myHeading = 0.0f;
+    float bearing = 0.0f;
+    const char *compassStatus1 = "No";
+    const char *compassStatus2 = "Fix";
+    const meshtastic_NodeInfoLite *ourNode = nodeDB ? nodeDB->getMeshNode(nodeDB->getNodeNum()) : nullptr;
+    meshtastic_PositionLite nodePos;
+    meshtastic_PositionLite ourPos;
+    const bool haveNodePos = nodeDB && nodeDB->copyNodePosition(node->num, nodePos);
+    const bool haveOurPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ourPos);
+    const bool hasOwnPositionFix = ourNode && nodeDB->hasValidPosition(ourNode);
+    const bool hasNodePositionFix = nodeDB && nodeDB->hasValidPosition(node);
+    if (hasOwnPositionFix && hasNodePositionFix && haveOurPos && haveNodePos) {
+        showCompass = CompassRenderer::getHeadingRadians(DegD(ourPos.latitude_i), DegD(ourPos.longitude_i), myHeading);
+        if (showCompass) {
+            bearing = GeoCoord::bearing(DegD(ourPos.latitude_i), DegD(ourPos.longitude_i), DegD(nodePos.latitude_i),
+                                        DegD(nodePos.longitude_i));
+            bearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeading);
+            compassStatus1 = nullptr;
+            compassStatus2 = nullptr;
+        } else {
+            compassStatus2 = "Heading";
+        }
+    }
+    const int compassX = contentRight - 38;
+    const int compassY = cardTop + 51;
+    drawBearingCompassOrStatus(display, compassX, compassY, 27, showCompass, myHeading, bearing, compassStatus1, compassStatus2);
+
+    const int metricsTop = cardTop + cardHeight + 8;
+    display->drawLine(contentLeft, metricsTop, contentRight, metricsTop);
+    const int rowHeight = 26;
+    int rowY = metricsTop + 6;
+    auto drawMetricRow = [&](const char *label, const char *value) {
+        if (rowY + FONT_HEIGHT_SMALL > bodyBottom)
+            return;
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(contentLeft + 2, rowY, label);
+        char clippedValue[48];
+        UIRenderer::truncateStringWithEmotes(display, value, clippedValue, sizeof(clippedValue), contentWidth - 100);
+        const int valueWidth = display->getStringWidth(clippedValue);
+        display->drawString(contentRight - valueWidth, rowY, clippedValue);
+        display->drawLine(contentLeft, rowY + rowHeight - 7, contentRight, rowY + rowHeight - 7);
+        rowY += rowHeight;
+    };
+
+    char heardValue[24];
+    const uint32_t heardSeconds = sinceLastSeen(node);
+    if (heardSeconds == 0 || heardSeconds == UINT32_MAX) {
+        snprintf(heardValue, sizeof(heardValue), "unknown");
+    } else {
+        const uint32_t minutes = heardSeconds / 60;
+        const uint32_t hours = minutes / 60;
+        const uint32_t days = hours / 24;
+        snprintf(heardValue, sizeof(heardValue), "%lu%c ago", static_cast<unsigned long>(days ? days : hours ? hours : minutes),
+                 days ? 'd' : hours ? 'h' : 'm');
+    }
+
+    char uptimeValue[32] = "--";
+    meshtastic_DeviceMetrics nodeMetrics;
+    const bool haveNodeMetrics = nodeDB && nodeDB->copyNodeTelemetry(node->num, nodeMetrics);
+    if (haveNodeMetrics && nodeMetrics.has_uptime_seconds)
+        getUptimeStr(nodeMetrics.uptime_seconds * 1000, "Up: ", uptimeValue, sizeof(uptimeValue));
+
+    char distanceValue[24] = "--";
+    if (hasOwnPositionFix && hasNodePositionFix && haveOurPos && haveNodePos) {
+        const float distanceMeters = GeoCoord::latLongToMeter(DegD(nodePos.latitude_i), DegD(nodePos.longitude_i),
+                                                              DegD(ourPos.latitude_i), DegD(ourPos.longitude_i));
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            const int feet = static_cast<int>(distanceMeters * METERS_TO_FEET + 0.5f);
+            if (feet > 0 && feet < 1000)
+                snprintf(distanceValue, sizeof(distanceValue), "%dft", feet);
+            else if (feet >= 1000)
+                snprintf(distanceValue, sizeof(distanceValue), "%dmi", static_cast<int>(feet / 5280.0f + 0.5f));
+        } else {
+            const int meters = static_cast<int>(distanceMeters + 0.5f);
+            if (meters > 0 && meters < 1000)
+                snprintf(distanceValue, sizeof(distanceValue), "%dm", meters);
+            else if (meters >= 1000)
+                snprintf(distanceValue, sizeof(distanceValue), "%dkm", static_cast<int>(meters / 1000.0f + 0.5f));
+        }
+    }
+
+    char batteryValue[24] = "--";
+    if (haveNodeMetrics) {
+        if (nodeMetrics.has_battery_level && nodeMetrics.battery_level > 0 && nodeMetrics.battery_level <= 100) {
+            if (nodeMetrics.has_voltage && nodeMetrics.voltage > 0.001f)
+                snprintf(batteryValue, sizeof(batteryValue), "%d%% / %.2fV", static_cast<int>(nodeMetrics.battery_level),
+                         nodeMetrics.voltage);
+            else
+                snprintf(batteryValue, sizeof(batteryValue), "%d%%", static_cast<int>(nodeMetrics.battery_level));
+        } else if (nodeMetrics.has_voltage && nodeMetrics.voltage > 0.001f) {
+            snprintf(batteryValue, sizeof(batteryValue), "%.2fV", nodeMetrics.voltage);
+        } else if (nodeMetrics.has_battery_level && nodeMetrics.battery_level > 100) {
+            snprintf(batteryValue, sizeof(batteryValue), "USB");
+        }
+    }
+
+    drawMetricRow("LAST HEARD", heardValue);
+    drawMetricRow("UPTIME", uptimeValue);
+    drawMetricRow("DISTANCE", distanceValue);
+    drawMetricRow("BATTERY", batteryValue);
+
+    graphics::drawCommonFooter(display, x, y);
+}
+#endif
 // Compact panels: toggle between the compass/distance view and the status/telemetry view.
 static int favoriteViewIndex = 0;
 
@@ -763,6 +948,13 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
     if (!node || node->num == nodeDB->getNodeNum() || !nodeInfoLiteIsFavorite(node))
         return;
+
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    currentFavoriteNodeNum = node->num;
+    drawTDeckFavoriteNode(display, x, y, node);
+    return;
+#endif
+
     display->clear();
 #if defined(OLED_TINY)
     uint32_t now = millis();
@@ -1314,6 +1506,164 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int line = 1;
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    {
+    // T-Deck Pro has enough portrait space for a compact status dashboard. Keep
+    // the legacy frame and input path, but give each status group its own zone.
+    graphics::drawCommonHeader(display, x, y, "Home");
+    display->setColor(WHITE);
+
+    const int screenW = display->getWidth();
+    const int contentLeft = x + 8;
+    const int contentRight = x + screenW - 8;
+    const int contentWidth = contentRight - contentLeft;
+    const int bodyTop = y + FONT_HEIGHT_SMALL + 4;
+
+    const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
+    const char *shortName = owner.short_name[0] ? owner.short_name : "";
+    const char *identityName = longName[0] ? longName : shortName;
+    if (!identityName[0])
+        identityName = "Unnamed";
+
+    // Identity row: keep the full name left-aligned and the existing short name
+    // visible on the right without allowing either value to clip the other.
+    display->setFont(FONT_SMALL);
+    const int shortNameWidth = (longName[0] && shortName[0]) ? display->getStringWidth(shortName) : 0;
+    const int identityMaxWidth = contentWidth - (shortNameWidth > 0 ? shortNameWidth + 12 : 0);
+    char identityBuffer[96];
+    UIRenderer::truncateStringWithEmotes(display, identityName, identityBuffer, sizeof(identityBuffer), identityMaxWidth);
+    UIRenderer::drawStringWithEmotes(display, contentLeft, bodyTop, identityBuffer, FONT_HEIGHT_SMALL, 1, true);
+    if (shortNameWidth > 0)
+        display->drawString(contentRight - shortNameWidth, bodyTop, shortName);
+    const int identityRuleY = bodyTop + FONT_HEIGHT_SMALL + 3;
+    display->drawLine(contentLeft, identityRuleY, contentRight, identityRuleY);
+
+    // Message state remains read-only here; opening Messages still follows the
+    // existing frame/menu path.
+    const int messageTop = identityRuleY + 6;
+    const int messageHeight = 27;
+    display->drawRect(contentLeft, messageTop, contentWidth, messageHeight);
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft + 6, messageTop + 6, "Messages");
+    const char *messageState = hasUnreadMessage ? "Unread" : "No new";
+    const int messageStateWidth = display->getStringWidth(messageState);
+    display->drawString(contentRight - 6 - messageStateWidth, messageTop + 6, messageState);
+
+    const int gridTop = messageTop + messageHeight + 6;
+    const int gridGap = 4;
+    const int cellWidth = (contentWidth - gridGap) / 2;
+    const int cellHeight = 52;
+    const int gridBottom = gridTop + (cellHeight * 2) + gridGap;
+
+    int onlineNodes = nodeStatus->getNumOnline() > 0 ? static_cast<int>(nodeStatus->getNumOnline()) - 1 : 0;
+    int totalNodes = nodeStatus->getNumTotal() > 0 ? static_cast<int>(nodeStatus->getNumTotal()) - 1 : 0;
+    if (onlineNodes < 0)
+        onlineNodes = 0;
+    if (totalNodes < 0)
+        totalNodes = 0;
+
+    char nodesValue[12];
+    char onlineValue[12];
+    char channelValue[12];
+    char uptimeValue[32];
+    snprintf(nodesValue, sizeof(nodesValue), "%d", totalNodes);
+    if (config.lora.tx_enabled)
+        snprintf(onlineValue, sizeof(onlineValue), "%d", onlineNodes);
+    else
+        snprintf(onlineValue, sizeof(onlineValue), "TX off");
+    int channelUtilization = static_cast<int>(airTime->channelUtilizationPercent() + 0.5f);
+    if (channelUtilization < 0)
+        channelUtilization = 0;
+    if (channelUtilization > 100)
+        channelUtilization = 100;
+    snprintf(channelValue, sizeof(channelValue), "%d%%", channelUtilization);
+    getUptimeStr(millis(), "", uptimeValue, sizeof(uptimeValue));
+
+    auto drawMetricCell = [&](int cellX, int cellY, const char *label, const char *value) {
+        display->drawRect(cellX, cellY, cellWidth, cellHeight);
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(cellX + 6, cellY + 5, label);
+        display->setFont(FONT_SMALL);
+        display->drawString(cellX + 6, cellY + 22, value);
+    };
+
+    drawMetricCell(contentLeft, gridTop, "Nodes", nodesValue);
+    drawMetricCell(contentLeft + cellWidth + gridGap, gridTop, "Online", onlineValue);
+
+    const int channelCellX = contentLeft;
+    const int channelCellY = gridTop + cellHeight + gridGap;
+    display->drawRect(channelCellX, channelCellY, cellWidth, cellHeight);
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(channelCellX + 6, channelCellY + 5, "Channel use");
+
+    display->setFont(FONT_SMALL);
+    const int channelValueWidth = display->getStringWidth(channelValue);
+    const int channelValueX = channelCellX + cellWidth - 6 - channelValueWidth;
+    display->drawString(channelValueX, channelCellY + 22, channelValue);
+
+    // Keep the compact utilization bar inside the metric cell, even when the
+    // value label is wider than expected on a localized font.
+    const int barGap = 5;
+    const int barX = channelCellX + 6;
+    const int barY = channelCellY + 28;
+    const int barWidth = std::max(0, channelValueX - barGap - barX);
+    const int barHeight = 8;
+    if (barWidth > 2) {
+        display->drawRect(barX, barY, barWidth, barHeight);
+        const int fillWidth = ((barWidth - 2) * channelUtilization) / 100;
+        if (fillWidth > 0)
+            display->fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2);
+    }
+
+    drawMetricCell(contentLeft + cellWidth + gridGap, gridTop + cellHeight + gridGap, "Uptime", uptimeValue);
+
+    const int statusRowHeight = 22;
+    int statusY = gridBottom + 7;
+    auto drawStatusRow = [&](const char *label, const char *value) {
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(contentLeft, statusY, label);
+        const int valueWidth = display->getStringWidth(value);
+        display->drawString(contentRight - valueWidth, statusY, value);
+        display->drawLine(contentLeft, statusY + statusRowHeight - 3, contentRight, statusY + statusRowHeight - 3);
+        statusY += statusRowHeight;
+    };
+
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft, statusY, "GPS");
+#if HAS_GPS
+    UIRenderer::drawGps(display, contentLeft + 47, statusY - 1, gpsStatus);
+#else
+    const char *noGps = "No GPS";
+    display->drawString(contentRight - display->getStringWidth(noGps), statusY, noGps);
+#endif
+    display->drawLine(contentLeft, statusY + statusRowHeight - 3, contentRight, statusY + statusRowHeight - 3);
+    statusY += statusRowHeight;
+
+    char voltageValue[20];
+    if (powerStatus->getHasBattery()) {
+        const int batteryVoltageMv = powerStatus->getBatteryVoltageMv();
+        snprintf(voltageValue, sizeof(voltageValue), "%01d.%02dV", batteryVoltageMv / 1000,
+                 (batteryVoltageMv % 1000) / 10);
+    } else {
+        snprintf(voltageValue, sizeof(voltageValue), "USB");
+    }
+    drawStatusRow("Power", voltageValue);
+
+    const char *apiState = isAPIConnected(service->api_state) ? "API connected" : "API offline";
+    drawStatusRow("Link", apiState);
+
+    if (!config.lora.tx_enabled || !config.bluetooth.enabled) {
+        const char *radioState = !config.lora.tx_enabled ? "TX disabled" : "BT off";
+        drawStatusRow("Radio", radioState);
+    }
+
+    // Keep all body content above both the footer link icon and the transient
+    // navigation overlay at the bottom of the 240x320 panel.
+    graphics::drawCommonFooter(display, x, y);
+    return;
+    }
+#endif
+
     // === Header ===
     if (currentResolution == ScreenResolution::UltraLow) {
         graphics::drawCommonHeader(display, x, y, "Home");
@@ -1750,6 +2100,191 @@ void UIRenderer::drawBootIconScreen(const char *upperMsg, OLEDDisplay *display, 
 // ****************************
 // * My Position Screen       *
 // ****************************
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    (void)state;
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "Position");
+
+    const int screenW = display->getWidth();
+    const int screenH = display->getHeight();
+    const int contentLeft = x + 8;
+    const int contentRight = x + screenW - 8;
+    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int bodyBottom = y + screenH - footerReserve;
+
+    bool hasLiveGpsFix = false;
+    bool hasOwnPositionFix = false;
+    bool validHeading = false;
+    float heading = 0.0f;
+    const char *fixStatus = "NO GPS";
+
+#if HAS_GPS
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    hasOwnPositionFix = ourNode && nodeDB->hasValidPosition(ourNode);
+    hasLiveGpsFix = gpsStatus && gpsStatus->getHasLock() &&
+                    (gpsStatus->getLatitude() != 0 || gpsStatus->getLongitude() != 0);
+
+    if (config.position.fixed_position) {
+        fixStatus = "FIXED";
+    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        fixStatus = "GPS OFF";
+    } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
+        fixStatus = "NO GPS";
+    } else if (!gpsStatus->getHasLock()) {
+        fixStatus = "NO LOCK";
+    } else {
+        fixStatus = "FIX STABLE";
+    }
+
+    if (gpsStatus) {
+        geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
+                              int32_t(gpsStatus->getAltitude()));
+    }
+
+    const bool hasSensorHeading = screen->hasHeading();
+    if (hasSensorHeading || hasLiveGpsFix || hasOwnPositionFix) {
+        double headingLat = 0.0;
+        double headingLon = 0.0;
+        if (hasLiveGpsFix) {
+            headingLat = DegD(gpsStatus->getLatitude());
+            headingLon = DegD(gpsStatus->getLongitude());
+        } else if (hasOwnPositionFix) {
+            meshtastic_PositionLite ownPos;
+            if (nodeDB->copyNodePosition(ourNode->num, ownPos)) {
+                headingLat = DegD(ownPos.latitude_i);
+                headingLon = DegD(ownPos.longitude_i);
+            }
+        }
+        validHeading = CompassRenderer::getHeadingRadians(headingLat, headingLon, heading);
+    }
+#endif
+
+    const int summaryY = y + FONT_HEIGHT_SMALL + 5;
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft, summaryY, "GPS");
+#if HAS_GPS
+    UIRenderer::drawGps(display, contentLeft + 28, summaryY - 1, gpsStatus);
+#else
+    display->drawString(contentLeft + 28, summaryY, "No GPS");
+#endif
+    const int fixStatusWidth = display->getStringWidth(fixStatus);
+    display->drawString(contentRight - fixStatusWidth, summaryY, fixStatus);
+    const int separatorY = summaryY + FONT_HEIGHT_SMALL + 3;
+    display->drawLine(contentLeft, separatorY, contentRight, separatorY);
+
+    const int panelTop = separatorY + 7;
+    const int panelHeight = 112;
+    const int cardGap = 8;
+    const int compassWidth = 104;
+    const int compassX0 = contentLeft;
+    const int coordinatesX0 = compassX0 + compassWidth + cardGap;
+    const int coordinatesWidth = contentRight - coordinatesX0;
+
+    display->drawRect(compassX0, panelTop, compassWidth, panelHeight);
+    display->drawRect(coordinatesX0, panelTop, coordinatesWidth, panelHeight);
+
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(compassX0 + 6, panelTop + 5, "HEADING");
+    display->drawString(coordinatesX0 + 6, panelTop + 5, "COORDINATES");
+
+    const int compassCenterX = compassX0 + compassWidth / 2;
+    const int compassCenterY = panelTop + panelHeight / 2 + 7;
+    int compassRadius = (compassWidth - 12) / 2;
+    const int verticalRadius = (panelHeight - FONT_HEIGHT_SMALL - 10) / 2;
+    if (compassRadius > verticalRadius)
+        compassRadius = verticalRadius;
+    if (compassRadius < 8)
+        compassRadius = 8;
+
+    const char *statusLine1 = validHeading ? nullptr : "No";
+    const char *statusLine2 = validHeading ? nullptr : (hasLiveGpsFix || hasOwnPositionFix ? "Heading" : "Fix");
+    drawDetailedCompassOrStatus(display, compassCenterX, compassCenterY, compassRadius, validHeading, heading, statusLine1,
+                                statusLine2);
+
+    display->setFont(FONT_SMALL_LOCAL);
+#if HAS_GPS
+    if (gpsStatus) {
+        const int coordinateY = panelTop + 31;
+        UIRenderer::drawGpsCoordinates(display, coordinatesX0 + 6, coordinateY, gpsStatus, "line1");
+        if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
+            uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
+            UIRenderer::drawGpsCoordinates(display, coordinatesX0 + 6, coordinateY + 28, gpsStatus, "line2");
+        }
+    } else {
+        display->drawString(coordinatesX0 + 6, panelTop + 31, "No GPS");
+    }
+#else
+    display->drawString(coordinatesX0 + 6, panelTop + 31, "No GPS");
+#endif
+
+    char lastFix[32];
+#if HAS_GPS
+    if (gpsStatus && gpsStatus->getLastFixMillis() > 0) {
+        const uint32_t delta = millis() - gpsStatus->getLastFixMillis();
+        getUptimeStr(delta, "Last: ", lastFix, sizeof(lastFix), false);
+    } else {
+        snprintf(lastFix, sizeof(lastFix), "Last: ?");
+    }
+#else
+    snprintf(lastFix, sizeof(lastFix), "Last: ?");
+#endif
+    const int lastFixWidth = display->getStringWidth(lastFix);
+    display->drawString(contentRight - lastFixWidth - 6, panelTop + panelHeight - FONT_HEIGHT_SMALL - 5, lastFix);
+
+    const int metricsTop = panelTop + panelHeight + 8;
+    display->drawLine(contentLeft, metricsTop, contentRight, metricsTop);
+    const int rowHeight = 26;
+    int rowY = metricsTop + 6;
+
+    auto drawMetricRow = [&](const char *label, const char *value) {
+        if (rowY + FONT_HEIGHT_SMALL > bodyBottom)
+            return;
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(contentLeft + 2, rowY, label);
+        const int valueWidth = display->getStringWidth(value);
+        display->drawString(contentRight - valueWidth, rowY, value);
+        display->drawLine(contentLeft, rowY + rowHeight - 7, contentRight, rowY + rowHeight - 7);
+        rowY += rowHeight;
+    };
+
+    char satellites[16];
+    char altitude[24];
+#if HAS_GPS
+    if (config.position.fixed_position) {
+        snprintf(satellites, sizeof(satellites), "FIXED");
+    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        snprintf(satellites, sizeof(satellites), "OFF");
+    } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
+        snprintf(satellites, sizeof(satellites), "--");
+    } else if (!gpsStatus->getHasLock()) {
+        snprintf(satellites, sizeof(satellites), "NO FIX");
+    } else {
+        snprintf(satellites, sizeof(satellites), "%u", gpsStatus->getNumSatellites());
+    }
+
+    if (!hasLiveGpsFix && !config.position.fixed_position) {
+        snprintf(altitude, sizeof(altitude), "--");
+    } else if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        snprintf(altitude, sizeof(altitude), "%.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+    } else {
+        snprintf(altitude, sizeof(altitude), "%.0im", geoCoord.getAltitude());
+    }
+#else
+    snprintf(satellites, sizeof(satellites), "--");
+    snprintf(altitude, sizeof(altitude), "--");
+#endif
+
+    drawMetricRow("SATELLITES", satellites);
+    drawMetricRow("ALTITUDE", altitude);
+    drawMetricRow("LAST FIX", lastFix);
+
+    graphics::drawCommonFooter(display, x, y);
+}
+#endif
 // Compact panels: 0 = compass, 1 = coordinates + elevation
 static int positionViewIndex = 0;
 
@@ -1766,6 +2301,10 @@ void UIRenderer::scrollPositionUp()
 
 void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+    drawTDeckPositionScreen(display, state, x, y);
+    return;
+#endif
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -2067,6 +2606,10 @@ void UIRenderer::notifyScreenWoke()
 // cppcheck-suppress constParameterPointer; signature must match OverlayCallback typedef from OLEDDisplayUi library
 void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (screen)
+        screen->markTouchFrameMapped();
+#endif
 #if BASEUI_HAS_GAMES
     // Hide the navigation bar while a game owns the screen (the attract screen doesn't intercept,
     // so the nav bar stays visible there).
@@ -2155,7 +2698,15 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     const int navPadding = compactPanel ? 8 : ((currentResolution == ScreenResolution::High) ? 24 : 12);
 
-    int usableWidth = SCREEN_WIDTH - (navPadding * 2);
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    const int screenWidth = display->getWidth();
+    const int screenHeight = display->getHeight();
+#else
+    const int screenWidth = SCREEN_WIDTH;
+    const int screenHeight = SCREEN_HEIGHT;
+#endif
+
+    int usableWidth = screenWidth - (navPadding * 2);
     if (usableWidth < iconSize)
         usableWidth = iconSize;
 
@@ -2166,10 +2717,10 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
 
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
-    const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
+    const int xStart = (screenWidth - totalWidth) / 2;
 
     const bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
-    const int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
+    const int y = navBarVisible ? (screenHeight - iconSize - 1) : screenHeight;
 
 #if defined(USE_EINK)
     // Only show bar briefly after switching frames
@@ -2206,6 +2757,17 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int rectY = y - (compactPanel ? 1 : 2);
     const int rectWidth = totalWidth + 4 + (bigOffset * 2);
     const int rectHeight = iconSize + (compactPanel ? 2 : 6);
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (navBarVisible && screen) {
+        for (size_t i = pageStart; i < pageEnd; ++i) {
+            const int iconX = xStart + (i - pageStart) * (iconSize + spacing);
+            screen->addTouchTarget(touchExpandedRect(iconX, y, iconSize, iconSize, 2),
+                                   meshtastic::TouchTargetKind::MenuOption, static_cast<uint32_t>(i),
+                                   INPUT_BROKER_NONE);
+        }
+    }
+#endif
 
     // Clear background and draw border
     display->setColor(BLACK);
@@ -2296,6 +2858,12 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         int baseX = rectX + rectWidth + offset;
         int regionX = baseX;
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        if (screen)
+            screen->addTouchTarget(touchExpandedRect(regionX, top, maxW, halfH, 3),
+                                   meshtastic::TouchTargetKind::NavigationNext, 0, INPUT_BROKER_NONE);
+#endif
+
 #if GRAPHICS_TFT_COLORING_ENABLED
         registerTFTColorRegion(TFTColorRole::NavigationArrow, regionX, top, maxW, halfH);
 #endif
@@ -2307,6 +2875,12 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (navBarVisible && pageStart > 0) {
         int baseX = rectX - offset - 1;
         int regionX = baseX - maxW + 1;
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        if (screen)
+            screen->addTouchTarget(touchExpandedRect(regionX, top, maxW, halfH, 3),
+                                   meshtastic::TouchTargetKind::NavigationPrevious, 0, INPUT_BROKER_NONE);
+#endif
 
 #if GRAPHICS_TFT_COLORING_ENABLED
         registerTFTColorRegion(TFTColorRole::NavigationArrow, regionX, top, maxW, halfH);

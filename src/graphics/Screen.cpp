@@ -183,6 +183,10 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (screen)
+        screen->beginTouchFrame();
+#endif
 #ifdef MESHTASTIC_LOCKDOWN
     if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
         OLEDDisplay *display = screen->getDisplayDevice();
@@ -208,6 +212,10 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
             NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
         display->display();
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        if (screen)
+            screen->publishTouchFrame();
+#endif
         return;
     }
 #endif
@@ -215,6 +223,10 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     prepareFrameColorRegions();
 #endif
     ui->update();
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (screen)
+        screen->publishTouchFrame();
+#endif
 }
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
 
@@ -333,6 +345,9 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
     NotificationRenderer::alertBannerCallback = banner_overlay_options.bannerCallback;
     NotificationRenderer::curSelected = banner_overlay_options.InitialSelected;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    NotificationRenderer::touchSelectionPending = false;
+#endif
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::current_notification_type = banner_overlay_options.notificationType;
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
@@ -355,6 +370,9 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    NotificationRenderer::touchSelectionPending = false;
+#endif
     NotificationRenderer::current_notification_type = notificationTypeEnum::node_picker;
 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
@@ -657,6 +675,42 @@ Screen::~Screen()
     delete ui;
     delete dispdev;
 }
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+void Screen::beginTouchFrame()
+{
+    const uint32_t currentFrame = ui ? static_cast<uint32_t>(ui->getUiState()->currentFrame) : 0;
+    const uint32_t overlayType = NotificationRenderer::isOverlayBannerShowing()
+                                     ? static_cast<uint32_t>(NotificationRenderer::current_notification_type) + 1
+                                     : 0;
+    const uint32_t touchSurfaceKey = (currentFrame << 8) | overlayType;
+    if (!touchSurfaceKeyValid || touchSurfaceKey != lastTouchSurfaceKey) {
+        ++touchPageGeneration;
+        lastTouchSurfaceKey = touchSurfaceKey;
+        touchSurfaceKeyValid = true;
+    }
+    if (touchScreenImpl1)
+        touchScreenImpl1->beginTouchFrame(touchPageGeneration);
+}
+
+void Screen::markTouchFrameMapped()
+{
+    if (touchScreenImpl1)
+        touchScreenImpl1->markTouchFrameMapped();
+}
+
+bool Screen::addTouchTarget(meshtastic::TouchRect rect, meshtastic::TouchTargetKind kind, uint32_t value,
+                            input_broker_event tapAction, input_broker_event longPressAction)
+{
+    return touchScreenImpl1 && touchScreenImpl1->addTouchTarget(rect, kind, value, tapAction, longPressAction);
+}
+
+void Screen::publishTouchFrame()
+{
+    if (touchScreenImpl1)
+        touchScreenImpl1->publishTouchFrame();
+}
+#endif
 
 /**
  * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
@@ -1344,7 +1398,6 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     // Old EInkDisplay class
     static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
 #endif
-
     // Prepare now for next frame, shown when display wakes
     ui->setOverlays(NULL, 0);  // Clear overlay
     setFrames(FOCUS_PRESERVE); // Return to normal display updates, showing same frame as before screensaver, ideally
@@ -2113,11 +2166,91 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
     return 0;
 }
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+bool Screen::handleTouchTarget(const InputEvent *event)
+{
+    if (event->touchTargetLongPress && event->inputEvent == INPUT_BROKER_NONE)
+        return true;
+
+    const auto kind = static_cast<meshtastic::TouchTargetKind>(event->touchTargetKind);
+    switch (kind) {
+    case meshtastic::TouchTargetKind::NavigationPrevious:
+        showFrame(FrameDirection::PREVIOUS);
+        return true;
+    case meshtastic::TouchTargetKind::NavigationNext:
+        showFrame(FrameDirection::NEXT);
+        return true;
+    case meshtastic::TouchTargetKind::MenuOption:
+        if (event->touchTargetValue < frameCount) {
+            ui->switchToFrame(static_cast<uint8_t>(event->touchTargetValue));
+            setFastFramerate();
+        }
+        return true;
+    case meshtastic::TouchTargetKind::NotificationOption:
+        if (NotificationRenderer::handleTouchTarget(event->touchTargetValue)) {
+            setFastFramerate();
+            updateUiFrame(ui);
+        }
+        return true;
+    case meshtastic::TouchTargetKind::Confirm:
+    case meshtastic::TouchTargetKind::Cancel: {
+        NotificationRenderer::inEvent = *event;
+        NotificationRenderer::inEvent.inputEvent =
+            (kind == meshtastic::TouchTargetKind::Confirm) ? INPUT_BROKER_SELECT : INPUT_BROKER_CANCEL;
+        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+        ui->setOverlays(overlays, 2);
+        setFastFramerate();
+        updateUiFrame(ui);
+        return true;
+    }
+    case meshtastic::TouchTargetKind::Back:
+        showFrame(FrameDirection::PREVIOUS);
+        return true;
+    case meshtastic::TouchTargetKind::NodeRow:
+        if (cannedMessageModule && cannedMessageModule->shouldDraw())
+            return false;
+        if (!NodeListRenderer::isTouchRowValid(event->touchTargetValue))
+            return true;
+        if (ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_nodes ||
+            ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location ||
+            ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
+            ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+            ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
+            ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
+            menuHandler::nodeListMenu();
+            return true;
+        }
+        return true;
+    case meshtastic::TouchTargetKind::MessageRow:
+        if (cannedMessageModule && cannedMessageModule->shouldDraw())
+            return false;
+        if (ui->getUiState()->currentFrame == framesetInfo.positions.textMessage && messageStore.hasVisibleMessages()) {
+            menuHandler::messageResponseMenu();
+            return true;
+        }
+        return true;
+    case meshtastic::TouchTargetKind::EmoteRow:
+    case meshtastic::TouchTargetKind::KeyboardKey:
+    case meshtastic::TouchTargetKind::None:
+    case meshtastic::TouchTargetKind::LegacyFallback:
+        return false;
+    }
+    return false;
+}
+#endif
+
 int Screen::handleInputEvent(const InputEvent *event)
 {
     LOG_INPUT("Screen Input event %u! kb %u", event->inputEvent, event->kbchar);
     if (!screenOn)
         return 0;
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (event->touchTargetKind != static_cast<uint8_t>(meshtastic::TouchTargetKind::None) &&
+        handleTouchTarget(event)) {
+        return 1;
+    }
+#endif
 
     // Handle text input notifications specially - pass input to virtual keyboard
     if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
@@ -2141,6 +2274,16 @@ int Screen::handleInputEvent(const InputEvent *event)
         EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
         handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
         setFastFramerate();                       // Draw ASAP
+    }
+#endif
+#if defined(_VARIANT_T_DECK_MAX)
+    if (NotificationRenderer::handleMaxTouchKeyRight(event)) {
+        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+        ui->setOverlays(overlays, 2);
+        setFastFramerate();
+        updateUiFrame(ui);
+        menuHandler::handleMenuSwitch(dispdev);
+        return 0;
     }
 #endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
@@ -2401,6 +2544,14 @@ bool Screen::isGamesFrameShown()
 {
     return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
 }
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+bool Screen::isMessageFrameShown() const
+{
+    return framesetInfo.positions.textMessage != 255 && ui &&
+           ui->getUiState()->currentFrame == framesetInfo.positions.textMessage;
+}
+#endif
 
 } // namespace graphics
 

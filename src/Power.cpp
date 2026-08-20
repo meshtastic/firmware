@@ -26,6 +26,7 @@
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
 #include "sleep.h"
+#include <cstring>
 #ifdef ARCH_ESP32
 // #include <driver/adc.h>
 #include <esp_adc/adc_cali.h>
@@ -1736,10 +1737,433 @@ bool Power::cw2015Init()
 
 #if defined(HAS_PPM) && HAS_PPM
 
-// The gauge is soldered on, so a failed init means wedged rather than absent - retry from
-// the power thread before writing it off.
 #define BQ27220_INIT_ATTEMPTS 3
 #define BQ27220_RETRY_INTERVAL_MS (60 * 1000)
+
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_BQ27220)
+namespace
+{
+bool writeBq27220Register(uint8_t command, const uint8_t *data, size_t length)
+{
+    Wire.beginTransmission(BQ27220_I2C_ADDRESS);
+    if (Wire.write(command) != 1)
+        return false;
+    if (length != 0 && Wire.write(data, length) != length)
+        return false;
+    return Wire.endTransmission() == 0;
+}
+
+bool writeBq27220Control(uint16_t subcommand)
+{
+    const uint8_t data[] = {static_cast<uint8_t>(subcommand), static_cast<uint8_t>(subcommand >> 8)};
+    return writeBq27220Register(CommandControl, data, sizeof(data));
+}
+
+bool readBq27220Bytes(uint8_t command, uint8_t *data, size_t length)
+{
+    Wire.beginTransmission(BQ27220_I2C_ADDRESS);
+    if (Wire.write(command) != 1)
+        return false;
+    if (Wire.endTransmission() != 0)
+        return false;
+
+    if (Wire.requestFrom(BQ27220_I2C_ADDRESS, length) != length) {
+        while (Wire.available())
+            Wire.read();
+        return false;
+    }
+
+    for (size_t i = 0; i < length; ++i) {
+        const int value = Wire.read();
+        if (value < 0)
+            return false;
+        data[i] = static_cast<uint8_t>(value);
+    }
+    return true;
+}
+
+bool readBq27220Register(uint8_t command, uint16_t &value)
+{
+    uint8_t data[2] = {0};
+    if (!readBq27220Bytes(command, data, sizeof(data)))
+        return false;
+
+    value = static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8);
+    return true;
+}
+
+bool readBq27220DeviceNumber(uint16_t &deviceNumber)
+{
+    if (!writeBq27220Control(Control_DEVICE_NUMBER))
+        return false;
+    delayMicroseconds(1000);
+    return readBq27220Register(CommandMACData, deviceNumber);
+}
+
+bool readBq27220OperationStatus(BQ27220OperationStatus &status)
+{
+    return readBq27220Register(CommandOperationStatus, status.full);
+}
+
+bool readBq27220ControlStatus(BQ27220ControlStatus &status)
+{
+    return readBq27220Register(CommandControl, status.full);
+}
+
+bool bq27220AccessIsOpen(const BQ27220OperationStatus &status)
+{
+    return status.reg.SEC == Bq27220OperationStatusSecUnsealed ||
+           status.reg.SEC == Bq27220OperationStatusSecFull;
+}
+
+bool restartBq27220Bus()
+{
+    const bool ended = Wire.end();
+    const bool started = Wire.begin(I2C_SDA, I2C_SCL);
+    return ended && started;
+}
+
+bool unsealBq27220()
+{
+    BQ27220OperationStatus status{};
+    if (!readBq27220OperationStatus(status))
+        return false;
+    if (bq27220AccessIsOpen(status))
+        return true;
+    if (status.reg.SEC != Bq27220OperationStatusSecSealed)
+        return false;
+
+    if (!writeBq27220Control(UnsealKey1))
+        return false;
+    delayMicroseconds(5000);
+    if (!writeBq27220Control(UnsealKey2))
+        return false;
+    delayMicroseconds(5000);
+
+    return readBq27220OperationStatus(status) &&
+           status.reg.SEC == Bq27220OperationStatusSecUnsealed;
+}
+
+bool fullAccessBq27220()
+{
+    BQ27220OperationStatus status{};
+    if (!readBq27220OperationStatus(status))
+        return false;
+    if (status.reg.SEC == Bq27220OperationStatusSecFull)
+        return true;
+    if (status.reg.SEC != Bq27220OperationStatusSecUnsealed)
+        return false;
+
+    if (!writeBq27220Control(FullAccessKey))
+        return false;
+    delayMicroseconds(5000);
+    if (!writeBq27220Control(FullAccessKey))
+        return false;
+    delayMicroseconds(5000);
+
+    return readBq27220OperationStatus(status) && status.reg.SEC == Bq27220OperationStatusSecFull;
+}
+
+bool resetBq27220()
+{
+    if (!writeBq27220Control(Control_RESET)) {
+        // Recover the handle only if the reset command itself failed.
+        if (!restartBq27220Bus() || !writeBq27220Control(Control_RESET))
+            return false;
+    }
+
+    delay(20);
+
+    BQ27220OperationStatus status{};
+    for (uint16_t attempt = 0; attempt < 400; ++attempt) {
+        if (readBq27220OperationStatus(status) && status.reg.INITCOMP)
+            return true;
+        delay(10);
+    }
+    return false;
+}
+
+bool waitForBq27220ConfigUpdate(bool expected)
+{
+    BQ27220OperationStatus status{};
+    for (uint16_t attempt = 0; attempt < 200; ++attempt) {
+        if (readBq27220OperationStatus(status) && status.reg.CFGUPDATE == expected)
+            return true;
+        delay(10);
+    }
+    return false;
+}
+
+bool getBq27220DataMemoryValue(const BQ27220DMData &entry, uint32_t &value, size_t &size)
+{
+    switch (entry.type) {
+    case BQ27220DMTypeU8:
+        value = entry.value.u8;
+        size = 1;
+        break;
+    case BQ27220DMTypeU16:
+        value = entry.value.u16;
+        size = 2;
+        break;
+    case BQ27220DMTypeU32:
+        value = entry.value.u32;
+        size = 4;
+        break;
+    case BQ27220DMTypeI8:
+        value = static_cast<uint8_t>(entry.value.i8);
+        size = 1;
+        break;
+    case BQ27220DMTypeI16:
+        value = static_cast<uint16_t>(entry.value.i16);
+        size = 2;
+        break;
+    case BQ27220DMTypeI32:
+        value = static_cast<uint32_t>(entry.value.i32);
+        size = 4;
+        break;
+    case BQ27220DMTypeF32:
+        std::memcpy(&value, &entry.value.f32, sizeof(value));
+        size = 4;
+        break;
+    case BQ27220DMTypePtr8: {
+        const auto *data = reinterpret_cast<const uint8_t *>(static_cast<uintptr_t>(entry.value.u32));
+        if (data == nullptr)
+            return false;
+        value = *data;
+        size = 1;
+        break;
+    }
+    case BQ27220DMTypePtr16: {
+        const auto *data = reinterpret_cast<const uint16_t *>(static_cast<uintptr_t>(entry.value.u32));
+        if (data == nullptr)
+            return false;
+        value = *data;
+        size = 2;
+        break;
+    }
+    case BQ27220DMTypePtr32: {
+        const auto *data = reinterpret_cast<const uint32_t *>(static_cast<uintptr_t>(entry.value.u32));
+        if (data == nullptr)
+            return false;
+        value = *data;
+        size = 4;
+        break;
+    }
+    default:
+        return false;
+    }
+    return true;
+}
+
+bool readBq27220DataMemory(uint16_t address, uint8_t *data, size_t size)
+{
+    const uint8_t addressBytes[] = {static_cast<uint8_t>(address), static_cast<uint8_t>(address >> 8)};
+    if (!writeBq27220Register(CommandSelectSubclass, addressBytes, sizeof(addressBytes)))
+        return false;
+
+    delayMicroseconds(1000);
+    return readBq27220Bytes(CommandMACData, data, size);
+}
+
+bool checkBq27220Configuration()
+{
+    for (const BQ27220DMData *entry = gauge_data_memory; entry->type != BQ27220DMTypeEnd; ++entry) {
+        if (entry->type == BQ27220DMTypeWait) {
+            delayMicroseconds(entry->value.u32);
+            continue;
+        }
+
+        uint32_t value = 0;
+        size_t size = 0;
+        if (!getBq27220DataMemoryValue(*entry, value, size))
+            return false;
+
+        uint8_t actual[4] = {0};
+        if (!readBq27220DataMemory(entry->address, actual, size)) {
+            LOG_WARN("BQ27220 configuration read failed at 0x%04x", entry->address);
+            return false;
+        }
+
+        for (size_t i = 0; i < size; ++i) {
+            const uint8_t expected = static_cast<uint8_t>(value >> (8 * (size - i - 1)));
+            if (actual[i] != expected) {
+                LOG_DEBUG("BQ27220 configuration mismatch at 0x%04x", entry->address);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool updateBq27220Configuration()
+{
+    if (!writeBq27220Control(Control_ENTER_CFG_UPDATE)) {
+        LOG_WARN("BQ27220 enter configuration update failed");
+        return false;
+    }
+    if (!waitForBq27220ConfigUpdate(true)) {
+        LOG_WARN("BQ27220 did not enter configuration update mode");
+        return false;
+    }
+
+    for (const BQ27220DMData *entry = gauge_data_memory; entry->type != BQ27220DMTypeEnd; ++entry) {
+        if (entry->type == BQ27220DMTypeWait) {
+            delayMicroseconds(entry->value.u32);
+            continue;
+        }
+
+        uint32_t value = 0;
+        size_t size = 0;
+        if (!getBq27220DataMemoryValue(*entry, value, size)) {
+            LOG_WARN("BQ27220 configuration value is invalid at 0x%04x", entry->address);
+            return false;
+        }
+
+        uint8_t data[4] = {0};
+        for (size_t i = 0; i < size; ++i)
+            data[i] = static_cast<uint8_t>(value >> (8 * (size - i - 1)));
+
+        uint8_t block[6] = {static_cast<uint8_t>(entry->address), static_cast<uint8_t>(entry->address >> 8)};
+        std::memcpy(block + 2, data, size);
+        if (!writeBq27220Register(CommandSelectSubclass, block, size + 2)) {
+            LOG_WARN("BQ27220 configuration write failed at 0x%04x", entry->address);
+            return false;
+        }
+        delayMicroseconds(250);
+
+        uint8_t checksum = 0;
+        for (size_t i = 0; i < size + 2; ++i)
+            checksum = static_cast<uint8_t>(checksum + block[i]);
+        checksum = static_cast<uint8_t>(0xff - checksum);
+
+        const uint8_t checksumAndLength[] = {checksum, static_cast<uint8_t>(size + 4)};
+        if (!writeBq27220Register(CommandMACDataSum, checksumAndLength, sizeof(checksumAndLength))) {
+            LOG_WARN("BQ27220 configuration checksum failed at 0x%04x", entry->address);
+            return false;
+        }
+        delayMicroseconds(10000);
+    }
+
+    if (!writeBq27220Control(Control_EXIT_CFG_UPDATE_REINIT)) {
+        LOG_WARN("BQ27220 exit configuration update failed");
+        return false;
+    }
+
+    delay(2000);
+    if (!waitForBq27220ConfigUpdate(false)) {
+        LOG_WARN("BQ27220 remained in configuration update mode");
+        return false;
+    }
+    return true;
+}
+
+bool sealBq27220()
+{
+    BQ27220OperationStatus status{};
+    if (!readBq27220OperationStatus(status))
+        return false;
+    if (status.reg.SEC == Bq27220OperationStatusSecSealed)
+        return true;
+    if (!bq27220AccessIsOpen(status) || !writeBq27220Control(Control_SEALED))
+        return false;
+
+    delayMicroseconds(1000);
+    return readBq27220OperationStatus(status) && status.reg.SEC == Bq27220OperationStatusSecSealed;
+}
+
+bool initializeBq27220()
+{
+    // XPowersLib may leave the shared ESP32-S3 I2C handle invalid after probing.
+    if (!restartBq27220Bus()) {
+        LOG_WARN("BQ27220 I2C bus restart failed");
+        return false;
+    }
+
+    uint16_t deviceNumber = 0;
+    if (!readBq27220DeviceNumber(deviceNumber) || deviceNumber != BQ27220_DEVICE_ID) {
+        LOG_WARN("BQ27220 device check failed (id=0x%04x)", deviceNumber);
+        return false;
+    }
+
+    BQ27220OperationStatus operationStatus{};
+    if (!readBq27220OperationStatus(operationStatus)) {
+        LOG_WARN("BQ27220 operation status read failed");
+        return false;
+    }
+
+    if (!unsealBq27220()) {
+        LOG_WARN("BQ27220 unseal failed");
+        return false;
+    }
+
+    if (!readBq27220OperationStatus(operationStatus) || !bq27220AccessIsOpen(operationStatus)) {
+        LOG_WARN("BQ27220 access status invalid after unseal");
+        return false;
+    }
+
+    BQ27220ControlStatus controlStatus{};
+    if (!readBq27220ControlStatus(controlStatus)) {
+        LOG_WARN("BQ27220 control status read failed");
+        return false;
+    }
+
+    bool resetRequired = !operationStatus.reg.INITCOMP || operationStatus.reg.CFGUPDATE ||
+                         controlStatus.reg.BATT_ID != 0;
+    bool configurationRepairRequired = resetRequired;
+
+    if (!resetRequired && !checkBq27220Configuration()) {
+        LOG_INFO("BQ27220 configuration repair required");
+        configurationRepairRequired = true;
+    }
+
+    if (resetRequired) {
+        LOG_INFO("BQ27220 reset required (INITCOMP=%d CFGUPDATE=%d BATT_ID=%d)", operationStatus.reg.INITCOMP,
+                 operationStatus.reg.CFGUPDATE, controlStatus.reg.BATT_ID);
+
+        if (!resetBq27220()) {
+            LOG_WARN("BQ27220 reset failed");
+            return false;
+        }
+
+        // Recreate the ESP32-S3 device handles after the gauge reset.
+        if (!restartBq27220Bus()) {
+            LOG_WARN("BQ27220 I2C bus restart after reset failed");
+            return false;
+        }
+
+        if (!unsealBq27220()) {
+            LOG_WARN("BQ27220 unseal after reset failed");
+            return false;
+        }
+        if (!readBq27220OperationStatus(operationStatus) || !bq27220AccessIsOpen(operationStatus)) {
+            LOG_WARN("BQ27220 access status invalid after reset");
+            return false;
+        }
+    }
+
+    if (configurationRepairRequired) {
+        if (!fullAccessBq27220()) {
+            LOG_WARN("BQ27220 full access failed for configuration repair");
+            return false;
+        }
+        if (!updateBq27220Configuration()) {
+            LOG_WARN("BQ27220 configuration update failed");
+            return false;
+        }
+        if (!checkBq27220Configuration()) {
+            LOG_WARN("BQ27220 configuration verification failed");
+            return false;
+        }
+    }
+
+    if (!sealBq27220()) {
+        LOG_WARN("BQ27220 seal failed");
+        return false;
+    }
+    return true;
+}
+} // namespace
+#endif
 
 /**
  * Adapter class for BQ25896/BQ27220 Lipo battery charger.
@@ -1771,9 +2195,19 @@ class LipoCharger : public HasBatteryLevel
     {
         if (PPM == nullptr) {
             PPM = new XPowersPPM;
-            bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
+            const uint8_t chargerAddress =
+#ifdef T_DECK_MAX
+                T_DECK_MAX_CHARGER_ADDR;
+#else
+                BQ25896_ADDR;
+#endif
+            bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, chargerAddress);
             if (result) {
+#ifdef T_DECK_MAX
+                LOG_INFO("PPM SY6970 init succeeded");
+#else
                 LOG_INFO("PPM BQ25896 init succeeded");
+#endif
                 // Set the minimum operating voltage. Below this voltage, the PPM will
                 // protect PPM->setSysPowerDownVoltage(3100);
 
@@ -1802,7 +2236,11 @@ class LipoCharger : public HasBatteryLevel
                 // function
                 PPM->enableCharge();
             } else {
+#ifdef T_DECK_MAX
+                LOG_WARN("PPM SY6970 init failed");
+#else
                 LOG_WARN("PPM BQ25896 init failed");
+#endif
                 delete PPM;
                 PPM = nullptr;
                 return false;
@@ -1836,7 +2274,16 @@ class LipoCharger : public HasBatteryLevel
         bq = new BQ27220;
         bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
 
-        if (bq->init()) {
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_BQ27220)
+        const bool initialized = initializeBq27220();
+#else
+        const bool initialized = bq->init();
+#endif
+
+        if (initialized) {
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_BQ27220)
+            LOG_INFO("BQ27220 initialized");
+#endif
             LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
             LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
             LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
@@ -1845,7 +2292,7 @@ class LipoCharger : public HasBatteryLevel
 
         delete bq;
         bq = nullptr;
-        // init() bails out mid-sequence, so hand the next bus user a sane driver state.
+        // Initialization can leave the bus in a stale state, so hand the next bus user a sane driver state.
         recoverI2CBus();
         LOG_WARN("BQ27220 init failed (%d retries left), use BQ25896 for battery state", (int)gaugeAttemptsLeft);
     }
