@@ -75,13 +75,6 @@
 #define GPS_TX_PIN 43
 #define PIN_GPS_PPS 13
 
-// SPI interface SD card slot
-#define SPI_MOSI MOSI
-#define SPI_SCK SCK
-#define SPI_MISO MISO
-#define SPI_CS 21
-#define SD_SPI_FREQUENCY 75000000U
-
 #define USE_SX1262
 // #define USE_SX1280
 #define HW_SPI1_DEVICE
