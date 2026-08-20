@@ -4,81 +4,82 @@
 
 #include "AudioBoard.h"
 #include "DebugConfiguration.h"
-#include "TCA9555.h"
 #include "mesh/MeshLED.h"
 #include "variant.h"
+#include <Wire.h>
 
-TCA9535 ioExpander(0x21);
+#include "ExtensionIOXL9555.hpp" // SensorLib
+extern ExtensionIOXL9555 io;
+
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
 
 class WioTrackerMeshLED : public MeshLED
 {
   public:
-    void init() override { ioExpander.write1(10, LOW); } // ensure LED starts off
-    void on() override { ioExpander.write1(10, HIGH); }
-    void off() override { ioExpander.write1(10, LOW); }
+    void init() override { io.digitalWrite(EXPANDS_LED_USER, LOW); }
+    void on() override { io.digitalWrite(EXPANDS_LED_USER, HIGH); }
+    void off() override { io.digitalWrite(EXPANDS_LED_USER, LOW); }
 };
 
 static bool initOK = false;
 
-void initVariant()
+void earlyInitVariant()
 {
-    Wire.begin(I2C_SDA, I2C_SCL);
-    if (ioExpander.begin()) {
-        ioExpander.pinMode1(0, INPUT); // wakeup button
-        ioExpander.pinMode1(1, INPUT); // IIC IRQ
-        ioExpander.pinMode1(2, INPUT); // SD detect
+    if (io.begin(Wire, XL9555_SLAVE_ADDRESS1, I2C_SDA, I2C_SCL)) {
+        io.pinMode(EXPANDS_BTN_WAKE_UP, INPUT); // wakeup button
+        io.pinMode(EXPANDS_I2C_0_INT, INPUT);   // I2C IRQ
+        io.pinMode(EXPANDS_SD_DETECT, INPUT);   // SD detect
 
-        ioExpander.pinMode1(11, OUTPUT); // OTG EN
-        ioExpander.write1(11, LOW);      // OTG EN low
+        io.pinMode(EXPANDS_EXP_OTG_EN, OUTPUT);   // OTG EN
+        io.digitalWrite(EXPANDS_EXP_OTG_EN, LOW); // OTG EN low
         delay(10);
-        ioExpander.pinMode1(12, OUTPUT); // PA EN
-        ioExpander.write1(12, HIGH);     // PA EN high
+        io.pinMode(EXPANDS_PA_PWR_EN, OUTPUT);    // PA EN
+        io.digitalWrite(EXPANDS_PA_PWR_EN, HIGH); // PA EN high
         delay(10);
-        ioExpander.pinMode1(14, OUTPUT); // TF EN
-        ioExpander.write1(14, HIGH);     // TF EN high
+        io.pinMode(EXPANDS_GNSS_PWR_EN, OUTPUT);    // GNSS EN
+        io.digitalWrite(EXPANDS_GNSS_PWR_EN, HIGH); // GNSS EN high
         delay(10);
-        ioExpander.pinMode1(15, OUTPUT); // BAT ADC EN
-        ioExpander.write1(15, HIGH);     // BAT ADC EN high
+        io.pinMode(EXPANDS_SD_PWR_EN, OUTPUT);    // TF EN
+        io.digitalWrite(EXPANDS_SD_PWR_EN, HIGH); // TF EN high
         delay(10);
-        ioExpander.pinMode1(13, OUTPUT); // GNSS EN
-        ioExpander.write1(13, HIGH);     // GNSS EN high
+        io.pinMode(EXPANDS_BAT_ADC_EN, OUTPUT);    // BAT ADC EN
+        io.digitalWrite(EXPANDS_BAT_ADC_EN, HIGH); // BAT ADC EN high
         delay(10);
-        ioExpander.pinMode1(9, OUTPUT); // GNSS RST (active HIGH on this board)
+        io.pinMode(EXPANDS_GNSS_RST, OUTPUT); // GNSS RST (active HIGH on this board)
         // Expander output defaults to HIGH, so module is already in reset.
         // Hold reset for 10ms, then release LOW so the module starts running.
         delay(10);
-        ioExpander.write1(9, LOW);       // release reset - module starts running
-        ioExpander.pinMode1(10, OUTPUT); // User LED / GNSS wakeup
-        ioExpander.write1(10, LOW);      // User LED / GNSS wakeup low
+        io.digitalWrite(EXPANDS_GNSS_RST, LOW); // release reset - module starts running
+        io.pinMode(EXPANDS_LED_USER, OUTPUT);   // User LED
+        io.digitalWrite(EXPANDS_LED_USER, LOW); // User LED
         delay(10);
-        ioExpander.pinMode1(7, OUTPUT); // GROVE EN
-        ioExpander.write1(7, HIGH);     // GROVE EN high
+        io.pinMode(EXPANDS_GROVE_PWR_EN, OUTPUT);    // GROVE EN
+        io.digitalWrite(EXPANDS_GROVE_PWR_EN, HIGH); // GROVE EN high
         delay(10);
 
-        ioExpander.pinMode1(5, OUTPUT); // LCD EN
-        ioExpander.write1(5, HIGH);     // LCD EN high
+        io.pinMode(EXPANDS_LCD_PWR_EN, OUTPUT);    // LCD EN
+        io.digitalWrite(EXPANDS_LCD_PWR_EN, HIGH); // LCD EN high
         delay(50);
-        ioExpander.pinMode1(6, OUTPUT); // LCD RST
-        ioExpander.write1(6, HIGH);     // LCD RST high
+        io.pinMode(EXPANDS_LCD_RST, OUTPUT);    // LCD RST
+        io.digitalWrite(EXPANDS_LCD_RST, HIGH); // LCD RST high
         delay(5);
-        ioExpander.write1(6, LOW); // LCD RST low
+        io.digitalWrite(EXPANDS_LCD_RST, LOW); // LCD RST low
         delay(10);
-        ioExpander.write1(6, HIGH); // LCD RST high
+        io.digitalWrite(EXPANDS_LCD_RST, HIGH); // LCD RST high
         delay(500);
-        ioExpander.pinMode1(4, OUTPUT); // LCD CS
-        ioExpander.write1(4, HIGH);     // LCD CS high
+        io.pinMode(EXPANDS_LCD_CS, OUTPUT);    // LCD CS
+        io.digitalWrite(EXPANDS_LCD_CS, HIGH); // LCD CS high
         delay(10);
 
-        ioExpander.pinMode1(8, OUTPUT); // TP RST
-        ioExpander.write1(8, LOW);      // TP RST low
-        ioExpander.pinMode1(3, OUTPUT); // TP INT
-        ioExpander.write1(3, LOW);      // TP INT low
+        io.pinMode(EXPANDS_TP_RST, OUTPUT);   // TP RST
+        io.digitalWrite(EXPANDS_TP_RST, LOW); // TP RST low
+        io.pinMode(EXPANDS_TP_INT, OUTPUT);   // TP INT
+        io.digitalWrite(EXPANDS_TP_INT, LOW); // TP INT low
         delay(10);
-        ioExpander.write1(3, LOW); // TP INT low
+        io.digitalWrite(EXPANDS_TP_INT, LOW); // TP INT low
         delay(1);
-        ioExpander.write1(8, HIGH); // TP RST high
+        io.digitalWrite(EXPANDS_TP_RST, HIGH); // TP RST high
         delay(60);
         initOK = true;
 

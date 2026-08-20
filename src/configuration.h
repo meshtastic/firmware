@@ -358,7 +358,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Audio Codec
 // -----------------------------------------------------------------------------
+#ifndef ES8311_ADDR      // audio-driver lib may define this already
 #define ES8311_ADDR 0x18 // same address as MCP9808_ADDR / STK8BXX_ADDR / LIS3DH_ADDR
+#endif
 #define ES7243E_ADDR 0x14
 
 // -----------------------------------------------------------------------------

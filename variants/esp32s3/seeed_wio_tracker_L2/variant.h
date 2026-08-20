@@ -31,6 +31,35 @@
 #define ADC_I2S_DIN 15
 #define ADC_I2S_MCLK 10
 
+// External expansion chip TCA9555
+#define USE_XL9555
+/* Button */
+#define EXPANDS_BTN_WAKE_UP (0) // INPUT
+/* I2C */
+#define EXPANDS_I2C_0_INT (1) // INPUT
+/* LED */
+#define EXPANDS_LED_USER (10)
+/* Display */
+#define EXPANDS_LCD_PWR_EN (5)
+#define EXPANDS_LCD_RST (6)
+#define EXPANDS_LCD_CS (4)
+#define EXPANDS_TP_RST (8)
+#define EXPANDS_TP_INT (3) // INPUT
+/* SD card */
+#define EXPANDS_SD_PWR_EN (14)
+#define EXPANDS_SD_DETECT (2) // INPUT
+/* GNSS */
+#define EXPANDS_GNSS_PWR_EN (13)
+#define EXPANDS_GNSS_RST (9)
+/* USB */
+#define EXPANDS_EXP_OTG_EN (11)
+/* Audio */
+#define EXPANDS_PA_PWR_EN (12)
+/* Battery */
+#define EXPANDS_BAT_ADC_EN (15)
+/* Grove */
+#define EXPANDS_GROVE_PWR_EN (7)
+
 // SX1262 LoRa Module Pins
 #define USE_SX1262
 #define LORA_SCK 4
