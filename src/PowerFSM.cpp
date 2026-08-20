@@ -439,7 +439,21 @@ void PowerFSM_setup()
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 
-    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
+    // On ESP32-S3 boards whose CDC console runs on the native USB-OTG peripheral
+    // (ARDUINO_USB_MODE=0), light sleep powers down the USB PHY and the host can no longer
+    // re-enumerate the device: dmesg loops "device descriptor read/64, error -32" until the
+    // cable is physically replugged. See https://github.com/meshtastic/firmware/issues/4206
+    // While actually running on USB power there is no energy to save, so skip light sleep.
+    bool nativeUsbSerialAttached = false;
+#if defined(ARDUINO_USB_MODE) && (ARDUINO_USB_MODE == 0) && defined(ARDUINO_USB_CDC_ON_BOOT) &&                     \
+    (ARDUINO_USB_CDC_ON_BOOT == 1)
+    nativeUsbSerialAttached = powerStatus && powerStatus->getHasUSB();
+    if (nativeUsbSerialAttached)
+        LOG_INFO("Native USB-CDC on USB power: light sleep disabled (keeps serial alive)");
+#endif
+
+    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor &&
+        !nativeUsbSerialAttached) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
