@@ -437,12 +437,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     const bool compactPanel = graphics::isCompactPanel(display);
     // Compact panels: no bottom nav row anymore (see UIRenderer::drawNavigationBar), full height available.
-    const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL;
+    const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL + BASEUI_BELOW_HEADER_MARGIN + BASEUI_HEADER_MARGIN;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
-    const int contentTop = compactPanel ? 0 : getTextPositions(display)[1];
+    // Rounded screens start the body below the header margin; getTextPositions(display)[1] + BASEUI_BELOW_HEADER_MARGIN
+    const int contentTop = compactPanel ? 0 : navHeight;
     const int usableHeight = compactPanel ? scrollBottom - contentTop : scrollBottom;
-    constexpr int LEFT_MARGIN = 2;
-    constexpr int RIGHT_MARGIN = 2;
+    constexpr int LEFT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
+    constexpr int RIGHT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
     constexpr int SCROLLBAR_WIDTH = 3;
     constexpr int BUBBLE_PAD_X = 3;
     constexpr int BUBBLE_PAD_Y = 4;
@@ -453,6 +454,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Check if bubbles are enabled
     const bool showBubbles = config.display.enable_message_bubbles && !compactPanel;
     const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
+    // Bubbles carry their own padding, so the rounded-screen inset has to come from here
+    const int contentLeft = x + (showBubbles ? BASEUI_BODY_LR_MARGIN : 0);
 
     // Derived widths
     const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
@@ -873,10 +876,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             if (b.mine) {
                 bubbleX = rightEdge - bubbleW;
             } else {
-                bubbleX = x;
+                bubbleX = contentLeft;
             }
-            if (bubbleX < x)
-                bubbleX = x;
+            if (bubbleX < contentLeft)
+                bubbleX = contentLeft;
             if (bubbleX + bubbleW > rightEdge)
                 bubbleW = std::max(1, rightEdge - bubbleX);
 
@@ -953,7 +956,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
-                    headerX = x + textIndent;
+                    headerX = contentLeft + textIndent;
                 }
                 graphics::UIRenderer::drawStringWithEmotes(display, headerX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
                                                            true);
@@ -1002,7 +1005,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
-                    drawStringWithEmotes(display, x + textIndent, lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(display, contentLeft + textIndent, lineY, cachedLines[i], emotes, numEmotes);
                 }
             }
         }
