@@ -1483,8 +1483,7 @@ void TFTDisplay::display(bool fromBlank)
 #if defined(CO5300_CS)
             constexpr uint32_t kCO5300MinTransferBytes = 80;
             constexpr uint32_t kCO5300BytesPerColumn = sizeof(uint16_t) * 2; // two rows, RGB565
-            constexpr uint32_t kCO5300MinColumns =
-                (kCO5300MinTransferBytes + kCO5300BytesPerColumn - 1) / kCO5300BytesPerColumn;
+            constexpr uint32_t kCO5300MinColumns = (kCO5300MinTransferBytes + kCO5300BytesPerColumn - 1) / kCO5300BytesPerColumn;
 
             // CO5300 workaround: widen very small updates so LovyanGFX avoids tiny SPI writes.
             uint32_t span = x_LastPixelUpdate - x_FirstPixelUpdate + 1;
@@ -1524,18 +1523,20 @@ void TFTDisplay::display(bool fromBlank)
                 uint32_t bi = (y_draw / 8) * displayWidth;
                 isset = buffer[x + bi] & (1 << (y_draw & 7));
 #if GRAPHICS_TFT_COLORING_ENABLED
-                linePixelBuffer[x_FirstPixelUpdate + col] = hasColorRegions
-                    ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw), isset, colorTftWhite, colorTftBlack)
-                    : (isset ? colorTftWhite : colorTftBlack);
+                linePixelBuffer[x_FirstPixelUpdate + col] =
+                    hasColorRegions ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw), isset,
+                                                                     colorTftWhite, colorTftBlack)
+                                    : (isset ? colorTftWhite : colorTftBlack);
 #else
                 linePixelBuffer[x_FirstPixelUpdate + col] = isset ? colorTftWhite : colorTftBlack;
 #endif
                 bi = ((y_draw + 1) / 8) * displayWidth;
                 isset = buffer[x + bi] & (1 << ((y_draw + 1) & 7));
 #if GRAPHICS_TFT_COLORING_ENABLED
-                linePixelBuffer[x_FirstPixelUpdate + span + col] = hasColorRegions
-                    ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw + 1), isset, colorTftWhite, colorTftBlack)
-                    : (isset ? colorTftWhite : colorTftBlack);
+                linePixelBuffer[x_FirstPixelUpdate + span + col] =
+                    hasColorRegions ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw + 1),
+                                                                     isset, colorTftWhite, colorTftBlack)
+                                    : (isset ? colorTftWhite : colorTftBlack);
 #else
                 linePixelBuffer[x_FirstPixelUpdate + span + col] = isset ? colorTftWhite : colorTftBlack;
 #endif
