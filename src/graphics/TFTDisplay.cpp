@@ -1479,8 +1479,70 @@ void TFTDisplay::display(bool fromBlank)
                 x_LastPixelUpdate = displayWidth - 1;
             }
 
-            int y_offset = 0;
             // Step 3: Copy only the changed span into the pixel line buffer.
+#if defined(CO5300_CS)
+            constexpr uint32_t kCO5300MinTransferBytes = 80;
+            constexpr uint32_t kCO5300BytesPerColumn = sizeof(uint16_t) * 2; // two rows, RGB565
+            constexpr uint32_t kCO5300MinColumns =
+                (kCO5300MinTransferBytes + kCO5300BytesPerColumn - 1) / kCO5300BytesPerColumn;
+
+            // CO5300 workaround: widen very small updates so LovyanGFX avoids tiny SPI writes.
+            uint32_t span = x_LastPixelUpdate - x_FirstPixelUpdate + 1;
+            if (span < kCO5300MinColumns) {
+                uint32_t needed = kCO5300MinColumns - span;
+                uint32_t growLeft = needed / 2;
+                uint32_t growRight = needed - growLeft;
+
+                const uint32_t availableLeft = x_FirstPixelUpdate;
+                if (growLeft > availableLeft)
+                    growLeft = availableLeft;
+                x_FirstPixelUpdate -= growLeft;
+                needed -= growLeft;
+
+                const uint32_t availableRight = (displayWidth - 1) - x_LastPixelUpdate;
+                const uint32_t extendRight = (needed < availableRight) ? needed : availableRight;
+                x_LastPixelUpdate += extendRight;
+                needed -= extendRight;
+
+                const uint32_t extendLeft = (needed < x_FirstPixelUpdate) ? needed : x_FirstPixelUpdate;
+                x_FirstPixelUpdate -= extendLeft;
+            }
+
+            // Keep transfer edges aligned as before for DMA-friendly boundaries.
+            x_FirstPixelUpdate &= ~1U;
+            x_LastPixelUpdate = (x_LastPixelUpdate | 1U);
+            if (x_LastPixelUpdate >= displayWidth) {
+                x_LastPixelUpdate = displayWidth - 1;
+            }
+
+            // snap y down to the even-row pair (AMOLED requires 2-row aligned writes)
+            const uint32_t y_draw = y & ~1U;
+            span = x_LastPixelUpdate - x_FirstPixelUpdate + 1;
+            const int y_offset = (int)y_draw - (int)y;
+            for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
+                const uint32_t col = x - x_FirstPixelUpdate;
+                uint32_t bi = (y_draw / 8) * displayWidth;
+                isset = buffer[x + bi] & (1 << (y_draw & 7));
+#if GRAPHICS_TFT_COLORING_ENABLED
+                linePixelBuffer[x_FirstPixelUpdate + col] = hasColorRegions
+                    ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw), isset, colorTftWhite, colorTftBlack)
+                    : (isset ? colorTftWhite : colorTftBlack);
+#else
+                linePixelBuffer[x_FirstPixelUpdate + col] = isset ? colorTftWhite : colorTftBlack;
+#endif
+                bi = ((y_draw + 1) / 8) * displayWidth;
+                isset = buffer[x + bi] & (1 << ((y_draw + 1) & 7));
+#if GRAPHICS_TFT_COLORING_ENABLED
+                linePixelBuffer[x_FirstPixelUpdate + span + col] = hasColorRegions
+                    ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw + 1), isset, colorTftWhite, colorTftBlack)
+                    : (isset ? colorTftWhite : colorTftBlack);
+#else
+                linePixelBuffer[x_FirstPixelUpdate + span + col] = isset ? colorTftWhite : colorTftBlack;
+#endif
+            }
+            const uint8_t lines_updated = 2;
+#else
+            int y_offset = 0;
 #if GRAPHICS_TFT_COLORING_ENABLED
             if (hasColorRegions)
                 graphics::beginTFTColorRow(static_cast<int16_t>(y));
@@ -1498,49 +1560,7 @@ void TFTDisplay::display(bool fromBlank)
                 linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
 #endif
             }
-
-#if defined(CO5300_CS)
-            uint8_t lines_updated = 2;
-            if (y % 2 == 0) {
-                y_byteIndex = ((y + 1) / 8) * displayWidth;
-                y_byteMask = (1 << ((y + 1) & 7));
-                uint32_t bufferIndex = 1;
-                for (x = x_FirstPixelUpdate; x < x_LastPixelUpdate; x++) {
-                    isset = buffer[x + y_byteIndex] & y_byteMask;
-#if GRAPHICS_TFT_COLORING_ENABLED
-                    if (hasColorRegions) {
-                        linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = graphics::resolveTFTColorPixel(
-                            static_cast<int16_t>(x), static_cast<int16_t>(y), isset, colorTftWhite, colorTftBlack);
-                    } else {
-                        linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
-                    }
-#else
-                    linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
-#endif
-                }
-            } else {
-                y_offset = -1;
-                memcpy(&linePixelBuffer[x_LastPixelUpdate + 1], &linePixelBuffer[x_FirstPixelUpdate],
-                       2 * (x_LastPixelUpdate - x_FirstPixelUpdate + 1));
-                y_byteIndex = ((y - 1) / 8) * displayWidth;
-                y_byteMask = (1 << ((y - 1) & 7));
-                uint32_t bufferIndex = 0;
-                for (x = x_FirstPixelUpdate; x < x_LastPixelUpdate; x++) {
-                    isset = buffer[x + y_byteIndex] & y_byteMask;
-#if GRAPHICS_TFT_COLORING_ENABLED
-                    if (hasColorRegions) {
-                        linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = graphics::resolveTFTColorPixel(
-                            static_cast<int16_t>(x), static_cast<int16_t>(y), isset, colorTftWhite, colorTftBlack);
-                    } else {
-                        linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
-                    }
-#else
-                    linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
-#endif
-                }
-            }
-#else
-            uint8_t lines_updated = 1;
+            const uint8_t lines_updated = 1;
 #endif
 
 #if defined(HACKADAY_COMMUNICATOR)
