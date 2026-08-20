@@ -11,9 +11,9 @@
 #endif
 
 #include "AudioIO.h"
+#include "ButterworthFilter.h"
 #include "NodeDB.h"
 #include <Arduino.h>
-#include <ButterworthFilter.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <codec2.h>
