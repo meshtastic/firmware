@@ -60,6 +60,5 @@
 #define GPS_RX_PIN 18
 #define HAS_GPS 1
 #define GPS_THREAD_INTERVAL 50
-//#define GPS_EN // TODO: add GPS enable pin control via io/expander 
+// #define GPS_EN // TODO: add GPS enable pin control via io/expander
 #endif
-

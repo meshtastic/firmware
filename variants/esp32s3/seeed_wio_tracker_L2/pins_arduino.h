@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-
 static const uint8_t SDA = 47;
 static const uint8_t SCL = 48;
 

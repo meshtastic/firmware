@@ -375,7 +375,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48 // same address as ADS1115
-#define CST328_ADDR 0x1A // same address as CST226SE
+#define CST328_ADDR 0x1A  // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
 #define CST226SE_ADDR_ALT 0x5A
 #define GT911_ADDR 0x5D // same address as SFA30_ADDR / LPS22HB_ADDR_ALT

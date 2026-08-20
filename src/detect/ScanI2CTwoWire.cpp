@@ -458,7 +458,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_ES7243E
                 SCAN_SIMPLE_CASE(ES7243E_ADDR, ES7243E, "ES7243E", (uint8_t)addr.address);
 #endif
-                case XPOWERS_AXP192_AXP2101_ADDRESS:
+            case XPOWERS_AXP192_AXP2101_ADDRESS:
 #ifndef SEEED_WIO_TRACKER_L2 // false positive on Wio Tracker L2
                 // Do we have the axp2101/192 or the TCA8418
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x90), 1);
@@ -837,7 +837,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 logFoundDevice("BMA423", (uint8_t)addr.address);
 
                 break;
-            case RAK120353_ADDR: { // AW35615 USB-C CC controller — must be checked before
+            case RAK120353_ADDR: { // AW35615 USB-C CC controller - must be checked before
                                    // RAK120353_ADDR which shares 0x22 but is a TCA9535 variant
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);
                 if ((registerValue & 0xF0) == 0x90) { // DEVICE_ID upper nibble = 0x9 for AW35615
@@ -1072,7 +1072,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
-                // Check ADS1X15 FIRST — the SE050 probe writes 5 bytes which corrupts the ADS1X15 Lo_thresh register.
+                // Check ADS1X15 FIRST - the SE050 probe writes 5 bytes which corrupts the ADS1X15 Lo_thresh register.
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
                 if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
                     type = ADS1X15;
@@ -1105,7 +1105,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = NXP_SE050;
                     break;
                 }
-
 
                 LOG_INFO("FT6336U touchscreen found");
                 type = FT6336U;

@@ -725,11 +725,11 @@ static AnalogBatteryLevel analogLevel;
 #ifdef HAS_ADS1115
 #include "SPILock.h"
 // AW35615 USB-C CC controller register constants (Arduino Wire, no ESP-IDF dependency)
-static constexpr uint8_t AW35615_ADDR       = 0x22;
-static constexpr uint8_t AW35615_REG_DEVID  = 0x01; // Device ID (probe)
-static constexpr uint8_t AW35615_REG_ST1A   = 0x3D; // STATUS1A: TOGSS[5:3]
-static constexpr uint8_t AW35615_REG_ST0    = 0x40; // STATUS0:  VBUSOK[7]
-static constexpr uint8_t AW35615_VBUSOK     = (1 << 7);
+static constexpr uint8_t AW35615_ADDR = 0x22;
+static constexpr uint8_t AW35615_REG_DEVID = 0x01; // Device ID (probe)
+static constexpr uint8_t AW35615_REG_ST1A = 0x3D;  // STATUS1A: TOGSS[5:3]
+static constexpr uint8_t AW35615_REG_ST0 = 0x40;   // STATUS0:  VBUSOK[7]
+static constexpr uint8_t AW35615_VBUSOK = (1 << 7);
 static constexpr uint8_t AW35615_TOGSS_MASK = 0x38;
 static constexpr uint8_t AW35615_TOGSS_SHIFT = 3;
 static constexpr uint8_t AW35615_TOGSS_SNK_CC1 = 5; // device is sink on CC1
@@ -751,7 +751,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         // Wire is already configured (SDA=47, SCL=48) and the ADC-enable
         // expander pin (pin 15) is already HIGH from initVariant().
         if (!_ads.begin(ADS1115_ADDR, &Wire)) {
-            LOG_WARN("ADS1115 not found on I2C bus — battery sensor unavailable");
+            LOG_WARN("ADS1115 not found on I2C bus - battery sensor unavailable");
             return false;
         }
         _ads.setGain(GAIN_TWO); // ±2.048 V FSR matches the voltage-divider ratio
@@ -810,7 +810,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
             uint8_t st0 = 0;
             if (aw35615Read(AW35615_REG_ST0, st0)) {
                 bool vbus = (st0 & AW35615_VBUSOK) != 0;
-                //LOG_DEBUG("[AW35615] STATUS0=0x%02x  VBUSOK=%d", st0, (int)vbus);
+                // LOG_DEBUG("[AW35615] STATUS0=0x%02x  VBUSOK=%d", st0, (int)vbus);
                 return vbus;
             }
         }
@@ -829,7 +829,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
             if (aw35615Read(AW35615_REG_ST1A, st1a)) {
                 uint8_t togss = (st1a & AW35615_TOGSS_MASK) >> AW35615_TOGSS_SHIFT;
                 bool charging = (togss == AW35615_TOGSS_SNK_CC1 || togss == AW35615_TOGSS_SNK_CC2);
-                //LOG_DEBUG("[AW35615] STATUS1A=0x%02x  TOGSS=%d  charging=%d", st1a, (int)togss, (int)charging);
+                // LOG_DEBUG("[AW35615] STATUS1A=0x%02x  TOGSS=%d  charging=%d", st1a, (int)togss, (int)charging);
                 return charging;
             }
         }
@@ -874,8 +874,7 @@ bool Power::ads1115Init()
     if (ads1115BattLevel.init()) {
         batteryLevel = &ads1115BattLevel;
         return true;
-    }
-    else
+    } else
         return false;
 }
 #endif // HAS_ADS1115
