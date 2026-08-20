@@ -51,6 +51,9 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/EnvironmentTelemetry.h"
+#endif
 #include "security/LockdownDisplay.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -427,7 +430,7 @@ void Screen::showAlphanumericPicker(const char *message, const char *initialText
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                            std::function<void(const std::string &)> textCallback)
 {
-    LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+    LOG_INFO("showTextInput header='%s', durationMs=%d", header ? header : "NULL", durationMs);
 
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
@@ -578,7 +581,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SPISSD1306)
     dispdev = new SSD1306Spi(SSD1306_RESET, SSD1306_RS, SSD1306_NSS, GEOMETRY_64_48);
     if (!dispdev->init()) {
-        LOG_DEBUG("Error: SSD1306 not detected!");
+        LOG_DEBUG("SSD1306 not detected");
     } else {
         static_cast<SSD1306Spi *>(dispdev)->setHorizontalOffset(32);
         LOG_INFO("SSD1306 init success");
@@ -589,14 +592,14 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     // runtime via config.yaml Display: Panel: HUB75.
     if (portduino_config.displayPanel == hub75) {
 #if defined(HAS_HUB75_NATIVE)
-        LOG_DEBUG("Make HUB75Native!");
+        LOG_DEBUG("Make HUB75Native");
         dispdev = new HUB75Native(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
 #else
-        LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in!");
+        LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in");
 #endif
     } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         if (portduino_config.displayPanel != no_screen) {
-            LOG_DEBUG("Make TFTDisplay!");
+            LOG_DEBUG("Make TFTDisplay");
             dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
         } else {
@@ -607,7 +610,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         }
     }
 #elif USE_TFTDISPLAY
-    LOG_DEBUG("Make TFTDisplay!");
+    LOG_DEBUG("Make TFTDisplay");
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
@@ -649,6 +652,10 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 Screen::~Screen()
 {
     delete[] graphics::normalFrames;
+    // Owned by the constructor; Screen is genuinely destroyed on the portduino reboot path
+    // (screen = nullptr in Power.cpp), which previously leaked the display and UI objects.
+    delete ui;
+    delete dispdev;
 }
 
 /**
@@ -1109,7 +1116,7 @@ int32_t Screen::runOnce()
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
+    if (showingBootScreen && Throttle::hasElapsed(serialSinceMsec, logo_timeout)) {
         LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;
@@ -1117,7 +1124,7 @@ int32_t Screen::runOnce()
 
 #ifdef USERPREFS_OEM_TEXT
     static bool showingOEMBootScreen = true;
-    if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
+    if (showingOEMBootScreen && Throttle::hasElapsed(serialSinceMsec, logo_timeout / 2)) {
         LOG_INFO("Switch to OEM screen...");
         // Change frames.
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
@@ -1268,7 +1275,7 @@ int32_t Screen::runOnce()
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
 
-            LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums, next frame", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
@@ -2333,6 +2340,16 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
+                    // moduleFrames.size() bounds the module-frame region, before favorites are appended; its leading
+                    // slots are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
+                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
+                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+                    const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
+                    if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
+                        menuHandler::environmentTelemetryMenu();
+                    }
+#endif
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {

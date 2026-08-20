@@ -339,6 +339,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_RC52 = 142,
     /* Heltec ESP32C6 + SX1262 */
     meshtastic_HardwareModel_HELTEC_RCC6 = 143,
+    /* Seeed Wio Tracker L1 Pro 1W, nRF52840 + SX1262 with 1 W external PA */
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W = 144,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -414,6 +416,10 @@ typedef enum _meshtastic_FirmwareEdition {
     meshtastic_FirmwareEdition_HAMVENTION = 19,
     /* FAB, the international Fab Lab digital fabrication conference */
     meshtastic_FirmwareEdition_FAB = 20,
+    /* Dragon Con, the yearly pop culture convention in Atlanta, GA */
+    meshtastic_FirmwareEdition_DRAGON_CON = 21,
+    /* Chaos Communication Congress, the hacker conference held yearly in Germany */
+    meshtastic_FirmwareEdition_CCC = 22,
     /* Placeholder for DIY and unofficial events */
     meshtastic_FirmwareEdition_DIY_EDITION = 127
 } meshtastic_FirmwareEdition;
@@ -1112,10 +1118,8 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_Priority priority;
     /* rssi of received packet. Only sent to phone for dispay purposes.
  Explicit presence: rssi 0 is a legitimate reading on some radios (SX126x can report exactly
- 0 dBm; SX127x's formula can even go positive), so implicit-presence proto3 made an unset
- value indistinguishable from a measured one. has_rx_rssi disambiguates; a replayed packet
- built from history the device never restored an RSSI for should leave this field absent
- rather than emitting 0. */
+ 0 dBm; SX127x's formula can even go positive). has_rx_rssi disambiguates; a replayed packet
+ built from history should leave this field absent rather than emitting 0. */
     bool has_rx_rssi;
     int32_t rx_rssi;
     /* Describe if this message is delayed */
@@ -1269,15 +1273,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        - storage already unlocked, client must auth
-   "token_missing"     - no boot token on flash
-   "token_expired"     - boot token wall-clock TTL elapsed
-   "token_boots_zero"  - boot token boot-count TTL exhausted
-   "token_hmac_fail"   - token tampered or wrong device
-   "token_dek_fail"    - token DEK decrypt failed
-   "token_wrong_size"  - token file corrupted
-   "token_bad_magic"   - token file corrupted
-   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
+   "needs_auth"        — storage already unlocked, client must auth
+   "token_missing"     — no boot token on flash
+   "token_expired"     — boot token wall-clock TTL elapsed
+   "token_boots_zero"  — boot token boot-count TTL exhausted
+   "token_hmac_fail"   — token tampered or wrong device
+   "token_dek_fail"    — token DEK decrypt failed
+   "token_wrong_size"  — token file corrupted
+   "token_bad_magic"   — token file corrupted
+   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];

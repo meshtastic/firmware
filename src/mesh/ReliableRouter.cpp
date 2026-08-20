@@ -16,6 +16,12 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+    if (isBlockedEventCoordinatePacket(p)) {
+        LOG_DEBUG("Suppress reliable coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
     const GlobalPacketId key(p);
     const bool retransmitting = p->want_ack;
 
@@ -24,8 +30,10 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
 
-        if (copy)
-            startRetransmission(copy, NUM_RELIABLE_RETX);
+        if (copy) {
+            const uint8_t totalAttempts = isBroadcast(p->to) ? NUM_RELIABLE_RETX : NUM_RELIABLE_UNICAST_ATTEMPTS;
+            startRetransmission(copy, totalAttempts);
+        }
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an
@@ -45,34 +53,41 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     return result;
 }
 
-bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
+void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
-    if (p->from == getNodeNum()) {
-        printPacket("Rx someone rebroadcasting for us", p);
+    if (p->from != getNodeNum())
+        return;
 
-        // We are seeing someone rebroadcast one of our broadcast attempts.
-        // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
-        // the original sending process.
+    printPacket("Rx someone rebroadcasting for us", p);
 
-        // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
-        // from the intended recipient.
-        auto key = GlobalPacketId(getFrom(p), p->id);
-        auto old = findPendingPacket(key);
-        if (old) {
-            LOG_DEBUG("Generate implicit ack");
-            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
-            // marked as wantAck
-            sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+    // We are seeing someone rebroadcast one of our transmissions. If this is the first time we saw
+    // this, cancel any retransmissions we have queued up and generate an internal ack for the
+    // original sending process. Header-only (from/id), so it works even for a packet we cannot
+    // decrypt - notably a PKI DM we originated, which is opaque to us when overheard.
 
-            // Only stop retransmissions if the rebroadcast came via LoRa
-            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-                stopRetransmission(key);
-            }
-        } else {
-            LOG_DEBUG("Didn't find pending packet");
+    // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
+    // from the intended recipient.
+    auto key = GlobalPacketId(getFrom(p), p->id);
+    auto old = findPendingPacket(key);
+    if (old) {
+        LOG_DEBUG("Generate implicit ack");
+        // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
+        // marked as wantAck
+        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+
+        // Only stop retransmissions if the rebroadcast came via LoRa
+        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+            stopRetransmission(key);
         }
+    } else {
+        LOG_DEBUG("Didn't find pending packet");
     }
+}
+
+bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
+{
+    perhapsGenerateImplicitAckForOwnOverheard(p);
 
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,

@@ -63,22 +63,17 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 #ifdef DS248X_I2C_CLOCK_SPEED
     reClockI2C.setup(_bus, _port);
-
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
     if (!ds248x.begin(bus, _address)) {
-#ifdef DS248X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
         return false;
     }
 
     // Try to init One-Wire with 3 retries. This detects ROMs consistently
     // on the second one.
     uint8_t numRetries = 3;
-    uint8_t rom[8]{};
 
     for (uint8_t retry = 1; retry <= numRetries; retry++) {
         bool initError = false;
@@ -149,35 +144,29 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
                 printROM(ds248xData.rom);
             }
         } else {
-            LOG_WARN("%s: Could not determine variant (%u/%u)", sensorName, retry, numRetries);
+            LOG_WARN("%s: Can't determine variant (%u/%u)", sensorName, retry, numRetries);
             initError = true;
         }
 
         if (initError && retry == numRetries) {
-#ifdef DS248X_I2C_CLOCK_SPEED
-            reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
             LOG_ERROR("%s: Max retries for one-wire init (%u/%u). Aborting", sensorName, retry, numRetries);
             return false;
         }
 
         if (!initError) {
-            LOG_INFO("%s: Started one-wire (%u/%u)", sensorName, retry, numRetries);
             status = true;
             // We want to keep searching for ROMs on the DS248X_DS2482_800
             // and always do the three passes
             if (_variant == ds248x_variant_t::DS248X_DS2484) {
+                LOG_INFO("%s: Started one-wire (%u/%u)", sensorName, retry, numRetries);
                 break;
+            } else {
+                LOG_INFO("%s: One-wire startup cycle (%u/%u)", sensorName, retry, numRetries);
             }
         }
         // TODO Potentially not needed, but taken from Adafruit's library example
         delay(500);
     }
-
-#ifdef DS248X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
 
     initI2CSensor();
     return status;
@@ -192,8 +181,8 @@ bool DS248XSensor::isValidROM(const uint8_t *rom)
 float DS248XSensor::readTemperatureROM(const uint8_t *rom)
 {
 #ifdef DS248X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
     uint8_t data[9]{};
@@ -221,11 +210,6 @@ float DS248XSensor::readTemperatureROM(const uint8_t *rom)
             ok = ds248x.OneWireReadByte(&data[i]);
         }
     }
-
-#ifdef DS248X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
 
     if (!ok) {
         LOG_WARN("%s: One-wire transaction failed", sensorName);
@@ -282,18 +266,112 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
             return true;
         }
     } else if (_variant == ds248x_variant_t::DS248X_DS2482_800) {
-        // Only ch0 is reported, and each populated channel blocks 750ms on its conversion
-        // TODO Support more than one temperature via repeated (3.0)
-        // TODO Select which channel can be reported as main temperature
-        if (readTemperatureChannel(0)) {
-            measurement->variant.environment_metrics.temperature = ds2482800Data.ds248xData[0].temperature;
-            measurement->variant.environment_metrics.has_temperature = true;
-            LOG_DEBUG("Got %s readings: temperature=%.2f", sensorName, measurement->variant.environment_metrics.temperature);
-            return true;
+        // If using DS248X_DS2482_800, we read all channels
+        uint8_t channelCount = 0;
+
+        // Note, the reason why we are using an unpacked version of this message
+        // (instead of repeated) it's to save space. With repeated, we have to send all
+        // channels (even if null) or otherwise we don't know where each channel is
+        // being reported
+        for (uint8_t channel = 0; channel < 8; channel++) {
+            if (readTemperatureChannel(channel)) {
+                channelCount += 1;
+
+                if (channel == mainTemperatureChannel) {
+                    measurement->variant.environment_metrics.has_temperature = true;
+                    measurement->variant.environment_metrics.temperature = ds2482800Data.ds248xData[channel].temperature;
+                }
+
+                switch (channel) {
+                case 0:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch0 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch0 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 1:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch1 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch1 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 2:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch2 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch2 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 3:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch3 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch3 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 4:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch4 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch4 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 5:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch5 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch5 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 6:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch6 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch6 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 7:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch7 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch7 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                }
+
+                LOG_DEBUG("Got %s readings: temperature_ch%u=%.2f", sensorName, channel,
+                          ds2482800Data.ds248xData[channel].temperature);
+            }
         }
-        return false;
+        return channelCount > 0;
     }
     return false;
+}
+
+void DS248XSensor::setMainTemperature(uint8_t channel)
+{
+    if (channel > 7) {
+        LOG_ERROR("%s: Requested channel (%u) not available", sensorName, channel);
+        return;
+    }
+
+    LOG_INFO("%s: Setting requested channel (%u) as main temperature", sensorName, channel);
+    mainTemperatureChannel = channel;
+    return;
+}
+
+AdminMessageHandleResult DS248XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                          meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+    result = AdminMessageHandleResult::NOT_HANDLED;
+
+    switch (request->which_payload_variant) {
+    case meshtastic_AdminMessage_sensor_config_tag:
+        if (!request->sensor_config.has_ds248x_config) {
+            result = AdminMessageHandleResult::NOT_HANDLED;
+            break;
+        }
+
+        // Check for main temperature channel request
+        if (request->sensor_config.ds248x_config.has_main_temperature_channel) {
+            this->setMainTemperature(request->sensor_config.ds248x_config.main_temperature_channel);
+        }
+
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
 }
 
 #endif
