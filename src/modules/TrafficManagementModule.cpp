@@ -586,7 +586,8 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
 
     // Membership refresh (this hourly pass owns it): clear every isMember bit, then re-mark from
     // both NodeDB tiers. Runs AFTER seeding so the upsert still sees last pass's bits (spareMembers).
-    // Cost/lag rationale in docs/node_info_stores.md "Consistency with NodeDB (anti-entropy)".
+    // Cost/lag rationale in https://meshtastic.org/docs/development/reference/node-info-stores "Consistency with NodeDB
+    // (anti-entropy)".
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++)
         nodeInfoPayload[i].isMember = false;
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
@@ -729,7 +730,8 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
 {
     // Same enable gate as the write-through hooks and maintenance: a disabled module stops
     // updating and sweeping the cache, so its frozen contents must not keep feeding PKI key
-    // resolution either. Enforces the "superset only while enabled" corollary (node_info_stores.md).
+    // resolution either. Enforces the "superset only while enabled" corollary
+    // (https://meshtastic.org/docs/development/reference/node-info-stores).
     if (!moduleConfig.has_traffic_management)
         return false;
     if (!nodeInfoPayload || node == 0 || !out)
@@ -1514,7 +1516,8 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     // Throttle the spoofed reply (per requester + per target + 1 s global floor; checked here so a
     // request declined above never spends the budget). false forwards the request instead of consuming
-    // it. Rationale in docs/traffic_management_module.md "Throttling direct responses".
+    // it. Rationale in https://meshtastic.org/docs/development/reference/traffic-management-internals "Throttling direct
+    // responses".
     if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request", getFrom(p));
         return false;
