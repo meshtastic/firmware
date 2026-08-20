@@ -1,5 +1,6 @@
 #pragma once
 
+#include "configuration.h"
 #include "Observer.h"
 #include "concurrency/OSThread.h"
 #include "freertosinc.h"
@@ -56,6 +57,11 @@ typedef struct _InputEvent {
     unsigned char kbchar;
     uint16_t touchX;
     uint16_t touchY;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    uint8_t touchTargetKind;
+    uint32_t touchTargetValue;
+    uint8_t touchTargetLongPress;
+#endif
 } InputEvent;
 
 class InputPollable

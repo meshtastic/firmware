@@ -14,12 +14,24 @@
  * @date [Insert Date]
  */
 #include "ExternalNotificationModule.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#include "ExternalNotificationPolicy.h"
+#endif
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#include "Throttle.h"
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+#include "input/HapticFeedback.h"
+#endif
+#if defined(HAS_A7682_AUDIO)
+#include "audio/A7682Audio.h"
+#endif
+#endif
 #include "main.h"
 #include "mesh/Throttle.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
@@ -78,9 +90,12 @@ int32_t ExternalNotificationModule::runOnce()
         return INT32_MAX; // we don't need this thread here...
     } else {
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+        const uint32_t now = millis();
+        const bool notificationTimedOut = externalNotificationDeadlineExpired(nagCycleCutoff, now);
+#else
         bool isRtttlPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
-        // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
 #if defined(HAS_I2S_SPEAKER_NRF52)
@@ -89,8 +104,10 @@ int32_t ExternalNotificationModule::runOnce()
         // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
         // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
-        if (nagWindowExpired && !isRtttlPlaying) {
-            // Turn off external notification immediately when timeout is reached, regardless of song state
+        const bool notificationTimedOut = nagWindowExpired && !isRtttlPlaying;
+#endif
+        if (notificationTimedOut) {
+            // T-Deck haptic and GPIO outputs must honor the deadline even if audio is still playing.
             nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
             isNagging = false;
@@ -101,17 +118,31 @@ int32_t ExternalNotificationModule::runOnce()
         if (isNagging) {
             delay = (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                   : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+            if (!Throttle::isWithinTimespanMs(externalTurnedOn[0], delay)) {
+#else
             // externalTurnedOn[] is when each output was last toggled, so these are intervals.
             if (Throttle::hasElapsed(externalTurnedOn[0], delay)) {
+#endif
                 setExternalState(0, !getExternal(0));
             }
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+            if (shouldDriveHapticNotification(hapticShouldAlert, isNagging) &&
+                !Throttle::isWithinTimespanMs(externalTurnedOn[1], delay)) {
+#else
             if (Throttle::hasElapsed(externalTurnedOn[1], delay)) {
+#endif
                 setExternalState(1, !getExternal(1));
             }
             // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+            if (!moduleConfig.external_notification.use_pwm && !Throttle::isWithinTimespanMs(externalTurnedOn[2], delay)) {
+                LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + delay, now);
+#else
             if (!moduleConfig.external_notification.use_pwm && Throttle::hasElapsed(externalTurnedOn[2], delay)) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
+#endif
                 setExternalState(2, !getExternal(2));
             }
 #if defined(HAS_RGB_LED)
@@ -138,12 +169,6 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
 #endif
 
-#ifdef HAS_DRV2605
-            // Only trigger DRV2605 if vibration alerts are enabled
-            if (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra) {
-                drv.go();
-            }
-#endif
         }
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
@@ -151,7 +176,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
-            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+            } else if (isNagging && !notificationTimedOut) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
@@ -173,7 +198,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
-            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+            } else if (isNagging && !notificationTimedOut) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
@@ -250,7 +275,20 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
     ambientLightingThread->setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
 #endif
 
-#ifdef HAS_DRV2605
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_DRV2605)
+    // Only trigger DRV2605 when setting vibration motor
+    bool shouldTriggerDRV = false;
+    if (on && index == 1 && shouldDriveHapticNotification(hapticShouldAlert, isNagging))
+        shouldTriggerDRV = true;
+
+    if (shouldTriggerDRV) {
+        if (hapticFeedback)
+            hapticFeedback->play(HapticEffect::MESSAGE);
+    } else if (!on && index == 1) {
+        if (hapticFeedback)
+            hapticFeedback->stop();
+    }
+#elif defined(HAS_DRV2605)
     // Only trigger DRV2605 when setting vibration motor
     bool shouldTriggerDRV = false;
     if (on) {
@@ -298,13 +336,19 @@ void ExternalNotificationModule::stopNow()
         externalTurnedOn[i] = 0;
     }
     setIntervalFromNow(0);
-#ifdef HAS_DRV2605
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_DRV2605)
+    if (hapticFeedback)
+        hapticFeedback->stop();
+#elif defined(HAS_DRV2605)
     drv.stop();
 #endif
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
     isNagging = false;
     buzzerShouldAlert = false;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    hapticShouldAlert = false;
+#endif
     nagCycleCutoff = UINT32_MAX;
 
 #ifdef HAS_I2S
@@ -441,12 +485,25 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             const bool vibraShouldAlert = (moduleConfig.external_notification.alert_bell_vibra && containsBell) ||
                                           (moduleConfig.external_notification.alert_message_vibra && !is_muted);
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+            hapticShouldAlert = hapticShouldAlert || vibraShouldAlert;
+#endif
+
             // Alert GPIO Buzzer when receiving a bell = alertBellBuzzer: true
             // Alert GPIO Buzzer when receiving a message = alertMessageBuzzer: true
             // If you are already buzzing, keep going
             buzzerShouldAlert =
                 buzzerShouldAlert || (canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
                                                     (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
+
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
+            // A7682E follows the user-facing notification mode and mute policy, while
+            // remaining independent from the legacy GPIO/RTTTL alert flags.
+            const bool a7682MessageShouldAlert = shouldPlayA7682RxCue(
+                !isFromUs(&mp), is_muted, isSilenced, canBuzz(), buzzerModeIsDirectOnly, isDmToUs);
+            if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && a7682MessageShouldAlert && a7682Audio)
+                a7682Audio->queueCue(A7682AudioCue::RX_TEXT);
+#endif
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
@@ -463,18 +520,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             if (vibraShouldAlert) {
                 LOG_INFO("externalNotificationModule - Vibra alert");
-#ifdef HAS_DRV2605
-                // Set DRV2605 waveform when vibration alert is triggered
-                drv.setWaveform(0, 16); // Long buzzer 100%
-                drv.setWaveform(1, 0);  // Pause
-                drv.setWaveform(2, 16);
-                drv.setWaveform(3, 0);
-                drv.setWaveform(4, 16);
-                drv.setWaveform(5, 0);
-                drv.setWaveform(6, 16);
-                drv.setWaveform(7, 0);
-                drv.go();
-#endif
                 setExternalState(1, true);
             }
 

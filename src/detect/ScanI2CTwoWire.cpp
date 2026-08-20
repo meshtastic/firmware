@@ -423,6 +423,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case TDECK_KB_ADDR:
+#if defined(T_DECK_MAX)
+                // MAX uses 0x55 for BQ27220; its keyboard is the TCA8418 at 0x34.
+                logFoundDevice("BQ27220", (uint8_t)addr.address);
+                type = BQ27220;
+#else
                 // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
                 if (registerValue != 0) {
@@ -432,6 +437,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("TDECKKB", (uint8_t)addr.address);
                     type = TDECKKB;
                 }
+#endif
                 break;
             case BBQ10_KB_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
@@ -817,7 +823,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 break;
 
-                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
+            case LSM6DS3_ADDR:
+#if defined(T_DECK_MAX)
+                // MAX uses 0x6A for SY6970, which must not be classified as an IMU.
+                if (addr.address == T_DECK_MAX_CHARGER_ADDR)
+                    break;
+#endif
+                logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                type = LSM6DS3;
+                break;
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
             case TCA9555_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);
