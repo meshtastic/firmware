@@ -1,5 +1,6 @@
 #include "configuration.h"
 #if defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
+#include "AudioCodebooks.h"
 #include "AudioModule.h"
 #include "FSCommon.h"
 #include "MeshService.h"
@@ -98,10 +99,32 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
     // moduleConfig.audio.ptt_pin = 39;
 
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
-        LOG_INFO("Set up codec2 in mode %u", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
-        codec2 = codec2_create((moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+        // Must happen before codec2_create() when the tables are not in the image.
+        const char *bindErr = audioCodebooksBind();
+        if (bindErr) {
+            LOG_ERROR("Audio disabled: %s", bindErr);
+            disable();
+            return;
+        }
+
+        // Never derive the codec2 mode arithmetically from the config value:
+        // codec2 renumbered its modes and bitrate-1 is wrong for 450 only.
+        const AudioModeInfo *m = audioModeFromConfig(moduleConfig.audio.bitrate);
+        if (!m) {
+            LOG_ERROR("Audio disabled: bitrate %u is not a codec2 mode", moduleConfig.audio.bitrate);
+            disable();
+            return;
+        }
+
+        LOG_INFO("Set up codec2 at %u bit/s (mode %d)", m->bitrate, m->codec2Mode);
+        codec2 = codec2_create(m->codec2Mode);
+        if (!codec2) {
+            LOG_ERROR("Audio disabled: codec2 mode %d not built into this firmware", m->codec2Mode);
+            disable();
+            return;
+        }
         memcpy(tx_header.magic, c2_magic, sizeof(c2_magic));
-        tx_header.mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
+        tx_header.mode = m->codec2Mode;
         codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
         encode_codec_size = (codec2_bits_per_frame(codec2) + 7) / 8;
         encode_frame_num = (meshtastic_Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
@@ -123,8 +146,9 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setFont(FONT_SMALL);
     display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
     display->setColor(BLACK);
-    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio",
-                         (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+    // Show the rate actually in use, which may be below the configured one.
+    const AudioModeInfo *shown = audioModeFromConfig(moduleConfig.audio.bitrate);
+    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 %u bit/s", shown ? shown->bitrate : 0);
     display->setColor(WHITE);
     display->setFont(FONT_LARGE);
     display->setTextAlignment(TEXT_ALIGN_CENTER);

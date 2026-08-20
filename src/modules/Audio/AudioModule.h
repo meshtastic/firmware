@@ -11,6 +11,7 @@
 #endif
 
 #include "AudioIO.h"
+#include "AudioModeSelect.h"
 #include "ButterworthFilter.h"
 #include "NodeDB.h"
 #include <Arduino.h>
@@ -31,7 +32,6 @@ struct c2_header {
 #define PTT_PIN 39
 
 #define AUDIO_MODULE_RX_BUFFER 128
-#define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
 
 class AudioModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
