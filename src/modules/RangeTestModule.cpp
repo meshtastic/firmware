@@ -311,7 +311,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     // TODO: If quotes are found in the payload, it has to be escaped.
     fileToAppend.printf("\"%.*s\",", (int)p.payload.size, p.payload.bytes);
-    fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
+    fileToAppend.printf("%i", mp.rx_rssi); // RX RSSI
 
     fileToAppend.printf("\n");
     fileToAppend.flush();
