@@ -1,3 +1,5 @@
+#define _VARIANT_T_DECK_PRO_V1_1
+
 // Display (E-Ink)
 #define PIN_EINK_CS 34
 #define PIN_EINK_BUSY 37

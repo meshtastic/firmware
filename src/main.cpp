@@ -177,9 +177,20 @@ MagnetometerThread *magnetometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
-#ifdef USE_XL9555
+#if defined(T_DECK_MAX)
+#include "platform/extra_variants/t_deck_max/TDeckMaxXL9555.hpp"
+ExtensionIOXL9555 io;
+#elif defined(USE_XL9555)
 #include "ExtensionIOXL9555.hpp"
 ExtensionIOXL9555 io;
+#endif
+
+#if defined(T_DECK_MAX)
+#include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
+#endif
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1)
+bool tDeckProV1_1RecoverI2C();
 #endif
 
 #ifdef USE_MCP23017
@@ -324,6 +335,21 @@ __attribute__((noinline)) void lateInitVariant() {}
 
 __attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
 __attribute__((noinline)) void earlyInitVariant() {}
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+// Weak hook for board setup that depends on the shared I2C bus already being initialized.
+void initVariantAfterI2C() __attribute__((weak));
+void initVariantAfterI2C() {}
+
+static bool recoverTDeckI2C()
+{
+#if defined(T_DECK_MAX)
+    return tDeckMaxRecoverI2C();
+#else
+    return tDeckProV1_1RecoverI2C();
+#endif
+}
+#endif
 
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
@@ -613,6 +639,10 @@ void setup()
 #endif
 #endif
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    initVariantAfterI2C();
+#endif
+
 #if defined(M5STACK_UNITC6L)
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, 1);
@@ -639,7 +669,19 @@ void setup()
     power = new Power();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    bool powerReady = power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+#else
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+#endif
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    // XPowersLib may release the shared ESP32 I2C handle while probing an absent
+    // battery gauge. Recreate it before the generic scanner starts probing.
+    bool tDeckI2CReady = powerReady;
+    if (!powerReady)
+        tDeckI2CReady = recoverTDeckI2C();
+#endif
 
 #ifdef USE_MCP23017
     // Bring up the I2C IO expander (LoRa reset, LCD reset, GPS wake) now that the PMU rails are up,
@@ -674,7 +716,14 @@ void setup()
 #endif
 
 #if defined(I2C_SDA)
-    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    if (tDeckI2CReady)
+#endif
+        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+    else
+        LOG_ERROR("T-Deck: skipping I2C scan because the bus is unavailable");
+#endif
 #elif defined(ARCH_PORTDUINO)
     if (portduino_config.i2cdev != "") {
         LOG_INFO("Scan for i2c devices");
@@ -807,6 +856,10 @@ void setup()
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
+#if defined(T_DECK_MAX)
+    if (acc_info.type == ScanI2C::DeviceType::NONE)
+        tDeckMaxSetImuPower(false);
+#endif
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
@@ -941,7 +994,10 @@ void setup()
 #endif
 
 #ifdef HAS_DRV2605
-#if defined(PIN_DRV_EN)
+#if defined(T_DECK_MAX)
+    tDeckMaxSetMotorPower(true);
+    delay(10);
+#elif defined(PIN_DRV_EN)
     pinMode(PIN_DRV_EN, OUTPUT);
     digitalWrite(PIN_DRV_EN, HIGH);
     delay(10);
@@ -961,6 +1017,9 @@ void setup()
     drv.selectLibrary(1);
     // I2C trigger by sending 'go' command
     drv.setMode(DRV2605_MODE_INTTRIG);
+#if defined(T_DECK_MAX)
+    tDeckMaxSetMotorPower(false);
+#endif
 #endif
 
     // Init our SPI controller (must be before screen and lora)
