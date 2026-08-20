@@ -205,6 +205,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
+#ifdef SEEED_WIO_TRACKER_L1_PRO_1W
+// Indexed by SX1262 output power in dBm, matching RadioInterface::limitPower().
+// TODO: verify against measured output.
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10
+#endif
+
 // Default system gain to 0 if not defined
 #ifndef NUM_PA_POINTS
 #define NUM_PA_POINTS 1
@@ -234,7 +241,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SSD1306_ADDRESS_L 0x3C // Addr = 0
 #define SSD1306_ADDRESS_H 0x3D // Addr = 1
 
-#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
+#if (defined(SEEED_WIO_TRACKER_L1) || defined(SEEED_WIO_TRACKER_L1_PRO_1W)) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS SSD1306_ADDRESS_H
 #define USE_SH1106
 #endif
@@ -253,6 +260,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BBQ10_KB_ADDR 0x1F
 #define MPR121_KB_ADDR 0x5A
 #define TCA8418_KB_ADDR 0x34
+#define TSTC8_KB_ADDR 0x6C // STC8H companion-MCU keypad on the ThinkNode-M9
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -270,6 +278,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define QMC5883L_ADDR 0x0D
 #define HMC5883L_ADDR 0x1E
 #define MMC5983MA_ADDR 0x30
+#define QMC6309_ADDR 0x7C
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
@@ -300,7 +309,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
+#define SEN6X_ADDR 0x6B // same as QMI8658_ADDR and BQ25896_ADDR
 #define SCD30_ADDR 0x61
+#define ADS1X15_ADDR 0x48
+#define ADS1X15_ADDR_ALT1 0x49
+#define ADS1X15_ADDR_ALT2 0x4A
+#define ADS1X15_ADDR_ALT3 0x4B
 #define DS248X_ADDR 0x18      // same as MCP9808_ADDR, STK8BXX_ADDR and LIS3DH_ADDR
 #define DS248X_ADDR_ALT1 0x19 // same as LIS3DH_ADDR_ALT and BMA423_ADDR
 #define DS248X_ADDR_ALT2 0x1A // same as CST328_ADDR
@@ -310,7 +324,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
 #define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 #define HM330X_ADDR 0x40
-
+#define AS3935_ADDR 0x03 // both address pins tied high, the common breakout-board default
+#define AS3935_ADDR_ALT 0x01
+#define AS3935_ADDR_ALT2 0x02
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

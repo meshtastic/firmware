@@ -148,27 +148,31 @@ void menuHandler::loraMenu()
         "Radio Preset",
         "Frequency Slot",
         "LoRa Region",
+        "Transmit Enabled",
 #if HAS_LORA_FEM
         "FEM LNA",
 #endif
     };
+    // NOTE: "FEM LNA" must stay last; it is the only entry that can be hidden at runtime by
+    // trimming optionsCount, which only works for a trailing option.
     enum optionsNumbers {
         Back = 0,
         DeviceRolePicker = 1,
         RadioPresetPicker = 2,
         FrequencySlot = 3,
         LoraPicker = 4,
+        TxEnabled = 5,
 #if HAS_LORA_FEM
-        LoraFemLna = 5
+        LoraFemLna = 6
 #endif
     };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
 #if HAS_LORA_FEM
-    bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? 6 : 5;
+    bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? 7 : 6;
 #else
-    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsCount = 6;
 #endif
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
@@ -181,6 +185,8 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::FrequencySlot;
         } else if (selected == LoraPicker) {
             menuHandler::menuQueue = menuHandler::LoraPicker;
+        } else if (selected == TxEnabled) {
+            menuHandler::menuQueue = menuHandler::TXEnabledMenu;
         }
 #if HAS_LORA_FEM
         else if (selected == LoraFemLna) {
@@ -239,8 +245,9 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     }
     auto changes = SEGMENT_CONFIG;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (crypto) {
-        crypto->ensurePkiKeys(config.security, owner);
+    // Minting the key moves our node num with it, and nothing reboots on this path to repair it later.
+    if (nodeDB->ensurePkiIdentity()) {
+        changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
     }
 #endif
     initRegion();
@@ -569,6 +576,31 @@ static BannerOverlayOptions buildRegionPresetBanner()
 void menuHandler::radioPresetPicker()
 {
     screen->showOverlayBanner(buildRegionPresetBanner());
+}
+
+void menuHandler::txEnabledMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    enum optionsNumbers { Back = 0, Enabled = 1, Disabled = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Transmit Enabled";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.InitialSelected = config.lora.tx_enabled ? Enabled : Disabled;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        // -1 is the timeout/dismiss case; treat it like Back so we never write config.
+        if (selected <= Back) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+            return;
+        }
+        bool wanted = (selected == Enabled);
+        if (config.lora.tx_enabled == wanted)
+            return;
+        config.lora.tx_enabled = wanted;
+        service->reloadConfig(SEGMENT_CONFIG);
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::twelveHourPicker()
@@ -2942,6 +2974,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case RadioPresetPicker:
         radioPresetPicker();
+        break;
+    case TXEnabledMenu:
+        txEnabledMenu();
         break;
     case FrequencySlot:
         FrequencySlotPicker();

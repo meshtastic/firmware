@@ -430,6 +430,14 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
+
+    // likewise the edition: it lives in persisted devicestate, so a vanilla install must
+    // overwrite the previous event build's value. Before the CRC compare, so the change persists.
+#ifdef USERPREFS_FIRMWARE_EDITION
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
+#else
+    myNodeInfo.firmware_edition = meshtastic_FirmwareEdition_VANILLA;
+#endif
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -615,9 +623,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-#ifdef USERPREFS_FIRMWARE_EDITION
-    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
-#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -1028,7 +1033,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
      defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
-     defined(SEEED_MESHPAGER_X2)) &&                                                                                             \
+     defined(ELECROW_ThinkNode_M9) || defined(T_WATCH_ULTRA) || defined(SEEED_MESHPAGER_X2)) &&                                                                 \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1112,7 +1117,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.wake_on_tap_or_motion = true;
 #endif
 
-#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
+#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR) || defined(T_WATCH_ULTRA)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
@@ -1260,7 +1265,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
 #endif
 
-#if defined(PIN_VIBRATION)
+#if HAS_TFT
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
+        moduleConfig.external_notification.nag_timeout = 0;
+#elif defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
 #elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) ||                           \
     defined(HAS_I2S_SPEAKER_NRF52)
@@ -1272,12 +1280,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-#if HAS_TFT
-    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
-        moduleConfig.external_notification.nag_timeout = 0;
-#else
-    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
-#endif // HAS_TFT
 #endif // HAS_I2S
 
 #ifdef NANO_G2_ULTRA
@@ -2146,9 +2148,9 @@ void NodeDB::demoteOldestHotNodesToWarm()
         const meshtastic_NodeInfoLite &n = (*meshNodes)[i];
         if (n.num == 0)
             continue;
-        // Keep the public key if we have one (40 B warm record); keyless nodes
-        // still get a placeholder so re-admission restores last_heard.
-        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
+        // Warm entries carry no key length, so a partial key would be indistinguishable
+        // from a full one. nullptr keeps the keyless placeholder that restores last_heard.
+        warmStore.absorb(n.num, n.last_heard, n.public_key.size == 32 ? n.public_key.bytes : nullptr, n.role,
                          warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) - they'd otherwise orphan until the next
@@ -3526,8 +3528,10 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
             // If the protected cap refuses the favorite, fall back to a heard-now stamp so the
             // contact still isn't the first eviction victim.
-            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
                 stampContactHeardNow(info);
+            }
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
@@ -4442,12 +4446,30 @@ bool NodeDB::createNewIdentity()
 
     myNodeInfo.my_node_num = newNodeNum;
 
+    // The number has moved, so the caller must persist it whatever happens next. Returning false here
+    // would leave the new key saved against the old number, which is the break this exists to prevent.
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    if (!info)
-        return false;
-    TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    if (info)
+        TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    else
+        LOG_ERROR("No room for our own node 0x%08x, identity moved without a self record", newNodeNum);
 
     return true;
+}
+
+bool NodeDB::ensurePkiIdentity()
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    // A failed or declined keygen leaves the existing key, and so the existing node num, untouched.
+    if (!crypto || !crypto->ensurePkiKeys(config.security, owner))
+        return false;
+
+    // ensurePkiKeys() writes key material only, so my_node_num is still the stale MAC-derived value.
+    // createNewIdentity() early-returns when the key, and so the node num, did not actually change.
+    return createNewIdentity();
+#else
+    return false;
+#endif
 }
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
