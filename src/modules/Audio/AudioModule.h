@@ -5,26 +5,9 @@
 #include "configuration.h"
 #if defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
 
-// Voice needs a digital microphone and an amplifier wired up, so it is opted
-// into per variant rather than inferred from the radio. The old gate keyed off
-// USE_SX1280 as a proxy for "2.4 GHz, therefore no duty cycle", which has
-// stopped being true in both directions: newer parts do 2.4 GHz LoRa, and at
-// 450 bit/s sub-GHz voice is viable on the faster presets. Regulatory limits
-// are now checked at runtime against the band plan instead.
-
-// Codec2 is floating point throughout - quantise.c alone makes 15 log10f and 11
-// powf calls per frame. Software float cannot keep up: measured on Cortex-M0+,
-// encoding one second of speech costs 3.54 s of CPU. This catches ESP32-S2, C3
-// and C6, and RP2040, all of which the old ARCH_ESP32 gate let through.
+// Codec2 is float throughout; software float runs ~3.5x slower than real time.
 #if !defined(__FPU_PRESENT) && !defined(__XTENSA__) && !defined(ESP_PLATFORM)
 #error "HAS_AUDIO_CODEC2 requires a hardware FPU"
-#endif
-
-// Capture and playback are still the ESP32 I2S calls inline in AudioModule.cpp.
-// Lifting them behind AudioCapture.h is the next step; until then, enabling this
-// flag elsewhere fails loudly rather than mysteriously.
-#if !defined(ARCH_ESP32)
-#error "HAS_AUDIO_CODEC2: no capture/playback backend for this architecture yet"
 #endif
 
 #include "NodeDB.h"

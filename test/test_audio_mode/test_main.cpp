@@ -20,12 +20,8 @@ static constexpr uint32_t AIR_LONG_SLOW = 4559;   // SF12 / 250 kHz
 void setUp() {}
 void tearDown() {}
 
-/**
- * The whole reason this header exists. Codec2 renumbered its modes, and the old
- * `bitrate - 1` arithmetic still produces the correct id for every mode we ship
- * except 450, where it yields 9 - an id no mode uses. A regression here does not
- * announce itself: it breaks exactly one rate, the one the emergency case needs.
- */
+// `bitrate - 1` still yields the right id for every rate except 450, so a
+// regression here breaks exactly one mode and nothing else.
 static void test_codec2_ids_are_not_config_minus_one()
 {
     const AudioModeInfo *m450 = audioModeFromConfig(BAUD(450));
@@ -33,8 +29,6 @@ static void test_codec2_ids_are_not_config_minus_one()
     TEST_ASSERT_EQUAL_INT(10, m450->codec2Mode);
     TEST_ASSERT_NOT_EQUAL_INT((int)BAUD(450) - 1, m450->codec2Mode);
 
-    // Every other shipped mode happens to survive the arithmetic, which is
-    // precisely why a partial fix looks like it works.
     TEST_ASSERT_EQUAL_INT(1, audioModeFromConfig(BAUD(2400))->codec2Mode);
     TEST_ASSERT_EQUAL_INT(3, audioModeFromConfig(BAUD(1400))->codec2Mode);
     TEST_ASSERT_EQUAL_INT(8, audioModeFromConfig(BAUD(700C))->codec2Mode);
@@ -49,7 +43,7 @@ static void test_legacy_and_default_resolve_to_700c()
     }
 }
 
-/// Rates we do not build must land on something, never nullptr.
+// Unbuilt rates must land on something, never nullptr.
 static void test_unbuilt_rates_fall_back()
 {
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_2400, audioModeFromConfig(BAUD(3200))->codec2Mode);
@@ -58,7 +52,7 @@ static void test_unbuilt_rates_fall_back()
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_1400, audioModeFromConfig(BAUD(1200))->codec2Mode);
 }
 
-/// Frames per packet is wire-visible - the receiver sizes its ring from it.
+// Wire-visible: the receiver sizes its ring from this.
 static void test_frame_geometry()
 {
     struct {
@@ -83,9 +77,7 @@ static void test_occupancy()
     const AudioModeInfo *m450 = audioModeFromConfig(BAUD(450));
     const AudioModeInfo *m2400 = audioModeFromConfig(BAUD(2400));
 
-    // 450 on LONG_FAST: legal where there is no duty cycle, antisocial anyway.
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.71f, audioOccupancy(*m450, AIR_LONG_FAST));
-    // 2400 on SHORT_FAST sits just over the ceiling - the reason it steps down.
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.27f, audioOccupancy(*m2400, AIR_SHORT_FAST));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.13f, audioOccupancy(*m2400, AIR_SHORT_TURBO));
 }
@@ -99,12 +91,10 @@ static void test_fast_preset_keeps_configured_mode()
 
 static void test_slow_preset_steps_down()
 {
-    // 2400 wants 27% of SHORT_FAST, over the ceiling, so it drops to 1400.
     const AudioModeInfo *m = chooseAudioMode(BAUD(2400), AIR_SHORT_FAST, 0.0f);
     TEST_ASSERT_NOT_NULL(m);
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_1400, m->codec2Mode);
 
-    // MEDIUM_FAST only clears at 450.
     m = chooseAudioMode(BAUD(2400), AIR_MEDIUM_FAST, 0.0f);
     TEST_ASSERT_NOT_NULL(m);
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_450, m->codec2Mode);
@@ -119,12 +109,12 @@ static void test_congestion_steps_down_one_further()
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_1400, quiet->codec2Mode);
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_700C, busy->codec2Mode);
 
-    // Right at the threshold is not over it.
+    // At the threshold is not over it.
     const AudioModeInfo *edge = chooseAudioMode(BAUD(2400), AIR_MEDIUM_TURBO, AUDIO_CONGESTION_PERCENT);
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_1400, edge->codec2Mode);
 }
 
-/// Degradation only - congestion must never talk us up to a better mode.
+// Degradation only.
 static void test_never_upgrades_above_configured()
 {
     const AudioModeInfo *m = chooseAudioMode(BAUD(450), AIR_SHORT_TURBO, 0.0f);
@@ -132,7 +122,7 @@ static void test_never_upgrades_above_configured()
     TEST_ASSERT_EQUAL_INT(AUDIO_C2_450, m->codec2Mode);
 }
 
-/// The only case where PTT is allowed to do nothing.
+// The only case where PTT may do nothing.
 static void test_refuses_when_nothing_fits()
 {
     TEST_ASSERT_NULL(chooseAudioMode(BAUD(2400), AIR_LONG_FAST, 0.0f));
@@ -140,8 +130,7 @@ static void test_refuses_when_nothing_fits()
     TEST_ASSERT_NULL(chooseAudioMode(BAUD(450), AIR_LONG_SLOW, 0.0f));
 }
 
-/// Congestion must not turn a working link into a refusal by pushing past the
-/// bottom of the ladder.
+// Congestion must not push past the bottom of the ladder into a refusal.
 static void test_congestion_does_not_cause_refusal_when_lowest_fits()
 {
     const AudioModeInfo *m = chooseAudioMode(BAUD(2400), AIR_MEDIUM_FAST, 90.0f);
