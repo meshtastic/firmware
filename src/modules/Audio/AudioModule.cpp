@@ -53,7 +53,7 @@ void run_codec2(void *parameter)
 
         if (tcount != 0) {
             if (audioModule->radio_state == RadioState::tx) {
-                for (int i = 0; i < audioModule->adc_buffer_size; i++)
+                for (int i = 0; i < audioModule->frame_samples; i++)
                     audioModule->speech[i] = (int16_t)hp_filter.Update((float)audioModule->speech[i]);
 
                 codec2_encode(audioModule->codec2, audioModule->tx_encode_frame + audioModule->tx_encode_frame_index,
@@ -67,7 +67,6 @@ void run_codec2(void *parameter)
                 }
             }
             if (audioModule->radio_state == RadioState::rx) {
-                size_t bytesOut = 0;
                 // Reject frames not carrying our own header (magic + mode); an invalid mode byte
                 // would else NULL-deref via codec2_create. The bound keeps reads inside the buffer.
                 const int headerLen = sizeof(audioModule->tx_header);
@@ -79,9 +78,7 @@ void run_codec2(void *parameter)
                     memcmp(audioModule->rx_encode_frame, &audioModule->tx_header, headerLen) == 0) {
                     for (int i = headerLen; i + frameSize <= limit; i += frameSize) {
                         codec2_decode(audioModule->codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
-                        // adc_buffer_size is a sample count; i2s_write wants bytes (int16_t samples).
-                        i2s_write(I2S_PORT, &audioModule->output_buffer, audioModule->adc_buffer_size * sizeof(int16_t),
-                                  &bytesOut, pdMS_TO_TICKS(500));
+                        audioIOWrite(audioModule->output_buffer, audioModule->frame_samples, 500);
                     }
                 } else {
                     LOG_WARN("Audio: dropping frame with mismatched or short codec2 header");
@@ -109,7 +106,7 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
         encode_codec_size = (codec2_bits_per_frame(codec2) + 7) / 8;
         encode_frame_num = (meshtastic_Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
-        adc_buffer_size = codec2_samples_per_frame(codec2);
+        frame_samples = codec2_samples_per_frame(codec2);
         LOG_INFO("Use %d frames of %d bytes for a total payload length of %d bytes", encode_frame_num, encode_codec_size,
                  encode_frame_size);
         xTaskCreate(&run_codec2, "codec2_task", 30000, NULL, 5, &codec2HandlerTask);
@@ -144,42 +141,9 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 int32_t AudioModule::runOnce()
 {
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
-        esp_err_t res;
         if (firstTime) {
-            // Set up I2S Processor configuration. This will produce 16bit samples at 8 kHz instead of 12 from the ADC
-            LOG_INFO("Init I2S SD: %d DIN: %d WS: %d SCK: %d", moduleConfig.audio.i2s_sd, moduleConfig.audio.i2s_din,
-                     moduleConfig.audio.i2s_ws, moduleConfig.audio.i2s_sck);
-            i2s_config_t i2s_config = {.mode = (i2s_mode_t)(I2S_MODE_MASTER | (moduleConfig.audio.i2s_sd ? I2S_MODE_RX : 0) |
-                                                            (moduleConfig.audio.i2s_din ? I2S_MODE_TX : 0)),
-                                       .sample_rate = 8000,
-                                       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-                                       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-                                       .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
-                                       .intr_alloc_flags = 0,
-                                       .dma_buf_count = 8,
-                                       .dma_buf_len = adc_buffer_size, // 320 * 2 bytes
-                                       .use_apll = false,
-                                       .tx_desc_auto_clear = true,
-                                       .fixed_mclk = 0};
-            res = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
-            if (res != ESP_OK) {
-                LOG_ERROR("Failed to install I2S driver: %d", res);
-            }
-
-            const i2s_pin_config_t pin_config = {
-                .bck_io_num = moduleConfig.audio.i2s_sck,
-                .ws_io_num = moduleConfig.audio.i2s_ws,
-                .data_out_num = moduleConfig.audio.i2s_din ? moduleConfig.audio.i2s_din : I2S_PIN_NO_CHANGE,
-                .data_in_num = moduleConfig.audio.i2s_sd ? moduleConfig.audio.i2s_sd : I2S_PIN_NO_CHANGE};
-            res = i2s_set_pin(I2S_PORT, &pin_config);
-            if (res != ESP_OK) {
-                LOG_ERROR("Failed to set I2S pin config: %d", res);
-            }
-
-            res = i2s_start(I2S_PORT);
-            if (res != ESP_OK) {
-                LOG_ERROR("Failed to start I2S: %d", res);
-            }
+            if (!audioIOBegin(8000, frame_samples))
+                return disable();
 
             radio_state = RadioState::rx;
 
@@ -213,25 +177,17 @@ int32_t AudioModule::runOnce()
                 }
             }
             if (radio_state == RadioState::tx) {
-                // Get I2S data from the microphone and place in data buffer. adc_buffer_size is a
-                // sample count; i2s_read and adc_buffer_index are in bytes, so scale by int16_t.
-                size_t bytesIn = 0;
-                const size_t frameBytes = adc_buffer_size * sizeof(uint16_t);
-                res = i2s_read(I2S_PORT, (uint8_t *)adc_buffer + adc_buffer_index, frameBytes - adc_buffer_index, &bytesIn,
-                               pdMS_TO_TICKS(40)); // wait 40ms for audio to arrive.
-
-                if (res == ESP_OK) {
-                    adc_buffer_index += bytesIn;
-                    if (adc_buffer_index >= frameBytes) {
-                        adc_buffer_index = 0;
-                        memcpy((void *)speech, (void *)adc_buffer, frameBytes);
-                        // Notify run_codec2 task that the buffer is ready.
-                        radio_state = RadioState::tx;
-                        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                        vTaskNotifyGiveFromISR(codec2HandlerTask, &xHigherPriorityTaskWoken);
-                        if (xHigherPriorityTaskWoken == pdTRUE)
-                            YIELD_FROM_ISR(xHigherPriorityTaskWoken);
-                    }
+                // Accumulate until a whole codec2 frame is present; a read can be short.
+                mic_buffer_index +=
+                    (int)audioIORead(mic_buffer + mic_buffer_index, (size_t)(frame_samples - mic_buffer_index), 40);
+                if (mic_buffer_index >= frame_samples) {
+                    mic_buffer_index = 0;
+                    memcpy(speech, mic_buffer, (size_t)frame_samples * sizeof(int16_t));
+                    // Notify run_codec2 task that the buffer is ready.
+                    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+                    vTaskNotifyGiveFromISR(codec2HandlerTask, &xHigherPriorityTaskWoken);
+                    if (xHigherPriorityTaskWoken == pdTRUE)
+                        YIELD_FROM_ISR(xHigherPriorityTaskWoken);
                 }
             }
         }

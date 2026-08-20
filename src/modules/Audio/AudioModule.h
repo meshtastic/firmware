@@ -10,13 +10,13 @@
 #error "HAS_AUDIO_CODEC2 requires a hardware FPU"
 #endif
 
+#include "AudioIO.h"
 #include "NodeDB.h"
 #include <Arduino.h>
 #include <ButterworthFilter.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <codec2.h>
-#include <driver/i2s.h>
 #include <functional>
 
 enum RadioState { standby, rx, tx };
@@ -28,10 +28,8 @@ struct c2_header {
     char mode;
 };
 
-#define ADC_BUFFER_SIZE_MAX 320
+#define AUDIO_FRAME_SAMPLES_MAX 320
 #define PTT_PIN 39
-
-#define I2S_PORT I2S_NUM_0
 
 #define AUDIO_MODULE_RX_BUFFER 128
 #define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
@@ -42,11 +40,11 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     unsigned char rx_encode_frame[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
     unsigned char tx_encode_frame[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
     c2_header tx_header = {};
-    int16_t speech[ADC_BUFFER_SIZE_MAX] = {};
-    int16_t output_buffer[ADC_BUFFER_SIZE_MAX] = {};
-    uint16_t adc_buffer[ADC_BUFFER_SIZE_MAX] = {};
-    int adc_buffer_size = 0;
-    uint16_t adc_buffer_index = 0;
+    int16_t speech[AUDIO_FRAME_SAMPLES_MAX] = {};
+    int16_t output_buffer[AUDIO_FRAME_SAMPLES_MAX] = {};
+    int16_t mic_buffer[AUDIO_FRAME_SAMPLES_MAX] = {};
+    int frame_samples = 0;                         // codec2 samples per frame
+    int mic_buffer_index = 0;                      // samples accumulated so far
     int tx_encode_frame_index = sizeof(c2_header); // leave room for header
     int rx_encode_frame_index = 0;
     int encode_codec_size = 0;
