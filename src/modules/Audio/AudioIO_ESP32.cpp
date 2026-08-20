@@ -11,6 +11,17 @@
 static i2s_chan_handle_t rxChan = nullptr;
 static i2s_chan_handle_t txChan = nullptr;
 
+#if AUDIO_I2S_SLOT_BITS == 32
+// Wide slots carry the sample MSB-aligned, so the codec's int16 has to be
+// unpacked from / packed into 32-bit words. Separate buffers: capture and
+// playback still run on different threads until the codec task goes away.
+static int32_t rxScratch[AUDIO_FRAME_SAMPLES_MAX];
+static int32_t txScratch[AUDIO_FRAME_SAMPLES_MAX];
+#define AUDIO_I2S_WIDTH I2S_DATA_BIT_WIDTH_32BIT
+#else
+#define AUDIO_I2S_WIDTH I2S_DATA_BIT_WIDTH_16BIT
+#endif
+
 bool audioIOBegin(uint32_t sampleRateHz, size_t frameSamples)
 {
     if (rxChan || txChan)
@@ -37,7 +48,7 @@ bool audioIOBegin(uint32_t sampleRateHz, size_t frameSamples)
 
     i2s_std_config_t stdCfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sampleRateHz),
-        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(AUDIO_I2S_WIDTH, I2S_SLOT_MODE_MONO),
         .gpio_cfg = {.mclk = I2S_GPIO_UNUSED,
                      .bclk = (gpio_num_t)moduleConfig.audio.i2s_sck,
                      .ws = (gpio_num_t)moduleConfig.audio.i2s_ws,
@@ -79,9 +90,21 @@ size_t audioIORead(int16_t *dst, size_t samples, uint32_t timeoutMs)
     if (!rxChan)
         return 0;
     size_t bytesIn = 0;
+
+#if AUDIO_I2S_SLOT_BITS == 32
+    if (samples > AUDIO_FRAME_SAMPLES_MAX)
+        samples = AUDIO_FRAME_SAMPLES_MAX;
+    if (i2s_channel_read(rxChan, rxScratch, samples * sizeof(int32_t), &bytesIn, timeoutMs) != ESP_OK)
+        return 0;
+    const size_t got = bytesIn / sizeof(int32_t);
+    for (size_t i = 0; i < got; i++)
+        dst[i] = (int16_t)(rxScratch[i] >> 16);
+    return got;
+#else
     if (i2s_channel_read(rxChan, dst, samples * sizeof(int16_t), &bytesIn, timeoutMs) != ESP_OK)
         return 0;
     return bytesIn / sizeof(int16_t);
+#endif
 }
 
 size_t audioIOWrite(const int16_t *src, size_t samples, uint32_t timeoutMs)
@@ -89,9 +112,20 @@ size_t audioIOWrite(const int16_t *src, size_t samples, uint32_t timeoutMs)
     if (!txChan)
         return 0;
     size_t bytesOut = 0;
+
+#if AUDIO_I2S_SLOT_BITS == 32
+    if (samples > AUDIO_FRAME_SAMPLES_MAX)
+        samples = AUDIO_FRAME_SAMPLES_MAX;
+    for (size_t i = 0; i < samples; i++)
+        txScratch[i] = (int32_t)src[i] << 16;
+    if (i2s_channel_write(txChan, txScratch, samples * sizeof(int32_t), &bytesOut, timeoutMs) != ESP_OK)
+        return 0;
+    return bytesOut / sizeof(int32_t);
+#else
     if (i2s_channel_write(txChan, src, samples * sizeof(int16_t), &bytesOut, timeoutMs) != ESP_OK)
         return 0;
     return bytesOut / sizeof(int16_t);
+#endif
 }
 
 #endif

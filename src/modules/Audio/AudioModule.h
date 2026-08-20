@@ -28,7 +28,6 @@ struct c2_header {
     char mode;
 };
 
-#define AUDIO_FRAME_SAMPLES_MAX 320
 #define PTT_PIN 39
 
 #define AUDIO_MODULE_RX_BUFFER 128

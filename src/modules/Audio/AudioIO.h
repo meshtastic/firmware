@@ -12,6 +12,16 @@
 // board whose mic or amp is not I2S, an I2C-configured I2S codec, or PDM does
 // not set HAS_AUDIO_CODEC2.
 
+// Largest codec2 frame we carry: 40 ms at 8 kHz.
+#define AUDIO_FRAME_SAMPLES_MAX 320
+
+// I2S slot width. Digital MEMS mics of the INMP441 / ICS43434 / MSM261 class
+// emit 24 bits inside a 32-bit slot and need 32 here; the backend then takes
+// the top 16 bits. Variants override in variant.h.
+#ifndef AUDIO_I2S_SLOT_BITS
+#define AUDIO_I2S_SLOT_BITS 16
+#endif
+
 bool audioIOBegin(uint32_t sampleRateHz, size_t frameSamples);
 void audioIOEnd();
 
