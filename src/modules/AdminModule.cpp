@@ -1034,8 +1034,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                    if (crypto && !owner.is_licensed) {
-                        crypto->ensurePkiKeys(config.security, owner);
+                    // Minting the key moves our node num with it (my_node_num == crc32(public_key)), so
+                    // persist devicestate + the node DB too - exactly as the licensed branch below does.
+                    if (!owner.is_licensed && nodeDB->ensurePkiIdentity()) {
+                        changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
                     }
 #endif
                     // new region is valid and we're coming from an unset region, so enable tx
