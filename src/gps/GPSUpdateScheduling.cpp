@@ -1,18 +1,46 @@
 #include "GPSUpdateScheduling.h"
 
 #include "Default.h"
+#include "UptimeClock.h"
+
+// Sampled from the original `2750 * seconds^1.22` curve. Interpolation tracks it within 0.6% for
+// inputs >=10s and 1.7% below that; the 1s/2s/3s points keep the convex first segment from
+// overshooting (a 0s-to-5s chord reads 42% high at 1s).
+static constexpr uint32_t kThresholdCurveSecs[] = {0, 1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 450, 600, 900};
+static constexpr uint32_t kThresholdCurveMs[] = {0,       2750,    6406,    10506,   19592,   45639,  74845,
+                                                 106314,  174350,  285925,  406141,  666053,  946093, 1551548,
+                                                 2203893, 2893481, 4745172, 6740269, 11053722};
+static constexpr size_t kThresholdCurvePoints = sizeof(kThresholdCurveSecs) / sizeof(kThresholdCurveSecs[0]);
+
+// How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
+// GPS_SOFTSLEEP? Avoids pow() so this heuristic doesn't pull double-precision libm into the image.
+uint32_t gpsHardsleepThresholdMs(uint32_t predictedSearchSecs)
+{
+    if (predictedSearchSecs >= kThresholdCurveSecs[kThresholdCurvePoints - 1])
+        return kThresholdCurveMs[kThresholdCurvePoints - 1];
+
+    size_t i = 1;
+    while (kThresholdCurveSecs[i] < predictedSearchSecs)
+        i++;
+
+    uint32_t x0 = kThresholdCurveSecs[i - 1], x1 = kThresholdCurveSecs[i];
+    uint32_t y0 = kThresholdCurveMs[i - 1], y1 = kThresholdCurveMs[i];
+    return y0 + (uint32_t)((uint64_t)(y1 - y0) * (predictedSearchSecs - x0) / (x1 - x0));
+}
 
 // Mark the time when searching for GPS position begins
 void GPSUpdateScheduling::informSearching()
 {
-    searchStartedMs = millis();
+    searching = true;
+    searchStartedMs = Time::getMillis();
 }
 
 // Mark the time when searching for GPS is complete,
 // then update the predicted lock-time
 void GPSUpdateScheduling::informGotLock()
 {
-    searchEndedMs = millis();
+    searching = false;
+    searchEndedMs = Time::getMillis();
     LOG_DEBUG("Took %us to get lock", (searchEndedMs - searchStartedMs) / 1000);
     updateLockTimePrediction();
     consecutiveFailures = 0; // Drop back to fast cadence as soon as we acquire any fix
@@ -24,7 +52,8 @@ void GPSUpdateScheduling::informGotLock()
 // down() to fall into GPS_IDLE, leaving the chip awake on subsequent indoor cycles.
 void GPSUpdateScheduling::informSearchFailed()
 {
-    searchEndedMs = millis();
+    searching = false;
+    searchEndedMs = Time::getMillis();
     consecutiveFailures++;
     LOG_DEBUG("GPS search ended without fix after %us (consecutive failures: %u)", (searchEndedMs - searchStartedMs) / 1000,
               consecutiveFailures);
@@ -34,6 +63,7 @@ void GPSUpdateScheduling::informSearchFailed()
 // When re-enabling GPS with user button.
 void GPSUpdateScheduling::reset()
 {
+    searching = false;
     searchStartedMs = 0;
     searchEndedMs = 0;
     searchCount = 0;
@@ -45,7 +75,7 @@ void GPSUpdateScheduling::reset()
 // Used by GPS hardware directly, to enter timed hardware sleep
 uint32_t GPSUpdateScheduling::msUntilNextSearch()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     // Target interval (seconds), between GPS updates
     uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval, default_gps_update_interval);
@@ -80,13 +110,12 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
 // Used to abort a search in progress, if it runs unacceptably long
 uint32_t GPSUpdateScheduling::elapsedSearchMs()
 {
-    // If searching
-    if (searchStartedMs > searchEndedMs)
-        return millis() - searchStartedMs;
+    // Recorded, not inferred from searchStartedMs > searchEndedMs: ordering two stamps inverts
+    // across the 32-bit wrap, and the inform*() calls already know which state we are in.
+    if (!searching)
+        return 0; // Not searching. We shouldn't really consume this value
 
-    // If not searching - 0ms. We shouldn't really consume this value
-    else
-        return 0;
+    return Time::getMillis() - searchStartedMs;
 }
 
 // Is it now time to begin searching for a GPS position?

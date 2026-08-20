@@ -27,6 +27,7 @@ class NodeDBTestShim : public NodeDB
     void runDemote() { demoteOldestHotNodesToWarm(); }
     void runCleanup() { cleanupMeshDB(); }
     bool runOwnerRecovery() { return recoverOwnerFromNodeDB(); }
+    void stampUntrusted(NodeNum num, uint32_t uptimeSecs) { recordHeardWhileClockUntrusted(num, uptimeSecs); }
 
     // Read back the role + protected category the warm tier cached for a node.
     bool warmMeta(NodeNum n, uint8_t &role, uint8_t &prot) { return warmStore.lookupMeta(n, role, prot); }
@@ -215,6 +216,27 @@ static void test_eviction_preservesFavorite(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(0x99990000));
 }
 
+// A node heard during this boot is newer than every persisted epoch, including valid epochs after
+// 2038. Ranking both domains in one uint32_t incorrectly evicts the current-boot node first.
+static void test_eviction_prefersCurrentBootStampOverPost2038Epoch(void)
+{
+    constexpr NodeNum futureDated = 0x70000001;
+    constexpr NodeNum heardThisBoot = 0x70000002;
+
+    db->seedSelf();
+    db->push(futureDated, 0xB5000000u, false, false, /*withUser=*/true, /*withKey=*/true);
+    db->push(heardThisBoot, 0, false, false, /*withUser=*/true, /*withKey=*/true);
+    db->stampUntrusted(heardThisBoot, 10);
+    for (int i = 3; i < MAX_NUM_NODES; i++)
+        db->push(0x70000000u + i, UINT32_MAX, false, false, /*withUser=*/true, /*withKey=*/true);
+
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes());
+    TEST_ASSERT_NOT_NULL(db->getOrCreateMeshNode(0x79999999));
+
+    TEST_ASSERT_NULL(db->getMeshNode(futureDated));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(heardThisBoot));
+}
+
 // Ignored handling: an ignored node survives eviction (like a favourite), and is
 // never purged by cleanupMeshDB even with no user info (a block set by bare ID).
 static void test_ignored_survivesEvictionAndCleanup(void)
@@ -358,6 +380,7 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_migration_carriesRoleAndProtectedIntoWarm);
     RUN_TEST(test_migration_carriesSignerBitThroughWarm);
     RUN_TEST(test_eviction_preservesFavorite);
+    RUN_TEST(test_eviction_prefersCurrentBootStampOverPost2038Epoch);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
     RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
