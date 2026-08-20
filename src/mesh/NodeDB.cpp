@@ -2148,9 +2148,9 @@ void NodeDB::demoteOldestHotNodesToWarm()
         const meshtastic_NodeInfoLite &n = (*meshNodes)[i];
         if (n.num == 0)
             continue;
-        // Keep the public key if we have one (40 B warm record); keyless nodes
-        // still get a placeholder so re-admission restores last_heard.
-        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
+        // Warm entries carry no key length, so a partial key would be indistinguishable
+        // from a full one. nullptr keeps the keyless placeholder that restores last_heard.
+        warmStore.absorb(n.num, n.last_heard, n.public_key.size == 32 ? n.public_key.bytes : nullptr, n.role,
                          warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) - they'd otherwise orphan until the next
