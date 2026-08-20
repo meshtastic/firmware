@@ -167,3 +167,53 @@ state_classify() {
 		printf 'CLEAN\t\n'
 	fi
 }
+
+# --- Error-line budget -------------------------------------------------------------------------
+#
+# A second orthogonal axis, like CLEAN/DIRTY above: a suite can pass while emitting six figures of
+# LOG_ERROR, which buries a real failure and trains everyone to skim. The budget is declared in the
+# same manifest, as an `errors=` flag, and it is a RANGE rather than a ceiling - for a fuzz suite the
+# floor is the load-bearing half. test_fuzz_decode logging ~100k rejections is it working; the same
+# suite logging none means it stopped feeding malformed input, and every case would still pass.
+#
+# Undeclared suites get ERROR_BUDGET_DEFAULT. Declared forms: "N" (max), "MIN..MAX", "MIN.." (floor
+# only). Everything is inclusive.
+ERROR_BUDGET_DEFAULT=100
+
+# Count LOG_ERROR lines in a suite's captured output.
+state_count_errors() {
+	local log="$1"
+	[[ -f $log ]] || {
+		printf '0'
+		return 0
+	}
+	# `|| true`, not `|| printf 0`: grep -c already prints 0 before exiting 1 on no match, so a
+	# fallback that prints appends a second line and the caller gets "0\n0" to do arithmetic on.
+	grep -cE '^ERROR +\|' "$log" 2>/dev/null || true
+}
+
+# VERDICT<TAB>DETAIL. WITHIN / OVER / UNDER, mirroring state_classify()'s shape.
+state_classify_errors() {
+	local count="$1" declared="$2" min=0 max="$ERROR_BUDGET_DEFAULT"
+
+	if [[ -n $declared ]]; then
+		if [[ $declared == *".."* ]]; then
+			min="${declared%%..*}"
+			max="${declared##*..}"
+			[[ -z $max ]] && max=""
+		else
+			max="$declared"
+		fi
+	fi
+
+	if [[ -n $max ]] && ((count > max)); then
+		printf 'OVER\t%d error line(s), budget %s' "$count" "${declared:-$ERROR_BUDGET_DEFAULT}"
+		return 0
+	fi
+	if ((count < min)); then
+		printf 'UNDER\t%d error line(s), expected at least %d - is it still exercising the path?' \
+			"$count" "$min"
+		return 0
+	fi
+	printf 'WITHIN\t%d' "$count"
+}

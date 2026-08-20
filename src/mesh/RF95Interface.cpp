@@ -129,7 +129,8 @@ bool RF95Interface::init()
 
     limitPower(RF95_MAX_POWER);
 
-    iface = lora = new RadioLibRF95(&module);
+    lora.reset(new RadioLibRF95(&module));
+    iface = lora.get();
 
 #ifdef RF95_TCXO
     pinMode(RF95_TCXO, OUTPUT);

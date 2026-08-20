@@ -23,6 +23,9 @@
 #include "graphics/images.h"
 #include "main.h"
 #include "target_specific.h"
+#ifdef COMPASS_SENSOR_DEBUG
+#include "motion/MotionSensor.h"
+#endif
 #include <OLEDDisplay.h>
 #include <cstring>
 #include <gps/RTC.h>
@@ -543,7 +546,7 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
     if (currentResolution == ScreenResolution::High) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
-        display->drawXbm(x + 1, y + 1, imgGPS_width, imgGPS_height, imgGPS);
+        display->drawXbm(x + 1, y + 3, imgGPS_width, imgGPS_height, imgGPS);
     }
 
     display->drawString(x + textOffset, y, textString);
@@ -1775,6 +1778,26 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     graphics::drawCommonHeader(display, x, y, titleStr);
     const int *textPos = getTextPositions(display);
     const bool compactPanel = graphics::isCompactPanel(display);
+
+#ifdef COMPASS_SENSOR_DEBUG
+    // Optional raw IMU accel + magnetometer x/y/z readout for on-device axis/sign tuning.
+    {
+        char dbg[40];
+        float sx = 0, sy = 0, sz = 0;
+        uint32_t age = 0;
+        if (MotionSensor::getLatestCompassAccelSample(sx, sy, sz, age))
+            snprintf(dbg, sizeof(dbg), "A %.2f %.2f %.2f", sx, sy, sz);
+        else
+            snprintf(dbg, sizeof(dbg), "A ---");
+        display->drawString(x, textPos[line++], dbg);
+
+        if (MotionSensor::getLatestCompassMagSample(sx, sy, sz, age))
+            snprintf(dbg, sizeof(dbg), "M %.2f %.2f %.2f", sx, sy, sz);
+        else
+            snprintf(dbg, sizeof(dbg), "M ---");
+        display->drawString(x, textPos[line++], dbg);
+    }
+#endif
 
     // === First Row: My Location ===
 #if HAS_GPS
