@@ -1,7 +1,7 @@
 #pragma once
 
 #include "SinglePortModule.h"
-#include "concurrency/NotifiedWorkerThread.h"
+#include "concurrency/Lock.h"
 #include "configuration.h"
 #if defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
 
@@ -12,63 +12,31 @@
 
 #include "AudioIO.h"
 #include "AudioModeSelect.h"
+#include "AudioStream.h"
 #include "ButterworthFilter.h"
 #include "NodeDB.h"
 #include <Arduino.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <codec2.h>
-#include <functional>
 
 enum RadioState { standby, rx, tx };
 
-const char c2_magic[3] = {0xc0, 0xde, 0xc2}; // Magic number for codec2 header
-
-struct c2_header {
-    char magic[3];
-    char mode;
-};
-
+#ifndef PTT_PIN
 #define PTT_PIN 39
-
-#define AUDIO_MODULE_RX_BUFFER 128
+#endif
 
 class AudioModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
   public:
-    unsigned char rx_encode_frame[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
-    unsigned char tx_encode_frame[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
-    c2_header tx_header = {};
-    int16_t speech[AUDIO_FRAME_SAMPLES_MAX] = {};
-    int16_t output_buffer[AUDIO_FRAME_SAMPLES_MAX] = {};
-    int16_t mic_buffer[AUDIO_FRAME_SAMPLES_MAX] = {};
-    int frame_samples = 0;                         // codec2 samples per frame
-    int mic_buffer_index = 0;                      // samples accumulated so far
-    int tx_encode_frame_index = sizeof(c2_header); // leave room for header
-    int rx_encode_frame_index = 0;
-    int encode_codec_size = 0;
-    int encode_frame_size = 0;
-    volatile RadioState radio_state = RadioState::rx;
-
-    struct CODEC2 *codec2 = NULL;
-    // int16_t sample;
-
     AudioModule();
 
     bool shouldDraw();
 
-    /**
-     * Send our payload into the mesh
-     */
-    void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
   protected:
-    int encode_frame_num = 0;
-    bool firstTime = true;
-
     virtual int32_t runOnce() override;
-
     virtual meshtastic_MeshPacket *allocReply() override;
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
@@ -78,11 +46,39 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 #endif
 
-    /** Called to handle a particular incoming message
-     * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered
-     * for it
-     */
-    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+  private:
+    void onPttDown();
+    void onPttUp();
+    void captureAndEncode();
+    void sendPacket(bool last);
+    void servicePlayout();
+    static void emitDecoded(void *ctx, const uint8_t *frames, size_t len, uint8_t mode, bool conceal);
+    void decodeAndPlay(const uint8_t *frames, size_t len, uint8_t mode);
+
+    struct CODEC2 *codec2 = nullptr;
+    const AudioModeInfo *mode = nullptr;
+
+    uint8_t txPacket[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
+    uint16_t txLen = AUDIO_HEADER_LEN;
+    uint8_t txSession = 0;
+    uint16_t txSeq = 0;
+
+    int16_t speech[AUDIO_FRAME_SAMPLES_MAX] = {};
+    int16_t playBuf[AUDIO_FRAME_SAMPLES_MAX] = {};
+    int16_t micBuf[AUDIO_FRAME_SAMPLES_MAX] = {};
+    int micIndex = 0;
+
+    int frameSamples = 0;
+    int bytesPerFrame = 0;
+    int framesPerPacket = 0;
+
+    // handleReceived runs on the Router thread, runOnce on ours.
+    AudioStreamAssembler stream;
+    concurrency::Lock streamLock;
+
+    RadioState radio_state = RadioState::rx;
+    bool firstTime = true;
+    uint32_t nextPlayoutMs = 0;
 };
 
 extern AudioModule *audioModule;
