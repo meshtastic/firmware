@@ -1210,7 +1210,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     float spacing = newRegion->getSpacing(check_bw);
     float padding = newRegion->getPadding(check_bw);
     float freqSlotWidth = spacing + (padding * 2) + (check_bw / 1000.0f); // in MHz
-    uint32_t numFreqSlots = floor((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
+    uint32_t numFreqSlots = (uint32_t)((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
 
     // Check if the region supports the requested bandwidth
     if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
@@ -1228,7 +1228,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             spacing = newRegion->getSpacing(check_bw);
             padding = newRegion->getPadding(check_bw);
             freqSlotWidth = spacing + (padding * 2) + (check_bw / 1000.0f); // in MHz
-            numFreqSlots = floor((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
+            numFreqSlots = (uint32_t)((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
         } else {
             return false;
         }
@@ -1403,7 +1403,7 @@ void RadioInterface::applyModemConfig()
     float spacing = newRegion->getSpacing(bw);
     float padding = newRegion->getPadding(bw);
     float freqSlotWidth = spacing + (padding * 2) + (bw / 1000.0f); // in MHz
-    uint32_t numFreqSlots = floor((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
+    uint32_t numFreqSlots = (uint32_t)((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
 
     // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to

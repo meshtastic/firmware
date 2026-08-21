@@ -540,7 +540,7 @@ void menuHandler::FrequencySlotPicker()
         const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing + 0.001;
         const double denominator = spacing + (padding * 2) + channelBandwidthMHz;
         if (denominator > 0.0) {
-            numChannels = static_cast<uint32_t>(floor(numerator / denominator));
+            numChannels = static_cast<uint32_t>(numerator / denominator);
         } else {
             LOG_WARN("Invalid region config: non-positive channel spacing/width");
         }
