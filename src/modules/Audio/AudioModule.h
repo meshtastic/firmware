@@ -64,13 +64,22 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     void sendPacket(bool last);
     void servicePlayout();
     void cycleDestination();
+    bool audioAllowed();
+    const AudioModeInfo *pickMode();
+    bool setTxMode(const AudioModeInfo *m);
     const char *destinationLabel();
     const char *talkerLabel();
     static void emitDecoded(void *ctx, const uint8_t *frames, size_t len, uint8_t mode, bool conceal);
     void decodeAndPlay(const uint8_t *frames, size_t len, uint8_t mode);
 
+    // Separate instances: we may transmit degraded while a peer transmits at
+    // its own rate, and codec2 state is per mode.
     struct CODEC2 *codec2 = nullptr;
     const AudioModeInfo *mode = nullptr;
+    struct CODEC2 *rxCodec = nullptr;
+    int8_t rxCodecMode = AUDIO_C2_NONE;
+    int rxFrameSamples = 0;
+    int rxBytesPerFrame = 0;
 
     uint8_t txPacket[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
     uint16_t txLen = AUDIO_HEADER_LEN;

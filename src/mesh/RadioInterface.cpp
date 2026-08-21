@@ -92,9 +92,9 @@ const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
 const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
 // Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
-const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 0, 2, 2};
+const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, true, true, 0, 2, 2};
 // Ham '100kHz' profile. 62.5kHz bandwidth coerced to 100kHz via padding.
-const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, false, true, 0, 1, 1};
+const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, true, true, 0, 1, 1};
 
 Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 

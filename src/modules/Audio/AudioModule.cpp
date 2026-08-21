@@ -5,7 +5,9 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "RadioLibInterface.h"
 #include "Router.h"
+#include "airtime.h"
 #include "buzz/buzz.h"
 #include "concurrency/LockGuard.h"
 #include "graphics/ScreenFonts.h"
@@ -36,6 +38,7 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
         disable();
         return;
     }
+    // Duty cycle is checked in runOnce, not here: the region can change later.
 
     // Must happen before codec2_create() when the tables are not in the image.
     const char *bindErr = audioCodebooksBind();
@@ -54,20 +57,15 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
         return;
     }
 
-    codec2 = codec2_create(mode->codec2Mode);
-    if (!codec2) {
-        LOG_ERROR("Audio disabled: codec2 mode %d not built into this firmware", mode->codec2Mode);
+    const AudioModeInfo *want = mode;
+    mode = nullptr; // setTxMode compares against this
+    if (!setTxMode(want)) {
+        LOG_ERROR("Audio disabled: codec2 mode %d not built into this firmware", want->codec2Mode);
         disable();
         return;
     }
-    codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
-
-    frameSamples = codec2_samples_per_frame(codec2);
-    bytesPerFrame = codec2_bytes_per_frame(codec2);
-    framesPerPacket = audioFramesPerPacket(*mode);
 
     stream.begin(emitDecoded, this);
-    stream.setPacketMs(audioMsPerPacket(*mode));
 
     LOG_INFO("Audio: %u bit/s, %d frames of %d bytes per packet, %u ms of speech", mode->bitrate, framesPerPacket, bytesPerFrame,
              (unsigned)audioMsPerPacket(*mode));
@@ -205,6 +203,52 @@ const char *AudioModule::talkerLabel()
     return label;
 }
 
+// Regulatory and practicality gates. The radio does not exist when the module
+// is constructed, so none of this can move into the constructor.
+bool AudioModule::audioAllowed()
+{
+    if (!moduleConfig.audio.codec2_enabled || !myRegion->profile->audioPermitted)
+        return false;
+    // A duty-cycled region cannot carry a continuous voice stream at all.
+    return getEffectiveDutyCycle() >= 100;
+}
+
+// Degrade until the mode fits the preset, one rung further if the channel is
+// already busy. Null when even the lowest rate cannot fit.
+const AudioModeInfo *AudioModule::pickMode()
+{
+    if (!RadioLibInterface::instance)
+        return audioModeFromConfig(moduleConfig.audio.bitrate);
+
+    const uint32_t airMs =
+        RadioLibInterface::instance->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    const float util = airTime ? airTime->channelUtilizationPercent() : 0.0f;
+    return chooseAudioMode(moduleConfig.audio.bitrate, airMs, util);
+}
+
+bool AudioModule::setTxMode(const AudioModeInfo *m)
+{
+    if (m == mode && codec2)
+        return true;
+
+    struct CODEC2 *c = codec2_create(m->codec2Mode);
+    if (!c) {
+        LOG_ERROR("Audio: codec2 mode %d not built in", m->codec2Mode);
+        return false;
+    }
+    codec2_set_lpc_post_filter(c, 1, 0, 0.8, 0.2);
+    if (codec2)
+        codec2_destroy(codec2);
+
+    codec2 = c;
+    mode = m;
+    frameSamples = codec2_samples_per_frame(c);
+    bytesPerFrame = codec2_bytes_per_frame(c);
+    framesPerPacket = audioFramesPerPacket(*m);
+    stream.setPacketMs(audioMsPerPacket(*m));
+    return true;
+}
+
 bool AudioModule::onPttDown()
 {
     {
@@ -214,6 +258,22 @@ bool AudioModule::onPttDown()
             playLongBeep();
             return false;
         }
+    }
+
+    const AudioModeInfo *want = pickMode();
+    if (!want) {
+        LOG_WARN("PTT refused, no codec2 rate fits this preset");
+        playLongBeep();
+        return false;
+    }
+    const bool degraded = want->bitrate < audioModeFromConfig(moduleConfig.audio.bitrate)->bitrate;
+    if (!setTxMode(want)) {
+        playLongBeep();
+        return false;
+    }
+    if (degraded) {
+        LOG_INFO("Audio degraded to %u bit/s", want->bitrate);
+        play4ClickDown();
     }
 
     radio_state = RadioState::tx;
@@ -297,16 +357,29 @@ void AudioModule::emitDecoded(void *ctx, const uint8_t *frames, size_t len, uint
 
 void AudioModule::decodeAndPlay(const uint8_t *frames, size_t len, uint8_t packetMode)
 {
-    if (packetMode != mode->codec2Mode) {
-        // A talker on another bitrate. Decoding would need a second codec2
-        // instance; drop with a note rather than emit noise.
-        LOG_WARN("Audio: ignoring packet in codec2 mode %u, we are in %d", packetMode, mode->codec2Mode);
-        return;
+    // Peers degrade independently, so the incoming rate is whatever the sender
+    // chose. Keep a decoder for it rather than dropping the packet.
+    if ((int8_t)packetMode != rxCodecMode) {
+        if (rxCodec)
+            codec2_destroy(rxCodec);
+        rxCodec = codec2_create(packetMode);
+        if (!rxCodec) {
+            LOG_WARN("Audio: cannot decode codec2 mode %u, not built in", packetMode);
+            rxCodecMode = AUDIO_C2_NONE;
+            return;
+        }
+        codec2_set_lpc_post_filter(rxCodec, 1, 0, 0.8, 0.2);
+        rxCodecMode = (int8_t)packetMode;
+        rxFrameSamples = codec2_samples_per_frame(rxCodec);
+        rxBytesPerFrame = codec2_bytes_per_frame(rxCodec);
+        LOG_INFO("Audio: receiving codec2 mode %u", packetMode);
     }
+    if (!rxCodec)
+        return;
 
-    for (size_t i = 0; i + bytesPerFrame <= len; i += bytesPerFrame) {
-        codec2_decode(codec2, playBuf, frames + i);
-        audioIOWrite(playBuf, frameSamples, 500);
+    for (size_t i = 0; i + rxBytesPerFrame <= len; i += rxBytesPerFrame) {
+        codec2_decode(rxCodec, playBuf, frames + i);
+        audioIOWrite(playBuf, rxFrameSamples, 500);
     }
 }
 
@@ -323,7 +396,7 @@ void AudioModule::servicePlayout()
 
 int32_t AudioModule::runOnce()
 {
-    if (!moduleConfig.audio.codec2_enabled || !myRegion->profile->audioPermitted)
+    if (!audioAllowed())
         return disable();
 
     if (firstTime) {
@@ -392,7 +465,7 @@ bool AudioModule::shouldDraw()
 
 ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (!moduleConfig.audio.codec2_enabled || !myRegion->profile->audioPermitted || isFromUs(&mp))
+    if (!audioAllowed() || isFromUs(&mp))
         return ProcessMessage::CONTINUE;
 
     // Runs on the Router thread; runOnce drains the stream on ours.

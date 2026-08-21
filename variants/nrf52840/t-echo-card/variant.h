@@ -196,6 +196,13 @@ static const uint8_t A0 = PIN_A0;
 #define MIC_SCLK (32 + 3) // P1.3 - PDM clock (MIC_SCLK on vendor header)
 #define MIC_DATA (32 + 5) // P1.5 - PDM data (MIC_DATA on vendor header)
 
+// Codec2 voice. PDM capture at 16 kHz decimated to 8 kHz, MAX98357 playback,
+// and the VQ codebooks in the ZD25WQ32CEIGR rather than internal flash, which
+// is 92% full with them in the image.
+#define HAS_AUDIO_CODEC2
+#define CODEC2_EXTERNAL_CODEBOOKS
+#define PTT_PIN PIN_BUTTON1
+
 #define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
