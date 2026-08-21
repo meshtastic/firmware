@@ -33,13 +33,13 @@ void tearDown() {}
 
 // Payload bytes are all `tag`, so emissions are identifiable.
 static void feed(NodeNum from, uint16_t seq, uint8_t tag, uint32_t nowMs, bool last = false, uint8_t session = SESSION,
-                 uint8_t mode = MODE)
+                 uint8_t mode = MODE, uint8_t channel = 0, bool isDm = false)
 {
     uint8_t buf[AUDIO_HEADER_LEN + 8];
     AudioHeader h{AUDIO_MAGIC, mode, session, (uint8_t)(last ? 1 : 0), seq};
     memcpy(buf, &h, sizeof(h));
     memset(buf + sizeof(h), tag, 8);
-    asm_.accept(from, buf, sizeof(buf), nowMs);
+    asm_.accept(from, channel, isDm, buf, sizeof(buf), nowMs);
 }
 
 static void drain(uint32_t nowMs, int steps = 8)
@@ -228,8 +228,8 @@ static void test_rejects_foreign_payload()
 {
     uint8_t buf[16] = {0};
     buf[0] = 0x00; // wrong magic
-    TEST_ASSERT_FALSE(asm_.accept(ALICE, buf, sizeof(buf), 100));
-    TEST_ASSERT_FALSE(asm_.accept(ALICE, buf, 2, 100)); // shorter than the header
+    TEST_ASSERT_FALSE(asm_.accept(ALICE, 0, false, buf, sizeof(buf), 100));
+    TEST_ASSERT_FALSE(asm_.accept(ALICE, 0, false, buf, 2, 100)); // shorter than the header
 }
 
 // Gap at the head with a full ring must not deadlock.
@@ -242,6 +242,15 @@ static void test_ring_full_forces_progress()
     feed(ALICE, 5, 15, 100);
     drain(100);
     TEST_ASSERT_TRUE(emitted.size() > 0);
+}
+
+// The receive display names the talker, so from/channel/DM have to stick.
+static void test_sender_metadata_survives_the_stream()
+{
+    feed(ALICE, 0, 10, 100, false, SESSION, MODE, 3, true);
+    TEST_ASSERT_EQUAL_UINT32(ALICE, asm_.talker());
+    TEST_ASSERT_EQUAL_UINT8(3, asm_.talkerChannel());
+    TEST_ASSERT_TRUE(asm_.talkerIsDm());
 }
 
 void setup()
@@ -264,6 +273,7 @@ void setup()
     RUN_TEST(test_mode_travels_with_the_packet);
     RUN_TEST(test_rejects_foreign_payload);
     RUN_TEST(test_ring_full_forces_progress);
+    RUN_TEST(test_sender_metadata_survives_the_stream);
     exit(UNITY_END());
 }
 

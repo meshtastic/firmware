@@ -33,6 +33,10 @@ enum RadioState { standby, rx, tx };
 #endif
 #define AUDIO_PTT_WARN_MS 10000
 
+// Hold this long to transmit; a shorter press cycles the destination. Matches
+// PTT discipline of keying up before speaking, so nothing is clipped.
+#define AUDIO_PTT_ARM_MS 300
+
 class AudioModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
   public:
@@ -59,6 +63,9 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     void captureAndEncode();
     void sendPacket(bool last);
     void servicePlayout();
+    void cycleDestination();
+    const char *destinationLabel();
+    const char *talkerLabel();
     static void emitDecoded(void *ctx, const uint8_t *frames, size_t len, uint8_t mode, bool conceal);
     void decodeAndPlay(const uint8_t *frames, size_t len, uint8_t mode);
 
@@ -86,8 +93,16 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     RadioState radio_state = RadioState::rx;
     bool firstTime = true;
     bool pttLatched = false; // held down but refused, ignore until released
+    bool pttHeld = false;
+    uint32_t pttDownMs = 0;
     uint32_t nextPlayoutMs = 0;
     uint32_t pttStartMs = 0;
+
+    // Transmit destination. NODENUM_BROADCAST plus a channel index is a channel;
+    // any other node number is a DM. Receive is unaffected by this.
+    NodeNum txDest = NODENUM_BROADCAST;
+    uint8_t txChannel = 0;
+    char label[24] = {};
 };
 
 extern AudioModule *audioModule;

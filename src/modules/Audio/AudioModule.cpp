@@ -2,6 +2,7 @@
 #if defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "AudioCodebooks.h"
 #include "AudioModule.h"
+#include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
@@ -72,30 +73,136 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
              (unsigned)audioMsPerPacket(*mode));
 }
 
+// Truncate in place until the string fits, so a long node or channel name does
+// not run off a 72 px panel.
+static void fitToWidth(OLEDDisplay *display, char *str, uint16_t width)
+{
+    while (str[0] && display->getStringWidth(str) > width) {
+        size_t n = strlen(str);
+        str[n - 1] = 0;
+    }
+}
+
 void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    char buffer[50];
+    const bool sending = radio_state == RadioState::tx;
 
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    bool receiving;
+    {
+        concurrency::LockGuard g(&streamLock);
+        receiving = stream.isReceiving();
+    }
+
+    char who[32];
+    if (sending)
+        snprintf(who, sizeof(who), ">%s", destinationLabel());
+    else if (receiving)
+        snprintf(who, sizeof(who), "<%s", talkerLabel());
+    else
+        snprintf(who, sizeof(who), ">%s", destinationLabel()); // idle: show who we would talk to
+
+    char status[12];
+    if (sending) {
+        const uint32_t held = millis() - pttStartMs;
+        if (held + AUDIO_PTT_WARN_MS >= AUDIO_MAX_PTT_MS)
+            snprintf(status, sizeof(status), "%u", (unsigned)((AUDIO_MAX_PTT_MS - held + 999) / 1000));
+        else
+            snprintf(status, sizeof(status), "PTT");
+    } else {
+        if (receiving)
+            snprintf(status, sizeof(status), "RX");
+        else
+            snprintf(status, sizeof(status), "%u", (unsigned)(mode ? mode->bitrate : 0));
+    }
+
     display->setFont(FONT_SMALL);
+    fitToWidth(display, who, display->getWidth());
+
+#if defined(OLED_TINY)
+    // 72x40 with 13 px lines: two centred rows, no header bar. The compact UI
+    // draws no nav chrome either.
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(display->getWidth() / 2 + x, y, who);
+    display->drawString(display->getWidth() / 2 + x, y + FONT_HEIGHT_SMALL, status);
+#else
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
     display->setColor(BLACK);
-    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 %u bit/s", mode ? mode->bitrate : 0);
+    display->drawString(0 + x, 0 + y, who);
     display->setColor(WHITE);
+
     display->setFont(FONT_LARGE);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    const char *label = "Receive";
-    char countdown[8];
-    if (radio_state == RadioState::tx) {
-        const uint32_t held = millis() - pttStartMs;
-        if (held + AUDIO_PTT_WARN_MS >= AUDIO_MAX_PTT_MS) {
-            snprintf(countdown, sizeof(countdown), "%u", (unsigned)((AUDIO_MAX_PTT_MS - held + 999) / 1000));
-            label = countdown;
-        } else {
-            label = "PTT";
+    display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, status);
+#endif
+}
+
+void AudioModule::cycleDestination()
+{
+    if (txDest == NODENUM_BROADCAST) {
+        for (uint8_t ch = txChannel + 1; ch < channels.getNumChannels(); ch++) {
+            if (channels.getByIndex(ch).role != meshtastic_Channel_Role_DISABLED) {
+                txChannel = ch;
+                return;
+            }
         }
     }
-    display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, label);
+
+    // Past the last channel, walk the favourites, then wrap to channel 0.
+    const size_t total = nodeDB->getNumMeshNodes();
+    bool seenCurrent = (txDest == NODENUM_BROADCAST);
+    for (size_t i = 0; i < total; i++) {
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (!n || n->num == nodeDB->getNodeNum() || !nodeInfoLiteIsFavorite(n))
+            continue;
+        if (seenCurrent) {
+            txDest = n->num;
+            txChannel = 0;
+            return;
+        }
+        if (n->num == txDest)
+            seenCurrent = true;
+    }
+
+    txDest = NODENUM_BROADCAST;
+    txChannel = 0;
+}
+
+const char *AudioModule::destinationLabel()
+{
+    if (txDest == NODENUM_BROADCAST)
+        snprintf(label, sizeof(label), "#%s", channels.getName(txChannel));
+    else {
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(txDest);
+        if (n && nodeInfoLiteHasUser(n) && n->short_name[0])
+            snprintf(label, sizeof(label), "%s", n->short_name);
+        else
+            snprintf(label, sizeof(label), "%08x", (unsigned)txDest);
+    }
+    return label;
+}
+
+// Bare name for a DM, name@#channel otherwise, following MessageRenderer.
+const char *AudioModule::talkerLabel()
+{
+    NodeNum from;
+    uint8_t ch;
+    bool dm;
+    {
+        concurrency::LockGuard g(&streamLock);
+        from = stream.talker();
+        ch = stream.talkerChannel();
+        dm = stream.talkerIsDm();
+    }
+
+    meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(from);
+    const char *who = (n && nodeInfoLiteHasUser(n) && n->short_name[0]) ? n->short_name : nullptr;
+
+    if (who)
+        snprintf(label, sizeof(label), dm ? "%s" : "%s@#%s", who, channels.getName(ch));
+    else
+        snprintf(label, sizeof(label), dm ? "%08x" : "%08x@#%s", (unsigned)from, channels.getName(ch));
+    return label;
 }
 
 bool AudioModule::onPttDown()
@@ -119,7 +226,7 @@ bool AudioModule::onPttDown()
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
-    LOG_INFO("PTT pressed, session %u", txSession);
+    LOG_INFO("PTT pressed, session %u to 0x%08x", txSession, (unsigned)txDest);
     return true;
 }
 
@@ -167,7 +274,8 @@ void AudioModule::sendPacket(bool last)
     meshtastic_MeshPacket *p = allocReply();
     if (!p)
         return;
-    p->to = NODENUM_BROADCAST;
+    p->to = txDest;
+    p->channel = txChannel;
     p->decoded.want_response = false;
     p->want_ack = false; // shoot and forget, an ACK would arrive far too late
     p->priority = meshtastic_MeshPacket_Priority_MAX;
@@ -230,10 +338,27 @@ int32_t AudioModule::runOnce()
     }
 
     const bool pressed = digitalRead(pttPin()) == HIGH;
-    if (!pressed)
-        pttLatched = false;
 
-    if (pressed && radio_state == RadioState::rx && !pttLatched) {
+    if (pressed && !pttHeld) {
+        pttHeld = true;
+        pttDownMs = millis();
+    } else if (!pressed && pttHeld) {
+        pttHeld = false;
+        // Released before arming and never transmitted: a short press, which
+        // picks who we would be talking to.
+        if (radio_state != RadioState::tx && !pttLatched) {
+            cycleDestination();
+            playClick();
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+        }
+        pttLatched = false;
+    }
+
+    const bool armed = pttHeld && !Throttle::isWithinTimespanMs(pttDownMs, AUDIO_PTT_ARM_MS);
+
+    if (armed && radio_state == RadioState::rx && !pttLatched) {
         if (!onPttDown())
             pttLatched = true; // refused; wait for a release before asking again
     } else if (!pressed && radio_state == RadioState::tx) {
@@ -272,7 +397,8 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     // Runs on the Router thread; runOnce drains the stream on ours.
     concurrency::LockGuard g(&streamLock);
-    stream.accept(getFrom(&mp), mp.decoded.payload.bytes, mp.decoded.payload.size, millis());
+    const bool isDm = mp.to != NODENUM_BROADCAST;
+    stream.accept(getFrom(&mp), mp.channel, isDm, mp.decoded.payload.bytes, mp.decoded.payload.size, millis());
 
     return ProcessMessage::CONTINUE;
 }

@@ -65,7 +65,7 @@ class AudioStreamAssembler
     bool isActive() const { return active; }
 
     /// @return false if the packet was not ours to take
-    bool accept(NodeNum from, const uint8_t *payload, size_t len, uint32_t nowMs)
+    bool accept(NodeNum from, uint8_t channel, bool isDm, const uint8_t *payload, size_t len, uint32_t nowMs)
     {
         if (len <= sizeof(AudioHeader))
             return false;
@@ -80,7 +80,7 @@ class AudioStreamAssembler
 
         if (active && (from != streamFrom || h.session != streamSession)) {
             if (!expired(nowMs)) {
-                enqueue(from, h.session, payload, len);
+                enqueue(from, channel, isDm, h.session, payload, len);
                 return true;
             }
             endStream();
@@ -91,6 +91,8 @@ class AudioStreamAssembler
             priming = true;
             primeStartMs = nowMs;
             streamFrom = from;
+            streamChannel = channel;
+            streamIsDm = isDm;
             streamSession = h.session;
             streamMode = h.mode;
             playoutSeq = h.seq; // the opening packet is the likeliest loss
@@ -170,6 +172,10 @@ class AudioStreamAssembler
     /// True while a transmission is in progress, so PTT should refuse.
     bool isReceiving() const { return active; }
 
+    NodeNum talker() const { return streamFrom; }
+    uint8_t talkerChannel() const { return streamChannel; }
+    bool talkerIsDm() const { return streamIsDm; }
+
     bool hasQueued() const { return queue.used > 0; }
 
   private:
@@ -197,12 +203,14 @@ class AudioStreamAssembler
     bool expired(uint32_t nowMs) const { return (uint32_t)(nowMs - lastRxMs) > idleTimeoutMs(); }
 
     // Packets from a second sender, stored whole so promotion is just a replay.
-    void enqueue(NodeNum from, uint8_t session, const uint8_t *payload, size_t len)
+    void enqueue(NodeNum from, uint8_t channel, bool isDm, uint8_t session, const uint8_t *payload, size_t len)
     {
         if (queue.used && (queue.from != from || queue.session != session))
             return; // already holding someone else
         if (queue.used == 0) {
             queue.from = from;
+            queue.channel = channel;
+            queue.isDm = isDm;
             queue.session = session;
         }
         if (queue.used + 2 + len > AUDIO_QUEUE_BYTES) {
@@ -230,6 +238,8 @@ class AudioStreamAssembler
         static uint8_t scratch[AUDIO_QUEUE_BYTES];
         const uint16_t n = queue.used;
         const NodeNum from = queue.from;
+        const uint8_t channel = queue.channel;
+        const bool isDm = queue.isDm;
         memcpy(scratch, queue.buf, n);
         queue.used = 0;
         queue.truncated = false;
@@ -240,7 +250,7 @@ class AudioStreamAssembler
             off += 2;
             if (off + len > n)
                 break;
-            accept(from, scratch + off, len, lastRxMs);
+            accept(from, channel, isDm, scratch + off, len, lastRxMs);
             off += len;
         }
     }
@@ -323,6 +333,8 @@ class AudioStreamAssembler
     bool sawLast = false;
 
     NodeNum streamFrom = 0;
+    uint8_t streamChannel = 0;
+    bool streamIsDm = false;
     uint8_t streamSession = 0;
     uint8_t streamMode = 0;
     uint16_t playoutSeq = 0;
@@ -333,6 +345,8 @@ class AudioStreamAssembler
 
     struct {
         NodeNum from;
+        uint8_t channel;
+        bool isDm;
         uint8_t session;
         uint16_t used;
         bool truncated;
