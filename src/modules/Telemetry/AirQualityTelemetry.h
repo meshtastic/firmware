@@ -5,6 +5,7 @@
 #pragma once
 #include "BaseTelemetryModule.h"
 #include <map>
+#include <memory>
 
 #ifndef AIR_QUALITY_TELEMETRY_MODULE_ENABLE
 #define AIR_QUALITY_TELEMETRY_MODULE_ENABLE 0
@@ -57,7 +58,6 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
         openHistory(); // safe here: fsInit() and setupSDCard() both run before setupModules()
     }
 
-    ~AirQualityTelemetryModule() { delete history; }
     virtual bool wantUIFrame() override;
 #if !HAS_SCREEN
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -110,7 +110,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
 
     // The offload publishes one of these rather than reading again, so one warm-up feeds the phone,
     // the mesh, the screen and on-demand requests. Never null once openHistory() has run.
-    TelemetryStore<meshtastic_AirQualityMetrics> *history = nullptr;
+    std::unique_ptr<TelemetryStore<meshtastic_AirQualityMetrics>> history;
 
     uint32_t lastReadMs = 0; // monotonic millis() of the last read attempt
     bool everRead = false;   // false until the first read attempt, whatever its outcome

@@ -18,8 +18,7 @@
 #endif
 
 /// Fixed-size ring in a preallocated file, so readings outlive a reboot or deep sleep. One
-/// record-sized write per reading: SD is the intended target, internal flash wears. Each op opens
-/// and closes, so nothing is stranded by a sleep, and a drain costs one open per record.
+/// record-sized write per reading, so SD is the intended target and internal flash wears.
 template <typename T, typename FsT = typename std::remove_reference<decltype(FSCom)>::type>
 class FileTelemetryStore : public TelemetryStore<T>
 {
@@ -50,14 +49,31 @@ class FileTelemetryStore : public TelemetryStore<T>
 
     static uint32_t offsetOf(uint16_t slot) { return sizeof(Header) + (uint32_t)slot * sizeof(Record); }
 
-    bool writeHeader()
+    bool fileExists()
+    {
+        concurrency::LockGuard g(spiLock);
+        return fs.exists(path);
+    }
+
+    uint32_t fileSize()
+    {
+        concurrency::LockGuard g(spiLock);
+        auto f = fs.open(path, FILE_O_READ);
+        if (!f)
+            return 0;
+        const uint32_t n = f.size();
+        f.close();
+        return n;
+    }
+
+    bool writeHeader(const Header &h)
     {
         concurrency::LockGuard g(spiLock);
         auto f = fs.open(path, TELEMETRY_STORE_O_RW);
         if (!f)
             return false;
         f.seek(0);
-        const bool ok = f.write((const uint8_t *)&hdr, sizeof(hdr)) == sizeof(hdr);
+        const bool ok = f.write((const uint8_t *)&h, sizeof(h)) == sizeof(h);
         f.flush();
         f.close();
         return ok;
@@ -67,6 +83,10 @@ class FileTelemetryStore : public TelemetryStore<T>
     bool create(uint16_t slots)
     {
         concurrency::LockGuard g(spiLock);
+        // Explicit, because the flag-mode backends open read-write without truncating
+        if (fs.exists(path))
+            fs.remove(path);
+
         auto f = fs.open(path, TELEMETRY_STORE_O_CREATE);
         if (!f) {
             LOG_ERROR("Telemetry store: cannot create %s", path);
@@ -107,17 +127,18 @@ class FileTelemetryStore : public TelemetryStore<T>
             return;
 
         // A different payload layout or ring size cannot be read back - start over.
-        if (!fs.exists(path) || !readHeader() || hdr.magic != MAGIC || hdr.version != VERSION ||
-            hdr.recordSize != sizeof(Record) || hdr.slots != slots) {
-            if (fs.exists(path))
+        if (!fileExists() || !readHeader() || hdr.magic != MAGIC || hdr.version != VERSION || hdr.recordSize != sizeof(Record) ||
+            hdr.slots != slots) {
+            if (fileExists())
                 LOG_INFO("Telemetry store: %s has a different layout, recreating", path);
             usable = create(slots);
             return;
         }
 
-        // Cut-off preallocation
-        if (hdr.head >= slots || hdr.count > slots) {
-            LOG_WARN("Telemetry store: %s header is inconsistent, recreating", path);
+        // Inconsistent header, or a file shorter than the geometry it claims: an interrupted
+        // preallocation would leave the second, and at() would read past the end
+        if (hdr.head >= slots || hdr.count > slots || fileSize() < offsetOf(slots)) {
+            LOG_WARN("Telemetry store: %s geometry is inconsistent, recreating", path);
             usable = create(slots);
             return;
         }
@@ -154,12 +175,17 @@ class FileTelemetryStore : public TelemetryStore<T>
                 return false;
         }
 
-        if (hdr.count < hdr.slots)
-            hdr.count++;
+        Header next = hdr;
+        if (next.count < next.slots)
+            next.count++;
         else
-            hdr.head = (hdr.head + 1) % hdr.slots; // the write above overwrote the old head
+            next.head = (next.head + 1) % next.slots; // the write above overwrote the old head
 
-        return writeHeader();
+        // Commit in RAM only once it is on disk, so a failed write cannot expose an uncounted slot
+        if (!writeHeader(next))
+            return false;
+        hdr = next;
+        return true;
     }
 
     uint16_t size() const override { return usable ? hdr.count : 0; }
@@ -203,9 +229,11 @@ class FileTelemetryStore : public TelemetryStore<T>
             return;
         // Just the mask byte; the metrics beside it are unchanged
         f.seek(offsetOf((hdr.head + i) % hdr.slots) + offsetof(Record, publishedMask));
-        f.write(&mask, 1);
+        const bool ok = f.write(&mask, 1) == 1;
         f.flush();
         f.close();
+        if (!ok)
+            LOG_WARN("Telemetry store: %s mask write failed, reading %u may resend", path, (unsigned)i);
     }
 
     /// False if the file could not be created or reopened; caller should fall back to RAM
@@ -215,5 +243,5 @@ class FileTelemetryStore : public TelemetryStore<T>
 /// Deduces FsT so callers naming a non-default filesystem need not spell out the type.
 template <typename T, typename FsT> FileTelemetryStore<T, FsT> *makeFileTelemetryStore(const char *path, uint16_t slots, FsT &fs)
 {
-    return new FileTelemetryStore<T, FsT>(path, slots, fs);
+    return new (std::nothrow) FileTelemetryStore<T, FsT>(path, slots, fs);
 }

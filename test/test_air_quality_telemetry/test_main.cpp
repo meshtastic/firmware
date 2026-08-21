@@ -10,10 +10,8 @@
 #include "modules/Telemetry/FileTelemetryStore.h"
 #endif
 
-// Two things are covered here. First, AirQualityTelemetryModule's pure scheduling policy: the local
-// device-to-phone loop that keeps readings near-realtime, and the offload that samples those
-// readings onto the mesh on its own interval. Second, the TelemetryStore contract, run against every
-// backend - the whole point of the abstraction is that the module cannot tell them apart.
+// AirQualityTelemetryModule's scheduling policy, and the TelemetryStore contract run against every
+// backend since the module must not be able to tell them apart.
 
 constexpr uint32_t LOCAL_MS = 60000U; // local loop cadence
 
@@ -251,6 +249,34 @@ static void test_store_fileRebuiltWhenGeometryChanges()
     TEST_ASSERT_TRUE(s.isEmpty());
 }
 
+// A file cut short of the geometry its header claims, as an interrupted preallocation would leave
+// it, is rebuilt rather than read past the end.
+static void test_store_fileRebuiltWhenTruncated()
+{
+    freshStoreFile();
+    {
+        FileTelemetryStore<uint32_t> s(kStorePath, 6);
+        TEST_ASSERT_TRUE(s.push(11U, 1000U));
+    }
+
+    // Keep the header, drop every slot behind it. 14 is the packed Header: magic, version,
+    // recordSize, slots, head, count.
+    uint8_t header[14];
+    File r = FSCom.open(kStorePath, FILE_O_READ);
+    TEST_ASSERT_TRUE(r);
+    TEST_ASSERT_EQUAL_INT(sizeof(header), r.read(header, sizeof(header)));
+    r.close();
+
+    File w = FSCom.open(kStorePath, FILE_O_WRITE); // truncates
+    TEST_ASSERT_TRUE(w);
+    w.write(header, sizeof(header));
+    w.close();
+
+    FileTelemetryStore<uint32_t> s(kStorePath, 6);
+    TEST_ASSERT_TRUE(s.isUsable());
+    TEST_ASSERT_TRUE(s.isEmpty());
+}
+
 // Preallocated at creation, so a full store costs the same as an empty one and cannot fill the
 // filesystem later.
 static void test_store_fileDoesNotGrowWithUse()
@@ -313,6 +339,7 @@ void setup()
     RUN_TEST(test_store_fileHonoursContract);
     RUN_TEST(test_store_fileSurvivesReopen);
     RUN_TEST(test_store_fileRebuiltWhenGeometryChanges);
+    RUN_TEST(test_store_fileRebuiltWhenTruncated);
     RUN_TEST(test_store_fileDoesNotGrowWithUse);
 #endif
     exit(UNITY_END());

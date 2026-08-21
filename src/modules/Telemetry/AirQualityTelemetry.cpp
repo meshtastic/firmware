@@ -150,6 +150,9 @@ int32_t AirQualityTelemetryModule::runOnce()
         return disable();
     }
 
+    if (!history)
+        return disable();
+
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so
         // do some setup
@@ -241,8 +244,7 @@ bool AirQualityTelemetryModule::shouldReadSensors(bool everRead, uint32_t nowMs,
 {
     if (!everRead)
         return true;
-    // Subtract-first, as Throttle::hasElapsed() does, so the 32-bit wrap cancels
-    return (phoneQueueEmpty || meshPublishDue) && (nowMs - lastReadMs) >= localIntervalMs;
+    return (phoneQueueEmpty || meshPublishDue) && Throttle::deadlinePassedAt(nowMs, lastReadMs + localIntervalMs);
 }
 
 bool AirQualityTelemetryModule::shouldSendToMesh(bool haveUnsentReading, bool meshDue, bool meshAllowed, bool powerSavingSensor)
@@ -282,8 +284,8 @@ void AirQualityTelemetryModule::openHistory()
 #ifdef AIR_QUALITY_TELEMETRY_HISTORY_PATH
     auto *persistent = makeFileTelemetryStore<meshtastic_AirQualityMetrics>(
         AIR_QUALITY_TELEMETRY_HISTORY_PATH, AIR_QUALITY_TELEMETRY_HISTORY_SIZE, AIR_QUALITY_TELEMETRY_HISTORY_FS);
-    if (persistent->isUsable()) {
-        history = persistent;
+    if (persistent && persistent->isUsable()) {
+        history.reset(persistent);
         return;
     }
 
@@ -292,7 +294,9 @@ void AirQualityTelemetryModule::openHistory()
     LOG_WARN("AQ history: %s unusable, keeping readings in RAM", AIR_QUALITY_TELEMETRY_HISTORY_PATH);
 #endif
 
-    history = new RamTelemetryStore<meshtastic_AirQualityMetrics>(AIR_QUALITY_TELEMETRY_HISTORY_SIZE);
+    history.reset(new (std::nothrow) RamTelemetryStore<meshtastic_AirQualityMetrics>(AIR_QUALITY_TELEMETRY_HISTORY_SIZE));
+    if (!history)
+        LOG_ERROR("AQ history: no memory for a store, telemetry disabled");
 }
 
 void AirQualityTelemetryModule::captureReading()
@@ -492,7 +496,7 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
             // From the loop's last reading: reading here would block on I2C and return nothing
             // useful while the sensors are asleep or warming up.
             TelemetryReading<meshtastic_AirQualityMetrics> reading;
-            if (!history->newest(reading)) {
+            if (!history || !history->newest(reading)) {
                 LOG_INFO("No air quality reading yet, no reply to request");
                 return NULL;
             }
@@ -535,7 +539,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     TelemetryReading<meshtastic_AirQualityMetrics> reading;
 
     // One fetch then check the mask: on a file-backed store each read costs an open
-    if (history->newest(reading) && !(reading.publishedMask & channel)) {
+    if (history && history->newest(reading) && !(reading.publishedMask & channel)) {
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
         m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
         m.time = reading.time;
