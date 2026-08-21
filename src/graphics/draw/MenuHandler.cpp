@@ -463,7 +463,7 @@ void menuHandler::FrequencySlotPicker()
 
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)
-                                      : bwCodeToKHz(loraConfig.bandwidth);
+                                      : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
 
     uint32_t numChannels = 0;
     if (myRegion) {
