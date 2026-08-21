@@ -1163,8 +1163,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
     // spacing = gap between slots (0 for continuous spectrum) and at the beginning of the band
     // padding = gap at the beginning and end of the slots (0 for no padding)
-    float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
-    uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
+    float spacing = newRegion->getSpacing(check_bw);
+    float padding = newRegion->getPadding(check_bw);
+    float freqSlotWidth = spacing + (padding * 2) + (check_bw / 1000.0f); // in MHz
+    uint32_t numFreqSlots = floor((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
 
     // Check if the region supports the requested bandwidth
     if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
@@ -1179,8 +1181,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             check_bw = bwCodeToKHz(loraConfig.bandwidth);
 
             // Recompute slot width and number of slots based on the new bandwidth
-            freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
-            numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
+            spacing = newRegion->getSpacing(check_bw);
+            padding = newRegion->getPadding(check_bw);
+            freqSlotWidth = spacing + (padding * 2) + (check_bw / 1000.0f); // in MHz
+            numFreqSlots = floor((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
         } else {
             return false;
         }
@@ -1317,8 +1321,10 @@ void RadioInterface::applyModemConfig()
     // Calculate number of frequency slots (aka Channels):
     // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
     // padding = gap at the beginning and end of the channel (0 for no padding)
-    float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (bw / 1000); // in MHz
-    uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
+    float spacing = newRegion->getSpacing(bw);
+    float padding = newRegion->getPadding(bw);
+    float freqSlotWidth = spacing + (padding * 2) + (bw / 1000.0f); // in MHz
+    uint32_t numFreqSlots = floor((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
 
     // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
@@ -1359,7 +1365,7 @@ void RadioInterface::applyModemConfig()
 
         // Calculate frequency: freqStart is band edge, add half bandwidth (plus optional padding) to get middle of first channel
         // subsequent channels are spaced by freqSlotWidth
-        freq = newRegion->freqStart + (bw / 2000) + newRegion->profile->padding + (channel_num * freqSlotWidth); // in MHz
+        freq = newRegion->freqStart + (bw / 2000.0f) + padding + (channel_num * freqSlotWidth); // in MHz
     }
 
     saveChannelNum(channel_num);

@@ -467,14 +467,14 @@ void menuHandler::FrequencySlotPicker()
 
     uint32_t numChannels = 0;
     if (myRegion) {
-        // Match RadioInterface::applyModemConfig(): include padding, add spacing in numerator, and use round()
-        const double spacing = myRegion->profile->spacing;
-        const double padding = myRegion->profile->padding;
+        // Match RadioInterface::applyModemConfig(): include padding, add spacing in numerator, and use floor()
+        const double spacing = myRegion->getSpacing(bw);
+        const double padding = myRegion->getPadding(bw);
         const double channelBandwidthMHz = bw / 1000.0;
-        const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing;
+        const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing + 0.001;
         const double denominator = spacing + (padding * 2) + channelBandwidthMHz;
         if (denominator > 0.0) {
-            numChannels = static_cast<uint32_t>(round(numerator / denominator));
+            numChannels = static_cast<uint32_t>(floor(numerator / denominator));
         } else {
             LOG_WARN("Invalid region config: non-positive channel spacing/width");
         }
