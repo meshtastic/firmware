@@ -744,6 +744,26 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
         rg.region = r->code;
         rg.group_index = (uint8_t)gi;
     }
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    // A pinned preset is a statement of intent, not enforcement: supportsPreset() still accepts any
+    // known preset while unset. Stock builds emit no UNSET entry, which clients read as unconstrained.
+    if (map.groups_count < maxGroups && map.region_groups_count < maxRegions) {
+        const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+        meshtastic_LoRaPresetGroup &grp = map.groups[map.groups_count];
+        grp.presets_count = 1;
+        grp.presets[0] = USERPREFS_LORACONFIG_MODEM_PRESET;
+        grp.default_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
+        grp.licensed_only = unset->profile->licensedOnly;
+
+        meshtastic_LoRaRegionPresets &rg = map.region_groups[map.region_groups_count++];
+        rg.region = unset->code;
+        rg.group_index = (uint8_t)map.groups_count++;
+    } else {
+        // Costs only the intent signal - clients fall back to unconstrained - but must not be silent.
+        LOG_ERROR("Region preset map full; UNSET intent omitted");
+    }
+#endif
 }
 
 /**
