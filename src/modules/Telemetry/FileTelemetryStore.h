@@ -202,7 +202,7 @@ class FileTelemetryStore : public TelemetryStore<T>
 
     bool push(const T &metrics, uint32_t time) override
     {
-        if (!usable)
+        if (!usable || hdr.slots == 0)
             return false;
 
         Record r = {};
@@ -275,6 +275,9 @@ class FileTelemetryStore : public TelemetryStore<T>
 
     /// False if the file could not be created or reopened; caller should fall back to RAM
     bool isUsable() const { return usable; }
+
+    /// Bytes of file ahead of slot 0, so a test can reach the records without restating the layout
+    static constexpr uint32_t headerBytes() { return sizeof(Header); }
 };
 
 /// Deduces FsT so callers naming a non-default filesystem need not spell out the type.

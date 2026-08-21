@@ -249,6 +249,20 @@ static void test_store_fileRebuiltWhenGeometryChanges()
     TEST_ASSERT_TRUE(s.isEmpty());
 }
 
+// Same contract as the RAM store at zero capacity: nothing usable, and a push that declines
+// rather than dividing by a zero slot count.
+static void test_store_fileWithoutCapacityStoresNothing()
+{
+    freshStoreFile();
+    FileTelemetryStore<uint32_t> s(kStorePath, 0);
+    TelemetryReading<uint32_t> r;
+    TEST_ASSERT_FALSE(s.isUsable());
+    TEST_ASSERT_EQUAL_UINT16(0, s.capacity());
+    TEST_ASSERT_FALSE(s.push(11U, 1000U));
+    TEST_ASSERT_TRUE(s.isEmpty());
+    TEST_ASSERT_FALSE(s.newest(r));
+}
+
 // A file cut short of the geometry its header claims, as an interrupted preallocation would leave
 // it, is rebuilt rather than read past the end.
 static void test_store_fileRebuiltWhenTruncated()
@@ -259,9 +273,8 @@ static void test_store_fileRebuiltWhenTruncated()
         TEST_ASSERT_TRUE(s.push(11U, 1000U));
     }
 
-    // Keep the header, drop every slot behind it. 10 is the packed Header: magic, version,
-    // recordSize, slots.
-    uint8_t header[10];
+    // Keep the header, drop every slot behind it
+    uint8_t header[FileTelemetryStore<uint32_t>::headerBytes()];
     File r = FSCom.open(kStorePath, FILE_O_READ);
     TEST_ASSERT_TRUE(r);
     TEST_ASSERT_EQUAL_INT(sizeof(header), r.read(header, sizeof(header)));
@@ -313,7 +326,7 @@ static void test_store_fileKeepsOrderAcrossReopenWhenFull()
 static void test_store_fileRejectsTornRecord()
 {
     freshStoreFile();
-    constexpr uint32_t kHeaderBytes = 10; // magic, version, recordSize, slots
+    constexpr uint32_t kHeaderBytes = FileTelemetryStore<uint32_t>::headerBytes();
     constexpr uint16_t kSlots = 6;
     {
         FileTelemetryStore<uint32_t> s(kStorePath, kSlots);
@@ -408,6 +421,7 @@ void setup()
     RUN_TEST(test_store_fileRebuiltWhenTruncated);
     RUN_TEST(test_store_fileKeepsOrderAcrossReopenWhenFull);
     RUN_TEST(test_store_fileRejectsTornRecord);
+    RUN_TEST(test_store_fileWithoutCapacityStoresNothing);
     RUN_TEST(test_store_fileDoesNotGrowWithUse);
 #endif
     exit(UNITY_END());

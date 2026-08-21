@@ -590,9 +590,8 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         }
     }
 
-    // Arm the pre-sleep sequence even when nothing was sent this cycle: a power-saving SENSOR
-    // node must still return to deep sleep, otherwise it stays awake until the next telemetry
-    // interval and drains its battery
+    // Arm the pre-sleep sequence even with nothing sent: a power-saving SENSOR that does not get
+    // back to deep sleep stays awake until the next interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!sent)
             LOG_WARN("AQ telemetry unavailable, sleep without send");
