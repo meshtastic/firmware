@@ -259,9 +259,9 @@ static void test_store_fileRebuiltWhenTruncated()
         TEST_ASSERT_TRUE(s.push(11U, 1000U));
     }
 
-    // Keep the header, drop every slot behind it. 14 is the packed Header: magic, version,
-    // recordSize, slots, head, count.
-    uint8_t header[14];
+    // Keep the header, drop every slot behind it. 10 is the packed Header: magic, version,
+    // recordSize, slots.
+    uint8_t header[10];
     File r = FSCom.open(kStorePath, FILE_O_READ);
     TEST_ASSERT_TRUE(r);
     TEST_ASSERT_EQUAL_INT(sizeof(header), r.read(header, sizeof(header)));
@@ -269,12 +269,43 @@ static void test_store_fileRebuiltWhenTruncated()
 
     File w = FSCom.open(kStorePath, FILE_O_WRITE); // truncates
     TEST_ASSERT_TRUE(w);
-    w.write(header, sizeof(header));
+    // Assert it, or a failed write leaves an empty file that rebuilds for the wrong reason
+    TEST_ASSERT_EQUAL_INT(sizeof(header), w.write(header, sizeof(header)));
     w.close();
 
     FileTelemetryStore<uint32_t> s(kStorePath, 6);
     TEST_ASSERT_TRUE(s.isUsable());
     TEST_ASSERT_TRUE(s.isEmpty());
+}
+
+// Ring order is derived from the records, so a wrapped ring reopens in the same order it had, with
+// no separately committed header to disagree with them.
+static void test_store_fileKeepsOrderAcrossReopenWhenFull()
+{
+    freshStoreFile();
+    {
+        FileTelemetryStore<uint32_t> s(kStorePath, 4);
+        for (uint32_t i = 1; i <= 6U; i++) // two past capacity, so head is off zero
+            TEST_ASSERT_TRUE(s.push(100U + i, 2000U + i));
+    }
+
+    FileTelemetryStore<uint32_t> s(kStorePath, 4);
+    TelemetryReading<uint32_t> r;
+    TEST_ASSERT_TRUE(s.isUsable());
+    TEST_ASSERT_EQUAL_UINT16(4, s.size());
+    for (uint16_t i = 0; i < 4; i++) {
+        TEST_ASSERT_TRUE(s.at(i, r));
+        TEST_ASSERT_EQUAL_UINT32(103U + i, r.metrics);
+        TEST_ASSERT_EQUAL_UINT32(2003U + i, r.time);
+    }
+
+    // And a push after reopening continues the ring rather than restarting it
+    TEST_ASSERT_TRUE(s.push(999U, 3000U));
+    TEST_ASSERT_EQUAL_UINT16(4, s.size());
+    TEST_ASSERT_TRUE(s.at(0, r));
+    TEST_ASSERT_EQUAL_UINT32(104U, r.metrics);
+    TEST_ASSERT_TRUE(s.newest(r));
+    TEST_ASSERT_EQUAL_UINT32(999U, r.metrics);
 }
 
 // Preallocated at creation, so a full store costs the same as an empty one and cannot fill the
@@ -340,6 +371,7 @@ void setup()
     RUN_TEST(test_store_fileSurvivesReopen);
     RUN_TEST(test_store_fileRebuiltWhenGeometryChanges);
     RUN_TEST(test_store_fileRebuiltWhenTruncated);
+    RUN_TEST(test_store_fileKeepsOrderAcrossReopenWhenFull);
     RUN_TEST(test_store_fileDoesNotGrowWithUse);
 #endif
     exit(UNITY_END());

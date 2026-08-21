@@ -23,20 +23,20 @@ template <typename T, typename FsT = typename std::remove_reference<decltype(FSC
 class FileTelemetryStore : public TelemetryStore<T>
 {
     static constexpr uint32_t MAGIC = 0x4D544853; // "MTHS"
-    static constexpr uint16_t VERSION = 1;
+    static constexpr uint16_t VERSION = 2;
 
-    // Packed: its layout has to be stable to reopen a file.
+    // Packed, and immutable once written: its layout has to be stable to reopen a file.
     struct __attribute__((packed)) Header {
         uint32_t magic;
         uint16_t version;
         uint16_t recordSize; // catches payload-layout drift across firmware builds
         uint16_t slots;
-        uint16_t head;
-        uint16_t count;
     };
 
     // Not packed: T holds floats and unaligned access faults. Drift is caught by hdr.recordSize.
+    // seq orders the ring and doubles as the occupied flag, so it is never handed out as 0.
     struct Record {
+        uint32_t seq;
         uint32_t time;
         uint8_t publishedMask;
         T metrics;
@@ -46,6 +46,13 @@ class FileTelemetryStore : public TelemetryStore<T>
     const char *path;
     Header hdr = {};
     bool usable = false;
+
+    // Derived from the records on open, never persisted on its own. A ring whose order lives in the
+    // header needs that header committed after every push, and a push that overwrote the oldest slot
+    // has nothing to roll back to if the commit fails.
+    uint16_t head = 0;
+    uint16_t count = 0;
+    uint32_t lastSeq = 0;
 
     static uint32_t offsetOf(uint16_t slot) { return sizeof(Header) + (uint32_t)slot * sizeof(Record); }
 
@@ -66,14 +73,26 @@ class FileTelemetryStore : public TelemetryStore<T>
         return n;
     }
 
-    bool writeHeader(const Header &h)
+    bool readSlot(uint16_t slot, Record &r)
+    {
+        concurrency::LockGuard g(spiLock);
+        auto f = fs.open(path, FILE_O_READ);
+        if (!f)
+            return false;
+        f.seek(offsetOf(slot));
+        const bool ok = f.read((uint8_t *)&r, sizeof(r)) == sizeof(r);
+        f.close();
+        return ok;
+    }
+
+    bool writeSlot(uint16_t slot, const Record &r)
     {
         concurrency::LockGuard g(spiLock);
         auto f = fs.open(path, TELEMETRY_STORE_O_RW);
         if (!f)
             return false;
-        f.seek(0);
-        const bool ok = f.write((const uint8_t *)&h, sizeof(h)) == sizeof(h);
+        f.seek(offsetOf(slot));
+        const bool ok = f.write((const uint8_t *)&r, sizeof(r)) == sizeof(r);
         f.flush();
         f.close();
         return ok;
@@ -93,7 +112,7 @@ class FileTelemetryStore : public TelemetryStore<T>
             return false;
         }
 
-        hdr = {MAGIC, VERSION, (uint16_t)sizeof(Record), slots, 0, 0};
+        hdr = {MAGIC, VERSION, (uint16_t)sizeof(Record), slots};
         bool ok = f.write((const uint8_t *)&hdr, sizeof(hdr)) == sizeof(hdr);
 
         const Record blank = {};
@@ -102,6 +121,9 @@ class FileTelemetryStore : public TelemetryStore<T>
 
         f.flush();
         f.close();
+
+        head = count = 0;
+        lastSeq = 0;
 
         if (!ok)
             LOG_ERROR("Telemetry store: cannot preallocate %s, %u slots", path, (unsigned)slots);
@@ -117,6 +139,28 @@ class FileTelemetryStore : public TelemetryStore<T>
         const bool ok = f.read((uint8_t *)&hdr, sizeof(hdr)) == sizeof(hdr);
         f.close();
         return ok;
+    }
+
+    /// Rebuild ring order from the records themselves; the oldest is the lowest sequence present.
+    void scanSlots()
+    {
+        uint32_t oldestSeq = UINT32_MAX;
+        head = count = 0;
+        lastSeq = 0;
+
+        for (uint16_t i = 0; i < hdr.slots; i++) {
+            Record r = {};
+            if (!readSlot(i, r) || r.seq == 0)
+                continue;
+
+            count++;
+            if (r.seq > lastSeq)
+                lastSeq = r.seq;
+            if (r.seq < oldestSeq) {
+                oldestSeq = r.seq;
+                head = i;
+            }
+        }
     }
 
   public:
@@ -135,16 +179,17 @@ class FileTelemetryStore : public TelemetryStore<T>
             return;
         }
 
-        // Inconsistent header, or a file shorter than the geometry it claims: an interrupted
-        // preallocation would leave the second, and at() would read past the end
-        if (hdr.head >= slots || hdr.count > slots || fileSize() < offsetOf(slots)) {
-            LOG_WARN("Telemetry store: %s geometry is inconsistent, recreating", path);
+        // Shorter than the geometry its header claims: an interrupted preallocation leaves that,
+        // and readSlot() would run off the end
+        if (fileSize() < offsetOf(slots)) {
+            LOG_WARN("Telemetry store: %s is short of its geometry, recreating", path);
             usable = create(slots);
             return;
         }
 
         usable = true;
-        LOG_INFO("Telemetry store: %s reopened, %u/%u readings", path, (unsigned)hdr.count, (unsigned)hdr.slots);
+        scanSlots();
+        LOG_INFO("Telemetry store: %s reopened, %u/%u readings", path, (unsigned)count, (unsigned)hdr.slots);
     }
 
     FileTelemetryStore(const FileTelemetryStore &) = delete;
@@ -155,59 +200,38 @@ class FileTelemetryStore : public TelemetryStore<T>
         if (!usable)
             return false;
 
-        const uint16_t slot = (hdr.head + hdr.count) % hdr.slots;
-
         Record r = {};
+        r.seq = lastSeq + 1;
         r.time = time;
         r.publishedMask = 0;
         r.metrics = metrics;
 
-        {
-            concurrency::LockGuard g(spiLock);
-            auto f = fs.open(path, TELEMETRY_STORE_O_RW);
-            if (!f)
-                return false;
-            f.seek(offsetOf(slot));
-            const bool ok = f.write((const uint8_t *)&r, sizeof(r)) == sizeof(r);
-            f.flush();
-            f.close();
-            if (!ok)
-                return false;
-        }
-
-        Header next = hdr;
-        if (next.count < next.slots)
-            next.count++;
-        else
-            next.head = (next.head + 1) % next.slots; // the write above overwrote the old head
-
-        // Commit in RAM only once it is on disk, so a failed write cannot expose an uncounted slot
-        if (!writeHeader(next))
+        const uint16_t slot = (head + count) % hdr.slots;
+        if (!writeSlot(slot, r))
             return false;
-        hdr = next;
+
+        // The record carries its own order, so this is bookkeeping, not a second commit that could
+        // fail and leave the file describing a ring it no longer holds
+        lastSeq = r.seq;
+        if (count < hdr.slots)
+            count++;
+        else
+            head = (head + 1) % hdr.slots; // the write above overwrote the old head
+
         return true;
     }
 
-    uint16_t size() const override { return usable ? hdr.count : 0; }
+    uint16_t size() const override { return usable ? count : 0; }
     uint16_t capacity() const override { return usable ? hdr.slots : 0; }
 
     bool at(uint16_t i, TelemetryReading<T> &out) override
     {
-        if (!usable || i >= hdr.count)
+        if (!usable || i >= count)
             return false;
 
         Record r = {};
-        {
-            concurrency::LockGuard g(spiLock);
-            auto f = fs.open(path, FILE_O_READ);
-            if (!f)
-                return false;
-            f.seek(offsetOf((hdr.head + i) % hdr.slots));
-            const bool ok = f.read((uint8_t *)&r, sizeof(r)) == sizeof(r);
-            f.close();
-            if (!ok)
-                return false;
-        }
+        if (!readSlot((head + i) % hdr.slots, r))
+            return false;
 
         out.metrics = r.metrics;
         out.time = r.time;
@@ -228,7 +252,7 @@ class FileTelemetryStore : public TelemetryStore<T>
         if (!f)
             return;
         // Just the mask byte; the metrics beside it are unchanged
-        f.seek(offsetOf((hdr.head + i) % hdr.slots) + offsetof(Record, publishedMask));
+        f.seek(offsetOf((head + i) % hdr.slots) + offsetof(Record, publishedMask));
         const bool ok = f.write(&mask, 1) == 1;
         f.flush();
         f.close();
