@@ -7,7 +7,6 @@
 enum TelemetryPublishChannel : uint8_t {
     TELEMETRY_PUBLISHED_MESH = 1 << 0,
     TELEMETRY_PUBLISHED_MQTT = 1 << 1,
-    TELEMETRY_PUBLISHED_PHONE = 1 << 2,
 };
 
 template <typename T> struct BufferedReading {

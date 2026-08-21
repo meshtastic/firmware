@@ -56,11 +56,11 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
         as other modules already had already been initialized (screen)
     */
 
-    // moduleConfig.telemetry.air_quality_enabled = 1;
+    moduleConfig.telemetry.air_quality_enabled = 1;
     // moduleConfig.telemetry.air_quality_screen_enabled = 1;
     // moduleConfig.telemetry.air_quality_interval = 30 * 60;
-    // moduleConfig.telemetry.air_quality_telemetry_read_interval = 6 * 60;
-    // moduleConfig.mqtt.telemetry_uplink_enabled = true;
+    moduleConfig.telemetry.air_quality_telemetry_read_interval = 6 * 60;
+    moduleConfig.mqtt.telemetry_uplink_enabled = true;
 
     // Add here supported sensors in the Air Quality module
     // These sensors will be scanned twice, once in the first scan,
@@ -237,17 +237,31 @@ int32_t AirQualityTelemetryModule::runOnce()
             return pendingForReadyMs;
 
         // Get telemetry
+        bool meshReadDue = !Throttle::isWithinTimespanMs(lastRead, telemetryReadIntervalMs) || lastRead == 0;
+        bool phoneReadDue = telemetryPhoneAllowed && telemetryPhoneDue;
+
         bool readThisCycle = false;         // TOREMOVE
         bool readGotValidTelemetry = false; // TOREMOVE
-        if (!Throttle::isWithinTimespanMs(lastRead, telemetryReadIntervalMs) || (telemetryPhoneAllowed && telemetryPhoneDue) ||
-            lastRead == 0) {
+        bool sentTelemetryToPhone = false;  // TOREMOVE
+        if (meshReadDue || phoneReadDue) {
             readThisCycle = true; // TOREMOVE
             meshtastic_Telemetry snapshot;
-            if (getAirQualityTelemetry(&snapshot)) {
-                readGotValidTelemetry = true; // TOREMOVE
+            bool gotValid = getAirQualityTelemetry(&snapshot);
+            readGotValidTelemetry = gotValid; // TOREMOVE
+
+            if (gotValid && meshReadDue) {
                 history.push(snapshot.variant.air_quality_metrics, snapshot.time);
             }
-            lastRead = millis();
+
+            if (gotValid && phoneReadDue) {
+                logSendPacket(snapshot);
+                sentTelemetryToPhone = publishTelemetry(snapshot, NODENUM_BROADCAST, true); // TOREMOVE
+                if (sentTelemetryToPhone)
+                    lastSentToPhone = millis();
+            }
+
+            if (meshReadDue)
+                lastRead = millis();
             // Correct the awake time, trimming to 0
             const int32_t elapsed = (int32_t)(millis() - startAirQualityTelemetryCycle);
             awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
@@ -265,27 +279,17 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
         }
 
-        bool sentTelemetryToMesh = false;  // TOREMOVE
-        bool sentTelemetryToPhone = false; // TOREMOVE
+        bool sentTelemetryToMesh = false; // TOREMOVE
 
-        if (!history.isEmpty()) {
-            if (telemetryMeshDue && telemetryMeshAllowed) {
-                if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
-                    sentTelemetryToMesh = publishBufferedTelemetry(history, PublishTarget::Mesh);
-                } else {
-                    sentTelemetryToMesh = sendTelemetry(NODENUM_BROADCAST, TELEMETRY_PUBLISHED_MESH);
-                }
+        if (!history.isEmpty() && telemetryMeshDue && telemetryMeshAllowed) {
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+                sentTelemetryToMesh = publishBufferedTelemetry(history, PublishTarget::Mesh);
+            } else {
+                sentTelemetryToMesh = sendTelemetry(NODENUM_BROADCAST);
+            }
 
-                if (transmitHistory && sentTelemetryToMesh) {
-                    transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
-                }
-
-            } else if (telemetryPhoneDue && telemetryPhoneAllowed) {
-                // Mesh transmission isn't due yet, but we can still update the phone.
-                sentTelemetryToPhone = sendTelemetry(NODENUM_BROADCAST, TELEMETRY_PUBLISHED_PHONE); // TOREMOVE
-                if (sentTelemetryToPhone) {
-                    lastSentToPhone = millis();
-                }
+            if (transmitHistory && sentTelemetryToMesh) {
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
             }
         }
 
@@ -305,7 +309,8 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // TOREMOVE: verbose end-of-cycle summary, delete once mesh/phone/mqtt gating is confirmed working
-        LOG_INFO("AQ summary: read=%d valid=%d historySize=%u", readThisCycle, readGotValidTelemetry, (unsigned)history.size());
+        LOG_INFO("AQ summary: read=%d valid=%d (interval=%ums lastAgo=%dms) historySize=%u", readThisCycle, readGotValidTelemetry,
+                 telemetryReadIntervalMs, lastRead ? (int32_t)(millis() - lastRead) : -1, (unsigned)history.size());
         LOG_INFO("AQ summary: mesh allowed=%d due=%d(interval=%ums lastAgo=%dms) sent=%d", telemetryMeshAllowed, telemetryMeshDue,
                  telemetryMeshIntervalMs, lastMeshTelemetry ? (int32_t)(millis() - lastMeshTelemetry) : -1, sentTelemetryToMesh);
         LOG_INFO("AQ summary: phone allowed=%d due=%d(interval=%ums lastAgo=%dms) sent=%d", telemetryPhoneAllowed,
@@ -521,24 +526,23 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
     return NULL;
 }
 
-bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, TelemetryPublishChannel publishTarget)
+bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest)
 {
-    bool toPhone = publishTarget == TELEMETRY_PUBLISHED_PHONE;
     bool sent = false;
 
-    // Never send the same reading twice to the same publishTarget.
-    if (!history.isEmpty() && !(history.at(history.size() - 1).publishedMask & publishTarget)) {
+    // Never send the same reading twice to the mesh.
+    if (!history.isEmpty() && !(history.at(history.size() - 1).publishedMask & TELEMETRY_PUBLISHED_MESH)) {
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
         m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
         m.time = history.at(history.size() - 1).time;
         m.variant.air_quality_metrics = history.at(history.size() - 1).metrics;
 
         logSendPacket(m);
-        sent = publishTelemetry(m, dest, toPhone);
+        sent = publishTelemetry(m, dest, false);
         if (sent) {
-            history.markMostRecent(publishTarget);
+            history.markMostRecent(TELEMETRY_PUBLISHED_MESH);
 
-            if (!toPhone && isPowerSavingSensor()) {
+            if (isPowerSavingSensor()) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                 if (notification) {
                     notification->level = meshtastic_LogRecord_Level_INFO;
@@ -556,7 +560,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, TelemetryPublishChan
     // Arm the pre-sleep sequence even when nothing was sent this cycle: a power-saving SENSOR
     // node must still return to deep sleep, otherwise it stays awake until the next telemetry
     // interval and drains its battery
-    if (!toPhone && isPowerSavingSensor()) {
+    if (isPowerSavingSensor()) {
         if (!sent)
             LOG_WARN("AQ telemetry unavailable, sleep without send");
         sleepOnNextExecution = true;

@@ -64,7 +64,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
 
     virtual meshtastic_MeshPacket *allocReply() override;
 
-    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, TelemetryPublishChannel publishTarget = TELEMETRY_PUBLISHED_MESH);
+    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST);
     void logSendPacket(meshtastic_Telemetry &m);
 
     meshtastic_MeshPacket *allocTelemetryHistoryPacket() override { return allocDataPacket(); }
