@@ -10,18 +10,28 @@
 #define AIR_QUALITY_TELEMETRY_MODULE_ENABLE 0
 #endif
 
-// How many local-loop readings to retain between offloads. Sized to roughly one LoRa frame's worth:
-// a populated AirQualityMetrics encodes to ~35 bytes inside a TelemetryRecord, so about six fit the
-// 233-byte Data.payload limit. Each slot costs sizeof(TelemetryReading<meshtastic_AirQualityMetrics>),
-// ~216 bytes; a variant short on RAM can lower this, one with room to spare can raise it.
+// Readings retained between offloads, ~216 bytes each. Floor is one LoRa frame's worth (~6 fit
+// Data.payload); PSRAM boards go past that for free, the ring is heap-allocated.
 #ifndef AIR_QUALITY_TELEMETRY_HISTORY_SIZE
+#if MESHTASTIC_MEM_CLASS >= MEM_CLASS_LARGE
+#define AIR_QUALITY_TELEMETRY_HISTORY_SIZE 64
+#elif MESHTASTIC_MEM_CLASS >= MEM_CLASS_MEDIUM
+#define AIR_QUALITY_TELEMETRY_HISTORY_SIZE 16
+#else
 #define AIR_QUALITY_TELEMETRY_HISTORY_SIZE 8
+#endif
+#endif
+
+// Define AIR_QUALITY_TELEMETRY_HISTORY_PATH to persist readings instead of keeping them in RAM;
+// see the filesystem-choice note in FileTelemetryStore.h. Falls back to RAM if it cannot be opened.
+#ifndef AIR_QUALITY_TELEMETRY_HISTORY_FS
+#define AIR_QUALITY_TELEMETRY_HISTORY_FS FSCom
 #endif
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
-#include "TelemetryHistory.h"
+#include "TelemetryStore.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CConsumer.h"
 #include <OLEDDisplay.h>
@@ -44,7 +54,10 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
+        openHistory(); // safe here: fsInit() and setupSDCard() both run before setupModules()
     }
+
+    ~AirQualityTelemetryModule() { delete history; }
     virtual bool wantUIFrame() override;
 #if !HAS_SCREEN
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -52,17 +65,13 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 #endif
 
-    // Pure local-loop policy: the device reads at its own near-realtime cadence so an attached phone
-    // sees live values, independent of the on-air interval. Either consumer can drive the read - the
-    // offload keeps the loop alive when a backed-up phone queue would otherwise stall it. everRead
-    // (rather than a lastReadMs sentinel) marks the never-read state, so a read stamped at
-    // millis()==0 still honors the cadence.
+    // Local loop runs at its own cadence, independent of the on-air interval; either consumer can
+    // drive it. everRead, not a lastReadMs sentinel, marks the never-read state.
     static bool shouldReadSensors(bool everRead, uint32_t nowMs, uint32_t lastReadMs, uint32_t localIntervalMs,
                                   bool phoneQueueEmpty, bool meshPublishDue);
 
-    // Pure offload policy: the mesh takes a sample of the local loop's readings on its own interval,
-    // not every one of them. A power-saving SENSOR takes this path even with nothing left to send,
-    // because sendTelemetry() is also what arms its deep sleep.
+    // The mesh samples the loop on its own interval. A power-saving SENSOR takes this path even with
+    // nothing to send, because sendTelemetry() is what arms its deep sleep.
     static bool shouldSendToMesh(bool haveUnsentReading, bool meshDue, bool meshAllowed, bool powerSavingSensor);
 
   protected:
@@ -76,11 +85,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     */
     bool getAirQualityTelemetry(meshtastic_Telemetry *m);
     virtual meshtastic_MeshPacket *allocReply() override;
-    /**
-     * Publish the newest reading in history to the mesh or the phone. Does nothing if nothing has
-     * been read yet, or if this destination already had that reading.
-     * @return true if a packet was handed off to send
-     */
+    /// Publish the newest reading to the mesh or the phone, unless that destination already had it.
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool phoneOnly = false);
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
@@ -89,6 +94,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     void i2cScanFinished(ScanI2C *i2cScanner);
 
   private:
+    void openHistory();
     /// Read every sensor once and push the result into history with the time it was taken.
     void captureReading();
     /// Wake any sleeping sensor. @return ms to wait for the slowest one, 0 if all are ready.
@@ -98,14 +104,13 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     bool firstTime = true;
     meshtastic_MeshPacket *lastMeasurementPacket;
 
-    // Cadence of the local device-to-phone loop, and the thread's own tick. Deliberately unrelated
-    // to air_quality_interval: that one paces what goes on air.
+    // Local device-to-phone cadence and the thread's tick; unrelated to air_quality_interval,
+    // which paces what goes on air.
     uint32_t localLoopIntervalMs = SECONDS_IN_MINUTE * 1000;
 
-    // What the local loop has measured, newest last. The offload publishes one of these readings
-    // rather than triggering a read of its own, so one sensor warm-up feeds the phone, the mesh, the
-    // screen and on-demand requests, and a packet is never restamped as fresher than it is.
-    TelemetryHistory<meshtastic_AirQualityMetrics, AIR_QUALITY_TELEMETRY_HISTORY_SIZE> history;
+    // The offload publishes one of these rather than reading again, so one warm-up feeds the phone,
+    // the mesh, the screen and on-demand requests. Never null once openHistory() has run.
+    TelemetryStore<meshtastic_AirQualityMetrics> *history = nullptr;
 
     uint32_t lastReadMs = 0; // monotonic millis() of the last read attempt
     bool everRead = false;   // false until the first read attempt, whatever its outcome

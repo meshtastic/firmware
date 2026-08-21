@@ -1,13 +1,23 @@
 #include "TestUtil.h"
+// FSCommon.h is what defines FSCom, so it has to be included before anything tests for it.
+#include "FSCommon.h"
+#include "SPILock.h"
 #include "modules/Telemetry/AirQualityTelemetry.h"
-#include "modules/Telemetry/TelemetryHistory.h"
+#include "modules/Telemetry/TelemetryStore.h"
 #include <unity.h>
 
-// These exercise AirQualityTelemetryModule's pure scheduling policy: the local device-to-phone loop
-// that keeps readings near-realtime, and the offload that samples those readings onto the mesh at
-// its own interval. They take plain values, so no device globals or fake clock are needed.
+#ifdef FSCom
+#include "modules/Telemetry/FileTelemetryStore.h"
+#endif
+
+// Two things are covered here. First, AirQualityTelemetryModule's pure scheduling policy: the local
+// device-to-phone loop that keeps readings near-realtime, and the offload that samples those
+// readings onto the mesh on its own interval. Second, the TelemetryStore contract, run against every
+// backend - the whole point of the abstraction is that the module cannot tell them apart.
 
 constexpr uint32_t LOCAL_MS = 60000U; // local loop cadence
+
+// ---------------------------------------------------------------- local loop
 
 // Nothing read yet: measure immediately, whatever the clock or the consumers say.
 static void test_read_firstReadIsImmediate()
@@ -62,7 +72,7 @@ static void test_read_survivesMillisRollover()
     TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldReadSensors(true, 10000U, lastRead, LOCAL_MS, true, false));
 }
 
-// The offload keeps its own cadence and its own airtime veto over the latched local reading.
+// ------------------------------------------------------------------ offload
 
 static void test_mesh_publishesUnsentReadingWhenDueAndAllowed()
 {
@@ -95,98 +105,194 @@ static void test_mesh_powerSavingSensorRunsEvenWithNothingToSend()
     TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldSendToMesh(false, true, true, true));
 }
 
-// The history ring holds what the local loop measured between offloads. Exercised with a plain
-// uint32_t payload - the ring itself knows nothing about telemetry types.
+// ----------------------------------------------------------- store contract
 
-static void test_history_startsEmpty()
+// Every backend has to behave identically here: the module holds a TelemetryStore<T> and must not be
+// able to tell RAM from a file. Each check names the backend so a failure says which one broke.
+// The store is expected to be empty on entry and is left full.
+static void checkStoreContract(TelemetryStore<uint32_t> &s, const char *backend)
 {
-    TelemetryHistory<uint32_t, 3> h;
-    TEST_ASSERT_TRUE(h.isEmpty());
-    TEST_ASSERT_EQUAL_UINT8(0, h.size());
+    TelemetryReading<uint32_t> r;
+
+    TEST_ASSERT_TRUE_MESSAGE(s.isEmpty(), backend);
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, s.size(), backend);
+    TEST_ASSERT_FALSE_MESSAGE(s.newest(r), backend);
     // Nothing read yet is not the same as a reading nobody has taken.
-    TEST_ASSERT_FALSE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH));
+    TEST_ASSERT_FALSE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), backend);
+    TEST_ASSERT_FALSE_MESSAGE(s.at(0, r), backend);
+
+    // Capture time travels with the reading it belongs to.
+    TEST_ASSERT_TRUE_MESSAGE(s.push(11U, 1000U), backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.push(22U, 1060U), backend);
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(2, s.size(), backend);
+
+    TEST_ASSERT_TRUE_MESSAGE(s.newest(r), backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(22U, r.metrics, backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1060U, r.time, backend);
+
+    // Oldest first, so a batched offload can walk them in the order they were taken.
+    TEST_ASSERT_TRUE_MESSAGE(s.at(0, r), backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(11U, r.metrics, backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1000U, r.time, backend);
+
+    // Each consumer tracks what it has taken independently.
+    TEST_ASSERT_TRUE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_PHONE), backend);
+    s.markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
+    TEST_ASSERT_FALSE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_PHONE), backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), backend);
+
+    // Marking by index addresses oldest-first, not raw slots.
+    s.markPublished(0, TELEMETRY_PUBLISHED_MESH);
+    TEST_ASSERT_TRUE_MESSAGE(s.at(0, r), backend);
+    TEST_ASSERT_TRUE_MESSAGE(r.publishedMask & TELEMETRY_PUBLISHED_MESH, backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.at(1, r), backend);
+    TEST_ASSERT_FALSE_MESSAGE(r.publishedMask & TELEMETRY_PUBLISHED_MESH, backend);
+
+    // Filling past capacity drops the oldest and keeps the order. That is the steady state: the
+    // offload samples the loop rather than draining it.
+    const uint16_t cap = s.capacity();
+    for (uint32_t i = 0; i < (uint32_t)cap + 3U; i++)
+        TEST_ASSERT_TRUE_MESSAGE(s.push(100U + i, 2000U + i), backend);
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(cap, s.size(), backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.at(0, r), backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(100U + 3U, r.metrics, backend); // oldest survivor
+    TEST_ASSERT_TRUE_MESSAGE(s.newest(r), backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(100U + cap + 2U, r.metrics, backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2000U + cap + 2U, r.time, backend);
+
+    // A reading landing in a slot whose previous occupant had been published starts unpublished.
+    TEST_ASSERT_TRUE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_PHONE), backend);
+    TEST_ASSERT_FALSE_MESSAGE(s.at(cap, r), backend); // one past the end
 }
 
-static void test_history_keepsCaptureTimeWithItsReading()
+static void test_store_ramHonoursContract()
 {
-    TelemetryHistory<uint32_t, 3> h;
-    h.push(11U, 1000U);
-    h.push(22U, 1060U);
-    TEST_ASSERT_EQUAL_UINT8(2, h.size());
-    TEST_ASSERT_EQUAL_UINT32(22U, h.newest().metrics);
-    TEST_ASSERT_EQUAL_UINT32(1060U, h.newest().time);
-    // Oldest first, so the offload can walk them in the order they were taken.
-    TEST_ASSERT_EQUAL_UINT32(11U, h.at(0).metrics);
-    TEST_ASSERT_EQUAL_UINT32(1000U, h.at(0).time);
+    RamTelemetryStore<uint32_t> s(6);
+    TEST_ASSERT_EQUAL_UINT16(6, s.capacity());
+    checkStoreContract(s, "ram");
 }
 
-// Overwriting the oldest once full is the steady state: the offload samples the loop, it does not
-// drain it.
-static void test_history_wrapsAndDropsOldest()
+// A store that could not get its memory stores nothing rather than faulting on every push.
+static void test_store_ramWithoutCapacityStoresNothing()
 {
-    TelemetryHistory<uint32_t, 3> h;
-    for (uint32_t i = 1; i <= 5; i++)
-        h.push(i, 1000U + i);
-
-    TEST_ASSERT_EQUAL_UINT8(3, h.size()); // never grows past capacity
-    TEST_ASSERT_EQUAL_UINT32(3U, h.at(0).metrics);
-    TEST_ASSERT_EQUAL_UINT32(4U, h.at(1).metrics);
-    TEST_ASSERT_EQUAL_UINT32(5U, h.at(2).metrics);
-    TEST_ASSERT_EQUAL_UINT32(5U, h.newest().metrics);
-    TEST_ASSERT_EQUAL_UINT32(1005U, h.newest().time);
+    RamTelemetryStore<uint32_t> s(0);
+    TelemetryReading<uint32_t> r;
+    TEST_ASSERT_EQUAL_UINT16(0, s.capacity());
+    TEST_ASSERT_FALSE(s.push(11U, 1000U));
+    TEST_ASSERT_TRUE(s.isEmpty());
+    TEST_ASSERT_FALSE(s.newest(r));
 }
 
-// Each consumer tracks what it has taken independently.
-static void test_history_publishMarksOneChannelOnly()
+#ifdef FSCom
+static const char *kStorePath = "/test_aq_store.bin";
+
+static void freshStoreFile()
 {
-    TelemetryHistory<uint32_t, 3> h;
-    h.push(11U, 1000U);
-    TEST_ASSERT_TRUE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH));
-    TEST_ASSERT_TRUE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_PHONE));
-
-    h.markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
-    TEST_ASSERT_FALSE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_PHONE));
-    TEST_ASSERT_TRUE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH));
+    if (FSCom.exists(kStorePath))
+        FSCom.remove(kStorePath);
 }
 
-// A new reading is unpublished to everyone, even when it lands in a slot whose previous occupant
-// had already been sent.
-static void test_history_reusedSlotStartsUnpublished()
+static void test_store_fileHonoursContract()
 {
-    TelemetryHistory<uint32_t, 2> h;
-    h.push(11U, 1000U);
-    h.markNewestPublished(TELEMETRY_PUBLISHED_MESH);
-    h.markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
-    h.push(22U, 1060U);
-    h.push(33U, 1120U); // wraps onto the slot that held 11
-
-    TEST_ASSERT_EQUAL_UINT32(33U, h.newest().metrics);
-    TEST_ASSERT_TRUE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH));
-    TEST_ASSERT_TRUE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_PHONE));
+    freshStoreFile();
+    // Named filesystem rather than the default, which is what a variant pointing this at SD or at a
+    // PSRAM filesystem does.
+    auto *store = makeFileTelemetryStore<uint32_t>(kStorePath, 6, FSCom);
+    FileTelemetryStore<uint32_t> &s = *store;
+    TEST_ASSERT_TRUE(s.isUsable());
+    TEST_ASSERT_EQUAL_UINT16(6, s.capacity());
+    checkStoreContract(s, "file");
+    delete store;
 }
 
-// Marking by index is what a batched offload will walk; it must address oldest-first, not raw slots.
-static void test_history_markByIndexFollowsOldestFirst()
+// The reason the file backend exists: readings outlive the process that took them, so an offline
+// node can keep measuring across the deep sleep it takes between offloads.
+static void test_store_fileSurvivesReopen()
 {
-    TelemetryHistory<uint32_t, 3> h;
-    for (uint32_t i = 1; i <= 4; i++)
-        h.push(i, 1000U + i); // ring now holds 2,3,4 with head off zero
+    freshStoreFile();
+    {
+        FileTelemetryStore<uint32_t> s(kStorePath, 4);
+        TEST_ASSERT_TRUE(s.push(11U, 1000U));
+        TEST_ASSERT_TRUE(s.push(22U, 1060U));
+        s.markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
+    }
 
-    h.markPublished(0, TELEMETRY_PUBLISHED_MESH);
-    TEST_ASSERT_EQUAL_UINT32(2U, h.at(0).metrics);
-    TEST_ASSERT_TRUE(h.at(0).publishedMask & TELEMETRY_PUBLISHED_MESH);
-    TEST_ASSERT_FALSE(h.at(1).publishedMask & TELEMETRY_PUBLISHED_MESH);
-    TEST_ASSERT_TRUE(h.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH));
+    FileTelemetryStore<uint32_t> s(kStorePath, 4);
+    TelemetryReading<uint32_t> r;
+    TEST_ASSERT_TRUE(s.isUsable());
+    TEST_ASSERT_EQUAL_UINT16(2, s.size());
+    TEST_ASSERT_TRUE(s.at(0, r));
+    TEST_ASSERT_EQUAL_UINT32(11U, r.metrics);
+    TEST_ASSERT_EQUAL_UINT32(1000U, r.time);
+    // Who has already taken a reading survives too, so a reboot does not resend the backlog.
+    TEST_ASSERT_TRUE(s.newest(r));
+    TEST_ASSERT_EQUAL_UINT32(22U, r.metrics);
+    TEST_ASSERT_TRUE(r.publishedMask & TELEMETRY_PUBLISHED_PHONE);
+    TEST_ASSERT_FALSE(r.publishedMask & TELEMETRY_PUBLISHED_MESH);
 }
+
+// Reopening at a different capacity cannot reuse the slots, so the file is rebuilt rather than
+// decoded as nonsense. Same path as a firmware build whose payload struct changed size.
+static void test_store_fileRebuiltWhenGeometryChanges()
+{
+    freshStoreFile();
+    {
+        FileTelemetryStore<uint32_t> s(kStorePath, 4);
+        TEST_ASSERT_TRUE(s.push(11U, 1000U));
+        TEST_ASSERT_EQUAL_UINT16(1, s.size());
+    }
+
+    FileTelemetryStore<uint32_t> s(kStorePath, 8);
+    TEST_ASSERT_TRUE(s.isUsable());
+    TEST_ASSERT_EQUAL_UINT16(8, s.capacity());
+    TEST_ASSERT_TRUE(s.isEmpty());
+}
+
+// Preallocated at creation, so a full store costs the same as an empty one and cannot fill the
+// filesystem later.
+static void test_store_fileDoesNotGrowWithUse()
+{
+    freshStoreFile();
+    FileTelemetryStore<uint32_t> s(kStorePath, 4);
+
+    File f = FSCom.open(kStorePath, FILE_O_READ);
+    TEST_ASSERT_TRUE(f);
+    const size_t emptySize = f.size();
+    f.close();
+
+    for (uint32_t i = 0; i < 20U; i++)
+        TEST_ASSERT_TRUE(s.push(i, 1000U + i));
+
+    f = FSCom.open(kStorePath, FILE_O_READ);
+    TEST_ASSERT_TRUE(f);
+    TEST_ASSERT_EQUAL_UINT32(emptySize, f.size());
+    f.close();
+}
+#endif // FSCom
 
 void setUp(void) {}
 
-void tearDown(void) {}
+void tearDown(void)
+{
+#ifdef FSCom
+    // Leave no residue: run-tests.sh flags a suite that writes a path it has not declared
+    freshStoreFile();
+#endif
+}
 
 extern "C" {
 void setup()
 {
     initializeTestEnvironment();
+#ifdef FSCom
+    // FileTelemetryStore brackets every FSCom touch with spiLock; nothing in the test environment
+    // creates it, so do it here (initSPI asserts it only runs once).
+    if (!spiLock)
+        initSPI();
+#endif
     UNITY_BEGIN();
     RUN_TEST(test_read_firstReadIsImmediate);
     RUN_TEST(test_read_holdsUntilLocalCadenceElapses);
@@ -201,12 +307,14 @@ void setup()
     RUN_TEST(test_mesh_holdsWhileAirtimeVetoes);
     RUN_TEST(test_mesh_doesNotResendTheSameReading);
     RUN_TEST(test_mesh_powerSavingSensorRunsEvenWithNothingToSend);
-    RUN_TEST(test_history_startsEmpty);
-    RUN_TEST(test_history_keepsCaptureTimeWithItsReading);
-    RUN_TEST(test_history_wrapsAndDropsOldest);
-    RUN_TEST(test_history_publishMarksOneChannelOnly);
-    RUN_TEST(test_history_reusedSlotStartsUnpublished);
-    RUN_TEST(test_history_markByIndexFollowsOldestFirst);
+    RUN_TEST(test_store_ramHonoursContract);
+    RUN_TEST(test_store_ramWithoutCapacityStoresNothing);
+#ifdef FSCom
+    RUN_TEST(test_store_fileHonoursContract);
+    RUN_TEST(test_store_fileSurvivesReopen);
+    RUN_TEST(test_store_fileRebuiltWhenGeometryChanges);
+    RUN_TEST(test_store_fileDoesNotGrowWithUse);
+#endif
     exit(UNITY_END());
 }
 
