@@ -1,6 +1,8 @@
 #define I2C_SDA 15
 #define I2C_SCL 16
 
+extern bool elecrow_v2; // false = v1, true = v2
+
 #if CROW_SELECT == 1
 #define WAKE_ON_TOUCH
 #define SCREEN_TOUCH_INT 47
@@ -17,7 +19,7 @@
 #define DAC_I2S_DOUT 12
 #define DAC_I2S_MCLK 8 // don't use GPIO0 because it's assigned to LoRa or button
 #else
-#define PIN_BUZZER 8
+#define PIN_BUZZER (elecrow_v2 ? 0 : 8)
 #endif
 
 // GPS via UART1 connector
@@ -72,7 +74,7 @@
 #define SENSOR_POWER_ON LOW
 #else
 // 4.3", 5.0", 7.0"
-#define LORA_CS 0
+#define LORA_CS (elecrow_v2 ? 8 : 0)
 #define LORA_SCK 5
 #define LORA_MISO 4
 #define LORA_MOSI 6
