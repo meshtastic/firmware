@@ -23,7 +23,7 @@ template <typename T, typename FsT = typename std::remove_reference<decltype(FSC
 class FileTelemetryStore : public TelemetryStore<T>
 {
     static constexpr uint32_t MAGIC = 0x4D544853; // "MTHS"
-    static constexpr uint16_t VERSION = 2;
+    static constexpr uint16_t VERSION = 3;
 
     // Packed, and immutable once written: its layout has to be stable to reopen a file.
     struct __attribute__((packed)) Header {
@@ -34,13 +34,18 @@ class FileTelemetryStore : public TelemetryStore<T>
     };
 
     // Not packed: T holds floats and unaligned access faults. Drift is caught by hdr.recordSize.
-    // seq orders the ring and doubles as the occupied flag, so it is never handed out as 0.
+    // seq orders the ring and doubles as the occupied flag, so it is never handed out as 0. It is
+    // repeated at the tail because a short or interrupted write lands the new head over a stale
+    // tail, which is the one corruption a single-record store can actually see.
     struct Record {
         uint32_t seq;
         uint32_t time;
         uint8_t publishedMask;
         T metrics;
+        uint32_t seqEnd;
     };
+
+    static bool recordValid(const Record &r) { return r.seq != 0 && r.seq == r.seqEnd; }
 
     FsT &fs;
     const char *path;
@@ -150,8 +155,8 @@ class FileTelemetryStore : public TelemetryStore<T>
 
         for (uint16_t i = 0; i < hdr.slots; i++) {
             Record r = {};
-            if (!readSlot(i, r) || r.seq == 0)
-                continue;
+            if (!readSlot(i, r) || !recordValid(r))
+                continue; // empty, or torn mid-write
 
             count++;
             if (r.seq > lastSeq)
@@ -201,14 +206,22 @@ class FileTelemetryStore : public TelemetryStore<T>
             return false;
 
         Record r = {};
-        r.seq = lastSeq + 1;
+        r.seq = r.seqEnd = lastSeq + 1;
         r.time = time;
         r.publishedMask = 0;
         r.metrics = metrics;
 
+        // A full ring overwrites its oldest slot, so a failed write here has already damaged it
         const uint16_t slot = (head + count) % hdr.slots;
-        if (!writeSlot(slot, r))
+        if (!writeSlot(slot, r)) {
+            const Record blank = {};
+            if (writeSlot(slot, blank))
+                scanSlots(); // that slot is gone, the rest of the ring is still good
+            else
+                usable = false;
+            LOG_WARN("Telemetry store: %s slot %u write failed", path, (unsigned)slot);
             return false;
+        }
 
         // The record carries its own order, so this is bookkeeping, not a second commit that could
         // fail and leave the file describing a ring it no longer holds
@@ -230,7 +243,7 @@ class FileTelemetryStore : public TelemetryStore<T>
             return false;
 
         Record r = {};
-        if (!readSlot((head + i) % hdr.slots, r))
+        if (!readSlot((head + i) % hdr.slots, r) || !recordValid(r))
             return false;
 
         out.metrics = r.metrics;

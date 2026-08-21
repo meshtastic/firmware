@@ -308,6 +308,41 @@ static void test_store_fileKeepsOrderAcrossReopenWhenFull()
     TEST_ASSERT_EQUAL_UINT32(999U, r.metrics);
 }
 
+// A record torn mid-write keeps a plausible leading seq, so the trailing copy is what catches it.
+// Reopening must skip that slot rather than serve half a reading.
+static void test_store_fileRejectsTornRecord()
+{
+    freshStoreFile();
+    constexpr uint32_t kHeaderBytes = 10; // magic, version, recordSize, slots
+    constexpr uint16_t kSlots = 6;
+    {
+        FileTelemetryStore<uint32_t> s(kStorePath, kSlots);
+        TEST_ASSERT_TRUE(s.push(11U, 1000U));
+        TEST_ASSERT_TRUE(s.push(22U, 1060U));
+    }
+
+    File f = FSCom.open(kStorePath, FILE_O_READ);
+    TEST_ASSERT_TRUE(f);
+    const uint32_t recordBytes = (f.size() - kHeaderBytes) / kSlots;
+    f.close();
+
+    // seqEnd is the last field, so the record's trailing word is the copy to disagree with
+    File w = FSCom.open(kStorePath, "r+");
+    TEST_ASSERT_TRUE(w);
+    w.seek(kHeaderBytes + recordBytes - 4);
+    const uint8_t garbage[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+    TEST_ASSERT_EQUAL_INT(sizeof(garbage), w.write(garbage, sizeof(garbage)));
+    w.close();
+
+    FileTelemetryStore<uint32_t> s(kStorePath, kSlots);
+    TelemetryReading<uint32_t> r;
+    TEST_ASSERT_TRUE(s.isUsable());
+    TEST_ASSERT_EQUAL_UINT16(1, s.size()); // the torn one is gone, the intact one survives
+    TEST_ASSERT_TRUE(s.at(0, r));
+    TEST_ASSERT_EQUAL_UINT32(22U, r.metrics);
+    TEST_ASSERT_EQUAL_UINT32(1060U, r.time);
+}
+
 // Preallocated at creation, so a full store costs the same as an empty one and cannot fill the
 // filesystem later.
 static void test_store_fileDoesNotGrowWithUse()
@@ -372,6 +407,7 @@ void setup()
     RUN_TEST(test_store_fileRebuiltWhenGeometryChanges);
     RUN_TEST(test_store_fileRebuiltWhenTruncated);
     RUN_TEST(test_store_fileKeepsOrderAcrossReopenWhenFull);
+    RUN_TEST(test_store_fileRejectsTornRecord);
     RUN_TEST(test_store_fileDoesNotGrowWithUse);
 #endif
     exit(UNITY_END());
