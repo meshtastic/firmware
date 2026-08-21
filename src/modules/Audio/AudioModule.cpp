@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
+#include "buzz/buzz.h"
 #include "concurrency/LockGuard.h"
 #include "graphics/ScreenFonts.h"
 #include "mesh/Throttle.h"
@@ -65,6 +66,7 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
     framesPerPacket = audioFramesPerPacket(*mode);
 
     stream.begin(emitDecoded, this);
+    stream.setPacketMs(audioMsPerPacket(*mode));
 
     LOG_INFO("Audio: %u bit/s, %d frames of %d bytes per packet, %u ms of speech", mode->bitrate, framesPerPacket, bytesPerFrame,
              (unsigned)audioMsPerPacket(*mode));
@@ -82,13 +84,33 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setColor(WHITE);
     display->setFont(FONT_LARGE);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y,
-                        radio_state == RadioState::tx ? "PTT" : "Receive");
+    const char *label = "Receive";
+    char countdown[8];
+    if (radio_state == RadioState::tx) {
+        const uint32_t held = millis() - pttStartMs;
+        if (held + AUDIO_PTT_WARN_MS >= AUDIO_MAX_PTT_MS) {
+            snprintf(countdown, sizeof(countdown), "%u", (unsigned)((AUDIO_MAX_PTT_MS - held + 999) / 1000));
+            label = countdown;
+        } else {
+            label = "PTT";
+        }
+    }
+    display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, label);
 }
 
-void AudioModule::onPttDown()
+bool AudioModule::onPttDown()
 {
+    {
+        concurrency::LockGuard g(&streamLock);
+        if (stream.isReceiving()) {
+            LOG_INFO("PTT refused, transmission in progress");
+            playLongBeep();
+            return false;
+        }
+    }
+
     radio_state = RadioState::tx;
+    pttStartMs = millis();
     txLen = AUDIO_HEADER_LEN;
     micIndex = 0;
     txSeq = 0;
@@ -98,6 +120,7 @@ void AudioModule::onPttDown()
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
     LOG_INFO("PTT pressed, session %u", txSession);
+    return true;
 }
 
 void AudioModule::onPttUp()
@@ -148,6 +171,9 @@ void AudioModule::sendPacket(bool last)
     p->decoded.want_response = false;
     p->want_ack = false; // shoot and forget, an ACK would arrive far too late
     p->priority = meshtastic_MeshPacket_Priority_MAX;
+    // One relay, not the mesh-wide hop limit: a voice stream at 25% occupancy
+    // reflooded three hops out would swamp the network.
+    p->hop_limit = 1;
     p->decoded.payload.size = txLen;
     memcpy(p->decoded.payload.bytes, txPacket, txLen);
     service->sendToMesh(p);
@@ -204,10 +230,20 @@ int32_t AudioModule::runOnce()
     }
 
     const bool pressed = digitalRead(pttPin()) == HIGH;
-    if (pressed && radio_state == RadioState::rx)
-        onPttDown();
-    else if (!pressed && radio_state == RadioState::tx)
+    if (!pressed)
+        pttLatched = false;
+
+    if (pressed && radio_state == RadioState::rx && !pttLatched) {
+        if (!onPttDown())
+            pttLatched = true; // refused; wait for a release before asking again
+    } else if (!pressed && radio_state == RadioState::tx) {
         onPttUp();
+    } else if (radio_state == RadioState::tx && !Throttle::isWithinTimespanMs(pttStartMs, AUDIO_MAX_PTT_MS)) {
+        LOG_INFO("PTT time-out after %u ms", (unsigned)AUDIO_MAX_PTT_MS);
+        onPttUp();
+        playLongBeep();
+        pttLatched = true; // no restart until the button is let go
+    }
 
     if (radio_state == RadioState::tx) {
         captureAndEncode();

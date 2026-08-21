@@ -115,8 +115,8 @@ static void test_last_flag_ends_stream()
     TEST_ASSERT_FALSE(asm_.isActive());
 }
 
-// Half duplex: one stream at a time.
-static void test_second_talker_ignored()
+// Half duplex: one stream at a time. The second is queued, never interleaved.
+static void test_second_talker_not_interleaved()
 {
     feed(ALICE, 0, 10, 100);
     feed(BOB, 0, 77, 100, false, 0x33);
@@ -132,6 +132,7 @@ static void test_new_session_after_last_is_accepted()
     feed(ALICE, 0, 10, 100, true);
     drain(100);
     TEST_ASSERT_FALSE(asm_.isActive());
+    TEST_ASSERT_FALSE(asm_.hasQueued());
     feed(ALICE, 0, 20, 200, false, 0x77);
     drain(200);
     bool sawNew = false;
@@ -145,8 +146,60 @@ static void test_timeout_ends_stream()
 {
     feed(ALICE, 0, 10, 100);
     drain(100);
-    asm_.tick(100 + AUDIO_STREAM_TIMEOUT_MS + 1, true);
+    asm_.tick(100 + AUDIO_IDLE_MAX_MS + 1, true);
     TEST_ASSERT_FALSE(asm_.isActive());
+}
+
+// 5 s was 1.7 packet intervals at 450, so one lost packet ended a live stream.
+static void test_idle_timeout_scales_with_mode()
+{
+    asm_.setPacketMs(3000); // 450
+    feed(ALICE, 0, 10, 100);
+    drain(100);
+    asm_.tick(100 + 12000, true); // would have expired under the old 5 s
+    TEST_ASSERT_TRUE(asm_.isActive());
+    asm_.tick(100 + AUDIO_IDLE_MAX_MS + 1, true);
+    TEST_ASSERT_FALSE(asm_.isActive());
+    asm_.setPacketMs(2240);
+}
+
+// A second sender is held, then played once the first sends `last`.
+static void test_second_sender_is_queued_then_played()
+{
+    feed(ALICE, 0, 10, 100);
+    feed(BOB, 0, 77, 100, false, 0x33);
+    feed(BOB, 1, 78, 100, true, 0x33);
+    TEST_ASSERT_TRUE(asm_.hasQueued());
+
+    feed(ALICE, 1, 11, 100, true);
+    drain(100);
+
+    bool sawAlice = false, sawBob = false;
+    size_t firstBob = 0;
+    for (size_t i = 0; i < emitted.size(); i++) {
+        if (emitted[i].first == 10 || emitted[i].first == 11)
+            sawAlice = true;
+        if (emitted[i].first == 77 && !sawBob) {
+            sawBob = true;
+            firstBob = i;
+        }
+    }
+    TEST_ASSERT_TRUE(sawAlice);
+    TEST_ASSERT_TRUE(sawBob);
+    // Bob must not start before Alice has finished.
+    TEST_ASSERT_TRUE(emitted[firstBob - 1].first == 10 || emitted[firstBob - 1].first == 11);
+}
+
+// Only one sender is held; a third is dropped rather than interleaved.
+static void test_third_sender_not_queued()
+{
+    feed(ALICE, 0, 10, 100);
+    feed(BOB, 0, 77, 100, false, 0x33);
+    feed(0x33333333, 0, 88, 100, false, 0x44);
+    feed(ALICE, 1, 11, 100, true);
+    drain(100, 16);
+    for (auto &e : emitted)
+        TEST_ASSERT_NOT_EQUAL_UINT8(88, e.first);
 }
 
 // 3200 wraps seq inside minutes of talking.
@@ -201,9 +254,12 @@ void setup()
     RUN_TEST(test_late_copy_is_dropped);
     RUN_TEST(test_gap_conceals_and_advances);
     RUN_TEST(test_last_flag_ends_stream);
-    RUN_TEST(test_second_talker_ignored);
+    RUN_TEST(test_second_talker_not_interleaved);
     RUN_TEST(test_new_session_after_last_is_accepted);
     RUN_TEST(test_timeout_ends_stream);
+    RUN_TEST(test_idle_timeout_scales_with_mode);
+    RUN_TEST(test_second_sender_is_queued_then_played);
+    RUN_TEST(test_third_sender_not_queued);
     RUN_TEST(test_seq_wraps_at_65535);
     RUN_TEST(test_mode_travels_with_the_packet);
     RUN_TEST(test_rejects_foreign_payload);

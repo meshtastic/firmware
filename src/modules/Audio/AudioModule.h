@@ -26,6 +26,13 @@ enum RadioState { standby, rx, tx };
 #define PTT_PIN 39
 #endif
 
+// Time-out timer, as commercial and amateur PTT radios have. 60 s of speech
+// costs ~15 s of airtime at the 25% occupancy ceiling.
+#ifndef AUDIO_MAX_PTT_MS
+#define AUDIO_MAX_PTT_MS 60000
+#endif
+#define AUDIO_PTT_WARN_MS 10000
+
 class AudioModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
   public:
@@ -47,7 +54,7 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
 #endif
 
   private:
-    void onPttDown();
+    bool onPttDown();
     void onPttUp();
     void captureAndEncode();
     void sendPacket(bool last);
@@ -78,7 +85,9 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
 
     RadioState radio_state = RadioState::rx;
     bool firstTime = true;
+    bool pttLatched = false; // held down but refused, ignore until released
     uint32_t nextPlayoutMs = 0;
+    uint32_t pttStartMs = 0;
 };
 
 extern AudioModule *audioModule;

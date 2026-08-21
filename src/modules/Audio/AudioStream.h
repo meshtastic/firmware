@@ -23,8 +23,16 @@ static_assert(sizeof(AudioHeader) == AUDIO_HEADER_LEN, "AudioHeader must match A
 // Slots to fill before playout, unless the hold expires first.
 #define AUDIO_PRIME_SLOTS 2
 
-// Ends the stream when `last` never arrives.
-#define AUDIO_STREAM_TIMEOUT_MS 5000
+// Idle timeout, when `last` never arrives. Scaled to the mode: 5 s is only 1.7
+// packet intervals at 450, so one lost packet would end a live stream. It also
+// gates our own PTT, so it cannot be generous either.
+#define AUDIO_IDLE_MIN_MS 10000
+#define AUDIO_IDLE_MAX_MS 30000
+#define AUDIO_IDLE_PACKETS 5
+
+// A second sender is queued and played after the first, capped: ~35 s at 450,
+// ~13 s at 2400. Past that a queued transmission is too stale to be a reply.
+#define AUDIO_QUEUE_BYTES 8192
 
 // Reassembles one voice stream into playout order. One stream only: PTT is half
 // duplex. Free of codec2/I2S/Arduino so it can be tested on the host.
@@ -38,6 +46,9 @@ class AudioStreamAssembler
     {
         emit = fn;
         emitCtx = ctx;
+        // reset() keeps the queue on purpose, so endStream() can promote it.
+        queue.used = 0;
+        queue.truncated = false;
         reset();
     }
 
@@ -68,9 +79,11 @@ class AudioStreamAssembler
         const size_t frameLen = len - sizeof(h);
 
         if (active && (from != streamFrom || h.session != streamSession)) {
-            if (!expired(nowMs))
-                return false;
-            reset();
+            if (!expired(nowMs)) {
+                enqueue(from, h.session, payload, len);
+                return true;
+            }
+            endStream();
         }
 
         if (!active) {
@@ -122,7 +135,7 @@ class AudioStreamAssembler
 
         if (expired(nowMs)) {
             drain(nowMs);
-            reset();
+            endStream();
             return;
         }
 
@@ -146,10 +159,18 @@ class AudioStreamAssembler
         playoutSeq++;
 
         if (sawLast && filled() == 0)
-            reset();
+            endStream();
     }
 
     void setPrimeHoldMs(uint32_t ms) { primeHoldMs = ms; }
+
+    // Packet duration for the configured mode; scales the idle timeout.
+    void setPacketMs(uint32_t ms) { packetMs = ms; }
+
+    /// True while a transmission is in progress, so PTT should refuse.
+    bool isReceiving() const { return active; }
+
+    bool hasQueued() const { return queue.used > 0; }
 
   private:
     struct Slot {
@@ -163,7 +184,66 @@ class AudioStreamAssembler
     // Survives the 16-bit wrap.
     static bool seqBefore(uint16_t a, uint16_t b) { return (int16_t)(a - b) < 0; }
 
-    bool expired(uint32_t nowMs) const { return (uint32_t)(nowMs - lastRxMs) > AUDIO_STREAM_TIMEOUT_MS; }
+    uint32_t idleTimeoutMs() const
+    {
+        uint32_t t = packetMs * AUDIO_IDLE_PACKETS;
+        if (t < AUDIO_IDLE_MIN_MS)
+            t = AUDIO_IDLE_MIN_MS;
+        if (t > AUDIO_IDLE_MAX_MS)
+            t = AUDIO_IDLE_MAX_MS;
+        return t;
+    }
+
+    bool expired(uint32_t nowMs) const { return (uint32_t)(nowMs - lastRxMs) > idleTimeoutMs(); }
+
+    // Packets from a second sender, stored whole so promotion is just a replay.
+    void enqueue(NodeNum from, uint8_t session, const uint8_t *payload, size_t len)
+    {
+        if (queue.used && (queue.from != from || queue.session != session))
+            return; // already holding someone else
+        if (queue.used == 0) {
+            queue.from = from;
+            queue.session = session;
+        }
+        if (queue.used + 2 + len > AUDIO_QUEUE_BYTES) {
+            queue.truncated = true;
+            return;
+        }
+        queue.buf[queue.used++] = (uint8_t)(len & 0xff);
+        queue.buf[queue.used++] = (uint8_t)(len >> 8);
+        memcpy(queue.buf + queue.used, payload, len);
+        queue.used += (uint16_t)len;
+    }
+
+    void endStream()
+    {
+        reset();
+        promote();
+    }
+
+    void promote()
+    {
+        if (!queue.used)
+            return;
+        // Copy out first: accept() re-enters enqueue() for anything that does
+        // not belong to the stream being promoted.
+        static uint8_t scratch[AUDIO_QUEUE_BYTES];
+        const uint16_t n = queue.used;
+        const NodeNum from = queue.from;
+        memcpy(scratch, queue.buf, n);
+        queue.used = 0;
+        queue.truncated = false;
+
+        uint16_t off = 0;
+        while (off + 2 <= n) {
+            const uint16_t len = (uint16_t)(scratch[off] | (scratch[off + 1] << 8));
+            off += 2;
+            if (off + len > n)
+                break;
+            accept(from, scratch + off, len, lastRxMs);
+            off += len;
+        }
+    }
 
     int freeSlot() const
     {
@@ -249,6 +329,15 @@ class AudioStreamAssembler
     uint32_t lastRxMs = 0;
     uint32_t primeStartMs = 0;
     uint32_t primeHoldMs = 1000;
+    uint32_t packetMs = 2240;
+
+    struct {
+        NodeNum from;
+        uint8_t session;
+        uint16_t used;
+        bool truncated;
+        uint8_t buf[AUDIO_QUEUE_BYTES];
+    } queue = {};
 
     uint8_t lastPayload[AUDIO_PAYLOAD_LEN] = {};
     uint8_t lastPayloadLen = 0;
