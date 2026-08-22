@@ -89,7 +89,7 @@ int32_t ExternalNotificationModule::runOnce()
         isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
         const bool buzzerModeAllowed = buzzerModeAllowsNotification(config.device.buzzer_mode, buzzerAlertIsDirectMessage);
-        const bool buzzerWindowExpired = !Throttle::isWithinTimespanMs(buzzerAlertStarted, buzzerAlertDurationMs);
+        const bool buzzerWindowExpired = Throttle::hasElapsed(buzzerAlertStarted, buzzerAlertDurationMs);
         if (buzzerShouldAlert && (!buzzerModeAllowed || (buzzerWindowExpired && !isRtttlPlaying))) {
             stopBuzzerNow();
             isRtttlPlaying = false;
@@ -286,9 +286,8 @@ bool ExternalNotificationModule::nagging()
 
 void ExternalNotificationModule::stopBuzzerNow()
 {
-    // These players are shared with system tones. Only stop them when this module
-    // owns an active buzzer alert; stopping generic LED/vibration output must not
-    // interrupt unrelated audio.
+    // Only an active buzzer alert owned by this module may stop the shared
+    // players; generic output cleanup must leave unrelated audio running.
     if (buzzerShouldAlert) {
         rtttl::stop();
 #ifdef HAS_I2S
