@@ -558,9 +558,13 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     buzzerPlaybackStarted = true;
                     buzzerPlaybackBackend = BuzzerPlaybackBackend::PWM;
                 } else {
+#if defined(HAS_I2S_SPEAKER_NRF52)
+                    // runOnce starts this backend and records playback only after begin().
+#else
                     setExternalState(2, true);
                     buzzerPlaybackStarted = true;
                     buzzerPlaybackBackend = BuzzerPlaybackBackend::DIGITAL;
+#endif
                 }
             }
 
