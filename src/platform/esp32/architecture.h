@@ -214,6 +214,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #elif defined(MESHNOLOGY_W10)
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
+#elif defined(ELECROW_ThinkNode_M9)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M9
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

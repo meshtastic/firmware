@@ -298,7 +298,11 @@ static void test_regionPresetMap_coversAllRegionsWithinBounds()
     meshtastic_LoRaRegionPresetMap map;
     getRegionPresetMap(map);
 
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const size_t known = countKnownRegions() + 1; // + the UNSET intent entry
+#else
     const size_t known = countKnownRegions();
+#endif
     TEST_ASSERT_EQUAL_UINT((unsigned)known, (unsigned)map.region_groups_count);
 
     // Bounds derived from the generated nanopb arrays (mesh.options max_count), so
@@ -333,6 +337,12 @@ static void test_regionPresetMap_matchesRegionTable()
 
         const meshtastic_LoRaPresetGroup &grp = map.groups[gi];
         const RegionInfo *r = getRegion(code);
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+        // UNSET states the pinned preset, not PROFILE_UNDEF's list, so the table checks below don't apply.
+        if (code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            continue;
+#endif
 
         // Group's list is non-empty and within the generated array bound.
         const size_t maxPresets = sizeof(grp.presets) / sizeof(grp.presets[0]);
@@ -371,6 +381,36 @@ static void test_regionPresetMap_matchesRegionTable()
         // Licensed flag matches the region's profile.
         TEST_ASSERT_EQUAL(r->profile->licensedOnly, grp.licensed_only);
     }
+}
+
+// UNSET appears only when the build pins a preset, and then states exactly that preset.
+// A stock build leaves it out entirely, which clients read as "unconstrained".
+static void test_regionPresetMap_unsetCarriesUserprefsIntent()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+    const meshtastic_LoRaPresetGroup *grp = nullptr;
+    for (pb_size_t i = 0; i < map.region_groups_count; i++)
+        if (map.region_groups[i].region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            grp = &map.groups[map.region_groups[i].group_index];
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const meshtastic_Config_LoRaConfig_ModemPreset pinned = USERPREFS_LORACONFIG_MODEM_PRESET;
+    TEST_ASSERT_NOT_NULL_MESSAGE(grp, "a build that pins a preset must state it for UNSET");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, (unsigned)grp->presets_count, "the pinned preset is the sole entry");
+    TEST_ASSERT_EQUAL(pinned, grp->presets[0]);
+    TEST_ASSERT_EQUAL(pinned, grp->default_preset);
+    TEST_ASSERT_FALSE_MESSAGE(grp->licensed_only, "UNSET is not a licensed-only region");
+
+    // Stating intent must not narrow what the device accepts: the firmware still takes any
+    // real preset while the region is unset (#11496), so the map cannot become enforcement.
+    const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+#else
+    TEST_ASSERT_NULL_MESSAGE(grp, "a stock build must leave UNSET out of the map entirely");
+#endif
 }
 
 void setUp(void)
@@ -422,6 +462,7 @@ void setup()
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
+    RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
     exit(UNITY_END());
 }
 
