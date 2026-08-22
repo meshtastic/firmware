@@ -71,7 +71,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         if (config.position.fixed_position) {
             LOG_DEBUG("Ignore own position update except time: position.fixed_position true");
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_WATCH_ULTRA)
             // Since we return early if position.fixed_position is true, set the T-Watch's RTC to the time received from the
             // client device here
             if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
