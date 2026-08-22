@@ -100,10 +100,10 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
     strncat(rtttl, ",32p", sizeof(rtttl) - strlen(rtttl) - 1);
 
     audioThread->beginRttl(rtttl, strlen(rtttl));
-    while (audioThread->isPlaying()) {
+    while (audioThread->isPlaying(AudioThread::RtttlOwner::SYSTEM)) {
         delay(10);
     }
-    audioThread->stop(); // release I2S so the amp goes silent instead of looping the last buffer
+    audioThread->stopRtttlIfOwnedBy(AudioThread::RtttlOwner::SYSTEM);
 }
 #endif
 
