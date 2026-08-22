@@ -205,6 +205,24 @@ static void test_getPositionPrecisionForChannel_clampsPreciseOnSecondaryThatInhe
     TEST_ASSERT_EQUAL_UINT32(MAX_POSITION_PRECISION_PUBLIC_KEY, precision);
 }
 
+static void test_getPositionPrecisionForChannel_keepsPreciseOnSecondaryThatInheritsUnencryptedKeyInHamMode()
+{
+    channels.initDefaults();
+    channels.getByIndex(0).settings.psk.size = 0;
+    uint8_t idx = 1;
+    meshtastic_Channel &ch = channels.getByIndex(idx);
+    ch = meshtastic_Channel_init_default;
+    ch.has_settings = true;
+    ch.role = meshtastic_Channel_Role_SECONDARY;
+    ch.settings.has_module_settings = true;
+    ch.settings.module_settings.position_precision = 32;
+    owner.is_licensed = true;
+
+    uint32_t precision = getPositionPrecisionForChannel(idx);
+    owner.is_licensed = false;
+    TEST_ASSERT_EQUAL_UINT32(32, precision);
+}
+
 static CryptoKey makeCryptoKey(const uint8_t *bytes, int length)
 {
     CryptoKey k;
@@ -289,6 +307,7 @@ void setup()
     RUN_TEST(test_getPositionPrecisionForChannel_keepsPreciseOnUnencryptedChannelInHamMode);
     RUN_TEST(test_getPositionPrecisionForChannel_clampsPreciseOnDefaultKeyChannelInHamMode);
     RUN_TEST(test_getPositionPrecisionForChannel_clampsPreciseOnSecondaryThatInheritsDefaultKeyInHamMode);
+    RUN_TEST(test_getPositionPrecisionForChannel_keepsPreciseOnSecondaryThatInheritsUnencryptedKeyInHamMode);
     RUN_TEST(test_cryptoKeyIsPublic_openKeyIsPublic);
     RUN_TEST(test_cryptoKeyIsPublic_defaultKeyIsPublic);
     RUN_TEST(test_cryptoKeyIsPublic_defaultKeyFamilyVariesLastByte);
