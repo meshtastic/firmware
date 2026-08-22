@@ -83,6 +83,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     void handleSetRingtone(const char *from_msg);
 
   protected:
+    enum class BuzzerPlaybackBackend : uint8_t { NONE, DIGITAL, PWM, I2S, NRF52_I2S };
+
     /** Called to handle a particular incoming message
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
@@ -97,6 +99,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     bool isSilenced = false;
     bool buzzerShouldAlert = false;
+    BuzzerPlaybackBackend buzzerPlaybackBackend = BuzzerPlaybackBackend::NONE;
     bool buzzerAlertIsDirectMessage = false;
     uint32_t buzzerAlertStarted = 0;
     uint32_t buzzerAlertDurationMs = 0;
