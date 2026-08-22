@@ -17,6 +17,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
+#include "UptimeClock.h"
 #include "buzz/BuzzerMode.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
@@ -119,7 +120,7 @@ int32_t ExternalNotificationModule::runOnce()
             if (!moduleConfig.external_notification.use_pwm && buzzerShouldAlert &&
                 Throttle::hasElapsed(externalTurnedOn[2], delay)) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
-                          millis());
+                          Time::getMillis());
                 setExternalState(2, !getExternal(2));
             }
 #if defined(HAS_RGB_LED)
@@ -215,7 +216,7 @@ bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
 void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 {
     externalCurrentState[index] = on;
-    externalTurnedOn[index] = millis();
+    externalTurnedOn[index] = Time::getMillis();
 
     switch (index) {
     case 1:
@@ -285,13 +286,26 @@ bool ExternalNotificationModule::nagging()
 
 void ExternalNotificationModule::stopBuzzerNow()
 {
-    rtttl::stop();
+    // These players are shared with system tones. Only stop them when this module
+    // owns an active buzzer alert; stopping generic LED/vibration output must not
+    // interrupt unrelated audio.
+    if (buzzerShouldAlert) {
+        rtttl::stop();
 #ifdef HAS_I2S
-    audioThread->stop();
+        audioThread->stop();
 #endif
 #if defined(HAS_I2S_SPEAKER_NRF52)
-    nrf52RtttlPlayer.stop();
+        nrf52RtttlPlayer.stop();
 #endif
+
+#ifdef HAS_I2S
+        // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
+        // T-Deck uses GPIO0 as trackball button, so restore the mode
+#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
+        pinMode(0, INPUT);
+#endif
+#endif
+    }
     if (getExternal(2)) {
         setExternalState(2, false);
     }
@@ -299,14 +313,6 @@ void ExternalNotificationModule::stopBuzzerNow()
     buzzerAlertIsDirectMessage = false;
     buzzerAlertStarted = 0;
     buzzerAlertDurationMs = 0;
-
-#ifdef HAS_I2S
-    // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
-    // T-Deck uses GPIO0 as trackball button, so restore the mode
-#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
-    pinMode(0, INPUT);
-#endif
-#endif
 }
 
 void ExternalNotificationModule::stopNow()
@@ -464,7 +470,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                         ? (moduleConfig.external_notification.nag_timeout * 1000)
                         : (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                         : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
-                const uint32_t alertStarted = millis();
+                const uint32_t alertStarted = Time::getMillis();
                 nagCycleCutoff = alertStarted + alertDuration;
                 LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
                 isNagging = true;
