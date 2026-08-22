@@ -1,5 +1,7 @@
 #pragma once
 #include "PowerFSM.h"
+#include "concurrency/Lock.h"
+#include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
@@ -35,6 +37,10 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len, RtttlOwner owner = RtttlOwner::SYSTEM)
     {
+        concurrency::LockGuard guard(&rtttlLock);
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+        }
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(true);
 #endif
@@ -48,49 +54,41 @@ class AudioThread : public concurrency::OSThread
     // Also handles actually playing the RTTTL, needs to be called in loop
     bool isPlaying()
     {
-        if (i2sRtttl != nullptr) {
-            const bool playing = i2sRtttl->isRunning() && i2sRtttl->loop();
-            if (!playing) {
-                stop();
-            }
-            return playing;
-        }
-        return false;
+        concurrency::LockGuard guard(&rtttlLock);
+        return isPlayingUnlocked();
+    }
+
+    bool isPlaying(RtttlOwner owner)
+    {
+        concurrency::LockGuard guard(&rtttlLock);
+        const bool playing = isPlayingUnlocked();
+        return playing && rtttlOwner == owner;
     }
 
     bool stopRtttlIfOwnedBy(RtttlOwner owner)
     {
+        concurrency::LockGuard guard(&rtttlLock);
         if (rtttlOwner != owner) {
             return false;
         }
-        stop();
+        stopUnlocked();
         return true;
     }
 
-    bool isRtttlOwnedBy(RtttlOwner owner) const { return rtttlOwner == owner; }
-
     void stop()
     {
-        if (i2sRtttl != nullptr) {
-            i2sRtttl->stop();
-            i2sRtttl = nullptr;
-        }
-
-        rtttlFile = nullptr;
-        rtttlOwner = RtttlOwner::NONE;
-
-        setCPUFast(false);
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        concurrency::LockGuard guard(&rtttlLock);
+        stopUnlocked();
     }
 
     void readAloud(const char *text)
     {
+        concurrency::LockGuard guard(&rtttlLock);
         if (i2sRtttl != nullptr) {
             i2sRtttl->stop();
             i2sRtttl = nullptr;
         }
+        rtttlFile = nullptr;
         rtttlOwner = RtttlOwner::NONE;
 
 #ifdef AUDIO_AMP_ENABLE
@@ -117,6 +115,32 @@ class AudioThread : public concurrency::OSThread
     }
 
   private:
+    bool isPlayingUnlocked()
+    {
+        if (i2sRtttl == nullptr) {
+            return false;
+        }
+        const bool playing = i2sRtttl->isRunning() && i2sRtttl->loop();
+        if (!playing) {
+            stopUnlocked();
+        }
+        return playing;
+    }
+
+    void stopUnlocked()
+    {
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+            i2sRtttl = nullptr;
+        }
+        rtttlFile = nullptr;
+        rtttlOwner = RtttlOwner::NONE;
+        setCPUFast(false);
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(false);
+#endif
+    }
+
     void initOutput()
     {
         audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
@@ -129,6 +153,7 @@ class AudioThread : public concurrency::OSThread
 
     std::unique_ptr<AudioFileSourcePROGMEM> rtttlFile = nullptr;
     RtttlOwner rtttlOwner = RtttlOwner::NONE;
+    concurrency::Lock rtttlLock;
 };
 
 #endif
