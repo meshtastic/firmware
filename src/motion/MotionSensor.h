@@ -7,6 +7,10 @@
 
 #include "../configuration.h"
 
+#ifndef MOTION_SENSOR_SLEEP_CHECK_INTERVAL_MS
+#define MOTION_SENSOR_SLEEP_CHECK_INTERVAL_MS MOTION_SENSOR_CHECK_INTERVAL_MS
+#endif
+
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 #include "../Power.h"

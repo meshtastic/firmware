@@ -28,7 +28,11 @@
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
+#ifdef USERPREFS_CONFIG_SCREEN_ON_SECS
+#define default_screen_on_secs IF_ROUTER(1, USERPREFS_CONFIG_SCREEN_ON_SECS)
+#else
 #define default_screen_on_secs IF_ROUTER(1, 60 * 10)
+#endif
 #define default_node_info_broadcast_secs 3 * 60 * 60
 #define default_neighbor_info_broadcast_secs 6 * 60 * 60
 #define default_mesh_beacon_min_broadcast_interval_secs 3600
