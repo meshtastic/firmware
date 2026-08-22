@@ -451,7 +451,8 @@ static bool computeBottomCompassPlacement(OLEDDisplay *display, int16_t xOffset,
                                           int16_t margin, int16_t *compassX, int16_t *compassY, int16_t *compassRadius)
 {
     // Return false when content leaves no room for a readable compass.
-    int availableHeight = SCREEN_HEIGHT - yBelowContent - bottomReserved - margin;
+    int availableHeight =
+        SCREEN_HEIGHT - yBelowContent - bottomReserved - margin - BASEUI_HEADER_MARGIN - BASEUI_BELOW_HEADER_MARGIN;
     if (availableHeight < FONT_HEIGHT_SMALL * 2) {
         return false;
     }
@@ -581,12 +582,12 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
         if (strcmp(mode, "line1") == 0) {
             strcpy(displayLine, "No GPS present");
-            display->drawString(x, y, displayLine);
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, y, displayLine);
         }
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         if (strcmp(mode, "line1") == 0) {
             strcpy(displayLine, gps->getHasTime() ? "GPS Time Only" : "No GPS Lock");
-            display->drawString(x, y, displayLine);
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, y, displayLine);
         }
     } else {
 
@@ -665,13 +666,14 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
             }
 
             if (strcmp(mode, "line1") == 0) {
-                display->drawString(x, y, coordinateLine_1);
+                display->drawString(x + BASEUI_BODY_LR_MARGIN, y, coordinateLine_1);
             } else if (strcmp(mode, "line2") == 0) {
-                display->drawString(x, y, coordinateLine_2);
+                display->drawString(x + BASEUI_BODY_LR_MARGIN, y, coordinateLine_2);
             } else if (strcmp(mode, "combined") == 0) {
                 display->drawString(x, y, coordinateLine_1);
                 if (coordinateLine_2[0] != '\0') {
-                    display->drawString(x + display->getStringWidth(coordinateLine_1), y, coordinateLine_2);
+                    display->drawString(x + BASEUI_BODY_LR_MARGIN + display->getStringWidth(coordinateLine_1), y,
+                                        coordinateLine_2);
                 }
             }
 
@@ -683,12 +685,12 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
             snprintf(coordinateLine_2, sizeof(coordinateLine_2), "Lon: %3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(),
                      geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(), geoCoord.getDMSLonCP());
             if (strcmp(mode, "line1") == 0) {
-                display->drawString(x, y, coordinateLine_1);
+                display->drawString(x + BASEUI_BODY_LR_MARGIN, y, coordinateLine_1);
             } else if (strcmp(mode, "line2") == 0) {
-                display->drawString(x, y, coordinateLine_2);
+                display->drawString(x + BASEUI_BODY_LR_MARGIN, y, coordinateLine_2);
             } else { // both
-                display->drawString(x, y, coordinateLine_1);
-                display->drawString(x, y + 10, coordinateLine_2);
+                display->drawString(x + BASEUI_BODY_LR_MARGIN, y, coordinateLine_1);
+                display->drawString(x + BASEUI_BODY_LR_MARGIN, y + 10, coordinateLine_2);
             }
         }
     }
@@ -933,6 +935,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 #endif
 
+    y += BASEUI_BELOW_HEADER_MARGIN;
     // ===== DYNAMIC ROW STACKING WITH YOUR MACROS =====
     // 1. Each potential info row has a macro-defined Y position (not regular increments!).
     // 2. Each row is only shown if it has valid data.
@@ -1304,7 +1307,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 }
 
 // ****************************
-// * Device Focused Screen    *
+// *        Home Frame        *
 // ****************************
 void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -1313,6 +1316,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setFont(FONT_SMALL);
     int line = 1;
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    bool origBold = config.display.heading_bold;
 
     // === Header ===
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -1320,11 +1324,11 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     } else {
         graphics::drawCommonHeader(display, x, y, "");
     }
+    y += BASEUI_BELOW_HEADER_MARGIN;
 
     // === Content below header ===
 
     // === First Row: Region / Channel Utilization and Uptime ===
-    bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
     const bool compactPanel = graphics::isCompactPanel(display);
@@ -1333,19 +1337,20 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         const char *txdisabled = "Transmit Disabled";
         if (compactPanel) {
             int textWidth = display->getStringWidth(txdisabled);
-            display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line], txdisabled);
+            display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line] + y, txdisabled);
         } else {
-            display->drawString(x, getTextPositions(display)[line], txdisabled);
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + y, txdisabled);
         }
     } else if (compactPanel) {
         // No room for a separate left/right column layout - center it instead.
-        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online", true);
+        drawNodes(display, x, getTextPositions(display)[line] + y + 2, nodeStatus, -1, false, "online", true);
     } else {
         // Display Region and Channel Utilization
         if (currentResolution == ScreenResolution::UltraLow) {
-            drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+            drawNodes(display, x, getTextPositions(display)[line] + y + 2, nodeStatus, -1, false, "online");
         } else {
-            drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+            drawNodes(display, x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + y + 2, nodeStatus, -1, false,
+                      "online");
         }
     }
     char uptimeStr[32] = "";
@@ -1353,7 +1358,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
     }
     if (!compactPanel) {
-        display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
+        display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr) - BASEUI_BODY_LR_MARGIN,
+                            getTextPositions(display)[line++] + y, uptimeStr);
     } else {
         line++;
     }
@@ -1362,7 +1368,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     config.display.heading_bold = false;
 
 #if HAS_GPS
-    UIRenderer::drawGps(display, x, getTextPositions(display)[line], gpsStatus, compactPanel);
+    UIRenderer::drawGps(display, x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + y, gpsStatus, compactPanel);
 #endif
 
 #if defined(OLED_TINY)
@@ -1374,7 +1380,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         char chUtilStr[16];
         snprintf(chUtilStr, sizeof(chUtilStr), "ChUtil %d%%", chutil_percent);
         int chUtilWidth = display->getStringWidth(chUtilStr);
-        display->drawString((SCREEN_WIDTH - chUtilWidth) / 2, getTextPositions(display)[line++], chUtilStr);
+        display->drawString((SCREEN_WIDTH - chUtilWidth) / 2, getTextPositions(display)[line++] + y, chUtilStr);
 
         // === Node Identity: long name (falls back to short), truncated with "..." if too wide ===
         const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
@@ -1384,14 +1390,14 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         UIRenderer::truncateStringWithEmotes(display, rawName, nodeName, sizeof(nodeName), SCREEN_WIDTH - 4);
         int textWidth = UIRenderer::measureStringWithEmotes(display, nodeName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], nodeName, FONT_HEIGHT_SMALL, 1,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, nodeName, FONT_HEIGHT_SMALL, 1,
                                          false);
     } else {
         // === Node Identity ===
         const char *shortName = owner.short_name[0] ? owner.short_name : "";
         int textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, shortName, FONT_HEIGHT_SMALL, 1,
                                          false);
     }
 #else
@@ -1400,9 +1406,11 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
         snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), getTextPositions(display)[line++], batStr);
+        display->drawString(x + SCREEN_WIDTH - BASEUI_BODY_LR_MARGIN - display->getStringWidth(batStr),
+                            getTextPositions(display)[line++] + y, batStr);
     } else {
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), getTextPositions(display)[line++], "USB");
+        display->drawString(x + SCREEN_WIDTH - BASEUI_BODY_LR_MARGIN - display->getStringWidth("USB"),
+                            getTextPositions(display)[line++] + y, "USB");
     }
 
     config.display.heading_bold = origBold;
@@ -1413,9 +1421,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int chutil_percent = static_cast<int>(airTime->channelUtilizationPercent() + 0.5f);
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%d%%", chutil_percent);
 
-    int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
-                                                                 : display->getStringWidth(chUtil) + 5;
-    int chUtil_y = getTextPositions(display)[line] + 3;
+    int chUtil_width = display->getStringWidth(chUtil);
+    int chUtil_y = getTextPositions(display)[line] + 3 + y;
 
     int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
     int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
@@ -1433,10 +1440,15 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
     const int raw_chutil_percent = chutil_percent;
 
-    // With BT disabled we pin this row left to make room for the extra "BT off" indicator.
-    const int starting_position = config.bluetooth.enabled ? x : 0;
+    // Center the row; with BT disabled reserve the width of the extra "BT off" indicator.
+    int starting_position =
+        (SCREEN_WIDTH - chUtil_width - chutil_bar_width - extraoffset - display->getStringWidth(chUtilPercentage));
+    if (!config.bluetooth.enabled) {
+        starting_position -= (display->getStringWidth("BT off") + extraoffset);
+    }
+    starting_position /= 2;
 
-    display->drawString(starting_position, getTextPositions(display)[line], chUtil);
+    display->drawString(starting_position, getTextPositions(display)[line] + y, chUtil);
 
     // Force 61% or higher to show a full 100% bar, text would still show related percent.
     if (chutil_percent >= 61) {
@@ -1446,7 +1458,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int fillRight = computeChannelUtilizationFill(chutil_percent, chutil_bar_max_fill);
 
     // Draw outline
-    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+    display->drawRect(starting_position + chUtil_width, chUtil_y, chutil_bar_width, chutil_bar_height);
 
     // Fill progress
     if (fillRight > 0) {
@@ -1458,16 +1470,18 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
             UtilizationFillColor = TFTPalette::Medium;
         }
         setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
-                                   starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+                                   starting_position + chUtil_width + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
 #endif
-        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+        display->fillRect(starting_position + chUtil_width + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
 
-    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line],
+    display->drawString(starting_position + chUtil_width + chutil_bar_width + extraoffset, getTextPositions(display)[line] + y,
                         chUtilPercentage);
 
     if (!config.bluetooth.enabled) {
-        display->drawString(SCREEN_WIDTH - display->getStringWidth("BT off"), getTextPositions(display)[line], "BT off");
+        display->drawString(starting_position + chUtil_width + chutil_bar_width + extraoffset +
+                                display->getStringWidth(chUtilPercentage) + extraoffset,
+                            getTextPositions(display)[line] + y, "BT off");
     }
 
     line += 1;
@@ -1491,21 +1505,28 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (SCREEN_WIDTH - UIRenderer::measureStringWithEmotes(display, combinedName) > 10) {
         textWidth = UIRenderer::measureStringWithEmotes(display, combinedName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + yOffset, combinedName,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + yOffset + y, combinedName,
                                          FONT_HEIGHT_SMALL, 1, false);
     } else {
         // === LongName Centered ===
         textWidth = UIRenderer::measureStringWithEmotes(display, longName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], longName, FONT_HEIGHT_SMALL, 1,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, longName, FONT_HEIGHT_SMALL, 1,
                                          false);
 
         // === ShortName Centered ===
         textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1,
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, shortName, FONT_HEIGHT_SMALL, 1,
                                          false);
     }
+#ifdef SHOW_STEP_COUNTER
+    std::string stepsLine = "Steps: " + std::to_string(screen->steps);
+    textWidth = UIRenderer::measureStringWithEmotes(display, stepsLine.c_str());
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + y, stepsLine.c_str(), FONT_HEIGHT_SMALL,
+                                     1, false);
+#endif
 #endif
     graphics::drawCommonFooter(display, x, y);
 }
@@ -1776,6 +1797,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
+    y += BASEUI_BELOW_HEADER_MARGIN;
     const int *textPos = getTextPositions(display);
     const bool compactPanel = graphics::isCompactPanel(display);
 
@@ -1804,7 +1826,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    UIRenderer::drawGps(display, x, textPos[line++], gpsStatus, compactPanel);
+    UIRenderer::drawGps(display, x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, gpsStatus, compactPanel);
 
     config.display.heading_bold = origBold;
 
@@ -1914,18 +1936,18 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), true);
 #endif
 
-            display->drawString(0, textPos[line++], uptimeStr);
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, uptimeStr);
         } else {
-            display->drawString(0, textPos[line++], "Last: ?");
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, "Last: ?");
         }
 
         // === Third Row: Line 1 GPS Info ===
-        UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line1");
+        UIRenderer::drawGpsCoordinates(display, x, textPos[line++] + y, gpsStatus, "line1");
 
         if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
             uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
-            UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line2");
+            UIRenderer::drawGpsCoordinates(display, x, textPos[line++] + y, gpsStatus, "line2");
         }
 
         // === Final Row: Altitude ===
@@ -1936,21 +1958,21 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0im", alt);
         }
-        display->drawString(x, textPos[line++], altitudeLine);
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, altitudeLine);
     }
 #if !defined(OLED_TINY)
     // === Draw Compass ===
     if (validHeading || statusLine1) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
         if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-            const int16_t topY = textPos[1];
-            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1); // nav row height
+            const int16_t topY = textPos[1] + y;
+            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1) - y; // nav row height
             const int16_t usableHeight = bottomY - topY - 5;
 
             int16_t compassRadius = usableHeight / 2;
             if (compassRadius < 8)
                 compassRadius = 8;
-            const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
+            const int16_t compassX = x + BASEUI_BODY_LR_MARGIN + SCREEN_WIDTH - compassRadius - 8;
 
             // Center vertically and nudge down slightly to keep "N" clear of header
             const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
@@ -2085,7 +2107,11 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         lastFrameChangeTime = millis();
     }
 
+#ifdef OLED_HUGE
+    const int iconSize = 24;
+#else
     const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
+#endif
     const int spacing = (currentResolution == ScreenResolution::High) ? 8 : 4;
     const int bigOffset = (currentResolution == ScreenResolution::High) ? 1 : 0;
     const bool compactPanel = graphics::isCompactPanel(display);
@@ -2153,7 +2179,11 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 #endif
 
+#if BASEUI_HEADER_LR_MARGIN
+    const int navPadding = BASEUI_HEADER_LR_MARGIN;
+#else
     const int navPadding = compactPanel ? 8 : ((currentResolution == ScreenResolution::High) ? 24 : 12);
+#endif
 
     int usableWidth = SCREEN_WIDTH - (navPadding * 2);
     if (usableWidth < iconSize)
@@ -2253,12 +2283,15 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->setColor(BLACK);
 #endif
         }
-
+#ifdef OLED_HUGE
+        NodeListRenderer::drawScaledXBitmap3x(x, y, 8, 8, icon, display);
+#else
         if (currentResolution == ScreenResolution::High) {
             NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, icon, display);
         } else {
             display->drawXbm(x, y, iconSize, iconSize, icon);
         }
+#endif
 
         if (isActive) {
             display->setColor(WHITE);

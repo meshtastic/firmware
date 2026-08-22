@@ -208,10 +208,14 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
 #elif defined(HELTEC_WIRELESS_TRACKER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#elif defined(T_WATCH_ULTRA)
+#define HW_VENDOR meshtastic_HardwareModel_T_WATCH_ULTRA
 #elif defined(M5STACK_CARDPUTER_ADV)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #elif defined(MESHNOLOGY_W10)
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
+#elif defined(ELECROW_ThinkNode_M9)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M9
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

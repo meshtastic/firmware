@@ -322,6 +322,8 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 __attribute__((noinline)) void lateInitVariant() __attribute__((weak));
 __attribute__((noinline)) void lateInitVariant() {}
 
+// earlyInitVariant() runs before consoleInit(): a LOG_* macro here CRASHES the device,
+// it is not a silent no-op. Defer any logging to lateInitVariant() or later.
 __attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
 __attribute__((noinline)) void earlyInitVariant() {}
 
