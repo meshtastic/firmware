@@ -99,7 +99,9 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
     // trailing rest flushes the last note out of the I2S DMA buffer before teardown
     strncat(rtttl, ",32p", sizeof(rtttl) - strlen(rtttl) - 1);
 
-    audioThread->beginRttl(rtttl, strlen(rtttl));
+    if (!audioThread->beginRttlIfIdle(rtttl, strlen(rtttl))) {
+        return;
+    }
     while (audioThread->isPlaying(AudioThread::RtttlOwner::SYSTEM)) {
         delay(10);
     }
