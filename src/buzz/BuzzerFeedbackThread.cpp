@@ -1,4 +1,5 @@
 #include "BuzzerFeedbackThread.h"
+#include "BuzzerMode.h"
 #include "NodeDB.h"
 #include "buzz.h"
 #include "configuration.h"
@@ -13,10 +14,8 @@ BuzzerFeedbackThread::BuzzerFeedbackThread()
 
 int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
 {
-    // Only provide feedback if buzzer is enabled for notifications
-    if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
-        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY ||
-        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY) {
+    // Input feedback is a system tone, not a message notification.
+    if (!buzzerModeAllowsSystemTones(config.device.buzzer_mode)) {
         return 0; // Let other handlers process the event
     }
 

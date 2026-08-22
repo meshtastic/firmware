@@ -65,7 +65,13 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     void setExternalState(uint8_t index = 0, bool on = false);
     bool getExternal(uint8_t index = 0);
 
-    void setMute(bool mute) { isSilenced = mute; }
+    void setMute(bool mute)
+    {
+        isSilenced = mute;
+        if (mute) {
+            stopNow();
+        }
+    }
     bool getMute() { return isSilenced; }
 
     bool canBuzz();
@@ -91,6 +97,11 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     bool isSilenced = false;
     bool buzzerShouldAlert = false;
+    bool buzzerAlertIsDirectMessage = false;
+    uint32_t buzzerAlertStarted = 0;
+    uint32_t buzzerAlertDurationMs = 0;
+
+    void stopBuzzerNow();
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,

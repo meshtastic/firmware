@@ -1,4 +1,5 @@
 #include "buzz.h"
+#include "BuzzerMode.h"
 #include "NodeDB.h"
 #include "configuration.h"
 
@@ -108,9 +109,7 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
 
 void playTones(const ToneDuration *tone_durations, int size)
 {
-    if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
-        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY) {
-        // Buzzer is disabled or not set to system tones
+    if (!buzzerModeAllowsSystemTones(config.device.buzzer_mode)) {
         return;
     }
 #ifdef HAS_I2S
