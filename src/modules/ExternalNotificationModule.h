@@ -99,6 +99,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     bool isSilenced = false;
     bool buzzerShouldAlert = false;
+    bool buzzerPlaybackStarted = false;
     BuzzerPlaybackBackend buzzerPlaybackBackend = BuzzerPlaybackBackend::NONE;
     bool buzzerAlertIsDirectMessage = false;
     uint32_t buzzerAlertStarted = 0;
