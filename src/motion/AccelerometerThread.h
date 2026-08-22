@@ -21,17 +21,11 @@
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
-#include "QMI8658Sensor.h"
-
-#include <memory>
 #ifdef HAS_QMA6100P
 #include "QMA6100PSensor.h"
 #endif
 #ifdef HAS_STK8XXX
 #include "STK8XXXSensor.h"
-#endif
-#ifdef HAS_BHI260AP
-#include "BHI260APSensor.h"
 #endif
 
 extern ScanI2C::DeviceAddress accelerometer_found;
@@ -39,7 +33,7 @@ extern ScanI2C::DeviceAddress accelerometer_found;
 class AccelerometerThread : public concurrency::OSThread
 {
   private:
-    std::unique_ptr<MotionSensor> sensor;
+    MotionSensor *sensor = nullptr;
     bool isInitialised = false;
 
   public:
@@ -65,10 +59,6 @@ class AccelerometerThread : public concurrency::OSThread
             sensor->calibrate(forSeconds);
         }
     }
-
-    // True if the active sensor drives the compass heading in runOnce(). Callers must not
-    // disable() the thread in this case, or the compass would freeze until the next reboot.
-    bool providesHeading() const { return isInitialised && sensor && sensor->providesHeading(); }
 
   protected:
     int32_t runOnce() override
@@ -99,66 +89,43 @@ class AccelerometerThread : public concurrency::OSThread
         switch (device.type) {
 #ifdef HAS_BMA423
         case ScanI2C::DeviceType::BMA423:
-            sensor.reset(new BMA423Sensor(device));
+            sensor = new BMA423Sensor(device);
             break;
 #endif
-#if __has_include(<Adafruit_MPU6050.h>)
         case ScanI2C::DeviceType::MPU6050:
-            sensor.reset(new MPU6050Sensor(device));
+            sensor = new MPU6050Sensor(device);
             break;
-#endif
         case ScanI2C::DeviceType::BMX160:
-            sensor.reset(new BMX160Sensor(device));
+            sensor = new BMX160Sensor(device);
             break;
-#if __has_include(<Adafruit_LIS3DH.h>)
         case ScanI2C::DeviceType::LIS3DH:
-        case ScanI2C::DeviceType::SC7A20:
-            sensor.reset(new LIS3DHSensor(device));
+            sensor = new LIS3DHSensor(device);
             break;
-#endif
-#if __has_include(<Adafruit_LSM6DS3TRC.h>)
         case ScanI2C::DeviceType::LSM6DS3:
-            sensor.reset(new LSM6DS3Sensor(device));
+            sensor = new LSM6DS3Sensor(device);
             break;
-#endif
 #ifdef HAS_STK8XXX
         case ScanI2C::DeviceType::STK8BAXX:
-            sensor.reset(new STK8XXXSensor(device));
+            sensor = new STK8XXXSensor(device);
             break;
 #endif
-#if __has_include(<ICM_20948.h>)
         case ScanI2C::DeviceType::ICM20948:
-            sensor.reset(new ICM20948Sensor(device));
+            sensor = new ICM20948Sensor(device);
             break;
-#endif
-#if __has_include(<ICM42670P.h>)
         case ScanI2C::DeviceType::ICM42607P:
-            sensor.reset(new ICM42607PSensor(device));
+            sensor = new ICM42607PSensor(device);
             break;
-#endif
-#if __has_include(<DFRobot_BMM150.h>)
         case ScanI2C::DeviceType::BMM150:
-            sensor.reset(new BMM150Sensor(device));
+            sensor = new BMM150Sensor(device);
             break;
-#endif
 #ifdef HAS_BMI270
         case ScanI2C::DeviceType::BMI270:
-            sensor.reset(new BMI270Sensor(device));
+            sensor = new BMI270Sensor(device);
             break;
 #endif
 #ifdef HAS_QMA6100P
         case ScanI2C::DeviceType::QMA6100P:
-            sensor.reset(new QMA6100PSensor(device));
-            break;
-#endif
-#if __has_include(<SensorQMI8658.hpp>)
-        case ScanI2C::DeviceType::QMI8658:
-            sensor.reset(new QMI8658Sensor(device));
-            break;
-#endif
-#ifdef HAS_BHI260AP
-        case ScanI2C::DeviceType::BHI260AP:
-            sensor.reset(new BHI260APSensor(device));
+            sensor = new QMA6100PSensor(device);
             break;
 #endif
         default:
@@ -201,7 +168,8 @@ class AccelerometerThread : public concurrency::OSThread
     void clean()
     {
         isInitialised = false;
-        sensor.reset();
+        delete sensor;
+        sensor = nullptr;
     }
 };
 

@@ -4,7 +4,6 @@
 #include "configuration.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
-#include "meshUtils.h"
 
 #if HAS_SCREEN
 #include "gps/RTC.h"
@@ -20,7 +19,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     auto &p = mp.decoded;
-    LOG_INFO("Received waypoint msg from=0x%08x, id=0x%08x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
+    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
@@ -93,10 +92,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         return;
     }
 
-    // Sanitize before these reach the OLED renderer (defense-in-depth vs PB_VALIDATE_UTF8).
-    sanitizeUtf8(wp.name, sizeof(wp.name));
-    sanitizeUtf8(wp.description, sizeof(wp.description));
-
     // Get timestamp info. Will pass as a field to drawColumns
     char lastStr[20];
     getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
@@ -105,7 +100,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     char distStr[20] = "";
 
     // Get our node, to use our own position
-    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // Match compass sizing/placement to favorite node screen logic.
     const int w = display->getWidth();
@@ -152,10 +147,8 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const char *statusLine2 = nullptr;
 
     // Distance only needs our own position fix; compass/bearing additionally needs heading.
-    meshtastic_PositionLite ownPos;
-    const bool haveOwnPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ownPos);
-    if (hasOwnPositionFix && haveOwnPos) {
-        const meshtastic_PositionLite &op = ownPos;
+    if (hasOwnPositionFix) {
+        const meshtastic_PositionLite &op = ourNode->position;
         const float d =
             GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
 

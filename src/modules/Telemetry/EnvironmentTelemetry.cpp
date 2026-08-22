@@ -7,17 +7,17 @@
 #include "EnvironmentTelemetry.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Power.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "buzz.h"
-#include "gps/RTC.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
+#include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
@@ -54,7 +54,7 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/LTR390UVSensor.h"
 #endif
 
-#if __has_include(<Adafruit_BME680.h>)
+#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
 #include "Sensor/BME680Sensor.h"
 #endif
 
@@ -66,8 +66,16 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/MCP9808Sensor.h"
 #endif
 
+#if __has_include(<Adafruit_SHT31.h>)
+#include "Sensor/SHT31Sensor.h"
+#endif
+
 #if __has_include(<Adafruit_LPS2X.h>)
 #include "Sensor/LPS22HBSensor.h"
+#endif
+
+#if __has_include(<Adafruit_SHTC3.h>)
+#include "Sensor/SHTC3Sensor.h"
 #endif
 
 #if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
@@ -86,8 +94,8 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/OPT3001Sensor.h"
 #endif
 
-#if __has_include(<SHTSensor.h>)
-#include "Sensor/SHTXXSensor.h"
+#if __has_include(<Adafruit_SHT4x.h>)
+#include "Sensor/SHT4XSensor.h"
 #endif
 
 #if __has_include(<SparkFun_MLX90632_Arduino_Library.h>)
@@ -100,10 +108,6 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 
 #if __has_include(<DFRobot_RainfallSensor.h>)
 #include "Sensor/DFRobotGravitySensor.h"
-#endif
-
-#if __has_include(<SparkFun_AS3935.h>)
-#include "Sensor/AS3935Sensor.h"
 #endif
 
 #if __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
@@ -127,20 +131,16 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/SPA06Sensor.h"
 #endif
 
+#ifdef SENSECAP_INDICATOR
+#include "Sensor/IndicatorSensor.h"
+#endif
+
 #if __has_include(<Adafruit_TSL2561_U.h>)
 #include "Sensor/TSL2561Sensor.h"
 #endif
 
 #if __has_include(<BH1750_WE.h>)
 #include "Sensor/BH1750Sensor.h"
-#endif
-
-#if __has_include(<Adafruit_ADS1X15.h>)
-#include "Sensor/ADS1X15Sensor.h"
-#endif
-
-#if __has_include(<Adafruit_DS248x.h>)
-#include "Sensor/DS248XSensor.h"
 #endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -150,132 +150,14 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
-EnvironmentTelemetryModule *environmentTelemetryModule = nullptr;
-
-namespace
-{
-EnvironmentTelemetryModule::DisplaySource gDisplaySource = EnvironmentTelemetryModule::DisplaySource::Mesh;
-} // namespace
-
 static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
-static constexpr uint32_t IMMEDIATE_SEND_MAX_STALENESS_MS = 5UL * 60UL * 1000; // 5 minutes
-static constexpr uint32_t LOCAL_DISPLAY_REFRESH_INTERVAL_MS = 1000;
-
-EnvironmentTelemetryModule::DisplaySource EnvironmentTelemetryModule::getDisplaySource()
-{
-    return gDisplaySource;
-}
-
-void EnvironmentTelemetryModule::setDisplaySource(DisplaySource source)
-{
-    gDisplaySource = source;
-    if (environmentTelemetryModule != nullptr) {
-        environmentTelemetryModule->lastLocalDisplayRefreshMs = 0;
-        environmentTelemetryModule->refreshDisplayedMeasurement();
-    }
-}
-
-void EnvironmentTelemetryModule::clearMeasurementPacket()
-{
-    if (lastMeasurementPacket != nullptr) {
-        packetPool.release(lastMeasurementPacket);
-        lastMeasurementPacket = nullptr;
-    }
-}
-
-bool EnvironmentTelemetryModule::shouldDisplayRemoteNode(NodeNum nodeNum) const
-{
-    if (nodeNum == 0 || nodeNum == nodeDB->getNodeNum()) {
-        return false;
-    }
-
-    switch (getDisplaySource()) {
-    case DisplaySource::LocalSensor:
-        return false;
-    case DisplaySource::Mesh:
-        return true;
-    case DisplaySource::FavoriteNodesOnly:
-        return nodeDB->isFavorite(nodeNum);
-    }
-
-    return false;
-}
-
-bool EnvironmentTelemetryModule::shouldKeepCurrentRemoteDisplay() const
-{
-    if (lastMeasurementPacket == nullptr) {
-        return false;
-    }
-
-    return shouldDisplayRemoteNode(getFrom(lastMeasurementPacket));
-}
-
-bool EnvironmentTelemetryModule::shouldDisplayLocalMeasurement() const
-{
-    switch (getDisplaySource()) {
-    case DisplaySource::LocalSensor:
-        return true;
-    case DisplaySource::Mesh:
-        return !shouldKeepCurrentRemoteDisplay();
-    case DisplaySource::FavoriteNodesOnly:
-        return false;
-    }
-
-    return false;
-}
-
-bool EnvironmentTelemetryModule::refreshLocalMeasurementPacket()
-{
-    meshtastic_Telemetry local = meshtastic_Telemetry_init_zero;
-    if (!getEnvironmentTelemetry(&local)) {
-        return false;
-    }
-
-    meshtastic_MeshPacket *localPacket = allocDataProtobuf(local);
-    if (localPacket == nullptr) {
-        return false;
-    }
-
-    clearMeasurementPacket();
-    lastMeasurementPacket = packetPool.allocCopy(*localPacket);
-    packetPool.release(localPacket);
-    return lastMeasurementPacket != nullptr;
-}
-
-void EnvironmentTelemetryModule::refreshDisplayedMeasurement()
-{
-    if (shouldDisplayLocalMeasurement()) {
-        if (lastMeasurementPacket != nullptr &&
-            Throttle::isWithinTimespanMs(lastLocalDisplayRefreshMs, LOCAL_DISPLAY_REFRESH_INTERVAL_MS)) {
-            return;
-        }
-        lastLocalDisplayRefreshMs = millis();
-        if (!refreshLocalMeasurementPacket()) {
-            clearMeasurementPacket();
-        }
-        return;
-    }
-
-    if (!shouldKeepCurrentRemoteDisplay()) {
-        clearMeasurementPacket();
-    }
-}
 
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
         return;
     }
-    LOG_INFO("Environment Telemetry adding I2C devices");
-
-    /*
-        Uncomment the preferences below if you want to use the module
-        without having to configure it from the PythonAPI or WebUI.
-    */
-
-    // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    // moduleConfig.telemetry.environment_screen_enabled = 1;
-    // moduleConfig.telemetry.environment_update_interval = 15;
+    LOG_INFO("Environment Telemetry adding I2C devices...");
 
     // order by priority of metrics/values (low top, high bottom)
 
@@ -284,6 +166,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // Not a real I2C device
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #else
+#ifdef SENSECAP_INDICATOR
+    // Not a real I2C device, uses UART
+    addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif
 #if HAS_SPA06 && __has_include(<Adafruit_SPA06_003.h>)
     addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
 #endif
@@ -299,9 +185,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<DFRobot_RainfallSensor.h>)
     addSensor<DFRobotGravitySensor>(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN);
 #endif
-#if __has_include(<SparkFun_AS3935.h>)
-    addSensor<AS3935Sensor>(i2cScanner, ScanI2C::DeviceType::AS3935);
-#endif
 #if __has_include(<Adafruit_AHTX0.h>)
     addSensor<AHT10Sensor>(i2cScanner, ScanI2C::DeviceType::AHT10);
 #endif
@@ -314,7 +197,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_LTR390.h>)
     addSensor<LTR390UVSensor>(i2cScanner, ScanI2C::DeviceType::LTR390UV);
 #endif
-#if __has_include(<Adafruit_BME680.h>)
+#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
     addSensor<BME680Sensor>(i2cScanner, ScanI2C::DeviceType::BME_680);
 #endif
 #if __has_include(<Adafruit_BMP280.h>)
@@ -326,8 +209,14 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_MCP9808.h>)
     addSensor<MCP9808Sensor>(i2cScanner, ScanI2C::DeviceType::MCP9808);
 #endif
+#if __has_include(<Adafruit_SHT31.h>)
+    addSensor<SHT31Sensor>(i2cScanner, ScanI2C::DeviceType::SHT31);
+#endif
 #if __has_include(<Adafruit_LPS2X.h>)
     addSensor<LPS22HBSensor>(i2cScanner, ScanI2C::DeviceType::LPS22HB);
+#endif
+#if __has_include(<Adafruit_SHTC3.h>)
+    addSensor<SHTC3Sensor>(i2cScanner, ScanI2C::DeviceType::SHTC3);
 #endif
 #if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
     addSensor<RAK12035Sensor>(i2cScanner, ScanI2C::DeviceType::RAK12035);
@@ -341,9 +230,13 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<ClosedCube_OPT3001.h>)
     addSensor<OPT3001Sensor>(i2cScanner, ScanI2C::DeviceType::OPT3001);
 #endif
+#if __has_include(<Adafruit_SHT4x.h>)
+    addSensor<SHT4XSensor>(i2cScanner, ScanI2C::DeviceType::SHT4X);
+#endif
 #if __has_include(<SparkFun_MLX90632_Arduino_Library.h>)
     addSensor<MLX90632Sensor>(i2cScanner, ScanI2C::DeviceType::MLX90632);
 #endif
+
 #if __has_include(<Adafruit_BMP3XX.h>)
     addSensor<BMP3XXSensor>(i2cScanner, ScanI2C::DeviceType::BMP_3XX);
 #endif
@@ -359,17 +252,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<BH1750_WE.h>)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
 #endif
-#if __has_include(<Adafruit_ADS1X15.h>)
-    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15);
-    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15_ALT);
-#endif
-#if __has_include(<SHTSensor.h>)
-    // TODO Can we scan for multiple sensors connected on the same bus?
-    addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
-#endif
-#if __has_include(<Adafruit_DS248x.h>)
-    addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
-#endif
 
 #endif
 }
@@ -377,16 +259,22 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
-        if (shouldDeferDeepSleep())
-            return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
+        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
         doDeepSleep(nightyNightMs, true, false);
     }
 
     uint32_t result = UINT32_MAX;
+    /*
+        Uncomment the preferences below if you want to use the module
+        without having to configure it from the PythonAPI or WebUI.
+    */
+
+    // moduleConfig.telemetry.environment_measurement_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
           ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE)) {
@@ -423,7 +311,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = rak9154Sensor.runOnce();
 #endif
 #endif
-            refreshDisplayedMeasurement();
         }
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled
@@ -440,25 +327,16 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = delay;
             }
         }
-        refreshDisplayedMeasurement();
-
-        // Give up on a stale immediate-send request rather than fire an arbitrarily late broadcast.
-        if (immediateSendRequested &&
-            !Throttle::isWithinTimespanMs(immediateSendRequestedAtMs, IMMEDIATE_SEND_MAX_STALENESS_MS)) {
-            immediateSendRequested = false;
-        }
 
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
-        if (((lastTelemetry == 0) || immediateSendRequested ||
-             !Throttle::isWithinTimespanMs(
-                 lastTelemetry, Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
-                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes,
-                                                                        TrafficType::TELEMETRY))) &&
+        if (((lastTelemetry == 0) ||
+             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                              moduleConfig.telemetry.environment_update_interval,
+                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            immediateSendRequested = false;
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
@@ -468,13 +346,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
             sendTelemetry(NODENUM_BROADCAST, true);
             lastSentToPhone = millis();
         }
-    }
-    if (sleepOnNextExecution) {
-        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
-        // this return value, which would otherwise override setIntervalFromNow() with the sensor
-        // polling interval (sub-second while a BME680 reading is in flight) and trigger deep sleep
-        // while the TX is still on air
-        return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, result);
 }
@@ -517,26 +388,10 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         return;
     }
 
-    // Bound the float metrics before String(float) renders them (see UnitConversions::displaySafeFloat);
-    // the stored packet is always the environment variant.
-    {
-        auto &e = telemetry.variant.environment_metrics;
-        e.temperature = UnitConversions::displaySafeFloat(e.temperature);
-        e.relative_humidity = UnitConversions::displaySafeFloat(e.relative_humidity);
-        e.barometric_pressure = UnitConversions::displaySafeFloat(e.barometric_pressure);
-        e.voltage = UnitConversions::displaySafeFloat(e.voltage);
-        e.current = UnitConversions::displaySafeFloat(e.current);
-        e.lux = UnitConversions::displaySafeFloat(e.lux);
-        e.white_lux = UnitConversions::displaySafeFloat(e.white_lux);
-        e.weight = UnitConversions::displaySafeFloat(e.weight);
-        e.distance = UnitConversions::displaySafeFloat(e.distance);
-        e.radiation = UnitConversions::displaySafeFloat(e.radiation);
-    }
-
     const auto &m = telemetry.variant.environment_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.has_iaq || m.voltage != 0 ||
+    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.iaq != 0 || m.voltage != 0 ||
                   m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
 
     if (!hasAny) {
@@ -545,17 +400,14 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     }
 
     // === First line: Show sender name + time since received (left), and first metric (right) ===
-    const bool isLocalTelemetry = (getFrom(lastMeasurementPacket) == nodeDB->getNodeNum());
-    const char *sender = isLocalTelemetry ? "Local Sensor" : getSenderShortName(*lastMeasurementPacket);
-    String leftStr = String(sender);
-    if (!isLocalTelemetry) {
-        uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
-        String agoStr = (agoSecs > 864000) ? "?"
-                        : (agoSecs > 3600) ? String(agoSecs / 3600) + "h"
-                        : (agoSecs > 60)   ? String(agoSecs / 60) + "m"
-                                           : String(agoSecs) + "s";
-        leftStr += " (" + agoStr + ")";
-    }
+    const char *sender = getSenderShortName(*lastMeasurementPacket);
+    uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
+    String agoStr = (agoSecs > 864000) ? "?"
+                    : (agoSecs > 3600) ? String(agoSecs / 3600) + "h"
+                    : (agoSecs > 60)   ? String(agoSecs / 60) + "m"
+                                       : String(agoSecs) + "s";
+
+    String leftStr = String(sender) + " (" + agoStr + ")";
     display->drawString(x, currentY, leftStr); // Left side: who and when
 
     // === Collect sensor readings as label strings (no icons) ===
@@ -571,7 +423,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Hum: " + String(m.relative_humidity, 0) + "%");
     if (m.barometric_pressure != 0)
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
-    if (m.has_iaq) {
+    if (m.iaq != 0) {
         String aqi = "IAQ: " + String(m.iaq);
         const char *bannerMsg = nullptr; // Default: no banner
 
@@ -600,7 +452,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         static uint32_t lastAlertTime = 0;
         uint32_t now = millis();
 
-        bool isOwnTelemetry = isLocalTelemetry;
+        bool isOwnTelemetry = lastMeasurementPacket->from == nodeDB->getNodeNum();
         bool isCooldownOver = (now - lastAlertTime > 60000);
 
         if (isOwnTelemetry && bannerMsg && isCooldownOver) {
@@ -679,17 +531,11 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         LOG_INFO("(Received from %s): radiation=%fµR/h", sender, t->variant.environment_metrics.radiation);
 
 #endif
-        // Cache the latest env metrics per node on NodeDB so the phone can
-        // pull last-known values across reboots and replays.
-        nodeDB->updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
+        // release previous packet before occupying a new spot
+        if (lastMeasurementPacket != nullptr)
+            packetPool.release(lastMeasurementPacket);
 
-        const NodeNum senderNode = getFrom(&mp);
-        if (shouldDisplayRemoteNode(senderNode)) {
-            clearMeasurementPacket();
-            lastMeasurementPacket = packetPool.allocCopy(mp);
-        } else if (!shouldKeepCurrentRemoteDisplay()) {
-            refreshDisplayedMeasurement();
-        }
+        lastMeasurementPacket = packetPool.allocCopy(mp);
     }
 
     return false; // Let others look at this message also if they want
@@ -759,7 +605,7 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding EnvironmentTelemetry module");
+            LOG_ERROR("Error decoding EnvironmentTelemetry module!");
             return NULL;
         }
         // Check for a request for environment metrics
@@ -782,99 +628,58 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m.time = getTime();
 
-    bool validTelemetry = getEnvironmentTelemetry(&m);
+    if (getEnvironmentTelemetry(&m)) {
+        LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
+                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
+                 m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
+                 m.variant.environment_metrics.temperature);
+        LOG_INFO("Send: voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
+                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-    if (validTelemetry) {
-        if (m.variant.environment_metrics.has_temperature || m.variant.environment_metrics.has_relative_humidity ||
-            m.variant.environment_metrics.has_barometric_pressure)
-            LOG_INFO("Send: barometric_pressure=%fkPa, relative_humidity=%f%RH, temperature=%fdegC",
-                     m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.relative_humidity,
-                     m.variant.environment_metrics.temperature);
+        LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
+                 m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
 
-        if (m.variant.environment_metrics.has_voltage || m.variant.environment_metrics.has_current ||
-            m.variant.environment_metrics.has_iaq || m.variant.environment_metrics.has_gas_resistance)
-            LOG_INFO("Send: voltage=%f, current=%f, IAQ=%d, gas_resistance=%f", m.variant.environment_metrics.voltage,
-                     m.variant.environment_metrics.current, m.variant.environment_metrics.iaq,
-                     m.variant.environment_metrics.gas_resistance);
+        LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
 
-        if (m.variant.environment_metrics.has_distance || m.variant.environment_metrics.has_lux)
-            LOG_INFO("Send: distance=%f, lux=%f", m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
-
-        if (m.variant.environment_metrics.has_wind_speed || m.variant.environment_metrics.has_wind_direction)
-            LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees", m.variant.environment_metrics.wind_speed,
-                     m.variant.environment_metrics.wind_direction);
-
-        if (m.variant.environment_metrics.has_weight)
-            LOG_INFO("Send: weight=%fkg", m.variant.environment_metrics.weight);
-
-        if (m.variant.environment_metrics.has_radiation)
-            LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
-
-        if (m.variant.environment_metrics.has_soil_temperature || m.variant.environment_metrics.has_soil_moisture)
-            LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
-                     m.variant.environment_metrics.soil_moisture);
-
-        if (m.variant.environment_metrics.has_adc_voltage_ch0 || m.variant.environment_metrics.has_adc_voltage_ch1 ||
-            m.variant.environment_metrics.has_adc_voltage_ch2 || m.variant.environment_metrics.has_adc_voltage_ch3)
-            LOG_INFO("Send: adc_ch0=%f, adc_ch1=%f, adc_ch2=%f, adc_ch3=%f", m.variant.environment_metrics.adc_voltage_ch0,
-                     m.variant.environment_metrics.adc_voltage_ch1, m.variant.environment_metrics.adc_voltage_ch2,
-                     m.variant.environment_metrics.adc_voltage_ch3);
-
-        if (m.variant.environment_metrics.has_adc_voltage_ch4 || m.variant.environment_metrics.has_adc_voltage_ch5 ||
-            m.variant.environment_metrics.has_adc_voltage_ch6 || m.variant.environment_metrics.has_adc_voltage_ch7)
-            LOG_INFO("Send: adc_ch4=%f, adc_ch5=%f, adc_ch6=%f, adc_ch7=%f", m.variant.environment_metrics.adc_voltage_ch4,
-                     m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
-                     m.variant.environment_metrics.adc_voltage_ch7);
-
-        if (m.variant.environment_metrics.has_lightning_strike_count_1h)
-            LOG_INFO("Send: lightning=%u, distance=%fkm", m.variant.environment_metrics.lightning_strike_count_1h,
-                     m.variant.environment_metrics.lightning_distance_km);
+        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                 m.variant.environment_metrics.soil_moisture);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        if (!p) {
-            validTelemetry = false;
-        } else {
-            p->to = dest;
-            p->decoded.want_response = false;
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-            else
-                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-            if (phoneOnly) {
-                LOG_INFO("Send packet to phone");
-                service->sendToPhone(p);
-            } else {
-                LOG_INFO("Send packet to mesh");
-                service->sendToMesh(p, RX_SRC_LOCAL, true);
+        p->to = dest;
+        p->decoded.want_response = false;
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+        else
+            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        // release previous packet before occupying a new spot
+        if (lastMeasurementPacket != nullptr)
+            packetPool.release(lastMeasurementPacket);
 
-                if (isPowerSavingSensor()) {
-                    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                    if (notification) {
-                        notification->level = meshtastic_LogRecord_Level_INFO;
-                        notification->time = getValidTime(RTCQualityFromNet);
-                        sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                                Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
-                                                                  default_telemetry_broadcast_interval_secs) /
-                                    1000U);
-                        service->sendClientNotification(notification);
-                    }
-                }
+        lastMeasurementPacket = packetPool.allocCopy(*p);
+        if (phoneOnly) {
+            LOG_INFO("Send packet to phone");
+            service->sendToPhone(p);
+        } else {
+            LOG_INFO("Send packet to mesh");
+            service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+                meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+                notification->level = meshtastic_LogRecord_Level_INFO;
+                notification->time = getValidTime(RTCQualityFromNet);
+                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                          default_telemetry_broadcast_interval_secs) /
+                            1000U);
+                service->sendClientNotification(notification);
+                sleepOnNextExecution = true;
+                LOG_DEBUG("Start next execution in 5s, then sleep");
+                setIntervalFromNow(FIVE_SECONDS_MS);
             }
         }
+        return true;
     }
-
-    // Arm the pre-sleep sequence even when no valid reading was available this cycle (e.g. a
-    // failed sensor read): a power-saving SENSOR node must still return to deep sleep,
-    // otherwise it stays awake until the next telemetry interval and drains its battery
-    if (!phoneOnly && isPowerSavingSensor()) {
-        if (!validTelemetry)
-            LOG_WARN("Env telemetry unavailable, sleep without send");
-        sleepOnNextExecution = true;
-        preflightSleepDeferrals = 0;
-        LOG_DEBUG("Start next execution in 5s, then sleep");
-        setIntervalFromNow(FIVE_SECONDS_MS);
-    }
-    return validTelemetry;
+    return false;
 }
 
 AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,

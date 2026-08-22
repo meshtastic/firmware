@@ -27,7 +27,7 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 
     // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
-    LOG_TRACE("Set random delay before tx");
+    LOG_DEBUG("Set random delay before tx");
     setTransmitDelay();
     return res;
 }
@@ -47,7 +47,7 @@ void SimRadio::setTransmitDelay()
         startTransmitTimer(true);
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
-        LOG_TRACE("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
+        LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
         startTransmitTimerRebroadcast(p);
     }
 }
@@ -140,7 +140,7 @@ bool SimRadio::cancelSending(NodeNum from, PacketId id)
         packetPool.release(p); // free the packet we just removed
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
+    LOG_DEBUG("cancelSending id=0x%x, removed=%d", id, result);
     return result;
 }
 
@@ -169,7 +169,7 @@ void SimRadio::onNotify(uint32_t notification)
             startTransmitTimer();
             break;
         }
-        LOG_TRACE("delay done");
+        LOG_DEBUG("delay done");
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
@@ -209,60 +209,16 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
     isReceiving = false;
     size_t numbytes = beginSending(txp);
     meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
-    if (!p)
-        return;
-
-    // A packet we originate that's encrypted for someone else (a PKI DM, channel == 0) can't be
-    // decrypted here. Attempting it only logs a spurious "no suitable channel" miss, and the
-    // ciphertext (up to MAX_LORA_PAYLOAD_LEN + MESHTASTIC_PKC_OVERHEAD) overflows the decoded
-    // loopback payload. Carry such packets as ciphertext instead so the receiving sim node can
-    // decrypt them as if they had arrived over the air (see unpackAndReceive()).
-    bool carryEncrypted = p->pki_encrypted;
-    if (!carryEncrypted) {
-        perhapsDecode(p);
-        // Channel packets we couldn't decrypt (e.g. relaying an unknown channel) are carried too.
-        carryEncrypted = (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag);
-    }
-
+    perhapsDecode(p);
     meshtastic_Compressed c = meshtastic_Compressed_init_default;
-    // The Compressed wrapper is re-encoded back into decoded.payload.bytes (the same 233-byte field
-    // its data is copied from), so the carried bytes must leave room for the protobuf framing or
-    // pb_encode_to_bytes() below overflows and silently drops the loopback payload. meshtastic_Compressed_size
-    // is the max encoded size for a full data field, so (meshtastic_Compressed_size - sizeof(c.data.bytes))
-    // is the worst-case framing overhead to reserve.
-    constexpr size_t loopbackCapacity = sizeof(p->decoded.payload.bytes) - (meshtastic_Compressed_size - sizeof(c.data.bytes));
-    if (carryEncrypted) {
-        // Sentinel portnum UNKNOWN_APP marks the payload as ciphertext for unpackAndReceive().
-        c.portnum = meshtastic_PortNum_UNKNOWN_APP;
-        if (p->encrypted.size <= loopbackCapacity) {
-            memcpy(&c.data.bytes, p->encrypted.bytes, p->encrypted.size);
-            c.data.size = p->encrypted.size;
-        } else {
-            LOG_WARN("Encrypted payload (%u) > sim loopback capacity (%u), send empty", (unsigned)p->encrypted.size,
-                     (unsigned)loopbackCapacity);
-        }
+    c.portnum = p->decoded.portnum;
+    // LOG_DEBUG("Send back to simulator with portNum %d", p->decoded.portnum);
+    if (p->decoded.payload.size <= sizeof(c.data.bytes)) {
+        memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
+        c.data.size = p->decoded.payload.size;
     } else {
-        c.portnum = p->decoded.portnum;
-        // LOG_DEBUG("Send back to simulator with portNum %d", p->decoded.portnum);
-        if (p->decoded.payload.size <= loopbackCapacity) {
-            memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
-            c.data.size = p->decoded.payload.size;
-        } else {
-            LOG_WARN("Payload > compressed max, send empty");
-        }
+        LOG_WARN("Payload size larger than compressed message allows! Send empty payload");
     }
-
-    // pb_encode_to_bytes writes into decoded.payload, which aliases `encrypted` in the union, so all
-    // reads of p->encrypted above must be complete before this point.
-    if (carryEncrypted) {
-        // On the encrypted path, `decoded` aliases the ciphertext we just copied into c.data;
-        // the remaining `Data` fields hold ciphertext bytes that would serialize as spurious
-        // wire fields, so clear the struct.
-        p->decoded = meshtastic_Data_init_zero;
-    }
-    // On the decoded path, `p->decoded` is already a valid Data from perhapsDecode(),
-    // so retain the existing fields (want_response, request_id, bitfield, etc.)
-    p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);
     p->decoded.portnum = meshtastic_PortNum_SIMULATOR_APP;
@@ -277,25 +233,19 @@ void SimRadio::unpackAndReceive(meshtastic_MeshPacket &p)
 {
     // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
     meshtastic_Compressed scratch;
+    meshtastic_Compressed *decoded = NULL;
     if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         memset(&scratch, 0, sizeof(scratch));
-        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch)) {
-            if (scratch.portnum == meshtastic_PortNum_UNKNOWN_APP) {
-                // The sender carried ciphertext verbatim (a packet it couldn't decrypt, e.g. a PKI DM,
-                // see startSend()). Restore it as an encrypted packet so the router decrypts it as if
-                // received over the air, instead of treating the ciphertext as a plaintext payload. The
-                // outer MeshPacket still carries from/to/id/channel/pki_encrypted, which decrypt needs.
-                p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-                memcpy(&p.encrypted.bytes, scratch.data.bytes, scratch.data.size);
-                p.encrypted.size = scratch.data.size;
-            } else {
-                // Extract the original payload and replace
-                memcpy(&p.decoded.payload, &scratch.data, sizeof(scratch.data));
-                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum
-                p.decoded.portnum = scratch.portnum;
-            }
+        p.decoded.payload.size =
+            pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch);
+        if (p.decoded.payload.size) {
+            decoded = &scratch;
+            // Extract the original payload and replace
+            memcpy(&p.decoded.payload, &decoded->data, sizeof(decoded->data));
+            // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum
+            p.decoded.portnum = decoded->portnum;
         } else
-            LOG_ERROR("Error decoding proto for simulator message");
+            LOG_ERROR("Error decoding proto for simulator message!");
     }
     // Let SimRadio receive as if it did via its LoRa chip
     startReceive(&p);
@@ -305,7 +255,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
 {
 #ifdef USERPREFS_SIMRADIO_EMULATE_COLLISIONS
     if (isActivelyReceiving()) {
-        LOG_WARN("Collision detected, dropping current and previous packet");
+        LOG_WARN("Collision detected, dropping current and previous packet!");
         rxBad++;
         airTime->logAirtime(RX_ALL_LOG, getPacketTime(receivingPacket, true));
         packetPool.release(receivingPacket);
@@ -319,23 +269,17 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
         } else if ((interval - airtimeLeft) > preambleTimeMsec) {
             // Only if transmitting for longer than preamble there is a collision
             // (channel should actually be detected as active otherwise)
-            LOG_WARN("Collision detected during transmission");
+            LOG_WARN("Collision detected during transmission!");
             return;
         }
     }
-    receivingPacket = packetPool.allocCopy(*p);
-    if (!receivingPacket) {
-        return;
-    }
     isReceiving = true;
+    receivingPacket = packetPool.allocCopy(*p);
     uint32_t airtimeMsec = getPacketTime(p, true);
     notifyLater(airtimeMsec, ISR_RX, false); // Model the time it is busy receiving
 #else
-    receivingPacket = packetPool.allocCopy(*p);
-    if (!receivingPacket) {
-        return;
-    }
     isReceiving = true;
+    receivingPacket = packetPool.allocCopy(*p);
     handleReceiveInterrupt(); // Simulate receiving the packet immediately
     startTransmitTimer();
 #endif
@@ -359,18 +303,16 @@ void SimRadio::handleReceiveInterrupt()
     }
 
     if (!isReceiving) {
-        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt outside receive mode");
+        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode");
         return;
     }
 
-    LOG_TRACE("HANDLE RECEIVE INTERRUPT");
+    LOG_DEBUG("HANDLE RECEIVE INTERRUPT");
     rxGood++;
 
     meshtastic_MeshPacket *mp = packetPool.allocCopy(*receivingPacket); // keep a copy in packetPool
     packetPool.release(receivingPacket);                                // release the original
     receivingPacket = nullptr;
-    if (!mp)
-        return;
 
     printPacket("Lora RX", mp);
 

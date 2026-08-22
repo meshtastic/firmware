@@ -12,7 +12,7 @@ enum LoRaRadioType {
     LR1110_RADIO,
     LR1120_RADIO,
     LR1121_RADIO,
-    LR2021_RADIO
+    LR2021_RADIO,
 };
 
 extern LoRaRadioType radioType;

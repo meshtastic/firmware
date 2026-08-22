@@ -8,31 +8,9 @@
 #if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
-#if defined(SENSECAP_INDICATOR)
-#include "mesh/comms/I2CProxy.h"
-#endif
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "meshUtils.h" // vformat
 
-#endif
-#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-#include "platform/nrf52/Nrf52Twim.h"
-#include <QMA6100P.h>
-
-namespace
-{
-bool probeQMA6100P(uint8_t address)
-{
-    uint8_t chipID = 0;
-
-    Nrf52Twim::restoreBus();
-    const bool readOk = Nrf52Twim::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID);
-    const bool found = readOk && chipID == QMA6100P_CHIP_ID;
-    Nrf52Twim::restoreBus();
-
-    return found;
-}
-} // namespace
 #endif
 
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
@@ -107,8 +85,9 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
 
     return o_probe;
 }
+
 uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation &registerLocation,
-                                          ScanI2CTwoWire::ResponseWidth responseWidth, bool zeropad = false) const
+                                          ScanI2CTwoWire::ResponseWidth responseWidth, bool zeropad) const
 {
     uint16_t value = 0x00;
     TwoWire *i2cBus = fetchI2CBus(registerLocation.i2cAddress);
@@ -158,35 +137,44 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
     return match;
 }
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
-#include "../modules/Telemetry/Sensor/SEN5XSensor.h"
-#include "../modules/Telemetry/Sensor/SEN6XSensor.h"
-bool probeSEN5X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
+/// for SEN5X detection
+// Note, this code needs to be called before setting the I2C bus speed
+// for the screen at high speed. The speed needs to be at 100kHz, otherwise
+// detection will not work
+String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
 {
-    SEN5XSensor sen5xsensor;
-    return sen5xsensor.probe(i2cBus, address, port);
-}
-
-bool probeSEN6X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
-{
-    SEN6XSensor sen6xsensor;
-    return sen6xsensor.probe(i2cBus, address, port);
-}
-
-bool probeHM330x(TwoWire *i2cBus, uint8_t address)
-{
+    uint8_t cmd[] = {0xD0, 0x14};
+    uint8_t response[48] = {0};
 
     i2cBus->beginTransmission(address);
-    i2cBus->write(0X88);
-    byte ret = i2cBus->endTransmission();
+    i2cBus->write(cmd, 2);
+    if (i2cBus->endTransmission() != 0)
+        return "";
 
-    if (ret == 0) {
-        return true;
+    delay(20);
+    if (i2cBus->requestFrom(address, (uint8_t)48) != 48)
+        return "";
+
+    for (int i = 0; i < 48 && i2cBus->available(); ++i) {
+        response[i] = i2cBus->read();
     }
 
-    return false;
+    char productName[33] = {0};
+    int j = 0;
+    for (int i = 0; i < 48 && j < 32; i += 3) {
+        if (response[i] >= 32 && response[i] <= 126)
+            productName[j++] = response[i];
+        else
+            break;
+
+        if (response[i + 1] >= 32 && response[i + 1] <= 126)
+            productName[j++] = response[i + 1];
+        else
+            break;
+    }
+
+    return String(productName);
 }
-#endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 static uint8_t crcSHT2X(const uint8_t *data, uint8_t len)
@@ -244,44 +232,6 @@ bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 }
 #endif
 
-// Everest Semiconductor ES7210 4-channel audio ADC, as found on the T-Deck. Its AD1/AD0 straps
-// select 0x40..0x43, so it lands squarely on the INA/SHT2X addresses. Chip ID registers and their
-// reset values, per the ES7210 datasheet rev 2.0.
-static constexpr uint8_t ES7210_CHIP_ID1_REG = 0x3D;
-static constexpr uint8_t ES7210_CHIP_ID1 = 0x72;
-static constexpr uint8_t ES7210_CHIP_ID0_REG = 0x3E;
-static constexpr uint8_t ES7210_CHIP_ID0 = 0x10;
-
-static bool readByteRegister(TwoWire *i2cBus, uint8_t address, uint8_t reg, uint8_t &value)
-{
-    i2cBus->beginTransmission(address);
-    i2cBus->write(reg);
-
-    if (i2cBus->endTransmission() != 0)
-        return false;
-
-    if (i2cBus->requestFrom(address, (uint8_t)1) != 1 || !i2cBus->available())
-        return false;
-
-    value = i2cBus->read();
-    return true;
-}
-
-// The INA219 has no manufacturer or die ID register to check, so it is inferred from "something
-// answered here and it wasn't anything else we know". That makes positively identifying the other
-// occupants of this address the only way to keep them out of the fallback.
-static bool detectES7210(TwoWire *i2cBus, uint8_t address)
-{
-    uint8_t id = 0;
-
-    // Read the high ID byte first so anything that clearly isn't an ES7210 costs a single
-    // transaction, then confirm with the low byte.
-    if (!readByteRegister(i2cBus, address, ES7210_CHIP_ID1_REG, id) || id != ES7210_CHIP_ID1)
-        return false;
-
-    return readByteRegister(i2cBus, address, ES7210_CHIP_ID0_REG, id) && id == ES7210_CHIP_ID0;
-}
-
 #define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
     case ADDR:                                                                                                                   \
         logFoundDevice(__VA_ARGS__);                                                                                             \
@@ -307,11 +257,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
 #if WIRE_INTERFACES_COUNT == 2
     if (port == I2CPort::WIRE1) {
-#if defined(SENSECAP_INDICATOR)
-        i2cBus = i2cProxy; // WIRE1 is bridged to the RP2040
-#else
         i2cBus = &Wire1;
-#endif
     } else {
 #endif
         i2cBus = &Wire;
@@ -329,36 +275,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     // 0x7C-0x7F Reserved for future purposes
 
     for (addr.address = 8; addr.address < 120; addr.address++) {
-#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-        bool nrf52QmaFound = false;
-#endif
         if (asize != 0) {
             if (!in_array(address, asize, (uint8_t)addr.address))
                 continue;
             LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         }
-        // For QMA6100P candidates on nRF52, use bounded I2C probing; otherwise use normal Wire
-#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-        if (addr.address == QMA6100P_ADDRESS_LOW || addr.address == QMA6100P_ADDRESS_HIGH) {
-            nrf52QmaFound = probeQMA6100P(addr.address);
-            err = nrf52QmaFound ? 0 : 2;
-        } else {
-            i2cBus->beginTransmission(addr.address);
-#ifdef ARCH_PORTDUINO
-            err = 2;
-            if ((addr.address >= 0x30 && addr.address <= 0x37) || (addr.address >= 0x50 && addr.address <= 0x5F)) {
-                if (i2cBus->read() != -1)
-                    err = 0;
-            } else {
-                err = i2cBus->writeQuick((uint8_t)0);
-            }
-            if (err != 0)
-                err = 2;
-#else
-            err = i2cBus->endTransmission();
-#endif
-        }
-#else
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         err = 2;
@@ -372,7 +293,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             err = 2;
 #else
         err = i2cBus->endTransmission();
-#endif
 #endif
         type = NONE;
         if (err == 0) {
@@ -433,18 +353,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = TDECKKB;
                 }
                 break;
-            case BBQ10_KB_ADDR:
-                // Check status register (0xF0) for DS284X status and one-wire reset
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
-                    type = DS248X;
-                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
-                    break;
-                }
-                type = BBQ10KB;
-                logFoundDevice("BB Q10", (uint8_t)addr.address);
-                break;
-                SCAN_SIMPLE_CASE(TSTC8_KB_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10", (uint8_t)addr.address);
+
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
@@ -519,69 +429,27 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L)
-            case INA_ADDR: // same as HM330X, ES7210 and SHT2X
+            case INA_ADDR:
             case INA_ADDR_ALTERNATE:
-            case INA_ADDR_WAVESHARE_UPS: {
-                uint16_t mfg = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
+            case INA_ADDR_WAVESHARE_UPS:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
+                LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
+                if (registerValue == 0x5449) {
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
+                    LOG_DEBUG("Register DIE_UID: 0x%x", registerValue);
 
-                LOG_DEBUG("Register MFG_UID: 0x%x", mfg);
-
-                // Only read DIE_UID for vendors we recognize as INA-compatible to avoid
-                // an extra I2C transaction + delay on other devices sharing this address.
-                if (mfg == 0x5449 || mfg == 0x190F) {
-                    uint16_t die = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
-                    LOG_DEBUG("Register DIE_UID: 0x%x", die);
-
-                    // TI INA226 or fully compatible clones (e.g. TPA626)
-                    if (mfg == 0x5449 && die == 0x2260) {
+                    if (registerValue == 0x2260) {
                         logFoundDevice("INA226", (uint8_t)addr.address);
                         type = INA226;
-                        break;
-                    }
-                    // Silergy SQ52201 (INA226-compatible with different IDs)
-                    else if (mfg == 0x190F && die == 0x0000) {
-                        logFoundDevice("INA226 (SQ52201)", (uint8_t)addr.address);
-                        type = INA226;
-                        break;
-                    }
-                    // TI INA260
-                    else if (mfg == 0x5449) {
+                    } else {
                         logFoundDevice("INA260", (uint8_t)addr.address);
                         type = INA260;
-                        break;
                     }
-                }
-
-                // The ES7210 audio ADC shares this address on some boards (T-Deck). It answers
-                // none of the checks above, so identify it here and leave the type unset - driving
-                // an audio codec as if it were a power monitor crashes the device. See #11115.
-                if (detectES7210(i2cBus, (uint8_t)addr.address)) {
-                    LOG_INFO("ES7210 audio codec at 0x%x, not a power sensor", (uint8_t)addr.address);
-                    break;
-                }
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_TELEMETRY
-                if (detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
-                    logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
-                    type = SHTXX;
-                    break;
-                }
-#endif
-                // Get INA219 configuration register 0x00 expecting 0x399F after power-on reset
-                uint16_t registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
-                if (registerValue == 0x399F) {
+                } else { // Assume INA219 if INA260 ID is not found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
-                    break;
                 }
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && HAS_TELEMETRY
-                // Assume HM330x as the weakest detection method if none of the above ones are found
-                if (probeHM330x(i2cBus, addr.address)) {
-                    logFoundDevice("HM330X", (uint8_t)addr.address);
-                    type = HM330X;
-                    break;
-                }
-#endif
-            }
+                break;
             case INA3221_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
@@ -621,6 +489,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         break;
                     }
 #endif
+
                     // Check register 0x07 for 0x0400 response to ID MCP9808 chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
                     if (registerValue == 0x0400) {
@@ -634,30 +503,25 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
                         type = LIS3DH;
                         logFoundDevice("LIS3DH", (uint8_t)addr.address);
-                        break;
-                    }
-
-                    // Check status register (0xF0) for DS284X status and one-wire reset
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                    if (registerValue & 0x16) { // One-wire reset after power-on
-                        type = DS248X;
-                        logFoundDevice("DS248X", (uint8_t)addr.address);
                     }
                     break;
                 }
-            case SHTXX_ADDR:     // same as OPT3001_ADDR_ALT
-            case SHTXX_ADDR_ALT: // same as OPT3001_ADDR
+            case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
+            case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
                 if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
                     type = OPT3001;
                     logFoundDevice("OPT3001", (uint8_t)addr.address);
-                } else { // SHTXX
-                    type = SHTXX;
-                    logFoundDevice("SHTXX", (uint8_t)addr.address);
+                } else if (i2cCommandResponseLength(addr, 0x89, 6)) { // SHT4x serial number (6 bytes inc. CRC)
+                    type = SHT4X;
+                    logFoundDevice("SHT4X", (uint8_t)addr.address);
+                } else {
+                    type = SHT31;
+                    logFoundDevice("SHT31", (uint8_t)addr.address);
                 }
 
                 break;
 
-                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTXX, "SHTXX", (uint8_t)addr.address)
+                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3", (uint8_t)addr.address)
             case RCWL9620_ADDR:
                 // get MAX30102 PARTID
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
@@ -686,29 +550,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
-            case DS248X_ADDR_ALT3:
-                // Check status register (0xF0) for DS284X status and one-wire reset
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
-                    type = DS248X;
-                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
-                    break;
-                }
-                break;
+                SCAN_SIMPLE_CASE(QMC6310U_ADDR, QMC6310U, "QMC6310U", (uint8_t)addr.address)
 
-            case QMC6310U_ADDR:
-                // Check status register (0xF0) for DS284X status and one-wire reset
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
-                    type = DS248X;
-                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
-                    break;
-                }
-                type = QMC6310U;
-                logFoundDevice("QMC6310U", (uint8_t)addr.address);
-                break;
-
-            case QMI8658_ADDR: // same as BQ25896_ADDR and SEN6X_ADDR
+            case QMI8658_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
                 if (registerValue == 0xC0) {
                     type = BQ24295;
@@ -725,42 +569,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x6A) {
                     type = LSM6DS3;
                     logFoundDevice("LSM6DS3", (uint8_t)addr.address);
-                } else if (registerValue == 0x6B) {
-                    type = ISM330DHCX;
-                    logFoundDevice("ISM330DHCX", (uint8_t)addr.address);
                 } else {
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
-                    if (probeSEN6X(i2cBus, addr.address, port)) {
-                        type = SEN6X;
-                        logFoundDevice("SEN6X", addr.address);
-                        break;
-                    }
-#endif
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
                 }
                 break;
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L", (uint8_t)addr.address)
-            case HMC5883L_ADDR:
-                // WHO_AM_I first: the DS248X probe below reads a reserved address on the IIS2MDCTR
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x4FU), 1); // get ID
-                if (registerValue == 0x40) {
-                    type = IIS2MDCTR;
-                    logFoundDevice("IIS2MDCTR", (uint8_t)addr.address);
-                    break;
-                }
-
-                // Check status register (0xF0) for DS284X status and one-wire reset
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
-                    type = DS248X;
-                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
-                    break;
-                }
-                type = HMC5883L;
-                logFoundDevice("HMC5883L", (uint8_t)addr.address);
-                break;
+                SCAN_SIMPLE_CASE(HMC5883L_ADDR, HMC5883L, "HMC5883L", (uint8_t)addr.address)
 #ifdef HAS_QMA6100P
                 SCAN_SIMPLE_CASE(QMA6100P_ADDR, QMA6100P, "QMA6100P", (uint8_t)addr.address)
 #else
@@ -783,25 +599,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
                     type = LIS3DH;
                     logFoundDevice("LIS3DH", (uint8_t)addr.address);
-                    break;
-                } else if ((registerValue & 0xFF00) == 0x1100) {
-                    // Silan SC7A20: LIS3DH register map, but answers 0x11 here.
-                    type = SC7A20;
-                    logFoundDevice("SC7A20", (uint8_t)addr.address);
-                    break;
+                } else {
+                    type = BMA423;
+                    logFoundDevice("BMA423", (uint8_t)addr.address);
                 }
-
-                // Check status register (0xF0) for DS284X status and one-wire reset
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
-                    type = DS248X;
-                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
-                    break;
-                }
-
-                type = BMA423;
-                logFoundDevice("BMA423", (uint8_t)addr.address);
-
                 break;
             case TCA9535_ADDR:
             case RAK120352_ADDR:
@@ -849,28 +650,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
-            case DFROBOT_RAIN_ADDR:
-                // Check status register (0xF0) for DS284X status and one-wire reset
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
-                    type = DS248X;
-                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
-                    break;
-                }
-                type = DFROBOT_RAIN;
-                logFoundDevice("DFRobot Rain Gauge", (uint8_t)addr.address);
-                break;
+                SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(SCD30_ADDR, SCD30, "SCD30", (uint8_t)addr.address);
             case CST328_ADDR:
-                // Check status register (0xF0) for DS284X status and one-wire reset
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
-                    type = DS248X;
-                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
-                    break;
-                }
                 // Do we have the CST328 or the CST226SE,CST3530
                 {
                     // T-Deck pro V1.1 new touch panel use CST3530
@@ -938,17 +722,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             }
-            case BMM150_ADDR:
-#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-                if (nrf52QmaFound) {
-                    logFoundDevice("QMA6100P", (uint8_t)addr.address);
-                    type = QMA6100P;
-                    break;
-                }
-#endif
-                logFoundDevice("BMM150", (uint8_t)addr.address);
-                type = BMM150;
-                break;
+                SCAN_SIMPLE_CASE(BMM150_ADDR, BMM150, "BMM150", (uint8_t)addr.address);
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
 #endif
@@ -1000,18 +774,31 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = ICM42607P;
                         logFoundDevice("ICM-42607-P", (uint8_t)addr.address);
                         break;
-                    } else if (registerValue == 0x68) { // WHO_AM_I from datasheet
+                    }
+                    String prod = "";
+                    prod = readSEN5xProductName(i2cBus, addr.address);
+                    if (prod.startsWith("SEN55")) {
+                        type = SEN5X;
+                        logFoundDevice("Sensirion SEN55", addr.address);
+                        break;
+                    } else if (prod.startsWith("SEN54")) {
+                        type = SEN5X;
+                        logFoundDevice("Sensirion SEN54", addr.address);
+                        break;
+                    } else if (prod.startsWith("SEN50")) {
+                        type = SEN5X;
+                        logFoundDevice("Sensirion SEN50", addr.address);
+                        break;
+                    }
+                    if (addr.address == BMX160_ADDR) {
+                        type = BMX160;
+                        logFoundDevice("BMX160", (uint8_t)addr.address);
+                        break;
+                    } else {
                         type = MPU6050;
                         logFoundDevice("MPU6050", (uint8_t)addr.address);
                         break;
                     }
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
-                    if (probeSEN5X(i2cBus, addr.address, port)) {
-                        type = SEN5X;
-                        logFoundDevice("SEN5X", addr.address);
-                        break;
-                    }
-#endif
                 }
                 break;
 
@@ -1029,55 +816,29 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
-                // T=1oI2C soft reset; an SE050 answers A5 E0 00 3F 19. requestFrom() is
-                // required: readBytes() only drains the RX buffer requestFrom() fills.
-                const uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
-                const uint8_t expectedInfo[] = {0xA5, 0xE0, 0x00, 0x3F, 0x19};
-                uint8_t info[sizeof(expectedInfo)] = {0};
-                size_t len = 0;
-                bool isSE050 = false;
-
                 i2cBus->beginTransmission(addr.address);
-                i2cBus->write(getInfo, sizeof(getInfo));
-                if (i2cBus->endTransmission() == 0) {
-                    delay(2); // guard time before the answer can be read back
-                    len = i2cBus->requestFrom((uint8_t)addr.address, (uint8_t)sizeof(info));
-                    if (len == sizeof(info)) {
-                        for (size_t i = 0; i < sizeof(info); i++)
-                            info[i] = i2cBus->read();
-                        isSE050 = (memcmp(expectedInfo, info, sizeof(info)) == 0);
-                    }
-                }
-
-                if (isSE050) {
+                uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
+                uint8_t expectedInfo[] = {0xa5, 0xE0, 0x00, 0x3F, 0x19};
+                uint8_t info[5];
+                size_t len = 0;
+                i2cBus->write(getInfo, 5);
+                i2cBus->endTransmission();
+                len = i2cBus->readBytes(info, 5);
+                if (len == 5 && memcmp(expectedInfo, info, len) == 0) {
                     LOG_INFO("NXP SE050 crypto chip found");
                     type = NXP_SE050;
                     break;
                 }
 
-                // ADS1X15 default config register is 8583h
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
-                    type = ADS1X15;
-                    logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
+                if (registerValue == 0x8583 || registerValue == 0x8580) {
+                    type = ADS1115;
+                    logFoundDevice("ADS1115 ADC", (uint8_t)addr.address);
                     break;
                 }
 
                 LOG_INFO("FT6336U touchscreen found");
                 type = FT6336U;
-                break;
-            }
-
-            case ADS1X15_ADDR_ALT1:
-            case ADS1X15_ADDR_ALT2:
-            case ADS1X15_ADDR_ALT3: {
-                // ADS1X15 default config register is 8583h
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
-                    type = ADS1X15_ALT;
-                    logFoundDevice("ADS1X15_ALT", (uint8_t)addr.address);
-                    break;
-                }
                 break;
             }
 
@@ -1094,54 +855,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             foundDevices[addr] = type;
         }
     }
-
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-    // AS3935 addresses (0x01-0x03) fall in the reserved range the loop above skips; probe
-    // them separately rather than widening that loop for every board.
-    static const uint8_t as3935Candidates[] = {AS3935_ADDR_ALT, AS3935_ADDR_ALT2, AS3935_ADDR};
-    for (uint8_t i = 0; i < sizeof(as3935Candidates); i++) {
-        // Respect the caller's address filter, same as the main loop above (line ~269).
-        if (asize != 0 && !in_array(address, asize, as3935Candidates[i]))
-            continue;
-
-        DeviceAddress as3935Addr(port, as3935Candidates[i]);
-        i2cBus->beginTransmission(as3935Candidates[i]);
-        uint8_t as3935Err = i2cBus->endTransmission();
-        if (as3935Err == 0) {
-            // No WHOAMI, and a POR-only check can't survive a warm reboot (initDevice rewrites
-            // REG0x00). Write a test pattern to bits[5:1] instead and confirm it reads back.
-            constexpr uint8_t AS3935_PROBE_PATTERN = 0b01010; // arbitrary, bits[5:1]
-            i2cBus->beginTransmission(as3935Candidates[i]);
-            i2cBus->write((uint8_t)0x00);                        // REG0x00 (AFE_GAIN)
-            i2cBus->write((uint8_t)(AS3935_PROBE_PATTERN << 1)); // PWD=0, gain bits = pattern
-            if (i2cBus->endTransmission() == 0) {
-                uint16_t reg0 = getRegisterValue(ScanI2CTwoWire::RegisterLocation(as3935Addr, 0x00), 1);
-                if (((reg0 >> 1) & 0x1F) == AS3935_PROBE_PATTERN) {
-                    logFoundDevice("AS3935", as3935Candidates[i]);
-                    deviceAddresses[AS3935] = as3935Addr;
-                    foundDevices[as3935Addr] = AS3935;
-                    break; // only one AS3935 expected per bus
-                } else {
-                    LOG_DEBUG("Unexpected REG0x00 readback for AS3935: addr=0x%x val=0x%x", as3935Candidates[i], reg0);
-                }
-            }
-        }
-    }
-#endif
-
-    // The QMC6309 magnetometer sits at 0x7C, above the general scan ceiling (the loop above stops at 0x77 to
-    // avoid the reserved 0x78-0x7F block). Probe it explicitly. Gated on the SensorLib driver being present so
-    // only boards that can actually drive the chip poke this reserved address.
-#if __has_include(<SensorQMC6309.hpp>)
-    addr.address = QMC6309_ADDR;
-    i2cBus->beginTransmission(addr.address);
-    if (i2cBus->endTransmission() == 0 &&
-        getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1) == 0x90 /* QMC6309 chip id */) {
-        deviceAddresses[QMC6309] = addr;
-        foundDevices[addr] = QMC6309;
-        logFoundDevice("QMC6309", (uint8_t)addr.address);
-    }
-#endif
 }
 
 void ScanI2CTwoWire::scanPort(I2CPort port)
@@ -1154,9 +867,7 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address)
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;
     } else {
-#if defined(SENSECAP_INDICATOR)
-        return i2cProxy; // WIRE1 is bridged to the RP2040
-#elif WIRE_INTERFACES_COUNT == 2
+#if WIRE_INTERFACES_COUNT == 2
         return &Wire1;
 #else
         return &Wire;

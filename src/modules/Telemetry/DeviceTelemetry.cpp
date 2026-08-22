@@ -4,13 +4,11 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "RadioLibInterface.h"
 #include "Router.h"
-#include "Throttle.h"
 #include "TransmitHistory.h"
-#include "UptimeClock.h"
 #include "configuration.h"
-#include "gps/RTC.h"
 #include "main.h"
 #include "memGet.h"
 #include <OLEDDisplay.h>
@@ -23,12 +21,13 @@ static constexpr uint16_t TX_HISTORY_KEY_DEVICE_TELEMETRY = 0x8001;
 int32_t DeviceTelemetryModule::runOnce()
 {
 
+    refreshUptime();
     uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_DEVICE_TELEMETRY) : 0;
     bool isImpoliteRole = isSensorOrRouterRole();
-    if (((lastTelemetry == 0) || Throttle::hasElapsed(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
-                                                                         moduleConfig.telemetry.device_update_interval,
-                                                                         default_telemetry_broadcast_interval_secs,
-                                                                         numOnlineNodes, TrafficType::TELEMETRY))) &&
+    if (((lastTelemetry == 0) ||
+         ((uptimeLastMs - lastTelemetry) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
+                                                                                    default_telemetry_broadcast_interval_secs,
+                                                                                    numOnlineNodes))) &&
         airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
         moduleConfig.telemetry.device_telemetry_enabled) {
@@ -39,9 +38,9 @@ int32_t DeviceTelemetryModule::runOnce()
         // Just send to phone when it's not our time to send to mesh yet
         // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
-        if (lastSentStatsToPhone == 0 || Throttle::hasElapsed(lastSentStatsToPhone, sendStatsToPhoneIntervalMs)) {
+        if (lastSentStatsToPhone == 0 || (uptimeLastMs - lastSentStatsToPhone) >= sendStatsToPhoneIntervalMs) {
             sendLocalStatsToPhone();
-            lastSentStatsToPhone = Time::getMillis();
+            lastSentStatsToPhone = uptimeLastMs;
         }
     }
     return sendToPhoneIntervalMs;
@@ -77,7 +76,7 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding DeviceTelemetry module");
+            LOG_ERROR("Error decoding DeviceTelemetry module!");
             return NULL;
         }
         // Check for a request for device metrics
@@ -101,21 +100,17 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.has_air_util_tx = true;
     t.variant.device_metrics.has_battery_level = true;
     t.variant.device_metrics.has_channel_utilization = true;
+    t.variant.device_metrics.has_voltage = true;
     t.variant.device_metrics.has_uptime_seconds = true;
+
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
     t.variant.device_metrics.battery_level = (!powerStatus->getHasBattery() || powerStatus->getIsCharging())
                                                  ? MAGIC_USB_BATTERY_LEVEL
                                                  : powerStatus->getBatteryChargePercent();
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
-    // Only populate voltage when we actually have a battery reading. Previously this assigned
-    // -0.001 (from -1 mV / 1000) whenever the ADC returned -1, leaking a sentinel onto the wire
-    // that clients then displayed as a real negative voltage. See GH #7958.
-    int32_t batteryMv = powerStatus->getBatteryVoltageMv();
-    if (powerStatus->getHasBattery() && batteryMv > 0) {
-        t.variant.device_metrics.has_voltage = true;
-        t.variant.device_metrics.voltage = batteryMv / 1000.0f;
-    }
-    t.variant.device_metrics.uptime_seconds = Time::getUptimeSecs();
+    t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+    t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
+
     return t;
 }
 
@@ -125,7 +120,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.which_variant = meshtastic_Telemetry_local_stats_tag;
     telemetry.variant.local_stats = meshtastic_LocalStats_init_zero;
     telemetry.time = getTime();
-    telemetry.variant.local_stats.uptime_seconds = Time::getUptimeSecs();
+    telemetry.variant.local_stats.uptime_seconds = getUptimeSeconds();
     telemetry.variant.local_stats.channel_utilization = airTime->channelUtilizationPercent();
     telemetry.variant.local_stats.air_util_tx = airTime->utilizationTXPercent();
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
@@ -173,8 +168,6 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
 void DeviceTelemetryModule::sendLocalStatsToPhone()
 {
     meshtastic_MeshPacket *p = allocDataProtobuf(getLocalStatsTelemetry());
-    if (!p)
-        return;
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -194,8 +187,6 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     DEBUG_HEAP_AFTER("DeviceTelemetryModule::sendTelemetry", p);
 
-    if (!p)
-        return false;
     p->to = dest;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;

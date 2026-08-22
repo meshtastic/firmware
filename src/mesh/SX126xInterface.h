@@ -47,12 +47,12 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void clearRadioIsr() override;
+    virtual void disableInterrupt() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void setRadioIsr(void (*callback)()) override;
+    virtual void enableInterrupt(void (*callback)()) override;
 
 #ifdef LORA_DIO1_SOFTWARE_POLL
     void handleSoftwareLoraIrqPoll() override;

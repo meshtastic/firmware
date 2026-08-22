@@ -1,6 +1,5 @@
 #include "configuration.h"
 #include "main.h"
-#include "memory/MemAudit.h"
 #if USE_TFTDISPLAY
 
 #if ARCH_PORTDUINO
@@ -21,86 +20,6 @@ extern SX1509 gpioExtender;
 uint16_t TFT_MESH = TFT_MESH_OVERRIDE;
 #else
 uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
-#endif
-
-#if defined(CO5300_CS)
-#include <LovyanGFX.hpp> // Graphics and font library for AMOLED driver chip
-class LGFX : public lgfx::LGFX_Device
-{
-    lgfx::Panel_CO5300 _panel_instance;
-    lgfx::Bus_SPI _bus_instance;
-
-  public:
-    LGFX(void)
-    {
-        {
-            auto cfg = _bus_instance.config();
-
-            // configure SPI
-            cfg.spi_host = CO5300_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
-            cfg.spi_mode = SPI_MODE0;
-            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                            // 80MHz by an integer)
-            cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
-            cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
-            cfg.use_lock = true;                // Set to true to use transaction locking
-            cfg.dma_channel = SPI_DMA_CH_AUTO;  // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
-                                                // SPI_DMA_CH_AUTO=auto setting)
-            cfg.pin_sclk = CO5300_SCK;          // Set SPI SCLK pin number
-            cfg.pin_io0 = CO5300_IO0;
-            cfg.pin_io1 = CO5300_IO1;
-            cfg.pin_io2 = CO5300_IO2;
-            cfg.pin_io3 = CO5300_IO3;
-
-            _bus_instance.config(cfg);              // applies the set value to the bus.
-            _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
-        }
-
-        {                                        // Set the display panel control.
-            auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
-
-            cfg.pin_cs = CO5300_CS;                    // Pin number where CS is connected (-1 = disable)
-            cfg.pin_rst = CO5300_RESET;                // Pin number where RST is connected  (-1 = disable)
-            cfg.panel_width = TFT_WIDTH;               // actual displayable width
-            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
-            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is upside down)
-            cfg.offset_x = TFT_OFFSET_X;
-            cfg.offset_y = TFT_OFFSET_Y;
-            cfg.dummy_read_pixel = 8; // Number of bits for dummy read before pixel readout
-            cfg.dummy_read_bits = 1;  // Number of bits for dummy read before non-pixel data read
-            cfg.readable = true;      // Set to true if data can be read
-            cfg.invert = false;       // Set to true if the light/darkness of the panel is reversed
-            cfg.rgb_order = false;    // Set to true if the panel's red and blue are swapped
-            cfg.dlen_16bit = false;   // Set to true for panels that transmit data length in 16-bit units
-            cfg.bus_shared = true;    // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
-
-            // Set the following only when the display is shifted with a driver with a variable number of pixels
-            cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
-            cfg.memory_height = TFT_HEIGHT; // Maximum height supported by the driver IC
-            _panel_instance.config(cfg);
-        }
-
-        setPanel(&_panel_instance);
-    }
-
-    bool init()
-    {
-#ifdef CO5300_RESET
-        LOG_DEBUG("LGFX_Panel_CO5300::init()");
-        lgfx::pinMode(CO5300_RESET, lgfx::pin_mode_t::output);
-        lgfx::gpio_hi(CO5300_RESET);
-        delay(20);
-        lgfx::gpio_lo(CO5300_RESET);
-        delay(30);
-        lgfx::gpio_hi(CO5300_RESET);
-        delay(20);
-#endif
-        return lgfx::LGFX_Device::init();
-    }
-};
-
-static LGFX *tft = nullptr;
-
 #endif
 
 #if defined(ST7735S)
@@ -207,6 +126,7 @@ static void rak14014_tpIntHandle(void)
 
 #elif defined(HACKADAY_COMMUNICATOR)
 #include <Arduino_GFX_Library.h>
+Arduino_DataBus *bus = nullptr;
 Arduino_GFX *tft = nullptr;
 
 #elif defined(ST72xx_DE)
@@ -622,7 +542,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.memory_width = 240;
             cfg.memory_height = 320;
             cfg.offset_x = 0;
-            cfg.offset_y = 0;                             // No vertical shift needed - panel is top-aligned
+            cfg.offset_y = 0;                             // No vertical shift needed — panel is top-aligned
             cfg.offset_rotation = 2;                      // Rotate 180° to correct upside-down layout
 #else
             cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
@@ -907,7 +827,7 @@ class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Bus_SPI _bus_instance;
 
-    lgfx::ITouch *_touch_instance = nullptr;
+    lgfx::ITouch *_touch_instance;
 
   public:
     lgfx::Panel_Device *_panel_instance;
@@ -937,7 +857,7 @@ class LGFX : public lgfx::LGFX_Device
 #endif
         else {
             _panel_instance = new lgfx::Panel_NULL;
-            LOG_ERROR("Unknown display panel configured");
+            LOG_ERROR("Unknown display panel configured!");
         }
 
         auto buscfg = _bus_instance.config();
@@ -977,28 +897,24 @@ class LGFX : public lgfx::LGFX_Device
             } else if (portduino_config.touchscreenModule == ft5x06) {
                 _touch_instance = new lgfx::Touch_FT5x06;
             }
-            // Not every module in the config enum has a branch above (gt911 is handled by the
-            // color-UI path in tftSetup.cpp), so the pointer can legitimately still be null here.
-            if (_touch_instance) {
-                auto touch_cfg = _touch_instance->config();
+            auto touch_cfg = _touch_instance->config();
 
-                touch_cfg.pin_cs = portduino_config.touchscreenCS.pin;
-                touch_cfg.x_min = 0;
-                touch_cfg.x_max = portduino_config.displayHeight - 1;
-                touch_cfg.y_min = 0;
-                touch_cfg.y_max = portduino_config.displayWidth - 1;
-                touch_cfg.pin_int = portduino_config.touchscreenIRQ.pin;
-                touch_cfg.bus_shared = true;
-                touch_cfg.offset_rotation = portduino_config.touchscreenRotate;
-                if (portduino_config.touchscreenI2CAddr != -1) {
-                    touch_cfg.i2c_addr = portduino_config.touchscreenI2CAddr;
-                } else {
-                    touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
-                }
-
-                _touch_instance->config(touch_cfg);
-                _panel_instance->setTouch(_touch_instance);
+            touch_cfg.pin_cs = portduino_config.touchscreenCS.pin;
+            touch_cfg.x_min = 0;
+            touch_cfg.x_max = portduino_config.displayHeight - 1;
+            touch_cfg.y_min = 0;
+            touch_cfg.y_max = portduino_config.displayWidth - 1;
+            touch_cfg.pin_int = portduino_config.touchscreenIRQ.pin;
+            touch_cfg.bus_shared = true;
+            touch_cfg.offset_rotation = portduino_config.touchscreenRotate;
+            if (portduino_config.touchscreenI2CAddr != -1) {
+                touch_cfg.i2c_addr = portduino_config.touchscreenI2CAddr;
+            } else {
+                touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
             }
+
+            _touch_instance->config(touch_cfg);
+            _panel_instance->setTouch(_touch_instance);
         }
 #if defined(SDL_h_)
         if (portduino_config.displayPanel == x11) {
@@ -1232,21 +1148,10 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#elif defined(VARIANT_DISPLAY_DRIVER)
-// Board-specific framebuffer backends (class LGFX) can livee in the
-// variant files - variant_display.h (declaration) and
-// variant_display.cpp (bodies) - so this shared
-// file isn't inflated for a single board. It exposes the same surface TFTDisplay
-// drives, so the generic `tft = new LGFX;` in connect() works.
-#include "variant_display.h"
-
-static LGFX *tft = nullptr;
-
 #endif
+
 #include "SPILock.h"
-#include "TFTColorRegions.h"
 #include "TFTDisplay.h"
-#include "TFTPalette.h"
 #include <SPI.h>
 
 #ifdef UNPHONE
@@ -1256,28 +1161,9 @@ extern unPhone unphone;
 
 GpioPin *TFTDisplay::backlightEnable = NULL;
 
-namespace
-{
-static constexpr uint8_t kFullRepaintChunkRows = 8;
-
-static inline uint16_t getThemeDefaultOnColor()
-{
-    return graphics::TFTPalette::White;
-}
-
-static inline uint16_t getThemeDefaultOffColor()
-{
-#if GRAPHICS_TFT_COLORING_ENABLED
-    return graphics::getThemeBodyBg();
-#else
-    return TFT_BLACK;
-#endif
-}
-} // namespace
-
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
-    LOG_DEBUG("TFTDisplay");
+    LOG_DEBUG("TFTDisplay!");
 
 #ifdef TFT_BL
     GpioPin *p = new GpioHwPin(TFT_BL);
@@ -1314,16 +1200,14 @@ TFTDisplay::~TFTDisplay()
         free(linePixelBuffer);
         linePixelBuffer = nullptr;
     }
-    if (repaintChunkBuffer != nullptr) {
-        free(repaintChunkBuffer);
-        repaintChunkBuffer = nullptr;
-    }
-    memaudit::set("display", 0);
 }
 
 // Write the buffer to the display memory
 void TFTDisplay::display(bool fromBlank)
 {
+    if (fromBlank)
+        tft->fillScreen(TFT_BLACK);
+
     concurrency::LockGuard g(spiLock);
 
     uint32_t x, y;
@@ -1332,87 +1216,12 @@ void TFTDisplay::display(bool fromBlank)
     uint32_t x_FirstPixelUpdate;
     uint32_t x_LastPixelUpdate;
     bool isset, dblbuf_isset;
-    uint16_t colorTftWhite, colorTftBlack;
+    uint16_t colorTftMesh, colorTftBlack;
     bool somethingChanged = false;
 
-    // Theme defaults for non-role pixels.
-    const uint16_t defaultOnColor = getThemeDefaultOnColor();
-    const uint16_t defaultOffColor = getThemeDefaultOffColor();
-    static uint16_t lastDefaultOnColor = 0;
-    static uint16_t lastDefaultOffColor = 0;
-    static bool haveLastDefaults = false;
-    const bool themeDefaultsChanged =
-        !haveLastDefaults || (defaultOnColor != lastDefaultOnColor) || (defaultOffColor != lastDefaultOffColor);
-    const bool forceFullRepaint = fromBlank || themeDefaultsChanged;
-
-    // If theme defaults changed, reset panel background immediately so stale pixels don't linger.
-    if (forceFullRepaint) {
-        tft->fillScreen(defaultOffColor);
-    }
-
-    colorTftWhite = (defaultOnColor >> 8) | ((defaultOnColor & 0xFF) << 8);
-    colorTftBlack = (defaultOffColor >> 8) | ((defaultOffColor & 0xFF) << 8);
-
-#if GRAPHICS_TFT_COLORING_ENABLED
-    static uint32_t lastColorFrameSignature = 0;
-    const bool hasColorRegions = graphics::getTFTColorRegionCount() > 0;
-    const uint32_t colorFrameSignature = graphics::getTFTColorFrameSignature();
-    const bool forceFullColorRepaint = forceFullRepaint || (colorFrameSignature != lastColorFrameSignature);
-
-    // When region roles/layout changed, color can differ even with identical monochrome glyph bits.
-    // Repaint full frame only for those frames, then return to diff-based updates.
-    if (forceFullColorRepaint) {
-        for (uint32_t yStart = 0; yStart < displayHeight; yStart += kFullRepaintChunkRows) {
-            const uint32_t rowsThisChunk = min<uint32_t>(kFullRepaintChunkRows, displayHeight - yStart);
-            for (uint32_t row = 0; row < rowsThisChunk; row++) {
-                y = yStart + row;
-                y_byteIndex = (y / 8) * displayWidth;
-                y_byteMask = (1 << (y & 7));
-
-                uint16_t *chunkRow = repaintChunkBuffer + (row * displayWidth);
-
-                // Step 1: fill the whole row with the default colors. No per-pixel
-                // region scan, so background pixels (the bulk of the screen) are O(1).
-                for (x = 0; x < displayWidth; x++) {
-                    isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
-                    chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
-                }
-
-                // Step 2: overprint each region overlapping this row, applied in
-                // ascending index order so the highest-index region wins (matches
-                // resolveTFTColorPixel precedence). Only region-covered pixels are
-                // re-touched, so total cost is ~screen + sum of region spans.
-                if (hasColorRegions) {
-                    graphics::beginTFTColorRow(static_cast<int16_t>(y));
-                    for (uint8_t k = 0; k < graphics::tftColorRowCount; k++) {
-                        const graphics::TFTColorRegion &r = graphics::colorRegions[graphics::tftColorRowRegions[k]];
-                        int32_t xs = r.x > 0 ? r.x : 0;
-                        int32_t xe = r.x + r.width;
-                        if (xe > (int32_t)displayWidth)
-                            xe = (int32_t)displayWidth;
-                        for (int32_t xx = xs; xx < xe; xx++) {
-                            isset = (buffer[xx + y_byteIndex] & y_byteMask) != 0;
-                            chunkRow[xx] = isset ? r.onColorBe : r.offColorBe;
-                        }
-                    }
-                }
-            }
-#if defined(HACKADAY_COMMUNICATOR)
-            tft->draw16bitBeRGBBitmap(0, yStart, repaintChunkBuffer, displayWidth, rowsThisChunk);
-#else
-            tft->pushImage(0, yStart, displayWidth, rowsThisChunk, repaintChunkBuffer);
-#endif
-        }
-
-        memcpy(buffer_back, buffer, displayBufferSize);
-        lastColorFrameSignature = colorFrameSignature;
-        haveLastDefaults = true;
-        lastDefaultOnColor = defaultOnColor;
-        lastDefaultOffColor = defaultOffColor;
-        graphics::clearTFTColorRegions();
-        return;
-    }
-#endif
+    // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
+    colorTftMesh = __builtin_bswap16(TFT_MESH);
+    colorTftBlack = __builtin_bswap16(TFT_BLACK);
 
     y = 0;
     while (y < displayHeight) {
@@ -1421,7 +1230,7 @@ void TFTDisplay::display(bool fromBlank)
 
         // Step 1: Do a quick scan of 8 rows together. This allows fast-forwarding over unchanged screen areas.
         if (y_byteMask == 1) {
-            if (!forceFullRepaint) {
+            if (!fromBlank) {
                 for (x = 0; x < displayWidth; x++) {
                     if (buffer[x + y_byteIndex] != buffer_back[x + y_byteIndex])
                         break;
@@ -1439,14 +1248,13 @@ void TFTDisplay::display(bool fromBlank)
             }
         }
 
-        // Step 2: Scan this row for changed span (first and last changed pixel).
-        uint32_t x_FirstChanged = 0;
-        for (x_FirstChanged = 0; x_FirstChanged < displayWidth; x_FirstChanged++) {
-            isset = buffer[x_FirstChanged + y_byteIndex] & y_byteMask;
+        // Step 2: Scan each of the 8 rows individually. Find the first pixel in each row that needs updating
+        for (x_FirstPixelUpdate = 0; x_FirstPixelUpdate < displayWidth; x_FirstPixelUpdate++) {
+            isset = buffer[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
 
-            if (!forceFullRepaint) {
+            if (!fromBlank) {
                 // get src pixel in the page based ordering the OLED lib uses
-                dblbuf_isset = buffer_back[x_FirstChanged + y_byteIndex] & y_byteMask;
+                dblbuf_isset = buffer_back[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
                 if (isset != dblbuf_isset) {
                     break;
                 }
@@ -1456,122 +1264,35 @@ void TFTDisplay::display(bool fromBlank)
         }
 
         // Did we find a pixel that needs updating on this row?
-        if (x_FirstChanged < displayWidth) {
-            uint32_t x_LastChanged = displayWidth - 1;
-            while (x_LastChanged > x_FirstChanged) {
-                isset = buffer[x_LastChanged + y_byteIndex] & y_byteMask;
-                if (!forceFullRepaint) {
-                    dblbuf_isset = buffer_back[x_LastChanged + y_byteIndex] & y_byteMask;
+        if (x_FirstPixelUpdate < displayWidth) {
+
+            // Quickly write out the first changed pixel (saves another array lookup)
+            linePixelBuffer[x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+            x_LastPixelUpdate = x_FirstPixelUpdate;
+
+            // Step 3: copy all remaining pixels in this row into the pixel line buffer,
+            // while also recording the last pixel in the row that needs updating
+            for (x = x_FirstPixelUpdate + 1; x < displayWidth; x++) {
+                isset = buffer[x + y_byteIndex] & y_byteMask;
+                linePixelBuffer[x] = isset ? colorTftMesh : colorTftBlack;
+
+                if (!fromBlank) {
+                    dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
                     if (isset != dblbuf_isset) {
-                        break;
+                        x_LastPixelUpdate = x;
                     }
                 } else if (isset) {
-                    break;
+                    x_LastPixelUpdate = x;
                 }
-                x_LastChanged--;
             }
-
-            // Align the first pixel for update to an even number so the total alignment of
-            // the data will be at 32-bit boundary, which is required by GDMA SPI transfers.
-            x_FirstPixelUpdate = x_FirstChanged & ~1U;
-            x_LastPixelUpdate = x_LastChanged | 1U;
-            if (x_LastPixelUpdate >= displayWidth) {
-                x_LastPixelUpdate = displayWidth - 1;
-            }
-
-            // Step 3: Copy only the changed span into the pixel line buffer.
-#if defined(CO5300_CS)
-            constexpr uint32_t kCO5300MinTransferBytes = 80;
-            constexpr uint32_t kCO5300BytesPerColumn = sizeof(uint16_t) * 2; // two rows, RGB565
-            constexpr uint32_t kCO5300MinColumns = (kCO5300MinTransferBytes + kCO5300BytesPerColumn - 1) / kCO5300BytesPerColumn;
-
-            // CO5300 workaround: widen very small updates so LovyanGFX avoids tiny SPI writes.
-            uint32_t span = x_LastPixelUpdate - x_FirstPixelUpdate + 1;
-            if (span < kCO5300MinColumns) {
-                uint32_t needed = kCO5300MinColumns - span;
-                uint32_t growLeft = needed / 2;
-                uint32_t growRight = needed - growLeft;
-
-                const uint32_t availableLeft = x_FirstPixelUpdate;
-                if (growLeft > availableLeft)
-                    growLeft = availableLeft;
-                x_FirstPixelUpdate -= growLeft;
-                needed -= growLeft;
-
-                const uint32_t availableRight = (displayWidth - 1) - x_LastPixelUpdate;
-                const uint32_t extendRight = (needed < availableRight) ? needed : availableRight;
-                x_LastPixelUpdate += extendRight;
-                needed -= extendRight;
-
-                const uint32_t extendLeft = (needed < x_FirstPixelUpdate) ? needed : x_FirstPixelUpdate;
-                x_FirstPixelUpdate -= extendLeft;
-            }
-
-            // Keep transfer edges aligned as before for DMA-friendly boundaries.
-            x_FirstPixelUpdate &= ~1U;
-            x_LastPixelUpdate = (x_LastPixelUpdate | 1U);
-            if (x_LastPixelUpdate >= displayWidth) {
-                x_LastPixelUpdate = displayWidth - 1;
-            }
-
-            // snap y down to the even-row pair (AMOLED requires 2-row aligned writes)
-            const uint32_t y_draw = y & ~1U;
-            span = x_LastPixelUpdate - x_FirstPixelUpdate + 1;
-            const int y_offset = (int)y_draw - (int)y;
-            for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
-                const uint32_t col = x - x_FirstPixelUpdate;
-                uint32_t bi = (y_draw / 8) * displayWidth;
-                isset = buffer[x + bi] & (1 << (y_draw & 7));
-#if GRAPHICS_TFT_COLORING_ENABLED
-                linePixelBuffer[x_FirstPixelUpdate + col] =
-                    hasColorRegions ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw), isset,
-                                                                     colorTftWhite, colorTftBlack)
-                                    : (isset ? colorTftWhite : colorTftBlack);
-#else
-                linePixelBuffer[x_FirstPixelUpdate + col] = isset ? colorTftWhite : colorTftBlack;
-#endif
-                bi = ((y_draw + 1) / 8) * displayWidth;
-                isset = buffer[x + bi] & (1 << ((y_draw + 1) & 7));
-#if GRAPHICS_TFT_COLORING_ENABLED
-                linePixelBuffer[x_FirstPixelUpdate + span + col] =
-                    hasColorRegions ? graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y_draw + 1),
-                                                                     isset, colorTftWhite, colorTftBlack)
-                                    : (isset ? colorTftWhite : colorTftBlack);
-#else
-                linePixelBuffer[x_FirstPixelUpdate + span + col] = isset ? colorTftWhite : colorTftBlack;
-#endif
-            }
-            const uint8_t lines_updated = 2;
-#else
-            int y_offset = 0;
-#if GRAPHICS_TFT_COLORING_ENABLED
-            if (hasColorRegions)
-                graphics::beginTFTColorRow(static_cast<int16_t>(y));
-#endif
-            for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
-                isset = buffer[x + y_byteIndex] & y_byteMask;
-#if GRAPHICS_TFT_COLORING_ENABLED
-                if (hasColorRegions) {
-                    linePixelBuffer[x] =
-                        graphics::resolveTFTColorPixelRow(static_cast<int16_t>(x), isset, colorTftWhite, colorTftBlack);
-                } else {
-                    linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
-                }
-#else
-                linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
-#endif
-            }
-            const uint8_t lines_updated = 1;
-#endif
-
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
                                       (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1);
 #else
             // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
             // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
-            tft->pushImage(x_FirstPixelUpdate, y + y_offset, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), lines_updated,
-                           &linePixelBuffer[x_FirstPixelUpdate]);
+            tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
+                          &linePixelBuffer[x_FirstPixelUpdate]);
 #endif
             somethingChanged = true;
         }
@@ -1580,14 +1301,6 @@ void TFTDisplay::display(bool fromBlank)
     // Copy the Buffer to the Back Buffer
     if (somethingChanged)
         memcpy(buffer_back, buffer, displayBufferSize);
-
-#if GRAPHICS_TFT_COLORING_ENABLED
-    lastColorFrameSignature = colorFrameSignature;
-#endif
-    haveLastDefaults = true;
-    lastDefaultOnColor = defaultOnColor;
-    lastDefaultOffColor = defaultOffColor;
-    graphics::clearTFTColorRegions();
 }
 
 void TFTDisplay::sdlLoop()
@@ -1598,7 +1311,7 @@ void TFTDisplay::sdlLoop()
     if (portduino_config.displayPanel == x11) {
         lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)tft->_panel_instance;
         if (sdl_panel_->loop() && !shuttingDown) {
-            LOG_WARN("Window Closed");
+            LOG_WARN("Window Closed!");
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
@@ -1638,7 +1351,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-        LOG_DEBUG("Display on");
+        // LOG_DEBUG("Display on");
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
@@ -1666,7 +1379,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
-        LOG_DEBUG("Display off");
+        // LOG_DEBUG("Display off");
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
@@ -1757,24 +1470,20 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Do TFT init");
-    // connect() re-runs on every display wake on variants whose handleSetOn() re-inits
-    // the UI (see the gates in Screen::handleSetOn); construct the driver exactly once.
-    if (!tft) {
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-        tft = new TFT_eSPI;
+    tft = new TFT_eSPI;
 #elif defined(HACKADAY_COMMUNICATOR)
-        Arduino_DataBus *bus =
-            new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
-        tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */,
-                                 12 /* col offset 1 */, 0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */,
-                                 nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
-#else
-        tft = new LGFX;
-#endif
-    }
+    bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
+    tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */, 12 /* col offset 1 */,
+                             0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */, nv3007_279_init_operations,
+                             sizeof(nv3007_279_init_operations));
 
-    LOG_INFO("Power to TFT Backlight");
+#else
+    tft = new LGFX;
+#endif
+
     backlightEnable->set(true);
+    LOG_INFO("Power to TFT Backlight");
 
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
@@ -1782,9 +1491,9 @@ bool TFTDisplay::connect()
 #ifdef HACKADAY_COMMUNICATOR
     bool beginStatus = tft->begin();
     if (beginStatus)
-        LOG_DEBUG("TFT Success");
+        LOG_DEBUG("TFT Success!");
     else
-        LOG_ERROR("TFT Fail");
+        LOG_ERROR("TFT Fail!");
 #else
     tft->init();
 #endif
@@ -1802,34 +1511,20 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
-#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER) || defined(T_WATCH_ULTRA)
+#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
-    tft->fillScreen(getThemeDefaultOffColor());
+    tft->fillScreen(TFT_BLACK);
 
     if (this->linePixelBuffer == NULL) {
-#if defined(CO5300_CS)
-        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * 2);
-#else
         this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth);
-#endif
 
         if (!this->linePixelBuffer) {
-            LOG_ERROR("Not enough memory to create TFT line buffer");
+            LOG_ERROR("Not enough memory to create TFT line buffer\n");
             return false;
         }
-        memaudit::add("display", sizeof(uint16_t) * displayWidth);
-    }
-    if (this->repaintChunkBuffer == NULL) {
-        this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
-
-        if (!this->repaintChunkBuffer) {
-            LOG_ERROR("Not enough memory to create TFT repaint chunk buffer");
-            return false;
-        }
-        memaudit::add("display", sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
     }
     return true;
 }

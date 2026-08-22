@@ -1,14 +1,16 @@
-name: Pull Request
-on: [pull_request]
-concurrency:
-  group: ${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+name: Annotate PR with trunk issues
+# See: https://github.com/trunk-io/trunk-action/blob/main/readme.md#getting-inline-annotations-for-fork-prs
+
+on:
+  workflow_run:
+    workflows: [Pull Request] # Name from `trunk_check.yml`
+    types: [completed]
 
 permissions: read-all
 
 jobs:
   trunk_check:
-    name: Trunk Check Runner
+    name: Trunk Code Quality Annotate
     runs-on: ubuntu-24.04
     permissions:
       checks: write # For trunk to post annotations
@@ -21,4 +23,4 @@ jobs:
       - name: Trunk Check
         uses: trunk-io/trunk-action@v1.3.1
         with:
-          save-annotations: true
+          post-annotations: true

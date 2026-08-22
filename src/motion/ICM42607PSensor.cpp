@@ -4,16 +4,10 @@
 
 #include "detect/ScanI2CTwoWire.h"
 #include <ICM42670P.h>
-#include <math.h>
 
 static constexpr uint16_t ICM42607P_ACCEL_ODR_HZ = 50;
 static constexpr uint16_t ICM42607P_ACCEL_FSR_G = 2;
-static constexpr float ICM42607P_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE =
-#ifdef ICM42607P_ACCEL_TO_COMPASS_ROTATION_DEG
-    ICM42607P_ACCEL_TO_COMPASS_ROTATION_DEG;
-#else
-    0.0f;
-#endif
+static constexpr float ICM42607P_COUNTS_PER_G = 32768.0f / ICM42607P_ACCEL_FSR_G;
 
 #ifdef ICM_42607P_INT_PIN
 volatile static bool ICM42607P_IRQ = false;
@@ -24,7 +18,10 @@ void ICM42607PSetInterrupt()
 }
 #endif
 
-ICM42607PSensor::ICM42607PSensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
+ICM42607PSensor::ICM42607PSensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice)
+{
+    wire = ScanI2CTwoWire::fetchI2CBus(foundDevice.address);
+}
 
 ICM42607PSensor::~ICM42607PSensor() = default;
 
@@ -33,7 +30,6 @@ bool ICM42607PSensor::init()
     bool addressLsb = deviceAddress() == ICM42607P_ADDR_ALT;
 
     LOG_DEBUG("ICM-42607-P begin on addr 0x%02X (port=%d)", deviceAddress(), devicePort());
-    TwoWire *wire = ScanI2CTwoWire::fetchI2CBus(device.address);
     sensor.reset();
     auto newSensor = std::make_unique<ICM42670>(*wire, addressLsb);
 
@@ -75,6 +71,9 @@ int32_t ICM42607PSensor::runOnce()
     }
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #else
+    int16_t x = 0;
+    int16_t y = 0;
+    int16_t z = 0;
     inv_imu_sensor_event_t event = {};
 
     if (sensor == nullptr || sensor->getDataFromRegisters(event) != 0) {
@@ -86,22 +85,11 @@ int32_t ICM42607PSensor::runOnce()
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
-    float ax = static_cast<float>(event.accel[0]);
-    float ay = static_cast<float>(event.accel[1]);
-    const float az = static_cast<float>(event.accel[2]);
-
-    if (ICM42607P_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE != 0.0f) {
-        static const float rotRad = ICM42607P_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE * DEG_TO_RAD;
-        static const float cosTheta = cosf(rotRad);
-        static const float sinTheta = sinf(rotRad);
-        const float rotatedX = (ax * cosTheta) - (ay * sinTheta);
-        const float rotatedY = (ax * sinTheta) + (ay * cosTheta);
-        ax = rotatedX;
-        ay = rotatedY;
-    }
-
-    // Match the accel sign convention used by other FusionCompass sensor paths.
-    publishCompassAccelSample(ax, -ay, -az);
+    x = event.accel[0];
+    y = event.accel[1];
+    z = event.accel[2];
+    // LOG_DEBUG("ICM-42607-P accel read x=%.3fg y=%.3fg z=%.3fg", (float)x / ICM42607P_COUNTS_PER_G,
+    //           (float)y / ICM42607P_COUNTS_PER_G, (float)z / ICM42607P_COUNTS_PER_G);
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #endif

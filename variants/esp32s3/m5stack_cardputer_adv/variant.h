@@ -59,6 +59,14 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #define TCXO_OPTIONAL
 
+// SD card slot — shares the SPI bus with the LoRa radio (separate chip select).
+// The default SPI instance is used; spiLock arbitrates access between radio and SD.
+#define HAS_SDCARD
+#define SPI_SCK 40
+#define SPI_MISO 39
+#define SPI_MOSI 14
+#define SDCARD_CS 12
+
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 #define GPS_RX_PIN 15
