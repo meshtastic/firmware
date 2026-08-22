@@ -161,6 +161,14 @@ lint:
         - test/test_airtime/test_main.cpp
         - test/test_throttle/test_main.cpp
         - test/test_uptime_clock/test_main.cpp
+    # Different cause, same detector: Unity test functions are named test_<something>,
+    # and the Lob detector reads a long enough test_-prefixed identifier as a Lob API
+    # key. Length alone does not decide it (several longer names here do not trip),
+    # so the names cannot be kept clear of it by inspection. These are C++ function
+    # names, not secrets.
+    - linters: [trufflehog]
+      paths:
+        - test/test_nodedb_blocked/test_main.cpp
 runtimes:
   enabled:
     - python@3.14.4
