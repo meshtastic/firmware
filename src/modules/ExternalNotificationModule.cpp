@@ -89,10 +89,9 @@ int32_t ExternalNotificationModule::runOnce()
         }
 #ifdef HAS_I2S
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
-        const bool isI2sPlaying = audioThread->isPlaying();
+        const bool isI2sPlaying = audioThread->isPlaying(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION);
         if (buzzerPlaybackBackend == BuzzerPlaybackBackend::I2S) {
-            const bool ownsI2sPlayback = audioThread->isRtttlOwnedBy(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION);
-            isRtttlPlaying = isI2sPlaying && ownsI2sPlayback;
+            isRtttlPlaying = isI2sPlaying;
             if (!isRtttlPlaying) {
                 buzzerPlaybackBackend = BuzzerPlaybackBackend::NONE;
             }
