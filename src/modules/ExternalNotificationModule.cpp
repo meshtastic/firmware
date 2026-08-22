@@ -87,11 +87,9 @@ int32_t ExternalNotificationModule::runOnce()
 #if defined(HAS_I2S_SPEAKER_NRF52)
         isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
-        const bool buzzerWindowActive =
-            buzzerShouldAlert &&
-            buzzerModeAllowsNotification(config.device.buzzer_mode, buzzerAlertIsDirectMessage) &&
-            Throttle::isWithinTimespanMs(buzzerAlertStarted, buzzerAlertDurationMs);
-        if (buzzerShouldAlert && !buzzerWindowActive) {
+        const bool buzzerModeAllowed = buzzerModeAllowsNotification(config.device.buzzer_mode, buzzerAlertIsDirectMessage);
+        const bool buzzerWindowExpired = !Throttle::isWithinTimespanMs(buzzerAlertStarted, buzzerAlertDurationMs);
+        if (buzzerShouldAlert && (!buzzerModeAllowed || (buzzerWindowExpired && !isRtttlPlaying))) {
             stopBuzzerNow();
             isRtttlPlaying = false;
         }
