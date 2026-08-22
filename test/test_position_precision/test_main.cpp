@@ -146,6 +146,65 @@ static void test_getPositionPrecisionForChannel_keepsPreciseOnStrongKeyChannel()
     TEST_ASSERT_EQUAL_UINT32(32, getPositionPrecisionForChannel(idx));
 }
 
+static void test_getPositionPrecisionForChannel_clampsPreciseOnUnencryptedChannelOutsideHamMode()
+{
+    channels.initDefaults();
+    uint8_t idx = 0;
+    meshtastic_Channel &ch = channels.getByIndex(idx);
+    ch.settings.psk.size = 0;
+    ch.settings.has_module_settings = true;
+    ch.settings.module_settings.position_precision = 32;
+    owner.is_licensed = false;
+
+    TEST_ASSERT_EQUAL_UINT32(MAX_POSITION_PRECISION_PUBLIC_KEY, getPositionPrecisionForChannel(idx));
+}
+
+static void test_getPositionPrecisionForChannel_keepsPreciseOnUnencryptedChannelInHamMode()
+{
+    channels.initDefaults();
+    uint8_t idx = 0;
+    meshtastic_Channel &ch = channels.getByIndex(idx);
+    ch.settings.psk.size = 0;
+    ch.settings.has_module_settings = true;
+    ch.settings.module_settings.position_precision = 32;
+    owner.is_licensed = true;
+
+    uint32_t precision = getPositionPrecisionForChannel(idx);
+    owner.is_licensed = false;
+    TEST_ASSERT_EQUAL_UINT32(32, precision);
+}
+
+static void test_getPositionPrecisionForChannel_clampsPreciseOnDefaultKeyChannelInHamMode()
+{
+    channels.initDefaults();
+    uint8_t idx = 0;
+    meshtastic_Channel &ch = channels.getByIndex(idx);
+    ch.settings.has_module_settings = true;
+    ch.settings.module_settings.position_precision = 32;
+    owner.is_licensed = true;
+
+    uint32_t precision = getPositionPrecisionForChannel(idx);
+    owner.is_licensed = false;
+    TEST_ASSERT_EQUAL_UINT32(MAX_POSITION_PRECISION_PUBLIC_KEY, precision);
+}
+
+static void test_getPositionPrecisionForChannel_clampsPreciseOnSecondaryThatInheritsDefaultKeyInHamMode()
+{
+    channels.initDefaults();
+    uint8_t idx = 1;
+    meshtastic_Channel &ch = channels.getByIndex(idx);
+    ch = meshtastic_Channel_init_default;
+    ch.has_settings = true;
+    ch.role = meshtastic_Channel_Role_SECONDARY;
+    ch.settings.has_module_settings = true;
+    ch.settings.module_settings.position_precision = 32;
+    owner.is_licensed = true;
+
+    uint32_t precision = getPositionPrecisionForChannel(idx);
+    owner.is_licensed = false;
+    TEST_ASSERT_EQUAL_UINT32(MAX_POSITION_PRECISION_PUBLIC_KEY, precision);
+}
+
 static CryptoKey makeCryptoKey(const uint8_t *bytes, int length)
 {
     CryptoKey k;
@@ -226,6 +285,10 @@ void setup()
     RUN_TEST(test_getPositionPrecisionForChannel_secondaryWithoutModuleSettingsFailsClosed);
     RUN_TEST(test_getPositionPrecisionForChannel_clampsPreciseOnDefaultKeyChannel);
     RUN_TEST(test_getPositionPrecisionForChannel_keepsPreciseOnStrongKeyChannel);
+    RUN_TEST(test_getPositionPrecisionForChannel_clampsPreciseOnUnencryptedChannelOutsideHamMode);
+    RUN_TEST(test_getPositionPrecisionForChannel_keepsPreciseOnUnencryptedChannelInHamMode);
+    RUN_TEST(test_getPositionPrecisionForChannel_clampsPreciseOnDefaultKeyChannelInHamMode);
+    RUN_TEST(test_getPositionPrecisionForChannel_clampsPreciseOnSecondaryThatInheritsDefaultKeyInHamMode);
     RUN_TEST(test_cryptoKeyIsPublic_openKeyIsPublic);
     RUN_TEST(test_cryptoKeyIsPublic_defaultKeyIsPublic);
     RUN_TEST(test_cryptoKeyIsPublic_defaultKeyFamilyVariesLastByte);

@@ -88,6 +88,8 @@ class Channels
 
     // Returns true if this channel's effective key is publicly decryptable (open or well-known/default PSK).
     bool usesPublicKey(ChannelIndex chIndex);
+    // Returns true when the channel's effective key has encryption disabled.
+    bool isUnencrypted(ChannelIndex chIndex);
     // Returns true if the channel is "well known": its PSK is absent or a
     // single-byte well-known key index, AND its name is any modem-preset
     // display name (e.g. a channel named "LongFast" counts even while the

@@ -21,8 +21,9 @@ uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
         return 0;
     uint32_t precision = getPositionPrecisionForChannel(ch);
 
-    // Never send a precise position on a publicly-decryptable channel (key check is gated on > ceiling).
-    if (precision > MAX_POSITION_PRECISION_PUBLIC_KEY && channels.usesPublicKey(channelIndex)) {
+    // Ham mode permits precise positions only when the channel is unencrypted.
+    if (precision > MAX_POSITION_PRECISION_PUBLIC_KEY && channels.usesPublicKey(channelIndex) &&
+        !(owner.is_licensed && channels.isUnencrypted(channelIndex))) {
         precision = MAX_POSITION_PRECISION_PUBLIC_KEY;
     }
     return precision;

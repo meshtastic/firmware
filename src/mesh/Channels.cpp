@@ -440,6 +440,11 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     return (psk.size == sizeof(defaultpsk) && memcmp(psk.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0);
 }
 
+bool Channels::isUnencrypted(ChannelIndex chIndex)
+{
+    return getKey(chIndex).length == 0;
+}
+
 bool Channels::isWellKnownChannel(ChannelIndex chIndex)
 {
     const auto &ch = getByIndex(chIndex);

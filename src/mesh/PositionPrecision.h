@@ -13,7 +13,8 @@
 // Configured precision as-is; does NOT apply the public-key clamp -- use the channelIndex overload for the on-wire value.
 uint32_t getPositionPrecisionForChannel(const meshtastic_Channel &channel);
 
-// Configured precision, clamped to MAX_POSITION_PRECISION_PUBLIC_KEY when the channel's effective key is publicly decryptable.
+// Configured precision, clamped to MAX_POSITION_PRECISION_PUBLIC_KEY when the channel's effective key is publicly decryptable,
+// except for unencrypted channels in Ham mode.
 uint32_t getPositionPrecisionForChannel(uint8_t channelIndex);
 
 // Truncate a single latitude_i/longitude_i to `precision` significant bits, centered in the
