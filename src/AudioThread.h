@@ -29,9 +29,11 @@ extern ExtensionIOXL9555 io;
 class AudioThread : public concurrency::OSThread
 {
   public:
+    enum class RtttlOwner : uint8_t { NONE, SYSTEM, EXTERNAL_NOTIFICATION };
+
     AudioThread() : OSThread("Audio") { initOutput(); }
 
-    void beginRttl(const void *data, uint32_t len)
+    void beginRttl(const void *data, uint32_t len, RtttlOwner owner = RtttlOwner::SYSTEM)
     {
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(true);
@@ -39,6 +41,7 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
+        rtttlOwner = owner;
         i2sRtttl->begin(rtttlFile.get(), audioOut.get());
     }
 
@@ -46,9 +49,22 @@ class AudioThread : public concurrency::OSThread
     bool isPlaying()
     {
         if (i2sRtttl != nullptr) {
-            return i2sRtttl->isRunning() && i2sRtttl->loop();
+            const bool playing = i2sRtttl->isRunning() && i2sRtttl->loop();
+            if (!playing) {
+                stop();
+            }
+            return playing;
         }
         return false;
+    }
+
+    bool stopRtttlIfOwnedBy(RtttlOwner owner)
+    {
+        if (rtttlOwner != owner) {
+            return false;
+        }
+        stop();
+        return true;
     }
 
     void stop()
@@ -59,6 +75,7 @@ class AudioThread : public concurrency::OSThread
         }
 
         rtttlFile = nullptr;
+        rtttlOwner = RtttlOwner::NONE;
 
         setCPUFast(false);
 #ifdef AUDIO_AMP_ENABLE
@@ -72,6 +89,7 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl->stop();
             i2sRtttl = nullptr;
         }
+        rtttlOwner = RtttlOwner::NONE;
 
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(true);
@@ -108,6 +126,7 @@ class AudioThread : public concurrency::OSThread
     std::unique_ptr<AudioOutputI2S> audioOut = nullptr;
 
     std::unique_ptr<AudioFileSourcePROGMEM> rtttlFile = nullptr;
+    RtttlOwner rtttlOwner = RtttlOwner::NONE;
 };
 
 #endif
