@@ -4,11 +4,11 @@ Lockdown passphrase provisioning / unlock / lock-now over USB serial.
 
 Speaks the AdminMessage.lockdown_auth / FromRadio.lockdown_status wire format
 introduced for MESHTASTIC_LOCKDOWN firmware builds. **This tool is the
-canonical reference implementation** — downstream clients (Meshtastic-Android,
+canonical reference implementation** - downstream clients (Meshtastic-Android,
 in-tree TCP/BLE tools) should mirror its packet shape.
 
 ==============================================================================
-SECURITY MODEL — READ BEFORE EXTENDING
+SECURITY MODEL - READ BEFORE EXTENDING
 ==============================================================================
 
   * USB-ONLY by design. The passphrase is sent **in cleartext over the USB
@@ -16,7 +16,7 @@ SECURITY MODEL — READ BEFORE EXTENDING
     serial channel. The link is local; an attacker would need physical
     access to the cable to read it.
   * DO NOT extend to TCP or BLE transports without first redesigning the
-    handshake — both broadcast the wire format over channels an attacker
+    handshake - both broadcast the wire format over channels an attacker
     can passively sniff or actively MITM.
   * Passphrases entered at a shell prompt land in your shell history. Use
     --passphrase-file (mode 0600) or the interactive prompt for anything
@@ -195,7 +195,7 @@ def read_passphrase_from_file(path: str) -> bytes:
     mode = stat.S_IMODE(st.st_mode)
     if mode & 0o077:
         sys.exit(
-            f"error: {path} mode is {oct(mode)} — must be 0600 (operator-only).\n"
+            f"error: {path} mode is {oct(mode)} - must be 0600 (operator-only).\n"
             f"       run: chmod 600 {path}"
         )
     try:
@@ -236,7 +236,7 @@ def gather_passphrase(args, *, confirm: bool) -> bytes:
                 "       `ps`. Prefer --passphrase-file or the interactive prompt."
             )
         sys.stderr.write(
-            "warning: passphrase passed on argv — visible to other users via\n"
+            "warning: passphrase passed on argv - visible to other users via\n"
             "         ps(1), and persisted in your shell history file.\n"
         )
         pp = args.passphrase.encode("utf-8")
@@ -269,7 +269,7 @@ def install_notification_printer(iface) -> None:
     if original is None:
         sys.exit(
             "error: meshtastic.serial_interface.SerialInterface has no\n"
-            "       _handleFromRadio method. The lib's private API changed —\n"
+            "       _handleFromRadio method. The lib's private API changed -\n"
             "       this tool needs to be updated. See L7 in the audit notes."
         )
 
@@ -292,7 +292,7 @@ def install_notification_printer(iface) -> None:
                 print(f"[device:LOCKDOWN] {' '.join(parts)}", flush=True)
                 if _STATUS_FUTURE is not None:
                     _STATUS_FUTURE.deliver(ls)
-        except Exception as exc:  # noqa: BLE001 — best-effort logging only
+        except Exception as exc:  # noqa: BLE001 - best-effort logging only
             print(f"[notif-parse-error] {exc}", flush=True)
         return original(fromRadioBytes)
 
@@ -347,7 +347,7 @@ def send_lockdown_auth(iface, la, label: str) -> int:
     # _generatePacketId is private but stable across recent lib versions.
     generate_id = getattr(iface, "_generatePacketId", None)
     if generate_id is None:
-        sys.exit("error: meshtastic lib missing _generatePacketId — see L7 note")
+        sys.exit("error: meshtastic lib missing _generatePacketId - see L7 note")
     mp = mesh_pb2.MeshPacket()
     mp.to = my_node_num
     mp.id = generate_id()
@@ -358,7 +358,7 @@ def send_lockdown_auth(iface, la, label: str) -> int:
     mp.priority = mesh_pb2.MeshPacket.Priority.RELIABLE
     mp.decoded.portnum = portnums_pb2.PortNum.ADMIN_APP
     mp.decoded.payload = am.SerializeToString()
-    # NOTE: pki_encrypted intentionally left False — see top-of-file note in
+    # NOTE: pki_encrypted intentionally left False - see top-of-file note in
     # the original tool. Lockdown firmware drops PKI-encrypted ToRadio.
 
     tr = mesh_pb2.ToRadio()
@@ -366,7 +366,7 @@ def send_lockdown_auth(iface, la, label: str) -> int:
 
     send_to_radio = getattr(iface, "_sendToRadio", None)
     if send_to_radio is None:
-        sys.exit("error: meshtastic lib missing _sendToRadio — see L7 note")
+        sys.exit("error: meshtastic lib missing _sendToRadio - see L7 note")
     print(
         f"[client] sending {label} (to=0x{my_node_num:08x}, id={mp.id}) ...", flush=True
     )
@@ -465,7 +465,7 @@ def cmd_disable(iface, args) -> int:
     # Runtime-toggle OFF. Unlike 'lock' (which reboots back into the locked
     # state), 'disable' turns lockdown off entirely: the firmware re-verifies
     # the passphrase to load the DEK, reverts at-rest encryption to plaintext,
-    # then reboots into normal mode. A non-empty passphrase is REQUIRED — the
+    # then reboots into normal mode. A non-empty passphrase is REQUIRED - the
     # firmware rejects an empty one with UNLOCK_FAILED.
     if not args.yes:
         sys.stderr.write(
@@ -484,7 +484,7 @@ def cmd_disable(iface, args) -> int:
     _STATUS_FUTURE = StatusFuture()
     send_lockdown_auth(iface, la, "disable")
     # On success the firmware decrypts every stored file before broadcasting
-    # DISABLED, so a large node DB can take longer than the default wait — bump
+    # DISABLED, so a large node DB can take longer than the default wait - bump
     # --wait if you see no status. The DISABLED broadcast precedes the reboot.
     status = _await_status(args.wait)
     if status is None:
@@ -495,7 +495,7 @@ def cmd_disable(iface, args) -> int:
 
 def cmd_watch(_iface, args) -> int:
     print(
-        f"[client] watching for LockdownStatus notifications for {args.seconds}s — Ctrl-C to exit early",
+        f"[client] watching for LockdownStatus notifications for {args.seconds}s - Ctrl-C to exit early",
         flush=True,
     )
     try:
@@ -520,7 +520,7 @@ def _exit_code_for_status(status: mesh_pb2.LockdownStatus) -> int:
         sys.stderr.write(
             "error: UNLOCK_FAILED"
             + (
-                f" — try again in {status.backoff_seconds}s"
+                f" - try again in {status.backoff_seconds}s"
                 if status.backoff_seconds
                 else ""
             )
@@ -586,7 +586,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--port",
-        help="USB serial device path, e.g. /dev/cu.usbmodem* — TCP/BLE/UDP rejected",
+        help="USB serial device path, e.g. /dev/cu.usbmodem* - TCP/BLE/UDP rejected",
     )
     ap.add_argument(
         "--wait",

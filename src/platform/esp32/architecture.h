@@ -198,6 +198,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
 #elif defined(T_BEAM_1W)
 #define HW_VENDOR meshtastic_HardwareModel_TBEAM_1_WATT
+#elif defined(T_BEAM_BPF)
+#define HW_VENDOR meshtastic_HardwareModel_TBEAM_BPF
 #elif defined(T_LORA_PAGER)
 #define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
 #elif defined(HELTEC_V4)
@@ -206,8 +208,12 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
 #elif defined(HELTEC_WIRELESS_TRACKER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#elif defined(T_WATCH_ULTRA)
+#define HW_VENDOR meshtastic_HardwareModel_T_WATCH_ULTRA
 #elif defined(M5STACK_CARDPUTER_ADV)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
+#elif defined(MESHNOLOGY_W10)
+#define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

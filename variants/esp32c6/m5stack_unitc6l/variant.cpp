@@ -60,7 +60,8 @@ void c6l_init()
     vTaskDelay(10 / portTICK_PERIOD_MS);
     i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_PULL_EN, 0b11100011); // pull up/down enable, 0 disable, 1 enable
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IN_DEF_STA, 0b00000011); // P0 P1 default to high level; button press triggers the interrupt
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IN_DEF_STA,
+                   0b00000011); // P0 P1 default to high level; button press triggers the interrupt
     vTaskDelay(10 / portTICK_PERIOD_MS);
     i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_INT_MASK, 0b11111100); // P0 P1 interrupts enabled (0 = enable, 1 = disable)
     vTaskDelay(10 / portTICK_PERIOD_MS);

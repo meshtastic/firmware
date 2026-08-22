@@ -1,9 +1,9 @@
 #pragma once
 
 #if defined(__APPLE__)
+#include <errno.h>
 #include <malloc/malloc.h>
 #include <stdlib.h>
-#include <errno.h>
 
 // LovyanGFX includes the Linux header name; bridge it for Darwin native builds.
 static inline void *memalign(size_t alignment, size_t size)

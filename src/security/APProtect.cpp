@@ -9,7 +9,7 @@
 // M22 (audit): refuse to engage APPROTECT on silicon revisions where the
 // debug-port lockout is publicly known to be bypassable. nRF52840 build
 // codes AAB0..AAF0 are all affected by the SWD glitching attack documented
-// in LimitedResults' nRF52-series research — i.e. every nRF52840 currently
+// in LimitedResults' nRF52-series research - i.e. every nRF52840 currently
 // in shipping Meshtastic hardware. Engaging APPROTECT on these revisions
 // gives the operator a false sense of security AND irreversibly blocks
 // legitimate SWD-based dev/recovery: the worst of both. Detect-and-skip
