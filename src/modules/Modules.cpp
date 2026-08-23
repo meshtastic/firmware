@@ -55,8 +55,10 @@
 #include "modules/TraceRouteModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
-#include "modules/GeofenceModule.h"
 #include "modules/WaypointModule.h"
+#if HAS_SCREEN
+#include "modules/GeofenceModule.h"
+#endif
 #endif
 #if ARCH_PORTDUINO
 #include "modules/Telemetry/HostMetrics.h"
@@ -159,7 +161,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
     waypointModule = new WaypointModule();
+#if HAS_SCREEN
     geofenceModule = new GeofenceModule();
+#endif
 #endif
 #if !MESHTASTIC_EXCLUDE_TEXTMESSAGE
     textMessageModule = new TextMessageModule();

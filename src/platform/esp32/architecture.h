@@ -221,6 +221,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V4_R8
 #elif defined(MINI_EPAPER_S3)
 #define HW_VENDOR meshtastic_HardwareModel_MINI_EPAPER_S3
+#elif defined(HELTEC_RC32)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RC32
+#elif defined(HELTEC_RCC6)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RCC6
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

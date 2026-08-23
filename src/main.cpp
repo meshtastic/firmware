@@ -25,7 +25,9 @@
 #include "Power.h"
 #include "SPILock.h"
 #include "Throttle.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "WaypointStore.h"
+#endif
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
@@ -1104,7 +1106,7 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
     waypointStore.loadFromFlash();
 #endif
 
@@ -1546,10 +1548,10 @@ void loop()
 #if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();
 #endif
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
     waypointStore.purgeExpired();
 #endif
-#if !MESHTASTIC_EXCLUDE_WAYPOINT && ENABLE_WAYPOINT_PERSISTENCE
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT && ENABLE_WAYPOINT_PERSISTENCE
     waypointStoreAutosaveTick();
 #endif
     long delayMsec = mainController.runOrDelay();

@@ -15,6 +15,7 @@ The base applet doesn't handle any events; this is left to the derived applets.
 #pragma once
 
 #include "configuration.h"
+#include <list>
 #include <vector>
 
 #include "WaypointStore.h"
@@ -33,8 +34,6 @@ class MapApplet : public Applet
   public:
     MapApplet();
     void onRender(bool full) override;
-    void onActivate() override;
-    void onDeactivate() override;
 
     MapApplet *asMapApplet() override { return this; } // Identify as MapApplet without RTTI
 
@@ -104,7 +103,7 @@ class MapApplet : public Applet
     float lngCenter = 0;          // Map center: longitude
     bool centerIsOurNode = false; // True if map is centered on our own position (GPS or phone)
 
-    std::vector<Marker> markers;
+    std::list<Marker> markers;
     std::vector<WaypointMarker> waypointMarkers;
     uint32_t widthMeters = 0;  // Map width: meters
     uint32_t heightMeters = 0; // Map height: meters

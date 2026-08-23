@@ -1,12 +1,11 @@
 #include "GeofenceModule.h"
 
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 
 #include "WaypointStore.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
-#include <algorithm>
 #include <cstring>
 
 #if HAS_SCREEN
@@ -19,15 +18,12 @@
 
 GeofenceModule *geofenceModule;
 
-// Keep the in-memory footprint bounded. A mesh realistically has only a handful of active
-// geofencing waypoints; the crossing-state map grows with (waypoints x nodes).
-static constexpr size_t GEOFENCE_MAX_WAYPOINTS = WAYPOINT_HISTORY_LIMIT;
 static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
 
 GeofenceModule::GeofenceModule()
 {
-    geofences.reserve(GEOFENCE_MAX_WAYPOINTS);
     crossingInside.reserve(GEOFENCE_MAX_CROSSING);
+    waypointStoreObserver.observe(&waypointStore);
 }
 
 bool GeofenceModule::insideRadius(int32_t ptLat_i, int32_t ptLon_i, int32_t ctrLat_i, int32_t ctrLon_i, uint32_t radiusMeters)
@@ -88,37 +84,6 @@ GeofenceModule::Crossing GeofenceModule::classifyTrackedUpdate(bool hasTrackedSt
     return classify(true, false, isInside, notifyOnEnter, notifyOnExit);
 }
 
-void GeofenceModule::removeGeofence(uint32_t waypointId, NodeNum creatorNodeNum)
-{
-    geofences.erase(std::remove_if(geofences.begin(), geofences.end(),
-                                   [waypointId, creatorNodeNum](const Geofence &geofence) {
-                                       return geofence.id == waypointId &&
-                                              (creatorNodeNum == 0 || geofence.creatorNodeNum == creatorNodeNum);
-                                   }),
-                    geofences.end());
-    crossingInside.erase(
-        std::remove_if(crossingInside.begin(), crossingInside.end(),
-                       [waypointId](const CrossingState &state) { return (uint32_t)(state.key >> 32) == waypointId; }),
-        crossingInside.end());
-}
-
-void GeofenceModule::purgeExpired(uint32_t now)
-{
-    if (now == 0)
-        return; // no trustworthy clock; can't judge expiry
-    for (size_t i = 0; i < geofences.size();) {
-        if (geofences[i].expire != 0 && geofences[i].expire <= now) {
-            uint32_t id = geofences[i].id;
-            geofences.erase(geofences.begin() + i);
-            crossingInside.erase(std::remove_if(crossingInside.begin(), crossingInside.end(),
-                                                [id](const CrossingState &state) { return (uint32_t)(state.key >> 32) == id; }),
-                                 crossingInside.end());
-        } else {
-            i++;
-        }
-    }
-}
-
 GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
 {
     for (auto &state : crossingInside) {
@@ -146,59 +111,17 @@ bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint32_t now)
     return true;
 }
 
-void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp, NodeNum creatorNodeNum)
+int GeofenceModule::onWaypointStoreChanged(const WaypointStore *store)
 {
-    uint32_t now = getTime();
-    purgeExpired(now);
-
-    const NodeNum localNodeNum = nodeDB ? nodeDB->getNodeNum() : 0;
-
-    // Drop anything we don't track (a plain pin, notifications turned off, an expired or deleted
-    // waypoint, or a circle with no centre) from the store.
-    if (!shouldTrack(wp, now) || creatorNodeNum == 0 || creatorNodeNum != localNodeNum) {
-        removeGeofence(wp.id, creatorNodeNum);
-        return;
-    }
-
-    Geofence *slot = nullptr;
-    for (auto &g : geofences) {
-        if (g.id == wp.id && g.creatorNodeNum == creatorNodeNum) {
-            slot = &g;
-            break;
-        }
-    }
-    if (!slot) {
-        if (geofences.size() >= GEOFENCE_MAX_WAYPOINTS) {
-            LOG_WARN("Geofence store full (%u); ignoring waypoint 0x%08x", (unsigned)geofences.size(), wp.id);
-            return;
-        }
-        geofences.push_back(Geofence{});
-        slot = &geofences.back();
-    }
-
-    slot->id = wp.id;
-    slot->creatorNodeNum = creatorNodeNum;
-    slot->latitude_i = wp.latitude_i;
-    slot->longitude_i = wp.longitude_i;
-    slot->geofence_radius = wp.geofence_radius;
-    slot->has_bounding_box = wp.has_bounding_box;
-    slot->bounding_box = wp.bounding_box;
-    slot->notify_on_enter = wp.notify_on_enter;
-    slot->notify_on_exit = wp.notify_on_exit;
-    slot->notify_favorites_only = wp.notify_favorites_only;
-    slot->expire = wp.expire;
-    strncpy(slot->name, wp.name, sizeof(slot->name) - 1);
-    slot->name[sizeof(slot->name) - 1] = '\0';
-
-    LOG_INFO("Geofence: tracking waypoint 0x%08x '%s' creator=0x%08x radius=%um box=%d enter=%d exit=%d favOnly=%d", wp.id,
-             slot->name, (unsigned)creatorNodeNum, wp.geofence_radius, wp.has_bounding_box, wp.notify_on_enter, wp.notify_on_exit,
-             wp.notify_favorites_only);
+    (void)store;
+    crossingInside.clear();
+    return 0;
 }
 
 void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition, int32_t previousLat_i,
                                       int32_t previousLon_i)
 {
-    if (geofences.empty())
+    if (waypointStore.getWaypoints().empty())
         return;
     if (!p.has_latitude_i || !p.has_longitude_i)
         return;
@@ -207,26 +130,27 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
     if (node == nodeDB->getNodeNum())
         return; // judge other nodes' positions only (per design#114)
 
-    purgeExpired(getTime());
-
     const int32_t lat = p.latitude_i;
     const int32_t lon = p.longitude_i;
+    const uint32_t now = getTime();
+    const NodeNum localNodeNum = nodeDB->getNodeNum();
     bool favoriteResolved = false;
     bool isFavorite = false;
 
-    for (auto &g : geofences) {
-        const bool isInside =
-            insideAny(lat, lon, g.latitude_i, g.longitude_i, g.geofence_radius, g.has_bounding_box, g.bounding_box);
-        const uint64_t key = crossingKey(g.id, node);
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        const meshtastic_Waypoint &wp = entry.waypoint;
+        if (entry.creatorNodeNum != localNodeNum || !shouldTrack(wp, now))
+            continue;
+
+        const bool isInside = inside(wp, lat, lon);
+        const uint64_t key = crossingKey(wp.id, node);
         CrossingState *state = findCrossingState(key);
         const bool hasTrackedState = (state != nullptr);
-        const bool previousInside = hasPreviousPosition ? insideAny(previousLat_i, previousLon_i, g.latitude_i, g.longitude_i,
-                                                                    g.geofence_radius, g.has_bounding_box, g.bounding_box)
-                                                        : false;
+        const bool previousInside = hasPreviousPosition ? inside(wp, previousLat_i, previousLon_i) : false;
 
         const Crossing crossing =
             classifyTrackedUpdate(hasTrackedState, hasTrackedState ? state->inside : false, hasPreviousPosition, previousInside,
-                                  isInside, g.notify_on_enter, g.notify_on_exit);
+                                  isInside, wp.notify_on_enter, wp.notify_on_exit);
 
         // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {
@@ -247,7 +171,7 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
         if (crossing == Crossing::None)
             continue;
 
-        if (g.notify_favorites_only) {
+        if (wp.notify_favorites_only) {
             if (!favoriteResolved) {
                 isFavorite = nodeDB->isFavorite(node);
                 favoriteResolved = true;
@@ -256,11 +180,11 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
                 continue;
         }
 
-        notify(g, node, crossing == Crossing::Enter);
+        notify(wp, node, crossing == Crossing::Enter);
     }
 }
 
-void GeofenceModule::notify(const Geofence &g, NodeNum node, bool entered)
+void GeofenceModule::notify(const meshtastic_Waypoint &wp, NodeNum node, bool entered)
 {
     // Resolve a display name for the crossing node.
     char who[40];
@@ -275,7 +199,7 @@ void GeofenceModule::notify(const Geofence &g, NodeNum node, bool entered)
         snprintf(who, sizeof(who), "!%08x", (unsigned)node);
     }
 
-    LOG_INFO("Geofence: %s %s '%s'", who, entered ? "entered" : "left", g.name);
+    LOG_INFO("Geofence: %s %s '%s'", who, entered ? "entered" : "left", wp.name);
 
 #if HAS_SCREEN
     if (screen)
@@ -286,14 +210,14 @@ void GeofenceModule::notify(const Geofence &g, NodeNum node, bool entered)
     strncpy(event.nodeName, who, sizeof(event.nodeName) - 1);
     event.nodeName[sizeof(event.nodeName) - 1] = '\0';
     event.entered = entered;
-    strncpy(event.geofenceName, g.name, sizeof(event.geofenceName) - 1);
+    strncpy(event.geofenceName, wp.name, sizeof(event.geofenceName) - 1);
     event.geofenceName[sizeof(event.geofenceName) - 1] = '\0';
     notifyObservers(&event);
 
 #if HAS_SCREEN && !defined(MESHTASTIC_INCLUDE_INKHUD)
     if (screen) {
         char banner[120];
-        snprintf(banner, sizeof(banner), "%s %s %s", who, entered ? "IN" : "OUT", g.name);
+        snprintf(banner, sizeof(banner), "%s %s %s", who, entered ? "IN" : "OUT", wp.name);
         screen->showSimpleBanner(banner, 5000);
     }
 #endif
@@ -302,4 +226,4 @@ void GeofenceModule::notify(const Geofence &g, NodeNum node, bool entered)
         externalNotificationModule->startNotification();
 }
 
-#endif // !MESHTASTIC_EXCLUDE_WAYPOINT
+#endif // HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT

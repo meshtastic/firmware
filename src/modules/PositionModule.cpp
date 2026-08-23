@@ -2,7 +2,9 @@
 #include "PositionModule.h"
 #include "Default.h"
 #include "GPS.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "GeofenceModule.h"
+#endif
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
@@ -112,7 +114,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     bool hasPreviousPosition = false;
     int32_t previousLat_i = 0;
     int32_t previousLon_i = 0;
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
     if (geofenceModule && !isLocal) {
         meshtastic_PositionLite previousPos;
         if (nodeDB->copyNodePosition(sender, previousPos) && (previousPos.latitude_i != 0 || previousPos.longitude_i != 0)) {
@@ -126,7 +128,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     nodeDB->updatePosition(sender, p);
     precision = getPositionPrecisionForChannel(mp.channel);
 
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
     if (geofenceModule && !isLocal)
         geofenceModule->evaluatePosition(sender, p, hasPreviousPosition, previousLat_i, previousLon_i);
 #endif

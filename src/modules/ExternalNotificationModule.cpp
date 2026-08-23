@@ -17,7 +17,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
-#include "UptimeClock.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "gps/RTC.h"
@@ -516,11 +515,12 @@ void ExternalNotificationModule::armNagCycle()
     const uint32_t durationMs = moduleConfig.external_notification.nag_timeout
                                     ? moduleConfig.external_notification.nag_timeout * 1000UL
                                     : moduleConfig.external_notification.output_ms;
-    nagCycleCutoff = Time::getMillis() + durationMs;
+    nagCycleCutoff = millis() + durationMs;
     LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
     isNagging = true;
 }
 
+#if HAS_SCREEN
 void ExternalNotificationModule::startNotification()
 {
     if (!moduleConfig.external_notification.enabled || isSilenced)
@@ -556,6 +556,7 @@ void ExternalNotificationModule::startNotification()
 
     setIntervalFromNow(0); // run once so the nag/stop lifecycle in runOnce() takes over
 }
+#endif
 
 /**
  * @brief An admin message arrived to AdminModule. We are asked whether we want to handle that.

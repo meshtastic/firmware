@@ -8,7 +8,9 @@
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "modules/NodeInfoModule.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "modules/WaypointModule.h"
+#endif
 #include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>

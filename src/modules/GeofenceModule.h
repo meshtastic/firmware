@@ -2,9 +2,10 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 
 #include "Observer.h"
+#include "WaypointStore.h"
 #include "mesh/MeshTypes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
@@ -45,27 +46,10 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     static Crossing classifyTrackedUpdate(bool hasTrackedState, bool trackedInside, bool hasPreviousPosition, bool previousInside,
                                           bool isInside, bool notifyOnEnter, bool notifyOnExit);
 
-    void onWaypointReceived(const meshtastic_Waypoint &wp, NodeNum creatorNodeNum = 0);
-
     void evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition = false, int32_t previousLat_i = 0,
                           int32_t previousLon_i = 0);
 
   private:
-    struct Geofence {
-        uint32_t id;
-        NodeNum creatorNodeNum;
-        int32_t latitude_i;
-        int32_t longitude_i;
-        uint32_t geofence_radius;
-        bool has_bounding_box;
-        meshtastic_BoundingBox bounding_box;
-        bool notify_on_enter;
-        bool notify_on_exit;
-        bool notify_favorites_only;
-        uint32_t expire;
-        char name[sizeof(meshtastic_Waypoint::name)];
-    };
-
     struct CrossingState {
         uint64_t key;
         bool inside;
@@ -73,16 +57,16 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
 
     static uint64_t crossingKey(uint32_t waypointId, NodeNum node) { return ((uint64_t)waypointId << 32) | node; }
 
-    void purgeExpired(uint32_t now);
-    void removeGeofence(uint32_t waypointId, NodeNum creatorNodeNum = 0);
     CrossingState *findCrossingState(uint64_t key);
-    void notify(const Geofence &g, NodeNum node, bool entered);
+    void notify(const meshtastic_Waypoint &wp, NodeNum node, bool entered);
+    int onWaypointStoreChanged(const WaypointStore *store);
 
-    std::vector<Geofence> geofences;
     // Bounded (waypointId, nodeNum) state; new pairs are skipped until an old waypoint frees space.
     std::vector<CrossingState> crossingInside;
+    CallbackObserver<GeofenceModule, const WaypointStore *> waypointStoreObserver =
+        CallbackObserver<GeofenceModule, const WaypointStore *>(this, &GeofenceModule::onWaypointStoreChanged);
 };
 
 extern GeofenceModule *geofenceModule;
 
-#endif // !MESHTASTIC_EXCLUDE_WAYPOINT
+#endif // HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT

@@ -1,22 +1,22 @@
 #include "WaypointModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "WaypointUtils.h"
 #include "configuration.h"
+
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "ExternalNotificationModule.h"
+#include "MeshService.h"
+#include "WaypointStore.h"
+#include "WaypointUtils.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
+#include "mesh/Router.h"
 #include "meshUtils.h"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
-#include <string>
-
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
-#include "ExternalNotificationModule.h"
-#include "MeshService.h"
-#include "WaypointStore.h"
-#include "mesh/Router.h"
 #include <pb_encode.h>
+#include <string>
 #endif
 
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
@@ -63,22 +63,8 @@ void drawWaypointIcon(OLEDDisplay *display, const meshtastic_Waypoint &wp, int16
     graphics::UIRenderer::drawStringWithEmotes(display, left, top, utf8, FONT_HEIGHT_SMALL, 1, false);
 }
 
-void formatWaypointDistance(char *out, size_t outSize, float meters, bool includeBearing, float bearingDegrees)
+void formatWaypointDistance(char *out, size_t outSize, float meters)
 {
-    out[0] = '\0';
-
-    if (includeBearing) {
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            const float feet = meters * METERS_TO_FEET;
-            snprintf(out, outSize, feet < (2 * MILES_TO_FEET) ? "%.0fft %.0f deg" : "%.1fmi %.0f deg",
-                     feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingDegrees);
-        } else {
-            snprintf(out, outSize, meters < 2000 ? "%.0fm %.0f deg" : "%.1fkm %.0f deg", meters < 2000 ? meters : meters / 1000,
-                     bearingDegrees);
-        }
-        return;
-    }
-
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
         const float feet = meters * METERS_TO_FEET;
         snprintf(out, outSize, feet < (2 * MILES_TO_FEET) ? "%.0fft" : "%.1fmi",
@@ -190,9 +176,14 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     (void)mp;
     return ProcessMessage::CONTINUE;
 #else
+#if HAS_SCREEN
     StoredWaypoint stored;
     if (!waypointStore.addFromPacket(mp, &stored))
         return ProcessMessage::CONTINUE;
+#else
+    devicestate.rx_waypoint = mp;
+    devicestate.has_rx_waypoint = true;
+#endif
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 
@@ -213,7 +204,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 #endif
 }
 
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 bool WaypointModule::broadcastDelete(uint32_t waypointId)
 {
     meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
@@ -240,6 +231,9 @@ bool WaypointModule::broadcastDelete(uint32_t waypointId)
     // Already-expired = the mesh convention for "delete this waypoint".
     wp.expire = 1;
 
+    if (!service)
+        return false;
+
     meshtastic_MeshPacket *p = router ? router->allocForSending() : nullptr;
     if (!p)
         return false;
@@ -247,8 +241,7 @@ bool WaypointModule::broadcastDelete(uint32_t waypointId)
     p->decoded.portnum = meshtastic_PortNum_WAYPOINT_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Waypoint_msg, &wp);
-
-    if (!service) {
+    if (p->decoded.payload.size == 0) {
         packetPool.release(p);
         return false;
     }
@@ -268,8 +261,11 @@ bool WaypointModule::shouldDraw()
     if (!screen || waypointStore.getWaypoints().empty())
         return false;
 
-    const StoredWaypoint *entries[WAYPOINT_HISTORY_LIMIT];
-    return collectDrawableWaypoints(entries, WAYPOINT_HISTORY_LIMIT) > 0;
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (!WaypointStore::isExpired(entry))
+            return true;
+    }
+    return false;
 #else
     return false;
 #endif
@@ -359,7 +355,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         if (hasOwnPositionFix && haveOwnPos && wp.has_latitude_i && wp.has_longitude_i) {
             const float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(ownPos.latitude_i),
                                                      DegD(ownPos.longitude_i));
-            formatWaypointDistance(distStr, sizeof(distStr), d, false, 0.0f);
+            formatWaypointDistance(distStr, sizeof(distStr), d);
 
             if (graphics::CompassRenderer::getHeadingRadians(DegD(ownPos.latitude_i), DegD(ownPos.longitude_i), myHeading)) {
                 showCompass = true;

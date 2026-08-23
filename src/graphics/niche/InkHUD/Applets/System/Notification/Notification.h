@@ -12,8 +12,6 @@ An Applet should veto a notification if it is already displaying the same info w
 #pragma once
 
 #include "configuration.h"
-#include <cstdint>
-#include <cstring>
 
 namespace NicheGraphics::InkHUD
 {
@@ -26,45 +24,23 @@ class Notification
         NOTIFICATION_MESSAGE_DIRECT,
         NOTIFICATION_BATTERY,
         NOTIFICATION_GEOFENCE
-    } type = NOTIFICATION_MESSAGE_BROADCAST;
+    } type;
 
-    uint32_t timestamp = 0;
+    uint32_t timestamp;
 
-    uint8_t getChannel() const { return channel; }
-    uint32_t getSender() const { return sender; }
-    uint8_t getBatteryPercentage() const { return batteryPercentage; }
-    const char *getGeofenceNodeName() const { return geofenceNodeName; }
-    const char *getGeofenceName() const { return geofenceName; }
-    bool getGeofenceEntered() const { return geofenceEntered; }
-    void setGeofenceNodeName(const char *name)
-    {
-        if (!name) {
-            geofenceNodeName[0] = '\0';
-            return;
-        }
-        strncpy(geofenceNodeName, name, sizeof(geofenceNodeName) - 1);
-        geofenceNodeName[sizeof(geofenceNodeName) - 1] = '\0';
-    }
-    void setGeofenceName(const char *name)
-    {
-        if (!name) {
-            geofenceName[0] = '\0';
-            return;
-        }
-        strncpy(geofenceName, name, sizeof(geofenceName) - 1);
-        geofenceName[sizeof(geofenceName) - 1] = '\0';
-    }
-    void setGeofenceEntered(bool entered) { geofenceEntered = entered; }
+    uint8_t getChannel() { return channel; }
+    uint32_t getSender() { return sender; }
+    uint8_t getBatteryPercentage() { return batteryPercentage; }
 
     friend class NotificationApplet;
 
   protected:
-    uint8_t channel = 0;
-    uint32_t sender = 0;
-    uint8_t batteryPercentage = 0;
-    char geofenceNodeName[sizeof(meshtastic_User::long_name)] = {};
-    char geofenceName[sizeof(meshtastic_Waypoint::name)] = {};
-    bool geofenceEntered = false;
+    uint8_t channel;
+    uint32_t sender;
+    uint8_t batteryPercentage;
+    char geofenceNodeName[sizeof(meshtastic_User::long_name)];
+    char geofenceName[sizeof(meshtastic_Waypoint::name)];
+    bool geofenceEntered;
 };
 
 } // namespace NicheGraphics::InkHUD

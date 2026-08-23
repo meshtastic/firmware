@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 
 using namespace NicheGraphics;
 
@@ -39,8 +38,10 @@ InkHUD::WaypointListApplet::WaypointListApplet() : concurrency::OSThread("Waypoi
 void InkHUD::WaypointListApplet::onActivate()
 {
     setInputsSubscribed(NAV_UP | NAV_DOWN, true);
-    seedFromStore();
+    scrollOffset = 0;
+    hasRenderHash = false;
     waypointStoreObserver.observe(&waypointStore);
+    waypointStore.purgeExpired();
     updateRefreshTimer();
 }
 
@@ -54,10 +55,10 @@ void InkHUD::WaypointListApplet::onDeactivate()
 int32_t InkHUD::WaypointListApplet::runOnce()
 {
     bool needsUpdate = false;
-    if (isActive() && pruneExpiredWaypoints())
-        needsUpdate = true;
+    if (isActive())
+        waypointStore.purgeExpired();
 
-    if (isActive() && !waypoints.empty()) {
+    if (isActive() && !waypointStore.getWaypoints().empty()) {
         const uint32_t renderHash = buildRenderHash();
         if (!hasRenderHash || renderHash != lastRenderHash) {
             lastRenderHash = renderHash;
@@ -74,29 +75,9 @@ int32_t InkHUD::WaypointListApplet::runOnce()
     return OSThread::interval;
 }
 
-void InkHUD::WaypointListApplet::seedFromStore()
-{
-    waypoints.clear();
-    scrollOffset = 0;
-    hasRenderHash = false;
-
-    for (const auto &stored : waypointStore.getWaypoints()) {
-        if (waypoints.size() >= MAX_WAYPOINTS)
-            break;
-
-        WaypointCard entry;
-        if (!fillWaypointCard(stored.waypoint, entry))
-            continue;
-
-        waypoints.push_back(entry);
-    }
-
-    syncListState();
-}
-
 void InkHUD::WaypointListApplet::updateRefreshTimer()
 {
-    if (waypoints.empty()) {
+    if (waypointStore.getWaypoints().empty()) {
         OSThread::disable();
         return;
     }
@@ -105,43 +86,20 @@ void InkHUD::WaypointListApplet::updateRefreshTimer()
     OSThread::setIntervalFromNow(nextRefreshIntervalMs());
 }
 
-bool InkHUD::WaypointListApplet::pruneExpiredWaypoints()
+bool InkHUD::WaypointListApplet::hasDescription(const meshtastic_Waypoint &waypoint)
 {
-    const uint32_t now = getValidTime(RTCQuality::RTCQualityDevice);
-    if (now == 0)
-        return false;
-
-    bool removed = false;
-    for (auto it = waypoints.begin(); it != waypoints.end();) {
-        if (it->expire != 0 && it->expire <= now) {
-            it = waypoints.erase(it);
-            removed = true;
-        } else {
-            ++it;
-        }
-    }
-
-    if (removed) {
-        syncListState();
-    }
-
-    return removed;
+    return waypoint.description[0] != '\0';
 }
 
-bool InkHUD::WaypointListApplet::hasDescription(const WaypointCard &entry)
+uint8_t InkHUD::WaypointListApplet::rowHeight(const meshtastic_Waypoint &waypoint)
 {
-    return entry.description[0] != '\0';
-}
-
-uint8_t InkHUD::WaypointListApplet::rowHeight(const WaypointCard &entry, bool landscape)
-{
-    (void)landscape;
-    const uint8_t lines = hasDescription(entry) ? 3 : 2;
+    const uint8_t lines = hasDescription(waypoint) ? 3 : 2;
     return (fontSmall.lineHeight() * lines) + lines;
 }
 
-uint8_t InkHUD::WaypointListApplet::visibleRows(uint8_t start, bool landscape)
+uint8_t InkHUD::WaypointListApplet::visibleRows(uint8_t start)
 {
+    const auto &waypoints = waypointStore.getWaypoints();
     const int16_t contentTop = getHeaderHeight() + 2;
     const uint16_t availableH = (height() > contentTop) ? (height() - contentTop) : 1;
     if (waypoints.empty() || start >= waypoints.size())
@@ -150,7 +108,7 @@ uint8_t InkHUD::WaypointListApplet::visibleRows(uint8_t start, bool landscape)
     uint16_t usedH = 0;
     uint8_t count = 0;
     for (uint8_t i = start; i < waypoints.size(); ++i) {
-        const uint8_t nextH = rowHeight(waypoints.at(i), landscape);
+        const uint8_t nextH = rowHeight(waypoints.at(i).waypoint);
         if (count > 0 && usedH + nextH > availableH)
             break;
 
@@ -164,8 +122,9 @@ uint8_t InkHUD::WaypointListApplet::visibleRows(uint8_t start, bool landscape)
     return count;
 }
 
-uint8_t InkHUD::WaypointListApplet::maxScrollOffset(bool landscape)
+uint8_t InkHUD::WaypointListApplet::maxScrollOffset()
 {
+    const auto &waypoints = waypointStore.getWaypoints();
     if (waypoints.empty())
         return 0;
 
@@ -175,7 +134,7 @@ uint8_t InkHUD::WaypointListApplet::maxScrollOffset(bool landscape)
     uint8_t start = (uint8_t)waypoints.size();
 
     while (start > 0) {
-        const uint8_t nextH = rowHeight(waypoints.at(start - 1), landscape);
+        const uint8_t nextH = rowHeight(waypoints.at(start - 1).waypoint);
         if (usedH > 0 && usedH + nextH > availableH)
             break;
 
@@ -189,19 +148,20 @@ uint8_t InkHUD::WaypointListApplet::maxScrollOffset(bool landscape)
     return start;
 }
 
-bool InkHUD::WaypointListApplet::rowIndexAt(int16_t y, bool landscape, uint8_t &indexOut)
+bool InkHUD::WaypointListApplet::rowIndexAt(int16_t y, uint8_t &indexOut)
 {
+    const auto &waypoints = waypointStore.getWaypoints();
     if (waypoints.empty())
         return false;
 
     const uint8_t start = std::min<uint8_t>(scrollOffset, (uint8_t)waypoints.size() - 1);
-    const uint8_t rows = visibleRows(start, landscape);
+    const uint8_t rows = visibleRows(start);
     const uint8_t end = std::min<uint8_t>((uint8_t)waypoints.size(), start + rows);
 
     // Walk the same row layout used by onRender, stopping at whichever row contains y
     int16_t rowTop = getHeaderHeight() + 2;
     for (uint8_t i = start; i < end; ++i) {
-        const uint8_t rowH = rowHeight(waypoints.at(i), landscape);
+        const uint8_t rowH = rowHeight(waypoints.at(i).waypoint);
         if (y < rowTop + rowH) {
             indexOut = i;
             return true;
@@ -214,8 +174,7 @@ bool InkHUD::WaypointListApplet::rowIndexAt(int16_t y, bool landscape, uint8_t &
 
 void InkHUD::WaypointListApplet::scrollBy(int delta)
 {
-    const bool landscape = width() > height();
-    const int next = std::clamp<int>((int)scrollOffset + delta, 0, maxScrollOffset(landscape));
+    const int next = std::clamp<int>((int)scrollOffset + delta, 0, maxScrollOffset());
     if (next == scrollOffset)
         return;
 
@@ -236,19 +195,18 @@ void InkHUD::WaypointListApplet::onNavDown()
 bool InkHUD::WaypointListApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
 {
     (void)x;
+    const auto &waypoints = waypointStore.getWaypoints();
     if (waypoints.empty() || y < getHeaderHeight())
         return false;
-
-    const bool landscape = width() > height();
 
     // Long press a row to delete that waypoint (broadcasts the deletion to the mesh too)
     if (longPress) {
         uint8_t index = 0;
-        if (!rowIndexAt(y, landscape, index))
+        if (!rowIndexAt(y, index))
             return false;
 
         if (waypointModule)
-            waypointModule->broadcastDelete(waypoints.at(index).id);
+            waypointModule->broadcastDelete(waypoints.at(index).waypoint.id);
         return true;
     }
 
@@ -263,17 +221,18 @@ int InkHUD::WaypointListApplet::onWaypointStoreChanged(const WaypointStore *stor
     if (!isActive())
         return 0;
 
-    seedFromStore();
+    syncListState();
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     return 0;
 }
 
-std::string InkHUD::WaypointListApplet::headerText(bool landscape)
+std::string InkHUD::WaypointListApplet::headerText()
 {
+    const auto &waypoints = waypointStore.getWaypoints();
     if (waypoints.empty())
         return "Waypoints";
 
-    const uint8_t rows = visibleRows(scrollOffset, landscape);
+    const uint8_t rows = visibleRows(scrollOffset);
     const uint8_t first = scrollOffset + 1;
     const uint8_t last = std::min<uint8_t>((uint8_t)waypoints.size(), scrollOffset + rows);
 
@@ -282,32 +241,32 @@ std::string InkHUD::WaypointListApplet::headerText(bool landscape)
     return buf;
 }
 
-std::string InkHUD::WaypointListApplet::waypointName(const WaypointCard &entry)
+std::string InkHUD::WaypointListApplet::waypointName(const meshtastic_Waypoint &waypoint)
 {
-    if (entry.name[0])
-        return parse(entry.name);
+    if (waypoint.name[0])
+        return parse(waypoint.name);
 
     char buf[20];
-    snprintf(buf, sizeof(buf), "Waypoint 0x%x", (unsigned)entry.id);
+    snprintf(buf, sizeof(buf), "Waypoint 0x%x", (unsigned)waypoint.id);
     return buf;
 }
 
-std::string InkHUD::WaypointListApplet::waypointDescription(const WaypointCard &entry)
+std::string InkHUD::WaypointListApplet::waypointDescription(const meshtastic_Waypoint &waypoint)
 {
-    if (!hasDescription(entry))
+    if (!hasDescription(waypoint))
         return "";
 
-    return parse(entry.description);
+    return parse(waypoint.description);
 }
 
-std::string InkHUD::WaypointListApplet::coordinateText(const WaypointCard &entry, bool landscape)
+std::string InkHUD::WaypointListApplet::coordinateText(const meshtastic_Waypoint &waypoint, bool landscape)
 {
-    if (!entry.has_latitude_i || !entry.has_longitude_i)
+    if (!waypoint.has_latitude_i || !waypoint.has_longitude_i)
         return "--";
 
     const uint8_t decimals = landscape ? (width() >= 220 ? 4 : 3) : (width() >= 140 ? 3 : 2);
-    const double lat = entry.latitude_i * 1e-7;
-    const double lon = entry.longitude_i * 1e-7;
+    const double lat = waypoint.latitude_i * 1e-7;
+    const double lon = waypoint.longitude_i * 1e-7;
 
     char buf[40];
     snprintf(buf, sizeof(buf), "%.*f,%.*f", decimals, lat, decimals, lon);
@@ -320,17 +279,17 @@ bool InkHUD::WaypointListApplet::tryGetOwnPosition(meshtastic_PositionLite &out)
     return ourNode && nodeDB->copyNodePosition(ourNode->num, out) && (out.latitude_i != 0 || out.longitude_i != 0);
 }
 
-std::string InkHUD::WaypointListApplet::distanceText(const WaypointCard &entry)
+std::string InkHUD::WaypointListApplet::distanceText(const meshtastic_Waypoint &waypoint)
 {
-    if (!entry.has_latitude_i || !entry.has_longitude_i)
+    if (!waypoint.has_latitude_i || !waypoint.has_longitude_i)
         return "";
 
     meshtastic_PositionLite ownPos = meshtastic_PositionLite_init_zero;
     if (!tryGetOwnPosition(ownPos))
         return "";
 
-    const float meters = GeoCoord::latLongToMeter(entry.latitude_i * 1e-7, entry.longitude_i * 1e-7, ownPos.latitude_i * 1e-7,
-                                                  ownPos.longitude_i * 1e-7);
+    const float meters = GeoCoord::latLongToMeter(waypoint.latitude_i * 1e-7, waypoint.longitude_i * 1e-7,
+                                                  ownPos.latitude_i * 1e-7, ownPos.longitude_i * 1e-7);
     if (meters < 0)
         return "";
 
@@ -380,16 +339,17 @@ uint32_t InkHUD::WaypointListApplet::nextRefreshIntervalMs()
     meshtastic_PositionLite ownPos = meshtastic_PositionLite_init_zero;
     const bool haveOwnPos = tryGetOwnPosition(ownPos);
 
-    for (const WaypointCard &entry : waypoints) {
-        if (entry.expire != 0) {
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        const meshtastic_Waypoint &waypoint = entry.waypoint;
+        if (waypoint.expire != 0) {
             if (now == 0) {
                 intervalMs = std::min(intervalMs, WAITING_STATE_REFRESH_MS);
-            } else if (entry.expire > now) {
-                intervalMs = std::min(intervalMs, nextExpiryUpdateMs(entry.expire - now));
+            } else if (waypoint.expire > now) {
+                intervalMs = std::min(intervalMs, nextExpiryUpdateMs(waypoint.expire - now));
             }
         }
 
-        if (entry.has_latitude_i && entry.has_longitude_i) {
+        if (waypoint.has_latitude_i && waypoint.has_longitude_i) {
             if (!haveOwnPos) {
                 intervalMs = std::min(intervalMs, WAITING_STATE_REFRESH_MS);
             } else if (!config.position.fixed_position) {
@@ -408,17 +368,18 @@ uint32_t InkHUD::WaypointListApplet::buildRenderHash()
 {
     uint32_t hash = 2166136261u;
 
-    for (const WaypointCard &entry : waypoints) {
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        const meshtastic_Waypoint &waypoint = entry.waypoint;
         char idBuf[11];
-        snprintf(idBuf, sizeof(idBuf), "%lu", (unsigned long)entry.id);
+        snprintf(idBuf, sizeof(idBuf), "%lu", (unsigned long)waypoint.id);
         hash = fnv1aAppend(hash, idBuf);
         hash = fnv1aAppend(hash, "|");
 
-        const std::string distance = distanceText(entry);
+        const std::string distance = distanceText(waypoint);
         hash = fnv1aAppend(hash, distance.c_str());
         hash = fnv1aAppend(hash, "|");
 
-        const std::string expire = expireText(entry.expire);
+        const std::string expire = expireText(waypoint.expire);
         hash = fnv1aAppend(hash, expire.c_str());
         hash = fnv1aAppend(hash, ";");
     }
@@ -426,39 +387,20 @@ uint32_t InkHUD::WaypointListApplet::buildRenderHash()
     return hash;
 }
 
-bool InkHUD::WaypointListApplet::fillWaypointCard(const meshtastic_Waypoint &wp, WaypointCard &entry)
-{
-    if (WaypointStore::isExpired(wp))
-        return false;
-
-    entry = {};
-    entry.id = wp.id;
-    entry.has_latitude_i = wp.has_latitude_i;
-    entry.has_longitude_i = wp.has_longitude_i;
-    entry.latitude_i = wp.latitude_i;
-    entry.longitude_i = wp.longitude_i;
-    entry.expire = wp.expire;
-    entry.icon = wp.icon;
-    strncpy(entry.name, wp.name, sizeof(entry.name) - 1);
-    strncpy(entry.description, wp.description, sizeof(entry.description) - 1);
-    return true;
-}
-
 void InkHUD::WaypointListApplet::syncListState()
 {
-    const bool landscape = width() > height();
-    scrollOffset = std::min<uint8_t>(scrollOffset, maxScrollOffset(landscape));
+    scrollOffset = std::min<uint8_t>(scrollOffset, maxScrollOffset());
     hasRenderHash = false;
     // Re-arm the timer whenever visible waypoint state changes.
     updateRefreshTimer();
 }
 
-bool InkHUD::WaypointListApplet::canRenderWaypointIcon(const WaypointCard &entry, std::string *mapped)
+bool InkHUD::WaypointListApplet::canRenderWaypointIcon(const meshtastic_Waypoint &waypoint, std::string *mapped)
 {
-    if (!entry.icon)
+    if (!waypoint.icon)
         return false;
 
-    const std::string utf8 = WaypointUtils::utf8FromCodepoint(entry.icon);
+    const std::string utf8 = WaypointUtils::utf8FromCodepoint(waypoint.icon);
     if (utf8.empty())
         return false;
 
@@ -471,16 +413,16 @@ bool InkHUD::WaypointListApplet::canRenderWaypointIcon(const WaypointCard &entry
     return true;
 }
 
-uint8_t InkHUD::WaypointListApplet::fallbackBadgeNumber(const WaypointCard &entry)
+uint8_t InkHUD::WaypointListApplet::fallbackBadgeNumber(const meshtastic_Waypoint &waypoint)
 {
     uint8_t badge = 0;
 
-    for (auto it = waypoints.rbegin(); it != waypoints.rend(); ++it) {
-        const WaypointCard &candidate = *it;
+    for (auto it = waypointStore.getWaypoints().rbegin(); it != waypointStore.getWaypoints().rend(); ++it) {
+        const meshtastic_Waypoint &candidate = it->waypoint;
         if (canRenderWaypointIcon(candidate))
             continue;
 
-        if (candidate.id == entry.id)
+        if (candidate.id == waypoint.id)
             return badge;
 
         if (badge < 9)
@@ -490,21 +432,22 @@ uint8_t InkHUD::WaypointListApplet::fallbackBadgeNumber(const WaypointCard &entr
     return 0;
 }
 
-bool InkHUD::WaypointListApplet::drawWaypointIcon(const WaypointCard &entry, int16_t left, int16_t centerY, uint16_t boxSize)
+bool InkHUD::WaypointListApplet::drawWaypointIcon(const meshtastic_Waypoint &waypoint, int16_t left, int16_t centerY,
+                                                  uint16_t boxSize)
 {
     std::string mappedGlyph;
-    if (!canRenderWaypointIcon(entry, &mappedGlyph))
+    if (!canRenderWaypointIcon(waypoint, &mappedGlyph))
         return false;
 
     printAt(left + (boxSize / 2), centerY, mappedGlyph, CENTER, MIDDLE);
     return true;
 }
 
-void InkHUD::WaypointListApplet::drawFallbackIcon(const WaypointCard &entry, int16_t left, int16_t rowTop, uint16_t boxWidth,
-                                                  uint16_t rowHeight)
+void InkHUD::WaypointListApplet::drawFallbackIcon(const meshtastic_Waypoint &waypoint, int16_t left, int16_t rowTop,
+                                                  uint16_t boxWidth, uint16_t rowHeight)
 {
     char badgeText[3];
-    snprintf(badgeText, sizeof(badgeText), "%u", (unsigned)fallbackBadgeNumber(entry));
+    snprintf(badgeText, sizeof(badgeText), "%u", (unsigned)fallbackBadgeNumber(waypoint));
 
     setFont(fontSmall);
 
@@ -530,7 +473,8 @@ void InkHUD::WaypointListApplet::onRender(bool full)
     (void)full;
 
     const bool landscape = width() > height();
-    drawHeader(headerText(landscape));
+    const auto &waypoints = waypointStore.getWaypoints();
+    drawHeader(headerText());
 
     if (waypoints.empty()) {
         setFont(fontMedium);
@@ -542,7 +486,7 @@ void InkHUD::WaypointListApplet::onRender(bool full)
 
     const int16_t contentTop = getHeaderHeight() + 2;
     const uint8_t start = std::min<uint8_t>(scrollOffset, (uint8_t)waypoints.size() - 1);
-    const uint8_t rows = visibleRows(start, landscape);
+    const uint8_t rows = visibleRows(start);
     const uint8_t end = std::min<uint8_t>((uint8_t)waypoints.size(), start + rows);
     const uint16_t iconW = fontSmall.lineHeight();
     const uint16_t gap = 2;
@@ -566,21 +510,21 @@ void InkHUD::WaypointListApplet::onRender(bool full)
 
     int16_t rowTop = contentTop;
     for (uint8_t i = start; i < end; ++i) {
-        const WaypointCard &entry = waypoints.at(i);
-        const uint8_t rowH = rowHeight(entry, landscape);
+        const meshtastic_Waypoint &waypoint = waypoints.at(i).waypoint;
+        const uint8_t rowH = rowHeight(waypoint);
         const int16_t line1Y = rowTop + (fontSmall.lineHeight() / 2) + 1;
         const int16_t line2Y = rowTop + fontSmall.lineHeight() + 1;
         const int16_t metaY =
-            rowTop + (hasDescription(entry) ? ((fontSmall.lineHeight() * 2) + 2) : (fontSmall.lineHeight() + 1));
+            rowTop + (hasDescription(waypoint) ? ((fontSmall.lineHeight() * 2) + 2) : (fontSmall.lineHeight() + 1));
 
-        if (!drawWaypointIcon(entry, 1, line1Y, iconW - 1))
-            drawFallbackIcon(entry, 0, rowTop, iconW, rowH);
+        if (!drawWaypointIcon(waypoint, 1, line1Y, iconW - 1))
+            drawFallbackIcon(waypoint, 0, rowTop, iconW, rowH);
 
-        const std::string name = waypointName(entry);
-        const std::string description = waypointDescription(entry);
-        const std::string distance = distanceText(entry);
-        const std::string coord = coordinateText(entry, landscape);
-        const std::string expire = expireText(entry.expire);
+        const std::string name = waypointName(waypoint);
+        const std::string description = waypointDescription(waypoint);
+        const std::string distance = distanceText(waypoint);
+        const std::string coord = coordinateText(waypoint, landscape);
+        const std::string expire = expireText(waypoint.expire);
 
         const int16_t nameLeft = iconW + gap;
         int16_t nameRight = width() - 1;

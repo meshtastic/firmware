@@ -11,7 +11,6 @@
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
-#include <deque>
 #include <string>
 
 namespace NicheGraphics::InkHUD
@@ -32,60 +31,43 @@ class WaypointListApplet : public Applet, public concurrency::OSThread
     WaypointListApplet *asWaypointListApplet() override { return this; } // Identify as WaypointListApplet without RTTI
 
     // Read-only access for MenuApplet's "Remove Waypoint" page
-    size_t waypointCount() const { return waypoints.size(); }
-    uint32_t waypointIdAt(size_t index) const { return waypoints.at(index).id; }
-    std::string waypointLabelAt(size_t index) { return waypointName(waypoints.at(index)); }
+    size_t waypointCount() const { return waypointStore.getWaypoints().size(); }
+    uint32_t waypointIdAt(size_t index) const { return waypointStore.getWaypoints().at(index).waypoint.id; }
+    std::string waypointLabelAt(size_t index) { return waypointName(waypointStore.getWaypoints().at(index).waypoint); }
 
   protected:
     int32_t runOnce() override;
 
   private:
-    struct WaypointCard {
-        uint32_t id = 0;
-        bool has_latitude_i = false;
-        bool has_longitude_i = false;
-        int32_t latitude_i = 0;
-        int32_t longitude_i = 0;
-        uint32_t expire = 0;
-        uint32_t icon = 0;
-        char name[sizeof(meshtastic_Waypoint::name)] = {};
-        char description[sizeof(meshtastic_Waypoint::description)] = {};
-    };
-
-    static constexpr size_t MAX_WAYPOINTS = WAYPOINT_HISTORY_LIMIT;
-
-    bool pruneExpiredWaypoints();
-    void seedFromStore();
     void updateRefreshTimer();
-    uint8_t visibleRows(uint8_t start, bool landscape);
-    uint8_t rowHeight(const WaypointCard &entry, bool landscape);
-    uint8_t maxScrollOffset(bool landscape);
+    uint8_t visibleRows(uint8_t start);
+    uint8_t rowHeight(const meshtastic_Waypoint &waypoint);
+    uint8_t maxScrollOffset();
     void scrollBy(int delta);
-    bool rowIndexAt(int16_t y, bool landscape, uint8_t &indexOut); // Which waypoint row is at this y, if any
+    bool rowIndexAt(int16_t y, uint8_t &indexOut); // Which waypoint row is at this y, if any
     bool tryGetOwnPosition(meshtastic_PositionLite &out);
     uint32_t nextExpiryUpdateMs(uint32_t secondsLeft);
     uint32_t nextRefreshIntervalMs();
     uint32_t buildRenderHash();
-    bool fillWaypointCard(const meshtastic_Waypoint &wp, WaypointCard &entry);
     void syncListState();
 
-    std::string headerText(bool landscape);
-    std::string waypointName(const WaypointCard &entry);
-    std::string waypointDescription(const WaypointCard &entry);
-    std::string coordinateText(const WaypointCard &entry, bool landscape);
-    std::string distanceText(const WaypointCard &entry);
+    std::string headerText();
+    std::string waypointName(const meshtastic_Waypoint &waypoint);
+    std::string waypointDescription(const meshtastic_Waypoint &waypoint);
+    std::string coordinateText(const meshtastic_Waypoint &waypoint, bool landscape);
+    std::string distanceText(const meshtastic_Waypoint &waypoint);
     std::string expireText(uint32_t expireEpoch);
-    bool canRenderWaypointIcon(const WaypointCard &entry, std::string *mapped = nullptr);
-    uint8_t fallbackBadgeNumber(const WaypointCard &entry);
-    bool drawWaypointIcon(const WaypointCard &entry, int16_t left, int16_t centerY, uint16_t boxSize);
-    void drawFallbackIcon(const WaypointCard &entry, int16_t left, int16_t rowTop, uint16_t boxWidth, uint16_t rowHeight);
-    bool hasDescription(const WaypointCard &entry);
+    bool canRenderWaypointIcon(const meshtastic_Waypoint &waypoint, std::string *mapped = nullptr);
+    uint8_t fallbackBadgeNumber(const meshtastic_Waypoint &waypoint);
+    bool drawWaypointIcon(const meshtastic_Waypoint &waypoint, int16_t left, int16_t centerY, uint16_t boxSize);
+    void drawFallbackIcon(const meshtastic_Waypoint &waypoint, int16_t left, int16_t rowTop, uint16_t boxWidth,
+                          uint16_t rowHeight);
+    bool hasDescription(const meshtastic_Waypoint &waypoint);
 
     int onWaypointStoreChanged(const WaypointStore *store);
     CallbackObserver<WaypointListApplet, const WaypointStore *> waypointStoreObserver =
         CallbackObserver<WaypointListApplet, const WaypointStore *>(this, &WaypointListApplet::onWaypointStoreChanged);
 
-    std::deque<WaypointCard> waypoints;
     uint8_t scrollOffset = 0;
     uint32_t lastRenderHash = 0;
     bool hasRenderHash = false;

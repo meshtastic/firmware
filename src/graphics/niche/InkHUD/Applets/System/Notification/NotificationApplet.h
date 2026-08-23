@@ -14,8 +14,7 @@ Feature should be optional; enable disable via on-screen menu
 
 #include "configuration.h"
 
-#include <array>
-
+#include "concurrency/OSThread.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 struct GeofenceNotificationEvent;
@@ -27,9 +26,6 @@ namespace NicheGraphics::InkHUD
 class NotificationApplet : public SystemApplet
 {
   public:
-    static constexpr uint16_t DEFAULT_HEIGHT = 20;
-    static constexpr uint8_t MAX_WRAPPED_LINES = 2;
-
     NotificationApplet();
 
     void onRender(bool full) override;
@@ -53,11 +49,6 @@ class NotificationApplet : public SystemApplet
     void dismiss();    // Close the Notification Popup
 
   protected:
-    struct PreparedLine {
-        std::string text;
-        uint16_t width = 0;
-    };
-
     // Get notified when a new text message arrives
     CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *>(this, &NotificationApplet::onReceiveTextMessage);
@@ -67,17 +58,9 @@ class NotificationApplet : public SystemApplet
 #endif
 
     void showNotification(const Notification &n);
-    void clearPreparedLines();
-    void resetTileHeight();
-    void prepareCurrentNotificationLayout();
-    bool dismissOnAuxInput() const;
     std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
     bool hasNotification = false;
-    bool preparedWrapped = false;
-    uint8_t preparedLineCount = 0;
-    uint16_t preparedTextHeight = 0;
-    std::array<PreparedLine, MAX_WRAPPED_LINES> preparedLines = {};
     Notification currentNotification = Notification(); // Set when something notification-worthy happens. Used by render()
 };
 

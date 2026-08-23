@@ -16,7 +16,7 @@ class WaypointModule : public SinglePortModule, public Observable<const UIFrameE
     bool shouldDraw();
     void onDeviceTimeChanged();
 #endif
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
     /// Broadcast an expired copy of the waypoint so the mesh (and we) discard it.
     bool broadcastDelete(uint32_t waypointId);
 #endif

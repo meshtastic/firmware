@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 
 #include "FSCommon.h"
 #include "SPILock.h"
@@ -10,7 +10,6 @@
 #include "WaypointStore.h"
 #include "concurrency/LockGuard.h"
 #include "gps/RTC.h"
-#include "modules/GeofenceModule.h"
 #include <cstring>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -19,19 +18,14 @@ namespace
 {
 
 constexpr uint8_t WAYPOINT_STORE_VERSION = 2;
+constexpr const char *WAYPOINT_STORE_FILENAME = "/Waypoints_default.wpts";
 
 #ifndef WAYPOINT_AUTOSAVE_INTERVAL_SEC
 #define WAYPOINT_AUTOSAVE_INTERVAL_SEC (2 * 60 * 60)
-#endif
+#endif // HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 
 struct __attribute__((packed)) StoredWaypointRecord {
     uint32_t creatorNodeNum;
-    uint32_t receivedTime;
-    uint16_t payloadLength;
-    uint8_t payload[meshtastic_Waypoint_size];
-};
-
-struct __attribute__((packed)) StoredWaypointRecordV1 {
     uint32_t receivedTime;
     uint16_t payloadLength;
     uint8_t payload[meshtastic_Waypoint_size];
@@ -74,12 +68,7 @@ void persistWaypointStore()
 
 } // namespace
 
-WaypointStore waypointStore("default");
-
-WaypointStore::WaypointStore(const std::string &label)
-{
-    filename = "/Waypoints_" + label + ".wpts";
-}
+WaypointStore waypointStore;
 
 void WaypointStore::notifyChanged()
 {
@@ -120,8 +109,6 @@ bool WaypointStore::removeWaypoint(uint32_t id)
     if (!removed)
         return false;
 
-    untrackGeofence(id);
-
 #if ENABLE_WAYPOINT_PERSISTENCE
     markWaypointStoreUnsaved();
 #endif
@@ -132,24 +119,11 @@ bool WaypointStore::removeWaypoint(uint32_t id)
 
 void WaypointStore::addStoredWaypoint(const StoredWaypoint &entry)
 {
-    if (removeWaypointById(entry.waypoint.id))
-        untrackGeofence(entry.waypoint.id);
+    removeWaypointById(entry.waypoint.id);
 
     waypoints.push_front(entry);
-    while (waypoints.size() > WAYPOINT_HISTORY_LIMIT) {
-        untrackGeofence(waypoints.back().waypoint.id);
+    while (waypoints.size() > WAYPOINT_HISTORY_LIMIT)
         waypoints.pop_back();
-    }
-}
-
-void WaypointStore::untrackGeofence(uint32_t id) const
-{
-    if (!geofenceModule)
-        return;
-
-    meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
-    wp.id = id;
-    geofenceModule->onWaypointReceived(wp, 0);
 }
 
 bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWaypoint *stored)
@@ -181,9 +155,6 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
 
     addStoredWaypoint(entry);
 
-    if (geofenceModule)
-        geofenceModule->onWaypointReceived(entry.waypoint, entry.creatorNodeNum);
-
 #if ENABLE_WAYPOINT_PERSISTENCE
     markWaypointStoreUnsaved();
 #endif
@@ -205,8 +176,6 @@ bool WaypointStore::purgeExpired(uint32_t now)
             ++it;
             continue;
         }
-
-        untrackGeofence(it->waypoint.id);
 
         it = waypoints.erase(it);
         changed = true;
@@ -234,7 +203,7 @@ void WaypointStore::saveToFlash()
     FSCom.mkdir("/");
     spiLock->unlock();
 
-    SafeFile f(filename.c_str(), false);
+    SafeFile f(WAYPOINT_STORE_FILENAME, false);
 
     spiLock->lock();
     const uint8_t version = WAYPOINT_STORE_VERSION;
@@ -268,56 +237,39 @@ void WaypointStore::saveToFlash()
 void WaypointStore::loadFromFlash()
 {
     std::deque<StoredWaypoint>().swap(waypoints);
-#if ENABLE_WAYPOINT_PERSISTENCE
-    bool needsMigration = false;
-#endif
 
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
     {
         concurrency::LockGuard guard(spiLock);
 
-        if (FSCom.exists(filename.c_str())) {
-            auto f = FSCom.open(filename.c_str(), FILE_O_READ);
+        if (FSCom.exists(WAYPOINT_STORE_FILENAME)) {
+            auto f = FSCom.open(WAYPOINT_STORE_FILENAME, FILE_O_READ);
             if (f) {
                 uint8_t version = 0;
                 uint8_t count = 0;
                 f.readBytes(reinterpret_cast<char *>(&version), 1);
                 f.readBytes(reinterpret_cast<char *>(&count), 1);
 
-                if (version != 1 && version != WAYPOINT_STORE_VERSION) {
+                if (version != WAYPOINT_STORE_VERSION) {
                     LOG_WARN("WaypointStore version mismatch (%u)", version);
                     f.close();
                 } else {
-                    needsMigration = version == 1;
                     if (count > WAYPOINT_HISTORY_LIMIT)
                         count = WAYPOINT_HISTORY_LIMIT;
 
                     for (uint8_t i = 0; i < count; ++i) {
                         StoredWaypoint entry;
-                        if (version == 1) {
-                            StoredWaypointRecordV1 rec = {};
-                            if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
-                                break;
-                            if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
-                                LOG_WARN("WaypointStore skipping corrupt record %u", i);
-                                continue;
-                            }
-                            if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
-                                continue;
-                            entry.receivedTime = rec.receivedTime;
-                        } else {
-                            StoredWaypointRecord rec = {};
-                            if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
-                                break;
-                            if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
-                                LOG_WARN("WaypointStore skipping corrupt record %u", i);
-                                continue;
-                            }
-                            if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
-                                continue;
-                            entry.receivedTime = rec.receivedTime;
-                            entry.creatorNodeNum = rec.creatorNodeNum;
+                        StoredWaypointRecord rec = {};
+                        if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
+                            break;
+                        if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
+                            LOG_WARN("WaypointStore skipping corrupt record %u", i);
+                            continue;
                         }
+                        if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
+                            continue;
+                        entry.receivedTime = rec.receivedTime;
+                        entry.creatorNodeNum = rec.creatorNodeNum;
 
                         if (isExpired(entry.waypoint))
                             continue;
@@ -331,24 +283,19 @@ void WaypointStore::loadFromFlash()
 #endif
 
 #if ENABLE_WAYPOINT_PERSISTENCE
-    g_waypointStoreHasUnsavedChanges = needsMigration;
+    g_waypointStoreHasUnsavedChanges = false;
     g_lastWaypointAutoSaveMs = Time::getMillis();
 #endif
-
-    replayToGeofence();
 }
 
 void WaypointStore::clearAllWaypoints()
 {
     const bool hadWaypoints = !waypoints.empty();
 
-    for (const auto &entry : waypoints)
-        untrackGeofence(entry.waypoint.id);
-
     std::deque<StoredWaypoint>().swap(waypoints);
 
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
-    SafeFile f(filename.c_str(), false);
+    SafeFile f(WAYPOINT_STORE_FILENAME, false);
     {
         concurrency::LockGuard guard(spiLock);
         const uint8_t version = WAYPOINT_STORE_VERSION;
@@ -366,18 +313,6 @@ void WaypointStore::clearAllWaypoints()
 
     if (hadWaypoints)
         notifyChanged();
-}
-
-void WaypointStore::replayToGeofence() const
-{
-    if (!geofenceModule)
-        return;
-
-    const uint32_t now = getTime();
-    for (auto it = waypoints.rbegin(); it != waypoints.rend(); ++it) {
-        if (!isExpired(*it, now))
-            geofenceModule->onWaypointReceived(it->waypoint, it->creatorNodeNum);
-    }
 }
 
 #if ENABLE_WAYPOINT_PERSISTENCE

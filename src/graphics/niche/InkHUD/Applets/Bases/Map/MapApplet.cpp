@@ -107,7 +107,12 @@ void InkHUD::MapApplet::drawWaypointFallbackMarker(const WaypointMarker &entry, 
     printAt(x, y + 1, badgeText, CENTER, MIDDLE);
 }
 
-InkHUD::MapApplet::MapApplet() {}
+InkHUD::MapApplet::MapApplet()
+{
+    if (gpsStatus)
+        gpsStatusObserver.observe(&gpsStatus->onNewStatus);
+    waypointStoreObserver.observe(&waypointStore);
+}
 
 int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
 {
@@ -118,20 +123,6 @@ int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
 
     requestUpdate();
     return 0;
-}
-
-void InkHUD::MapApplet::onActivate()
-{
-    if (gpsStatus)
-        gpsStatusObserver.observe(&gpsStatus->onNewStatus);
-    waypointStoreObserver.observe(&waypointStore);
-}
-
-void InkHUD::MapApplet::onDeactivate()
-{
-    if (gpsStatus)
-        gpsStatusObserver.unobserve(&gpsStatus->onNewStatus);
-    waypointStoreObserver.unobserve(&waypointStore);
 }
 
 int InkHUD::MapApplet::onWaypointStoreChanged(const WaypointStore *store)
@@ -511,7 +502,7 @@ void InkHUD::MapApplet::onRender(bool full)
             chosenZoom = s_lockedZoom;
             float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
             chosenMetersToPx = 1.0f / mpp;
-        } else if ((markers.empty() || metersToPxFit <= 0.0f) && nzooms > 0) {
+        } else if (((markers.empty() && waypointMarkers.empty()) || metersToPxFit <= 0.0f) && nzooms > 0) {
             // No spread to fit (own node only, or single remote node at map center). Use highest zoom at native scale.
             chosenZoom = zooms[0];
             float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
@@ -563,7 +554,7 @@ void InkHUD::MapApplet::onRender(bool full)
     };
 
     // Draw all markers first
-    for (const Marker &m : markers) {
+    for (Marker m : markers) {
         int16_t x = X(0.5) + (int16_t)(m.eastMeters * metersToPx);
         int16_t y = Y(0.5) - (int16_t)(m.northMeters * metersToPx);
 
@@ -803,11 +794,13 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
             const float latDeg =
                 waypointHasAnchor(entry.waypoint)
                     ? (entry.waypoint.latitude_i * 1e-7f)
-                    : ((entry.waypoint.bounding_box.latitude_south_i + entry.waypoint.bounding_box.latitude_north_i) * 0.5e-7f);
+                    : ((float)entry.waypoint.bounding_box.latitude_south_i + entry.waypoint.bounding_box.latitude_north_i) *
+                          0.5e-7f;
             const float lngDeg =
                 waypointHasAnchor(entry.waypoint)
                     ? (entry.waypoint.longitude_i * 1e-7f)
-                    : ((entry.waypoint.bounding_box.longitude_west_i + entry.waypoint.bounding_box.longitude_east_i) * 0.5e-7f);
+                    : ((float)entry.waypoint.bounding_box.longitude_west_i + entry.waypoint.bounding_box.longitude_east_i) *
+                          0.5e-7f;
             float latRad = latDeg * DEG_TO_RAD;
             float lngRad = lngDeg * DEG_TO_RAD;
             float x = cos(latRad) * cos(lngRad);
@@ -971,9 +964,9 @@ void InkHUD::MapApplet::getMapSize(uint32_t *widthMeters, uint32_t *heightMeters
     *heightMeters = 0;
 
     // Find the greatest distance horizontally and vertically from map center
-    for (const Marker &m : markers) {
-        *widthMeters = max(*widthMeters, (uint32_t)fabsf(m.eastMeters) * 2);
-        *heightMeters = max(*heightMeters, (uint32_t)fabsf(m.northMeters) * 2);
+    for (Marker m : markers) {
+        *widthMeters = max(*widthMeters, (uint32_t)abs(m.eastMeters) * 2);
+        *heightMeters = max(*heightMeters, (uint32_t)abs(m.northMeters) * 2);
     }
 
     // Waypoints contribute to the fit-all bounding box just like nodes, including geofence extents.
@@ -1146,7 +1139,6 @@ void InkHUD::MapApplet::calculateAllMarkers()
     // Clear old markers
     markers.clear();
     waypointMarkers.clear();
-    markers.reserve(nodeDB->getNumMeshNodes());
     waypointMarkers.reserve(waypointStore.getWaypoints().size());
 
     // For each node in db
