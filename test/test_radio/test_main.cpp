@@ -433,6 +433,12 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
 
     TEST_ASSERT_EQUAL_UINT(0, result);
     TEST_ASSERT_NULL(testRadio->getSendingPacket());
+
+    // Verify rejected packet was released to packetPool and its slot is reusable
+    meshtastic_MeshPacket *reallocated = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(reallocated);
+    TEST_ASSERT_EQUAL_PTR(p, reallocated);
+    packetPool.release(reallocated);
 }
 
 void setUp(void)
