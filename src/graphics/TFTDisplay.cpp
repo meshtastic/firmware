@@ -1644,7 +1644,12 @@ void TFTDisplay::sendCommand(uint8_t com)
         // alone cannot bring it back. Restore the rail, let it settle, then re-run the init sequence.
         digitalWrite(VTFT_CTRL, TFT_EN_ON);
         delay(10);
-        tft->begin(SPI_FREQUENCY);
+        if (!tft->begin(SPI_FREQUENCY)) {
+            // Nothing below this point can reach the panel, so skip the wake instead of lighting
+            // the backlight and repainting over a bus that did not come up.
+            LOG_ERROR("NV3001B re-init failed on wake");
+            break;
+        }
 #endif
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
