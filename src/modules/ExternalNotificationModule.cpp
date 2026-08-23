@@ -320,13 +320,7 @@ void ExternalNotificationModule::stopBuzzerNow()
         break;
     case BuzzerPlaybackBackend::I2S:
 #ifdef HAS_I2S
-        if (audioThread->stopRtttlIfOwnedBy(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION)) {
-            // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
-            // T-Deck uses GPIO0 as trackball button, so restore the mode
-#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
-            pinMode(0, INPUT);
-#endif
-        }
+        audioThread->stopRtttlIfOwnedBy(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION);
 #endif
         break;
     case BuzzerPlaybackBackend::NRF52_I2S:

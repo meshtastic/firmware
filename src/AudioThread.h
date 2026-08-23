@@ -101,6 +101,7 @@ class AudioThread : public concurrency::OSThread
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(false);
 #endif
+        restoreOutputPinMode();
     }
 
   protected:
@@ -153,6 +154,14 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(false);
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(false);
+#endif
+        restoreOutputPinMode();
+    }
+
+    static void restoreOutputPinMode()
+    {
+#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
+        pinMode(0, INPUT);
 #endif
     }
 
