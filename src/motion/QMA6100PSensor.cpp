@@ -170,7 +170,13 @@ QMA6100PSingleton *QMA6100PSingleton::GetInstance()
     return pinstance;
 }
 
-QMA6100PSingleton::QMA6100PSingleton() {}
+// The QMA6100P library leaves these base class members uninitialised until begin() runs
+QMA6100PSingleton::QMA6100PSingleton()
+{
+    rawAccelData = {0, 0, 0};
+    _i2cPort = nullptr;
+    _deviceAddress = 0;
+}
 
 QMA6100PSingleton::~QMA6100PSingleton() {}
 

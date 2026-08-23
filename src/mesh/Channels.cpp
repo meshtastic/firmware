@@ -128,11 +128,13 @@ bool Channels::ensureLicensedOperation()
         }
         auto &channelSettings = channel.settings;
         if (strcasecmp(channelSettings.name, Channels::adminChannel) == 0) {
-            channel.role = meshtastic_Channel_Role_DISABLED;
-            channelSettings.psk.bytes[0] = 0;
-            channelSettings.psk.size = 0;
-            hasEncryptionOrAdmin = true;
-            channels.setChannel(channel);
+            if (channel.role != meshtastic_Channel_Role_DISABLED || channelSettings.psk.size > 0) {
+                channel.role = meshtastic_Channel_Role_DISABLED;
+                channelSettings.psk.bytes[0] = 0;
+                channelSettings.psk.size = 0;
+                hasEncryptionOrAdmin = true;
+                channels.setChannel(channel);
+            }
 
         } else if (channelSettings.psk.size > 0) {
             channelSettings.psk.bytes[0] = 0;
@@ -493,6 +495,21 @@ bool Channels::isWellKnownChannel(ChannelIndex chIndex)
             return true;
     }
     return false;
+}
+
+bool Channels::isEventChannel(ChannelIndex chIndex)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    static_assert(sizeof(configuredEventPsk) == 16 || sizeof(configuredEventPsk) == 32,
+                  "USERPREFS_CHANNEL_0_PSK must be an AES-128 or AES-256 key");
+    CryptoKey effectiveKey = getKey(chIndex);
+    return effectiveKey.length == sizeof(configuredEventPsk) &&
+           memcmp(effectiveKey.bytes, configuredEventPsk, sizeof(configuredEventPsk)) == 0;
+#else
+    (void)chIndex;
+    return false;
+#endif
 }
 
 bool Channels::hasDefaultChannel()

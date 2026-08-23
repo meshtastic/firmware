@@ -1,3 +1,4 @@
+#include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
@@ -8,6 +9,47 @@
 #include "support/MockMeshService.h"
 
 static MockMeshService *mockMeshService;
+
+static void test_lr20x0BandClassification()
+{
+    TEST_ASSERT_FALSE(isLr20x0HighBand(906.875f));
+    TEST_ASSERT_FALSE(isLr20x0HighBand(1500.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2400.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2420.71875f));
+}
+
+static void test_lr20x0BandHopDetection()
+{
+    TEST_ASSERT_FALSE(isLr20x0BandHop(0.0f, 2420.71875f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 915.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2400.0f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(906.875f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(2420.71875f, 906.875f));
+    // Invalid requested frequency must not look like a band hop.
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, -1.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, -915.0f));
+}
+
+static void test_lr20x0ReconfigurePathSelection()
+{
+    // LF -> HF and HF -> LF take full begin(); same-band stays incremental.
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 906.875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 915.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2400.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(0.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 0.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, -1.0f)));
+}
 
 // Test shim to expose protected radio parameters set by applyModemConfig()
 class TestableRadioInterface : public RadioInterface
@@ -256,7 +298,11 @@ static void test_regionPresetMap_coversAllRegionsWithinBounds()
     meshtastic_LoRaRegionPresetMap map;
     getRegionPresetMap(map);
 
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const size_t known = countKnownRegions() + 1; // + the UNSET intent entry
+#else
     const size_t known = countKnownRegions();
+#endif
     TEST_ASSERT_EQUAL_UINT((unsigned)known, (unsigned)map.region_groups_count);
 
     // Bounds derived from the generated nanopb arrays (mesh.options max_count), so
@@ -291,6 +337,12 @@ static void test_regionPresetMap_matchesRegionTable()
 
         const meshtastic_LoRaPresetGroup &grp = map.groups[gi];
         const RegionInfo *r = getRegion(code);
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+        // UNSET states the pinned preset, not PROFILE_UNDEF's list, so the table checks below don't apply.
+        if (code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            continue;
+#endif
 
         // Group's list is non-empty and within the generated array bound.
         const size_t maxPresets = sizeof(grp.presets) / sizeof(grp.presets[0]);
@@ -331,6 +383,36 @@ static void test_regionPresetMap_matchesRegionTable()
     }
 }
 
+// UNSET appears only when the build pins a preset, and then states exactly that preset.
+// A stock build leaves it out entirely, which clients read as "unconstrained".
+static void test_regionPresetMap_unsetCarriesUserprefsIntent()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+    const meshtastic_LoRaPresetGroup *grp = nullptr;
+    for (pb_size_t i = 0; i < map.region_groups_count; i++)
+        if (map.region_groups[i].region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            grp = &map.groups[map.region_groups[i].group_index];
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const meshtastic_Config_LoRaConfig_ModemPreset pinned = USERPREFS_LORACONFIG_MODEM_PRESET;
+    TEST_ASSERT_NOT_NULL_MESSAGE(grp, "a build that pins a preset must state it for UNSET");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, (unsigned)grp->presets_count, "the pinned preset is the sole entry");
+    TEST_ASSERT_EQUAL(pinned, grp->presets[0]);
+    TEST_ASSERT_EQUAL(pinned, grp->default_preset);
+    TEST_ASSERT_FALSE_MESSAGE(grp->licensed_only, "UNSET is not a licensed-only region");
+
+    // Stating intent must not narrow what the device accepts: the firmware still takes any
+    // real preset while the region is unset (#11496), so the map cannot become enforcement.
+    const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+#else
+    TEST_ASSERT_NULL_MESSAGE(grp, "a stock build must leave UNSET out of the map entirely");
+#endif
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -359,6 +441,9 @@ void setup()
     initializeTestEnvironment();
 
     UNITY_BEGIN();
+    RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_lr20x0BandHopDetection);
+    RUN_TEST(test_lr20x0ReconfigurePathSelection);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
     RUN_TEST(test_bwCodeToKHz_roundTrip);
@@ -377,6 +462,7 @@ void setup()
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
+    RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
     exit(UNITY_END());
 }
 

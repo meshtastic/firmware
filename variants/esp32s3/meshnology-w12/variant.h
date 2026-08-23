@@ -8,6 +8,7 @@
 #define USE_SSD1306
 #define I2C_SDA 17
 #define I2C_SCL 18
+#define BICOLOR_OLED_DISPLAY
 
 // Powers the OLED/peripheral rail; active LOW
 #define VEXT_ENABLE 45
@@ -16,10 +17,14 @@
 #define BUTTON_PIN 0 // BOOT doubles as user button
 
 // ─── Battery ──────────────────────────────────────────────────────────────────
-// GPIO2 monitors a second (solar/VUSB) divider and is not used here
+// GPIO2 gates a P-MOSFET high-side switch on the divider (schematic W12-MB-V0.2 sheet 1); an NPN
+// inverts it, so it is active HIGH. Undriven, the switch stays off and GPIO1 reads a hard 0 mV.
 #define BATTERY_PIN 1
 #define ADC_CHANNEL ADC_CHANNEL_0 // GPIO1 = ADC1_CH0
-#define ADC_MULTIPLIER 2.0
+#define ADC_CTRL 2
+#define ADC_CTRL_ENABLED HIGH
+#define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // 4.2V cell is only ~857mV after the divider
+#define ADC_MULTIPLIER (490.0 / 100.0)   // R50 390K + R51 100K, over R51
 
 // ─── LoRa radio ───────────────────────────────────────────────────────────────
 // RF switching is hardwired to the radio's CTX/CPS pins, and the external PA enables

@@ -11,14 +11,21 @@
  *  6. Channel spacing calculation (placeholder for future protobuf changes)
  */
 
+#include "Channels.h"
 #include "DisplayFormatters.h"
+#include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "graphics/draw/MenuHandler.h"
 #include "mesh/Channels.h"
 #include "modules/AdminModule.h"
+#include "modules/NodeInfoModule.h"
+#include <ErriezCRC32.h> // crc32Buffer(), for the my_node_num == crc32(public_key) invariant
+#include <pb_decode.h>
+#include <pb_encode.h>
 #include <string>
 #include <unity.h>
 #include <vector>
@@ -601,21 +608,43 @@ static void test_validateConfigLora_bogusPresetRejected()
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
 }
 
-static void test_validateConfigLora_unsetRegionOnlyAcceptsLongFast()
+static void test_validateConfigLora_unsetRegionAcceptsAnyRealPreset()
 {
-    // UNSET uses PROFILE_UNDEF which has only LONG_FAST
+    // UNSET is "no region chosen yet", not a regulatory domain, so it must not invalidate
+    // a preset the user already picked - whichever region that preset belongs to.
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     cfg.use_preset = true;
 
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), "LONG_FAST should be valid for UNSET");
+    const meshtastic_Config_LoRaConfig_ModemPreset realPresets[] = {
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+        meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST,   meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW,
+        meshtastic_Config_LoRaConfig_ModemPreset_TINY_FAST,
+    };
+    for (auto preset : realPresets) {
+        cfg.modem_preset = preset;
+        char msg[64];
+        snprintf(msg, sizeof(msg), "preset %d should be valid for UNSET", (int)preset);
+        TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), msg);
+    }
 
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "MEDIUM_FAST should be invalid for UNSET");
+    // A value no region offers is still invalid, so the clamp can repair it.
+    cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "bogus preset should be invalid for UNSET");
+}
 
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
-    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "SHORT_TURBO should be invalid for UNSET");
+static void test_isKnownModemPreset_matchesRegionTable()
+{
+    // Every preset some region offers is "known"...
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO));
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW));
+    TEST_ASSERT_TRUE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW));
+
+    // ...and nothing else is, including the retired VERY_LONG_SLOW enum value.
+    TEST_ASSERT_FALSE(isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW));
+    TEST_ASSERT_FALSE(isKnownModemPreset((meshtastic_Config_LoRaConfig_ModemPreset)99));
 }
 
 static void test_validateConfigLora_allPresetsValidForLORA24()
@@ -700,7 +729,7 @@ static void test_clampConfigLora_customBwValidLeftUnchanged()
 
 static void test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast()
 {
-    // UNSET uses PROFILE_UNDEF with only LONG_FAST; any other preset should clamp to it
+    // UNSET's default preset is LONG_FAST; a value no region offers clamps to it
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     cfg.use_preset = true;
@@ -709,6 +738,21 @@ static void test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast()
     RadioInterface::clampConfigLora(cfg);
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_unsetRegionKeepsRealPreset()
+{
+    // The boot-time clamp (NodeDB::loadFromDisk) runs on every boot. While the region is
+    // unset it must leave a real preset alone rather than rewriting it to LONG_FAST.
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, cfg.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, cfg.region);
 }
 
 static void test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault()
@@ -949,6 +993,135 @@ static void test_channelSpacingCalculation_placeholder()
 
 // AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
+static NodeDB *savedNodeDB;
+static NodeDB *replacementNodeDB;
+static NodeInfoModule *savedNodeInfoModule;
+static meshtastic_DeviceState savedDeviceState;
+static meshtastic_User savedOwner;
+static meshtastic_LocalConfig savedConfig;
+static meshtastic_ChannelFile savedChannelFile;
+
+// Called from setUp/tearDown for every test, not opted into by a handful. A shared NodeDB plus
+// unrestored config/owner/devicestate/channelFile means each test inherits whatever its
+// predecessors left, and the admin handlers under test write all four.
+static void replaceAdminRadioGlobals()
+{
+    savedNodeDB = nodeDB;
+    savedNodeInfoModule = nodeInfoModule;
+    savedDeviceState = devicestate;
+    savedOwner = owner;
+    savedConfig = config;
+    savedChannelFile = channelFile;
+    replacementNodeDB = new NodeDB();
+    nodeDB = replacementNodeDB;
+}
+
+static void restoreAdminRadioGlobals()
+{
+    nodeInfoModule = savedNodeInfoModule;
+    nodeDB = savedNodeDB;
+    delete replacementNodeDB;
+    replacementNodeDB = nullptr;
+    devicestate = savedDeviceState;
+    owner = savedOwner;
+    config = savedConfig;
+    channelFile = savedChannelFile;
+    initRegion();
+}
+
+static void installEncryptedAndAdminChannels()
+{
+    channels.initDefaults();
+    meshtastic_Channel admin = meshtastic_Channel_init_zero;
+    admin.index = 1;
+    admin.role = meshtastic_Channel_Role_SECONDARY;
+    admin.has_settings = true;
+    strncpy(admin.settings.name, Channels::adminChannel, sizeof(admin.settings.name));
+    admin.settings.psk.size = 16;
+    memset(admin.settings.psk.bytes, 0xA5, admin.settings.psk.size);
+    channels.setChannel(admin);
+
+    meshtastic_Channel secondary = meshtastic_Channel_init_zero;
+    secondary.index = 2;
+    secondary.role = meshtastic_Channel_Role_SECONDARY;
+    secondary.has_settings = true;
+    strncpy(secondary.settings.name, "private", sizeof(secondary.settings.name));
+    secondary.settings.psk.size = 32;
+    memset(secondary.settings.psk.bytes, 0x5A, secondary.settings.psk.size);
+    channels.setChannel(secondary);
+}
+
+static void assertLicensedChannelsSanitized()
+{
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(0).settings.psk.size);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(1).settings.psk.size);
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(2).settings.psk.size);
+}
+
+static void test_handleSetOwner_persistsLicensedChannelSanitation()
+{
+    owner = meshtastic_User_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    installEncryptedAndAdminChannels();
+
+    meshtastic_User licensed = meshtastic_User_init_zero;
+    licensed.is_licensed = true;
+    testAdmin->deferSaves();
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1); // reloadOwner(false) only checks presence
+    testAdmin->handleSetOwner(licensed);
+
+    TEST_ASSERT_TRUE(testAdmin->savedSegments() & SEGMENT_CHANNELS);
+    assertLicensedChannelsSanitized();
+
+    uint8_t encoded[meshtastic_ChannelFile_size];
+    const size_t encodedSize = pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_ChannelFile_msg, &channelFile);
+    TEST_ASSERT_GREATER_THAN(0, encodedSize);
+    meshtastic_ChannelFile reloaded = meshtastic_ChannelFile_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(encoded, encodedSize, &meshtastic_ChannelFile_msg, &reloaded));
+    channelFile = reloaded;
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "sanitized reload must not trigger another persistence write");
+}
+
+static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
+{
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    installEncryptedAndAdminChannels();
+
+    TEST_ASSERT_TRUE(channels.ensureLicensedOperation());
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "boot sanitation must be idempotent");
+}
+
+static void test_restorePreferences_sanitizesLicensedBackupBeforeReturn()
+{
+    NodeDB *savedNodeDB = nodeDB;
+    nodeDB = new NodeDB();
+    const meshtastic_DeviceState savedDeviceState = devicestate;
+    const meshtastic_ChannelFile savedChannelFile = channelFile;
+
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    installEncryptedAndAdminChannels();
+    TEST_ASSERT_TRUE(nodeDB->backupPreferences(meshtastic_AdminMessage_BackupLocation_FLASH));
+
+    owner.is_licensed = false;
+    channels.initDefaults();
+    TEST_ASSERT_TRUE(
+        nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_DEVICESTATE | SEGMENT_CHANNELS));
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "restored licensed channels must remain sanitized");
+
+    devicestate = savedDeviceState;
+    channelFile = savedChannelFile;
+    nodeDB->saveToDisk(SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    FSCom.remove(backupFileName);
+    delete nodeDB;
+    nodeDB = savedNodeDB;
+}
 
 static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
                                            meshtastic_Config_LoRaConfig_ModemPreset preset)
@@ -959,6 +1132,52 @@ static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCo
     c.payload_variant.lora.use_preset = usePreset;
     c.payload_variant.lora.modem_preset = preset;
     return c;
+}
+
+static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
+{
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+
+    testAdmin->deferSaves();
+    const meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    testAdmin->handleSetConfig(c, false);
+
+    const int expectedSegments = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+    TEST_ASSERT_EQUAL_INT(expectedSegments, testAdmin->savedSegments());
+    TEST_ASSERT_EQUAL(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL(32, owner.public_key.size);
+}
+
+// Unlicensed twin of the test above. Without the re-derivation the node signs broadcasts every receiver
+// drops (verifyFirstContactNodeInfo: crc32(user.public_key) != from).
+static void test_handleSetConfig_persistsUnlicensedFirstRegionIdentity()
+{
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = false;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+
+    testAdmin->deferSaves();
+    const meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    testAdmin->handleSetConfig(c, false);
+
+    const int expectedSegments = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+    TEST_ASSERT_EQUAL_INT(expectedSegments, testAdmin->savedSegments());
+    TEST_ASSERT_EQUAL(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL(32, config.security.public_key.size);
+    TEST_ASSERT_EQUAL(32, owner.public_key.size);
+    // The invariant: a node's mesh address is derived from its identity key.
+    TEST_ASSERT_EQUAL_UINT32(crc32Buffer(config.security.public_key.bytes, config.security.public_key.size),
+                             nodeDB->getNodeNum());
 }
 
 static void test_handleSetConfig_fromOthers_invalidPresetRejected()
@@ -1281,6 +1500,14 @@ static void test_regionInfo_supportsPreset()
     const RegionInfo *eu866 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_866);
     TEST_ASSERT_TRUE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW));
     TEST_ASSERT_FALSE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+
+    // UNSET enforces nothing (the radio is silent regardless), so it supports every real
+    // preset - not just the LONG_FAST its own profile advertises as the default.
+    const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST));
+    TEST_ASSERT_FALSE(unset->supportsPreset((meshtastic_Config_LoRaConfig_ModemPreset)99));
 }
 
 static void test_checkConfigRegion_quietCheckReportsReason()
@@ -1293,6 +1520,16 @@ static void test_checkConfigRegion_quietCheckReportsReason()
     char err[160] = {0};
     TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg, err, sizeof(err)));
     TEST_ASSERT_TRUE_MESSAGE(strlen(err) > 0, "Expected a failure reason in errBuf");
+}
+
+static void test_checkConfigRegion_allowsProspectiveLicensedOwner()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M;
+    devicestate.owner.is_licensed = false;
+
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg));
+    TEST_ASSERT_TRUE(RadioInterface::checkConfigRegion(cfg, nullptr, 0, true));
 }
 
 static void test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion()
@@ -1334,6 +1571,50 @@ static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejecte
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_presetChosenBeforeRegionSurvives()
+{
+    // A fresh device: the user picks a preset in the app before choosing a region. The
+    // unset region must not clamp that choice back to LONG_FAST.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_UNSET, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_unsettingRegionKeepsPreset()
+{
+    // Clearing the region is a valid request in its own right. It must take effect (and
+    // disable tx) without discarding the config because the preset outlives the region.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.tx_enabled = true;
+    initRegion();
+
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_UNSET, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+    c.payload_variant.lora.tx_enabled = true;
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, config.lora.modem_preset);
+    TEST_ASSERT_FALSE_MESSAGE(config.lora.tx_enabled, "unsetting the region must disable tx");
+
+    // Restore the region table pointer for subsequent tests
+    initRegion();
 }
 
 // -----------------------------------------------------------------------
@@ -1406,6 +1687,16 @@ static void sendCommitEdit()
     sendAdmin(m);
 }
 
+// An admin message that changes nothing. It answers, so drain the reply or the packet pool leaks.
+static void sendGetDeviceMetadata()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_request_tag;
+    m.get_device_metadata_request = true;
+    sendAdmin(m);
+    testAdmin->drainReply();
+}
+
 // Preset = LongFast on US, unlicensed owner. "LongFast" is the display name we compare against.
 static void usePresetLongFast()
 {
@@ -1472,6 +1763,53 @@ static void test_warn_transaction_singleChannel_keepsSpecificMessage()
     TEST_ASSERT_EQUAL_INT(0, warningsContaining("on channels"));
 }
 
+// An idle transaction is retired by the next admin message, flushing the warnings it held.
+static void test_editTransaction_abandoned_isRetiredOnNextAdminMessage()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    // Deferred, exactly as before: nothing emitted while the transaction looks alive.
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+    TEST_ASSERT_TRUE(testAdmin->editTransactionOpen());
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata(); // any later admin message, from any client
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
+}
+
+// A write arriving after abandonment is saved, not deferred to a commit that never comes.
+static void test_editTransaction_abandoned_laterWriteIsNoLongerDeferred()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    testAdmin->ageEditTransaction();
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+
+    // The write itself retired the stale transaction, so its own warning is emitted immediately.
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
+}
+
+// A transaction still in use is left alone: each write refreshes the window.
+static void test_editTransaction_active_isNotRetired()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "long fast", DEFAULT_KEY, 1));
+
+    TEST_ASSERT_TRUE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+
+    sendCommitEdit();
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("There may be name issues on channels 0, 1"));
+}
+
 static void test_warn_license_noTransaction_emittedImmediately()
 {
     usePresetLongFast();
@@ -1498,6 +1836,138 @@ static void test_warn_license_transaction_coalescedToSingleMessage()
 }
 
 // -----------------------------------------------------------------------
+// Node-DB admin metadata: favorite / ignore / mute
+// -----------------------------------------------------------------------
+//
+// MeshService::reloadConfig() only re-derives the region and fires configChanged - which drives the
+// live SX126x/RadioInterface reconfigure - when saveWhat includes SEGMENT_CONFIG or
+// SEGMENT_CHANNELS. A pure node-DB metadata save must skip that reconfigure entirely. These watch
+// service->configChanged directly, so widening the saveWhat mask or reordering the check is caught
+// even though they run outside an edit transaction.
+//
+// Characterization: all three already hold on develop. They are worth pinning because that reload
+// is the path implicated in the WisMesh Tag favourite-node crash, and nothing asserted it.
+
+// Counts configChanged.notifyObservers() calls - the only externally visible signal that
+// reloadConfig() took the radio-reconfigure branch.
+class ConfigChangedCounter : public Observer<void *>
+{
+  public:
+    int count = 0;
+
+  protected:
+    int onNotify(void *arg) override
+    {
+        count++;
+        return 0;
+    }
+};
+
+static const NodeNum TEST_NODE_NUM = 0x12345678;
+
+static void test_setFavoriteNode_skipsRadioReload_butPersists()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_favorite_node_tag;
+    m.set_favorite_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_setIgnoredNode_skipsRadioReload_butPersists()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_ignored_node_tag;
+    m.set_ignored_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsIgnored(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_toggleMutedNode_skipsRadioReload_butPersists()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_toggle_muted_node_tag;
+    m.toggle_muted_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+// -----------------------------------------------------------------------
+// Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
+// -----------------------------------------------------------------------
+//
+// Reachable only since the mute branch was lifted out of its banner-callback lambda; the lambda
+// runs via screen->showOverlayBanner(), so nothing in MenuHandler.cpp was testable before.
+
+#if HAS_SCREEN
+static void test_toggleNodeMuted_flipsBitAndSkipsRadioReload()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+
+    graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_toggleNodeMuted_unknownNodeDoesNothing()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    graphics::menuHandler::toggleNodeMuted(0xDEADBEEF); // never added to the DB
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(0xDEADBEEF));
+}
+
+// CHARACTERIZATION OF A KNOWN DEFECT, not an endorsement. Flipping one NodeInfoLite bit currently
+// calls bare nodeDB->saveToDisk(), which rewrites all five segments. saveToDisk() is not virtual,
+// so the mask is observed through its effect: every prefs file reappears after being removed.
+//
+// A pending fix narrows this to SEGMENT_NODEDATABASE. When it lands, only nodes.proto should come
+// back and this assertion is EXPECTED to change - that diff is the point, so the improvement is
+// visible instead of silent.
+static void test_toggleNodeMuted_currentlyRewritesEverySegment()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+
+    const char *segmentFiles[] = {configFileName, moduleConfigFileName, deviceStateFileName, channelFileName,
+                                  nodeDatabaseFileName};
+    for (const char *f : segmentFiles)
+        FSCom.remove(f);
+
+    graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
+
+    for (const char *f : segmentFiles)
+        TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(f), f);
+}
+#endif // HAS_SCREEN
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -1507,14 +1977,12 @@ void setUp(void)
     service = mockMeshService;
     testAdmin = new AdminModuleTestShim();
     capturedWarnings.clear();
-    // Committing an edit transaction triggers a full saveToDisk(), which dereferences nodeDB.
-    // Create it once (kept reachable via the global, so no leak) for the warning tests; the
-    // other tests in this suite set their own config/region state and are unaffected.
-    if (!nodeDB)
-        nodeDB = new NodeDB();
+    // Every test gets its own NodeDB and its own copy of the globals the admin handlers write.
+    replaceAdminRadioGlobals();
 }
 void tearDown(void)
 {
+    restoreAdminRadioGlobals();
     service = nullptr;
     delete mockMeshService;
     mockMeshService = nullptr;
@@ -1532,6 +2000,11 @@ void setup()
     UNITY_BEGIN();
 
     // getRegion()
+    RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
+    RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
+    RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
+    RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
+    RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);
     RUN_TEST(test_getRegion_returnsCorrectRegion_EU868);
     RUN_TEST(test_getRegion_returnsCorrectRegion_LORA24);
@@ -1563,7 +2036,8 @@ void setup()
     RUN_TEST(test_validateConfigLora_customBandwidthFitsUS);
     RUN_TEST(test_validateConfigLora_customBandwidthFitsEU868);
     RUN_TEST(test_validateConfigLora_bogusPresetRejected);
-    RUN_TEST(test_validateConfigLora_unsetRegionOnlyAcceptsLongFast);
+    RUN_TEST(test_validateConfigLora_unsetRegionAcceptsAnyRealPreset);
+    RUN_TEST(test_isKnownModemPreset_matchesRegionTable);
     RUN_TEST(test_validateConfigLora_allPresetsValidForLORA24);
 
     // clampConfigLora()
@@ -1572,6 +2046,7 @@ void setup()
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
+    RUN_TEST(test_clampConfigLora_unsetRegionKeepsRealPreset);
     RUN_TEST(test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault);
 
     // Region-locked preset swap
@@ -1618,8 +2093,11 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged);
     RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
+    RUN_TEST(test_checkConfigRegion_allowsProspectiveLicensedOwner);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
+    RUN_TEST(test_handleSetConfig_presetChosenBeforeRegionSurvives);
+    RUN_TEST(test_handleSetConfig_unsettingRegionKeepsPreset);
 
     // Channel-configuration warning + coalescing
     RUN_TEST(test_warn_singleChannel_variantName_oneSpecificMessage);
@@ -1627,8 +2105,23 @@ void setup()
     RUN_TEST(test_warn_cleanChannel_noMessage);
     RUN_TEST(test_warn_transaction_multipleChannels_singleCoalescedMessage);
     RUN_TEST(test_warn_transaction_singleChannel_keepsSpecificMessage);
+    RUN_TEST(test_editTransaction_abandoned_isRetiredOnNextAdminMessage);
+    RUN_TEST(test_editTransaction_abandoned_laterWriteIsNoLongerDeferred);
+    RUN_TEST(test_editTransaction_active_isNotRetired);
     RUN_TEST(test_warn_license_noTransaction_emittedImmediately);
     RUN_TEST(test_warn_license_transaction_coalescedToSingleMessage);
+
+    // Node-DB metadata saves must not reconfigure the radio
+    RUN_TEST(test_setFavoriteNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_setIgnoredNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
+
+#if HAS_SCREEN
+    // Node menu mute toggle
+    RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
+    RUN_TEST(test_toggleNodeMuted_unknownNodeDoesNothing);
+    RUN_TEST(test_toggleNodeMuted_currentlyRewritesEverySegment);
+#endif
 
     exit(UNITY_END());
 }

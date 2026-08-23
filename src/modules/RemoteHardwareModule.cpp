@@ -103,8 +103,10 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             r.gpio_value = res;
             r.gpio_mask = p.gpio_mask;
             meshtastic_MeshPacket *p2 = allocDataProtobuf(r);
-            setReplyTo(p2, req);
-            myReply = p2;
+            if (p2) {
+                setReplyTo(p2, req);
+                myReply = p2;
+            }
             break;
         }
 
@@ -142,14 +144,15 @@ int32_t RemoteHardwareModule::runOnce()
 
             if (curVal != previousWatch) {
                 previousWatch = curVal;
-                LOG_INFO("Broadcast GPIOS 0x%llx changed!", curVal);
+                LOG_INFO("Broadcast GPIOS 0x%llx changed", curVal);
 
                 // Something changed!  Tell the world with a broadcast message
                 meshtastic_HardwareMessage r = meshtastic_HardwareMessage_init_default;
                 r.type = meshtastic_HardwareMessage_Type_GPIOS_CHANGED;
                 r.gpio_value = curVal;
                 meshtastic_MeshPacket *p = allocDataProtobuf(r);
-                service->sendToMesh(p);
+                if (p)
+                    service->sendToMesh(p);
             }
         }
     } else {
