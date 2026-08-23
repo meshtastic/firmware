@@ -397,9 +397,9 @@ static void drawCompassStatusText(OLEDDisplay *display, int16_t compassX, int16_
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
-void UIRenderer::drawBearingCompassOrStatus(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
-                                            bool showCompass, float myHeading, float bearing, const char *statusLine1,
-                                            const char *statusLine2, bool showRing)
+static void drawBearingCompassOrStatus(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
+                                       bool showCompass, float myHeading, float bearing, const char *statusLine1,
+                                       const char *statusLine2, bool showRing = true)
 {
     // Shared "favorite node" compass renderer: draw ring, then either heading data or fallback status text.
     if (showRing)

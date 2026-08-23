@@ -31,7 +31,6 @@ class WaypointStore : public Observable<const WaypointStore *>
     explicit WaypointStore(const std::string &label);
 
     bool addFromPacket(const meshtastic_MeshPacket &packet, StoredWaypoint *stored = nullptr);
-    void addWaypoint(const meshtastic_Waypoint &wp, uint32_t receivedTime = 0, NodeNum creatorNodeNum = 0);
     bool purgeExpired(uint32_t now = 0);
     bool removeWaypoint(uint32_t id);
 
@@ -40,15 +39,15 @@ class WaypointStore : public Observable<const WaypointStore *>
     void saveToFlash();
     void loadFromFlash();
     void clearAllWaypoints();
-    void replayToGeofence() const;
 
-    static uint32_t age(const StoredWaypoint &entry);
     static bool isExpired(const meshtastic_Waypoint &wp, uint32_t now = 0);
     static bool isExpired(const StoredWaypoint &entry, uint32_t now = 0);
 
   private:
     void addStoredWaypoint(const StoredWaypoint &entry);
     bool removeWaypointById(uint32_t id);
+    void untrackGeofence(uint32_t id) const;
+    void replayToGeofence() const;
     void notifyChanged();
 
     std::deque<StoredWaypoint> waypoints;

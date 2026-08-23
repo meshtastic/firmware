@@ -2,9 +2,8 @@
 #include "modules/GeofenceModule.h"
 #include <unity.h>
 
-// These exercise GeofenceModule's pure, side-effect-free geofence helpers (the inside test and the
-// crossing classifier). They take plain values / proto structs, so no device globals or fake clock
-// are needed. The (waypointId, nodeNum) store and notification plumbing are not covered here.
+// These cover pure geofence helpers without device globals or a fake clock.
+// Store and notification plumbing are not covered here.
 
 using Crossing = GeofenceModule::Crossing;
 
@@ -171,7 +170,7 @@ static void test_shouldTrack_expiredRejectedButLiveAccepted()
     TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, 0));     // no clock -> treat as live
 }
 
-static void test_classify_firstSightingNeverNotifies()
+static void test_first_sighting_no_notification()
 {
     // First sighting only baselines, regardless of inside state or notify flags.
     TEST_ASSERT_TRUE(GeofenceModule::classify(true, false, true, true, true) == Crossing::None);
@@ -238,7 +237,7 @@ void setup()
     RUN_TEST(test_shouldTrack_noGeofenceRejected);
     RUN_TEST(test_shouldTrack_noNotifyFlagsRejected);
     RUN_TEST(test_shouldTrack_expiredRejectedButLiveAccepted);
-    RUN_TEST(test_classify_firstSightingNeverNotifies);
+    RUN_TEST(test_first_sighting_no_notification);
     RUN_TEST(test_classify_noTransitionNeverNotifies);
     RUN_TEST(test_classify_enterFiresOnlyWhenEnabled);
     RUN_TEST(test_classify_exitFiresOnlyWhenEnabled);

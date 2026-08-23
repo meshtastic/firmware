@@ -23,17 +23,6 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
-static void triggerWaypointRefreshOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
-{
-#if !MESHTASTIC_EXCLUDE_WAYPOINT && HAS_SCREEN
-    if (waypointModule && oldQuality != newQuality)
-        waypointModule->onDeviceTimeChanged();
-#else
-    (void)oldQuality;
-    (void)newQuality;
-#endif
-}
-
 static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQuality)
 {
     if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {
@@ -47,7 +36,10 @@ static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQual
         if (nodeDB)
             nodeDB->backfillHeardAt();
     }
-    triggerWaypointRefreshOnTimeSource(oldQuality, newQuality);
+#if !MESHTASTIC_EXCLUDE_WAYPOINT && HAS_SCREEN
+    if (waypointModule && oldQuality != newQuality)
+        waypointModule->onDeviceTimeChanged();
+#endif
 }
 
 RTCQuality getRTCQuality()

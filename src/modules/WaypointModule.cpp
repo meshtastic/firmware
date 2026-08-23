@@ -1,6 +1,7 @@
 #include "WaypointModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "WaypointUtils.h"
 #include "configuration.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
@@ -12,7 +13,6 @@
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "ExternalNotificationModule.h"
-#include "GeofenceModule.h"
 #include "MeshService.h"
 #include "WaypointStore.h"
 #include "mesh/Router.h"
@@ -36,38 +36,6 @@ namespace
 
 constexpr int16_t WAYPOINT_ROW_GAP = 2;
 
-std::string utf8FromCodepoint(uint32_t codepoint)
-{
-    // Surrogate halves aren't valid standalone Unicode scalar values.
-    if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
-        return "";
-
-    char buf[5] = {};
-    if (codepoint <= 0x7F) {
-        buf[0] = static_cast<char>(codepoint);
-        return std::string(buf, 1);
-    }
-    if (codepoint <= 0x7FF) {
-        buf[0] = static_cast<char>(0xC0 | (codepoint >> 6));
-        buf[1] = static_cast<char>(0x80 | (codepoint & 0x3F));
-        return std::string(buf, 2);
-    }
-    if (codepoint <= 0xFFFF) {
-        buf[0] = static_cast<char>(0xE0 | (codepoint >> 12));
-        buf[1] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-        buf[2] = static_cast<char>(0x80 | (codepoint & 0x3F));
-        return std::string(buf, 3);
-    }
-    if (codepoint <= 0x10FFFF) {
-        buf[0] = static_cast<char>(0xF0 | (codepoint >> 18));
-        buf[1] = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
-        buf[2] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-        buf[3] = static_cast<char>(0x80 | (codepoint & 0x3F));
-        return std::string(buf, 4);
-    }
-    return "";
-}
-
 void drawFallbackWaypointIcon(OLEDDisplay *display, int16_t left, int16_t top, uint16_t boxSize)
 {
     const int16_t cx = left + (boxSize / 2);
@@ -86,7 +54,7 @@ void drawWaypointIcon(OLEDDisplay *display, const meshtastic_Waypoint &wp, int16
         return;
     }
 
-    const std::string utf8 = utf8FromCodepoint(wp.icon);
+    const std::string utf8 = WaypointUtils::utf8FromCodepoint(wp.icon);
     if (utf8.empty()) {
         drawFallbackWaypointIcon(display, left, top, boxSize);
         return;
@@ -225,9 +193,6 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     StoredWaypoint stored;
     if (!waypointStore.addFromPacket(mp, &stored))
         return ProcessMessage::CONTINUE;
-
-    if (geofenceModule)
-        geofenceModule->onWaypointReceived(stored.waypoint, stored.creatorNodeNum);
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 

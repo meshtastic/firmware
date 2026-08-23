@@ -73,7 +73,7 @@ class NotificationApplet : public SystemApplet
     bool dismissOnAuxInput() const;
     std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
-    bool hasNotification = false; // Only used for assert. Todo: remove?
+    bool hasNotification = false;
     bool preparedWrapped = false;
     uint8_t preparedLineCount = 0;
     uint16_t preparedTextHeight = 0;

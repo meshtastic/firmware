@@ -140,7 +140,6 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
 uint32_t menuHandler::pickedNodeNum = 0;
-uint32_t menuHandler::pickedWaypointId = 0;
 meshtastic_Config_LoRaConfig_RegionCode menuHandler::pendingRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 bool test_enabled = false;
 uint8_t test_count = 0;
@@ -2447,12 +2446,10 @@ void menuHandler::removeWaypointMenu()
     menuQueue = MenuNone;
 #else
     static const char *optionsArray[WAYPOINT_HISTORY_LIMIT + 1];
-    static int optionsEnumArray[WAYPOINT_HISTORY_LIMIT + 1];
     static uint32_t waypointIds[WAYPOINT_HISTORY_LIMIT + 1];
     static std::string labelStorage[WAYPOINT_HISTORY_LIMIT + 1];
 
     optionsArray[0] = "Back";
-    optionsEnumArray[0] = 0;
     int options = 1;
 
     for (const auto &entry : waypointStore.getWaypoints()) {
@@ -2463,7 +2460,6 @@ void menuHandler::removeWaypointMenu()
             name = "Unnamed Waypoint";
         labelStorage[options] = name.substr(0, 20);
         optionsArray[options] = labelStorage[options].c_str();
-        optionsEnumArray[options] = options;
         waypointIds[options] = entry.waypoint.id;
         options++;
     }
@@ -2471,7 +2467,6 @@ void menuHandler::removeWaypointMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Remove Waypoint";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
@@ -2479,12 +2474,12 @@ void menuHandler::removeWaypointMenu()
             screen->runNow();
             return;
         }
-        pickedWaypointId = waypointIds[selected];
-        LOG_INFO("Removing waypoint 0x%08x", menuHandler::pickedWaypointId);
+        const uint32_t waypointId = waypointIds[selected];
+        LOG_INFO("Removing waypoint 0x%08x", waypointId);
         if (waypointModule)
-            waypointModule->broadcastDelete(menuHandler::pickedWaypointId);
+            waypointModule->broadcastDelete(waypointId);
         else
-            waypointStore.removeWaypoint(menuHandler::pickedWaypointId);
+            waypointStore.removeWaypoint(waypointId);
         screen->setFrames(graphics::Screen::FOCUS_DEFAULT);
     };
     screen->showOverlayBanner(bannerOptions);

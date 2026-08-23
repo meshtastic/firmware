@@ -24,6 +24,7 @@ class Notification
     enum Type : uint8_t {
         NOTIFICATION_MESSAGE_BROADCAST,
         NOTIFICATION_MESSAGE_DIRECT,
+        NOTIFICATION_BATTERY,
         NOTIFICATION_GEOFENCE
     } type = NOTIFICATION_MESSAGE_BROADCAST;
 
@@ -31,6 +32,7 @@ class Notification
 
     uint8_t getChannel() const { return channel; }
     uint32_t getSender() const { return sender; }
+    uint8_t getBatteryPercentage() const { return batteryPercentage; }
     const char *getGeofenceNodeName() const { return geofenceNodeName; }
     const char *getGeofenceName() const { return geofenceName; }
     bool getGeofenceEntered() const { return geofenceEntered; }
@@ -59,8 +61,9 @@ class Notification
   protected:
     uint8_t channel = 0;
     uint32_t sender = 0;
-    char geofenceNodeName[40] = {};
-    char geofenceName[40] = {};
+    uint8_t batteryPercentage = 0;
+    char geofenceNodeName[sizeof(meshtastic_User::long_name)] = {};
+    char geofenceName[sizeof(meshtastic_Waypoint::name)] = {};
     bool geofenceEntered = false;
 };
 

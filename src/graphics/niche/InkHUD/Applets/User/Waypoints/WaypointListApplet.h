@@ -4,7 +4,8 @@
 
 #include "configuration.h"
 
-#include "SinglePortModule.h"
+#include "Observer.h"
+#include "WaypointStore.h"
 #include "concurrency/OSThread.h"
 #include "graphics/niche/InkHUD/Applet.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
@@ -16,7 +17,7 @@
 namespace NicheGraphics::InkHUD
 {
 
-class WaypointListApplet : public Applet, public SinglePortModule, public concurrency::OSThread
+class WaypointListApplet : public Applet, public concurrency::OSThread
 {
   public:
     WaypointListApplet();
@@ -24,8 +25,6 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
     void onActivate() override;
     void onDeactivate() override;
     void onRender(bool full) override;
-    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
-
     void onNavUp() override;
     void onNavDown() override;
     bool onTouchPoint(uint16_t x, uint16_t y, bool longPress) override;
@@ -49,14 +48,12 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
         int32_t longitude_i = 0;
         uint32_t expire = 0;
         uint32_t icon = 0;
-        char name[31] = {};
-        char description[101] = {};
+        char name[sizeof(meshtastic_Waypoint::name)] = {};
+        char description[sizeof(meshtastic_Waypoint::description)] = {};
     };
 
-    static constexpr size_t MAX_WAYPOINTS = 10;
+    static constexpr size_t MAX_WAYPOINTS = WAYPOINT_HISTORY_LIMIT;
 
-    void ingestWaypoint(const meshtastic_Waypoint &wp);
-    bool removeWaypointById(uint32_t id);
     bool pruneExpiredWaypoints();
     void seedFromStore();
     void updateRefreshTimer();
@@ -78,12 +75,15 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
     std::string coordinateText(const WaypointCard &entry, bool landscape);
     std::string distanceText(const WaypointCard &entry);
     std::string expireText(uint32_t expireEpoch);
-    std::string utf8FromCodepoint(uint32_t codepoint);
     bool canRenderWaypointIcon(const WaypointCard &entry, std::string *mapped = nullptr);
     uint8_t fallbackBadgeNumber(const WaypointCard &entry);
     bool drawWaypointIcon(const WaypointCard &entry, int16_t left, int16_t centerY, uint16_t boxSize);
     void drawFallbackIcon(const WaypointCard &entry, int16_t left, int16_t rowTop, uint16_t boxWidth, uint16_t rowHeight);
     bool hasDescription(const WaypointCard &entry);
+
+    int onWaypointStoreChanged(const WaypointStore *store);
+    CallbackObserver<WaypointListApplet, const WaypointStore *> waypointStoreObserver =
+        CallbackObserver<WaypointListApplet, const WaypointStore *>(this, &WaypointListApplet::onWaypointStoreChanged);
 
     std::deque<WaypointCard> waypoints;
     uint8_t scrollOffset = 0;

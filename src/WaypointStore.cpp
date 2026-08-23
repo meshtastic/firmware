@@ -6,6 +6,7 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "WaypointStore.h"
 #include "concurrency/LockGuard.h"
 #include "gps/RTC.h"
@@ -13,8 +14,6 @@
 #include <cstring>
 #include <pb_decode.h>
 #include <pb_encode.h>
-
-#include "mesh/NodeDB.h"
 
 namespace
 {
@@ -64,7 +63,7 @@ void markWaypointStoreUnsaved()
 {
     g_waypointStoreHasUnsavedChanges = true;
     if (g_lastWaypointAutoSaveMs == 0)
-        g_lastWaypointAutoSaveMs = millis();
+        g_lastWaypointAutoSaveMs = Time::getMillis();
 }
 
 void persistWaypointStore()
@@ -85,15 +84,6 @@ WaypointStore::WaypointStore(const std::string &label)
 void WaypointStore::notifyChanged()
 {
     notifyObservers(this);
-}
-
-uint32_t WaypointStore::age(const StoredWaypoint &entry)
-{
-    const uint32_t now = getTime();
-    if (entry.receivedTime == 0 || now <= entry.receivedTime)
-        return 0;
-
-    return now - entry.receivedTime;
 }
 
 bool WaypointStore::isExpired(const meshtastic_Waypoint &wp, uint32_t now)
@@ -130,12 +120,7 @@ bool WaypointStore::removeWaypoint(uint32_t id)
     if (!removed)
         return false;
 
-    if (geofenceModule) {
-        // creatorNodeNum=0 forces an unconditional untrack (removeGeofence() is private).
-        meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
-        wp.id = id;
-        geofenceModule->onWaypointReceived(wp, 0);
-    }
+    untrackGeofence(id);
 
 #if ENABLE_WAYPOINT_PERSISTENCE
     markWaypointStoreUnsaved();
@@ -147,11 +132,24 @@ bool WaypointStore::removeWaypoint(uint32_t id)
 
 void WaypointStore::addStoredWaypoint(const StoredWaypoint &entry)
 {
-    removeWaypointById(entry.waypoint.id);
+    if (removeWaypointById(entry.waypoint.id))
+        untrackGeofence(entry.waypoint.id);
 
     waypoints.push_front(entry);
-    while (waypoints.size() > WAYPOINT_HISTORY_LIMIT)
+    while (waypoints.size() > WAYPOINT_HISTORY_LIMIT) {
+        untrackGeofence(waypoints.back().waypoint.id);
         waypoints.pop_back();
+    }
+}
+
+void WaypointStore::untrackGeofence(uint32_t id) const
+{
+    if (!geofenceModule)
+        return;
+
+    meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
+    wp.id = id;
+    geofenceModule->onWaypointReceived(wp, 0);
 }
 
 bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWaypoint *stored)
@@ -183,32 +181,15 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
 
     addStoredWaypoint(entry);
 
+    if (geofenceModule)
+        geofenceModule->onWaypointReceived(entry.waypoint, entry.creatorNodeNum);
+
 #if ENABLE_WAYPOINT_PERSISTENCE
     markWaypointStoreUnsaved();
 #endif
     notifyChanged();
 
     return true;
-}
-
-void WaypointStore::addWaypoint(const meshtastic_Waypoint &wp, uint32_t receivedTime, NodeNum creatorNodeNum)
-{
-    StoredWaypoint entry;
-    entry.waypoint = wp;
-    entry.receivedTime = receivedTime ? receivedTime : getTime();
-    entry.creatorNodeNum = creatorNodeNum ? creatorNodeNum : (nodeDB ? nodeDB->getNodeNum() : 0);
-
-    if (isExpired(entry, entry.receivedTime)) {
-        removeWaypoint(entry.waypoint.id);
-        return;
-    }
-
-    addStoredWaypoint(entry);
-
-#if ENABLE_WAYPOINT_PERSISTENCE
-    markWaypointStoreUnsaved();
-#endif
-    notifyChanged();
 }
 
 bool WaypointStore::purgeExpired(uint32_t now)
@@ -225,8 +206,7 @@ bool WaypointStore::purgeExpired(uint32_t now)
             continue;
         }
 
-        if (geofenceModule)
-            geofenceModule->onWaypointReceived(it->waypoint, it->creatorNodeNum);
+        untrackGeofence(it->waypoint.id);
 
         it = waypoints.erase(it);
         changed = true;
@@ -247,6 +227,9 @@ void WaypointStore::saveToFlash()
     purgeExpired();
 
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
+    if (!g_waypointStoreHasUnsavedChanges)
+        return;
+
     spiLock->lock();
     FSCom.mkdir("/");
     spiLock->unlock();
@@ -278,92 +261,89 @@ void WaypointStore::saveToFlash()
 
 #if ENABLE_WAYPOINT_PERSISTENCE
     g_waypointStoreHasUnsavedChanges = false;
-    g_lastWaypointAutoSaveMs = millis();
+    g_lastWaypointAutoSaveMs = Time::getMillis();
 #endif
 }
 
 void WaypointStore::loadFromFlash()
 {
     std::deque<StoredWaypoint>().swap(waypoints);
+#if ENABLE_WAYPOINT_PERSISTENCE
+    bool needsMigration = false;
+#endif
 
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
-    concurrency::LockGuard guard(spiLock);
+    {
+        concurrency::LockGuard guard(spiLock);
 
-    if (FSCom.exists(filename.c_str())) {
-        auto f = FSCom.open(filename.c_str(), FILE_O_READ);
-        if (f) {
-            uint8_t version = 0;
-            uint8_t count = 0;
-            f.readBytes(reinterpret_cast<char *>(&version), 1);
-            f.readBytes(reinterpret_cast<char *>(&count), 1);
+        if (FSCom.exists(filename.c_str())) {
+            auto f = FSCom.open(filename.c_str(), FILE_O_READ);
+            if (f) {
+                uint8_t version = 0;
+                uint8_t count = 0;
+                f.readBytes(reinterpret_cast<char *>(&version), 1);
+                f.readBytes(reinterpret_cast<char *>(&count), 1);
 
-            if (version != 1 && version != WAYPOINT_STORE_VERSION) {
-                LOG_WARN("WaypointStore version mismatch (%u)", version);
-                f.close();
-            } else {
-                if (count > WAYPOINT_HISTORY_LIMIT)
-                    count = WAYPOINT_HISTORY_LIMIT;
+                if (version != 1 && version != WAYPOINT_STORE_VERSION) {
+                    LOG_WARN("WaypointStore version mismatch (%u)", version);
+                    f.close();
+                } else {
+                    needsMigration = version == 1;
+                    if (count > WAYPOINT_HISTORY_LIMIT)
+                        count = WAYPOINT_HISTORY_LIMIT;
 
-                for (uint8_t i = 0; i < count; ++i) {
-                    StoredWaypoint entry;
-                    if (version == 1) {
-                        StoredWaypointRecordV1 rec = {};
-                        if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
-                            break;
-                        if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
-                            LOG_WARN("WaypointStore skipping corrupt record %u", i);
-                            continue;
+                    for (uint8_t i = 0; i < count; ++i) {
+                        StoredWaypoint entry;
+                        if (version == 1) {
+                            StoredWaypointRecordV1 rec = {};
+                            if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
+                                break;
+                            if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
+                                LOG_WARN("WaypointStore skipping corrupt record %u", i);
+                                continue;
+                            }
+                            if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
+                                continue;
+                            entry.receivedTime = rec.receivedTime;
+                        } else {
+                            StoredWaypointRecord rec = {};
+                            if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
+                                break;
+                            if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
+                                LOG_WARN("WaypointStore skipping corrupt record %u", i);
+                                continue;
+                            }
+                            if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
+                                continue;
+                            entry.receivedTime = rec.receivedTime;
+                            entry.creatorNodeNum = rec.creatorNodeNum;
                         }
-                        if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
-                            continue;
-                        entry.receivedTime = rec.receivedTime;
-                        entry.creatorNodeNum = 0;
-                    } else {
-                        StoredWaypointRecord rec = {};
-                        if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
-                            break;
-                        if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
-                            LOG_WARN("WaypointStore skipping corrupt record %u", i);
-                            continue;
-                        }
-                        if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
-                            continue;
-                        entry.receivedTime = rec.receivedTime;
-                        entry.creatorNodeNum = rec.creatorNodeNum;
-                    }
 
-                    if (entry.creatorNodeNum == 0 && version == 1) {
-                        // Legacy records had no creator. Keep them visible, but they won't geofence-track
-                        // until refreshed from the mesh with creator metadata.
+                        if (isExpired(entry.waypoint))
+                            continue;
+                        waypoints.push_back(entry);
                     }
-
-                    if (isExpired(entry.waypoint))
-                        continue;
-                    waypoints.push_back(entry);
+                    f.close();
                 }
-                f.close();
             }
         }
     }
 #endif
 
 #if ENABLE_WAYPOINT_PERSISTENCE
-    g_waypointStoreHasUnsavedChanges = false;
-    g_lastWaypointAutoSaveMs = millis();
+    g_waypointStoreHasUnsavedChanges = needsMigration;
+    g_lastWaypointAutoSaveMs = Time::getMillis();
 #endif
+
+    replayToGeofence();
 }
 
 void WaypointStore::clearAllWaypoints()
 {
     const bool hadWaypoints = !waypoints.empty();
 
-    if (geofenceModule) {
-        for (const auto &entry : waypoints) {
-            meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
-            wp.id = entry.waypoint.id;
-            geofenceModule->onWaypointReceived(wp, 0);
-        }
-    }
+    for (const auto &entry : waypoints)
+        untrackGeofence(entry.waypoint.id);
 
     std::deque<StoredWaypoint>().swap(waypoints);
 
@@ -381,7 +361,7 @@ void WaypointStore::clearAllWaypoints()
 
 #if ENABLE_WAYPOINT_PERSISTENCE
     g_waypointStoreHasUnsavedChanges = false;
-    g_lastWaypointAutoSaveMs = millis();
+    g_lastWaypointAutoSaveMs = Time::getMillis();
 #endif
 
     if (hadWaypoints)
@@ -405,12 +385,12 @@ void waypointStoreAutosaveTick()
 {
     if (!g_waypointStoreHasUnsavedChanges) {
         if (g_lastWaypointAutoSaveMs == 0)
-            g_lastWaypointAutoSaveMs = millis();
+            g_lastWaypointAutoSaveMs = Time::getMillis();
         return;
     }
 
     if (g_lastWaypointAutoSaveMs == 0) {
-        g_lastWaypointAutoSaveMs = millis();
+        g_lastWaypointAutoSaveMs = Time::getMillis();
         return;
     }
 

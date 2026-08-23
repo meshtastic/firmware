@@ -2,6 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 
+#include "WaypointStore.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
@@ -20,7 +21,7 @@ GeofenceModule *geofenceModule;
 
 // Keep the in-memory footprint bounded. A mesh realistically has only a handful of active
 // geofencing waypoints; the crossing-state map grows with (waypoints x nodes).
-static constexpr size_t GEOFENCE_MAX_WAYPOINTS = 32;
+static constexpr size_t GEOFENCE_MAX_WAYPOINTS = WAYPOINT_HISTORY_LIMIT;
 static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
 
 GeofenceModule::GeofenceModule()
@@ -28,8 +29,6 @@ GeofenceModule::GeofenceModule()
     geofences.reserve(GEOFENCE_MAX_WAYPOINTS);
     crossingInside.reserve(GEOFENCE_MAX_CROSSING);
 }
-
-// --- Pure helpers -----------------------------------------------------------------------------
 
 bool GeofenceModule::insideRadius(int32_t ptLat_i, int32_t ptLon_i, int32_t ctrLat_i, int32_t ctrLon_i, uint32_t radiusMeters)
 {
@@ -88,8 +87,6 @@ GeofenceModule::Crossing GeofenceModule::classifyTrackedUpdate(bool hasTrackedSt
         return classify(false, previousInside, isInside, notifyOnEnter, notifyOnExit);
     return classify(true, false, isInside, notifyOnEnter, notifyOnExit);
 }
-
-// --- Store management -------------------------------------------------------------------------
 
 void GeofenceModule::removeGeofence(uint32_t waypointId, NodeNum creatorNodeNum)
 {
@@ -197,8 +194,6 @@ void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp, NodeNum c
              slot->name, (unsigned)creatorNodeNum, wp.geofence_radius, wp.has_bounding_box, wp.notify_on_enter, wp.notify_on_exit,
              wp.notify_favorites_only);
 }
-
-// --- Evaluation ------------------------------------------------------------------------------
 
 void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition, int32_t previousLat_i,
                                       int32_t previousLon_i)

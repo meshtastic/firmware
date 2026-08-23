@@ -2,10 +2,6 @@
 #include "Observer.h"
 #include "SinglePortModule.h"
 
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
-#include "WaypointStore.h"
-#endif
-
 /**
  * Waypoint message handling for meshtastic
  */

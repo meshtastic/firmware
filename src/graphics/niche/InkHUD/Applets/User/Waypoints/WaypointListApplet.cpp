@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "WaypointStore.h"
+#include "WaypointUtils.h"
 #include "modules/WaypointModule.h"
 
 #include <algorithm>
@@ -30,23 +31,22 @@ uint32_t fnv1aAppend(uint32_t hash, const char *text)
 
 } // namespace
 
-InkHUD::WaypointListApplet::WaypointListApplet()
-    : SinglePortModule("WaypointListApplet", meshtastic_PortNum_WAYPOINT_APP), concurrency::OSThread("WaypointListApplet")
+InkHUD::WaypointListApplet::WaypointListApplet() : concurrency::OSThread("WaypointListApplet")
 {
     OSThread::disable();
 }
 
 void InkHUD::WaypointListApplet::onActivate()
 {
-    loopbackOk = true;
     setInputsSubscribed(NAV_UP | NAV_DOWN, true);
     seedFromStore();
+    waypointStoreObserver.observe(&waypointStore);
     updateRefreshTimer();
 }
 
 void InkHUD::WaypointListApplet::onDeactivate()
 {
-    loopbackOk = false;
+    waypointStoreObserver.unobserve(&waypointStore);
     setInputsSubscribed(NAV_UP | NAV_DOWN, false);
     OSThread::disable();
 }
@@ -80,15 +80,15 @@ void InkHUD::WaypointListApplet::seedFromStore()
     scrollOffset = 0;
     hasRenderHash = false;
 
-    const auto &storedWaypoints = waypointStore.getWaypoints();
-    for (auto it = storedWaypoints.rbegin(); it != storedWaypoints.rend(); ++it) {
+    for (const auto &stored : waypointStore.getWaypoints()) {
+        if (waypoints.size() >= MAX_WAYPOINTS)
+            break;
+
         WaypointCard entry;
-        if (!fillWaypointCard(it->waypoint, entry))
+        if (!fillWaypointCard(stored.waypoint, entry))
             continue;
 
-        waypoints.push_front(entry);
-        if (waypoints.size() > MAX_WAYPOINTS)
-            waypoints.resize(MAX_WAYPOINTS);
+        waypoints.push_back(entry);
     }
 
     syncListState();
@@ -103,19 +103,6 @@ void InkHUD::WaypointListApplet::updateRefreshTimer()
 
     OSThread::enabled = true;
     OSThread::setIntervalFromNow(nextRefreshIntervalMs());
-}
-
-bool InkHUD::WaypointListApplet::removeWaypointById(uint32_t id)
-{
-    for (auto it = waypoints.begin(); it != waypoints.end(); ++it) {
-        if (it->id == id) {
-            waypoints.erase(it);
-            syncListState();
-            return true;
-        }
-    }
-
-    return false;
 }
 
 bool InkHUD::WaypointListApplet::pruneExpiredWaypoints()
@@ -270,38 +257,15 @@ bool InkHUD::WaypointListApplet::onTouchPoint(uint16_t x, uint16_t y, bool longP
     return true;
 }
 
-void InkHUD::WaypointListApplet::ingestWaypoint(const meshtastic_Waypoint &wp)
+int InkHUD::WaypointListApplet::onWaypointStoreChanged(const WaypointStore *store)
 {
-    WaypointCard entry;
-    if (!fillWaypointCard(wp, entry)) {
-        removeWaypointById(wp.id);
-        return;
-    }
-
-    removeWaypointById(entry.id);
-
-    waypoints.push_front(entry);
-    if (waypoints.size() > MAX_WAYPOINTS)
-        waypoints.resize(MAX_WAYPOINTS);
-
-    syncListState();
-}
-
-ProcessMessage InkHUD::WaypointListApplet::handleReceived(const meshtastic_MeshPacket &mp)
-{
+    (void)store;
     if (!isActive())
-        return ProcessMessage::CONTINUE;
+        return 0;
 
-    meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
-    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp))
-        return ProcessMessage::CONTINUE;
-
-    ingestWaypoint(wp);
-
-    if (getFrom(&mp) != nodeDB->getNodeNum())
-        requestAutoshow();
+    seedFromStore();
     requestUpdate(Drivers::EInk::UpdateTypes::FAST);
-    return ProcessMessage::CONTINUE;
+    return 0;
 }
 
 std::string InkHUD::WaypointListApplet::headerText(bool landscape)
@@ -462,34 +426,6 @@ uint32_t InkHUD::WaypointListApplet::buildRenderHash()
     return hash;
 }
 
-std::string InkHUD::WaypointListApplet::utf8FromCodepoint(uint32_t codepoint)
-{
-    char buf[5] = {};
-    if (codepoint <= 0x7F) {
-        buf[0] = static_cast<char>(codepoint);
-        return std::string(buf, 1);
-    }
-    if (codepoint <= 0x7FF) {
-        buf[0] = static_cast<char>(0xC0 | (codepoint >> 6));
-        buf[1] = static_cast<char>(0x80 | (codepoint & 0x3F));
-        return std::string(buf, 2);
-    }
-    if (codepoint <= 0xFFFF) {
-        buf[0] = static_cast<char>(0xE0 | (codepoint >> 12));
-        buf[1] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-        buf[2] = static_cast<char>(0x80 | (codepoint & 0x3F));
-        return std::string(buf, 3);
-    }
-    if (codepoint <= 0x10FFFF) {
-        buf[0] = static_cast<char>(0xF0 | (codepoint >> 18));
-        buf[1] = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
-        buf[2] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-        buf[3] = static_cast<char>(0x80 | (codepoint & 0x3F));
-        return std::string(buf, 4);
-    }
-    return "";
-}
-
 bool InkHUD::WaypointListApplet::fillWaypointCard(const meshtastic_Waypoint &wp, WaypointCard &entry)
 {
     if (WaypointStore::isExpired(wp))
@@ -522,7 +458,7 @@ bool InkHUD::WaypointListApplet::canRenderWaypointIcon(const WaypointCard &entry
     if (!entry.icon)
         return false;
 
-    const std::string utf8 = utf8FromCodepoint(entry.icon);
+    const std::string utf8 = WaypointUtils::utf8FromCodepoint(entry.icon);
     if (utf8.empty())
         return false;
 

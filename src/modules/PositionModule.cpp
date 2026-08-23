@@ -56,6 +56,7 @@ PositionModule::PositionModule()
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
 {
     auto p = *pptr;
+    const NodeNum sender = getFrom(&mp);
 
     const auto transport = mp.transport_mechanism;
     if (isFromUs(&mp) && !IS_ONE_OF(transport, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
@@ -91,7 +92,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Log packet size and data fields
     LOG_TRACE("POSITION node=0x%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
               "time=%d",
-              getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
+              sender, mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
               p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
               p.time);
 
@@ -114,8 +115,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
     if (geofenceModule && !isLocal) {
         meshtastic_PositionLite previousPos;
-        if (nodeDB->copyNodePosition(getFrom(&mp), previousPos) &&
-            (previousPos.latitude_i != 0 || previousPos.longitude_i != 0)) {
+        if (nodeDB->copyNodePosition(sender, previousPos) && (previousPos.latitude_i != 0 || previousPos.longitude_i != 0)) {
             hasPreviousPosition = true;
             previousLat_i = previousPos.latitude_i;
             previousLon_i = previousPos.longitude_i;
@@ -123,13 +123,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 #endif
 
-    nodeDB->updatePosition(getFrom(&mp), p);
+    nodeDB->updatePosition(sender, p);
     precision = getPositionPrecisionForChannel(mp.channel);
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
-    // Evaluate this other-node position against any geofencing waypoints we know about.
     if (geofenceModule && !isLocal)
-        geofenceModule->evaluatePosition(getFrom(&mp), p, hasPreviousPosition, previousLat_i, previousLon_i);
+        geofenceModule->evaluatePosition(sender, p, hasPreviousPosition, previousLat_i, previousLon_i);
 #endif
 
     return false; // Let others look at this message also if they want

@@ -1106,7 +1106,6 @@ void setup()
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
     waypointStore.loadFromFlash();
-    waypointStore.replayToGeofence();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C

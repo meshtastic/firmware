@@ -515,7 +515,6 @@ int InkHUD::Events::beforeReboot(void *unused)
     if (!eraseOnReboot) {
         inkhud->persistence->saveSettings();
         inkhud->persistence->saveLatestMessage();
-        waypointStore.saveToFlash();
     } else {
         NicheGraphics::clearFlashData();
         messageStore.clearAllMessages(); // also wipe the shared message store
