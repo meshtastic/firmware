@@ -33,7 +33,6 @@
 #define LORA_DIO2 34 // Not really used
 
 // Battery voltage divider: R9 = 47k, R13 = 56k.
-// Ratio of voltage divider = (47 + 56) / 56 = 103 / 56 = ~1.84
 // GPIO12 enables the switched divider; GPIO32 is ADC1 channel 4
 #define ADC_MULTIPLIER (103.0 / 56.0)
 #define BATTERY_PIN 32
@@ -42,8 +41,7 @@
 #define ADC_CTRL_ENABLED HIGH
 
 // USB power sensing
-// R19 = 56k, R18 = 47k.
-// 5 V USB produces approximately 2.28 V at GPIO33.
+// R19 = 56k, R18 = 47k // 5 V USB produces approximately 2.28 V at GPIO33.
 #define EXT_PWR_DETECT_ADC 33
 #define EXT_PWR_DETECT_ADC_CHANNEL ADC_CHANNEL_5
 #define EXT_PWR_DETECT_ADC_THRESHOLD_MV 1500
