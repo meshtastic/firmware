@@ -80,7 +80,6 @@ void HopScalingModule::clear()
 void HopScalingModule::saveToDisk() const
 {
 #ifdef FSCom
-    FSCom.mkdir("/prefs");
     PersistedHistogram state{};
     state.magic = HISTOGRAM_STATE_MAGIC;
     state.version = HISTOGRAM_STATE_VERSION;

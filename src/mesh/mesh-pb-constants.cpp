@@ -56,12 +56,11 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 /// Write to an arduino file
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
-    spiLock->lock();
+    // Locking is delegated to the Print's write() (SafeFile::write takes spiLock itself).
+    // All current callers pass a SafeFile; a non-SafeFile Print would not be bus-locked here.
     auto file = (Print *)stream->state;
     // LOG_DEBUG("writing %d bytes to protobuf file", count);
-    bool status = file->write(buf, count) == count;
-    spiLock->unlock();
-    return status;
+    return file->write(buf, count) == count;
 }
 #endif
 

@@ -121,14 +121,7 @@ void CannedMessageStore::handleSet(const meshtastic_AdminMessage *request)
     strncpy(cannedMessageModuleConfig.messages, request->set_canned_message_module_messages,
             sizeof(cannedMessageModuleConfig.messages));
 
-    // Ensure the directory exists
-#ifdef FSCom
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
-#endif
-
-    // Write to flash
+    // Write to flash ("/prefs" is created by SafeFile (openFile) inside saveProto)
     nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
                       &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
