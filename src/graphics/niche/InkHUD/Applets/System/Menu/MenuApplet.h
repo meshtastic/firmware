@@ -76,8 +76,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
     uint16_t menuTextLimit = 200;
 
-    std::vector<MenuItem> items;               // MenuItems for the current page. Filled by ShowPage
-    std::vector<uint32_t> removeWaypointIds;   // Parallel to items, for REMOVE_WAYPOINT page
+    std::vector<MenuItem> items;             // MenuItems for the current page. Filled by ShowPage
+    std::vector<uint32_t> removeWaypointIds; // Parallel to items, for REMOVE_WAYPOINT page
     std::vector<uint32_t> geofenceWaypointIds;
     uint32_t selectedGeofenceWaypointId = 0;
     std::vector<std::string> nodeConfigLabels; // Persistent labels for Node Config pages

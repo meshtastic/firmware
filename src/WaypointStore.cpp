@@ -105,7 +105,7 @@ uint8_t WaypointStore::notificationPreferencesFromWaypoint(const meshtastic_Wayp
 }
 
 uint8_t WaypointStore::mergeNotificationPreferences(bool locallyAuthored, bool hasExisting, uint8_t existingPreferences,
-                                                     const meshtastic_Waypoint &incoming)
+                                                    const meshtastic_Waypoint &incoming)
 {
     if (locallyAuthored)
         return notificationPreferencesFromWaypoint(incoming);
@@ -194,8 +194,8 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, bool loca
         return false;
 
     const StoredWaypoint *existing = findWaypoint(entry.waypoint.id);
-    entry.notificationPreferences = mergeNotificationPreferences(locallyAuthored, existing != nullptr,
-                                                                 existing ? existing->notificationPreferences : 0, entry.waypoint);
+    entry.notificationPreferences = mergeNotificationPreferences(
+        locallyAuthored, existing != nullptr, existing ? existing->notificationPreferences : 0, entry.waypoint);
     clearWireNotificationPreferences(entry.waypoint);
     entry.receivedTime = packet.rx_time ? packet.rx_time : getTime();
     entry.creatorNodeNum = getFrom(&packet);

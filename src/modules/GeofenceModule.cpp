@@ -132,9 +132,9 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
         const uint64_t key = crossingKey(wp.id, node);
         CrossingState *state = findCrossingState(key);
         const bool hasTrackedState = (state != nullptr);
-        const Crossing crossing = classify(!hasTrackedState, hasTrackedState ? state->inside : false, isInside,
-                                           entry.notificationEnabled(WAYPOINT_NOTIFY_ENTER),
-                                           entry.notificationEnabled(WAYPOINT_NOTIFY_EXIT));
+        const Crossing crossing =
+            classify(!hasTrackedState, hasTrackedState ? state->inside : false, isInside,
+                     entry.notificationEnabled(WAYPOINT_NOTIFY_ENTER), entry.notificationEnabled(WAYPOINT_NOTIFY_EXIT));
 
         // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {

@@ -745,13 +745,11 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         if (entry && !WaypointStore::isExpired(*entry) && waypointHasMapGeometry(entry->waypoint)) {
             *lat = waypointHasAnchor(entry->waypoint)
                        ? entry->waypoint.latitude_i * 1e-7f
-                       : ((float)entry->waypoint.bounding_box.latitude_south_i +
-                          entry->waypoint.bounding_box.latitude_north_i) *
+                       : ((float)entry->waypoint.bounding_box.latitude_south_i + entry->waypoint.bounding_box.latitude_north_i) *
                              0.5e-7f;
             *lng = waypointHasAnchor(entry->waypoint)
                        ? entry->waypoint.longitude_i * 1e-7f
-                       : ((float)entry->waypoint.bounding_box.longitude_west_i +
-                          entry->waypoint.bounding_box.longitude_east_i) *
+                       : ((float)entry->waypoint.bounding_box.longitude_west_i + entry->waypoint.bounding_box.longitude_east_i) *
                              0.5e-7f;
             latCenter = *lat;
             lngCenter = *lng;
@@ -1007,8 +1005,7 @@ void InkHUD::MapApplet::getMapSize(uint32_t *widthMeters, uint32_t *heightMeters
             }
             if (m.hasBoundingBox) {
                 *widthMeters = max(*widthMeters, (uint32_t)std::max(fabsf(m.boxWestMeters), fabsf(m.boxEastMeters)) * 2);
-                *heightMeters =
-                    max(*heightMeters, (uint32_t)std::max(fabsf(m.boxSouthMeters), fabsf(m.boxNorthMeters)) * 2);
+                *heightMeters = max(*heightMeters, (uint32_t)std::max(fabsf(m.boxSouthMeters), fabsf(m.boxNorthMeters)) * 2);
             }
             *widthMeters *= 1.1;
             *heightMeters *= 1.1;

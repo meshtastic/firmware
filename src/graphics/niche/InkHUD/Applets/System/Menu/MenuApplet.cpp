@@ -1185,8 +1185,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             item.action == TOGGLE_GEOFENCE_ENTER
                 ? WAYPOINT_NOTIFY_ENTER
                 : (item.action == TOGGLE_GEOFENCE_EXIT ? WAYPOINT_NOTIFY_EXIT : WAYPOINT_NOTIFY_FAVORITES_ONLY);
-        waypointStore.setNotificationPreference(selectedGeofenceWaypointId, preference,
-                                                !entry->notificationEnabled(preference));
+        waypointStore.setNotificationPreference(selectedGeofenceWaypointId, preference, !entry->notificationEnabled(preference));
         break;
     }
 
@@ -1290,12 +1289,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             std::string("Enter Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_ENTER) ? "On" : "Off");
         const std::string exitLabel =
             std::string("Exit Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_EXIT) ? "On" : "Off");
-        const std::string favoritesLabel = std::string("Favorites Only: ") +
-                                           (entry->notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY) ? "On" : "Off");
+        const std::string favoritesLabel =
+            std::string("Favorites Only: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY) ? "On" : "Off");
         items.push_back(MenuItem(enterLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_ENTER, MenuPage::GEOFENCE_OPTIONS));
         items.push_back(MenuItem(exitLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_EXIT, MenuPage::GEOFENCE_OPTIONS));
-        items.push_back(
-            MenuItem(favoritesLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_FAVORITES_ONLY, MenuPage::GEOFENCE_OPTIONS));
+        items.push_back(MenuItem(favoritesLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_FAVORITES_ONLY, MenuPage::GEOFENCE_OPTIONS));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
