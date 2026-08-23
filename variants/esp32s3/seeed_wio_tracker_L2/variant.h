@@ -59,7 +59,10 @@
 #define EXPANDS_EXP_OTG_EN (11)
 // Audio
 #define EXPANDS_PA_PWR_EN (12)
-#define AUDIO_AMP_ENABLE(on) io.digitalWrite(EXPANDS_PA_PWR_EN, (on) ? HIGH : LOW)
+#define AUDIO_AMP_ENABLE(on)                                                                                                     \
+    io.digitalWrite(EXPANDS_PA_PWR_EN, (on) ? HIGH : LOW);                                                                       \
+    if (on)                                                                                                                      \
+        delay(50);
 // Battery
 #define EXPANDS_BAT_ADC_EN (15)
 // Grove

@@ -196,8 +196,8 @@ void earlyInitVariant()
         io.pinMode(EXPANDS_EXP_OTG_EN, OUTPUT);   // OTG EN
         io.digitalWrite(EXPANDS_EXP_OTG_EN, LOW); // OTG EN low
         delay(10);
-        io.pinMode(EXPANDS_PA_PWR_EN, OUTPUT);    // PA EN
-        io.digitalWrite(EXPANDS_PA_PWR_EN, HIGH); // PA EN high
+        io.pinMode(EXPANDS_PA_PWR_EN, OUTPUT);   // PA EN
+        io.digitalWrite(EXPANDS_PA_PWR_EN, LOW); // PA EN low, controlled by AudioThread
         delay(10);
         io.pinMode(EXPANDS_GNSS_PWR_EN, OUTPUT);    // GNSS EN
         io.digitalWrite(EXPANDS_GNSS_PWR_EN, HIGH); // GNSS EN high
