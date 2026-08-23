@@ -15,9 +15,9 @@
 // A board with an I2S amplifier opts in by defining AUDIO_AMP_ENABLE(on) in its variant.h to power the
 // amp on/off around playback (e.g. an enable pin on an I/O expander). The includes below expose the
 // expander instances (io / mcpIoExpander) those macros typically reference.
-#ifdef USE_XL9555
-#include "ExtensionIOXL9555.hpp"
-extern ExtensionIOXL9555 io;
+#ifdef USE_PCA95X5
+#include PCA95X5_INC
+extern PCA95X5_CLS io;
 #endif
 
 #ifdef USE_MCP23017

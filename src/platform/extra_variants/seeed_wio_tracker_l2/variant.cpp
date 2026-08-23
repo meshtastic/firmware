@@ -4,15 +4,177 @@
 
 #include "AudioBoard.h"
 #include "DebugConfiguration.h"
+#include "PowerFSM.h"
+#include "concurrency/OSThread.h"
+#include "input/InputBroker.h"
+#include "input/TouchScreenImpl1.h"
 #include "mesh/MeshLED.h"
+#include "sleep.h"
 #include "variant.h"
-#include <Wire.h>
 
-#include "ExtensionIOXL9555.hpp" // SensorLib
-extern ExtensionIOXL9555 io;
+#include PCA95X5_INC
+extern PCA95X5_CLS io;
 
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
+
+// wake button handling
+#if defined(BOARD_PCA9535_ADDR) && defined(BOARD_PCA9535_BUTTON_MASK)
+static bool isPca9535WakeKeyPressed()
+{
+    return !io.digitalRead(EXPANDS_BTN_WAKE_UP);
+}
+
+class WakeKeyInterruptThread : public concurrency::OSThread
+{
+  public:
+    WakeKeyInterruptThread() : concurrency::OSThread("WioL2WakeKeyInt", SAMPLE_MS)
+    {
+        // Do not run unless an edge arrives.
+        OSThread::disable();
+        instance = this;
+#ifdef ARCH_ESP32
+        lsObserver.observe(&notifyLightSleep);
+        lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
+    }
+
+    void begin()
+    {
+        pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
+        attachInterrupt(BOARD_PCA9535_INT, WakeKeyInterruptThread::isr, FALLING);
+    }
+
+  protected:
+    int32_t runOnce() override
+    {
+        const uint32_t now = millis();
+
+        // Ignore side-key handling while BOOT/user button is held.
+        if (digitalRead(BUTTON_PIN) == LOW) {
+            resetStateAndStop();
+            return OSThread::disable();
+        }
+
+        switch (state) {
+        case State::IRQ_PENDING:
+            // Initial debounce after expander interrupt edge.
+            if ((uint32_t)(now - irqAtMs) < DEBOUNCE_MS) {
+                return SAMPLE_MS;
+            }
+
+            if (isPca9535WakeKeyPressed()) {
+                LOG_DEBUG("wake button pressed");
+                powerFSM.trigger(EVENT_PRESS);
+                state = State::PRESSED;
+                return SAMPLE_MS;
+            }
+
+            // Spurious/cleared edge.
+            resetStateAndStop();
+            return OSThread::disable();
+
+        case State::PRESSED: {
+            if (isPca9535WakeKeyPressed()) {
+                return SAMPLE_MS;
+            }
+
+            resetStateAndStop();
+            return OSThread::disable();
+        }
+
+        case State::REST:
+        default:
+            return OSThread::disable();
+        }
+    }
+
+  private:
+    enum class State : uint8_t {
+        REST,
+        IRQ_PENDING,
+        PRESSED,
+    };
+
+    static constexpr uint32_t SAMPLE_MS = 15;
+    static constexpr uint32_t DEBOUNCE_MS = 25;
+
+    static WakeKeyInterruptThread *instance;
+
+    static void isr()
+    {
+        if (instance) {
+            instance->onInterruptEdge();
+        }
+    }
+
+    void onInterruptEdge()
+    {
+        if (state != State::REST) {
+            return;
+        }
+
+        state = State::IRQ_PENDING;
+        irqAtMs = millis();
+        startThread();
+    }
+
+    void startThread()
+    {
+        if (!OSThread::enabled) {
+            OSThread::setIntervalFromNow(0);
+            OSThread::enabled = true;
+            runASAP = true;
+        }
+    }
+
+    void resetStateAndStop()
+    {
+        state = State::REST;
+        if (OSThread::enabled) {
+            OSThread::disable();
+        }
+    }
+
+#ifdef ARCH_ESP32
+    int onLightSleep(void *)
+    {
+        detachInterrupt(BOARD_PCA9535_INT);
+        // Clear any latched PCA9535 interrupt before enabling GPIO wake.
+        // If INT is left asserted low, light sleep exits immediately.
+        (void)io.digitalRead(EXPANDS_BTN_WAKE_UP);
+        resetStateAndStop();
+        return 0;
+    }
+
+    int onLightSleepEnd(esp_sleep_wakeup_cause_t cause)
+    {
+        (void)cause;
+        // Consume any pending interrupt source before reattaching ISR.
+        // Check BEFORE clearing: if INT is still asserted the button may still be held,
+        // and no new falling edge will fire until it is released.
+        bool intAsserted = (digitalRead(BOARD_PCA9535_INT) == LOW);
+        (void)io.digitalRead(EXPANDS_BTN_WAKE_UP);
+        pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
+        attachInterrupt(BOARD_PCA9535_INT, WakeKeyInterruptThread::isr, FALLING);
+        if (intAsserted) {
+            onInterruptEdge();
+        }
+        return 0;
+    }
+
+    CallbackObserver<WakeKeyInterruptThread, void *> lsObserver{this, &WakeKeyInterruptThread::onLightSleep};
+    CallbackObserver<WakeKeyInterruptThread, esp_sleep_wakeup_cause_t> lsEndObserver{this,
+                                                                                     &WakeKeyInterruptThread::onLightSleepEnd};
+#endif
+
+    volatile State state = State::REST;
+    volatile uint32_t irqAtMs = 0;
+};
+
+WakeKeyInterruptThread *WakeKeyInterruptThread::instance = nullptr;
+WakeKeyInterruptThread *wakeKeyThread = nullptr;
+#endif
 
 class WioTrackerMeshLED : public MeshLED
 {
@@ -26,7 +188,7 @@ static bool initOK = false;
 
 void earlyInitVariant()
 {
-    if (io.begin(Wire, XL9555_SLAVE_ADDRESS1, I2C_SDA, I2C_SCL)) {
+    if (io.begin(Wire, BOARD_PCA9535_ADDR, I2C_SDA, I2C_SCL)) {
         io.pinMode(EXPANDS_BTN_WAKE_UP, INPUT); // wakeup button
         io.pinMode(EXPANDS_I2C_0_INT, INPUT);   // I2C IRQ
         io.pinMode(EXPANDS_SD_DETECT, INPUT);   // SD detect
@@ -74,13 +236,13 @@ void earlyInitVariant()
 
         io.pinMode(EXPANDS_TP_RST, OUTPUT);   // TP RST
         io.digitalWrite(EXPANDS_TP_RST, LOW); // TP RST low
-        io.pinMode(EXPANDS_TP_INT, OUTPUT);   // TP INT
         io.digitalWrite(EXPANDS_TP_INT, LOW); // TP INT low
         delay(10);
         io.digitalWrite(EXPANDS_TP_INT, LOW); // TP INT low
         delay(1);
         io.digitalWrite(EXPANDS_TP_RST, HIGH); // TP RST high
         delay(60);
+        io.pinMode(EXPANDS_TP_INT, INPUT); // TP INT
         initOK = true;
 
         meshLED = std::make_shared<WioTrackerMeshLED>();
@@ -94,6 +256,17 @@ void lateInitVariant()
         LOG_ERROR("TCA9535 initialization failed");
         return;
     }
+
+    // wake button initialization
+#if defined(BOARD_PCA9535_ADDR) && defined(BOARD_PCA9535_BUTTON_MASK)
+    //    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    if (!wakeKeyThread) {
+        wakeKeyThread = new WakeKeyInterruptThread();
+        wakeKeyThread->begin();
+    }
+//    }
+#endif
+
     // AudioDriverLogger.begin(Serial, AudioDriverLogLevel::Debug);
     // I2C: function, scl, sda
     PinsAudioBoardES8311.addI2C(PinFunction::CODEC, Wire);
