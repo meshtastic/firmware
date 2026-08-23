@@ -37,7 +37,7 @@
 // GPIO12 enables the switched divider; GPIO32 is ADC1 channel 4
 #define ADC_MULTIPLIER (103.0 / 56.0)
 #define BATTERY_PIN 32
-#define ADC_CHANNEL ADC_CHANNEL_4 // GPIO32 = ADC2 channel 4 on ESP32
+#define ADC_CHANNEL ADC_CHANNEL_4 // GPIO32 = ADC1 channel 4 on ESP32
 #define ADC_CTRL 12
 #define ADC_CTRL_ENABLED HIGH
 
