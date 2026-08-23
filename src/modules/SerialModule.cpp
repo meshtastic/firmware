@@ -9,6 +9,412 @@
 #include <Arduino.h>
 #include <Throttle.h>
 
+#ifdef HELTEC_MESH_SOLAR
+#include "meshSolarApp.h"
+#endif
+
+// Outside the architecture guard on purpose: config validation, not serial I/O. See SerialModule.h.
+bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+        const char *warning = "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS "
+                              "Config output-only modes.";
+        LOG_ERROR(warning);
+#ifndef PIO_UNIT_TESTING
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message), "%s", warning);
+            service->sendClientNotification(cn);
+        }
+#endif
+        return false;
+    }
+
+    return true;
+}
+
+#if defined(USE_SERIAL_PACKET_IO)
+
+// Require pin definitions at compile time if not set in moduleConfig
+#ifndef SERIAL_PACKET_IO_RXD
+#error "SERIAL_PACKET_IO_RXD must be defined in platformio.ini build_flags (e.g., -DSERIAL_PACKET_IO_RXD=15)"
+#endif
+#ifndef SERIAL_PACKET_IO_TXD
+#error "SERIAL_PACKET_IO_TXD must be defined in platformio.ini build_flags (e.g., -DSERIAL_PACKET_IO_TXD=16)"
+#endif
+
+/*
+
+    This module has been totally rewritten to function as a serial 'interface'
+    for the router to send packets over the serial link similar to the MQTT interface.
+
+    The serial link is simply an alternate path for packets other than the air.
+
+    This is not a module, it does not source new packets or sink packets
+
+    This is intended for the WisMesh starter kit (19007 board+ 4630) + RS485 which uses Serial1
+
+    This module will wait not transmit over the link if the RX is currently busy.
+
+*/
+
+#define TIMEOUT 250
+#define BAUD 38400
+#define ACK 1
+
+// API: Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
+#define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
+
+#define PACKET_FLAGS_ENCRYPTED_MASK PACKET_FLAGS_VIA_MQTT_MASK
+
+SerialModule *serialModule;
+SerialModuleRadio *serialModuleRadio;
+
+meshtastic_serialPacket outPacket;
+meshtastic_serialPacket inPacket;
+char tmpbuf[250]; // for debug only
+
+SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
+static Print *serialPrint = &Serial1;
+
+#define headerByte1 0xaa
+#define headerByte2 0x55
+
+size_t serialPayloadSize;
+
+uint32_t computeCrc32(const uint8_t *buf, uint16_t len)
+{
+    uint32_t crc = 0xFFFFFFFF;        // Initial value
+    const uint32_t poly = 0xEDB88320; // CRC-32 polynomial
+
+    for (uint16_t i = 0; i < len; i++) {
+        crc ^= (uint8_t)buf[i];          // XOR with the current byte
+        for (int j = 7; j >= 0; j--) {   // Perform 8 bitwise operations
+            if (crc & 0x80000000) {      // Check if the MSB is set
+                crc = (crc << 1) ^ poly; // Shift and XOR with polynomial
+            } else {
+                crc <<= 1; // Shift if MSB is not set
+            }
+        }
+    }
+    return ~crc; // Return the final CRC value
+}
+
+void meshPacketToSerialPacket(meshtastic_MeshPacket *p, meshtastic_serialPacket *sp)
+{
+    sp->header.hbyte1 = headerByte1;
+    sp->header.hbyte2 = headerByte2;
+    sp->header.crc = 0;
+
+    if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+        sp->header.size = sizeof(SerialPacketHeader) + p->encrypted.size;
+        memcpy(sp->payload, p->encrypted.bytes, p->encrypted.size);
+    } else {
+        sp->header.size = sizeof(SerialPacketHeader) + p->decoded.payload.size;
+        memcpy(sp->payload, p->decoded.payload.bytes, p->decoded.payload.size);
+    }
+    sp->header.from = p->from;
+    sp->header.to = p->to;
+    sp->header.id = p->id;
+    sp->header.channel = p->channel;
+
+    sp->header.hop_limit = p->hop_limit & PACKET_FLAGS_HOP_LIMIT_MASK;
+    sp->header.hop_start = p->hop_start & PACKET_FLAGS_HOP_START_MASK;
+    if (sp->header.hop_start == 0) {
+        sp->header.hop_start = sp->header.hop_limit; // default to hop_limit if not set
+    }
+    sp->header.flags = 0x20 | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) |
+                       ((p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) ? PACKET_FLAGS_ENCRYPTED_MASK : 0);
+
+    sp->header.crc = computeCrc32((const uint8_t *)sp, sp->header.size);
+}
+
+void insertSerialPacketToMesh(meshtastic_serialPacket *sp)
+{
+
+    UniquePacketPoolPacket p = packetPool.allocUniqueZeroed();
+
+    p->from = sp->header.from;
+    p->to = sp->header.to;
+    p->id = sp->header.id;
+    p->channel = sp->header.channel;
+    // assert(HOP_MAX <= PACKET_FLAGS_HOP_LIMIT_MASK); // If hopmax changes, carefully check this code
+    p->hop_limit = sp->header.hop_limit;
+    p->hop_start = sp->header.hop_start;
+    p->want_ack = !!(sp->header.flags & PACKET_FLAGS_WANT_ACK_MASK);
+    p->via_mqtt = 0;
+    uint16_t payloadLen = sp->header.size - sizeof(SerialPacketHeader);
+    if (!!(sp->header.flags & PACKET_FLAGS_ENCRYPTED_MASK)) {
+        p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+        memcpy(p->encrypted.bytes, sp->payload, payloadLen);
+        p->encrypted.size = payloadLen;
+    } else {
+        p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        memcpy(p->decoded.payload.bytes, sp->payload, payloadLen);
+        p->decoded.payload.size = payloadLen;
+    }
+
+    LOG_DEBUG("Serial Module RX  from=0x%0x, to=0x%0x, packet_id=0x%0x", p->from, p->to, p->id);
+
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        memcpy(tmpbuf, p->decoded.payload.bytes, p->decoded.payload.size);
+        tmpbuf[p->decoded.payload.size + 1] = 0;
+        LOG_DEBUG("Serial Module RX packet of %d bytes, msg: %s", sp->header.size, tmpbuf);
+    }
+
+    router->enqueueReceivedMessage(p.release());
+}
+
+// check if this recieved serial packet is valid
+bool checkIfValidPacket(meshtastic_serialPacket *sp)
+{
+
+    if (sp->header.hbyte1 != headerByte1 || sp->header.hbyte2 != headerByte2) {
+        LOG_DEBUG("SerialModule:: valid packet check fail, header bytes");
+        return false;
+    }
+    if (sp->header.size == 0 || sp->header.size > sizeof(meshtastic_serialPacket)) {
+        LOG_DEBUG("SerialModule:: valid packet check fail, invalid size");
+        return false;
+    }
+
+    uint32_t received_crc = sp->header.crc;
+    sp->header.crc = 0; // need to set to zero for computing CRC
+    if (computeCrc32((const uint8_t *)sp, sp->header.size) != received_crc) {
+        LOG_DEBUG("SerialModule:: valid packet check fail, invalid crc");
+        sp->header.crc = received_crc; // restore
+        return false;
+    }
+    sp->header.crc = received_crc; // restore
+    return true;
+}
+
+SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
+{
+    ourPortNum = meshtastic_PortNum_SERIAL_APP;
+}
+
+// define a simple verion of SerialModule that does not have all of the other crap in it
+// This is intended for the WisMesh starter kit + RS485 which uses Serial1
+//
+
+int32_t SerialModule::runOnce()
+{
+
+    moduleConfig.serial.enabled = true;
+    // Set pins: Priority 1 = moduleConfig (user config), Priority 2 = compile-time defines
+    if (!moduleConfig.serial.rxd) {
+        moduleConfig.serial.rxd = SERIAL_PACKET_IO_RXD;
+    }
+    if (!moduleConfig.serial.txd) {
+        moduleConfig.serial.txd = SERIAL_PACKET_IO_TXD;
+    }
+    moduleConfig.serial.override_console_serial_port = false;
+    moduleConfig.serial.mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT;
+    moduleConfig.serial.timeout = TIMEOUT;
+    moduleConfig.serial.echo = 0;
+    // No default, use value from config
+    // moduleConfig.serial.baud = meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200;
+
+    if (!moduleConfig.serial.enabled)
+        return disable();
+
+    if (firstTime) {
+        // Interface with the serial peripheral from in here.
+        LOG_INFO("Init serial peripheral interface");
+
+        uint32_t baud = getBaudRate();
+        Serial1.setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
+        Serial1.begin(baud, SERIAL_8N1);
+        Serial1.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
+        serialModuleRadio = new SerialModuleRadio();
+        firstTime = 0;
+    } else {
+        int currentBufferCount = Serial1.available();
+        if (currentBufferCount) {
+            // data in the buffer.
+            if (lastBufferCount != currentBufferCount) {
+                // we have data, will wait until next poll to read it
+                // in case more data arrives
+                lastBufferCount = currentBufferCount;
+            } else {
+                // no data arrived since last poll, read this data
+                // read one packet
+                // stream.cpp/readBytes  arduinofruit library
+                serialPayloadSize = Serial1.readBytes((uint8_t *)&inPacket, sizeof(meshtastic_serialPacket));
+                if (!checkIfValidPacket(&inPacket)) {
+                    LOG_DEBUG("Serial Module failed CRC on RX, numbytes: %d", serialPayloadSize);
+                } else {
+                    // checks passed, pass this packet on
+                    LOG_DEBUG("Serial Module RX insert packet to mesh, numbytes: %d", serialPayloadSize);
+                    insertSerialPacketToMesh(&inPacket);
+                }
+                lastBufferCount = 0; // zero out the lastBuffer count
+            }
+        } else {
+            serialModuleRadio->checkTxQueue();
+        }
+    }
+    return (50);
+}
+
+bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    return true;
+}
+
+/**
+ * @brief Checks if the serial connection is established.
+ *
+ * @return true if the serial connection is established, false otherwise.
+ *
+ * For the serial2 port we can't really detect if any client is on the other side, so instead just look for recent messages
+ */
+bool SerialModule::checkIsConnected()
+{
+    // return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
+    //  we are not going to be able to determine if connected to another radio or not
+    //  just always return true
+    //  not sure where this function is called
+    return true;
+}
+
+/**
+ * Allocates a new mesh packet for use as a reply to a received packet.
+ *
+ * @return A pointer to the newly allocated mesh packet.
+ */
+meshtastic_MeshPacket *SerialModuleRadio::allocReply()
+{
+    auto reply = allocDataPacket(); // Allocate a packet for sending
+
+    return reply;
+}
+
+bool SerialModuleRadio::wantPacket(const meshtastic_MeshPacket *p)
+{
+    // never accept packets from module handler as we are relying on sampling the RX input
+    return false;
+}
+
+void SerialModuleRadio::sendPacketOverSerial(meshtastic_MeshPacket *p)
+{
+    meshPacketToSerialPacket(p, &outPacket);
+    // debug check
+    if (!checkIfValidPacket(&outPacket)) {
+        LOG_DEBUG("Serial Module failed CRC on TX");
+    } else {
+        if (Serial1.availableForWrite()) {
+            LOG_DEBUG("Serial Module onSend TX packet of %d bytes", outPacket.header.size);
+            Serial1.write((uint8_t *)&outPacket, outPacket.header.size);
+        }
+    }
+}
+
+void SerialModuleRadio::checkTxQueue()
+{
+    if (txQueue.empty())
+        return; // nothing to do
+    meshtastic_MeshPacket *p = txQueue.dequeue();
+    LOG_DEBUG("Serial Module Onsend pulled packet from txQueue   from=0x%0x, to=0x%0x, packet_id=0x%0x", p->from, p->to, p->id);
+    LOG_DEBUG("Serial Module num in txQueue: %d", txQueue.getMaxLen() - txQueue.getFree());
+    sendPacketOverSerial(p);
+    // free this packet
+    packetPool.release(p);
+}
+
+/*
+ Called from Router.cpp/Router::send
+ Send this over the link
+*/
+void SerialModuleRadio::onSend(meshtastic_MeshPacket *p)
+{
+
+    LOG_DEBUG("Serial Module Onsend TX   from=0x%0x, to=0x%0x, packet_id=0x%0x", p->from, p->to, p->id);
+    // check if RX buffer has data
+    if (Serial1.peek() != -1) {
+        // there is data in the buffer, could be that RX is active
+        // copy the packet. Need to enqueue
+        bool dropped = false;
+        meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
+        ErrorCode res = txQueue.enqueue(tosend, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
+
+        if (dropped) {
+            txDrop++;
+            LOG_DEBUG("Serial Module new drop, total dropped packets in txQueue: %d", txDrop);
+        }
+        if (res != ERRNO_OK) {
+            // we weren't able to queue it, so we must drop it to prevent leaks
+            // this packet was not sent
+            LOG_DEBUG("Serial Module unable to send packet, txQueue error");
+            packetPool.release(tosend);
+        } else {
+            LOG_DEBUG("Serial Module added packet to txQueue, num in txQueue: %d", txQueue.getMaxLen() - txQueue.getFree());
+        }
+        return;
+    }
+    sendPacketOverSerial(p);
+}
+
+/**
+ * Handle a received mesh packet.
+ *
+ * @param mp The received mesh packet.
+ * @return The processed message.
+ */
+ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    // we are never going to handle packets when called from the Module handler
+    return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+}
+
+/**
+ * @brief Returns the baud rate of the serial module from the module configuration.
+ *
+ * @return uint32_t The baud rate of the serial module.
+ */
+uint32_t SerialModule::getBaudRate()
+{
+    if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
+        return 110;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
+        return 300;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_600) {
+        return 600;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200) {
+        return 1200;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_2400) {
+        return 2400;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_4800) {
+        return 4800;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600) {
+        return 9600;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200) {
+        return 19200;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400) {
+        return 38400;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_57600) {
+        return 57600;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_115200) {
+        return 115200;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_230400) {
+        return 230400;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_460800) {
+        return 460800;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_576000) {
+        return 576000;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600) {
+        return 921600;
+    }
+    return BAUD;
+}
+
+#else
+
 /*
     SerialModule
         A simple interface to send messages over the mesh network by sending strings
@@ -45,33 +451,6 @@
 
 
 */
-#ifdef HELTEC_MESH_SOLAR
-#include "meshSolarApp.h"
-#endif
-
-// Outside the architecture guard on purpose: config validation, not serial I/O. See SerialModule.h.
-bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
-{
-    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
-        const char *warning = "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS "
-                              "Config output-only modes.";
-        LOG_ERROR(warning);
-#ifndef PIO_UNIT_TESTING
-        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        if (cn) {
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            cn->time = getValidTime(RTCQualityFromNet);
-            snprintf(cn->message, sizeof(cn->message), "%s", warning);
-            service->sendClientNotification(cn);
-        }
-#endif
-        return false;
-    }
-
-    return true;
-}
 
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -716,4 +1095,5 @@ void SerialModule::processWXSerial()
 #endif
     return;
 }
+#endif
 #endif
