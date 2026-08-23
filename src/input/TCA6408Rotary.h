@@ -7,19 +7,15 @@
 #if defined(HAS_TCA6408_ROTARY)
 
 /**
- * Rotary encoder wired to the A/B inputs of a TCA6408 I2C GPIO expander.
- *
- * The expander drives SENSOR_INT low on any input change, so the encoder is normally
- * read from the interrupt via InputBroker::requestPollSoon(). The thread keeps polling
- * as a backstop for edges that arrive while the bus is busy.
+ * Rotary encoder on the A/B inputs of a TCA6408 I2C GPIO expander. SENSOR_INT goes low on any
+ * input change; the interrupt only wakes this thread, so all I2C and decoder state stay on it.
  */
-class TCA6408Rotary : public Observable<const InputEvent *>, public concurrency::OSThread, public InputPollable
+class TCA6408Rotary : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
     explicit TCA6408Rotary(const char *name);
     bool init();
     int32_t runOnce() override;
-    void pollOnce() override;
 
   private:
     static void interruptHandler();

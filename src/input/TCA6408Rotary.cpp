@@ -3,6 +3,7 @@
 #if defined(HAS_TCA6408_ROTARY)
 
 #include "Throttle.h"
+#include "main.h"
 #include <Wire.h>
 
 namespace
@@ -56,26 +57,28 @@ int32_t TCA6408Rotary::runOnce()
     if (!ready)
         return concurrency::OSThread::disable();
 
-    pollOnce();
-    return TCA6408_POLL_MS;
-}
-
-void TCA6408Rotary::pollOnce()
-{
     uint8_t newState = 0;
     if (!readInput(newState)) {
         LOG_DEBUG("TCA6408 rotary read failed");
-        return;
+        return TCA6408_POLL_MS;
     }
 
     handleTransition(newState);
     inputState = newState;
+    return TCA6408_POLL_MS;
 }
 
+// Only wakes the thread. Reading the expander here would put an I2C transfer in interrupt
+// context and race runOnce() for the bus and the decoder state.
 void TCA6408Rotary::interruptHandler()
 {
-    if (instance && inputBroker)
-        inputBroker->requestPollSoon(instance);
+    if (!instance)
+        return;
+
+    instance->setIntervalFromNow(0);
+    runASAP = true;
+    BaseType_t higherWake = 0;
+    concurrency::mainDelay.interruptFromISR(&higherWake);
 }
 
 void TCA6408Rotary::powerSensorBus()

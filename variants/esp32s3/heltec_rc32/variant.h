@@ -4,9 +4,9 @@
 #define HAS_SCREEN 1
 #define HAS_SPI_TFT 1
 #define USE_TFTDISPLAY 1
-#define USE_ARDUINO_GFX 1    // panel is driven by Arduino_GFX rather than LovyanGFX
-#define TFT_NV3001B 1        // NV3001B controller, 128x220
-#define TFT_NV3001B_DETECT 1 // panel is an add-on module, so probe before assuming a screen
+#define USE_ARDUINO_GFX 1
+#define TFT_NV3001B 1
+#define TFT_NV3001B_DETECT 1
 #define TFT_SCL 17
 #define TFT_SDA 38
 #define TFT_CS 39
@@ -46,7 +46,7 @@
 #define SENSOR_RST 2
 #define SENSOR_POWER_CTRL_PIN 46
 #define SENSOR_POWER_ON HIGH
-#define HAS_TCA6408_ROTARY 1 // rotary encoder on the TCA6408 expander
+#define HAS_TCA6408_ROTARY 1
 #define PERIPHERAL_WARMUP_MS 100
 
 #define LED_POWER 47

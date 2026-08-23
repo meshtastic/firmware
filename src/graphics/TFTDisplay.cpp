@@ -1640,11 +1640,11 @@ void TFTDisplay::sendCommand(uint8_t com)
     case DISPLAYON: {
         LOG_DEBUG("Display on");
 #if defined(TFT_NV3001B)
-        // Raise the panel rail and let it settle before the controller sees displayOn(). Sleep leaves
-        // VTFT_CTRL de-asserted, so issuing the command first lands it on an unpowered NV3001B and the
-        // panel stays dark after wake.
+        // DISPLAYOFF cuts the panel rail, so the controller loses its configuration and sleep-out
+        // alone cannot bring it back. Restore the rail, let it settle, then re-run the init sequence.
         digitalWrite(VTFT_CTRL, TFT_EN_ON);
         delay(10);
+        tft->begin(SPI_FREQUENCY);
 #endif
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
@@ -1657,6 +1657,12 @@ void TFTDisplay::sendCommand(uint8_t com)
     !defined(HELTEC_MESH_NODE_T1)
         tft->wakeup();
         tft->powerSaveOff();
+#endif
+
+#if defined(TFT_NV3001B)
+        // Re-init left display RAM undefined, so repaint in full rather than diff against a
+        // buffer that no longer describes the panel.
+        display(true);
 #endif
 
 #if defined(VTFT_CTRL) && !defined(TFT_NV3001B) // NV3001B panels already powered the rail above

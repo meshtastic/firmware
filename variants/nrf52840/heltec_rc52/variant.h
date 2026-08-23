@@ -25,9 +25,9 @@ extern "C" {
 #define HAS_SCREEN 1
 #define HAS_SPI_TFT 1
 #define USE_TFTDISPLAY 1
-#define USE_ARDUINO_GFX 1    // panel is driven by Arduino_GFX rather than LovyanGFX
-#define TFT_NV3001B 1        // NV3001B controller, 128x220
-#define TFT_NV3001B_DETECT 1 // panel is an add-on module, so probe before assuming a screen
+#define USE_ARDUINO_GFX 1
+#define TFT_NV3001B 1
+#define TFT_NV3001B_DETECT 1
 #define HAS_GPS 1
 #define HAS_WIRE 1
 
@@ -67,7 +67,7 @@ extern "C" {
 #define SENSOR_POWER_ON HIGH
 #define SENSOR_INT (0 + 20)
 #define SENSOR_RST (32 + 15)
-#define HAS_TCA6408_ROTARY 1 // rotary encoder on the TCA6408 expander
+#define HAS_TCA6408_ROTARY 1
 
 /*
  * Serial interfaces

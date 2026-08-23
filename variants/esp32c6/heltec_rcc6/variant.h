@@ -7,9 +7,9 @@
 #define HAS_SCREEN 1
 #define HAS_SPI_TFT 1
 #define USE_TFTDISPLAY 1
-#define USE_ARDUINO_GFX 1    // panel is driven by Arduino_GFX rather than LovyanGFX
-#define TFT_NV3001B 1        // NV3001B controller, 128x220
-#define TFT_NV3001B_DETECT 1 // panel is an add-on module, so probe before assuming a screen
+#define USE_ARDUINO_GFX 1
+#define TFT_NV3001B 1
+#define TFT_NV3001B_DETECT 1
 #define HAS_GPS 0
 #define HAS_WIRE 0
 #undef GPS_RX_PIN
