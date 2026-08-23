@@ -286,8 +286,10 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, mesht
     const bool cryptoOverride =
         has_channel && overrideChannel && (overrideChannel->name[0] != '\0' || overrideChannel->psk.size > 0);
     if (!cryptoOverride) {
-        if (router->send(p) == ERRNO_SHOULD_RELEASE)
+        if (router->send(p) == ERRNO_SHOULD_RELEASE) {
+            MeshBeaconModule::clearTargetRadioSettings(p);
             packetPool.release(p);
+        }
         return;
     }
 
@@ -301,8 +303,10 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, mesht
     primary.settings = beaconChannelSettings(saved, targetPreset, overrideChannel);
     channels.fixupChannel(channels.getPrimaryIndex());
 
-    if (router->send(p) == ERRNO_SHOULD_RELEASE) // encrypts with the beacon channel's key and stamps its hash
+    if (router->send(p) == ERRNO_SHOULD_RELEASE) { // encrypts with the beacon channel's key and stamps its hash
+        MeshBeaconModule::clearTargetRadioSettings(p);
         packetPool.release(p);
+    }
 
     primary.settings = saved;
     channels.fixupChannel(channels.getPrimaryIndex());
