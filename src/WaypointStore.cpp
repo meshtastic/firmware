@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
 
 #include "FSCommon.h"
 #include "SPILock.h"
@@ -22,7 +22,7 @@ constexpr const char *WAYPOINT_STORE_FILENAME = "/Waypoints_default.wpts";
 
 #ifndef WAYPOINT_AUTOSAVE_INTERVAL_SEC
 #define WAYPOINT_AUTOSAVE_INTERVAL_SEC (2 * 60 * 60)
-#endif // HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#endif
 
 struct __attribute__((packed)) StoredWaypointRecord {
     uint32_t creatorNodeNum;

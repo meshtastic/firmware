@@ -1,6 +1,6 @@
 #include "GeofenceModule.h"
 
-#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
 
 #include "WaypointStore.h"
 #include "gps/GeoCoord.h"
@@ -226,4 +226,4 @@ void GeofenceModule::notify(const meshtastic_Waypoint &wp, NodeNum node, bool en
         externalNotificationModule->startNotification();
 }
 
-#endif // HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#endif

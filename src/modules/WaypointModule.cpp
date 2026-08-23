@@ -1,22 +1,22 @@
 #include "WaypointModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "configuration.h"
-
-#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
-#include "ExternalNotificationModule.h"
-#include "MeshService.h"
-#include "WaypointStore.h"
 #include "WaypointUtils.h"
+#include "configuration.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
-#include "mesh/Router.h"
 #include "meshUtils.h"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
-#include <pb_encode.h>
 #include <string>
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "ExternalNotificationModule.h"
+#include "MeshService.h"
+#include "WaypointStore.h"
+#include "mesh/Router.h"
+#include <pb_encode.h>
 #endif
 
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
@@ -176,14 +176,9 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     (void)mp;
     return ProcessMessage::CONTINUE;
 #else
-#if HAS_SCREEN
     StoredWaypoint stored;
     if (!waypointStore.addFromPacket(mp, &stored))
         return ProcessMessage::CONTINUE;
-#else
-    devicestate.rx_waypoint = mp;
-    devicestate.has_rx_waypoint = true;
-#endif
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 
@@ -204,7 +199,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 #endif
 }
 
-#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
 bool WaypointModule::broadcastDelete(uint32_t waypointId)
 {
     meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;

@@ -73,10 +73,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     void stopNow();
 
-#if HAS_SCREEN
     // Fire the configured message outputs for a non-message event such as a geofence crossing.
     void startNotification();
-#endif
 
     void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetRingtone(const char *from_msg);

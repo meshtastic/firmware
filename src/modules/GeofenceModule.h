@@ -2,7 +2,7 @@
 
 #include "configuration.h"
 
-#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
 
 #include "Observer.h"
 #include "WaypointStore.h"
@@ -69,4 +69,4 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
 
 extern GeofenceModule *geofenceModule;
 
-#endif // HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#endif

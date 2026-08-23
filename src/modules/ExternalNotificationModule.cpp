@@ -520,7 +520,6 @@ void ExternalNotificationModule::armNagCycle()
     isNagging = true;
 }
 
-#if HAS_SCREEN
 void ExternalNotificationModule::startNotification()
 {
     if (!moduleConfig.external_notification.enabled || isSilenced)
@@ -556,8 +555,6 @@ void ExternalNotificationModule::startNotification()
 
     setIntervalFromNow(0); // run once so the nag/stop lifecycle in runOnce() takes over
 }
-#endif
-
 /**
  * @brief An admin message arrived to AdminModule. We are asked whether we want to handle that.
  *
