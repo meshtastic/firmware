@@ -42,6 +42,9 @@ struct CompassAccelSample {
 
 concurrency::Lock latestCompassAccelLock;
 CompassAccelSample latestCompassAccelSample;
+
+concurrency::Lock latestCompassMagLock;
+CompassAccelSample latestCompassMagSample;
 } // namespace
 
 // screen is defined in main.cpp
@@ -239,6 +242,35 @@ bool MotionSensor::getLatestCompassAccelSample(float &x, float &y, float &z, uin
         y = latestCompassAccelSample.y;
         z = latestCompassAccelSample.z;
         sampledAtMs = latestCompassAccelSample.sampledAtMs;
+    }
+
+    ageMs = millis() - sampledAtMs;
+    return true;
+}
+
+void MotionSensor::publishCompassMagSample(float x, float y, float z)
+{
+    concurrency::LockGuard guard(&latestCompassMagLock);
+    latestCompassMagSample.x = x;
+    latestCompassMagSample.y = y;
+    latestCompassMagSample.z = z;
+    latestCompassMagSample.sampledAtMs = millis();
+    latestCompassMagSample.valid = true;
+}
+
+bool MotionSensor::getLatestCompassMagSample(float &x, float &y, float &z, uint32_t &ageMs)
+{
+    uint32_t sampledAtMs = 0;
+    {
+        concurrency::LockGuard guard(&latestCompassMagLock);
+        if (!latestCompassMagSample.valid) {
+            return false;
+        }
+
+        x = latestCompassMagSample.x;
+        y = latestCompassMagSample.y;
+        z = latestCompassMagSample.z;
+        sampledAtMs = latestCompassMagSample.sampledAtMs;
     }
 
     ageMs = millis() - sampledAtMs;

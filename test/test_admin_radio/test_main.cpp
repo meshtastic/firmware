@@ -23,6 +23,7 @@
 #include "mesh/Channels.h"
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
+#include <ErriezCRC32.h> // crc32Buffer(), for the my_node_num == crc32(public_key) invariant
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <string>
@@ -1153,6 +1154,32 @@ static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
     TEST_ASSERT_EQUAL(32, owner.public_key.size);
 }
 
+// Unlicensed twin of the test above. Without the re-derivation the node signs broadcasts every receiver
+// drops (verifyFirstContactNodeInfo: crc32(user.public_key) != from).
+static void test_handleSetConfig_persistsUnlicensedFirstRegionIdentity()
+{
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = false;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+
+    testAdmin->deferSaves();
+    const meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    testAdmin->handleSetConfig(c, false);
+
+    const int expectedSegments = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+    TEST_ASSERT_EQUAL_INT(expectedSegments, testAdmin->savedSegments());
+    TEST_ASSERT_EQUAL(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL(32, config.security.public_key.size);
+    TEST_ASSERT_EQUAL(32, owner.public_key.size);
+    // The invariant: a node's mesh address is derived from its identity key.
+    TEST_ASSERT_EQUAL_UINT32(crc32Buffer(config.security.public_key.bytes, config.security.public_key.size),
+                             nodeDB->getNodeNum());
+}
+
 static void test_handleSetConfig_fromOthers_invalidPresetRejected()
 {
     // Set up a known-good baseline in the global config
@@ -1975,6 +2002,7 @@ void setup()
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
+    RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
     RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);

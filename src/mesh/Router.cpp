@@ -16,6 +16,9 @@
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
+#include "modules/PositionModule.h"
+#endif
 #if HAS_TRAFFIC_MANAGEMENT
 #endif
 #if HAS_VARIABLE_HOPS
@@ -86,10 +89,42 @@ bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p)
     if (p->pki_encrypted || willUsePki(p)) {
         return false;
     }
+    // From us, to us: never leaves the device (sendLocal delivers it locally). This is how the phone
+    // hands a GPS-less node its fix and time, so it shares nothing and must not be blocked.
+    if (isFromUs(p) && isToUs(p)) {
+        return false;
+    }
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         return isCoordinatePortnum(p->decoded.portnum) && channels.isEventChannel(getEffectiveChannelIndex(p));
     }
     return false;
+#else
+    (void)p;
+    return false;
+#endif
+}
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
+// A remote node's unicast position request to us. Only the reply is generated for these; the packet
+// itself is still dropped by the caller.
+static bool isEventChannelPositionRequestForUs(const meshtastic_MeshPacket *p)
+{
+    return p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+           p->decoded.portnum == meshtastic_PortNum_POSITION_APP && p->decoded.want_response && isToUs(p) && !isFromUs(p);
+}
+#endif
+
+bool coerceCoordinatePacketToPositionChannel(meshtastic_MeshPacket *p)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (!isBlockedEventCoordinatePacket(p))
+        return false;
+    uint8_t positionChannel;
+    if (!findPositionChannel(positionChannel))
+        return false;
+    LOG_DEBUG("Coerce coordinate packet 0x%08x from event channel to position channel %u", p->id, positionChannel);
+    p->channel = positionChannel;
+    return true;
 #else
     (void)p;
     return false;
@@ -396,6 +431,11 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         return ERRNO_NO_INTERFACES;
     } else {
+        // Coordinates never go out on the event channel: any local originator (phone, module, UI) that aimed
+        // one there is moved onto the position channel instead. Before the loopback below so the local copy
+        // carries the channel it will actually be sent on.
+        coerceCoordinatePacketToPositionChannel(p);
+
         // If we are sending a broadcast, we also treat it as if we just received it ourself
         // this allows local apps (and PCs) to see broadcasts sourced locally. Only the loopback
         // handleReceived is deferred when nested; send(p) below still transmits immediately.
@@ -789,6 +829,12 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
+        // One-byte hash collisions are indistinguishable from tampering, so relay opaquely
+        // instead of blackholing; isFromUs stays REJECT to keep forged senders off the ACK path.
+        if (!isToUs(p) && !isFromUs(p)) {
+            LOG_WARN("Decryptable packet failed decoding, relay opaquely");
+            return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
+        }
         LOG_WARN("Decryptable packet failed decoding, drop");
         return RoutingAuthVerdict::REJECT;
     }
@@ -1023,13 +1069,15 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             return DecodeState::DECODE_POLICY_REJECT;
 #endif
 
+        if (p->decoded.has_bitfield)
+            p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
+
         if (isBlockedEventCoordinatePacket(p)) {
+            // want_response is already merged above: a position request on the event channel is still
+            // answered (on the position channel) even though its coordinates are dropped.
             LOG_DEBUG("Decoded coordinate packet on event channel; suppress payload logging");
             return DecodeState::DECODE_SUCCESS;
         }
-
-        if (p->decoded.has_bitfield)
-            p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
         /* Not actually ever used.
         // Decompress if needed. jm
@@ -1456,11 +1504,10 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             printPacket("handleReceived(REMOTE)", p);
 
 #if MESHTASTIC_PREHOP_DROP
-        // Pre-hop firmware drop, post-decode half: the bitfield that proves the origin populated hop_start is
-        // encrypted under the channel key, so it can only be evaluated now that the packet is decoded. A packet
-        // whose hop_start is still missing/unknown comes from pre-hop firmware - keep it out of module
-        // processing, admin handling, phone delivery, MQTT and rebroadcast. Local-origin packets are exempt.
-        if (!isFromUs(p) && classifyHopStart(*p) != HopStartStatus::VALID) {
+        // Pre-hop firmware drop, post-decode half: a packet whose hop_start is still missing/unknown comes
+        // from pre-hop firmware - keep it out of module processing, admin handling, phone delivery, MQTT
+        // and rebroadcast.
+        if (shouldSkipHandleForPostDecodeHop(*p)) {
             logHopStartDrop(*p, "post-decode pre-hop drop");
             cancelSending(p->from, p->id);
             skipHandle = true;
@@ -1510,6 +1557,16 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         // Discard coordinate-bearing packets that arrive on the event ("everyone")
         // channel: don't process, store in NodeDB, or rebroadcast them.
         if (!skipHandle && isBlockedEventCoordinatePacket(p)) {
+            // A position request addressed to us is still answered, on our position channel at that
+            // channel's precision, so "request position" from a node that only shares the event channel
+            // with us resolves where positions actually live. The requester's own coordinates are
+            // still dropped: not stored, not forwarded to the phone, not relayed, not published.
+            // Builds without the position module (MESHTASTIC_EXCLUDE_GPS, e.g. repeaters) have nothing
+            // to answer with, and neither the symbol nor the global exists to link against.
+#if !MESHTASTIC_EXCLUDE_GPS
+            if (isEventChannelPositionRequestForUs(p) && positionModule)
+                positionModule->replyOnPositionChannel(*p);
+#endif
             LOG_DEBUG("Drop coordinate packet on event (everyone) channel");
             cancelSending(p->from, p->id);
             skipHandle = true;

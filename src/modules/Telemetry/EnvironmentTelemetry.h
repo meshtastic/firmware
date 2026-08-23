@@ -56,6 +56,14 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 #endif
 
+    /** Bypass the normal broadcast throttle once, for a sensor with a noteworthy event to
+     * report sooner than the next scheduled send (airtime limits still apply). */
+    void requestImmediateSend()
+    {
+        immediateSendRequested = true;
+        immediateSendRequestedAtMs = millis();
+    }
+
   protected:
     /** Called to handle a particular incoming message
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
@@ -87,6 +95,8 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     bool shouldDisplayRemoteNode(NodeNum nodeNum) const;
 
     bool firstTime = 1;
+    bool immediateSendRequested = false;
+    uint32_t immediateSendRequestedAtMs = 0;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t lastLocalDisplayRefreshMs = 0;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
