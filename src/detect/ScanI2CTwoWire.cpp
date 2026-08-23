@@ -1074,7 +1074,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case 0x48: {
                 // Check ADS1X15 FIRST - the SE050 probe writes 5 bytes which corrupts the ADS1X15 Lo_thresh register.
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
+                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700 || registerValue == 0xc580) {
                     type = ADS1X15;
                     logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
                     break;
@@ -1098,16 +1098,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                             info[i] = i2cBus->read();
                         isSE050 = (memcmp(expectedInfo, info, sizeof(info)) == 0);
                     }
-                }
 
-                if (isSE050) {
-                    LOG_INFO("NXP SE050 crypto chip found");
-                    type = NXP_SE050;
-                    break;
+                    if (isSE050) {
+                        LOG_INFO("NXP SE050 crypto chip found");
+                        type = NXP_SE050;
+                    } else {
+                        LOG_INFO("FT6336U touchscreen found");
+                        type = FT6336U;
+                    }
                 }
-
-                LOG_INFO("FT6336U touchscreen found");
-                type = FT6336U;
                 break;
             }
 
