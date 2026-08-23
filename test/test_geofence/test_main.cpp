@@ -108,7 +108,6 @@ static void test_inside_noGeofenceNeverInside()
 static meshtastic_Waypoint makeNotifyingWaypoint()
 {
     meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
-    wp.notify_on_enter = true;
     return wp;
 }
 
@@ -118,7 +117,7 @@ static void test_shouldTrack_circleWithCentre()
     wp.geofence_radius = 100;
     wp.has_latitude_i = true;
     wp.has_longitude_i = true;
-    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, 0));
+    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, WAYPOINT_NOTIFY_ENTER, 0));
 }
 
 static void test_shouldTrack_circleWithoutCentreRejected()
@@ -127,7 +126,7 @@ static void test_shouldTrack_circleWithoutCentreRejected()
     wp.geofence_radius = 100; // circle needs a centre
     wp.has_latitude_i = false;
     wp.has_longitude_i = false;
-    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, 0));
+    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, WAYPOINT_NOTIFY_ENTER, 0));
 }
 
 static void test_shouldTrack_boxOnlyWithoutCentreAccepted()
@@ -139,23 +138,24 @@ static void test_shouldTrack_boxOnlyWithoutCentreAccepted()
     wp.bounding_box = makeBox();
     wp.has_latitude_i = false;
     wp.has_longitude_i = false;
-    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, 0));
+    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, WAYPOINT_NOTIFY_ENTER, 0));
 }
 
 static void test_shouldTrack_noGeofenceRejected()
 {
     meshtastic_Waypoint wp = makeNotifyingWaypoint(); // notify set, but no geofence shape
-    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, 0));
+    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, WAYPOINT_NOTIFY_ENTER, 0));
 }
 
-static void test_shouldTrack_noNotifyFlagsRejected()
+static void test_shouldTrack_noLocalPreferencesRejected()
 {
     meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
     wp.geofence_radius = 100;
     wp.has_latitude_i = true;
     wp.has_longitude_i = true;
-    // notify_on_enter / notify_on_exit both false -> nothing to alert on.
-    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, 0));
+    wp.notify_on_enter = true;
+    wp.notify_on_exit = true;
+    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, 0, 0));
 }
 
 static void test_shouldTrack_expiredRejectedButLiveAccepted()
@@ -165,9 +165,48 @@ static void test_shouldTrack_expiredRejectedButLiveAccepted()
     wp.has_latitude_i = true;
     wp.has_longitude_i = true;
     wp.expire = 1000;
-    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, 2000)); // expire <= now -> expired
-    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, 500));   // expire > now -> live
-    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, 0));     // no clock -> treat as live
+    TEST_ASSERT_FALSE(GeofenceModule::shouldTrack(wp, WAYPOINT_NOTIFY_ENTER, 2000)); // expire <= now -> expired
+    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, WAYPOINT_NOTIFY_ENTER, 500));   // expire > now -> live
+    TEST_ASSERT_TRUE(GeofenceModule::shouldTrack(wp, WAYPOINT_NOTIFY_ENTER, 0));     // no clock -> treat as live
+}
+
+static meshtastic_Waypoint makeWireNotificationWaypoint()
+{
+    meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
+    wp.notify_on_enter = true;
+    wp.notify_on_exit = true;
+    wp.notify_favorites_only = true;
+    return wp;
+}
+
+static void test_localWaypointInitializesPreferencesFromWireFields()
+{
+    const meshtastic_Waypoint wp = makeWireNotificationWaypoint();
+    const uint8_t preferences = WaypointStore::mergeNotificationPreferences(true, false, 0, wp);
+    TEST_ASSERT_EQUAL_UINT8(WAYPOINT_NOTIFY_ENTER | WAYPOINT_NOTIFY_EXIT | WAYPOINT_NOTIFY_FAVORITES_ONLY, preferences);
+}
+
+static void test_newRemoteWaypointIgnoresWirePreferences()
+{
+    const meshtastic_Waypoint wp = makeWireNotificationWaypoint();
+    TEST_ASSERT_EQUAL_UINT8(0, WaypointStore::mergeNotificationPreferences(false, false, 0, wp));
+}
+
+static void test_remoteWaypointUpdatePreservesLocalPreferences()
+{
+    meshtastic_Waypoint wp = makeWireNotificationWaypoint();
+    wp.notify_on_enter = false;
+    const uint8_t existing = WAYPOINT_NOTIFY_ENTER | WAYPOINT_NOTIFY_FAVORITES_ONLY;
+    TEST_ASSERT_EQUAL_UINT8(existing, WaypointStore::mergeNotificationPreferences(false, true, existing, wp));
+}
+
+static void test_storedWaypointClearsWirePreferences()
+{
+    meshtastic_Waypoint wp = makeWireNotificationWaypoint();
+    WaypointStore::clearWireNotificationPreferences(wp);
+    TEST_ASSERT_FALSE(wp.notify_on_enter);
+    TEST_ASSERT_FALSE(wp.notify_on_exit);
+    TEST_ASSERT_FALSE(wp.notify_favorites_only);
 }
 
 static void test_first_sighting_no_notification()
@@ -195,21 +234,6 @@ static void test_classify_exitFiresOnlyWhenEnabled()
     TEST_ASSERT_TRUE(GeofenceModule::classify(false, true, false, false, false) == Crossing::None);
 }
 
-static void test_classifyTrackedUpdate_firstInsideUsesPreviousOutside()
-{
-    TEST_ASSERT_TRUE(GeofenceModule::classifyTrackedUpdate(false, false, true, false, true, true, true) == Crossing::Enter);
-}
-
-static void test_classifyTrackedUpdate_firstOutsideUsesPreviousInside()
-{
-    TEST_ASSERT_TRUE(GeofenceModule::classifyTrackedUpdate(false, false, true, true, false, true, true) == Crossing::Exit);
-}
-
-static void test_classifyTrackedUpdate_noPreviousStillBaselines()
-{
-    TEST_ASSERT_TRUE(GeofenceModule::classifyTrackedUpdate(false, false, false, false, true, true, true) == Crossing::None);
-}
-
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -235,15 +259,16 @@ void setup()
     RUN_TEST(test_shouldTrack_circleWithoutCentreRejected);
     RUN_TEST(test_shouldTrack_boxOnlyWithoutCentreAccepted);
     RUN_TEST(test_shouldTrack_noGeofenceRejected);
-    RUN_TEST(test_shouldTrack_noNotifyFlagsRejected);
+    RUN_TEST(test_shouldTrack_noLocalPreferencesRejected);
     RUN_TEST(test_shouldTrack_expiredRejectedButLiveAccepted);
+    RUN_TEST(test_localWaypointInitializesPreferencesFromWireFields);
+    RUN_TEST(test_newRemoteWaypointIgnoresWirePreferences);
+    RUN_TEST(test_remoteWaypointUpdatePreservesLocalPreferences);
+    RUN_TEST(test_storedWaypointClearsWirePreferences);
     RUN_TEST(test_first_sighting_no_notification);
     RUN_TEST(test_classify_noTransitionNeverNotifies);
     RUN_TEST(test_classify_enterFiresOnlyWhenEnabled);
     RUN_TEST(test_classify_exitFiresOnlyWhenEnabled);
-    RUN_TEST(test_classifyTrackedUpdate_firstInsideUsesPreviousOutside);
-    RUN_TEST(test_classifyTrackedUpdate_firstOutsideUsesPreviousInside);
-    RUN_TEST(test_classifyTrackedUpdate_noPreviousStillBaselines);
     exit(UNITY_END());
 }
 

@@ -40,6 +40,7 @@ class Notification
     uint8_t batteryPercentage;
     char geofenceNodeName[sizeof(meshtastic_User::long_name)];
     char geofenceName[sizeof(meshtastic_Waypoint::name)];
+    uint32_t geofenceWaypointId;
     bool geofenceEntered;
 };
 

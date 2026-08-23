@@ -169,6 +169,19 @@ void InkHUD::MapApplet::resetZoom()
 {
     s_zoomLocked = false;
     s_lockedZoom = -1;
+    focusedWaypointId = 0;
+}
+
+bool InkHUD::MapApplet::focusWaypoint(uint32_t waypointId)
+{
+    const StoredWaypoint *entry = waypointStore.findWaypoint(waypointId);
+    if (!entry || WaypointStore::isExpired(*entry) || !waypointHasMapGeometry(entry->waypoint))
+        return false;
+
+    s_zoomLocked = false;
+    s_lockedZoom = -1;
+    focusedWaypointId = waypointId;
+    return true;
 }
 
 bool InkHUD::MapApplet::canZoomIn() const
@@ -727,6 +740,27 @@ void InkHUD::MapApplet::onRender(bool full)
 
 void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 {
+    if (focusedWaypointId != 0) {
+        const StoredWaypoint *entry = waypointStore.findWaypoint(focusedWaypointId);
+        if (entry && !WaypointStore::isExpired(*entry) && waypointHasMapGeometry(entry->waypoint)) {
+            *lat = waypointHasAnchor(entry->waypoint)
+                       ? entry->waypoint.latitude_i * 1e-7f
+                       : ((float)entry->waypoint.bounding_box.latitude_south_i +
+                          entry->waypoint.bounding_box.latitude_north_i) *
+                             0.5e-7f;
+            *lng = waypointHasAnchor(entry->waypoint)
+                       ? entry->waypoint.longitude_i * 1e-7f
+                       : ((float)entry->waypoint.bounding_box.longitude_west_i +
+                          entry->waypoint.bounding_box.longitude_east_i) *
+                             0.5e-7f;
+            latCenter = *lat;
+            lngCenter = *lng;
+            centerIsOurNode = false;
+            return;
+        }
+        focusedWaypointId = 0;
+    }
+
     // If we have a valid position for our own node, use that as the anchor
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
@@ -962,6 +996,25 @@ void InkHUD::MapApplet::getMapSize(uint32_t *widthMeters, uint32_t *heightMeters
     // Reset the value
     *widthMeters = 0;
     *heightMeters = 0;
+
+    if (focusedWaypointId != 0) {
+        for (const WaypointMarker &m : waypointMarkers) {
+            if (m.id != focusedWaypointId)
+                continue;
+            if (m.hasMarker && m.geofenceRadiusMeters > 0) {
+                *widthMeters = m.geofenceRadiusMeters * 2;
+                *heightMeters = m.geofenceRadiusMeters * 2;
+            }
+            if (m.hasBoundingBox) {
+                *widthMeters = max(*widthMeters, (uint32_t)std::max(fabsf(m.boxWestMeters), fabsf(m.boxEastMeters)) * 2);
+                *heightMeters =
+                    max(*heightMeters, (uint32_t)std::max(fabsf(m.boxSouthMeters), fabsf(m.boxNorthMeters)) * 2);
+            }
+            *widthMeters *= 1.1;
+            *heightMeters *= 1.1;
+            return;
+        }
+    }
 
     // Find the greatest distance horizontally and vertically from map center
     for (Marker m : markers) {

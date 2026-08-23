@@ -16,6 +16,7 @@
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "modules/GeofenceModule.h"
 #include "modules/WaypointModule.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
@@ -1167,6 +1168,28 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
     }
 
+    case SELECT_GEOFENCE_WAYPOINT: {
+        const size_t index = cursor - 2;
+        if (index < geofenceWaypointIds.size())
+            selectedGeofenceWaypointId = geofenceWaypointIds.at(index);
+        break;
+    }
+
+    case TOGGLE_GEOFENCE_ENTER:
+    case TOGGLE_GEOFENCE_EXIT:
+    case TOGGLE_GEOFENCE_FAVORITES_ONLY: {
+        const StoredWaypoint *entry = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+        if (!entry)
+            break;
+        const WaypointNotificationPreference preference =
+            item.action == TOGGLE_GEOFENCE_ENTER
+                ? WAYPOINT_NOTIFY_ENTER
+                : (item.action == TOGGLE_GEOFENCE_EXIT ? WAYPOINT_NOTIFY_EXIT : WAYPOINT_NOTIFY_FAVORITES_ONLY);
+        waypointStore.setNotificationPreference(selectedGeofenceWaypointId, preference,
+                                                !entry->notificationEnabled(preference));
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -1184,6 +1207,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     items.shrink_to_fit();
     nodeConfigLabels.clear();
     removeWaypointIds.clear();
+    geofenceWaypointIds.clear();
 
     switch (page) {
     case ROOT:
@@ -1210,8 +1234,15 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Remove Waypoint - only when viewing the waypoint list applet
         {
             WaypointListApplet *waypointListApplet = borrowedTileOwner ? borrowedTileOwner->asWaypointListApplet() : nullptr;
-            if (waypointListApplet && waypointListApplet->waypointCount() > 0)
+            if (waypointListApplet && waypointListApplet->waypointCount() > 0) {
                 items.push_back(MenuItem("Remove Waypoint", MenuPage::REMOVE_WAYPOINT_LIST));
+                for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+                    if (GeofenceModule::hasGeofence(entry.waypoint)) {
+                        items.push_back(MenuItem("Geofence Alerts", MenuPage::GEOFENCE_WAYPOINT_LIST));
+                        break;
+                    }
+                }
+            }
         }
 
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
@@ -1238,6 +1269,36 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.insert(items.begin(), MenuItem("Back", previousPage));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
+
+    case GEOFENCE_WAYPOINT_LIST:
+        previousPage = MenuPage::ROOT;
+        populateGeofenceWaypointPage();
+        items.insert(items.begin(), MenuItem::Header("Select Geofence"));
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case GEOFENCE_OPTIONS: {
+        previousPage = MenuPage::GEOFENCE_WAYPOINT_LIST;
+        items.push_back(MenuItem("Back", previousPage));
+        const StoredWaypoint *entry = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+        if (!entry) {
+            items.push_back(MenuItem::Header("Geofence unavailable"));
+            break;
+        }
+        const std::string enterLabel =
+            std::string("Enter Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_ENTER) ? "On" : "Off");
+        const std::string exitLabel =
+            std::string("Exit Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_EXIT) ? "On" : "Off");
+        const std::string favoritesLabel = std::string("Favorites Only: ") +
+                                           (entry->notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY) ? "On" : "Off");
+        items.push_back(MenuItem(enterLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_ENTER, MenuPage::GEOFENCE_OPTIONS));
+        items.push_back(MenuItem(exitLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_EXIT, MenuPage::GEOFENCE_OPTIONS));
+        items.push_back(
+            MenuItem(favoritesLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_FAVORITES_ONLY, MenuPage::GEOFENCE_OPTIONS));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
 
     case OPTIONS:
         previousPage = MenuPage::ROOT;
@@ -2480,6 +2541,25 @@ void InkHUD::MenuApplet::populateRemoveWaypointPage()
             items.push_back(MenuItem(waypointListApplet->waypointLabelAt(i).c_str(), MenuAction::REMOVE_WAYPOINT,
                                      MenuPage::REMOVE_WAYPOINT_LIST));
         }
+    }
+}
+
+void InkHUD::MenuApplet::populateGeofenceWaypointPage()
+{
+    assert(items.empty());
+
+    WaypointListApplet *waypointListApplet = borrowedTileOwner ? borrowedTileOwner->asWaypointListApplet() : nullptr;
+    if (!waypointListApplet)
+        return;
+
+    for (size_t i = 0; i < waypointListApplet->waypointCount(); ++i) {
+        const uint32_t id = waypointListApplet->waypointIdAt(i);
+        const StoredWaypoint *entry = waypointStore.findWaypoint(id);
+        if (!entry || !GeofenceModule::hasGeofence(entry->waypoint))
+            continue;
+        geofenceWaypointIds.push_back(id);
+        items.push_back(MenuItem(waypointListApplet->waypointLabelAt(i).c_str(), MenuAction::SELECT_GEOFENCE_WAYPOINT,
+                                 MenuPage::GEOFENCE_OPTIONS));
     }
 }
 

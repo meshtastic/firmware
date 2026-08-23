@@ -109,26 +109,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         trySetRtc(p, isLocal, force);
     }
 
-    bool hasPreviousPosition = false;
-    int32_t previousLat_i = 0;
-    int32_t previousLon_i = 0;
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
-    if (geofenceModule && !isLocal) {
-        meshtastic_PositionLite previousPos;
-        if (nodeDB->copyNodePosition(sender, previousPos) && (previousPos.latitude_i != 0 || previousPos.longitude_i != 0)) {
-            hasPreviousPosition = true;
-            previousLat_i = previousPos.latitude_i;
-            previousLon_i = previousPos.longitude_i;
-        }
-    }
-#endif
-
     nodeDB->updatePosition(sender, p);
     precision = getPositionPrecisionForChannel(mp.channel);
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
     if (geofenceModule && !isLocal)
-        geofenceModule->evaluatePosition(sender, p, hasPreviousPosition, previousLat_i, previousLon_i);
+        geofenceModule->evaluatePosition(sender, p);
 #endif
 
     return false; // Let others look at this message also if they want

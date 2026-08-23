@@ -12,6 +12,7 @@
 #include <vector>
 
 struct GeofenceNotificationEvent {
+    uint32_t waypointId = 0;
     char nodeName[sizeof(meshtastic_User::long_name)] = {};
     bool entered = false;
     char geofenceName[sizeof(meshtastic_Waypoint::name)] = {};
@@ -37,17 +38,12 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     static bool hasGeofence(const meshtastic_Waypoint &wp);
 
     // Box-only geofences do not require a waypoint center because their corners are absolute.
-    static bool shouldTrack(const meshtastic_Waypoint &wp, uint32_t now);
+    static bool shouldTrack(const meshtastic_Waypoint &wp, uint8_t notificationPreferences, uint32_t now);
 
     // The first sighting establishes a baseline without notifying.
     static Crossing classify(bool firstSighting, bool wasInside, bool isInside, bool notifyOnEnter, bool notifyOnExit);
 
-    // Tracked state wins; otherwise a supplied previous position provides the baseline.
-    static Crossing classifyTrackedUpdate(bool hasTrackedState, bool trackedInside, bool hasPreviousPosition, bool previousInside,
-                                          bool isInside, bool notifyOnEnter, bool notifyOnExit);
-
-    void evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition = false, int32_t previousLat_i = 0,
-                          int32_t previousLon_i = 0);
+    void evaluatePosition(NodeNum node, const meshtastic_Position &p);
 
   private:
     struct CrossingState {

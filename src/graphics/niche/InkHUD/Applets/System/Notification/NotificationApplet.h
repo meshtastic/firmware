@@ -58,6 +58,7 @@ class NotificationApplet : public SystemApplet
 #endif
 
     void showNotification(const Notification &n);
+    void openGeofenceOnMap();
     std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
     bool hasNotification = false;

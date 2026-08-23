@@ -28,6 +28,7 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
+#include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/EnvironmentTelemetry.h"
@@ -48,6 +49,10 @@ namespace graphics
 
 namespace
 {
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+uint32_t selectedGeofenceWaypointId = 0;
+#endif
 
 // Caller must ensure the provided options array outlives the banner callback.
 template <typename T, size_t N, typename Callback>
@@ -2424,20 +2429,109 @@ void menuHandler::removeFavoriteMenu()
 
 void menuHandler::waypointBaseMenu()
 {
-    enum optionsNumbers { Back, RemoveWaypoint };
-    static const char *optionsArray[] = {"Back", "Remove Waypoint"};
+    enum optionsNumbers { Back, GeofenceAlerts, RemoveWaypoint };
+    static const char *optionsArray[] = {"Back", "Geofence Alerts", "Remove Waypoint"};
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Waypoint Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == RemoveWaypoint) {
+        if (selected == GeofenceAlerts) {
+            menuQueue = GeofenceWaypointMenu;
+            screen->runNow();
+        } else if (selected == RemoveWaypoint) {
             menuQueue = RemoveWaypointMenu;
             screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::geofenceWaypointMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    static const char *optionsArray[WAYPOINT_HISTORY_LIMIT + 1];
+    static uint32_t waypointIds[WAYPOINT_HISTORY_LIMIT + 1];
+    static std::string labelStorage[WAYPOINT_HISTORY_LIMIT + 1];
+
+    optionsArray[0] = "Back";
+    int options = 1;
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (options > WAYPOINT_HISTORY_LIMIT || !GeofenceModule::hasGeofence(entry.waypoint))
+            continue;
+        std::string name = sanitizeString(entry.waypoint.name);
+        if (name.empty())
+            name = "Unnamed Geofence";
+        labelStorage[options] = name.substr(0, 20);
+        optionsArray[options] = labelStorage[options].c_str();
+        waypointIds[options] = entry.waypoint.id;
+        options++;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = options > 1 ? "Geofence Alerts" : "No Geofences";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = WaypointBaseMenu;
+        } else {
+            selectedGeofenceWaypointId = waypointIds[selected];
+            menuQueue = GeofenceOptionsMenu;
+        }
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
+void menuHandler::geofenceOptionsMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    const StoredWaypoint *entry = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+    if (!entry) {
+        menuQueue = GeofenceWaypointMenu;
+        screen->runNow();
+        return;
+    }
+
+    static std::string labels[4];
+    static const char *optionsArray[4];
+    labels[0] = "Back";
+    labels[1] = std::string("Enter Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_ENTER) ? "On" : "Off");
+    labels[2] = std::string("Exit Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_EXIT) ? "On" : "Off");
+    labels[3] =
+        std::string("Favorites Only: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY) ? "On" : "Off");
+    for (size_t i = 0; i < 4; ++i)
+        optionsArray[i] = labels[i].c_str();
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Geofence Alerts";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = GeofenceWaypointMenu;
+        } else {
+            const StoredWaypoint *current = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+            if (current) {
+                const WaypointNotificationPreference preference =
+                    selected == 1 ? WAYPOINT_NOTIFY_ENTER
+                                  : (selected == 2 ? WAYPOINT_NOTIFY_EXIT : WAYPOINT_NOTIFY_FAVORITES_ONLY);
+                waypointStore.setNotificationPreference(selectedGeofenceWaypointId, preference,
+                                                        !current->notificationEnabled(preference));
+            }
+            menuQueue = GeofenceOptionsMenu;
+        }
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
 }
 
 void menuHandler::removeWaypointMenu()
@@ -3125,6 +3219,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case WaypointBaseMenu:
         waypointBaseMenu();
+        break;
+    case GeofenceWaypointMenu:
+        geofenceWaypointMenu();
+        break;
+    case GeofenceOptionsMenu:
+        geofenceOptionsMenu();
         break;
     case RemoveWaypointMenu:
         removeWaypointMenu();

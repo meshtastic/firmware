@@ -43,6 +43,7 @@ class MapApplet : public Applet
     void zoomIn();
     void zoomOut();
     void resetZoom();
+    bool focusWaypoint(uint32_t waypointId);
     bool isZoomLocked() const { return s_zoomLocked; }
     bool canZoomIn() const;
     bool canZoomOut() const;
@@ -107,6 +108,7 @@ class MapApplet : public Applet
     std::vector<WaypointMarker> waypointMarkers;
     uint32_t widthMeters = 0;  // Map width: meters
     uint32_t heightMeters = 0; // Map height: meters
+    uint32_t focusedWaypointId = 0;
 };
 
 } // namespace NicheGraphics::InkHUD

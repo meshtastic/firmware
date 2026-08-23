@@ -73,17 +73,6 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
     return notifyOnExit ? Crossing::Exit : Crossing::None;
 }
 
-GeofenceModule::Crossing GeofenceModule::classifyTrackedUpdate(bool hasTrackedState, bool trackedInside, bool hasPreviousPosition,
-                                                               bool previousInside, bool isInside, bool notifyOnEnter,
-                                                               bool notifyOnExit)
-{
-    if (hasTrackedState)
-        return classify(false, trackedInside, isInside, notifyOnEnter, notifyOnExit);
-    if (hasPreviousPosition)
-        return classify(false, previousInside, isInside, notifyOnEnter, notifyOnExit);
-    return classify(true, false, isInside, notifyOnEnter, notifyOnExit);
-}
-
 GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
 {
     for (auto &state : crossingInside) {
@@ -94,12 +83,11 @@ GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
     return nullptr;
 }
 
-bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint32_t now)
+bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint8_t notificationPreferences, uint32_t now)
 {
-    // Must carry a geofence and ask for at least one notification.
     if (!hasGeofence(wp))
         return false;
-    if (!wp.notify_on_enter && !wp.notify_on_exit)
+    if ((notificationPreferences & (WAYPOINT_NOTIFY_ENTER | WAYPOINT_NOTIFY_EXIT)) == 0)
         return false;
     // Only the circle is centred on the waypoint; the bounding box carries its own absolute
     // corners, so a box-only geofence does not need a latitude/longitude pin.
@@ -118,8 +106,7 @@ int GeofenceModule::onWaypointStoreChanged(const WaypointStore *store)
     return 0;
 }
 
-void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition, int32_t previousLat_i,
-                                      int32_t previousLon_i)
+void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p)
 {
     if (waypointStore.getWaypoints().empty())
         return;
@@ -133,24 +120,21 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
     const int32_t lat = p.latitude_i;
     const int32_t lon = p.longitude_i;
     const uint32_t now = getTime();
-    const NodeNum localNodeNum = nodeDB->getNodeNum();
     bool favoriteResolved = false;
     bool isFavorite = false;
 
     for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
         const meshtastic_Waypoint &wp = entry.waypoint;
-        if (entry.creatorNodeNum != localNodeNum || !shouldTrack(wp, now))
+        if (!shouldTrack(wp, entry.notificationPreferences, now))
             continue;
 
         const bool isInside = inside(wp, lat, lon);
         const uint64_t key = crossingKey(wp.id, node);
         CrossingState *state = findCrossingState(key);
         const bool hasTrackedState = (state != nullptr);
-        const bool previousInside = hasPreviousPosition ? inside(wp, previousLat_i, previousLon_i) : false;
-
-        const Crossing crossing =
-            classifyTrackedUpdate(hasTrackedState, hasTrackedState ? state->inside : false, hasPreviousPosition, previousInside,
-                                  isInside, wp.notify_on_enter, wp.notify_on_exit);
+        const Crossing crossing = classify(!hasTrackedState, hasTrackedState ? state->inside : false, isInside,
+                                           entry.notificationEnabled(WAYPOINT_NOTIFY_ENTER),
+                                           entry.notificationEnabled(WAYPOINT_NOTIFY_EXIT));
 
         // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {
@@ -171,7 +155,7 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
         if (crossing == Crossing::None)
             continue;
 
-        if (wp.notify_favorites_only) {
+        if (entry.notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY)) {
             if (!favoriteResolved) {
                 isFavorite = nodeDB->isFavorite(node);
                 favoriteResolved = true;
@@ -207,6 +191,7 @@ void GeofenceModule::notify(const meshtastic_Waypoint &wp, NodeNum node, bool en
 #endif
 
     GeofenceNotificationEvent event;
+    event.waypointId = wp.id;
     strncpy(event.nodeName, who, sizeof(event.nodeName) - 1);
     event.nodeName[sizeof(event.nodeName) - 1] = '\0';
     event.entered = entered;

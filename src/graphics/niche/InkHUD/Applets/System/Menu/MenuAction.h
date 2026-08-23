@@ -143,6 +143,10 @@ enum MenuAction {
     MAP_ZOOM_RESET,
     // Waypoints (WaypointListApplet)
     REMOVE_WAYPOINT,
+    SELECT_GEOFENCE_WAYPOINT,
+    TOGGLE_GEOFENCE_ENTER,
+    TOGGLE_GEOFENCE_EXIT,
+    TOGGLE_GEOFENCE_FAVORITES_ONLY,
 };
 
 } // namespace NicheGraphics::InkHUD

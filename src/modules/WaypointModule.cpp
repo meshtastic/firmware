@@ -177,7 +177,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     return ProcessMessage::CONTINUE;
 #else
     StoredWaypoint stored;
-    if (!waypointStore.addFromPacket(mp, &stored))
+    if (!waypointStore.addFromPacket(mp, isFromUs(&mp), &stored))
         return ProcessMessage::CONTINUE;
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);

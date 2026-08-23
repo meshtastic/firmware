@@ -17,7 +17,7 @@
 namespace
 {
 
-constexpr uint8_t WAYPOINT_STORE_VERSION = 2;
+constexpr uint8_t WAYPOINT_STORE_VERSION = 3;
 constexpr const char *WAYPOINT_STORE_FILENAME = "/Waypoints_default.wpts";
 
 #ifndef WAYPOINT_AUTOSAVE_INTERVAL_SEC
@@ -27,6 +27,7 @@ constexpr const char *WAYPOINT_STORE_FILENAME = "/Waypoints_default.wpts";
 struct __attribute__((packed)) StoredWaypointRecord {
     uint32_t creatorNodeNum;
     uint32_t receivedTime;
+    uint8_t notificationPreferences;
     uint16_t payloadLength;
     uint8_t payload[meshtastic_Waypoint_size];
 };
@@ -91,6 +92,42 @@ bool WaypointStore::isExpired(const StoredWaypoint &entry, uint32_t now)
     return isExpired(entry.waypoint, now);
 }
 
+uint8_t WaypointStore::notificationPreferencesFromWaypoint(const meshtastic_Waypoint &wp)
+{
+    uint8_t preferences = 0;
+    if (wp.notify_on_enter)
+        preferences |= WAYPOINT_NOTIFY_ENTER;
+    if (wp.notify_on_exit)
+        preferences |= WAYPOINT_NOTIFY_EXIT;
+    if (wp.notify_favorites_only)
+        preferences |= WAYPOINT_NOTIFY_FAVORITES_ONLY;
+    return preferences;
+}
+
+uint8_t WaypointStore::mergeNotificationPreferences(bool locallyAuthored, bool hasExisting, uint8_t existingPreferences,
+                                                     const meshtastic_Waypoint &incoming)
+{
+    if (locallyAuthored)
+        return notificationPreferencesFromWaypoint(incoming);
+    return hasExisting ? existingPreferences : 0;
+}
+
+void WaypointStore::clearWireNotificationPreferences(meshtastic_Waypoint &wp)
+{
+    wp.notify_on_enter = false;
+    wp.notify_on_exit = false;
+    wp.notify_favorites_only = false;
+}
+
+const StoredWaypoint *WaypointStore::findWaypoint(uint32_t id) const
+{
+    for (const StoredWaypoint &entry : waypoints) {
+        if (entry.waypoint.id == id)
+            return &entry;
+    }
+    return nullptr;
+}
+
 bool WaypointStore::removeWaypointById(uint32_t id)
 {
     for (auto it = waypoints.begin(); it != waypoints.end(); ++it) {
@@ -117,6 +154,30 @@ bool WaypointStore::removeWaypoint(uint32_t id)
     return true;
 }
 
+bool WaypointStore::setNotificationPreference(uint32_t id, WaypointNotificationPreference preference, bool enabled)
+{
+    for (StoredWaypoint &entry : waypoints) {
+        if (entry.waypoint.id != id)
+            continue;
+
+        const uint8_t previous = entry.notificationPreferences;
+        if (enabled)
+            entry.notificationPreferences |= preference;
+        else
+            entry.notificationPreferences &= ~preference;
+        if (entry.notificationPreferences == previous)
+            return true;
+
+#if ENABLE_WAYPOINT_PERSISTENCE
+        markWaypointStoreUnsaved();
+#endif
+        notifyChanged();
+        return true;
+    }
+
+    return false;
+}
+
 void WaypointStore::addStoredWaypoint(const StoredWaypoint &entry)
 {
     removeWaypointById(entry.waypoint.id);
@@ -126,12 +187,16 @@ void WaypointStore::addStoredWaypoint(const StoredWaypoint &entry)
         waypoints.pop_back();
 }
 
-bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWaypoint *stored)
+bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, bool locallyAuthored, StoredWaypoint *stored)
 {
     StoredWaypoint entry;
     if (!decodeWaypointPayload(packet.decoded.payload.bytes, packet.decoded.payload.size, entry.waypoint))
         return false;
 
+    const StoredWaypoint *existing = findWaypoint(entry.waypoint.id);
+    entry.notificationPreferences = mergeNotificationPreferences(locallyAuthored, existing != nullptr,
+                                                                 existing ? existing->notificationPreferences : 0, entry.waypoint);
+    clearWireNotificationPreferences(entry.waypoint);
     entry.receivedTime = packet.rx_time ? packet.rx_time : getTime();
     entry.creatorNodeNum = getFrom(&packet);
 
@@ -221,6 +286,7 @@ void WaypointStore::saveToFlash()
         StoredWaypointRecord rec = {};
         rec.creatorNodeNum = waypoints[i].creatorNodeNum;
         rec.receivedTime = waypoints[i].receivedTime;
+        rec.notificationPreferences = waypoints[i].notificationPreferences;
         rec.payloadLength = encodeWaypointPayload(waypoints[i].waypoint, rec.payload, sizeof(rec.payload));
         f.write(reinterpret_cast<const uint8_t *>(&rec), sizeof(rec));
     }
@@ -270,6 +336,7 @@ void WaypointStore::loadFromFlash()
                             continue;
                         entry.receivedTime = rec.receivedTime;
                         entry.creatorNodeNum = rec.creatorNodeNum;
+                        entry.notificationPreferences = rec.notificationPreferences;
 
                         if (isExpired(entry.waypoint))
                             continue;

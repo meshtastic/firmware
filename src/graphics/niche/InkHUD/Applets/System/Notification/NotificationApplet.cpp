@@ -4,6 +4,7 @@
 
 #include "./Notification.h"
 #include "MessageStore.h"
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "modules/GeofenceModule.h"
@@ -86,6 +87,7 @@ int InkHUD::NotificationApplet::onGeofenceEvent(const GeofenceNotificationEvent 
     Notification n;
     n.type = Notification::Type::NOTIFICATION_GEOFENCE;
     n.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);
+    n.geofenceWaypointId = event->waypointId;
     strncpy(n.geofenceName, event->geofenceName, sizeof(n.geofenceName) - 1);
     n.geofenceName[sizeof(n.geofenceName) - 1] = '\0';
     strncpy(n.geofenceNodeName, event->nodeName, sizeof(n.geofenceNodeName) - 1);
@@ -176,7 +178,10 @@ void InkHUD::NotificationApplet::onBackground()
 
 void InkHUD::NotificationApplet::onButtonShortPress()
 {
-    dismiss();
+    if (currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE)
+        openGeofenceOnMap();
+    else
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onButtonLongPress()
@@ -211,6 +216,25 @@ void InkHUD::NotificationApplet::onNavLeft()
 
 void InkHUD::NotificationApplet::onNavRight()
 {
+    if (currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE)
+        openGeofenceOnMap();
+    else
+        dismiss();
+}
+
+void InkHUD::NotificationApplet::openGeofenceOnMap()
+{
+    for (uint8_t i = 0; i < inkhud->userApplets.size(); ++i) {
+        Applet *applet = inkhud->userApplets.at(i);
+        MapApplet *map = applet ? applet->asMapApplet() : nullptr;
+        if (!map || !applet->isActive() || !map->focusWaypoint(currentNotification.geofenceWaypointId))
+            continue;
+
+        dismiss();
+        inkhud->showApplet(i);
+        return;
+    }
+
     dismiss();
 }
 
