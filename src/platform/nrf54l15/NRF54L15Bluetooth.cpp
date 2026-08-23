@@ -398,16 +398,8 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
     bluetoothStatus->updateStatus(&newStatus);
 
 #if defined(CONFIG_BT_SMP)
-    // Every characteristic and CCC in mesh_svc carries BT_GATT_PERM_*_AUTHEN, so
-    // nothing works until the link is encrypted AND authenticated (level 4 here:
-    // LE Secure Connections + the fixed passkey).  We used to leave the escalation
-    // to the central, relying on it reacting to the "Insufficient Authentication"
-    // ATT error - iOS CoreBluetooth and BlueZ do, but Chrome's Web Bluetooth on
-    // Windows does not: it forwards the error to JS, the client never subscribes to
-    // fromNum, never sends want_config, and hangs on "loading" until the BLE zombie
-    // watchdog reboots us.  Send a Security Request instead so the peer either
-    // encrypts with its existing LTK or starts pairing.  If it holds a stale bond,
-    // security_changed_cb below unpairs it so the next attempt is clean.
+    // mesh_svc attributes all require BT_GATT_PERM_*_AUTHEN, and some centrals never
+    // escalate on their own, so request an authenticated link instead of waiting.
     int sec_err = bt_conn_set_security(conn, BT_SECURITY_L4);
     if (sec_err) {
         LOG_WARN("BLE security request failed: %d", sec_err);
