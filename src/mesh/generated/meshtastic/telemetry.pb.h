@@ -125,7 +125,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* HM330X PM SENSOR */
     meshtastic_TelemetrySensorType_HM330X = 55,
     /* Sensirion SEN6X PM/RHT/VOC/NOx/CO2/HCHO sensor family (SEN62, SEN63C, SEN65, SEN66, SEN68, SEN69C) */
-    meshtastic_TelemetrySensorType_SEN6X = 56
+    meshtastic_TelemetrySensorType_SEN6X = 56,
+    /* AS3935 Franklin lightning sensor */
+    meshtastic_TelemetrySensorType_AS3935 = 57
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -266,6 +268,12 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Multi-channel One-Wire Temperature Channel 7 (*C) */
     bool has_one_wire_temperature_ch7;
     float one_wire_temperature_ch7;
+    /* Lightning strikes detected in the last hour */
+    bool has_lightning_strike_count_1h;
+    uint32_t lightning_strike_count_1h;
+    /* Estimated distance to the leading edge of the storm, in km */
+    bool has_lightning_distance_km;
+    float lightning_distance_km;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -531,6 +539,13 @@ typedef struct _meshtastic_Nau7802Config {
     float calibrationFactor;
 } meshtastic_Nau7802Config;
 
+/* AS3935 lightning sensor configuration, for saving to flash */
+typedef struct _meshtastic_AS3935Config {
+    /* Antenna tuning capacitance in pF, 0 to 120 in steps of 8. The chip does not retain
+ this across power loss, so it is stored here and re-applied on every boot. */
+    uint32_t tuning_cap_pf;
+} meshtastic_AS3935Config;
+
 /* SEN5X State, for saving to flash (to be merged with SEN6XState) */
 typedef struct _meshtastic_SEN5XState {
     /* Last cleaning time for SEN5X */
@@ -576,8 +591,9 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SEN6X
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SEN6X+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_AS3935
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_AS3935+1))
+
 
 
 
@@ -594,7 +610,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -603,10 +619,11 @@ extern "C" {
 #define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
+#define meshtastic_AS3935Config_init_default     {0}
 #define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SEN6XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -615,6 +632,7 @@ extern "C" {
 #define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
+#define meshtastic_AS3935Config_init_zero        {0}
 #define meshtastic_SEN5XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SEN6XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 
@@ -662,6 +680,8 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_one_wire_temperature_ch5_tag 37
 #define meshtastic_EnvironmentMetrics_one_wire_temperature_ch6_tag 38
 #define meshtastic_EnvironmentMetrics_one_wire_temperature_ch7_tag 39
+#define meshtastic_EnvironmentMetrics_lightning_strike_count_1h_tag 40
+#define meshtastic_EnvironmentMetrics_lightning_distance_km_tag 41
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -749,6 +769,7 @@ extern "C" {
 #define meshtastic_Telemetry_traffic_management_stats_tag 9
 #define meshtastic_Nau7802Config_zeroOffset_tag  1
 #define meshtastic_Nau7802Config_calibrationFactor_tag 2
+#define meshtastic_AS3935Config_tuning_cap_pf_tag 1
 #define meshtastic_SEN5XState_last_cleaning_time_tag 1
 #define meshtastic_SEN5XState_last_cleaning_valid_tag 2
 #define meshtastic_SEN5XState_one_shot_mode_tag  3
@@ -810,7 +831,9 @@ X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch3,  35) \
 X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch4,  36) \
 X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch5,  37) \
 X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch6,  38) \
-X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch7,  39)
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch7,  39) \
+X(a, STATIC,   OPTIONAL, UINT32,   lightning_strike_count_1h,  40) \
+X(a, STATIC,   OPTIONAL, FLOAT,    lightning_distance_km,  41)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -941,6 +964,11 @@ X(a, STATIC,   SINGULAR, FLOAT,    calibrationFactor,   2)
 #define meshtastic_Nau7802Config_CALLBACK NULL
 #define meshtastic_Nau7802Config_DEFAULT NULL
 
+#define meshtastic_AS3935Config_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   tuning_cap_pf,     1)
+#define meshtastic_AS3935Config_CALLBACK NULL
+#define meshtastic_AS3935Config_DEFAULT NULL
+
 #define meshtastic_SEN5XState_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   last_cleaning_time,   1) \
 X(a, STATIC,   SINGULAR, BOOL,     last_cleaning_valid,   2) \
@@ -971,6 +999,7 @@ extern const pb_msgdesc_t meshtastic_HealthMetrics_msg;
 extern const pb_msgdesc_t meshtastic_HostMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
+extern const pb_msgdesc_t meshtastic_AS3935Config_msg;
 extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 
@@ -985,14 +1014,16 @@ extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 #define meshtastic_HostMetrics_fields &meshtastic_HostMetrics_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
+#define meshtastic_AS3935Config_fields &meshtastic_AS3935Config_msg
 #define meshtastic_SEN5XState_fields &meshtastic_SEN5XState_msg
 #define meshtastic_SEN6XState_fields &meshtastic_SEN6XState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
+#define meshtastic_AS3935Config_size             6
 #define meshtastic_AirQualityMetrics_size        157
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       209
+#define meshtastic_EnvironmentMetrics_size       222
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_HostMetrics_size              264
 #define meshtastic_LocalStats_size               87

@@ -9,7 +9,11 @@
 #include "mesh/MeshRadio.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
+#include "mesh/PositionPrecision.h"
 #include "mesh/Router.h"
+#include "modules/PositionModule.h"
+#include "modules/RoutingModule.h"
+#include "support/MockMeshService.h"
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -277,6 +281,151 @@ static void test_opaque_tx_is_not_misclassified_as_coordinates()
     TEST_ASSERT_EQUAL_UINT32(1, captureRadio->packets.size());
 }
 
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+static void enablePositionOnPrivateChannel()
+{
+    meshtastic_Channel &privateChannel = channelFile.channels[kPrivateChannel];
+    privateChannel.settings.has_module_settings = true;
+    privateChannel.settings.module_settings.position_precision = 32;
+    channels.onConfigChanged();
+    uint8_t positionChannel = 0xff;
+    TEST_ASSERT_TRUE(findPositionChannel(positionChannel));
+    TEST_ASSERT_EQUAL_UINT8(kPrivateChannel, positionChannel);
+}
+
+// The reply path needs the module, a service to send through, a routing module for the response hop
+// limit, and a fix of our own. Scoped to the one test so the rest of the suite stays module-free.
+struct ReplyHarness {
+    MeshService *savedService = service;
+    RoutingModule *savedRouting = routingModule;
+    PositionModule *savedPosition = positionModule;
+    MockMeshService localService;
+    RoutingModule localRouting;
+    PositionModule localPosition;
+
+    ReplyHarness()
+    {
+        service = &localService;
+        routingModule = &localRouting;
+        positionModule = &localPosition;
+        testNodeDB->addNode(kLocalNode, kEventChannel); // refreshLocalMeshNode() asserts our own entry exists
+        meshtastic_Position fix = meshtastic_Position_init_zero;
+        fix.has_latitude_i = true;
+        fix.latitude_i = 407825770;
+        fix.has_longitude_i = true;
+        fix.longitude_i = -1192084390;
+        testNodeDB->setLocalPosition(fix);
+    }
+
+    ~ReplyHarness()
+    {
+        // Drain what sendToMesh() queued for the (absent) phone so the pools are clean at exit.
+        while (auto *status = localService.getQueueStatusForPhone())
+            localService.releaseQueueStatusToPool(status);
+        while (auto *packet = localService.getForPhone())
+            localService.releaseToPool(packet);
+        positionModule = savedPosition;
+        routingModule = savedRouting;
+        service = savedService;
+    }
+};
+
+// A position request DM'd to us on the event channel is not processed (no module sees it, so nothing is
+// stored or forwarded), but it is answered: our position goes out as a reply, on the position channel.
+static void test_rx_event_channel_position_request_to_us_is_answered_on_position_channel()
+{
+    enablePositionOnPrivateChannel();
+    ReplyHarness harness;
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, kRemoteNode, kLocalNode, kEventChannel);
+    request.decoded.want_response = true;
+    receivePacket(request);
+
+    TEST_ASSERT_EQUAL_UINT32(0, captureModule->packets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, captureRadio->packets.size());
+
+    meshtastic_MeshPacket reply = captureRadio->packets.front();
+    TEST_ASSERT_EQUAL_UINT32(kRemoteNode, reply.to);
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, reply.from);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, reply.which_payload_variant); // went out under a channel key
+    TEST_ASSERT_EQUAL(DecodeState::DECODE_SUCCESS, perhapsDecode(&reply));
+    TEST_ASSERT_EQUAL_UINT8(kPrivateChannel, reply.channel); // ...the position channel's, not the event channel's
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_POSITION_APP, reply.decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(request.id, reply.decoded.request_id);
+}
+
+// Without a position channel there is nothing to answer on: the request is simply dropped.
+static void test_rx_event_channel_position_request_without_position_channel_is_dropped()
+{
+    ReplyHarness harness;
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, kRemoteNode, kLocalNode, kEventChannel);
+    request.decoded.want_response = true;
+    receivePacket(request);
+
+    TEST_ASSERT_EQUAL_UINT32(0, captureModule->packets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, captureRadio->packets.size());
+}
+
+// A broadcast position on the event channel is dropped outright, want_response or not: only unicast
+// requests to us are answered.
+static void test_rx_event_channel_position_broadcast_with_want_response_is_not_answered()
+{
+    enablePositionOnPrivateChannel();
+    ReplyHarness harness;
+
+    meshtastic_MeshPacket broadcast =
+        makeDecodedPacket(meshtastic_PortNum_POSITION_APP, kRemoteNode, NODENUM_BROADCAST, kEventChannel);
+    broadcast.decoded.want_response = true;
+    receivePacket(broadcast);
+
+    TEST_ASSERT_EQUAL_UINT32(0, captureModule->packets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, captureRadio->packets.size());
+}
+
+// The phone hands a GPS-less node its fix as a POSITION packet from us to us on channel 0. It never goes on
+// the air, so the event policy must let it through to the modules (where PositionModule records it).
+static void test_loopback_position_from_us_to_us_on_event_channel_is_not_blocked()
+{
+    meshtastic_MeshPacket loopback = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, kLocalNode, kLocalNode, kEventChannel);
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&loopback));
+
+    meshtastic_MeshPacket *packet = packetPool.allocCopy(loopback);
+    TEST_ASSERT_NOT_NULL(packet);
+    TEST_ASSERT_EQUAL_INT(ERRNO_SHOULD_RELEASE, testRouter->sendLocal(packet, RX_SRC_USER));
+    packetPool.release(packet);
+
+    TEST_ASSERT_EQUAL_UINT32(1, captureModule->packets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, captureRadio->packets.size());
+}
+
+// A local originator (module, UI) that aims a coordinate at the event channel is moved onto the position
+// channel by sendLocal(); with no position channel the send is still refused.
+static void test_tx_local_coordinate_on_event_channel_is_moved_to_position_channel()
+{
+    meshtastic_MeshPacket *packet = testRouter->allocForSending();
+    TEST_ASSERT_NOT_NULL(packet);
+    packet->to = NODENUM_BROADCAST;
+    packet->channel = kEventChannel;
+    packet->decoded = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, kLocalNode, NODENUM_BROADCAST, kEventChannel).decoded;
+    TEST_ASSERT_EQUAL_INT(meshtastic_Routing_Error_NOT_AUTHORIZED, testRouter->sendLocal(packet, RX_SRC_LOCAL));
+    TEST_ASSERT_EQUAL_UINT32(0, captureRadio->packets.size());
+
+    enablePositionOnPrivateChannel();
+    packet = testRouter->allocForSending();
+    TEST_ASSERT_NOT_NULL(packet);
+    packet->to = NODENUM_BROADCAST;
+    packet->channel = kEventChannel;
+    packet->decoded = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, kLocalNode, NODENUM_BROADCAST, kEventChannel).decoded;
+    TEST_ASSERT_EQUAL_INT(ERRNO_OK, testRouter->sendLocal(packet, RX_SRC_LOCAL));
+    TEST_ASSERT_EQUAL_UINT32(1, captureRadio->packets.size());
+
+    meshtastic_MeshPacket sent = captureRadio->packets.front();
+    TEST_ASSERT_EQUAL(DecodeState::DECODE_SUCCESS, perhapsDecode(&sent));
+    TEST_ASSERT_EQUAL_UINT8(kPrivateChannel, sent.channel);
+}
+#endif
+
 static void test_capture_endpoints_release_packet_pool_ownership()
 {
     constexpr size_t iterations = 64;
@@ -382,6 +531,13 @@ EVENT_ROUTER_TEST_ENTRY void setup()
     RUN_TEST(test_tx_event_coordinate_that_uses_pki_reaches_radio);
 #endif
     RUN_TEST(test_opaque_tx_is_not_misclassified_as_coordinates);
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    RUN_TEST(test_rx_event_channel_position_request_to_us_is_answered_on_position_channel);
+    RUN_TEST(test_rx_event_channel_position_request_without_position_channel_is_dropped);
+    RUN_TEST(test_rx_event_channel_position_broadcast_with_want_response_is_not_answered);
+    RUN_TEST(test_loopback_position_from_us_to_us_on_event_channel_is_not_blocked);
+    RUN_TEST(test_tx_local_coordinate_on_event_channel_is_moved_to_position_channel);
+#endif
     RUN_TEST(test_capture_endpoints_release_packet_pool_ownership);
 
     exit(UNITY_END());
