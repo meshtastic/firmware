@@ -236,13 +236,13 @@ void earlyInitVariant()
 
         io.pinMode(EXPANDS_TP_RST, OUTPUT);   // TP RST
         io.digitalWrite(EXPANDS_TP_RST, LOW); // TP RST low
+        io.pinMode(EXPANDS_TP_INT, OUTPUT);   // TP INT: disable (we use wake button for wakeup)
         io.digitalWrite(EXPANDS_TP_INT, LOW); // TP INT low
         delay(10);
         io.digitalWrite(EXPANDS_TP_INT, LOW); // TP INT low
         delay(1);
         io.digitalWrite(EXPANDS_TP_RST, HIGH); // TP RST high
         delay(60);
-        io.pinMode(EXPANDS_TP_INT, INPUT); // TP INT
         initOK = true;
 
         meshLED = std::make_shared<WioTrackerMeshLED>();
