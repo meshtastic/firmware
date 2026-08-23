@@ -55,6 +55,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Needed to diff against the base branch for newly added variants.
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -62,11 +65,33 @@ jobs:
       - run: pip install -U platformio
       - name: Generate matrix
         id: jsonStep
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
+          # A new board is 'release' and gets no CI until after merge, so force-build the
+          # first env of each ADDED variant config. A new env in an existing one does not count.
+          DIFF_BASE=""
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            DIFF_BASE=$(git merge-base FETCH_HEAD HEAD)
+          elif [[ "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
+            DIFF_BASE="$MERGE_GROUP_BASE_SHA"
+          fi
+          ADDED_ARGS=()
+          if [[ -n "$DIFF_BASE" ]]; then
+            # Assign rather than pipe: a failing diff must abort the step under 'set -e',
+            # not silently yield an empty list and drop the new board from the matrix.
+            ADDED_CONFIGS=$(git diff --name-only --diff-filter=A \
+              "$DIFF_BASE" HEAD -- 'variants/**/platformio.ini')
+            while IFS= read -r cfg; do
+              [[ -n "$cfg" ]] && ADDED_ARGS+=(--added-config "$cfg")
+            done <<<"$ADDED_CONFIGS"
+          fi
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py all --level pr)
+            TARGETS=$(./bin/generate_ci_matrix.py all --level pr "${ADDED_ARGS[@]}")
           else
             TARGETS=$(./bin/generate_ci_matrix.py all)
           fi

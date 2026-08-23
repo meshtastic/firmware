@@ -211,10 +211,13 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
         snprintf(header, sizeof(header), "To: @%s", getNodeName(this->dest));
     }
 
-    const int maxWidth = std::max(0, display->getWidth() - x);
+    // First row of text: inset horizontally by the header L/R margin and pushed down by the header margin
+    const int headerX = x + BASEUI_HEADER_LR_MARGIN;
+    const int headerY = y + BASEUI_HEADER_MARGIN;
+    const int maxWidth = std::max(0, display->getWidth() - headerX - BASEUI_HEADER_LR_MARGIN);
     char truncatedHeader[96];
     graphics::UIRenderer::truncateStringWithEmotes(display, header, truncatedHeader, sizeof(truncatedHeader), maxWidth);
-    graphics::UIRenderer::drawStringWithEmotes(display, x, y, truncatedHeader, FONT_HEIGHT_SMALL, 1, false);
+    graphics::UIRenderer::drawStringWithEmotes(display, headerX, headerY, truncatedHeader, FONT_HEIGHT_SMALL, 1, false);
 }
 
 void CannedMessageModule::resetSearch()
@@ -1475,7 +1478,9 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 {
     int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
 
-    int xOffset = 0;
+    // Inset the key grid horizontally by the body L/R margin (keeps touch aligned since
+    // keyForCoordinates() reads the same per-key rects stored below)
+    int xOffset = BASEUI_BODY_LR_MARGIN;
 
     int yOffset = 56;
 
@@ -1485,7 +1490,8 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 
-    display->drawStringMaxWidth(0, 0, display->getWidth(),
+    // Free text being typed is the first row of text: inset by header margins
+    display->drawStringMaxWidth(BASEUI_HEADER_LR_MARGIN, BASEUI_HEADER_MARGIN, display->getWidth() - 2 * BASEUI_HEADER_LR_MARGIN,
                                 cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
 
     display->setFont(FONT_MEDIUM);
@@ -1507,7 +1513,7 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
             }
         }
 
-        int cellWidth = display->width() / innerSize;
+        int cellWidth = (display->width() - 2 * BASEUI_BODY_LR_MARGIN) / innerSize;
 
         for (int8_t innerIndex = 0; innerIndex < innerSize; innerIndex++) {
             xOffset += innerIndex > 0 ? cellWidth : 0;
@@ -1580,7 +1586,7 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
             }
         }
 
-        xOffset = 0;
+        xOffset = BASEUI_BODY_LR_MARGIN;
     }
 
     this->highlight = 0x00;
@@ -1670,8 +1676,8 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    // Header
-    int titleY = 2;
+    // Header (first row): pushed down by the header margin; centered, so no L/R inset needed
+    int titleY = 2 + BASEUI_HEADER_MARGIN;
     String titleText = "Select Destination";
     titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -1723,7 +1729,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                     }
                 }
 
-                int availWidth = display->getWidth() -
+                int availWidth = display->getWidth() - 2 * BASEUI_BODY_LR_MARGIN -
                                  ((graphics::currentResolution == graphics::ScreenResolution::High) ? 40 : 20) -
                                  ((nodeInfoLiteIsFavorite(node)) ? 10 : 0);
                 if (availWidth < 0)
@@ -1749,12 +1755,14 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         // Highlight background (if selected)
         if (itemIndex == destIndex) {
             int scrollPadding = 8; // Reserve space for scrollbar
-            display->fillRect(0, yOffset + 2, display->getWidth() - scrollPadding, FONT_HEIGHT_SMALL - 5);
+            display->fillRect(BASEUI_BODY_LR_MARGIN, yOffset + 2, display->getWidth() - scrollPadding - 2 * BASEUI_BODY_LR_MARGIN,
+                              FONT_HEIGHT_SMALL - 5);
             display->setColor(BLACK);
         }
 
         // Draw entry text
-        graphics::UIRenderer::drawStringWithEmotes(display, xOffset + 2, yOffset, entryText.c_str(), FONT_HEIGHT_SMALL, 1, false);
+        graphics::UIRenderer::drawStringWithEmotes(display, xOffset + 2 + BASEUI_BODY_LR_MARGIN, yOffset, entryText.c_str(),
+                                                   FONT_HEIGHT_SMALL, 1, false);
         display->setColor(WHITE);
 
         // Draw key icon (after highlight)
@@ -1783,7 +1791,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
     if (totalEntries > visibleRows) {
         int scrollbarHeight = visibleRows * (FONT_HEIGHT_SMALL - 4);
         int totalScrollable = totalEntries;
-        int scrollTrackX = display->getWidth() - 6;
+        int scrollTrackX = display->getWidth() - 6 - BASEUI_BODY_LR_MARGIN;
         display->drawRect(scrollTrackX, rowYOffset, 4, scrollbarHeight);
         int scrollHeight = (scrollbarHeight * visibleRows) / totalScrollable;
         int scrollPos = rowYOffset + (scrollbarHeight * scrollIndex) / totalScrollable;
@@ -1801,8 +1809,8 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     const int maxEmoteHeight = graphics::EmoteRenderer::maxEmoteHeight();
     const int rowHeight = maxEmoteHeight + 2;
 
-    // Place header at top, then compute start of emote list
-    int headerY = y;
+    // Place header at top (pushed down by the header margin), then compute start of emote list
+    int headerY = y + BASEUI_HEADER_MARGIN;
     int listTop = headerY + headerFontHeight + headerMargin;
 
     int _visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
@@ -1841,12 +1849,13 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
         // Draw highlight box 2px taller than emote (1px margin above and below)
         if (emoteIdx == emotePickerIndex) {
-            display->fillRect(x, rowY, display->getWidth() - 8, emote.height + 2);
+            display->fillRect(x + BASEUI_BODY_LR_MARGIN, rowY, display->getWidth() - 8 - 2 * BASEUI_BODY_LR_MARGIN,
+                              emote.height + 2);
             display->setColor(BLACK);
         }
 
         // Emote bitmap (left), centered inside the row
-        int labelStartX = x + bitmapGapX;
+        int labelStartX = x + BASEUI_BODY_LR_MARGIN + bitmapGapX;
         const int emoteY = rowY + ((rowHeight - emote.height) / 2);
         display->drawXbm(labelStartX, emoteY, emote.width, emote.height, emote.bitmap);
         labelStartX += emote.width;
@@ -1863,7 +1872,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     // Draw scrollbar if needed
     if (numEmotes > _visibleRows) {
         int scrollbarHeight = _visibleRows * rowHeight;
-        int scrollTrackX = display->getWidth() - 6;
+        int scrollTrackX = display->getWidth() - 6 - BASEUI_BODY_LR_MARGIN;
         display->drawRect(scrollTrackX, listTop, 4, scrollbarHeight);
         int scrollBarLen = std::max(6, (scrollbarHeight * _visibleRows) / numEmotes);
         int scrollBarPos = listTop + (scrollbarHeight * topIndex) / numEmotes;
@@ -1900,7 +1909,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
+        display->drawString(10 + x + BASEUI_BODY_LR_MARGIN, y + FONT_HEIGHT_SMALL + BASEUI_HEADER_MARGIN,
+                            "Canned Message\nModule disabled.");
         return;
     }
 
@@ -1927,7 +1937,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
-            display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
+            display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - BASEUI_HEADER_LR_MARGIN,
+                                y + BASEUI_HEADER_MARGIN, buffer);
         }
 
 #if INPUTBROKER_SERIAL_TYPE == 1
@@ -2014,9 +2025,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         // Draw Free Text input with multi-emote support and proper line wrapping
         display->setColor(WHITE);
         {
-            int inputY = 0 + y + FONT_HEIGHT_SMALL;
+            int inputY = y + FONT_HEIGHT_SMALL + BASEUI_HEADER_MARGIN;
+            int inputX = x + BASEUI_BODY_LR_MARGIN;
             String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
-            drawWrappedEmoteText(display, x, inputY, msgWithCursor.c_str(), display->getWidth() - x, FONT_HEIGHT_SMALL);
+            drawWrappedEmoteText(display, inputX, inputY, msgWithCursor.c_str(),
+                                 display->getWidth() - inputX - BASEUI_BODY_LR_MARGIN, FONT_HEIGHT_SMALL);
         }
 #endif
         return;
@@ -2037,7 +2050,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         drawHeader(display, x, y, buffer);
 
         // Shift message list upward by 3 pixels to reduce spacing between header and first message
-        const int listYOffset = y + FONT_HEIGHT_SMALL - 3;
+        // Push the list below the header margin so the body starts clear of the reserved top area
+        const int listYOffset = y + FONT_HEIGHT_SMALL - 3 + BASEUI_HEADER_MARGIN;
         _visibleRows = (display->getHeight() - listYOffset) / baseRowSpacing;
 
         // Figure out which messages are visible and their needed heights
@@ -2059,16 +2073,17 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
 
 #ifdef USE_EINK
-            int nextX = x + (_highlight ? 12 : 0);
+            int nextX = x + BASEUI_BODY_LR_MARGIN + (_highlight ? 12 : 0);
             if (_highlight)
-                display->drawString(x + 0, lineY + textYOffset, ">");
+                display->drawString(x + BASEUI_BODY_LR_MARGIN, lineY + textYOffset, ">");
 #else
             int scrollPadding = 8;
             if (_highlight) {
-                display->fillRect(x + 0, lineY, display->getWidth() - scrollPadding, rowHeight);
+                display->fillRect(x + BASEUI_BODY_LR_MARGIN, lineY,
+                                  display->getWidth() - scrollPadding - 2 * BASEUI_BODY_LR_MARGIN, rowHeight);
                 display->setColor(BLACK);
             }
-            int nextX = x + (_highlight ? 2 : 0);
+            int nextX = x + BASEUI_BODY_LR_MARGIN + (_highlight ? 2 : 0);
 #endif
 
             if (msg && *msg)
@@ -2084,7 +2099,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         // Scrollbar
         if (messagesCount > _visibleRows) {
             int scrollHeight = display->getHeight() - listYOffset;
-            int scrollTrackX = display->getWidth() - 6;
+            int scrollTrackX = display->getWidth() - 6 - BASEUI_BODY_LR_MARGIN;
             display->drawRect(scrollTrackX, listYOffset, 4, scrollHeight);
             int barHeight = (scrollHeight * _visibleRows) / messagesCount;
             int scrollPos = listYOffset + (scrollHeight * topMsg) / messagesCount;
