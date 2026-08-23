@@ -20,6 +20,7 @@
 #include "input/RotaryEncoderImpl.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/SerialKeyboardImpl.h"
+#include "input/TCA6408Rotary.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/i2cButton.h"
 #if HAS_TRACKBALL
@@ -467,6 +468,13 @@ void InputBroker::Init()
         cardKbI2cImpl->init();
 #if defined(M5STACK_UNITC6L)
         i2cButton = new i2cButtonThread("i2cButtonThread");
+#endif
+#if defined(HAS_TCA6408_ROTARY)
+        tca6408Rotary = new TCA6408Rotary("TCA6408Rotary");
+        if (!tca6408Rotary->init()) {
+            delete tca6408Rotary;
+            tca6408Rotary = nullptr;
+        }
 #endif
 #ifdef INPUTBROKER_MATRIX_TYPE
         kbMatrixImpl = new KbMatrixImpl();
