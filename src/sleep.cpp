@@ -370,7 +370,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
                 // t-beam v1.2 radio power channel
                 PMU->disablePowerOutput(XPOWERS_ALDO2); // lora radio power channel
             } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
-                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3 || HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA) {
                 PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
             }
         } else if (model == XPOWERS_AXP192) {
@@ -453,8 +453,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef KB_INT
+#if KB_INT_WAKE_ON_HIGH
+    gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_HIGH_LEVEL);
+#else
     gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_LOW_LEVEL);
-#endif
+#endif // KB_INT_WAKE_ON_HIGH
+#endif // KB_INT
 #ifdef BOARD_PCA9535_INT
     // Side-key interrupt line from PCA9535 expander (active low).
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);

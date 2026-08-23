@@ -742,6 +742,11 @@ bool GPS::verifyCachedProbePresence()
         _serial_gps->write("$PDTINFO\r\n");
         present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
         break;
+    case GNSS_MODEL_LC760CA:
+        cachedProbeModelName = "LC760CA";
+        _serial_gps->write("$PDTINFO\r\n");
+        present = (getACK("CC1161W", 900) == GNSS_RESPONSE_OK);
+        break;
     case GNSS_MODEL_UBLOX6:
     case GNSS_MODEL_UBLOX7:
     case GNSS_MODEL_UBLOX8:
@@ -1115,7 +1120,7 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module config saved");
             }
-        } else if (gnssModel == GNSS_MODEL_CM121) {
+        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_CM121, GNSS_MODEL_LC760CA)) {
             // only ask for RMC and GGA
             // enable GGA
             _serial_gps->write("$CFGMSG,0,0,1,1*1B\r\n");
@@ -1281,8 +1286,8 @@ void GPS::setPowerPMU(bool on)
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
             // t-beam-s3-core GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
-        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
-            // t-watch-s3-plus GNSS power channel
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA || HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+            // t-watch-ultra / t-watch-s3-plus GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_BLDO1) : PMU->disablePowerOutput(XPOWERS_BLDO1);
         }
     } else if (model == XPOWERS_AXP192) {
@@ -1686,7 +1691,7 @@ GnssModel_t GPS::probe(int serialSpeed)
             {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
             {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
             {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580},
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580}
             // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
             /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
         GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
@@ -1713,8 +1718,11 @@ GnssModel_t GPS::probe(int serialSpeed)
     case 1: {
 
         // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
-        std::vector<ChipInfo> unicore = {
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
+        std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580},
+                                         {"UM600", "UM600", GNSS_MODEL_UC6580},
+                                         {"CM121", "CM121", GNSS_MODEL_CM121},
+                                         {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121},
+                                         {"LC760CA", "CC1161W", GNSS_MODEL_LC760CA}};
         PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
         currentDelay = 20;
         currentStep = 2;

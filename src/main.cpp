@@ -322,6 +322,8 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 __attribute__((noinline)) void lateInitVariant() __attribute__((weak));
 __attribute__((noinline)) void lateInitVariant() {}
 
+// earlyInitVariant() runs before consoleInit(): a LOG_* macro here CRASHES the device,
+// it is not a silent no-op. Defer any logging to lateInitVariant() or later.
 __attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
 __attribute__((noinline)) void earlyInitVariant() {}
 
@@ -760,6 +762,10 @@ void setup()
         case ScanI2C::DeviceType::TCA8418KB:
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x84;
+            break;
+        case ScanI2C::DeviceType::STC8HKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x12;
             break;
         default:
             // use this as default since it's also just zero
