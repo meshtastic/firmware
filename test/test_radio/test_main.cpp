@@ -60,6 +60,10 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
 
+    size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
+    meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
+    size_t getRadioBufferPayloadCapacity() const { return sizeof(radioBuffer.payload); }
+
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
 
@@ -413,6 +417,30 @@ static void test_regionPresetMap_unsetCarriesUserprefsIntent()
 #endif
 }
 
+static void test_beginSending_oversizedPayloadAbortsSafely()
+{
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203040;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+
+    // Set encrypted size larger than sizeof(radioBuffer.payload) (which is 256 - sizeof(PacketHeader))
+    p->encrypted.size = testRadio->getRadioBufferPayloadCapacity() + 10;
+
+    size_t result = testRadio->beginSendingPublic(p);
+
+    TEST_ASSERT_EQUAL_UINT(0, result);
+    TEST_ASSERT_NULL(testRadio->getSendingPacket());
+
+    // Verify rejected packet was released to packetPool and its slot is reusable
+    meshtastic_MeshPacket *reallocated = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(reallocated);
+    TEST_ASSERT_EQUAL_PTR(p, reallocated);
+    packetPool.release(reallocated);
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -463,6 +491,7 @@ void setup()
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
     RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
+    RUN_TEST(test_beginSending_oversizedPayloadAbortsSafely);
     exit(UNITY_END());
 }
 
