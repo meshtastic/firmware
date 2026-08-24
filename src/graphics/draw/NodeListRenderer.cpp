@@ -58,6 +58,11 @@ void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *
     drawScaledXBitmap(x, y, width, height, 2, bitmapXBM, display);
 }
 
+void drawScaledXBitmap3x(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display)
+{
+    drawScaledXBitmap(x, y, width, height, 3, bitmapXBM, display);
+}
+
 // Static variables for dynamic cycling
 static ListMode_Node currentMode_Nodes = MODE_LAST_HEARD;
 static ListMode_Location currentMode_Location = MODE_DISTANCE;
@@ -986,7 +991,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         return;
     }
 #endif
-    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
+    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1 + BASEUI_HEADER_MARGIN;
     // Compact panels: 4 rows fit (0,9,18,27), a 5th pages instead of cramming in.
     const int rowYOffset = graphics::isCompactPanel(display) ? (FONT_HEIGHT_SMALL - 4) : (FONT_HEIGHT_SMALL - 3);
     bool locationScreen = false;
@@ -1002,7 +1007,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     // Compact panels have no header (see drawCommonHeader) - don't reserve space for one.
     if (!graphics::isCompactPanel(display))
-        y += COMMON_HEADER_HEIGHT;
+        y += COMMON_HEADER_HEIGHT + BASEUI_BELOW_HEADER_MARGIN;
     firstRowY = y;
 
     int totalColumns = 1; // Default to 1 column
@@ -1018,7 +1023,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     } else {
         if (SCREEN_WIDTH <= 64) {
             totalColumns = 1;
-        } else if (SCREEN_WIDTH > 64 && SCREEN_WIDTH <= 240) {
+        } else if ((SCREEN_WIDTH > 64 && SCREEN_WIDTH <= 240) || ROUNDED_SCREEN) {
             totalColumns = 2;
         } else {
             totalColumns = 3;
@@ -1071,15 +1076,24 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         auto *node = nodeDB->getMeshNode(nodeNum);
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
+        int effectiveColumnWidth = columnWidth;
+        if (BASEUI_BODY_LR_MARGIN) {
+            if (col == 0) {
+                xPos += BASEUI_BODY_LR_MARGIN;
+                effectiveColumnWidth -= BASEUI_BODY_LR_MARGIN;
+            } else if (col == (totalColumns - 1)) {
+                effectiveColumnWidth -= BASEUI_BODY_LR_MARGIN;
+            }
+        }
 
-        renderer(display, node, xPos, yPos, columnWidth);
+        renderer(display, node, xPos, yPos, effectiveColumnWidth);
 
         if (extras)
-            extras(display, node, xPos, yPos, columnWidth, headingRadian, lat, lon);
+            extras(display, node, xPos, yPos, effectiveColumnWidth, headingRadian, lat, lon);
 
 #if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         if (screen) {
-            screen->addTouchTarget(touchExpandedRect(xPos, yPos, columnWidth, rowYOffset, 2),
+            screen->addTouchTarget(touchExpandedRect(xPos, yPos, effectiveColumnWidth, rowYOffset, 2),
                                    meshtastic::TouchTargetKind::NodeRow, static_cast<uint32_t>(idx),
                                    INPUT_BROKER_NONE);
         }

@@ -105,6 +105,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/DFRobotGravitySensor.h"
 #endif
 
+#if __has_include(<SparkFun_AS3935.h>)
+#include "Sensor/AS3935Sensor.h"
+#endif
+
 #if __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
 #include "Sensor/NAU7802Sensor.h"
 #endif
@@ -157,6 +161,7 @@ EnvironmentTelemetryModule::DisplaySource gDisplaySource = EnvironmentTelemetryM
 } // namespace
 
 static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
+static constexpr uint32_t IMMEDIATE_SEND_MAX_STALENESS_MS = 5UL * 60UL * 1000; // 5 minutes
 static constexpr uint32_t LOCAL_DISPLAY_REFRESH_INTERVAL_MS = 1000;
 
 EnvironmentTelemetryModule::DisplaySource EnvironmentTelemetryModule::getDisplaySource()
@@ -296,6 +301,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<DFRobot_RainfallSensor.h>)
     addSensor<DFRobotGravitySensor>(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN);
+#endif
+#if __has_include(<SparkFun_AS3935.h>)
+    addSensor<AS3935Sensor>(i2cScanner, ScanI2C::DeviceType::AS3935);
 #endif
 #if __has_include(<Adafruit_AHTX0.h>)
     addSensor<AHT10Sensor>(i2cScanner, ScanI2C::DeviceType::AHT10);
@@ -439,9 +447,15 @@ int32_t EnvironmentTelemetryModule::runOnce()
         }
         refreshDisplayedMeasurement();
 
+        // Give up on a stale immediate-send request rather than fire an arbitrarily late broadcast.
+        if (immediateSendRequested &&
+            !Throttle::isWithinTimespanMs(immediateSendRequestedAtMs, IMMEDIATE_SEND_MAX_STALENESS_MS)) {
+            immediateSendRequested = false;
+        }
+
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
-        if (((lastTelemetry == 0) ||
+        if (((lastTelemetry == 0) || immediateSendRequested ||
              !Throttle::isWithinTimespanMs(
                  lastTelemetry, Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
                                                                         default_telemetry_broadcast_interval_secs, numOnlineNodes,
@@ -449,6 +463,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
+            immediateSendRequested = false;
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
@@ -815,6 +830,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Send: adc_ch4=%f, adc_ch5=%f, adc_ch6=%f, adc_ch7=%f", m.variant.environment_metrics.adc_voltage_ch4,
                      m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
                      m.variant.environment_metrics.adc_voltage_ch7);
+
+        if (m.variant.environment_metrics.has_lightning_strike_count_1h)
+            LOG_INFO("Send: lightning=%u, distance=%fkm", m.variant.environment_metrics.lightning_strike_count_1h,
+                     m.variant.environment_metrics.lightning_distance_km);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         if (!p) {

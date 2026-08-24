@@ -4,21 +4,26 @@
 
 #include "MotionSensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(T_DECK_MAX) && defined(HAS_BHI260AP) && \
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BHI260AP) && \
     __has_include(<SensorBHI260AP.hpp>)
 
 #include <SensorBHI260AP.hpp>
+#include <Wire.h>
+#include <bosch/BoschSensorDataHelper.hpp>
 
 class BHI260APSensor : public MotionSensor
 {
   public:
     explicit BHI260APSensor(ScanI2C::FoundDevice foundDevice);
+#if defined(T_DECK_MAX)
     ~BHI260APSensor() override;
+#endif
 
     bool init() override;
     int32_t runOnce() override;
 
   private:
+#if defined(T_DECK_MAX)
     static void accelerationCallback(uint8_t sensorId, uint8_t *data, uint32_t length, uint64_t *timestamp,
                                      void *userData);
     static void dataReadyISR();
@@ -36,6 +41,13 @@ class BHI260APSensor : public MotionSensor
     float baselineX = 0.0f;
     float baselineY = 0.0f;
     float baselineZ = 0.0f;
+#else
+    SensorBHI260AP sensor;
+    volatile bool BHI_IRQ = false;
+    SensorStepCounter *stepCounter = nullptr;
+    SensorStepDetector *stepDetector = nullptr;
+    uint32_t steps = 0;
+#endif
 };
 
 #endif

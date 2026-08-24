@@ -509,14 +509,18 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setFont(FONT_SMALL);
     const bool compactPanel = graphics::isCompactPanel(display);
     // Compact panels: no bottom nav row anymore (see UIRenderer::drawNavigationBar), full height available.
+#if T5S3_EPD_UI_PROFILE
     const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL;
+#else
+    const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL + BASEUI_BELOW_HEADER_MARGIN + BASEUI_HEADER_MARGIN;
+#endif
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
 #if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     const int contentTop = getTDeckMessageContentTop(display);
     const int contentBottom = std::max(contentTop + 1, scrollBottom - 1);
     const int usableHeight = std::max(1, contentBottom - contentTop);
 #else
-    const int contentTop = compactPanel ? 0 : getTextPositions(display)[1];
+    const int contentTop = compactPanel ? 0 : navHeight;
     const int contentBottom = scrollBottom;
     const int usableHeight = compactPanel ? scrollBottom - contentTop : scrollBottom;
 #endif
@@ -530,8 +534,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     constexpr int BUBBLE_MIN_W = T5S3_EPD_UI_MESSAGE_BUBBLE_MIN_WIDTH;
     constexpr int BUBBLE_TEXT_INDENT = T5S3_EPD_UI_MESSAGE_TEXT_INDENT;
 #else
-    constexpr int LEFT_MARGIN = 2;
-    constexpr int RIGHT_MARGIN = 2;
+    constexpr int LEFT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
+    constexpr int RIGHT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
     constexpr int SCROLLBAR_WIDTH = 3;
     constexpr int BUBBLE_PAD_X = 3;
     constexpr int BUBBLE_PAD_Y = 4;
@@ -543,6 +547,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Check if bubbles are enabled
     const bool showBubbles = config.display.enable_message_bubbles && !compactPanel;
     const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
+#if T5S3_EPD_UI_PROFILE
+    const int contentLeft = x;
+#else
+    const int contentLeft = x + (showBubbles ? BASEUI_BODY_LR_MARGIN : 0);
+#endif
 
     // Derived widths
     const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
@@ -994,10 +1003,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             if (b.mine) {
                 bubbleX = rightEdge - bubbleW;
             } else {
-                bubbleX = x;
+                bubbleX = contentLeft;
             }
-            if (bubbleX < x)
-                bubbleX = x;
+            if (bubbleX < contentLeft)
+                bubbleX = contentLeft;
             if (bubbleX + bubbleW > rightEdge)
                 bubbleW = std::max(1, rightEdge - bubbleX);
 
@@ -1089,7 +1098,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
-                    headerX = x + textIndent;
+                    headerX = contentLeft + textIndent;
                 }
                 graphics::UIRenderer::drawStringWithEmotes(display, headerX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
                                                            true);
@@ -1138,7 +1147,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
-                    drawStringWithEmotes(display, x + textIndent, lineY, cachedLines[i], emotes, numEmotes);
+                    drawStringWithEmotes(display, contentLeft + textIndent, lineY, cachedLines[i], emotes, numEmotes);
                 }
             }
         }
