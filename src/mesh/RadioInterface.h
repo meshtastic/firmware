@@ -92,13 +92,15 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
-    // Defaults for the per-band counts below, for a driver that states nothing of its own. Every
-    // driver in the tree does state its own, so these set the fleet convention rather than any part's
-    // behaviour: one value per band, so the CW backoff scale stays equal across a mesh.
+    // Fallback per-band counts for a driver that states nothing of its own. Every driver in the tree
+    // states its own, and they do NOT all agree: the slot has to match the scan each part really runs,
+    // so a mesh mixing RF95 (2.25 symbols, fixed in hardware) with SX126x/LR (4) runs two slot lengths.
     // Uncited on purpose - no single vendor note covers every part they cover. AN1200.77 backs the
     // 2.4 GHz figure for SX1280: a longer window moves P(Detection) away from P(False Detection).
     static constexpr uint8_t NUM_SYM_CAD = 4;
     static constexpr uint8_t NUM_SYM_CAD_24GHZ = 8;
+    // Runs during RadioInterface's own construction, so it uses the fallbacks above, never a driver
+    // override. applyModemConfig() recomputes it before anything reads it, and is authoritative.
     uint32_t slotTimeMsec = computeSlotTimeMsec();
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     static constexpr uint16_t preambleLengthDefault =
