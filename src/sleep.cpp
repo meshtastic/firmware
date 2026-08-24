@@ -407,13 +407,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
  * the per-pin GPIO wake enable as a side effect - the node would then sleep with the packet latched
  * but the wake source disarmed, stranding it for the rest of the sleep chunk (up to 30s). Reading the
  * raw line just before sleeping lets us skip that sleep and let the main loop service the packet.
- * Returns false on boards where DIO1 is a virtual/expander pin (can't be polled as a GPIO level).
+ * Boards where DIO1 is a virtual/expander pin never reach here - doLightSleep() returns early on
+ * LORA_DIO1_EXTENDED_IO before this is called.
  */
 static bool loraWakeIrqAsserted()
 {
-#if defined(LORA_DIO1_EXTENDED_IO)
-    return false;
-#else
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO)
         return gpio_get_level((gpio_num_t)RF95_IRQ) == 1;
@@ -423,8 +421,13 @@ static bool loraWakeIrqAsserted()
         return gpio_get_level((gpio_num_t)LORA_DIO1) == 1;
 #endif
     return false;
-#endif
 }
+
+// Consecutive sleeps skipped because the LoRa IRQ was already asserted. A line stuck high would
+// otherwise stop the node sleeping for good, so give up on skipping once it stops looking transient.
+static uint8_t loraIrqSkippedSleeps = 0;
+#define LORA_IRQ_SKIP_SLEEP_WARN 3
+#define LORA_IRQ_SKIP_SLEEP_MAX 5
 
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
@@ -525,13 +528,19 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(res == ESP_OK);
 
     console->flush();
-    const bool loraIrqPending = loraWakeIrqAsserted();
+    const bool loraIrqPending = loraWakeIrqAsserted() && loraIrqSkippedSleeps < LORA_IRQ_SKIP_SLEEP_MAX;
     if (loraIrqPending) {
         // A LoRa IRQ is already pending (see loraWakeIrqAsserted). Don't sleep on top of it - return so
         // the main loop services the packet now instead of stranding it until the next wake.
-        LOG_INFO("LoRa IRQ pending, skip light sleep to service packet");
+        if (++loraIrqSkippedSleeps >= LORA_IRQ_SKIP_SLEEP_WARN)
+            LOG_WARN("LoRa IRQ still pending after %u skipped sleeps", loraIrqSkippedSleeps);
+        else
+            LOG_INFO("LoRa IRQ pending, skip light sleep to service packet");
         res = ESP_OK;
     } else {
+        // Either nothing pending, or the line has stayed high past LORA_IRQ_SKIP_SLEEP_MAX and the main
+        // loop is clearly not going to clear it. Never sleeping costs more than one stranded packet.
+        loraIrqSkippedSleeps = 0;
         res = esp_light_sleep_start();
     }
     if (res != ESP_OK) {
