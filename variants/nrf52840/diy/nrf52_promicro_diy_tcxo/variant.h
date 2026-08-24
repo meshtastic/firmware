@@ -36,7 +36,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 | P1.00 | BUTTON_PIN  |     | P1.13    | CS           | CS    |
 | P0.11 | SCL         |     | P1.11    | SCK          | SCK   |
 | P1.04 | SDA         |     | P0.10    | DIO1/IRQ     | DIO1  |
-| P1.06 | Free pin    |     | P0.09    | RESET        | RST   |
+| P1.06 | TXEN        |     | P0.09    | RESET        | RST   |
 |       |             |     |          |              |       |
 |       | Mid board   |     |          | Internal     |       |
 | P1.01 | Free pin    |     | 0.15     | LED          |       |
@@ -182,14 +182,14 @@ https://github.com/brad112358/easy_E22
 #define RF95_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
 
 // SX126X CONFIG
-#define SX126X_CS (32 + 13)      // P1.13 FIXME - we really should define LORA_CS instead
+#define SX126X_CS LORA_CS
 #define SX126X_DIO1 (0 + 10)     // P0.10 IRQ
 #define SX126X_DIO2_AS_RF_SWITCH // Note for E22 modules: DIO2 is not attached internally to TXEN for automatic TX/RX switching,
                                  // so it needs connecting externally if it is used in this way
 #define SX126X_BUSY (0 + 29)     // P0.29
 #define SX126X_RESET (0 + 9)     // P0.09
 #define SX126X_RXEN (0 + 17)     // P0.17
-#define SX126X_TXEN RADIOLIB_NC  // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
+#define SX126X_TXEN (32 + 6)     // P1.06 TXEN connected here to allow use of PA.
 
 // LR1121
 #ifdef USE_LR1121
