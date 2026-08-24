@@ -393,11 +393,45 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
-    // CAD->RX (#3) is SX126x-only: LR11x0's startChannelScan conflates cfg.cad.irqFlags/irqMask (it drives
-    // the DIO from irqFlags and ignores irqMask), so the flag/mask split the in-place handoff needs isn't
-    // available. Keep LR11x0 on the standard GOTO_STDBY + re-arm path.
+    // No in-place CAD->RX handoff (#3) here: startChannelScan drives the DIO from cfg.cad.irqFlags and
+    // ignores irqMask, so the flag/mask split that handoff needs isn't available. Stay on GOTO_STDBY
+    // + re-arm. symNum is SetCadParams SymbolNum - a plain symbol count - so NUM_SYM_CAD goes in raw.
+    // detPeak: Semtech SWSD003 lr11xx/apps/cad/main_cad.c optimized_parameters[symbols][BW][SF5..SF12],
+    // its measured best CAD detection rates. RadioLib's unexplained default is this table's
+    // [2 symbols][BW250] row, so it goes stale as soon as either symbol count or bandwidth moves.
+    // 50 = SWSD003's CAD_DETECT_PEAK fallback, used where it has no measured value.
+    static constexpr uint8_t CAD_DET_PEAK[4][4][8] = {
+        // Each block is one symbol count. Within a block the 4 rows are BW 62.5 / 125 / 250 / 500 kHz,
+        // and the 8 columns are SF5..SF12.
+        // 2 symbols:
+        {{39, 45, 47, 53, 59, 61, 64, 63},
+         {44, 51, 49, 55, 56, 60, 62, 68},
+         {48, 48, 50, 55, 55, 59, 61, 65},
+         {76, 80, 71, 77, 69, 50, 50, 50}},
+        // 4 symbols:
+        {{43, 45, 45, 50, 53, 57, 59, 63},
+         {44, 46, 49, 53, 53, 55, 57, 62},
+         {45, 47, 47, 51, 51, 56, 59, 62},
+         {58, 66, 58, 65, 62, 55, 60, 57}},
+        // 8 symbols:
+        {{43, 44, 46, 48, 51, 53, 56, 59},
+         {45, 43, 44, 50, 52, 55, 56, 61},
+         {42, 44, 45, 48, 50, 53, 55, 60},
+         {49, 52, 50, 59, 56, 57, 57, 60}},
+        // 16 symbols:
+        {{41, 44, 43, 46, 49, 52, 54, 60},
+         {42, 42, 43, 48, 49, 53, 55, 59},
+         {41, 42, 43, 48, 48, 53, 54, 58},
+         {44, 47, 45, 53, 52, 53, 57, 62}}};
+    // SWSD003 characterises symbol counts 2/4/8/16 over BW 62.5-500 kHz only; anything else (a custom
+    // narrow BW, or 2.4 GHz on LR1120) has no measured row, so defer to RadioLib rather than guess.
+    const int symIdx = NUM_SYM_CAD == 2 ? 0 : NUM_SYM_CAD == 4 ? 1 : NUM_SYM_CAD == 8 ? 2 : NUM_SYM_CAD == 16 ? 3 : -1;
+    const int bwIdx = bw < 46.0f ? -1 : bw < 93.75f ? 0 : bw < 187.5f ? 1 : bw < 375.0f ? 2 : bw < 750.0f ? 3 : -1;
+    const uint8_t detPeak = (symIdx < 0 || bwIdx < 0) ? (uint8_t)RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
+                                                      : CAD_DET_PEAK[symIdx][bwIdx][(sf >= 5 && sf <= 12) ? sf - 5 : 6];
+    // detMin 10 is SWSD003's CAD_DETECT_MIN, which is also what RadioLib defaults to.
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
-                                       .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .detPeak = detPeak,
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT, // resolves to STBY_RC
                                        .timeout = 0,

@@ -53,6 +53,10 @@ class RF95Interface : public RadioLibInterface
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
 
+    // SX127x CAD is fixed in hardware at ~2.25 symbols - the legacy scanChannel() takes no symNum, so
+    // NUM_SYM_CAD does not apply here. 2 keeps the slot at the 2.5 symbols this chip has always used.
+    uint8_t getCadSymbolCount() const override { return 2; }
+
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
 

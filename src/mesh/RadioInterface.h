@@ -92,12 +92,13 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
-    static constexpr uint8_t NUM_SYM_CAD =
-        2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48.
-           // NOTE: on SX126x the scanChannel symNum field is a *register encoding*, not a raw count -
-           // there raw 2 (RADIOLIB_SX126X_CAD_ON_4_SYMB) actually programs a 4-symbol scan, so SX126x
-           // overrides getCadSymbolCount() to reflect that. LR11x0/LR20x0 take symNum as a plain count,
-           // so for them this constant is both the value passed and the true symbol count.
+    // Symbols every sub-GHz CAD scan should run. Drivers whose scanChannel() symNum is a register
+    // encoding (SX126x, SX128x) must pass their own CAD_ON_4_SYMB constant, not this raw value.
+    // Deliberately uncited: this spans chip families and no vendor note covers them all. AN1200.48 is
+    // SX1261/2 only (it wants 4 symbols for SF9-SF12, which is most of our presets); Semtech publishes
+    // no symbol-count recommendation for LR11x0 or LR20x0, so 4 there is our choice, not theirs - it
+    // keeps slotTimeMsec, and so the CW backoff scale, identical across the chips in one mesh.
+    static constexpr uint8_t NUM_SYM_CAD = 4;
     static constexpr uint8_t NUM_SYM_CAD_24GHZ =
         4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
     uint32_t slotTimeMsec = computeSlotTimeMsec();
@@ -116,11 +117,8 @@ class RadioInterface
 
     uint32_t computeSlotTimeMsec();
 
-    // Effective number of LoRa symbols the CAD scan actually runs on this chip. Used by
-    // computeSlotTimeMsec() to size the contention-window slot to the real scan length. Defaults to
-    // NUM_SYM_CAD (2) for chips whose driver takes symNum as a plain count (LR11x0/LR20x0) and for
-    // SX127x hardware CAD; SX126x/LLCC68/STM32WL override this to 4 because their register encoding
-    // turns our symNum value into a 4-symbol scan (see NUM_SYM_CAD).
+    // Symbols the CAD scan really runs, so computeSlotTimeMsec() sizes the CW slot to the true scan
+    // length. Only SX127x differs: its CAD is fixed in hardware at ~2.25 symbols and is not settable.
     virtual uint8_t getCadSymbolCount() const { return NUM_SYM_CAD; }
 
     /**

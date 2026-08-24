@@ -398,15 +398,36 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool LR20x0Interface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
+    // check if we can detect a LoRa preamble on the current channel.
+    // symNum is SetLoraCadParams nb_symbols - a plain symbol count - so NUM_SYM_CAD goes in raw.
+    // det_peak is the peak-to-average ratio threshold: a higher value demands a stronger correlation
+    // peak and so detects less readily, which is why the recommended value falls as the scan lengthens.
+    // Indexed by NUM_SYM_CAD so the threshold tracks the scan length instead of drifting out of step.
+    static constexpr uint8_t CAD_DET_PEAK[4][8] = {
+        // LR20xx datasheet rev 2.2, Table 6-19 - recommended det_peak, SF5..SF12
+        {60, 60, 60, 64, 64, 66, 70, 74}, // 1 symbol
+        {56, 56, 56, 58, 58, 60, 64, 68}, // 2 symbols (RadioLib's default row)
+        {51, 51, 52, 54, 56, 60, 60, 65}, // 3 symbols
+        {51, 51, 51, 54, 56, 60, 60, 64}, // 4 symbols
+    };
+    const uint8_t detPeak = CAD_DET_PEAK[(NUM_SYM_CAD >= 1 && NUM_SYM_CAD <= 4) ? NUM_SYM_CAD - 1 : 3]
+                                        [(sf >= 5 && sf <= 12) ? sf - 5 : 6]; // out of range: 4 symbols, SF11
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
-                                       .detPeak = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
+                                       .detPeak = detPeak,
+                                       // ignored: SetLoraCadParams has no det_min - that byte carries
+                                       // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
                                        .timeout = 0,
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result;
+
+    // fastCad is NOT part of ChannelScanConfig_t - scanChannel() reads it off the radio object - so pin
+    // it here rather than inherit whatever RadioLib defaults to. false is SetLoraCadParams pnr_delta = 0:
+    // the scan always runs the full nb_symbols, which is what the fixed slot-time model assumes. true
+    // (pnr_delta = 8) raises the threshold per symbol and ends the scan early when the channel is idle.
+    lora.fastCad = false;
 
     setStandby();
     result = lora.scanChannel(cfg);
