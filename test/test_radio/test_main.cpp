@@ -419,8 +419,7 @@ static void test_regionPresetMap_unsetCarriesUserprefsIntent()
 #endif
 }
 
-// In-flight packet bytes as packetPool reports them to memaudit, 0 before the first alloc
-// registers the tag.
+// In-flight packet bytes as packetPool reports them, 0 before the first alloc registers the tag.
 static int32_t packetPoolLiveBytes()
 {
     memaudit::Tag rows[memaudit::kMaxTags];
@@ -437,7 +436,7 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
 
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     TEST_ASSERT_NOT_NULL(p);
-    // The pool accounting has to see this allocation, otherwise the check below proves nothing.
+    // Without this the check below would also pass against a dead probe.
     TEST_ASSERT_GREATER_THAN_INT32(liveBefore, packetPoolLiveBytes());
 
     p->from = 0x12345678;
@@ -453,9 +452,8 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
     TEST_ASSERT_EQUAL_UINT(0, result);
     TEST_ASSERT_NULL(testRadio->getSendingPacket());
 
-    // The rejected packet went back to the pool. Pointer identity is not a usable probe: the
-    // native pool is malloc-backed and ASan quarantines the freed block, so the next alloc
-    // lands at a different address.
+    // The rejected packet went back to the pool. Not pointer identity: the native pool is
+    // malloc-backed and ASan quarantines the freed block, so the next alloc moves.
     TEST_ASSERT_EQUAL_INT32(liveBefore, packetPoolLiveBytes());
 }
 

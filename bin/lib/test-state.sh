@@ -69,8 +69,7 @@ state_find_survivors() {
 	[[ -n $home ]] || return 0
 	for pid in $(ps -u "$(id -u)" -o pid= 2>/dev/null); do
 		[[ $pid == "$$" ]] && continue
-		# The redirect sits inside the group so a vanished or unreadable /proc entry stays silent:
-		# stderr on `tr` alone does not cover the shell's own open failure.
+		# Grouped so the redirect's own open failure is silenced too, not just tr's stderr.
 		if { tr '\0' '\n' <"/proc/$pid/environ"; } 2>/dev/null | grep -qxF "HOME=$home"; then
 			printf '%s\n' "$pid"
 		fi
