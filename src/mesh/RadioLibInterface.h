@@ -173,6 +173,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void pollMissedIrqs();
 
+    // Time::getMillis() at which a CAD->RX handoff left the chip listening without us arming it, or 0
+    // if none is outstanding. 0 is a sentinel, so it must be tested before any elapsed comparison.
+    uint32_t cadHandoffRxStart = 0;
+
+    /** Start the window checkCadHandoffTimeout() re-arms after, when a CAD->RX handoff delivers nothing. */
+    void startCadHandoffTimeout();
+
+    /** Re-arm if a CAD->RX handoff has produced no packet within one max-length airtime. */
+    void checkCadHandoffTimeout();
+
     /**
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.
@@ -212,6 +222,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Default is a full
      * startReceive(), correct for a chip that left RX to scan. A chip still in RX overrides this to
      * re-attach the MCU ISR only, so a reception already in flight is not aborted.
+     *
+     * An override must NOT call the chip's own startReceive(): its standby+SetRx aborts the packet CAD
+     * just detected, which is the whole point of the override. Call the base
+     * RadioLibInterface::startReceive(), which marks the interface as receiving and arms nothing - so
+     * only where the chip is known to be listening already.
      */
     virtual void rearmReceive() { startReceive(); }
 

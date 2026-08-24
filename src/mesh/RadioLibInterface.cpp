@@ -610,6 +610,8 @@ void RadioLibInterface::handleReceiveInterrupt()
 {
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
+    cadHandoffRxStart = 0; // a packet arrived, so any outstanding handoff did deliver
+
     if (!isReceiving) {
         LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
         return;
@@ -725,6 +727,7 @@ void RadioLibInterface::pollMissedIrqs()
     // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
     if (isReceiving) {
         checkRxDoneIrqFlag();
+        checkCadHandoffTimeout();
     }
     if (sendingPacket) {
         checkTxDoneIrqFlag();
@@ -734,6 +737,24 @@ void RadioLibInterface::pollMissedIrqs()
 void RadioLibInterface::resetAGC()
 {
     // Base implementation: no-op. Override in chip-specific subclasses.
+}
+
+void RadioLibInterface::startCadHandoffTimeout()
+{
+    // Same clock Throttle compares against, so a native test can drive both across the wrap.
+    cadHandoffRxStart = Time::getMillis();
+}
+
+void RadioLibInterface::checkCadHandoffTimeout()
+{
+    // A handoff we never armed has produced nothing for a whole max-length airtime: false detection, or
+    // the exit mode was not honoured. Re-arm either way. 0 means none outstanding - test it first.
+    const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    if (cadHandoffRxStart && Throttle::hasElapsed(cadHandoffRxStart, maxPacketTimeMsec)) {
+        LOG_WARN("CAD->RX handoff delivered nothing, re-arming");
+        cadHandoffRxStart = 0;
+        startReceive();
+    }
 }
 
 void RadioLibInterface::checkRxDoneIrqFlag()
@@ -767,6 +788,10 @@ void RadioLibInterface::setStandby()
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
+    // Transmitting ends any wait on a CAD->RX handoff: the TX completion re-arms RX itself, so leaving
+    // the marker set would have the poll re-arm a radio that is already listening.
+    cadHandoffRxStart = 0;
+
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {

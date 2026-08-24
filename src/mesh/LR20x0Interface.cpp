@@ -442,6 +442,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
         // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
         // RX_DONE is a clean edge, and tell rearmReceive() not to standby over the packet we just found.
         lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
+        startCadHandoffTimeout(); // nothing below arms the radio, so let the poll notice a no-show
         cadHandedToRx = true;
         return true;
     }
@@ -457,7 +458,7 @@ template <typename T> void LR20x0Interface<T>::rearmReceive()
         startReceive(); // normal path: chip left RX, so a full standby + re-arm is correct
         return;
     }
-    // CAD handed the chip to RX in place. Re-attach the MCU ISR and set RX bookkeeping only - a
+    // CAD handed the chip to RX in place. Re-attach the MCU ISR and mark the interface as receiving - a
     // startReceive() here would standby and abort the reception we detected.
     cadHandedToRx = false;
     enableInterrupt(isrRxLevel0);
