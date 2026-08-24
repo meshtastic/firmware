@@ -14,6 +14,7 @@
 #if defined(T_WATCH_ULTRA)
 
 #include "esp_flash.h"
+#include "esp_flash_encrypt.h"
 #include "esp_partition.h"
 #include "spi_flash_mmap.h"
 #include <string.h>
@@ -56,6 +57,10 @@ esp_err_t __wrap_esp_flash_read(esp_flash_t *chip, void *buffer, uint32_t addres
     // spi_flash_mmap only maps the default (main) chip's address space - anything
     // else (e.g. a second chip on another bus) falls back to the real call.
     if (chip != NULL && chip != esp_flash_default_chip)
+        return __real_esp_flash_read(chip, buffer, address, length);
+    // esp_flash_read is specified to return raw bytes, but the cache decrypts transparently.
+    // With flash encryption on, the mmap path would hand back plaintext - so don't take it.
+    if (esp_flash_encryption_enabled())
         return __real_esp_flash_read(chip, buffer, address, length);
 
     const size_t PAGE = 0x10000;
