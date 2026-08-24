@@ -1422,12 +1422,13 @@ uint32_t RadioInterface::computeSlotTimeMsec()
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
     if (myRegion->wideLora) {
-        // CAD duration derived from AN1200.22 of SX1280
-        return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
+        // CAD duration derived from AN1200.22 of SX1280. The fractional term needs float division:
+        // as ints, (2 * sf + 3) / 32 truncates to 0 for every legal SF (5..12), dropping it entirely.
+        return (NUM_SYM_CAD_24GHZ + (2.0f * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {
         // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol.
-        // getCadSymbolCount() reports the symbols the scan really runs (4 on SX126x/LLCC68/STM32WL, 2
-        // elsewhere), so the slot matches the actual out-of-RX scan time the CW backoff scheme assumes.
+        // getCadSymbolCount() reports the symbols the scan really runs (4 everywhere except SX127x), so
+        // the slot matches the actual out-of-RX scan time, and is the same across chips in one mesh.
         return max(2.25, getCadSymbolCount() + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
     }
 }
