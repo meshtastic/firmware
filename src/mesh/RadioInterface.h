@@ -92,12 +92,10 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
-    // Symbols every sub-GHz CAD scan should run. Drivers whose scanChannel() symNum is a register
-    // encoding (SX126x, SX128x) must pass their own CAD_ON_4_SYMB constant, not this raw value.
-    // Deliberately uncited: this spans chip families and no vendor note covers them all. AN1200.48 is
-    // SX1261/2 only (it wants 4 symbols for SF9-SF12, which is most of our presets); Semtech publishes
-    // no symbol-count recommendation for LR11x0 or LR20x0, so 4 there is our choice, not theirs - it
-    // keeps slotTimeMsec, and so the CW backoff scale, identical across the chips in one mesh.
+    // Symbols every sub-GHz CAD scan should run. A driver whose scanChannel() symNum is a register
+    // encoding rather than a plain count must translate this at its own call site.
+    // Deliberately uncited: no single vendor note covers every part this governs. It also sets the
+    // CAD term in slotTimeMsec, so keeping one value keeps the CW backoff scale equal across a mesh.
     static constexpr uint8_t NUM_SYM_CAD = 4;
     static constexpr uint8_t NUM_SYM_CAD_24GHZ =
         4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280

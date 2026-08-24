@@ -69,7 +69,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
      */
     virtual void startReceive() override;
 
-    /** #3/#6: re-arm RX without a standby - the chip is already in RX (CAD GOTO_RX handoff, or continuous
+    /** Re-arm RX without a standby - the chip is already in RX (CAD GOTO_RX handoff, or continuous
      * RX after RX_DONE), so just re-attach the MCU ISR + bookkeeping. Overrides the base full re-arm. */
     void rearmReceive() override;
 

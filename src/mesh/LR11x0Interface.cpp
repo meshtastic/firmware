@@ -393,7 +393,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
-    // No in-place CAD->RX handoff (#3) here: startChannelScan drives the DIO from cfg.cad.irqFlags and
+    // No in-place CAD->RX handoff here: startChannelScan drives the DIO from cfg.cad.irqFlags and
     // ignores irqMask, so the flag/mask split that handoff needs isn't available. Stay on GOTO_STDBY
     // + re-arm. symNum is SetCadParams SymbolNum - a plain symbol count - so NUM_SYM_CAD goes in raw.
     // detPeak: Semtech SWSD003 lr11xx/apps/cad/main_cad.c optimized_parameters[symbols][BW][SF5..SF12],
