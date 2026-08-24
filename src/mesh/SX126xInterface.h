@@ -69,8 +69,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
      */
     virtual void startReceive() override;
 
-    /** Re-arm RX without a standby - the chip is already in RX (CAD GOTO_RX handoff, or continuous
-     * RX after RX_DONE), so just re-attach the MCU ISR and mark the interface as receiving. Overrides the base full re-arm. */
+    /** Re-arm RX, skipping the standby only after a CAD GOTO_RX handoff has left the chip listening. */
     void rearmReceive() override;
 
     /**
@@ -91,6 +90,10 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
 
   private:
+    // Set when CAD exited straight into RX, so the next rearmReceive() knows the chip is already
+    // listening. Cleared there; the re-arm after that packet's RX_DONE is a normal full one.
+    bool cadHandedToRx = false;
+
 #ifdef LORA_DIO1_SOFTWARE_POLL
     bool irqPollingActive = false;
     bool pollTxMode = false;
