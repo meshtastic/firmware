@@ -119,7 +119,8 @@ External serial flash WP25R1635FZUIL0
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 3.3
 
-#define PIN_EINK_EN (32 + 11) // Note: this is really just backlight power
+#define PIN_EINK_EN (32 + 11)     // Note: this is really just backlight power
+#define GPIO_BACKLIGHT_DEFAULT_ON // hardware-dimmable frontlight, powers up lit
 #define PIN_EINK_CS (0 + 30)
 #define PIN_EINK_BUSY (0 + 3)
 #define PIN_EINK_DC (0 + 28)
