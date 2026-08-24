@@ -42,9 +42,10 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LED
+// P1.06 is a second drive for the same red LED as LED_POWER; driving both double-blinks it (#9829)
 // #define PIN_LED1 (32 + 6)
 #define LED_POWER (32 + 4)        // red
-#define LED_NOTIFICATION (0 + 13) // green
+#define LED_NOTIFICATION (0 + 13) // blue indicator
 #define POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
 
 // USB_CHECK
