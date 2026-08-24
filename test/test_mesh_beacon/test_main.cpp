@@ -1338,6 +1338,178 @@ static void test_broadcaster_distinctTargets_bothSent(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, mockRouter->sentPackets.size(), "distinct targets must each be sent");
 }
 
+// ---------------------------------------------------------------------------
+// Radio switch/restore re-entrancy
+// ---------------------------------------------------------------------------
+
+/**
+ * Stands in for a real driver on the restore path. RadioLibInterface::reconfigure() standbys the
+ * chip, setStandby() calls completeSending(), and completeSending() calls back into
+ * reconfigureForBeaconTX(iface, nullptr) - so reconfigure() re-entering is the normal case, not an
+ * exotic one. Bounded, so a regression fails an assertion instead of overflowing the stack.
+ */
+class ReentrantRadioInterface : public RadioInterface
+{
+  public:
+    static constexpr int kReentryLimit = 16;
+    int reconfigureCalls = 0;
+    bool reenterOnReconfigure = false;
+
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+
+    bool reconfigure() override
+    {
+        reconfigureCalls++;
+        if (reenterOnReconfigure && reconfigureCalls < kReentryLimit)
+            MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+        return true;
+    }
+};
+
+/**
+ * The restore must clear its guard before reconfiguring, or completeSending() re-enters the restore
+ * branch and it reconfigures the radio once per level until the stack runs out. Seen in the field as
+ * a run of "Beacon: restore radio config after TX" with a full applyModemConfig() between each.
+ */
+static void test_beaconRestore_isNotReenteredByCompleteSending(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0001;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+
+    // Switch to the beacon config. Not the case under test, so leave re-entry off.
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt), "beacon switch should have applied");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "switch must leave the radio on the beacon preset");
+
+    // Now restore, with reconfigure() re-entering exactly as completeSending() does.
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    radio.reconfigureCalls = 0;
+    radio.reenterOnReconfigure = true;
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore should have applied");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, radio.reconfigureCalls, "restore must reconfigure the radio exactly once");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "restore must put the home preset back");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
+                                     "restore must put the home channel back");
+}
+
+/**
+ * A second switch before the restore has run must survive the same re-entry. completeSending() calls
+ * in with a null packet, which reads as "restore" - so without the guard it would undo the switch that
+ * is still being applied, leaving the beacon to transmit on the home channel instead of its target.
+ */
+static void test_beaconSwitch_isNotUndoneByCompleteSending(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket first = meshtastic_MeshPacket_init_zero;
+    first.id = 0x5EED0002;
+    MeshBeaconModule::setTargetRadioSettings(&first, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &first), "first switch should have applied");
+
+    // Second switch with the restore still outstanding, and reconfigure() re-entering.
+    meshtastic_MeshPacket second = meshtastic_MeshPacket_init_zero;
+    second.id = 0x5EED0003;
+    MeshBeaconModule::setTargetRadioSettings(&second, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+    radio.reconfigureCalls = 0;
+    radio.reenterOnReconfigure = true;
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &second), "second switch should have applied");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, radio.reconfigureCalls, "second switch must reconfigure the radio exactly once");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST, config.lora.modem_preset,
+                                  "second switch must not be undone mid-flight");
+
+    // The home config must still be recoverable afterwards - the snapshot survives a second switch.
+    radio.reenterOnReconfigure = false;
+    MeshBeaconModule::clearTargetRadioSettings(&first);
+    MeshBeaconModule::clearTargetRadioSettings(&second);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore should have applied");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "restore must return to the home preset, not the first beacon target");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
+                                     "restore must return to the home channel");
+}
+
+/** A restore with nothing switched must do nothing at all - the guard is what makes re-entry safe. */
+static void test_beaconRestore_withoutSwitch_isNoOp(void)
+{
+    resetConfig();
+    ReentrantRadioInterface radio;
+
+    // reconfigureForBeaconTX() keeps its switched/not-switched state in a function-local static, so an
+    // earlier test that aborted mid-way can leave a switch outstanding. Drain it before asserting.
+    MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr);
+
+    radio.reconfigureCalls = 0;
+    radio.reenterOnReconfigure = true;
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore without a switch is a no-op");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, radio.reconfigureCalls, "no-op restore must not touch the radio");
+}
+
+/**
+ * The restore is driven by "our beacon finished", not by "the radio changed state". completeSending()
+ * clears a packet's target settings before restoring, so a caller that arrives without that - the
+ * pre-TX channel scan standbys the radio, and setStandby() calls completeSending() - must be refused.
+ * Otherwise the home config goes back under a beacon that has not keyed up yet, and it transmits on
+ * the wrong preset with the beacon channel hash already stamped on it.
+ */
+static void test_beaconRestore_deferredUntilPacketCompletes(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0004;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt), "beacon switch should have applied");
+
+    // The packet has not been sent yet, so its target settings are still live.
+    radio.reconfigureCalls = 0;
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr),
+                              "restore must be refused while the beacon is still outstanding");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, radio.reconfigureCalls, "a refused restore must not touch the radio");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "the beacon preset must still be in place when the packet keys up");
+
+    // completeSending() clears the target settings first; only then is the restore ours to make.
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore should have applied");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "restore must put the home preset back");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
+                                     "restore must put the home channel back");
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1461,6 +1633,13 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset);
     RUN_TEST(test_broadcaster_duplicateTargets_dedupedToOnePacket);
     RUN_TEST(test_broadcaster_distinctTargets_bothSent);
+
+    printf("\n=== Radio switch/restore re-entrancy ===\n");
+
+    RUN_TEST(test_beaconRestore_isNotReenteredByCompleteSending);
+    RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
+    RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);
+    RUN_TEST(test_beaconRestore_deferredUntilPacketCompletes);
 
     exit(UNITY_END());
 }

@@ -248,8 +248,14 @@ bool RadioLibInterface::isSending()
 bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
-    if (p)
+    if (p) {
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // Every path that abandons a queued packet clears its beacon target first; the restore is
+        // gated on no target being live, so a leftover entry would pin the radio on the beacon config.
+        MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
         packetPool.release(p); // free the packet we just removed
+    }
 
     bool result = (p != NULL);
     LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
