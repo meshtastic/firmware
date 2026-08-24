@@ -619,6 +619,14 @@ void RadioLibInterface::handleReceiveInterrupt()
 
     isReceiving = false;
 
+    // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
+    // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
+        LOG_DEBUG("CAD->RX handoff window expired, no packet");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
+        return;
+    }
+
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
 

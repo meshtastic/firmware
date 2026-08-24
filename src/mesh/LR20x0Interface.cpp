@@ -416,13 +416,17 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
     const uint8_t symNum = getCadSymbolCount();
     const uint8_t detPeak = CAD_DET_PEAK[(symNum >= 1 && symNum <= 4) ? symNum - 1 : 3]
                                         [(sf >= 5 && sf <= 12) ? sf - 5 : 6]; // out of range: 4 symbols, SF11
+    // Times the RX that follows a detection. lr20xx_driver calls this field PLL steps of 31.25 us (the
+    // datasheet's "32 MHz periods" disagrees); RadioLib scales it as 30.52, so we land ~2% long.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
     ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
                                        .detPeak = detPeak,
                                        // ignored: SetLoraCadParams has no det_min - that byte carries
                                        // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_LR2021_CAD_EXIT_MODE_RX,
-                                       .timeout = 0,
+                                       .timeout = cadRxTimeoutUsec,
                                        // A DIO pin map, not a status gate - SetDioIrqConfig only routes
                                        // IRQs to a pin - so keep preamble/header off it (they would fire
                                        // the ISR mid-frame) while getIrqStatus() still shows them for LBT.
@@ -455,7 +459,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
 template <typename T> void LR20x0Interface<T>::rearmReceive()
 {
     if (!cadHandedToRx) {
-        startReceive(); // normal path: chip left RX, so a full standby + re-arm is correct
+        startReceive(); // includes RX_DONE after a handoff, whose RX ends once it has delivered
         return;
     }
     // CAD handed the chip to RX in place. Re-attach the MCU ISR and mark the interface as receiving - a

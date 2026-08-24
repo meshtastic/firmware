@@ -406,7 +406,7 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
         {{39, 45, 47, 53, 59, 61, 64, 63},
          {44, 51, 49, 55, 56, 60, 62, 68},
          {48, 48, 50, 55, 55, 59, 61, 65},
-         {76, 80, 71, 77, 69, 50, 50, 50}},
+         {76, 80, 71, 77, 69, 50, 50, 50}}, // SF10-12: SWSD003 has no measurement, 50 is its fallback
         // 4 symbols:
         {{43, 45, 45, 50, 53, 57, 59, 63},
          {44, 46, 49, 53, 53, 55, 57, 62},
@@ -439,12 +439,16 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     // would fire the ISR mid-frame. getIrqStatus() still shows them to isActivelyReceiving().
     const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
                                  (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
-    // detMin 10 is SWSD003's CAD_DETECT_MIN. cad_timeout 0 is RX until one packet, then standby.
+    // detMin 10 is SWSD003's CAD_DETECT_MIN. UM Table 8-8: this times the RX that follows a detection,
+    // so bound it at one max-length airtime. RadioLib scales it as 30.52 us against a real 31.25, so the
+    // programmed value lands ~2% long - harmless here, and not worth pre-compensating a library bug.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
     ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
                                        .detPeak = detPeak,
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX,
-                                       .timeout = 0,
+                                       .timeout = cadRxTimeoutUsec,
                                        .irqFlags = cadIrqFlags,
                                        .irqMask = cadIrqFlags}}; // irqMask is ignored on this part
     int16_t result;
@@ -468,7 +472,7 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 template <typename T> void LR11x0Interface<T>::rearmReceive()
 {
     if (!cadHandedToRx) {
-        startReceive(); // normal path: chip left RX, so a full standby + re-arm is correct
+        startReceive(); // includes RX_DONE after a handoff, whose bounded RX left the chip in standby
         return;
     }
     // CAD handed the chip to RX in place. Re-attach the MCU ISR and mark the interface as receiving - a

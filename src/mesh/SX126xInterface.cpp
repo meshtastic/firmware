@@ -403,9 +403,15 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
 template <typename T> void SX126xInterface<T>::rearmReceive()
 {
-    // The chip is already in RX (CAD GOTO_RX handoff, or continuous RX after RX_DONE - readData() does
-    // not standby). Re-attach the MCU ISR that was detached and mark the interface as receiving via the base
-    // startReceive(), WITHOUT the standby+SetRx that would abort an in-flight reception.
+    // The flag is spent on the handoff re-arm below, so every later call takes the full path - including
+    // RX_DONE after a handoff, whose cadTimeout-bounded RX has already dropped the chip to standby.
+    if (!cadHandedToRx) {
+        startReceive();
+        return;
+    }
+    // CAD handed the chip to RX in place. Re-attach the MCU ISR and mark the interface as receiving - a
+    // startReceive() here would standby and abort the ongoing reception.
+    cadHandedToRx = false;
     enableInterrupt(isrRxLevel0);
     RadioLibInterface::startReceive();
 }
@@ -424,11 +430,15 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS;
     const uint32_t cadIrqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
                                 (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+    // cadTimeout bounds the RX the chip enters on detection: one max-length airtime, in microseconds. A
+    // detection that delivers nothing then expires to standby and raises TIMEOUT, which re-arms us.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
     ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
                                        .detPeak = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_SX126X_CAD_GOTO_RX,
-                                       .timeout = 0,
+                                       .timeout = cadRxTimeoutUsec,
                                        .irqFlags = cadIrqFlags,
                                        .irqMask = cadIrqMask}};
     int16_t result;
@@ -441,6 +451,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
         // ISR and RX state, no standby - a startReceive() here would abort the packet we just detected).
         lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_CAD_DONE | RADIOLIB_SX126X_IRQ_CAD_DETECTED);
         startCadHandoffTimeout(); // nothing below arms the radio, so let the poll notice a no-show
+        cadHandedToRx = true;
         return true;
     }
     if (result != RADIOLIB_CHANNEL_FREE)

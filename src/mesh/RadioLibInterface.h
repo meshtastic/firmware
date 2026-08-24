@@ -223,10 +223,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * startReceive(), correct for a chip that left RX to scan. A chip still in RX overrides this to
      * re-attach the MCU ISR only, so a reception already in flight is not aborted.
      *
-     * An override must NOT call the chip's own startReceive(): its standby+SetRx aborts the packet CAD
-     * just detected, which is the whole point of the override. Call the base
-     * RadioLibInterface::startReceive(), which marks the interface as receiving and arms nothing - so
-     * only where the chip is known to be listening already.
+     * On the handoff path only, an override must NOT call the chip's own startReceive(): its
+     * standby+SetRx aborts the packet CAD just detected. Call the base RadioLibInterface::startReceive()
+     * there, which marks the interface as receiving and arms nothing. Every other path must still take
+     * the chip's own startReceive() - a handoff's single-shot RX ends in standby once it delivers.
      */
     virtual void rearmReceive() { startReceive(); }
 
