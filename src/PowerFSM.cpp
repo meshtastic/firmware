@@ -58,6 +58,20 @@ static bool isPowered()
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
+/// True when the CDC console runs on the native USB-OTG peripheral (ARDUINO_USB_MODE=0) and the
+/// board is currently running on USB power. Light sleep powers that PHY down, after which the host
+/// can no longer re-enumerate the device and the console is gone until the cable is replugged.
+/// See https://github.com/meshtastic/firmware/issues/4206
+static bool nativeUsbSerialActive()
+{
+#if defined(ARDUINO_USB_MODE) && (ARDUINO_USB_MODE == 0) && defined(ARDUINO_USB_CDC_ON_BOOT) &&                     \
+    (ARDUINO_USB_CDC_ON_BOOT == 1)
+    return powerStatus && powerStatus->getHasUSB();
+#else
+    return false;
+#endif
+}
+
 static bool isBluetoothEnabledForPowerFSM()
 {
 #if HAS_BLUETOOTH && !MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -144,6 +158,15 @@ static void lsIdle()
     // LOG_INFO("lsIdle begin ls_secs=%u", getPref_ls_secs());
 
 #ifdef ARCH_ESP32
+
+    // USB may have been plugged in after boot, so re-check here instead of relying on the snapshot
+    // taken in PowerFSM_setup(). Leaving light sleep costs a wake cycle; losing the console costs a
+    // physical replug, and on boards without a PMU there is no VBUS insert IRQ to recover us.
+    if (nativeUsbSerialActive()) {
+        LOG_INFO("Native USB-CDC on USB power: leaving light sleep (keeps serial alive)");
+        powerFSM.trigger(EVENT_WAKE_TIMER);
+        return;
+    }
 
     // Do we have more sleeping to do?
     if (secsSlept < config.power.ls_secs) {
@@ -441,7 +464,15 @@ void PowerFSM_setup()
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 
-    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
+    // Already on USB power at boot: skip registering the light-sleep transitions entirely, so a
+    // mains powered node never churns through wake cycles. Cables plugged in later are caught live
+    // by lsIdle(). See nativeUsbSerialActive().
+    bool nativeUsbSerialAttached = nativeUsbSerialActive();
+    if (nativeUsbSerialAttached)
+        LOG_INFO("Native USB-CDC on USB power: light sleep disabled (keeps serial alive)");
+
+    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor &&
+        !nativeUsbSerialAttached) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
