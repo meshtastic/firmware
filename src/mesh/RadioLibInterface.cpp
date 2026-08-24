@@ -750,8 +750,10 @@ void RadioLibInterface::resetAGC()
 void RadioLibInterface::noteCadHandoffToRx()
 {
     cadHandedToRx = true;
-    // Same clock Throttle compares against, so a native test can drive both across the wrap.
-    cadHandoffRxStart = Time::getMillis();
+    // Same clock Throttle compares against, so a native test can drive both across the wrap. 0 is the
+    // "none outstanding" sentinel and getMillis() does land on it once per wrap, so step past it.
+    const uint32_t now = Time::getMillis();
+    cadHandoffRxStart = now ? now : 1;
 }
 
 void RadioLibInterface::rearmReceive()
@@ -763,8 +765,10 @@ void RadioLibInterface::rearmReceive()
         return;
     }
     cadHandedToRx = false;
-    enableInterrupt(isrRxLevel0);
+    // Same order the drivers' own startReceive() uses: mark receiving BEFORE arming, or an ISR that
+    // fires in between reaches handleReceiveInterrupt() while isReceiving is still false and is dropped.
     RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
     // The line is not known-low here, and the ISR is rising-edge: catch an RX_DONE that beat the arm.
     checkRxDoneIrqFlag();
 }
