@@ -2,7 +2,7 @@
 
 #include "configuration.h"
 #include "InputBroker.h"
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #include "TouchGestureRecognizer.h"
 #include "TouchTargetRegistry.h"
 #endif
@@ -15,7 +15,7 @@ typedef struct _TouchEvent {
     char touchEvent;
     uint16_t x;
     uint16_t y;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     input_broker_event targetAction;
     uint8_t targetKind;
     uint32_t targetValue;
@@ -28,7 +28,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
   public:
     explicit TouchScreenBase(const char *name, uint16_t width, uint16_t height);
     void init(bool hasTouch);
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     void beginTouchFrame(uint32_t pageGeneration);
     void markTouchFrameMapped();
     bool addTouchTarget(meshtastic::TouchRect rect, meshtastic::TouchTargetKind kind, uint32_t value,
@@ -65,7 +65,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     uint16_t _display_height;
 
   private:
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     bool _touchedOld = false;
     int16_t _last_x = 0;
     int16_t _last_y = 0;
@@ -82,7 +82,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     bool _tapped = false;
     uint32_t _lastRun = 0;
 #endif
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     meshtastic::TouchGestureRecognizer _recognizer;
     meshtastic::TouchTargetRegistry _targets;
     bool _targetCaptureStarted = false;

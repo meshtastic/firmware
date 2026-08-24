@@ -18,7 +18,7 @@ class NotificationRenderer
     static InputEvent inEvent;
     static char inKeypress;
     static int8_t curSelected;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     static bool touchSelectionPending;
 #endif
     static char alertBannerMessage[256];
@@ -53,7 +53,7 @@ class NotificationRenderer
     static void drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     static bool handleTouchTarget(uint32_t value);
 #endif
 #if defined(_VARIANT_T_DECK_MAX)

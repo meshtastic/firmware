@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 
 #include "TouchTargetRegistry.h"
 
@@ -197,4 +197,4 @@ void TouchTargetRegistry::cancelCapture()
 
 } // namespace meshtastic
 
-#endif // T_DECK_MAX || _VARIANT_T_DECK_PRO_V1_1
+#endif // T_DECK_MAX || _VARIANT_T_DECK_PRO_V1_1 || MESHTASTIC_T5S3_EPAPER_V2_UI

@@ -81,6 +81,23 @@ static inline bool useClockHeaderAccentTheme(uint32_t themeId)
            themeId == ThemeID::ClassicRed || themeId == ThemeID::MonochromeWhite;
 }
 
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+static void drawScaledXbm(OLEDDisplay *display, int x, int y, int width, int height, int scale, const uint8_t *bitmap)
+{
+    if (scale <= 0)
+        return;
+
+    const int bytesPerRow = (width + 7) / 8;
+    for (int row = 0; row < height; ++row) {
+        const uint8_t rowBits = pgm_read_byte(bitmap + row * bytesPerRow);
+        for (int col = 0; col < width; ++col) {
+            if (rowBits & (1U << (col & 7)))
+                display->fillRect(x + col * scale, y + row * scale, scale, scale);
+        }
+    }
+}
+#endif
+
 // *********************************
 // * Rounded Header when inverted *
 // *********************************
@@ -292,6 +309,31 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #ifdef USE_EINK
             batteryY += 2;
 #endif
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            constexpr int batteryScale = T5S3_EPD_UI_BATTERY_SCALE;
+            constexpr int batteryWidth = 7 * batteryScale;
+            drawScaledXbm(display, batteryX, batteryY, 7, 11, batteryScale, batteryBitmap_v);
+            if (isCharging && isBoltVisibleShared) {
+                drawScaledXbm(display, batteryX + batteryScale, batteryY + 3 * batteryScale, 5, 5, batteryScale,
+                              lightning_bolt_v);
+            } else {
+                drawScaledXbm(display, batteryX - batteryScale, batteryY + 4 * batteryScale, 8, 3, batteryScale,
+                              batteryBitmap_sidegaps_v);
+                const int fillHeight = 8 * batteryScale * chargePercent / 100;
+                const int fillY = batteryY + 10 * batteryScale - fillHeight;
+                display->fillRect(batteryX + batteryScale, fillY, 5 * batteryScale, fillHeight);
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (fillHeight > 0) {
+                    hasBatteryFillRegion = true;
+                    batteryFillRegionX = batteryX + batteryScale;
+                    batteryFillRegionY = fillY;
+                    batteryFillRegionW = 5 * batteryScale;
+                    batteryFillRegionH = fillHeight;
+                }
+#endif
+            }
+            batteryX += batteryWidth + 2;
+#else
             display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
             if (isCharging && isBoltVisibleShared)
                 display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
@@ -311,6 +353,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
             }
             batteryX += 9; // Icon + 2 pixels
+#endif
         }
     }
 #if GRAPHICS_TFT_COLORING_ENABLED

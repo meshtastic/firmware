@@ -132,7 +132,7 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 // ****************************
 // * LoRa Focused Screen      *
 // ****************************
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
 static void drawTDeckLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     (void)state;
@@ -143,10 +143,11 @@ static void drawTDeckLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
-    const int contentLeft = x + 8;
-    const int contentRight = x + screenW - 8;
+    const int contentMargin = T5S3_EPD_UI_CONTENT_MARGIN;
+    const int contentLeft = x + contentMargin;
+    const int contentRight = x + screenW - contentMargin;
     const int contentWidth = contentRight - contentLeft;
-    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int footerReserve = T5S3_EPD_UI_FOOTER_RESERVE;
     const int bodyBottom = y + screenH - footerReserve;
 
     uint32_t onlineNodes = nodeStatus ? nodeStatus->getNumOnline() : 0;
@@ -162,7 +163,7 @@ static void drawTDeckLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state
     snprintf(bleSummary, sizeof(bleSummary), "BLE %s", screen->ourId);
 
     const int summaryY = y + FONT_HEIGHT_SMALL + 5;
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft, summaryY, nodeSummary);
     const int bleWidth = display->getStringWidth(bleSummary);
     display->drawString(contentRight - bleWidth, summaryY, bleSummary);
@@ -199,12 +200,12 @@ static void drawTDeckLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state
         channelPercent = 100;
 
     const int panelTop = separatorY + 7;
-    const int panelTitleHeight = 22;
-    const int normalRowHeight = 29;
-    const int utilizationRowHeight = 43;
+    const int panelTitleHeight = T5S3_EPD_UI_DEBUG_PANEL_TITLE_HEIGHT;
+    const int normalRowHeight = T5S3_EPD_UI_DEBUG_ROW_HEIGHT;
+    const int utilizationRowHeight = T5S3_EPD_UI_DEBUG_UTILIZATION_ROW_HEIGHT;
     const int panelHeight = panelTitleHeight + normalRowHeight * 5 + utilizationRowHeight + 4;
     display->drawRect(contentLeft, panelTop, contentWidth, panelHeight);
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft + 7, panelTop + 5, "RADIO CONFIG");
     const char *radioState = config.lora.tx_enabled ? "TX READY" : "TX OFF";
     const int radioStateWidth = display->getStringWidth(radioState);
@@ -212,7 +213,7 @@ static void drawTDeckLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state
 
     int rowY = panelTop + panelTitleHeight;
     auto drawValueRow = [&](const char *label, const char *value) {
-        display->setFont(FONT_SMALL_LOCAL);
+        display->setFont(T5S3_EPD_UI_FONT_BODY);
         display->drawString(contentLeft + 9, rowY + 6, label);
         char clippedValue[64];
         const int valueMaxWidth = contentWidth - 92;
@@ -229,7 +230,7 @@ static void drawTDeckLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state
     drawValueRow("ROLE", role ? role : "Unknown");
     drawValueRow("TX", txState);
 
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft + 9, rowY + 6, "CHANNEL USE");
     char channelValue[12];
     snprintf(channelValue, sizeof(channelValue), "%d%%", channelPercent);
@@ -265,10 +266,11 @@ static void drawTDeckSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
-    const int contentLeft = x + 8;
-    const int contentRight = x + screenW - 8;
+    const int contentMargin = T5S3_EPD_UI_CONTENT_MARGIN;
+    const int contentLeft = x + contentMargin;
+    const int contentRight = x + screenW - contentMargin;
     const int contentWidth = contentRight - contentLeft;
-    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int footerReserve = T5S3_EPD_UI_FOOTER_RESERVE;
     const int bodyBottom = y + screenH - footerReserve;
 
     char apiState[48];
@@ -288,7 +290,7 @@ static void drawTDeckSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         snprintf(apiState, sizeof(apiState), "%s / Ethernet", clientWord);
 
     const int summaryY = y + FONT_HEIGHT_SMALL + 5;
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft, summaryY, "RUNTIME");
     const char *summaryState = isAPIConnected(service->api_state) ? "ACTIVE" : "STANDBY";
     const int summaryStateWidth = display->getStringWidth(summaryState);
@@ -316,11 +318,11 @@ static void drawTDeckSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 
     const int usageTop = separatorY + 7;
-    const int usageTitleHeight = 22;
-    const int usageRowHeight = 34;
+    const int usageTitleHeight = T5S3_EPD_UI_SYSTEM_USAGE_TITLE_HEIGHT;
+    const int usageRowHeight = T5S3_EPD_UI_SYSTEM_USAGE_ROW_HEIGHT;
     const int usagePanelHeight = usageTitleHeight + usageCount * usageRowHeight + 4;
     display->drawRect(contentLeft, usageTop, contentWidth, usagePanelHeight);
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft + 7, usageTop + 5, "RESOURCE USAGE");
     const int usageBottom = usageTop + usagePanelHeight;
     for (int i = 0; i < usageCount; ++i) {
@@ -331,7 +333,7 @@ static void drawTDeckSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         char value[32];
         snprintf(value, sizeof(value), "%d%%  %u/%uK", percent, static_cast<unsigned>(used / 1024),
                  static_cast<unsigned>(total / 1024));
-        display->setFont(FONT_SMALL_LOCAL);
+        display->setFont(T5S3_EPD_UI_FONT_BODY);
         display->drawString(contentLeft + 9, rowY + 4, usage[i].label);
         const int valueWidth = display->getStringWidth(value);
         display->drawString(contentRight - valueWidth - 9, rowY + 4, value);
@@ -354,18 +356,18 @@ static void drawTDeckSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     getUptimeStr(millis(), "Up: ", uptimeValue, sizeof(uptimeValue));
 
     const int statusTop = usageBottom + 8;
-    const int statusTitleHeight = 22;
-    const int statusRowHeight = 26;
+    const int statusTitleHeight = T5S3_EPD_UI_SYSTEM_STATUS_TITLE_HEIGHT;
+    const int statusRowHeight = T5S3_EPD_UI_SYSTEM_STATUS_ROW_HEIGHT;
     const int statusPanelHeight = statusTitleHeight + statusRowHeight * 3 + 4;
     display->drawRect(contentLeft, statusTop, contentWidth, statusPanelHeight);
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft + 7, statusTop + 5, "RUNTIME STATUS");
 
     const char *statusLabels[] = {"VERSION", "UPTIME", "API"};
     const char *statusValues[] = {versionValue, uptimeValue, apiState};
     for (int i = 0; i < 3; ++i) {
         const int rowY = statusTop + statusTitleHeight + i * statusRowHeight;
-        display->setFont(FONT_SMALL_LOCAL);
+        display->setFont(T5S3_EPD_UI_FONT_BODY);
         display->drawString(contentLeft + 9, rowY + 5, statusLabels[i]);
         char clippedValue[48];
         UIRenderer::truncateStringWithEmotes(display, statusValues[i], clippedValue, sizeof(clippedValue), contentWidth - 96);
@@ -383,7 +385,7 @@ static void drawTDeckSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     drawTDeckLoRaFocused(display, state, x, y);
     return;
 #endif
@@ -562,7 +564,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 // ****************************
 void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     drawTDeckSystemScreen(display, state, x, y);
     return;
 #endif

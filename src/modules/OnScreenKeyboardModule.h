@@ -5,6 +5,9 @@
 
 #include "graphics/Screen.h" // InputEvent
 #include "graphics/VirtualKeyboard.h"
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#include "platform/extra_variants/t5s3_epaper/T5S3Keyboard.h"
+#endif
 #include <OLEDDisplay.h>
 #include <functional>
 #include <memory>
@@ -22,7 +25,8 @@ class OnScreenKeyboardModule
 
     void stop(bool callEmptyCallback);
 
-    void handleInput(const InputEvent &event);
+    bool handleInput(const InputEvent &event);
+    bool isActive() const;
     static bool processVirtualKeyboardInput(const InputEvent &event, VirtualKeyboard *keyboard);
     bool draw(OLEDDisplay *display);
 
@@ -35,7 +39,11 @@ class OnScreenKeyboardModule
     void onSubmit(const std::string &text);
     void onCancel();
 
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    std::unique_ptr<T5S3Keyboard> t5Keyboard;
+#else
     std::unique_ptr<VirtualKeyboard> keyboard;
+#endif
     std::function<void(const std::string &)> callback;
 };
 

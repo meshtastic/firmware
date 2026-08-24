@@ -17,7 +17,10 @@
 #include "gps/GeoCoord.h"
 #include "graphics/EmoteRenderer.h"
 #include "graphics/SharedUIDisplay.h"
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+#include "graphics/EInkParallelDisplay.h"
+#endif
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #include "graphics/TouchLayout.h"
 #endif
 #include "graphics/TFTColorRegions.h"
@@ -30,6 +33,7 @@
 #include "motion/MotionSensor.h"
 #endif
 #include <OLEDDisplay.h>
+#include <algorithm>
 #include <cstring>
 #include <gps/RTC.h>
 
@@ -738,7 +742,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // **********************
 // * Favorite Node Info *
 // **********************
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
 static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic_NodeInfoLite *node)
 {
     display->clear();
@@ -752,14 +756,16 @@ static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, co
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
-    const int contentLeft = x + 8;
-    const int contentRight = x + screenW - 8;
+    const int contentMargin = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_CONTENT_MARGIN : 8;
+    const int contentLeft = x + contentMargin;
+    const int contentRight = x + screenW - contentMargin;
     const int contentWidth = contentRight - contentLeft;
-    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int footerReserve = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_FOOTER_RESERVE
+                                                  : ((currentResolution == ScreenResolution::High) ? 24 : 16);
     const int bodyBottom = y + screenH - footerReserve;
 
     const int summaryY = y + FONT_HEIGHT_SMALL + 5;
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft, summaryY, "FAVORITE NODE");
     const char *pinnedLabel = "PINNED";
     const int pinnedWidth = display->getStringWidth(pinnedLabel);
@@ -768,8 +774,8 @@ static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, co
     display->drawLine(contentLeft, separatorY, contentRight, separatorY);
 
     const int cardTop = separatorY + 7;
-    const int cardHeight = 102;
-    const int compassColumnWidth = 72;
+    const int cardHeight = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_FAVORITE_CARD_HEIGHT : 102;
+    const int compassColumnWidth = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_FAVORITE_COMPASS_WIDTH : 72;
     const int textLeft = contentLeft + 31;
     const int textRight = contentRight - compassColumnWidth;
     display->drawRect(contentLeft, cardTop, contentWidth, cardHeight);
@@ -788,10 +794,10 @@ static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, co
 
     char idLine[32];
     snprintf(idLine, sizeof(idLine), "!%08lX / %s", static_cast<unsigned long>(node->num), shortName);
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     char clippedId[32];
     UIRenderer::truncateStringWithEmotes(display, idLine, clippedId, sizeof(clippedId), textRight - textLeft - 6);
-    display->drawString(textLeft, cardTop + 34, clippedId);
+    display->drawString(textLeft, cardTop + T5S3_EPD_UI_FAVORITE_ROW_HEIGHT + 8, clippedId);
 
     char statusLine[96] = "";
 #if !MESHTASTIC_EXCLUDE_STATUS && !MESHTASTIC_EXCLUDE_STATUSDB
@@ -803,7 +809,7 @@ static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, co
     }
 #endif
     if (statusLine[0])
-        display->drawString(textLeft, cardTop + 56, statusLine);
+        display->drawString(textLeft, cardTop + T5S3_EPD_UI_FAVORITE_ROW_HEIGHT * 2 + 4, statusLine);
 
     char signalValue[24];
     if (node->has_hops_away && node->hops_away > 0) {
@@ -813,7 +819,7 @@ static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, co
     } else {
         snprintf(signalValue, sizeof(signalValue), "SNR: --");
     }
-    display->drawString(textLeft, cardTop + 78, signalValue);
+    display->drawString(textLeft, cardTop + T5S3_EPD_UI_FAVORITE_ROW_HEIGHT * 3, signalValue);
 
     bool showCompass = false;
     float myHeading = 0.0f;
@@ -839,18 +845,22 @@ static void drawTDeckFavoriteNode(OLEDDisplay *display, int16_t x, int16_t y, co
             compassStatus2 = "Heading";
         }
     }
-    const int compassX = contentRight - 38;
-    const int compassY = cardTop + 51;
-    drawBearingCompassOrStatus(display, compassX, compassY, 27, showCompass, myHeading, bearing, compassStatus1, compassStatus2);
+    const int compassX = T5S3_EPD_UI_PROFILE ? contentRight - compassColumnWidth / 2 : contentRight - 38;
+    const int compassY = T5S3_EPD_UI_PROFILE ? cardTop + cardHeight / 2 : cardTop + 51;
+    const int compassRadius = T5S3_EPD_UI_PROFILE
+                                  ? std::max(8, std::min((compassColumnWidth - 12) / 2, (cardHeight - 24) / 2))
+                                  : 27;
+    drawBearingCompassOrStatus(display, compassX, compassY, compassRadius, showCompass, myHeading, bearing, compassStatus1,
+                               compassStatus2);
 
     const int metricsTop = cardTop + cardHeight + 8;
     display->drawLine(contentLeft, metricsTop, contentRight, metricsTop);
-    const int rowHeight = 26;
+    const int rowHeight = T5S3_EPD_UI_FAVORITE_ROW_HEIGHT;
     int rowY = metricsTop + 6;
     auto drawMetricRow = [&](const char *label, const char *value) {
         if (rowY + FONT_HEIGHT_SMALL > bodyBottom)
             return;
-        display->setFont(FONT_SMALL_LOCAL);
+        display->setFont(T5S3_EPD_UI_FONT_BODY);
         display->drawString(contentLeft + 2, rowY, label);
         char clippedValue[48];
         UIRenderer::truncateStringWithEmotes(display, value, clippedValue, sizeof(clippedValue), contentWidth - 100);
@@ -949,7 +959,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (!node || node->num == nodeDB->getNodeNum() || !nodeInfoLiteIsFavorite(node))
         return;
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     currentFavoriteNodeNum = node->num;
     drawTDeckFavoriteNode(display, x, y, node);
     return;
@@ -1506,7 +1516,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int line = 1;
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     {
     // T-Deck Pro has enough portrait space for a compact status dashboard. Keep
     // the legacy frame and input path, but give each status group its own zone.
@@ -1514,8 +1524,9 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setColor(WHITE);
 
     const int screenW = display->getWidth();
-    const int contentLeft = x + 8;
-    const int contentRight = x + screenW - 8;
+    const int contentMargin = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_CONTENT_MARGIN : 8;
+    const int contentLeft = x + contentMargin;
+    const int contentRight = x + screenW - contentMargin;
     const int contentWidth = contentRight - contentLeft;
     const int bodyTop = y + FONT_HEIGHT_SMALL + 4;
 
@@ -1541,18 +1552,18 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // Message state remains read-only here; opening Messages still follows the
     // existing frame/menu path.
     const int messageTop = identityRuleY + 6;
-    const int messageHeight = 27;
+    const int messageHeight = T5S3_EPD_UI_HOME_MESSAGE_HEIGHT;
     display->drawRect(contentLeft, messageTop, contentWidth, messageHeight);
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft + 6, messageTop + 6, "Messages");
     const char *messageState = hasUnreadMessage ? "Unread" : "No new";
     const int messageStateWidth = display->getStringWidth(messageState);
     display->drawString(contentRight - 6 - messageStateWidth, messageTop + 6, messageState);
 
     const int gridTop = messageTop + messageHeight + 6;
-    const int gridGap = 4;
+    const int gridGap = T5S3_EPD_UI_HOME_GRID_GAP;
     const int cellWidth = (contentWidth - gridGap) / 2;
-    const int cellHeight = 52;
+    const int cellHeight = T5S3_EPD_UI_HOME_CELL_HEIGHT;
     const int gridBottom = gridTop + (cellHeight * 2) + gridGap;
 
     int onlineNodes = nodeStatus->getNumOnline() > 0 ? static_cast<int>(nodeStatus->getNumOnline()) - 1 : 0;
@@ -1581,7 +1592,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     auto drawMetricCell = [&](int cellX, int cellY, const char *label, const char *value) {
         display->drawRect(cellX, cellY, cellWidth, cellHeight);
-        display->setFont(FONT_SMALL_LOCAL);
+        display->setFont(T5S3_EPD_UI_FONT_BODY);
         display->drawString(cellX + 6, cellY + 5, label);
         display->setFont(FONT_SMALL);
         display->drawString(cellX + 6, cellY + 22, value);
@@ -1593,7 +1604,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int channelCellX = contentLeft;
     const int channelCellY = gridTop + cellHeight + gridGap;
     display->drawRect(channelCellX, channelCellY, cellWidth, cellHeight);
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(channelCellX + 6, channelCellY + 5, "Channel use");
 
     display->setFont(FONT_SMALL);
@@ -1617,10 +1628,10 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     drawMetricCell(contentLeft + cellWidth + gridGap, gridTop + cellHeight + gridGap, "Uptime", uptimeValue);
 
-    const int statusRowHeight = 22;
+    const int statusRowHeight = T5S3_EPD_UI_HOME_STATUS_ROW_HEIGHT;
     int statusY = gridBottom + 7;
     auto drawStatusRow = [&](const char *label, const char *value) {
-        display->setFont(FONT_SMALL_LOCAL);
+        display->setFont(T5S3_EPD_UI_FONT_BODY);
         display->drawString(contentLeft, statusY, label);
         const int valueWidth = display->getStringWidth(value);
         display->drawString(contentRight - valueWidth, statusY, value);
@@ -1628,7 +1639,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         statusY += statusRowHeight;
     };
 
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft, statusY, "GPS");
 #if HAS_GPS
     UIRenderer::drawGps(display, contentLeft + 47, statusY - 1, gpsStatus);
@@ -2100,7 +2111,7 @@ void UIRenderer::drawBootIconScreen(const char *upperMsg, OLEDDisplay *display, 
 // ****************************
 // * My Position Screen       *
 // ****************************
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
 static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     (void)state;
@@ -2111,9 +2122,11 @@ static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *st
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
-    const int contentLeft = x + 8;
-    const int contentRight = x + screenW - 8;
-    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int contentMargin = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_CONTENT_MARGIN : 8;
+    const int contentLeft = x + contentMargin;
+    const int contentRight = x + screenW - contentMargin;
+    const int footerReserve = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_FOOTER_RESERVE
+                                                  : ((currentResolution == ScreenResolution::High) ? 24 : 16);
     const int bodyBottom = y + screenH - footerReserve;
 
     bool hasLiveGpsFix = false;
@@ -2164,7 +2177,7 @@ static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *st
 #endif
 
     const int summaryY = y + FONT_HEIGHT_SMALL + 5;
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(contentLeft, summaryY, "GPS");
 #if HAS_GPS
     UIRenderer::drawGps(display, contentLeft + 28, summaryY - 1, gpsStatus);
@@ -2177,9 +2190,9 @@ static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *st
     display->drawLine(contentLeft, separatorY, contentRight, separatorY);
 
     const int panelTop = separatorY + 7;
-    const int panelHeight = 112;
-    const int cardGap = 8;
-    const int compassWidth = 104;
+    const int panelHeight = T5S3_EPD_UI_POSITION_PANEL_HEIGHT;
+    const int cardGap = T5S3_EPD_UI_POSITION_CARD_GAP;
+    const int compassWidth = T5S3_EPD_UI_POSITION_COMPASS_WIDTH;
     const int compassX0 = contentLeft;
     const int coordinatesX0 = compassX0 + compassWidth + cardGap;
     const int coordinatesWidth = contentRight - coordinatesX0;
@@ -2187,7 +2200,7 @@ static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *st
     display->drawRect(compassX0, panelTop, compassWidth, panelHeight);
     display->drawRect(coordinatesX0, panelTop, coordinatesWidth, panelHeight);
 
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
     display->drawString(compassX0 + 6, panelTop + 5, "HEADING");
     display->drawString(coordinatesX0 + 6, panelTop + 5, "COORDINATES");
 
@@ -2205,14 +2218,16 @@ static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *st
     drawDetailedCompassOrStatus(display, compassCenterX, compassCenterY, compassRadius, validHeading, heading, statusLine1,
                                 statusLine2);
 
-    display->setFont(FONT_SMALL_LOCAL);
+    display->setFont(T5S3_EPD_UI_FONT_BODY);
 #if HAS_GPS
     if (gpsStatus) {
         const int coordinateY = panelTop + 31;
         UIRenderer::drawGpsCoordinates(display, coordinatesX0 + 6, coordinateY, gpsStatus, "line1");
         if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
             uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
-            UIRenderer::drawGpsCoordinates(display, coordinatesX0 + 6, coordinateY + 28, gpsStatus, "line2");
+            const int coordinateRowHeight = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_POSITION_ROW_HEIGHT : 28;
+            UIRenderer::drawGpsCoordinates(display, coordinatesX0 + 6, coordinateY + coordinateRowHeight, gpsStatus,
+                                           "line2");
         }
     } else {
         display->drawString(coordinatesX0 + 6, panelTop + 31, "No GPS");
@@ -2237,13 +2252,13 @@ static void drawTDeckPositionScreen(OLEDDisplay *display, OLEDDisplayUiState *st
 
     const int metricsTop = panelTop + panelHeight + 8;
     display->drawLine(contentLeft, metricsTop, contentRight, metricsTop);
-    const int rowHeight = 26;
+    const int rowHeight = T5S3_EPD_UI_POSITION_ROW_HEIGHT;
     int rowY = metricsTop + 6;
 
     auto drawMetricRow = [&](const char *label, const char *value) {
         if (rowY + FONT_HEIGHT_SMALL > bodyBottom)
             return;
-        display->setFont(FONT_SMALL_LOCAL);
+        display->setFont(T5S3_EPD_UI_FONT_BODY);
         display->drawString(contentLeft + 2, rowY, label);
         const int valueWidth = display->getStringWidth(value);
         display->drawString(contentRight - valueWidth, rowY, value);
@@ -2301,7 +2316,7 @@ void UIRenderer::scrollPositionUp()
 
 void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     drawTDeckPositionScreen(display, state, x, y);
     return;
 #endif
@@ -2595,6 +2610,10 @@ void UIRenderer::drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *sta
 // Navigation bar overlay implementation
 static int16_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+constexpr uint8_t T5S3_HOME_FULL_REFRESH_PERIOD = 5;
+static uint8_t t5s3HomeSwitchCount = 0;
+#endif
 constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 constexpr uint32_t ICON_DISPLAY_DURATION_MS_COMPACT = 1000;
 
@@ -2606,7 +2625,7 @@ void UIRenderer::notifyScreenWoke()
 // cppcheck-suppress constParameterPointer; signature must match OverlayCallback typedef from OLEDDisplayUi library
 void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     if (screen)
         screen->markTouchFrameMapped();
 #endif
@@ -2624,12 +2643,25 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Detect frame change and record time
     if (frameToHighlight != lastFrameIndex) {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        if (lastFrameIndex >= 0 && ++t5s3HomeSwitchCount >= T5S3_HOME_FULL_REFRESH_PERIOD) {
+            t5s3HomeSwitchCount = 0;
+            static_cast<EInkParallelDisplay *>(display)->requestFullRefresh();
+        }
+#endif
         lastFrameIndex = frameToHighlight;
         lastFrameChangeTime = millis();
     }
 
+#if T5S3_EPD_UI_PROFILE
+    const int iconSize = T5S3_EPD_UI_NAV_ICON_SIZE;
+    const int spacing = T5S3_EPD_UI_NAV_SPACING;
+    const int iconBitmapSize = T5S3_EPD_UI_NAV_ICON_DRAW_SIZE;
+#else
     const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
     const int spacing = (currentResolution == ScreenResolution::High) ? 8 : 4;
+    const int iconBitmapSize = iconSize;
+#endif
     const int bigOffset = (currentResolution == ScreenResolution::High) ? 1 : 0;
     const bool compactPanel = graphics::isCompactPanel(display);
 
@@ -2698,7 +2730,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     const int navPadding = compactPanel ? 8 : ((currentResolution == ScreenResolution::High) ? 24 : 12);
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     const int screenWidth = display->getWidth();
     const int screenHeight = display->getHeight();
 #else
@@ -2753,12 +2785,17 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         return;
 
     // Pre-calculate bounding rect
-    const int rectX = xStart - 2 - bigOffset;
-    const int rectY = y - (compactPanel ? 1 : 2);
     const int rectWidth = totalWidth + 4 + (bigOffset * 2);
     const int rectHeight = iconSize + (compactPanel ? 2 : 6);
+#if T5S3_EPD_UI_PROFILE
+    const int rectX = xStart - 2 - bigOffset;
+    const int rectY = navBarVisible ? std::max(0, screenHeight - rectHeight) : y - (compactPanel ? 1 : 2);
+#else
+    const int rectX = xStart - 2 - bigOffset;
+    const int rectY = y - (compactPanel ? 1 : 2);
+#endif
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     if (navBarVisible && screen) {
         for (size_t i = pageStart; i < pageEnd; ++i) {
             const int iconX = xStart + (i - pageStart) * (iconSize + spacing);
@@ -2816,8 +2853,15 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #endif
         }
 
-        if (currentResolution == ScreenResolution::High) {
-            NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, icon, display);
+        const bool drawScaledIcon = T5S3_EPD_UI_PROFILE || currentResolution == ScreenResolution::High;
+        const int iconOffset = (iconSize - iconBitmapSize) / 2;
+        if (drawScaledIcon) {
+#if T5S3_EPD_UI_PROFILE
+            NodeListRenderer::drawScaledXBitmap(x + iconOffset, y + iconOffset, 8, 8, T5S3_EPD_UI_NAV_ICON_SCALE, icon,
+                                                 display);
+#else
+            NodeListRenderer::drawScaledXBitmap16x16(x + iconOffset, y + iconOffset, 8, 8, icon, display);
+#endif
         } else {
             display->drawXbm(x, y, iconSize, iconSize, icon);
         }
@@ -2858,7 +2902,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         int baseX = rectX + rectWidth + offset;
         int regionX = baseX;
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         if (screen)
             screen->addTouchTarget(touchExpandedRect(regionX, top, maxW, halfH, 3),
                                    meshtastic::TouchTargetKind::NavigationNext, 0, INPUT_BROKER_NONE);
@@ -2876,7 +2920,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         int baseX = rectX - offset - 1;
         int regionX = baseX - maxW + 1;
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         if (screen)
             screen->addTouchTarget(touchExpandedRect(regionX, top, maxW, halfH, 3),
                                    meshtastic::TouchTargetKind::NavigationPrevious, 0, INPUT_BROKER_NONE);

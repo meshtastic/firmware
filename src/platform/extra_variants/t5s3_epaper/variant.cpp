@@ -134,14 +134,14 @@ void showTouchIndicator(const char *text)
 }
 
 #if defined(BOARD_PCA9535_ADDR) && defined(BOARD_PCA9535_BUTTON_MASK)
-bool readPca9535Port1(uint8_t *value)
+bool readPca9535Register(uint8_t reg, uint8_t *value)
 {
     if (!value) {
         return false;
     }
 
     Wire.beginTransmission(BOARD_PCA9535_ADDR);
-    Wire.write((uint8_t)0x01); // input port 1
+    Wire.write(reg);
     if (Wire.endTransmission(false) != 0) {
         return false;
     }
@@ -153,6 +153,30 @@ bool readPca9535Port1(uint8_t *value)
     return true;
 }
 
+bool writePca9535Register(uint8_t reg, uint8_t value)
+{
+    Wire.beginTransmission(BOARD_PCA9535_ADDR);
+    Wire.write(reg);
+    Wire.write(value);
+    return Wire.endTransmission() == 0;
+}
+
+bool readPca9535Port1(uint8_t *value)
+{
+    return readPca9535Register(0x01, value);
+}
+
+bool configurePca9535SideKey()
+{
+    uint8_t configuration = 0xFF;
+    if (!readPca9535Register(0x07, &configuration)) {
+        return false;
+    }
+
+    configuration |= BOARD_PCA9535_BUTTON_MASK;
+    return writePca9535Register(0x07, configuration);
+}
+
 bool isPca9535SideKeyPressed()
 {
     uint8_t port1 = 0xFF;
@@ -162,6 +186,23 @@ bool isPca9535SideKeyPressed()
 
     return (port1 & BOARD_PCA9535_BUTTON_MASK) == 0;
 }
+
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+void injectT5s3QuickMessageEvent()
+{
+    if (!inputBroker)
+        return;
+
+    InputEvent event{};
+    event.source = "t5s3-pca9535";
+    event.inputEvent = INPUT_BROKER_T5S3_QUICK_MESSAGE;
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
+    inputBroker->queueInputEvent(&event);
+#else
+    inputBroker->injectInputEvent(&event);
+#endif
+}
+#endif
 
 class SideKeyInterruptThread : public concurrency::OSThread
 {
@@ -179,8 +220,20 @@ class SideKeyInterruptThread : public concurrency::OSThread
 
     void begin()
     {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        pinMode(BUTTON_PIN, INPUT_PULLUP);
+        if (!configurePca9535SideKey()) {
+            LOG_WARN("PCA9535 side-key input configuration failed");
+        }
+        uint8_t ignored = 0xFF;
+        (void)readPca9535Port1(&ignored);
+#endif
         pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
         attachInterrupt(BOARD_PCA9535_INT, SideKeyInterruptThread::isr, FALLING);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        // Keep a polling path as a fallback when the expander INT line is missed or latched.
+        startThread();
+#endif
     }
 
   protected:
@@ -200,10 +253,12 @@ class SideKeyInterruptThread : public concurrency::OSThread
         }
 
         // Ignore side-key handling while BOOT/user button is held.
+#if !defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         if (digitalRead(BUTTON_PIN) == LOW) {
             resetStateAndStop();
             return OSThread::disable();
         }
+#endif
 
         switch (state) {
         case State::IRQ_PENDING:
@@ -220,7 +275,12 @@ class SideKeyInterruptThread : public concurrency::OSThread
 
             // Spurious/cleared edge.
             resetStateAndStop();
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            startThread();
+            return SAMPLE_MS;
+#else
             return OSThread::disable();
+#endif
 
         case State::PRESSED: {
             if (isPca9535SideKeyPressed()) {
@@ -242,18 +302,35 @@ class SideKeyInterruptThread : public concurrency::OSThread
                     t5TouchHandleUserInput();
                     t5BacklightHandleUserInput();
                 } else {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+                    injectT5s3QuickMessageEvent();
+#else
                     toggleTouchInputEnabled();
+#endif
                 }
                 lastActionMs = now;
             }
 
             resetStateAndStop();
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            startThread();
+            return SAMPLE_MS;
+#else
             return OSThread::disable();
+#endif
         }
 
         case State::REST:
         default:
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            if (isPca9535SideKeyPressed()) {
+                state = State::PRESSED;
+                pressStartMs = now;
+            }
+            return SAMPLE_MS;
+#else
             return OSThread::disable();
+#endif
         }
     }
 
@@ -335,6 +412,9 @@ class SideKeyInterruptThread : public concurrency::OSThread
         (void)readPca9535Port1(&ignored);
         pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
         attachInterrupt(BOARD_PCA9535_INT, SideKeyInterruptThread::isr, FALLING);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        startThread();
+#endif
 
         return 0;
     }
@@ -616,7 +696,11 @@ bool readTouch(int16_t *x, int16_t *y)
         int16_t raw_x;
         int16_t raw_y;
         if (touch.getPoint(&raw_x, &raw_y)) {
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            // GT911 already reports portrait logical coordinates (540x960); do not rotate again.
+            *x = raw_x;
+            *y = raw_y;
+#elif defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
             // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
             // rotation=3 is the physical identity (device's default orientation).
             switch (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation) {
@@ -695,7 +779,11 @@ void lateInitVariant()
         touchLightSleepObserver.observer.observe(&notifyLightSleep);
         touchLightSleepEndObserver.observer.observe(&notifyLightSleepEnd);
 #endif
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        touchScreenImpl1 = new TouchScreenImpl1(EPD_HEIGHT, EPD_WIDTH, readTouch);
+#else
         touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
+#endif
         touchScreenImpl1->init();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
         touchBridge.observe(touchScreenImpl1);

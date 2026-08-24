@@ -146,7 +146,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
     e.kbchar = 0;
     e.touchX = event.x;
     e.touchY = event.y;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     e.touchTargetKind = event.targetKind;
     e.touchTargetValue = event.targetValue;
     e.touchTargetLongPress = event.targetLongPress;
@@ -176,7 +176,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_LONG_PRESS: {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         e.inputEvent = event.targetAction != INPUT_BROKER_NONE ? event.targetAction : INPUT_BROKER_SELECT;
 #else
         e.inputEvent = INPUT_BROKER_SELECT;

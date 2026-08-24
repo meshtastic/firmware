@@ -7,7 +7,7 @@
 #include "UIRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #include "graphics/TouchLayout.h"
 #endif
 #include "graphics/TFTColorRegions.h"
@@ -52,7 +52,7 @@ namespace graphics
 int bannerSignalBars = -1;
 InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 bool NotificationRenderer::touchSelectionPending = false;
 #endif
 char NotificationRenderer::alertBannerMessage[256] = {0};
@@ -241,7 +241,7 @@ void NotificationRenderer::resetBanner()
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
     curSelected = 0;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     touchSelectionPending = false;
 #endif
     alertBannerOptions = 0; // last x lines are selectable options
@@ -262,7 +262,7 @@ void NotificationRenderer::resetBanner()
     }
 }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 bool NotificationRenderer::handleTouchTarget(uint32_t value)
 {
     if (alertBannerOptions == 0 || value >= alertBannerOptions)
@@ -292,7 +292,21 @@ bool NotificationRenderer::handleTouchTarget(uint32_t value)
         alertBannerCallback(static_cast<int>(value));
     }
 
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    if (current_notification_type == notificationTypeEnum::text_input) {
+        // The option callback may have replaced this menu with the touch keyboard.
+        // Do not resetBanner() here because it would stop the newly opened keyboard.
+        alertBannerOptions = 0;
+        optionsArrayPtr = nullptr;
+        optionsEnumPtr = nullptr;
+        alertBannerCallback = nullptr;
+        touchSelectionPending = false;
+    } else {
+        resetBanner();
+    }
+#else
     resetBanner();
+#endif
     return true;
 }
 #endif
@@ -713,11 +727,11 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
 
     uint16_t totalLines = lineCount + alertBannerOptions;
     uint16_t screenHeight = display->height();
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
-    constexpr uint8_t menuTitleHeight = 25;
-    constexpr uint8_t menuRowHeight = 30;
-    constexpr uint8_t menuBottomPadding = 7;
-    constexpr uint8_t menuScreenMargin = 4;
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
+    constexpr uint8_t menuTitleHeight = T5S3_EPD_UI_MENU_TITLE_HEIGHT;
+    constexpr uint8_t menuRowHeight = T5S3_EPD_UI_MENU_ROW_HEIGHT;
+    constexpr uint8_t menuBottomPadding = T5S3_EPD_UI_MENU_BOTTOM_PADDING;
+    constexpr uint8_t menuScreenMargin = T5S3_EPD_UI_MENU_SCREEN_MARGIN;
     const uint8_t maxOptionRows =
         std::max<uint8_t>(1, (screenHeight > menuTitleHeight + menuBottomPadding + menuScreenMargin * 2
                                    ? (screenHeight - menuTitleHeight - menuBottomPadding - menuScreenMargin * 2) / menuRowHeight
@@ -947,7 +961,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
                                                uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth)
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     if (screen)
         screen->markTouchFrameMapped();
 #endif
@@ -1017,17 +1031,17 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         }
         lineCount++;
     }
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)) && defined(USE_EINK)
+#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     // Keep the legacy menu callbacks and touch values, but give T-Deck Pro menus
     // a self-contained Field console-style card so the frame underneath cannot show through.
     const bool isNodePicker = current_notification_type == notificationTypeEnum::node_picker;
     if (alertBannerOptions > 0 && (optionsArrayPtr != nullptr || isNodePicker) && lineCount > 0) {
-        constexpr uint16_t menuWidth = 218;
-        constexpr uint16_t menuTitleHeight = 25;
-        constexpr uint16_t menuRowHeight = 30;
-        constexpr uint16_t menuMessageRowHeight = 18;
-        constexpr uint16_t menuBottomPadding = 7;
-        constexpr uint16_t menuScreenMargin = 4;
+        constexpr uint16_t menuWidth = T5S3_EPD_UI_MENU_WIDTH;
+        constexpr uint16_t menuTitleHeight = T5S3_EPD_UI_MENU_TITLE_HEIGHT;
+        constexpr uint16_t menuRowHeight = T5S3_EPD_UI_MENU_ROW_HEIGHT;
+        constexpr uint16_t menuMessageRowHeight = T5S3_EPD_UI_MENU_MESSAGE_ROW_HEIGHT;
+        constexpr uint16_t menuBottomPadding = T5S3_EPD_UI_MENU_BOTTOM_PADDING;
+        constexpr uint16_t menuScreenMargin = T5S3_EPD_UI_MENU_SCREEN_MARGIN;
 
         const uint16_t screenWidth = display->getWidth();
         const uint16_t screenHeight = display->getHeight();
@@ -1115,10 +1129,12 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
             display->setFont(FONT_SMALL);
             display->setColor(selected ? BLACK : WHITE);
+            char optionNumber[4] = {0};
+            int labelLeft = 12;
             if (!isNodePicker) {
-                char optionNumber[4] = {0};
                 snprintf(optionNumber, sizeof(optionNumber), "%02u", static_cast<unsigned>(optionIndex + 1));
                 display->drawString(boxLeft + 12, rowY + 5, optionNumber);
+                labelLeft += display->getStringWidth(optionNumber) + display->getStringWidth("  ");
             }
 
             const uint16_t renderedOptionLine = static_cast<uint16_t>(messageLineCount + row);
@@ -1130,16 +1146,17 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                 optionText = optionsArrayPtr[optionIndex];
             }
             char optionBuffer[64] = {0};
-            const int labelLeft = isNodePicker ? 12 : 45;
             const int labelMaxWidth = std::max(1, static_cast<int>(boxWidth) - labelLeft - 13);
             UIRenderer::truncateStringWithEmotes(display, optionText, optionBuffer, sizeof(optionBuffer), labelMaxWidth);
             display->drawString(boxLeft + labelLeft, rowY + 5, optionBuffer);
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
             if (screen) {
                 screen->addTouchTarget(touchExpandedRect(boxLeft + 4, rowY, boxWidth - 8, menuRowHeight, 2),
                                        meshtastic::TouchTargetKind::NotificationOption, optionIndex,
                                        INPUT_BROKER_NONE);
             }
+#endif
 
             display->setColor(WHITE);
             display->drawLine(boxLeft + 8, rowY + menuRowHeight - 1, boxLeft + boxWidth - 8,
@@ -1249,13 +1266,13 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
     // Draw Content
     int16_t lineY = boxTop + vPadding;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     const uint16_t optionStartLine = (alertBannerOptions > 0 && totalLines >= alertBannerOptions)
                                          ? totalLines - alertBannerOptions
                                          : totalLines;
 #endif
     for (int i = 0; i < visibleTotalLines; i++) {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         const int16_t rowY = lineY;
 #endif
         display->setFont(fontForBannerLine(lineFonts[i]));
@@ -1362,7 +1379,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             }
         }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         if (alertBannerOptions > 0 && i >= optionStartLine && screen) {
             const uint32_t optionIndex = static_cast<uint32_t>(firstOptionToShow + i - optionStartLine);
             if (optionIndex < alertBannerOptions) {
@@ -1423,6 +1440,23 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
 
 void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    auto &keyboardModule = OnScreenKeyboardModule::instance();
+    const bool hasKeyboardTarget =
+        inEvent.touchTargetKind == static_cast<uint8_t>(meshtastic::TouchTargetKind::KeyboardKey);
+    if (inEvent.inputEvent != INPUT_BROKER_NONE || hasKeyboardTarget || inEvent.touchX != 0 || inEvent.touchY != 0) {
+        const InputEvent event = inEvent;
+        inEvent = {};
+        keyboardModule.handleInput(event);
+    }
+
+    if (!keyboardModule.draw(display)) {
+        if (current_notification_type == notificationTypeEnum::text_input)
+            resetBanner();
+        if (screen)
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    }
+#else
     if (virtualKeyboard) {
         // Check for timeout and auto-exit if needed
         if (virtualKeyboard->isTimedOut()) {
@@ -1490,6 +1524,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
         LOG_INFO("Virtual keyboard is null - resetting banner");
         resetBanner();
     }
+#endif
 }
 
 bool NotificationRenderer::isOverlayBannerShowing()

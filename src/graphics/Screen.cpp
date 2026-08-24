@@ -111,6 +111,25 @@ using namespace meshtastic; /** @todo remove */
 namespace graphics
 {
 
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+namespace
+{
+constexpr uint8_t T5S3_MENU_FULL_REFRESH_PERIOD = 5;
+uint8_t t5s3MenuActivationCount = 0;
+
+void noteT5s3MenuActivation(OLEDDisplay *display)
+{
+    if (display == nullptr)
+        return;
+
+    if (++t5s3MenuActivationCount >= T5S3_MENU_FULL_REFRESH_PERIOD) {
+        t5s3MenuActivationCount = 0;
+        static_cast<EInkParallelDisplay *>(display)->requestFullRefresh();
+    }
+}
+} // namespace
+#endif
+
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define IDLE_FRAMERATE 1 // in fps
 #define COMPASS_ACTIVE_FRAMERATE 20
@@ -183,7 +202,7 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     if (screen)
         screen->beginTouchFrame();
 #endif
@@ -212,7 +231,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
             NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
         display->display();
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         if (screen)
             screen->publishTouchFrame();
 #endif
@@ -223,7 +242,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     prepareFrameColorRegions();
 #endif
     ui->update();
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     if (screen)
         screen->publishTouchFrame();
 #endif
@@ -331,6 +350,10 @@ void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
 // Called to trigger a banner with custom message and duration
 void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    if (banner_overlay_options.optionsCount > 0)
+        noteT5s3MenuActivation(dispdev);
+#endif
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
@@ -345,7 +368,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
     NotificationRenderer::alertBannerCallback = banner_overlay_options.bannerCallback;
     NotificationRenderer::curSelected = banner_overlay_options.InitialSelected;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     NotificationRenderer::touchSelectionPending = false;
 #endif
     NotificationRenderer::pauseBanner = false;
@@ -353,12 +376,19 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    static_cast<EInkParallelDisplay *>(dispdev)->requestResponsiveUpdate();
+    setFastFramerate();
+#endif
     updateUiFrame(ui);
 }
 
 // Called to trigger a banner with custom message and duration
 void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback)
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    noteT5s3MenuActivation(dispdev);
+#endif
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
@@ -370,7 +400,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     NotificationRenderer::touchSelectionPending = false;
 #endif
     NotificationRenderer::current_notification_type = notificationTypeEnum::node_picker;
@@ -378,6 +408,9 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    static_cast<EInkParallelDisplay *>(dispdev)->requestResponsiveUpdate();
+#endif
     updateUiFrame(ui);
 }
 
@@ -385,6 +418,9 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
                               std::function<void(uint32_t)> bannerCallback)
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    noteT5s3MenuActivation(dispdev);
+#endif
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
@@ -405,6 +441,9 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    static_cast<EInkParallelDisplay *>(dispdev)->requestResponsiveUpdate();
+#endif
     updateUiFrame(ui);
 }
 
@@ -412,6 +451,9 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
 void Screen::showAlphanumericPicker(const char *message, const char *initialText, uint32_t durationMs, uint8_t length,
                                     std::function<void(const std::string &)> bannerCallback)
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    noteT5s3MenuActivation(dispdev);
+#endif
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
@@ -442,6 +484,9 @@ void Screen::showAlphanumericPicker(const char *message, const char *initialText
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    static_cast<EInkParallelDisplay *>(dispdev)->requestResponsiveUpdate();
+#endif
     updateUiFrame(ui);
 }
 
@@ -449,6 +494,10 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
                            std::function<void(const std::string &)> textCallback)
 {
     LOG_INFO("showTextInput header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    noteT5s3MenuActivation(dispdev);
+    NotificationRenderer::inEvent = {};
+#endif
 
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
@@ -465,6 +514,9 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    static_cast<EInkParallelDisplay *>(dispdev)->requestResponsiveUpdate();
+#endif
     updateUiFrame(ui);
 }
 
@@ -641,7 +693,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     dispdev = new EInkDynamicDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK_PARALLELDISPLAY)
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    dispdev = new EInkParallelDisplay(EPD_HEIGHT, EPD_WIDTH, EPD_WIDTH, EPD_HEIGHT,
+                                      EInkParallelDisplay::EPD_ROT_INVERTED_PORTRAIT);
+#else
     dispdev = new EInkParallelDisplay(EPD_WIDTH, EPD_HEIGHT, EInkParallelDisplay::EPD_ROT_PORTRAIT);
+#endif
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -676,7 +733,7 @@ Screen::~Screen()
     delete dispdev;
 }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 void Screen::beginTouchFrame()
 {
     const uint32_t currentFrame = ui ? static_cast<uint32_t>(ui->getUiState()->currentFrame) : 0;
@@ -2094,6 +2151,9 @@ void Screen::showFrame(FrameDirection direction)
 
 void Screen::setFastFramerate()
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    static_cast<EInkParallelDisplay *>(dispdev)->requestResponsiveUpdate();
+#endif
 #if defined(OLED_TINY)
     dispdev->clear();
 #if GRAPHICS_TFT_COLORING_ENABLED
@@ -2166,7 +2226,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
     return 0;
 }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 bool Screen::handleTouchTarget(const InputEvent *event)
 {
     if (event->touchTargetLongPress && event->inputEvent == INPUT_BROKER_NONE)
@@ -2211,6 +2271,14 @@ bool Screen::handleTouchTarget(const InputEvent *event)
             return false;
         if (!NodeListRenderer::isTouchRowValid(event->touchTargetValue))
             return true;
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        if (!event->touchTargetLongPress &&
+            (ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
+             ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal)) {
+            showFrame(FrameDirection::NEXT);
+            return true;
+        }
+#endif
         if (ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_nodes ||
             ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location ||
             ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
@@ -2245,7 +2313,21 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (!screenOn)
         return 0;
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    if (event->inputEvent == INPUT_BROKER_T5S3_QUICK_MESSAGE) {
+        if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input)
+            return 1;
+
+        NotificationRenderer::resetBanner();
+        if (cannedMessageModule) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            return 1;
+        }
+        return 0;
+    }
+#endif
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     if (event->touchTargetKind != static_cast<uint8_t>(meshtastic::TouchTargetKind::None) &&
         handleTouchTarget(event)) {
         return 1;
@@ -2545,7 +2627,7 @@ bool Screen::isGamesFrameShown()
     return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
 }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || T5S3_EPD_UI_PROFILE
 bool Screen::isMessageFrameShown() const
 {
     return framesetInfo.positions.textMessage != 255 && ui &&

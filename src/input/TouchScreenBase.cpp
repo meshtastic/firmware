@@ -1,6 +1,6 @@
 #include "TouchScreenBase.h"
 #include "configuration.h"
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #include "input/HapticFeedback.h"
 #endif
 #include "main.h"
@@ -47,7 +47,7 @@
 #endif
 
 TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t height)
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     : concurrency::OSThread(name), _display_width(width), _display_height(height), _recognizer(width, height),
       _targets(width, height), _originName(name)
 #else
@@ -59,7 +59,7 @@ TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t heig
 void TouchScreenBase::init(bool hasTouch)
 {
     if (hasTouch) {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
         LOG_INFO("TouchScreen initialized: tap=12 lock=20 swipe=38 long=500ms stable=3");
 #else
         LOG_INFO("TouchScreen initialized %d %d", TOUCH_THRESHOLD_X, TOUCH_THRESHOLD_Y);
@@ -71,7 +71,7 @@ void TouchScreenBase::init(bool hasTouch)
     }
 }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 void TouchScreenBase::beginTouchFrame(uint32_t pageGeneration)
 {
     _targets.beginFrame(pageGeneration);
@@ -96,7 +96,7 @@ void TouchScreenBase::publishTouchFrame()
 
 int32_t TouchScreenBase::runOnce()
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     const uint32_t nowMs = millis();
     if (nowMs - _lastRun < 20)
         return 20;
@@ -322,7 +322,7 @@ int32_t TouchScreenBase::runOnce()
 
 void TouchScreenBase::hapticFeedback()
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
     if (::hapticFeedback)
         ::hapticFeedback->play(HapticEffect::NAVIGATION);
