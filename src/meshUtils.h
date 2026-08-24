@@ -5,6 +5,16 @@
 #include <iterator>
 #include <stdint.h>
 
+/// Keep a function out of line even when the compiler would rather inline it. Use on helpers that
+/// hold a large object on the stack: inlining several of them into one caller makes that caller's
+/// frame reserve every helper's locals at once, which on our 8 KB Arduino loopTask is enough to
+/// overflow the stack (see issue #11237).
+#if defined(__GNUC__)
+#define NOINLINE __attribute__((noinline))
+#else
+#define NOINLINE
+#endif
+
 /// C++ v17+ clamp function, limits a given value to a range defined by lo and hi
 template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi)
 {
@@ -48,6 +58,10 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes);
 
 // is the memory region filled with a single character?
 bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
+
+// getDeviceId() fallback (see target_specific.h): copies the 6-byte factory MAC, or returns false
+// on an all-zero MAC so two blank devices don't collide on an all-zero id.
+bool getMacAddrDeviceId(uint8_t *deviceId);
 
 bool isOneOf(int item, int count, ...);
 

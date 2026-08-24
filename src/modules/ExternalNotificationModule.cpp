@@ -16,11 +16,12 @@
 #include "ExternalNotificationModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
@@ -38,6 +39,10 @@ bool ascending = true;
 
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
+#endif
+
+#if defined(HAS_I2S_SPEAKER_NRF52)
+#include "platform/nrf52/NRF52RtttlPlayer.h"
 #endif
 
 /*
@@ -78,7 +83,13 @@ int32_t ExternalNotificationModule::runOnce()
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
+#endif
+        // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
+        // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
+        const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
+        if (nagWindowExpired && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
@@ -90,14 +101,15 @@ int32_t ExternalNotificationModule::runOnce()
         if (isNagging) {
             delay = (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                   : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
-            if (externalTurnedOn[0] + delay < millis()) {
+            // externalTurnedOn[] is when each output was last toggled, so these are intervals.
+            if (Throttle::hasElapsed(externalTurnedOn[0], delay)) {
                 setExternalState(0, !getExternal(0));
             }
-            if (externalTurnedOn[1] + delay < millis()) {
+            if (Throttle::hasElapsed(externalTurnedOn[1], delay)) {
                 setExternalState(1, !getExternal(1));
             }
             // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
-            if (!moduleConfig.external_notification.use_pwm && externalTurnedOn[2] + delay < millis()) {
+            if (!moduleConfig.external_notification.use_pwm && Throttle::hasElapsed(externalTurnedOn[2], delay)) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
                 setExternalState(2, !getExternal(2));
@@ -127,7 +139,10 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
 
 #ifdef HAS_DRV2605
-            drv.go();
+            // Only trigger DRV2605 if vibration alerts are enabled
+            if (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra) {
+                drv.go();
+            }
 #endif
         }
 
@@ -136,18 +151,29 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        // Play RTTTL over the I2S speaker (no piezo on this board).
+        if (canBuzz() && buzzerShouldAlert) {
+            if (nrf52RtttlPlayer.isPlaying()) {
+                nrf52RtttlPlayer.play();
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+                nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
+            }
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+        }
+#endif
         // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz()) {
+        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
@@ -225,9 +251,18 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #endif
 
 #ifdef HAS_DRV2605
+    // Only trigger DRV2605 when setting vibration motor
+    bool shouldTriggerDRV = false;
     if (on) {
+        if (index == 1 &&
+            (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra)) {
+            shouldTriggerDRV = true;
+        }
+    }
+
+    if (shouldTriggerDRV) {
         drv.go();
-    } else {
+    } else if (!on && index == 1) {
         drv.stop();
     }
 #endif
@@ -253,6 +288,9 @@ void ExternalNotificationModule::stopNow()
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
 #endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+    nrf52RtttlPlayer.stop();
+#endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
     for (int i = 0; i < 3; i++) {
@@ -266,6 +304,7 @@ void ExternalNotificationModule::stopNow()
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
     isNagging = false;
+    buzzerShouldAlert = false;
     nagCycleCutoff = UINT32_MAX;
 
 #ifdef HAS_I2S
@@ -404,8 +443,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             // Alert GPIO Buzzer when receiving a bell = alertBellBuzzer: true
             // Alert GPIO Buzzer when receiving a message = alertMessageBuzzer: true
-            const bool buzzerShouldAlert = canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
-                                                         (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
+            // If you are already buzzing, keep going
+            buzzerShouldAlert =
+                buzzerShouldAlert || (canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
+                                                    (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
@@ -422,27 +463,27 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             if (vibraShouldAlert) {
                 LOG_INFO("externalNotificationModule - Vibra alert");
+#ifdef HAS_DRV2605
+                // Set DRV2605 waveform when vibration alert is triggered
+                drv.setWaveform(0, 16); // Long buzzer 100%
+                drv.setWaveform(1, 0);  // Pause
+                drv.setWaveform(2, 16);
+                drv.setWaveform(3, 0);
+                drv.setWaveform(4, 16);
+                drv.setWaveform(5, 0);
+                drv.setWaveform(6, 16);
+                drv.setWaveform(7, 0);
+                drv.go();
+#endif
                 setExternalState(1, true);
             }
 
             if (buzzerShouldAlert) {
                 LOG_INFO("externalNotificationModule - Buzzer alert");
                 if (buzzerModeIsDirectOnly && !isDmToUs && !containsBell) {
-                    LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
+                    LOG_INFO("Buzzer suppressed: mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
-#ifdef HAS_DRV2605
-                    drv.setWaveform(0, 16); // Long buzzer 100%
-                    drv.setWaveform(1, 0);  // Pause
-                    drv.setWaveform(2, 16);
-                    drv.setWaveform(3, 0);
-                    drv.setWaveform(4, 16);
-                    drv.setWaveform(5, 0);
-                    drv.setWaveform(6, 16);
-                    drv.setWaveform(7, 0);
-                    drv.go();
-#endif
-
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
 #ifdef HAS_I2S
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));

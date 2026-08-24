@@ -161,6 +161,10 @@ typedef enum _meshtastic_PortNum {
  Portnum for payloads from the official Meshtastic ATAK plugin using
  TAKPacketV2 with zstd dictionary compression. */
     meshtastic_PortNum_ATAK_PLUGIN_V2 = 78,
+    /* signed firmware updates over lora.
+
+ ENCODING: binary (ota-common transport frames) */
+    meshtastic_PortNum_LORA_OTA_APP = 79,
     /* GroupAlarm integration
  Used for transporting GroupAlarm-related messages between Meshtastic nodes
  and companion applications/services. */

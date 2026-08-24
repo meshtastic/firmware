@@ -35,7 +35,7 @@ class MapApplet : public Applet
 
     MapApplet *asMapApplet() override { return this; } // Identify as MapApplet without RTTI
 
-    // Zoom lock — shared across all MapApplet instances (static)
+    // Zoom lock - shared across all MapApplet instances (static)
     static constexpr int ZOOM_MAX_NO_TILES = 16;
 
     void zoomIn();

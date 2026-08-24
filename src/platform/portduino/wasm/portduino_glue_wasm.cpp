@@ -12,10 +12,9 @@
 //   - exec() short-circuits to "" (no popen/shell in the browser).
 // Downstream is unchanged: Ch341Hal -> libpinedio_webusb.c -> WebUSB.
 
-#include "CryptoEngine.h"   // crypto->ensurePkiKeys()
 #include "MeshRadio.h"      // initRegion()
 #include "MeshService.h"    // service->reloadConfig()
-#include "NodeDB.h"         // config, owner globals + SEGMENT_CONFIG
+#include "NodeDB.h"         // config globals, SEGMENT_*, nodeDB->ensurePkiIdentity()
 #include "PhoneAPI.h"       // the transport-agnostic client API seam
 #include "PortduinoFS.h"    // portduinoVFS
 #include "PortduinoGlue.h"  // declares `portduino_config` + Ch341Hal
@@ -33,9 +32,9 @@
 extern "C" EMSCRIPTEN_KEEPALIVE void wasm_fs_sync()
 {
     // Coalesce: IDBFS syncfs is async, and overlapping syncs warn "2 FS.syncfs
-    // operations in flight". Never run two at once — if one is in flight, mark a
+    // operations in flight". Never run two at once - if one is in flight, mark a
     // pending re-sync and let the running one chain it when it finishes.
-    // NOTE: loose != / == and string ops only — clang-format mangles !== and
+    // NOTE: loose != / == and string ops only - clang-format mangles !== and
     // /regex/ literals inside EM_ASM JS (splitting them into invalid tokens).
     EM_ASM({
         try {
@@ -78,10 +77,10 @@ void wasm_fs_mount()
     portduinoVFS->mountpoint("/meshdata");
 }
 
-// Resolve a per-instance MAC address (12 uppercase hex chars, no colons — the
+// Resolve a per-instance MAC address (12 uppercase hex chars, no colons - the
 // MAC_from_string format getMacAddr() expects). The lower 4 bytes become the
 // 32-bit NodeNum (pickNewNodeNum: mac[2..5]), so this is the node's identity on
-// the mesh — every browser node MUST get a distinct one or they collide on the
+// the mesh - every browser node MUST get a distinct one or they collide on the
 // same NodeNum. Priority:
 //   1. MESH_MAC env (headless determinism / parity tests, e.g. DEAD00C0FFEE),
 //   2. a value persisted in the /meshdata tree (survives reload/restart),
@@ -235,16 +234,16 @@ void wasm_config_apply()
 // (lora) region path exactly (AdminModule.cpp:904-937): validate -> first-region
 // keygen + enable tx -> initRegion() -> reloadConfig (resetRadioConfig +
 // reconfigure observer recomputes the carrier freq + saveToDisk). A region change
-// is reconfigure-only — no reboot. Returns 0 on success, -1 if validation fails.
+// is reconfigure-only - no reboot. Returns 0 on success, -1 if validation fails.
 // `region` is a meshtastic_Config_LoRaConfig_RegionCode enum value.
 // Re-entrancy guard. The node is single-threaded + Asyncify: while setup()/loop()
 // is suspended inside a WebUSB transfer, the JS event loop is free, so a stray DOM
-// or timer callback could re-enter a wasm_* entry point — starting a second
+// or timer callback could re-enter a wasm_* entry point - starting a second
 // Asyncify unwind ("async operation already in flight" abort) or clobbering shared
 // PhoneAPI state. The host MUST call these only BETWEEN wasm_loop_once() ticks; the
 // flag (set around setup()/loop() in portduino_main_wasm.cpp) lets the entry points
 // reject a mid-tick call rather than corrupt/abort. The JS-side queue is the real
-// fix — this is just the safety net the design otherwise lacked.
+// fix - this is just the safety net the design otherwise lacked.
 extern "C" volatile bool g_wasm_in_firmware = false;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
@@ -260,11 +259,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
     if (!(RadioInterface::validateConfigRegion(validated) && RadioInterface::validateConfigLora(validated)))
         return -1;
 
+    int changes = SEGMENT_CONFIG;
     bool wasUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     if (wasUnset && newRegion > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-        if (crypto)
-            crypto->ensurePkiKeys(config.security, owner); // first real region -> generate keys
+        // Minting the key moves our node num with it, so persist devicestate + the node DB too.
+        if (nodeDB && nodeDB->ensurePkiIdentity())
+            changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
 #endif
         validated.tx_enabled = true;
     }
@@ -274,8 +275,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
     config.lora = validated;
     initRegion(); // repoint myRegion at the new region table
     if (service)
-        service->reloadConfig(SEGMENT_CONFIG); // reconfigure radio (new freq) + persist
-    wasm_fs_sync();                            // browser: flush config.proto to IndexedDB
+        service->reloadConfig(changes); // reconfigure radio (new freq) + persist
+    wasm_fs_sync();                     // browser: flush config.proto to IndexedDB
     return 0;
 }
 
@@ -285,11 +286,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
 // those servers are excluded here, so we expose PhoneAPI directly to JS instead.
 // A JS-side transport (browser in-process, or a headless HTTP/TCP bridge) feeds
 // ToRadio protobufs in via wasm_api_to_radio() and drains FromRadio protobufs
-// out via wasm_api_from_radio() — exactly the unframed contract the device HTTP
+// out via wasm_api_from_radio() - exactly the unframed contract the device HTTP
 // API uses. PhoneAPI is abstract on checkIsConnected(); in-process we're always
 // connected. We poll available() rather than push from onNowHasData(), to keep
 // all API calls OUT of the loop's Asyncify suspend (the JS pump drains only
-// between wasm_loop_once() ticks — never re-entering wasm mid-SPI).
+// between wasm_loop_once() ticks - never re-entering wasm mid-SPI).
 class WasmPhoneAPI : public PhoneAPI
 {
   public:
@@ -300,7 +301,7 @@ static WasmPhoneAPI *g_wasmPhone = nullptr;
 
 // Lazily construct after MeshService exists (PhoneAPI's ctor observes
 // service->fromNumChanged). The first API call happens post-setup(), so service
-// is live by then — no wasm_setup() ordering change needed.
+// is live by then - no wasm_setup() ordering change needed.
 static WasmPhoneAPI *phone()
 {
     if (!g_wasmPhone && service)
@@ -310,7 +311,7 @@ static WasmPhoneAPI *phone()
 
 // JS -> device: hand one serialized ToRadio protobuf (UNFRAMED) to the node.
 // The SDK's want_config_id, text messages, admin, etc. all arrive here. Returns
-// 1 if accepted, 0 if rejected (e.g. per-portnum throttle — not a transport error).
+// 1 if accepted, 0 if rejected (e.g. per-portnum throttle - not a transport error).
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_to_radio(const uint8_t *buf, size_t len)
 {
     if (g_wasm_in_firmware)
@@ -350,7 +351,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_is_connected()
 // delay()/yield() normally come from framework linux/LinuxCommon.cpp (excluded:
 // it's POSIX/threads). We provide them via Asyncify's emscripten_sleep so
 // init-time blocking yields to the browser event loop instead of freezing the
-// tab — exactly the behavior we want at runtime. C++ linkage to match Arduino.h.
+// tab - exactly the behavior we want at runtime. C++ linkage to match Arduino.h.
 void delay(unsigned long ms)
 {
     emscripten_sleep(ms);
@@ -378,9 +379,9 @@ void randomSeed(unsigned long seed)
 // Restart the node. There is no in-process restart in wasm, so we hand off to
 // the JS host: a browser reloads the tab (NodeDB state survives via IDBFS, so it
 // comes back as the same node); a headless host calls Module.onReboot() if it
-// provided one (re-instantiate or exit as it sees fit), otherwise we just log —
+// provided one (re-instantiate or exit as it sees fit), otherwise we just log -
 // the caller (Power::reboot) already let modules persist via the reboot
-// observers. NOTE: loose !=/== and double-quoted strings only — clang-format
+// observers. NOTE: loose !=/== and double-quoted strings only - clang-format
 // mangles !== and /regex/ literals inside EM_ASM JS into invalid runtime tokens.
 void reboot()
 {
@@ -403,7 +404,7 @@ void reboot()
     });
 }
 
-// tone()/noTone() — no buzzer in the browser (from linux/LinuxCommon.cpp, excluded).
+// tone()/noTone() - no buzzer in the browser (from linux/LinuxCommon.cpp, excluded).
 void tone(unsigned char, unsigned int, unsigned long) {}
 void noTone(unsigned char) {}
 void delayMicroseconds(unsigned int us)
@@ -421,6 +422,6 @@ bool shouldWakeOnReceivedMessage()
     return false;
 }
 
-// TCP phone/API server is excluded in the wasm build — no-op stubs so main.cpp links.
+// TCP phone/API server is excluded in the wasm build - no-op stubs so main.cpp links.
 void initApiServer(int) {}
 void deInitApiServer() {}

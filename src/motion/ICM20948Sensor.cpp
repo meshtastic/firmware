@@ -1,10 +1,11 @@
 #include "ICM20948Sensor.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
+#include "detect/ScanI2CTwoWire.h"
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 #endif
 
 // Flag when an interrupt has been detected
@@ -93,11 +94,11 @@ int32_t ICM20948Sensor::runOnce()
 
     // If we're set to one of the inverted positions
     if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
-        ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
-        ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+        ma = FusionRemap(ma, FusionRemapAlignmentNXNYPZ);
+        ga = FusionRemap(ga, FusionRemapAlignmentNXNYPZ);
     }
 
-    float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
+    float heading = FusionCompass(ga, ma, FusionConventionNed);
 
     heading = applyCompassOrientation(heading);
     if (screen)
@@ -169,12 +170,9 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
     enableDebugging();
 #endif
 
-    // startup
-#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
-    TwoWire &bus = (device.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
-#else
-    TwoWire &bus = Wire; // fallback if only one I2C interface
-#endif
+    // startup; the bus is resolved via the scanner: WIRE1 may be a bridged
+    // bus rather than the local Wire1 (e.g. SenseCAP Indicator)
+    TwoWire &bus = *ScanI2CTwoWire::fetchI2CBus(device.address);
 
     bool bAddr = (device.address.address == 0x69);
     delay(100);
