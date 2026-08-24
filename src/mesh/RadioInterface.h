@@ -67,6 +67,9 @@ typedef struct {
 
 } RadioBuffer;
 
+/// On-air ceiling for MeshPacket.encrypted - what a single RadioBuffer can actually carry.
+constexpr size_t MAX_RADIO_PAYLOAD_LEN = sizeof(RadioBuffer::payload);
+
 /**
  * Basic operations all radio chipsets must implement.
  *

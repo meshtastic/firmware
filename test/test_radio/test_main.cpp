@@ -430,7 +430,9 @@ static int32_t packetPoolLiveBytes()
     return 0;
 }
 
-static void test_beginSending_oversizedPayloadAbortsSafely()
+// Oversize is refused at the radio queue in Router::send(). If one ever gets this far the memcpy is
+// clamped to the buffer instead of failing, and the packet stays the caller's to release.
+static void test_beginSending_oversizedPayloadIsClamped()
 {
     const int32_t liveBefore = packetPoolLiveBytes();
 
@@ -444,17 +446,32 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
     p->id = 0x10203040;
     p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
 
-    // Set encrypted size larger than sizeof(radioBuffer.payload) (which is 256 - sizeof(PacketHeader))
-    p->encrypted.size = testRadio->getRadioBufferPayloadCapacity() + 10;
+    const size_t capacity = testRadio->getRadioBufferPayloadCapacity();
+    p->encrypted.size = capacity + 10;
 
-    size_t result = testRadio->beginSendingPublic(p);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(capacity + sizeof(PacketHeader), testRadio->beginSendingPublic(p),
+                                   "an oversized payload must be clamped to the buffer, not rejected");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(p, testRadio->getSendingPacket(), "beginSending must still take the packet");
 
-    TEST_ASSERT_EQUAL_UINT(0, result);
-    TEST_ASSERT_NULL(testRadio->getSendingPacket());
-
-    // The rejected packet went back to the pool. Not pointer identity: the native pool is
-    // malloc-backed and ASan quarantines the freed block, so the next alloc moves.
+    // beginSending has no failure path that releases, so the packet is ours to free.
+    packetPool.release(p);
     TEST_ASSERT_EQUAL_INT32(liveBefore, packetPoolLiveBytes());
+}
+
+// The clamp must not shorten ordinary traffic.
+static void test_beginSending_fittingPayloadIsSentWhole()
+{
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203041;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = testRadio->getRadioBufferPayloadCapacity();
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(p->encrypted.size + sizeof(PacketHeader), testRadio->beginSendingPublic(p),
+                                   "a payload that exactly fills the buffer must be sent whole");
+    packetPool.release(p);
 }
 
 void setUp(void)
@@ -507,7 +524,8 @@ void setup()
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
     RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
-    RUN_TEST(test_beginSending_oversizedPayloadAbortsSafely);
+    RUN_TEST(test_beginSending_oversizedPayloadIsClamped);
+    RUN_TEST(test_beginSending_fittingPayloadIsSentWhole);
     exit(UNITY_END());
 }
 

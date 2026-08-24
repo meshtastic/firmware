@@ -602,6 +602,18 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+    // Relayed and phone-sourced frames arrive already encrypted, so perhapsEncode's TOO_LARGE check
+    // never sees them - this is the last gate before the radio queue.
+    if (p->encrypted.size > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_WARN("Drop 0x%08x: payload %u exceeds radio capacity %u", p->id, (unsigned)p->encrypted.size,
+                 (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        if (isFromUs(p))
+            abortSendAndNak(meshtastic_Routing_Error_TOO_LARGE, p);
+        else
+            packetPool.release(p);
+        return meshtastic_Routing_Error_TOO_LARGE;
+    }
+
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
 }
