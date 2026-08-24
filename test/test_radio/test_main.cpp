@@ -3,6 +3,8 @@
 #include "MeshService.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "memory/MemAudit.h"
+#include <string.h>
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
@@ -417,10 +419,27 @@ static void test_regionPresetMap_unsetCarriesUserprefsIntent()
 #endif
 }
 
+// In-flight packet bytes as packetPool reports them to memaudit, 0 before the first alloc
+// registers the tag.
+static int32_t packetPoolLiveBytes()
+{
+    memaudit::Tag rows[memaudit::kMaxTags];
+    size_t n = memaudit::snapshot(rows, memaudit::kMaxTags);
+    for (size_t i = 0; i < n; i++)
+        if (rows[i].tag && strcmp(rows[i].tag, "pktpool(live)") == 0)
+            return rows[i].bytes;
+    return 0;
+}
+
 static void test_beginSending_oversizedPayloadAbortsSafely()
 {
+    const int32_t liveBefore = packetPoolLiveBytes();
+
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     TEST_ASSERT_NOT_NULL(p);
+    // The pool accounting has to see this allocation, otherwise the check below proves nothing.
+    TEST_ASSERT_GREATER_THAN_INT32(liveBefore, packetPoolLiveBytes());
+
     p->from = 0x12345678;
     p->to = 0x87654321;
     p->id = 0x10203040;
@@ -434,11 +453,10 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
     TEST_ASSERT_EQUAL_UINT(0, result);
     TEST_ASSERT_NULL(testRadio->getSendingPacket());
 
-    // Verify rejected packet was released to packetPool and its slot is reusable
-    meshtastic_MeshPacket *reallocated = packetPool.allocZeroed();
-    TEST_ASSERT_NOT_NULL(reallocated);
-    TEST_ASSERT_EQUAL_PTR(p, reallocated);
-    packetPool.release(reallocated);
+    // The rejected packet went back to the pool. Pointer identity is not a usable probe: the
+    // native pool is malloc-backed and ASan quarantines the freed block, so the next alloc
+    // lands at a different address.
+    TEST_ASSERT_EQUAL_INT32(liveBefore, packetPoolLiveBytes());
 }
 
 void setUp(void)
