@@ -415,7 +415,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
     // NOTE: symNum is the *encoded* SET_CAD_PARAMS value, not a raw count - RADIOLIB_SX126X_CAD_ON_4_SYMB
-    // (== raw 2) runs the 4-symbol scan NUM_SYM_CAD asks for; keep the two in step if that constant moves.
+    // (== raw 2) runs the 4-symbol scan getCadSymbolCountSubGhz() reports; keep the two in step.
     // Exit CAD straight into RX on detection (GOTO_RX) with the RX IRQs already mapped, so the chip's
     // own CAD->RX transition delivers RX_DONE with no library call in between. irqFlags is
     // the status-enable set (CAD verdict + full RX set incl. PREAMBLE/HEADER_VALID for isActivelyReceiving);

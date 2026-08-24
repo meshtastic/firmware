@@ -92,15 +92,12 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
-    // Symbols every sub-GHz CAD scan should run. A driver whose scanChannel() symNum is a register
-    // encoding rather than a plain count must translate this at its own call site.
-    // Deliberately uncited: no single vendor note covers every part this governs. It also sets the
-    // CAD term in slotTimeMsec, so keeping one value keeps the CW backoff scale equal across a mesh.
+    // Defaults for the per-band counts below, for a driver that states nothing of its own. Every
+    // driver in the tree does state its own, so these set the fleet convention rather than any part's
+    // behaviour: one value per band, so the CW backoff scale stays equal across a mesh.
+    // Uncited on purpose - no single vendor note covers every part they cover. AN1200.77 backs the
+    // 2.4 GHz figure for SX1280: a longer window moves P(Detection) away from P(False Detection).
     static constexpr uint8_t NUM_SYM_CAD = 4;
-    // Symbols SX128x scans, matching RadioLib's own default for that part. AN1200.77: a longer window
-    // moves P(Detection) further from P(False Detection); 1 and 2 symbols risk false detection.
-    // Not fleet-wide for 2.4 GHz - LR1120 and LR2021 run there on NUM_SYM_CAD - so it reaches the slot
-    // through SX128xInterface's getCadSymbolCount(), not by being read directly.
     static constexpr uint8_t NUM_SYM_CAD_24GHZ = 8;
     uint32_t slotTimeMsec = computeSlotTimeMsec();
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
@@ -118,9 +115,14 @@ class RadioInterface
 
     uint32_t computeSlotTimeMsec();
 
-    // Symbols the CAD scan really runs, so computeSlotTimeMsec() sizes the CW slot to the true scan
-    // length. Only SX127x differs: its CAD is fixed in hardware at ~2.25 symbols and is not settable.
-    virtual uint8_t getCadSymbolCount() const { return NUM_SYM_CAD; }
+    // Symbols this part scans, declared per band: a part that works in both need not scan the same
+    // length in each, and the parts sharing a band do not all agree. Each driver states its own, and
+    // must pass a matching symNum - these are what size the CW slot, so a mismatch mis-scales backoff.
+    virtual uint8_t getCadSymbolCountSubGhz() const { return NUM_SYM_CAD; }
+    virtual uint8_t getCadSymbolCountWideLora() const { return NUM_SYM_CAD_24GHZ; }
+
+    /** Whichever of the two applies to the band actually in use. */
+    uint8_t getCadSymbolCount() const;
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need

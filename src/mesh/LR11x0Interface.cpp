@@ -393,7 +393,9 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
-    // symNum is SetCadParams SymbolNum - a plain symbol count - so NUM_SYM_CAD goes in raw.
+    // symNum is SetCadParams SymbolNum - a plain count - so take it straight from getCadSymbolCount(),
+    // which follows the band (8 on 2.4 GHz, as SX1280 scans) and is what sizes the CW slot.
+    const uint8_t symNum = getCadSymbolCount();
     // detPeak: Semtech SWSD003 lr11xx/apps/cad/main_cad.c optimized_parameters[symbols][BW][SF5..SF12],
     // its measured best CAD detection rates. RadioLib's  default is this table's [2 symbols][BW250] row.
     // 50 = SWSD003's CAD_DETECT_PEAK fallback, used where it has no measured value.
@@ -425,7 +427,7 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     // Anything unmatched uses RadioLib default.
     // Whole sub-GHz set today; a narrower BW or a symbol count outside 2/4/8/16 needs a row adding.
     static constexpr float TABLE_BW_KHZ[4] = {62.5f, 125.0f, 250.0f, 500.0f};
-    const int symIdx = NUM_SYM_CAD == 2 ? 0 : NUM_SYM_CAD == 4 ? 1 : NUM_SYM_CAD == 8 ? 2 : NUM_SYM_CAD == 16 ? 3 : -1;
+    const int symIdx = symNum == 2 ? 0 : symNum == 4 ? 1 : symNum == 8 ? 2 : symNum == 16 ? 3 : -1;
     int bwIdx = -1;
     for (int i = 0; i < 4; i++) {
         if (bw > TABLE_BW_KHZ[i] - 1.0f && bw < TABLE_BW_KHZ[i] + 1.0f)
@@ -433,15 +435,12 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     }
     const uint8_t detPeak = (symIdx < 0 || bwIdx < 0) ? (uint8_t)RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
                                                       : CAD_DET_PEAK[symIdx][bwIdx][(sf >= 5 && sf <= 12) ? sf - 5 : 6];
-    // Exit CAD straight into RX on detection, so the chip's own transition delivers the packet with no
-    // library call in the gap. irqFlags here is a DIO pin mask, not a status gate - SetDioIrqParams only
-    // routes IRQs to pins - so keep preamble/header off the pin (they would fire the ISR mid-frame and
-    // run readData() on a partial packet) while getIrqStatus() still shows them to isActivelyReceiving().
-    // cad_timeout 0 means RX until one packet arrives, then standby; the RX_DONE re-arm restores continuous.
+    // irqFlags is a DIO pin mask here, not a status gate, so preamble/header stay off the pin - they
+    // would fire the ISR mid-frame. getIrqStatus() still shows them to isActivelyReceiving().
     const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
                                  (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
-    // detMin 10 is SWSD003's CAD_DETECT_MIN, which is also what RadioLib defaults to.
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
+    // detMin 10 is SWSD003's CAD_DETECT_MIN. cad_timeout 0 is RX until one packet, then standby.
+    ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
                                        .detPeak = detPeak,
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX,

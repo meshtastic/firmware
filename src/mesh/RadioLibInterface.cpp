@@ -461,9 +461,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else {
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
                     if (isChannelActive()) { // currently traffic on the channel?
-                        // Re-arm unconditionally (no beacon-target skip) so we keep listening on the
-                        // channel we are deferring on - the old guard could leave a beacon node deaf on
-                        // its home config until the next TX cycle.
+                        // Re-arm unconditionally, beacon target or not, so the node keeps listening on
+                        // the channel it is deferring on.
                         rearmReceive();
                         setTransmitDelay();
                     } else {
