@@ -181,9 +181,8 @@ https://github.com/brad112358/easy_E22
 #define RF95_RXEN (0 + 17)    // P0.17
 #define RF95_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
 
-// P1.06 is the last free pin, so it is the only one left for a TXEN line - but it is also the e-ink
-// panel's BUSY line, so every opt-in below is refused on an e-ink build. (The EasyProMicro pinout,
-// where P1.06 is SCL, takes the #else branch at the end of this block and never reaches these.)
+// P1.06 is the only free pin left for a TXEN line, but it is also the e-ink panel's BUSY line.
+// EasyProMicro, where it is SCL, takes the #else branch below and has its own TXEN on P1.00.
 #if !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(USE_EINK)
 #define PROMICRO_P106_FREE_FOR_TXEN
 #endif

@@ -427,9 +427,8 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_LR2021_CAD_EXIT_MODE_RX,
                                        .timeout = cadRxTimeoutUsec,
-                                       // DS rev 2.2 6.8.3: SetDioIrqConfig only routes IRQs to a pin, so
-                                       // keep preamble/header off it (they would fire the ISR mid-frame)
-                                       // while the independent pending register still shows them for LBT.
+                                       // DS rev 2.2 6.8.3: only routes IRQs to a pin, so keep
+                                       // preamble/header off it - they would fire the ISR mid-frame
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) |
                                                    (1UL << RADIOLIB_IRQ_TIMEOUT) | (1UL << RADIOLIB_IRQ_CRC_ERR) |
                                                    (1UL << RADIOLIB_IRQ_HEADER_ERR),
