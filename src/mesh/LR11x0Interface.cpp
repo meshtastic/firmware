@@ -393,12 +393,9 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
-    // No in-place CAD->RX handoff here: startChannelScan drives the DIO from cfg.cad.irqFlags and
-    // ignores irqMask, so the flag/mask split that handoff needs isn't available. Stay on GOTO_STDBY
-    // + re-arm. symNum is SetCadParams SymbolNum - a plain symbol count - so NUM_SYM_CAD goes in raw.
+    // symNum is SetCadParams SymbolNum - a plain symbol count - so NUM_SYM_CAD goes in raw.
     // detPeak: Semtech SWSD003 lr11xx/apps/cad/main_cad.c optimized_parameters[symbols][BW][SF5..SF12],
-    // its measured best CAD detection rates. RadioLib's unexplained default is this table's
-    // [2 symbols][BW250] row, so it goes stale as soon as either symbol count or bandwidth moves.
+    // its measured best CAD detection rates. RadioLib's  default is this table's [2 symbols][BW250] row.
     // 50 = SWSD003's CAD_DETECT_PEAK fallback, used where it has no measured value.
     static constexpr uint8_t CAD_DET_PEAK[4][4][8] = {
         // Each block is one symbol count. Within a block the 4 rows are BW 62.5 / 125 / 250 / 500 kHz,
@@ -436,24 +433,49 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     }
     const uint8_t detPeak = (symIdx < 0 || bwIdx < 0) ? (uint8_t)RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
                                                       : CAD_DET_PEAK[symIdx][bwIdx][(sf >= 5 && sf <= 12) ? sf - 5 : 6];
+    // Exit CAD straight into RX on detection, so the chip's own transition delivers the packet with no
+    // library call in the gap. irqFlags here is a DIO pin mask, not a status gate - SetDioIrqParams only
+    // routes IRQs to pins - so keep preamble/header off the pin (they would fire the ISR mid-frame and
+    // run readData() on a partial packet) while getIrqStatus() still shows them to isActivelyReceiving().
+    // cad_timeout 0 means RX until one packet arrives, then standby; the RX_DONE re-arm restores continuous.
+    const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
+                                 (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
     // detMin 10 is SWSD003's CAD_DETECT_MIN, which is also what RadioLib defaults to.
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
                                        .detPeak = detPeak,
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT, // resolves to STBY_RC
+                                       .exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX,
                                        .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .irqFlags = cadIrqFlags,
+                                       .irqMask = cadIrqFlags}}; // irqMask is ignored on this part
     int16_t result;
 
     setStandby();
     result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
-        return true; // caller re-arms via rearmReceive() (LR11x0 uses the default full startReceive())
+    if (result == RADIOLIB_LORA_DETECTED) {
+        // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
+        // RX_DONE is a clean edge, and tell rearmReceive() not to standby over the packet we just found.
+        lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+        cadHandedToRx = true;
+        return true;
+    }
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
+}
+
+template <typename T> void LR11x0Interface<T>::rearmReceive()
+{
+    if (!cadHandedToRx) {
+        startReceive(); // normal path: chip left RX, so a full standby + re-arm is correct
+        return;
+    }
+    // CAD handed the chip to RX in place. Re-attach the MCU ISR and set RX bookkeeping only - a
+    // startReceive() here would standby and abort the reception we detected.
+    cadHandedToRx = false;
+    enableInterrupt(isrRxLevel0);
+    RadioLibInterface::startReceive();
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

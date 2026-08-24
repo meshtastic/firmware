@@ -418,10 +418,15 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
                                        // ignored: SetLoraCadParams has no det_min - that byte carries
                                        // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
+                                       .exitMode = RADIOLIB_LR2021_CAD_EXIT_MODE_RX,
                                        .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       // A DIO pin map, not a status gate - SetDioIrqConfig only routes
+                                       // IRQs to a pin - so keep preamble/header off it (they would fire
+                                       // the ISR mid-frame) while getIrqStatus() still shows them for LBT.
+                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) |
+                                                   (1UL << RADIOLIB_IRQ_TIMEOUT) | (1UL << RADIOLIB_IRQ_CRC_ERR) |
+                                                   (1UL << RADIOLIB_IRQ_HEADER_ERR),
+                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}}; // ignored on this part
     int16_t result;
 
     // fastCad is NOT part of ChannelScanConfig_t - scanChannel() reads it off the radio object - so pin
@@ -432,12 +437,30 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
 
     setStandby();
     result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
+    if (result == RADIOLIB_LORA_DETECTED) {
+        // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
+        // RX_DONE is a clean edge, and tell rearmReceive() not to standby over the packet we just found.
+        lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
+        cadHandedToRx = true;
         return true;
+    }
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
+}
+
+template <typename T> void LR20x0Interface<T>::rearmReceive()
+{
+    if (!cadHandedToRx) {
+        startReceive(); // normal path: chip left RX, so a full standby + re-arm is correct
+        return;
+    }
+    // CAD handed the chip to RX in place. Re-attach the MCU ISR and set RX bookkeeping only - a
+    // startReceive() here would standby and abort the reception we detected.
+    cadHandedToRx = false;
+    enableInterrupt(isrRxLevel0);
+    RadioLibInterface::startReceive();
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

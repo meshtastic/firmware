@@ -60,6 +60,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
      */
     virtual void startReceive() override;
 
+    /** Re-arm without a standby when CAD has already handed the chip to RX, else a full startReceive(). */
+    void rearmReceive() override;
+
     /**
      *  We override to turn on transmitter power as needed.
      */
@@ -73,5 +76,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+  private:
+    // Set when CAD exited straight into RX, so the next rearmReceive() knows the chip is already
+    // listening. Cleared there; the re-arm after that packet's RX_DONE is a normal full one.
+    bool cadHandedToRx = false;
 };
 #endif
