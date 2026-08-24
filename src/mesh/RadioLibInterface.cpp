@@ -831,6 +831,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
 #endif
         packetPool.release(txp);
+        // We got here through isChannelActive(), which left the chip in standby for a transmit that is
+        // no longer happening. Without this the node stays deaf until something else re-arms it.
+        startReceive();
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby
