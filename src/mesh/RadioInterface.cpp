@@ -1422,8 +1422,9 @@ uint32_t RadioInterface::computeSlotTimeMsec()
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
     if (myRegion->wideLora) {
-        // CAD duration derived from AN1200.22 of SX1280. The fractional term needs float division:
-        // as ints, (2 * sf + 3) / 32 truncates to 0 for every legal SF (5..12), dropping it entirely.
+        // SX1280 datasheet rev 3.3: CAD duration = (cadSymbolNum + (2*SF + 3) / 32) * Ts, the trailing
+        // term being the post-scan processing window. It needs float division: as ints, (2 * sf + 3) / 32
+        // truncates to 0 for every legal SF (5..12), so the term never contributed anything.
         return (NUM_SYM_CAD_24GHZ + (2.0f * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {
         // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol.

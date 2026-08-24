@@ -97,8 +97,9 @@ class RadioInterface
     // Deliberately uncited: no single vendor note covers every part this governs. It also sets the
     // CAD term in slotTimeMsec, so keeping one value keeps the CW backoff scale equal across a mesh.
     static constexpr uint8_t NUM_SYM_CAD = 4;
-    static constexpr uint8_t NUM_SYM_CAD_24GHZ =
-        4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
+    // Symbols used for CAD on 2.4 GHz. AN1200.77 measures 4 as reliable to within 3 dB of sensitivity
+    // and advises "where possible 4 or more symbols should be used"; 1 and 2 risk false detection.
+    static constexpr uint8_t NUM_SYM_CAD_24GHZ = 4;
     uint32_t slotTimeMsec = computeSlotTimeMsec();
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     static constexpr uint16_t preambleLengthDefault =

@@ -403,6 +403,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
     // det_peak is the peak-to-average ratio threshold: a higher value demands a stronger correlation
     // peak and so detects less readily, which is why the recommended value falls as the scan lengthens.
     // Indexed by NUM_SYM_CAD so the threshold tracks the scan length instead of drifting out of step.
+    // A symbol count above 4 needs a row adding; it falls back to the 4-symbol one silently.
     static constexpr uint8_t CAD_DET_PEAK[4][8] = {
         // LR20xx datasheet rev 2.2, Table 6-19 - recommended det_peak, SF5..SF12
         {60, 60, 60, 64, 64, 66, 70, 74}, // 1 symbol

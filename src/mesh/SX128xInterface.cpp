@@ -283,6 +283,10 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
     // NOT a raw count. NUM_SYM_CAD_24GHZ (== 4) is the plain count used by computeSlotTimeMsec; the
     // matching register encoding for 4 symbols is RADIOLIB_SX128X_CAD_ON_4_SYMB. Passing the raw 4
     // would set bits 7:5 = 000, i.e. a 1-symbol scan, leaving LBT nearly blind on 2.4 GHz.
+    // detPeak/detMin/exitMode are ignored: SetCadParams (0x88) carries only cadSymbolNum, and RadioLib's
+    // setCad() writes just that one byte. The PNR decision threshold is register 0x942 (cadDetPeak),
+    // which nothing here writes, so the scan runs at the chip's reset value of 0x32 - well above every
+    // value AN1200.77 Table 1 recommends (19-36), i.e. less sensitive than Semtech calibrated for.
     ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX128X_CAD_ON_4_SYMB,
                                        .detPeak = 0,
                                        .detMin = 0,

@@ -423,10 +423,17 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
          {42, 42, 43, 48, 49, 53, 55, 59},
          {41, 42, 43, 48, 48, 53, 54, 58},
          {44, 47, 45, 53, 52, 53, 57, 62}}};
-    // SWSD003 characterises symbol counts 2/4/8/16 over BW 62.5-500 kHz only; anything else (a custom
-    // narrow BW, or 2.4 GHz on LR1120) has no measured row, so defer to RadioLib rather than guess.
+    // SWSD003 characterises symbol counts 2/4/8/16 against the sub-GHz LoRa modem's four bandwidths.
+    // Use exact matches to avoid mixing widelora (406.25/812.5/1625 kHz)
+    // Anything unmatched uses RadioLib default.
+    // Whole sub-GHz set today; a narrower BW or a symbol count outside 2/4/8/16 needs a row adding.
+    static constexpr float TABLE_BW_KHZ[4] = {62.5f, 125.0f, 250.0f, 500.0f};
     const int symIdx = NUM_SYM_CAD == 2 ? 0 : NUM_SYM_CAD == 4 ? 1 : NUM_SYM_CAD == 8 ? 2 : NUM_SYM_CAD == 16 ? 3 : -1;
-    const int bwIdx = bw < 46.0f ? -1 : bw < 93.75f ? 0 : bw < 187.5f ? 1 : bw < 375.0f ? 2 : bw < 750.0f ? 3 : -1;
+    int bwIdx = -1;
+    for (int i = 0; i < 4; i++) {
+        if (bw > TABLE_BW_KHZ[i] - 1.0f && bw < TABLE_BW_KHZ[i] + 1.0f)
+            bwIdx = i;
+    }
     const uint8_t detPeak = (symIdx < 0 || bwIdx < 0) ? (uint8_t)RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
                                                       : CAD_DET_PEAK[symIdx][bwIdx][(sf >= 5 && sf <= 12) ? sf - 5 : 6];
     // detMin 10 is SWSD003's CAD_DETECT_MIN, which is also what RadioLib defaults to.
