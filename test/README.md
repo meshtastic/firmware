@@ -499,6 +499,7 @@ do not infer completeness from the row count.
 | `test_mqtt`                  | MQTT integration              |
 | `test_packet_history`        | Packet history tracking       |
 | `test_position_precision`    | Position precision helpers    |
+| `test_power_fsm`             | PowerFSM timeout helpers      |
 | `test_radio`                 | Radio interface               |
 | `test_serial`                | Serial communication          |
 | `test_module_config`         | AdminModule module config     |

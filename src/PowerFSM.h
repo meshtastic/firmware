@@ -54,4 +54,6 @@ extern Fsm powerFSM;
 extern State stateON, statePOWER, stateSERIAL, stateDARK;
 
 void PowerFSM_setup();
+/// Period of the DARK self-transition that re-checks for config drift. Never zero.
+uint32_t getDarkRecheckMs();
 #endif

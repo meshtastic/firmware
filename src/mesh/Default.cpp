@@ -19,6 +19,11 @@ uint32_t Default::getConfiguredOrDefaultMs(uint32_t configuredInterval)
     return secondsToMsClamped(configuredInterval > 0 ? configuredInterval : default_broadcast_interval_secs);
 }
 
+uint32_t Default::getTimeoutMs(uint32_t configuredInterval, uint32_t defaultInterval)
+{
+    return configuredInterval == DECAF_ZERO_TIMEOUT_SECS ? 0 : getConfiguredOrDefaultMs(configuredInterval, defaultInterval);
+}
+
 uint32_t Default::getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
 {
     if (configured > 0)

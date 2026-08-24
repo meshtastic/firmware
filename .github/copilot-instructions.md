@@ -695,6 +695,7 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 - `test_packet_signing/` - Packet signing
 - `test_position_module/` - Position module behaviour
 - `test_position_precision/` - Position precision helpers
+- `test_power_fsm/` - PowerFSM timeout helpers
 - `test_radio/` - Radio interface
 - `test_rtc/` - RTC / time handling
 - `test_serial/` - Serial communication

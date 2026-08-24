@@ -72,7 +72,15 @@ static uint32_t getBluetoothWaitMs()
     if (!isBluetoothEnabledForPowerFSM())
         return 0;
 
-    return Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
+    return Default::getTimeoutMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
+}
+
+// A zero display timeout means "go dark immediately", which as a DARK self-transition period
+// would re-enter DARK on every FSM tick, so fall back to the default period.
+uint32_t getDarkRecheckMs()
+{
+    uint32_t timeoutMs = Default::getTimeoutMs(config.display.screen_on_secs, default_screen_on_secs);
+    return timeoutMs > 0 ? timeoutMs : Default::getConfiguredOrDefaultMs(0, default_screen_on_secs);
 }
 
 #if defined(T5_S3_EPAPER_PRO)
@@ -327,6 +335,7 @@ void PowerFSM_setup()
                          ? 1
                          : 0);
     bool hasPower = isPowered();
+    uint32_t displayTimeoutMs = Default::getTimeoutMs(config.display.screen_on_secs, default_screen_on_secs);
 
     LOG_INFO("PowerFSM init, USB power=%d", hasPower ? 1 : 0);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
@@ -422,12 +431,8 @@ void PowerFSM_setup()
     if (config.display.screen_on_secs > 0)
 #endif
     {
-        powerFSM.add_timed_transition(&stateON, &stateDARK,
-                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
-                                      NULL, "Screen-on timeout");
-        powerFSM.add_timed_transition(&statePOWER, &stateDARK,
-                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
-                                      NULL, "Screen-on timeout");
+        powerFSM.add_timed_transition(&stateON, &stateDARK, displayTimeoutMs, NULL, "Screen-on timeout");
+        powerFSM.add_timed_transition(&statePOWER, &stateDARK, displayTimeoutMs, NULL, "Screen-on timeout");
     }
 
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
@@ -443,7 +448,7 @@ void PowerFSM_setup()
 
     if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
-                                      Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
+                                      Default::getTimeoutMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
 
         // If ESP32 and using power-saving, timer mover from DARK to light-sleep
@@ -451,17 +456,13 @@ void PowerFSM_setup()
         powerFSM.add_timed_transition(&stateDARK, &stateLS, getBluetoothWaitMs(), NULL, "Bluetooth timeout");
     } else {
         // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
-        powerFSM.add_timed_transition(&stateDARK, &stateDARK,
-                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
-                                      NULL, "Screen-on timeout");
+        powerFSM.add_timed_transition(&stateDARK, &stateDARK, getDarkRecheckMs(), NULL, "Screen-on timeout");
     }
 #endif // HAS_WIFI || !defined(MESHTASTIC_EXCLUDE_WIFI)
 
 #else // (not) ARCH_ESP32
     // If not ESP32, light-sleep not used. Check periodically if config has drifted out of stateDark
-    powerFSM.add_timed_transition(&stateDARK, &stateDARK,
-                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
-                                  "Screen-on timeout");
+    powerFSM.add_timed_transition(&stateDARK, &stateDARK, getDarkRecheckMs(), NULL, "Screen-on timeout");
 #endif
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state
