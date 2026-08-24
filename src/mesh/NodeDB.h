@@ -596,6 +596,10 @@ class NodeDB
 
     bool createNewIdentity();
 
+    /// Mint the identity keypair outside the boot path and re-seat my_node_num == crc32(public_key).
+    /// @return true if my_node_num moved; the caller must then also persist SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE.
+    bool ensurePkiIdentity();
+
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
