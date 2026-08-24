@@ -69,9 +69,6 @@ template <class T> class SX126xInterface : public RadioLibInterface
      */
     virtual void startReceive() override;
 
-    /** Re-arm RX, skipping the standby only after a CAD GOTO_RX handoff has left the chip listening. */
-    void rearmReceive() override;
-
     /**
      *  We override to turn on transmitter power as needed.
      */
@@ -90,10 +87,6 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
 
   private:
-    // Set when CAD exited straight into RX, so the next rearmReceive() knows the chip is already
-    // listening. Cleared there; the re-arm after that packet's RX_DONE is a normal full one.
-    bool cadHandedToRx = false;
-
 #ifdef LORA_DIO1_SOFTWARE_POLL
     bool irqPollingActive = false;
     bool pollTxMode = false;
