@@ -1425,7 +1425,9 @@ uint32_t RadioInterface::computeSlotTimeMsec()
         // SX1280 datasheet rev 3.3: CAD duration = (cadSymbolNum + (2*SF + 3) / 32) * Ts, the trailing
         // term being the post-scan processing window. It needs float division: as ints, (2 * sf + 3) / 32
         // truncates to 0 for every legal SF (5..12), so the term never contributed anything.
-        return (NUM_SYM_CAD_24GHZ + (2.0f * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
+        // A wideLora region is not one chip - LR1120 and LR2021 run here too, and scan fewer symbols
+        // than SX1280 - so take the count from the driver rather than assuming the 2.4 GHz part.
+        return (getCadSymbolCount() + (2.0f * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {
         // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol.
         // getCadSymbolCount() reports the symbols the scan really runs, so the slot matches the actual

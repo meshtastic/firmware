@@ -284,7 +284,7 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
     // symNum is the encoded SET_CAD_PARAMS value (symbol count in bits 7:5), not a raw count - pass the
-    // CAD_ON_n_SYMB constant matching NUM_SYM_CAD_24GHZ, which computeSlotTimeMsec uses as a plain count.
+    // CAD_ON_n_SYMB constant matching what getCadSymbolCount() reports, or the slot stops matching.
     // AN1200.77 Table 1 calibrated PNR thresholds, rows BW 200/400/800/1600 kHz, columns SF5..SF12.
     // The note measures these for a 4-symbol window but states they apply to any window duration.
     // A new bandwidth or SF outside these needs a row adding; unmatched leaves the chip's own default.

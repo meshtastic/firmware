@@ -97,8 +97,10 @@ class RadioInterface
     // Deliberately uncited: no single vendor note covers every part this governs. It also sets the
     // CAD term in slotTimeMsec, so keeping one value keeps the CW backoff scale equal across a mesh.
     static constexpr uint8_t NUM_SYM_CAD = 4;
-    // Symbols used for CAD on 2.4 GHz, matching RadioLib's own SX128x default. AN1200.77: a longer
-    // window moves P(Detection) further from P(False Detection); 1 and 2 symbols risk false detection.
+    // Symbols SX128x scans, matching RadioLib's own default for that part. AN1200.77: a longer window
+    // moves P(Detection) further from P(False Detection); 1 and 2 symbols risk false detection.
+    // Not fleet-wide for 2.4 GHz - LR1120 and LR2021 run there on NUM_SYM_CAD - so it reaches the slot
+    // through SX128xInterface's getCadSymbolCount(), not by being read directly.
     static constexpr uint8_t NUM_SYM_CAD_24GHZ = 8;
     uint32_t slotTimeMsec = computeSlotTimeMsec();
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
