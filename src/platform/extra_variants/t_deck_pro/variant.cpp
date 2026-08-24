@@ -12,7 +12,7 @@
 CSE_CST328 tsPanel = CSE_CST328(EINK_WIDTH, EINK_HEIGHT, &Wire, CST328_PIN_RST, CST328_PIN_INT);
 
 #if defined(_VARIANT_T_DECK_PRO_V1_1)
-void earlyInitVariant()
+void tDeckProEarlyInit()
 {
     pinMode(LORA_EN, OUTPUT);
     digitalWrite(LORA_EN, HIGH);
@@ -170,7 +170,7 @@ static void IRAM_ATTR touchInterruptHandler()
 }
 
 // T-Deck Pro specific init
-void lateInitVariant()
+void tDeckProLateInit()
 {
     // Reset touch
     pinMode(CST328_PIN_RST, OUTPUT);
@@ -230,8 +230,15 @@ void lateInitVariant()
     touchScreenImpl1->init();
 }
 
+#if !defined(_VARIANT_T_DECK_PRO_V1_1)
+void lateInitVariant()
+{
+    tDeckProLateInit();
+}
+#endif
+
 #if defined(_VARIANT_T_DECK_PRO_V1_1) && defined(HAS_A7682_AUDIO)
-void variant_shutdown()
+void tDeckProShutdown()
 {
     if (a7682Audio)
         a7682Audio->shutdown();

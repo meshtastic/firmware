@@ -151,7 +151,7 @@ static bool readTouch(int16_t *x, int16_t *y)
     return true;
 }
 
-void lateInitVariant()
+void tDeckMaxLateInit()
 {
     tDeckMaxResetTouch();
     cst3530TouchInterrupt = false;
@@ -184,7 +184,7 @@ void lateInitVariant()
 #endif
 }
 
-void variant_shutdown()
+void tDeckMaxShutdown()
 {
 #if defined(HAS_A7682_AUDIO)
     if (a7682Audio)

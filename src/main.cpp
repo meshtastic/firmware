@@ -48,6 +48,7 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
+#include "platform/DeviceVariant.h"
 #ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
 #include "memGet.h"
 #endif
@@ -189,10 +190,6 @@ ExtensionIOXL9555 io;
 #include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
 #endif
 
-#if defined(_VARIANT_T_DECK_PRO_V1_1)
-bool tDeckProV1_1RecoverI2C();
-#endif
-
 #ifdef USE_MCP23017
 #include "platform/esp32/ExtensionIOMCP23017.h"
 #endif
@@ -326,33 +323,6 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
-// Weak empty variant initialization function.
-// May be redefined by variant files.
-// noinline: weak default and call site share this TU, so LTO would inline the empty body and
-// never link the variant's strong override. nrf52_lto.py's _VARIANT_OVERRIDES guards this.
-__attribute__((noinline)) void lateInitVariant() __attribute__((weak));
-__attribute__((noinline)) void lateInitVariant() {}
-
-// earlyInitVariant() runs before consoleInit(): a LOG_* macro here CRASHES the device,
-// it is not a silent no-op. Defer any logging to lateInitVariant() or later.
-__attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
-__attribute__((noinline)) void earlyInitVariant() {}
-
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
-// Weak hook for board setup that depends on the shared I2C bus already being initialized.
-void initVariantAfterI2C() __attribute__((weak));
-void initVariantAfterI2C() {}
-
-static bool recoverTDeckI2C()
-{
-#if defined(T_DECK_MAX)
-    return tDeckMaxRecoverI2C();
-#else
-    return tDeckProV1_1RecoverI2C();
-#endif
-}
-#endif
-
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
 // For example NRF52 will prevent any flash writes in that case automatically
@@ -408,8 +378,8 @@ void setup()
     // boot sequence will follow when battery level raises to safe mode
     waitUntilPowerLevelSafe();
 
-    // Defined in variant.cpp for early init code
-    earlyInitVariant();
+    initializeDeviceVariant();
+    deviceVariant->earlyInit();
 
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
@@ -641,9 +611,7 @@ void setup()
 #endif
 #endif
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
-    initVariantAfterI2C();
-#endif
+    deviceVariant->afterI2CInit();
 
 #if defined(M5STACK_UNITC6L)
     pinMode(LORA_CS, OUTPUT);
@@ -671,19 +639,16 @@ void setup()
     power = new Power();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
-    bool powerReady = power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
-#else
-    power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
-#endif
-
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
-    // XPowersLib may release the shared ESP32 I2C handle while probing an absent
-    // battery gauge. Recreate it before the generic scanner starts probing.
-    bool tDeckI2CReady = powerReady;
-    if (!powerReady)
-        tDeckI2CReady = recoverTDeckI2C();
-#endif
+    // Must be after the status handler is installed, so that handler gets notified of the initial configuration.
+    const bool powerReady = power->setup();
+    [[maybe_unused]] bool deviceI2CReady = true;
+    if (deviceVariant->requiresI2CRecovery()) {
+        // Some variants release the shared ESP32 I2C handle while probing an
+        // absent battery gauge. Give the variant a chance to restore it.
+        deviceI2CReady = powerReady;
+        if (!powerReady)
+            deviceI2CReady = deviceVariant->recoverI2C();
+    }
 
 #ifdef USE_MCP23017
     // Bring up the I2C IO expander (LoRa reset, LCD reset, GPS wake) now that the PMU rails are up,
@@ -718,14 +683,10 @@ void setup()
 #endif
 
 #if defined(I2C_SDA)
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
-    if (tDeckI2CReady)
-#endif
+    if (deviceI2CReady)
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)
     else
-        LOG_ERROR("T-Deck: skipping I2C scan because the bus is unavailable");
-#endif
+        LOG_ERROR("Device variant: skipping I2C scan because the bus is unavailable");
 #elif defined(ARCH_PORTDUINO)
     if (portduino_config.i2cdev != "") {
         LOG_INFO("Scan for i2c devices");
@@ -858,10 +819,7 @@ void setup()
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
-#if defined(T_DECK_MAX)
-    if (acc_info.type == ScanI2C::DeviceType::NONE)
-        tDeckMaxSetImuPower(false);
-#endif
+    deviceVariant->onAccelerometerScan(acc_info.type != ScanI2C::DeviceType::NONE);
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
@@ -996,14 +954,8 @@ void setup()
 #endif
 
 #ifdef HAS_DRV2605
-#if defined(T_DECK_MAX)
-    tDeckMaxSetMotorPower(true);
+    deviceVariant->setMotorPower(true);
     delay(10);
-#elif defined(PIN_DRV_EN)
-    pinMode(PIN_DRV_EN, OUTPUT);
-    digitalWrite(PIN_DRV_EN, HIGH);
-    delay(10);
-#endif
     drv.begin();
 
     // Bits	Field	        Value	Meaning
@@ -1019,9 +971,7 @@ void setup()
     drv.selectLibrary(1);
     // I2C trigger by sending 'go' command
     drv.setMode(DRV2605_MODE_INTTRIG);
-#if defined(T_DECK_MAX)
-    tDeckMaxSetMotorPower(false);
-#endif
+    deviceVariant->setMotorPower(false);
 #endif
 
     // Init our SPI controller (must be before screen and lora)
@@ -1235,7 +1185,7 @@ void setup()
 
     auto rIf = initLoRa();
 
-    lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+    deviceVariant->lateInit();
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();

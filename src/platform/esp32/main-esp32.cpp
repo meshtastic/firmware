@@ -22,6 +22,7 @@
 #include "esp_mac.h"
 #include "freertosinc.h"
 #include "meshUtils.h"
+#include "platform/DeviceVariant.h"
 #include "sleep.h"
 #include "soc/rtc.h"
 #include "target_specific.h"
@@ -381,6 +382,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 #endif // #end ESP32S3_WAKE_TYPE
 #endif
+    shutdownDeviceVariant();
     variant_shutdown();
 
 #if SOC_PM_SUPPORT_RTC_PERIPH_PD
