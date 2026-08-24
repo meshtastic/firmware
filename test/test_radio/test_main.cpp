@@ -1,3 +1,4 @@
+#include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
@@ -5,14 +6,50 @@
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
-
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
+#include "support/MockMeshService.h"
 
 static MockMeshService *mockMeshService;
+
+static void test_lr20x0BandClassification()
+{
+    TEST_ASSERT_FALSE(isLr20x0HighBand(906.875f));
+    TEST_ASSERT_FALSE(isLr20x0HighBand(1500.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2400.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2420.71875f));
+}
+
+static void test_lr20x0BandHopDetection()
+{
+    TEST_ASSERT_FALSE(isLr20x0BandHop(0.0f, 2420.71875f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 915.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2400.0f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(906.875f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(2420.71875f, 906.875f));
+    // Invalid requested frequency must not look like a band hop.
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, -1.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, -915.0f));
+}
+
+static void test_lr20x0ReconfigurePathSelection()
+{
+    // LF -> HF and HF -> LF take full begin(); same-band stays incremental.
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 906.875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 915.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2400.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(0.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 0.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, -1.0f)));
+}
 
 // Test shim to expose protected radio parameters set by applyModemConfig()
 class TestableRadioInterface : public RadioInterface
@@ -22,6 +59,10 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getCr() const { return cr; }
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
+
+    size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
+    meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
+    size_t getRadioBufferPayloadCapacity() const { return sizeof(radioBuffer.payload); }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
@@ -33,7 +74,12 @@ class TestableRadioInterface : public RadioInterface
 
 static void test_bwCodeToKHz_specialMappings()
 {
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 7.8f, bwCodeToKHz(8));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 10.4f, bwCodeToKHz(10));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 15.6f, bwCodeToKHz(16));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 20.8f, bwCodeToKHz(21));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 31.25f, bwCodeToKHz(31));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 41.7f, bwCodeToKHz(42));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 62.5f, bwCodeToKHz(62));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 203.125f, bwCodeToKHz(200));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 406.25f, bwCodeToKHz(400));
@@ -45,6 +91,18 @@ static void test_bwCodeToKHz_passthrough()
 {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 125.0f, bwCodeToKHz(125));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 250.0f, bwCodeToKHz(250));
+}
+
+static void test_bwCodeToKHz_roundTrip()
+{
+    // Round-trip: bwKHzToCode(bwCodeToKHz(code)) should return the original code
+    uint16_t codes[] = {8, 10, 16, 21, 31, 42, 62, 200, 400, 800, 1600};
+    for (size_t i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
+        uint16_t code = codes[i];
+        float khz = bwCodeToKHz(code);
+        uint16_t result = bwKHzToCode(khz);
+        TEST_ASSERT_EQUAL_UINT16(code, result);
+    }
 }
 
 static void test_validateConfigLora_noopWhenUsePresetFalse()
@@ -183,6 +241,206 @@ static void test_applyModemConfig_customCodingRateLowerThanPreset()
     TEST_ASSERT_EQUAL_UINT8(8, testRadio->getCr());
 }
 
+// MEDIUM_TURBO performs like MEDIUM_FAST (sf=9, cr=5) but at 500 kHz. Verify the params resolve.
+static void test_applyModemConfig_mediumTurbo()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT8(5, testRadio->getCr());
+    TEST_ASSERT_EQUAL_UINT8(9, testRadio->getSf());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 500.0f, testRadio->getBw());
+}
+
+// MEDIUM_TURBO is a 500 kHz preset, so it is invalid for EU_868 and must clamp to the region default.
+static void test_clampConfigLora_mediumTurboInvalidForEU868()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+// MEDIUM_TURBO is valid for US (PROFILE_STD) and must be left unchanged.
+static void test_clampConfigLora_mediumTurboValidForUS()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO, cfg.modem_preset);
+}
+
+// -----------------------------------------------------------------------
+// getRegionPresetMap() - region->valid-preset map sent to clients during want_config
+// -----------------------------------------------------------------------
+
+static size_t countKnownRegions()
+{
+    size_t n = 0;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++)
+        n++;
+    return n;
+}
+
+// Every region in the firmware table (except the UNSET sentinel) must appear
+// exactly once in the map, and all counts must stay within the mesh.options bounds
+// (exceeding them would mean nanopb silently truncates the wire message).
+static void test_regionPresetMap_coversAllRegionsWithinBounds()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const size_t known = countKnownRegions() + 1; // + the UNSET intent entry
+#else
+    const size_t known = countKnownRegions();
+#endif
+    TEST_ASSERT_EQUAL_UINT((unsigned)known, (unsigned)map.region_groups_count);
+
+    // Bounds derived from the generated nanopb arrays (mesh.options max_count), so
+    // this stays correct if those bounds change.
+    const size_t maxGroups = sizeof(map.groups) / sizeof(map.groups[0]);
+    const size_t maxRegions = sizeof(map.region_groups) / sizeof(map.region_groups[0]);
+    TEST_ASSERT_GREATER_THAN_UINT(0, map.groups_count);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxGroups, map.groups_count);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxRegions, map.region_groups_count);
+
+    // Each known region appears exactly once.
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        int hits = 0;
+        for (pb_size_t i = 0; i < map.region_groups_count; i++)
+            if (map.region_groups[i].region == r->code)
+                hits++;
+        TEST_ASSERT_EQUAL_INT(1, hits);
+    }
+}
+
+// The advertised presets must agree with the live region table: every preset is
+// legal in its region, the default is among them, and the licensed flag matches.
+static void test_regionPresetMap_matchesRegionTable()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+    for (pb_size_t i = 0; i < map.region_groups_count; i++) {
+        meshtastic_Config_LoRaConfig_RegionCode code = map.region_groups[i].region;
+        uint8_t gi = map.region_groups[i].group_index;
+        TEST_ASSERT_LESS_THAN_UINT(map.groups_count, gi);
+
+        const meshtastic_LoRaPresetGroup &grp = map.groups[gi];
+        const RegionInfo *r = getRegion(code);
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+        // UNSET states the pinned preset, not PROFILE_UNDEF's list, so the table checks below don't apply.
+        if (code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            continue;
+#endif
+
+        // Group's list is non-empty and within the generated array bound.
+        const size_t maxPresets = sizeof(grp.presets) / sizeof(grp.presets[0]);
+        TEST_ASSERT_GREATER_THAN_UINT(0, grp.presets_count);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxPresets, grp.presets_count);
+
+        // Every advertised preset must be selectable from this region: either legal here,
+        // or legal in a sibling the firmware will auto-swap us to (the EU 86x trio, which
+        // advertises the union of the trio's presets rather than just its own).
+        for (pb_size_t p = 0; p < grp.presets_count; p++) {
+            bool selectable =
+                r->supportsPreset(grp.presets[p]) || RadioInterface::regionSwapForPreset(code, grp.presets[p]) != nullptr;
+            TEST_ASSERT_TRUE(selectable);
+        }
+
+        // The region's own enforced presets must all be advertised (advertised is a
+        // superset of the enforced list, never a subset).
+        const meshtastic_Config_LoRaConfig_ModemPreset *enforced = r->getAvailablePresets();
+        for (size_t e = 0; e < r->getNumPresets(); e++) {
+            bool advertised = false;
+            for (pb_size_t p = 0; p < grp.presets_count; p++)
+                if (grp.presets[p] == enforced[e])
+                    advertised = true;
+            TEST_ASSERT_TRUE(advertised);
+        }
+
+        // Default preset matches the table, is legal, and is present in the list.
+        TEST_ASSERT_EQUAL(r->getDefaultPreset(), grp.default_preset);
+        TEST_ASSERT_TRUE(r->supportsPreset(grp.default_preset));
+        bool defaultInList = false;
+        for (pb_size_t p = 0; p < grp.presets_count; p++)
+            if (grp.presets[p] == grp.default_preset)
+                defaultInList = true;
+        TEST_ASSERT_TRUE(defaultInList);
+
+        // Licensed flag matches the region's profile.
+        TEST_ASSERT_EQUAL(r->profile->licensedOnly, grp.licensed_only);
+    }
+}
+
+// UNSET appears only when the build pins a preset, and then states exactly that preset.
+// A stock build leaves it out entirely, which clients read as "unconstrained".
+static void test_regionPresetMap_unsetCarriesUserprefsIntent()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+    const meshtastic_LoRaPresetGroup *grp = nullptr;
+    for (pb_size_t i = 0; i < map.region_groups_count; i++)
+        if (map.region_groups[i].region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            grp = &map.groups[map.region_groups[i].group_index];
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const meshtastic_Config_LoRaConfig_ModemPreset pinned = USERPREFS_LORACONFIG_MODEM_PRESET;
+    TEST_ASSERT_NOT_NULL_MESSAGE(grp, "a build that pins a preset must state it for UNSET");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, (unsigned)grp->presets_count, "the pinned preset is the sole entry");
+    TEST_ASSERT_EQUAL(pinned, grp->presets[0]);
+    TEST_ASSERT_EQUAL(pinned, grp->default_preset);
+    TEST_ASSERT_FALSE_MESSAGE(grp->licensed_only, "UNSET is not a licensed-only region");
+
+    // Stating intent must not narrow what the device accepts: the firmware still takes any
+    // real preset while the region is unset (#11496), so the map cannot become enforcement.
+    const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+#else
+    TEST_ASSERT_NULL_MESSAGE(grp, "a stock build must leave UNSET out of the map entirely");
+#endif
+}
+
+static void test_beginSending_oversizedPayloadAbortsSafely()
+{
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203040;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+
+    // Set encrypted size larger than sizeof(radioBuffer.payload) (which is 256 - sizeof(PacketHeader))
+    p->encrypted.size = testRadio->getRadioBufferPayloadCapacity() + 10;
+
+    size_t result = testRadio->beginSendingPublic(p);
+
+    TEST_ASSERT_EQUAL_UINT(0, result);
+    TEST_ASSERT_NULL(testRadio->getSendingPacket());
+
+    // Verify rejected packet was released to packetPool and its slot is reusable
+    meshtastic_MeshPacket *reallocated = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(reallocated);
+    TEST_ASSERT_EQUAL_PTR(p, reallocated);
+    packetPool.release(reallocated);
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -211,8 +469,12 @@ void setup()
     initializeTestEnvironment();
 
     UNITY_BEGIN();
+    RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_lr20x0BandHopDetection);
+    RUN_TEST(test_lr20x0ReconfigurePathSelection);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
+    RUN_TEST(test_bwCodeToKHz_roundTrip);
     RUN_TEST(test_validateConfigLora_noopWhenUsePresetFalse);
     RUN_TEST(test_validateConfigLora_validPreset_nonWideRegion);
     RUN_TEST(test_validateConfigLora_validPreset_wideRegion);
@@ -223,6 +485,13 @@ void setup()
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
+    RUN_TEST(test_applyModemConfig_mediumTurbo);
+    RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
+    RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
+    RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
+    RUN_TEST(test_regionPresetMap_matchesRegionTable);
+    RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
+    RUN_TEST(test_beginSending_oversizedPayloadAbortsSafely);
     exit(UNITY_END());
 }
 

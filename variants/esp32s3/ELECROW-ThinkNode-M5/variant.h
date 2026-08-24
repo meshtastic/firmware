@@ -18,7 +18,9 @@
 #define BATTERY_PIN 8
 #define ADC_CHANNEL ADC_CHANNEL_7
 
-#define ADC_MULTIPLIER 2.0 // 2.0 + 10% for correction of display undervoltage.
+#define ADC_MULTIPLIER 2.0
+
+#define OCV_ARRAY 4100, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 
 #define PIN_BUZZER 9
 
@@ -43,8 +45,8 @@
 
 #define PIN_GPS_STANDBY 11 // An output to wake GPS, low means allow sleep, high means force wake
 
-#define GPS_TX_PIN 20 // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN 19 // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN 20 // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN 19 // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 

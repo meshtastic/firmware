@@ -1,6 +1,8 @@
 #include "Lock.h"
 #include "configuration.h"
 #include <cassert>
+#include <chrono>
+#include <thread>
 #include <logging.h>
 
 namespace concurrency
@@ -25,6 +27,11 @@ void Lock::lock()
     if (xSemaphoreTake(handle, portMAX_DELAY) == false) {
         abort();
     }
+}
+
+bool Lock::lock(uint32_t timeout)
+{
+    return xSemaphoreTake(handle, pdMS_TO_TICKS(timeout)) == pdTRUE;
 }
 
 void Lock::unlock()
@@ -55,6 +62,20 @@ void Lock::unlock()
 {
     pthread_mutex_unlock(&mutex);
     locked = false;
+}
+
+bool Lock::lock(uint32_t timeout)
+{
+    // pthread_mutex_timedlock is absent on macOS, so poll trylock instead.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
+    do {
+        if (pthread_mutex_trylock(&mutex) == 0) {
+            locked = true;
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
 }
 
 Lock::~Lock()

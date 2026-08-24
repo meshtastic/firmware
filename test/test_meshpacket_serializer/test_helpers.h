@@ -1,14 +1,27 @@
 #pragma once
 
-#include "serialization/JSON.h"
 #include "serialization/MeshPacketSerializer.h"
 #include <Arduino.h>
+#include <json/json.h>
+#include <memory>
 #include <meshtastic/mesh.pb.h>
 #include <meshtastic/mqtt.pb.h>
 #include <meshtastic/telemetry.pb.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <unity.h>
+
+// Parse a JSON string into a Json::Value; returns Json::nullValue on failure.
+static inline Json::Value parse_json(const std::string &s)
+{
+    Json::CharReaderBuilder b;
+    Json::Value root;
+    std::string errs;
+    std::unique_ptr<Json::CharReader> reader(b.newCharReader());
+    if (!reader->parse(s.c_str(), s.c_str() + s.size(), &root, &errs))
+        return Json::Value();
+    return root;
+}
 
 // Helper function to create a test packet with the given port and payload
 static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const uint8_t *payload, size_t payload_size,
@@ -24,9 +37,11 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     packet.want_ack = false;
     packet.priority = meshtastic_MeshPacket_Priority_UNSET;
     packet.rx_time = 1609459200;
+    packet.has_rx_time = true; // rx_time has explicit presence; mark this synthetic reading as measured
     packet.rx_snr = 10.5f;
     packet.hop_start = 3;
     packet.rx_rssi = -85;
+    packet.has_rx_rssi = true; // rx_rssi has explicit presence; mark this synthetic reading as measured
     packet.delayed = meshtastic_MeshPacket_Delayed_NO_DELAY;
 
     // Set decoded variant
@@ -36,7 +51,8 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
         packet.encrypted.size = payload_size;
         memcpy(packet.encrypted.bytes, payload, packet.encrypted.size);
     }
-    memcpy(packet.decoded.payload.bytes, payload, payload_size);
+    if (payload && payload_size)
+        memcpy(packet.decoded.payload.bytes, payload, payload_size);
     packet.decoded.payload.size = payload_size;
     packet.decoded.want_response = false;
     packet.decoded.dest = 0x55667788;
@@ -45,5 +61,16 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     packet.decoded.reply_id = 0;
     packet.decoded.emoji = 0;
 
+    return packet;
+}
+
+// Same as create_test_packet(), but with rx_time absent (has_rx_time = false) and a nonzero
+// millis()-style placeholder in rx_time, to verify serializers treat it as unknown, not a reading.
+static meshtastic_MeshPacket create_test_packet_no_rx_time(meshtastic_PortNum port, const uint8_t *payload, size_t payload_size,
+                                                           int payload_variant = meshtastic_MeshPacket_decoded_tag)
+{
+    meshtastic_MeshPacket packet = create_test_packet(port, payload, payload_size, payload_variant);
+    packet.rx_time = 123456; // a plausible uptime-seconds placeholder, not a real epoch
+    packet.has_rx_time = false;
     return packet;
 }

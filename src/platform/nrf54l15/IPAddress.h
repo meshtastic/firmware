@@ -1,4 +1,4 @@
-// IPAddress.h — stub for nRF54L15/Zephyr
+// IPAddress.h - stub for nRF54L15/Zephyr
 // MQTT.cpp includes this for IPv4 address representation.
 // Phase 2: compile-only stub.
 #pragma once
