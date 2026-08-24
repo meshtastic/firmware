@@ -314,27 +314,29 @@ bool ExternalNotificationModule::nagging()
 
 void ExternalNotificationModule::stopBuzzerNow()
 {
-    switch (buzzerPlaybackBackend) {
-    case BuzzerPlaybackBackend::PWM:
-        rtttl::stop();
-        break;
-    case BuzzerPlaybackBackend::I2S:
+    if (buzzerShouldAlert) {
+        switch (buzzerPlaybackBackend) {
+        case BuzzerPlaybackBackend::PWM:
+            rtttl::stop();
+            break;
+        case BuzzerPlaybackBackend::I2S:
 #ifdef HAS_I2S
-        audioThread->stopRtttlIfOwnedBy(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION);
+            audioThread->stopRtttlIfOwnedBy(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION);
 #endif
-        break;
-    case BuzzerPlaybackBackend::NRF52_I2S:
+            break;
+        case BuzzerPlaybackBackend::NRF52_I2S:
 #if defined(HAS_I2S_SPEAKER_NRF52)
-        nrf52RtttlPlayer.stop();
+            nrf52RtttlPlayer.stop();
 #endif
-        break;
-    case BuzzerPlaybackBackend::DIGITAL:
-        if (getExternal(2)) {
-            setExternalState(2, false);
+            break;
+        case BuzzerPlaybackBackend::DIGITAL:
+            if (getExternal(2)) {
+                setExternalState(2, false);
+            }
+            break;
+        default:
+            break;
         }
-        break;
-    default:
-        break;
     }
     buzzerPlaybackBackend = BuzzerPlaybackBackend::NONE;
     buzzerShouldAlert = false;
