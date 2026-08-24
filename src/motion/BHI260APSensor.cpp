@@ -38,7 +38,9 @@ void BHI260APSensor::releaseResources()
 
     initialized = false;
     dataReadyPending = false;
+#if defined(T_DECK_MAX)
     tDeckMaxSetImuPower(false);
+#endif
 }
 
 void BHI260APSensor::accelerationCallback(uint8_t sensorId, uint8_t *data, uint32_t length, uint64_t *timestamp,
@@ -92,7 +94,9 @@ void BHI260APSensor::dataReadyISR()
 bool BHI260APSensor::init()
 {
     releaseResources();
+#if defined(T_DECK_MAX)
     tDeckMaxSetImuPower(true);
+#endif
 
     TwoWire *wire = ScanI2CTwoWire::fetchI2CBus(device.address);
     if (wire == nullptr) {
