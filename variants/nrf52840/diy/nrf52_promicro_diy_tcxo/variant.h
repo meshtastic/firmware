@@ -36,7 +36,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 | P1.00 | BUTTON_PIN  |     | P1.13    | CS           | CS    |
 | P0.11 | SCL         |     | P1.11    | SCK          | SCK   |
 | P1.04 | SDA         |     | P0.10    | DIO1/IRQ     | DIO1  |
-| P1.06 | TXEN        |     | P0.09    | RESET        | RST   |
+| P1.06 | TXEN (opt)  |     | P0.09    | RESET        | RST   |
 |       |             |     |          |              |       |
 |       | Mid board   |     |          | Internal     |       |
 | P1.01 | Free pin    |     | 0.15     | LED          |       |
@@ -181,6 +181,17 @@ https://github.com/brad112358/easy_E22
 #define RF95_RXEN (0 + 17)    // P0.17
 #define RF95_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
 
+// P1.06 is the last free pin, so it is the only one left for a TXEN line - but it is also the e-ink
+// panel's BUSY line, so every opt-in below is refused on an e-ink build. (The EasyProMicro pinout,
+// where P1.06 is SCL, takes the #else branch at the end of this block and never reaches these.)
+#if !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(USE_EINK)
+#define PROMICRO_P106_FREE_FOR_TXEN
+#endif
+
+#if defined(PROMICRO_SX126X_TXEN) && defined(PROMICRO_SX1280)
+#error "PROMICRO_SX126X_TXEN and PROMICRO_SX1280 both claim P1.06 as TXEN - pick one"
+#endif
+
 // SX126X CONFIG
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 (0 + 10)     // P0.10 IRQ
@@ -189,7 +200,12 @@ https://github.com/brad112358/easy_E22
 #define SX126X_BUSY (0 + 29)     // P0.29
 #define SX126X_RESET (0 + 9)     // P0.09
 #define SX126X_RXEN (0 + 17)     // P0.17
-#define SX126X_TXEN (32 + 6)     // P1.06 TXEN connected here to allow use of PA.
+// Opt in with -D PROMICRO_SX126X_TXEN when P1.06 is wired to an external PA's TXEN.
+#if defined(PROMICRO_SX126X_TXEN) && defined(PROMICRO_P106_FREE_FOR_TXEN)
+#define SX126X_TXEN (32 + 6) // P1.06
+#else
+#define SX126X_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
+#endif
 
 // LR1121
 #ifdef USE_LR1121
@@ -213,6 +229,19 @@ https://github.com/brad112358/easy_E22
 #define LR2021_DIO3_TCXO_VOLTAGE 1.8
 #define LR2021_DIO_AS_RF_SWITCH
 #define LR2021_IRQ_DIO_NUM 9 // DIO9 → P0.10
+#endif
+
+// SX128X CONFIG - 2.4 GHz only, so off by default: it is a different module on the same footprint,
+// and an E28 needs P1.06 for TXEN. Opt in with -D PROMICRO_SX1280 (env nrf52_promicro_diy-sx1280).
+#if defined(PROMICRO_SX1280) && defined(PROMICRO_P106_FREE_FOR_TXEN)
+#define USE_SX1280
+#define SX128X_CS LORA_CS    // P1.13
+#define SX128X_DIO1 (0 + 10) // P0.10 IRQ
+#define SX128X_BUSY (0 + 29) // P0.29
+#define SX128X_RESET (0 + 9) // P0.09
+#define SX128X_RXEN (0 + 17) // P0.17
+#define SX128X_TXEN (32 + 6) // P1.06
+// #define SX128X_MAX_POWER 3 // set this if the module has an external PA, e.g. E28-2G4M20S
 #endif
 
 #else // Easy E22 Promicro arrangement
