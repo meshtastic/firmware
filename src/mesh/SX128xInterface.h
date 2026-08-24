@@ -75,6 +75,10 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    // isChannelActive() passes CAD_ON_8_SYMB, so report that rather than let the slot assume the
+    // fleet-wide NUM_SYM_CAD - the other parts sharing a 2.4 GHz region scan fewer symbols.
+    uint8_t getCadSymbolCount() const override { return NUM_SYM_CAD_24GHZ; }
+
   private:
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();
