@@ -65,9 +65,6 @@ template <class T> class LR11x0Interface : public RadioLibInterface
      */
     virtual void startReceive() override;
 
-    /** Re-arm without a standby when CAD has already handed the chip to RX, else a full startReceive(). */
-    void rearmReceive() override;
-
     /**
      *  We override to turn on transmitter power as needed.
      */
@@ -86,10 +83,5 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     // matches SX1280, the other part sharing that band, so one mesh keeps one CW slot.
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
     uint8_t getCadSymbolCountWideLora() const override { return 8; }
-
-  private:
-    // Set when CAD exited straight into RX, so the next rearmReceive() knows the chip is already
-    // listening. Cleared there; the re-arm after that packet's RX_DONE is a normal full one.
-    bool cadHandedToRx = false;
 };
 #endif

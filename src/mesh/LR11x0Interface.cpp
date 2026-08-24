@@ -435,51 +435,37 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     }
     const uint8_t detPeak = (symIdx < 0 || bwIdx < 0) ? (uint8_t)RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
                                                       : CAD_DET_PEAK[symIdx][bwIdx][(sf >= 5 && sf <= 12) ? sf - 5 : 6];
-    // irqFlags is a DIO pin mask here, not a status gate, so preamble/header stay off the pin - they
-    // would fire the ISR mid-frame. getIrqStatus() still shows them to isActivelyReceiving().
+    // Keep preamble/header off the pin - they would fire the ISR mid-frame. Same set the normal RX path
+    // already programs (stageMode sends irqFlags & irqMask), so isActivelyReceiving() sees no change.
     const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
                                  (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
-    // detMin 10 is SWSD003's CAD_DETECT_MIN. UM Table 8-8: this times the RX that follows a detection,
-    // so bound it at one max-length airtime. RadioLib scales it as 30.52 us against a real 31.25, so the
-    // programmed value lands ~2% long - harmless here, and not worth pre-compensating a library bug.
+    // UM Table 8-8: the timeout bounds the RX that follows a detection, so use one max-length airtime.
+    // RadioLib scales it by 30.52 us against a real 31.25, landing ~2% long - not worth pre-compensating.
     const RadioLibTime_t cadRxTimeoutUsec =
         (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
     ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
                                        .detPeak = detPeak,
+                                       // PARAM_DEFAULT lands on 10 in RadioLib, which is SWSD003's CAD_DETECT_MIN
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX,
                                        .timeout = cadRxTimeoutUsec,
                                        .irqFlags = cadIrqFlags,
-                                       .irqMask = cadIrqFlags}}; // irqMask is ignored on this part
+                                       .irqMask = cadIrqFlags}}; // ignored: startChannelScan() sends irqFlags twice
     int16_t result;
 
     setStandby();
     result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED) {
         // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
-        // RX_DONE is a clean edge, and tell rearmReceive() not to standby over the packet we just found.
+        // RX_DONE is a clean edge.
         lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
-        startCadHandoffTimeout(); // nothing below arms the radio, so let the poll notice a no-show
-        cadHandedToRx = true;
+        noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
         return true;
     }
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
-}
-
-template <typename T> void LR11x0Interface<T>::rearmReceive()
-{
-    if (!cadHandedToRx) {
-        startReceive(); // includes RX_DONE after a handoff, whose bounded RX left the chip in standby
-        return;
-    }
-    // CAD handed the chip to RX in place. Re-attach the MCU ISR and mark the interface as receiving - a
-    // startReceive() here would standby and abort the reception we detected.
-    cadHandedToRx = false;
-    enableInterrupt(isrRxLevel0);
-    RadioLibInterface::startReceive();
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

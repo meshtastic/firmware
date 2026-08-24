@@ -177,10 +177,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     // if none is outstanding. 0 is a sentinel, so it must be tested before any elapsed comparison.
     uint32_t cadHandoffRxStart = 0;
 
-    /** Start the window checkCadHandoffTimeout() re-arms after, when a CAD->RX handoff delivers nothing. */
-    void startCadHandoffTimeout();
+    // True between the handoff and the rearmReceive() that consumes it: the chip is already in RX, so
+    // that one re-arm must not standby. Both fields are cleared by setStandby().
+    bool cadHandedToRx = false;
 
-    /** Re-arm if a CAD->RX handoff has produced no packet within one max-length airtime. */
+    /** Record that CAD left the chip in RX: arms both the flag and the no-show window below. */
+    void noteCadHandoffToRx();
+
+    /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
 
     /**
@@ -219,18 +223,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void startReceive();
 
     /**
-     * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Default is a full
-     * startReceive(), correct for a chip that left RX to scan. A chip still in RX overrides this to
-     * re-attach the MCU ISR only, so a reception already in flight is not aborted.
-     *
-     * On the handoff path only, an override must NOT call the chip's own startReceive(): its
-     * standby+SetRx aborts the packet CAD just detected. Call the base RadioLibInterface::startReceive()
-     * there, which marks the interface as receiving and arms nothing. Every other path must still take
-     * the chip's own startReceive() - a handoff's single-shot RX ends in standby once it delivers.
+     * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Normally a full
+     * startReceive(); after a CAD->RX handoff the chip is already listening, so that one re-arm
+     * re-attaches the MCU ISR only - a startReceive() there would standby over the packet CAD found.
      */
-    virtual void rearmReceive() { startReceive(); }
+    void rearmReceive();
 
-    /** can we detect a LoRa preamble on the current channel? */
+    /** can we detect a LoRa preamble on the current channel?
+     *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
+     *  with rearmReceive() before anything else touches the radio. */
     virtual bool isChannelActive() = 0;
 
     /** are we actively receiving a packet (only called during receiving state)

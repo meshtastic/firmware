@@ -401,21 +401,6 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
 }
 
-template <typename T> void SX126xInterface<T>::rearmReceive()
-{
-    // The flag is spent on the handoff re-arm below, so every later call takes the full path - including
-    // RX_DONE after a handoff, whose cadTimeout-bounded RX has already dropped the chip to standby.
-    if (!cadHandedToRx) {
-        startReceive();
-        return;
-    }
-    // CAD handed the chip to RX in place. Re-attach the MCU ISR and mark the interface as receiving - a
-    // startReceive() here would standby and abort the ongoing reception.
-    cadHandedToRx = false;
-    enableInterrupt(isrRxLevel0);
-    RadioLibInterface::startReceive();
-}
-
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
@@ -447,11 +432,9 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED) {
         // The chip auto-entered RX (GOTO_RX). Drop the latched CAD verdict so the pin releases and the
-        // coming RX_DONE is a clean edge; the caller re-arms via rearmReceive() (SX126x: re-attach the MCU
-        // ISR and RX state, no standby - a startReceive() here would abort the packet we just detected).
+        // coming RX_DONE is a clean edge.
         lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_CAD_DONE | RADIOLIB_SX126X_IRQ_CAD_DETECTED);
-        startCadHandoffTimeout(); // nothing below arms the radio, so let the poll notice a no-show
-        cadHandedToRx = true;
+        noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
         return true;
     }
     if (result != RADIOLIB_CHANNEL_FREE)
