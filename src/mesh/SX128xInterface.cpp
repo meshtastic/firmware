@@ -108,8 +108,10 @@ template <typename T> bool SX128xInterface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
-    if (res == RADIOLIB_ERR_NONE)
-        startReceive(); // start receiving
+    if (res == RADIOLIB_ERR_NONE) {
+        applyCadDetPeak(); // init() does not route through reconfigure(), so set it here too
+        startReceive();    // start receiving
+    }
 
     return res == RADIOLIB_ERR_NONE;
 }
@@ -155,6 +157,8 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         LOG_ERROR("SX128X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
+    applyCadDetPeak(); // depends on the sf/bw just set
+
     startReceive(); // restart receiving
 
     return true;
@@ -163,6 +167,34 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 template <typename T> void SX128xInterface<T>::clearRadioIsr()
 {
     lora.clearDio1Action();
+}
+
+/** Set the CAD peak-to-noise threshold for the current sf/bw. */
+template <typename T> void SX128xInterface<T>::applyCadDetPeak()
+{
+    // AN1200.77 Table 1 calibrated PNR thresholds, rows BW 200/400/800/1600 kHz, columns SF5..SF12.
+    // The note measures these for a 4-symbol window but states they apply to any window duration.
+    // A new bandwidth or SF outside these needs a row adding; unmatched leaves the chip's own default.
+    static constexpr uint8_t CAD_DET_PEAK[4][8] = {
+        {22, 22, 23, 25, 25, 28, 32, 36}, // 203.125 kHz
+        {20, 21, 22, 23, 25, 25, 29, 32}, // 406.25 kHz
+        {20, 21, 21, 23, 25, 26, 27, 29}, // 812.5 kHz
+        {19, 21, 21, 23, 24, 24, 27, 28}, // 1625 kHz
+    };
+    static constexpr float TABLE_BW_KHZ[4] = {203.125f, 406.25f, 812.5f, 1625.0f};
+    int bwIdx = -1;
+    for (int i = 0; i < 4; i++) {
+        if (bw > TABLE_BW_KHZ[i] - 1.0f && bw < TABLE_BW_KHZ[i] + 1.0f)
+            bwIdx = i;
+    }
+    // Written through our own Module rather than lora.writeRegister(), which RadioLib keeps protected
+    // unless RADIOLIB_LOW_LEVEL unlocks raw register access across every driver. Same SPI transaction:
+    // SX128x::writeRegister() is a straight SPIwriteRegisterBurst, and begin() has already pointed
+    // spiConfig at the 0x18 WriteRegister opcode by the time reconfigure() runs.
+    if (bwIdx >= 0 && sf >= 5 && sf <= 12) {
+        const uint8_t detPeak = CAD_DET_PEAK[bwIdx][sf - 5];
+        module.SPIwriteRegisterBurst(SX1280_REG_CAD_DET_PEAK, &detPeak, 1);
+    }
 }
 
 template <typename T> bool SX128xInterface<T>::wideLora()
@@ -285,29 +317,8 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
     // check if we can detect a LoRa preamble on the current channel.
     // symNum is the encoded SET_CAD_PARAMS value (symbol count in bits 7:5), not a raw count - pass the
     // CAD_ON_n_SYMB constant matching what getCadSymbolCount() reports, or the slot stops matching.
-    // AN1200.77 Table 1 calibrated PNR thresholds, rows BW 200/400/800/1600 kHz, columns SF5..SF12.
-    // The note measures these for a 4-symbol window but states they apply to any window duration.
-    // A new bandwidth or SF outside these needs a row adding; unmatched leaves the chip's own default.
-    static constexpr uint8_t CAD_DET_PEAK[4][8] = {
-        {22, 22, 23, 25, 25, 28, 32, 36}, // 203.125 kHz
-        {20, 21, 22, 23, 25, 25, 29, 32}, // 406.25 kHz
-        {20, 21, 21, 23, 25, 26, 27, 29}, // 812.5 kHz
-        {19, 21, 21, 23, 24, 24, 27, 28}, // 1625 kHz
-    };
-    static constexpr float TABLE_BW_KHZ[4] = {203.125f, 406.25f, 812.5f, 1625.0f};
-    int bwIdx = -1;
-    for (int i = 0; i < 4; i++) {
-        if (bw > TABLE_BW_KHZ[i] - 1.0f && bw < TABLE_BW_KHZ[i] + 1.0f)
-            bwIdx = i;
-    }
-    // Written through our own Module rather than lora.writeRegister(), which RadioLib keeps protected
-    // unless RADIOLIB_LOW_LEVEL unlocks raw register access across every driver. Same SPI transaction:
-    // SX128x::writeRegister() is a straight SPIwriteRegisterBurst, and begin() has already pointed
-    // spiConfig at the 0x18 WriteRegister opcode by the time any scan runs.
-    if (bwIdx >= 0 && sf >= 5 && sf <= 12) {
-        const uint8_t detPeak = CAD_DET_PEAK[bwIdx][sf - 5];
-        module.SPIwriteRegisterBurst(SX1280_REG_CAD_DET_PEAK, &detPeak, 1);
-    }
+    // The PNR threshold is written once per config by applyCadDetPeak(), not here: nothing between the
+    // scan and the transmit that follows it should cost an extra SPI round trip.
 
     // detPeak/detMin/exitMode below are ignored: SetCadParams (0x88) carries only cadSymbolNum, and
     // RadioLib's setCad() writes just that one byte. CAD always exits to STDBY_RC, so a busy channel

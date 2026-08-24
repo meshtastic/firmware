@@ -77,4 +77,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     // 2.4 GHz only. isChannelActive() passes CAD_ON_8_SYMB; keep the two in step.
     uint8_t getCadSymbolCountWideLora() const override { return 8; }
+
+    /** Set the CAD peak-to-noise threshold for the current sf/bw. Call after either changes. */
+    void applyCadDetPeak();
 };
