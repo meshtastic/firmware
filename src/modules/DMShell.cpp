@@ -221,7 +221,8 @@ int32_t DMShellModule::runOnce()
         return 100;
     }
 
-    if (RadioLibInterface::instance->packetsInTxQueue() > 1) {
+    // Null on a node whose radio is not RadioLib-backed (--sim, SerialHal): nothing to throttle against.
+    if (RadioLibInterface::instance != nullptr && RadioLibInterface::instance->packetsInTxQueue() > 1) {
         return 50;
     }
 
