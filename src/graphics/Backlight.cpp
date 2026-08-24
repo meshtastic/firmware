@@ -51,9 +51,8 @@ void backlightInit()
     // PCA_PIN_EINK_EN is already configured by the variant's earlyInitVariant()
 
 #if HAS_GPIO_BACKLIGHT
-    // This backend only ever stores 0 or GPIO_BACKLIGHT_ON_LEVEL, so any other value - the legacy
-    // 153 default, a level from a dimmer-aware client - was not set here. Fall back to the variant
-    // default rather than reading it as "lit".
+    // Any level that is not ours, such as the legacy 153 default, was not set here, so fall back to
+    // the variant default rather than reading it as "lit".
     if (uiconfig.screen_brightness != 0 && uiconfig.screen_brightness != GPIO_BACKLIGHT_ON_LEVEL)
         uiconfig.screen_brightness = GPIO_BACKLIGHT_DEFAULT_LEVEL;
 #endif
@@ -67,6 +66,10 @@ void backlightInit()
 
 void backlightSet(uint8_t level)
 {
+#if HAS_GPIO_BACKLIGHT
+    // The rail has no intermediate states, so keep the stored level to the two this backend drives
+    level = level > 0 ? GPIO_BACKLIGHT_ON_LEVEL : 0;
+#endif
     if (level > 0)
         lastOnLevel = level;
     uiconfig.screen_brightness = level;

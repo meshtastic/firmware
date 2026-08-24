@@ -2,12 +2,8 @@
 
 #include "configuration.h"
 
-// Backlight control, two backends behind one API. uiconfig.screen_brightness holds the configured
-// level (0..255, 0 = off) for both; it is the user's intent, not the live pin state.
-//
-// PWM:  variant defines PIN_PWM_BACKLIGHT, optionally PWM_BACKLIGHT_DEFAULT, _MIN, _MAX and _STEP.
-// GPIO: variant defines PIN_EINK_EN or PCA_PIN_EINK_EN, an on/off frontlight rail. Add
-//       GPIO_BACKLIGHT_DEFAULT_ON if the board is meant to power up lit.
+// Backlight control for a PWM rail (PIN_PWM_BACKLIGHT) or an on/off GPIO rail (PIN_EINK_EN,
+// PCA_PIN_EINK_EN). uiconfig.screen_brightness is the configured level, not the live pin state.
 
 #if defined(PIN_PWM_BACKLIGHT)
 #define HAS_PWM_BACKLIGHT 1
@@ -44,7 +40,8 @@
 
 #if HAS_GPIO_BACKLIGHT
 
-// A GPIO backlight is on or off, so the module only ever stores these two levels.
+// On or off only, so these are the sole levels this backend stores. A variant defines
+// GPIO_BACKLIGHT_DEFAULT_ON to power up lit.
 #define GPIO_BACKLIGHT_ON_LEVEL 255
 #if defined(GPIO_BACKLIGHT_DEFAULT_ON)
 #define GPIO_BACKLIGHT_DEFAULT_LEVEL GPIO_BACKLIGHT_ON_LEVEL
