@@ -1427,8 +1427,8 @@ uint32_t RadioInterface::computeSlotTimeMsec()
         return (NUM_SYM_CAD_24GHZ + (2.0f * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {
         // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol.
-        // getCadSymbolCount() reports the symbols the scan really runs (4 everywhere except SX127x), so
-        // the slot matches the actual out-of-RX scan time, and is the same across chips in one mesh.
+        // getCadSymbolCount() reports the symbols the scan really runs, so the slot matches the actual
+        // out-of-RX scan time rather than a nominal one.
         return max(2.25, getCadSymbolCount() + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
     }
 }
