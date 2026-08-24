@@ -3,6 +3,8 @@
 #include "MeshService.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "memory/MemAudit.h"
+#include <cstring>
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
@@ -417,8 +419,21 @@ static void test_regionPresetMap_unsetCarriesUserprefsIntent()
 #endif
 }
 
+// Live bytes packetPool reports under its memaudit tag, which tracks every alloc/release.
+static int32_t livePacketPoolBytes()
+{
+    memaudit::Tag rows[memaudit::kMaxTags];
+    size_t n = memaudit::snapshot(rows, memaudit::kMaxTags);
+    for (size_t i = 0; i < n; i++)
+        if (rows[i].tag && strcmp(rows[i].tag, "pktpool(live)") == 0)
+            return rows[i].bytes;
+    return 0;
+}
+
 static void test_beginSending_oversizedPayloadAbortsSafely()
 {
+    const int32_t liveBefore = livePacketPoolBytes();
+
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     TEST_ASSERT_NOT_NULL(p);
     p->from = 0x12345678;
@@ -434,11 +449,11 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
     TEST_ASSERT_EQUAL_UINT(0, result);
     TEST_ASSERT_NULL(testRadio->getSendingPacket());
 
-    // Verify rejected packet was released to packetPool and its slot is reusable
-    meshtastic_MeshPacket *reallocated = packetPool.allocZeroed();
-    TEST_ASSERT_NOT_NULL(reallocated);
-    TEST_ASSERT_EQUAL_PTR(p, reallocated);
-    packetPool.release(reallocated);
+    // beginSending() owns the packet it rejects, so the pool's live byte count has to land back
+    // where it started. Do not assert the next alloc hands the same address back: on native
+    // packetPool is a malloc/free MemoryDynamic and the coverage build's ASan quarantine holds the
+    // freed chunk, so the address always differs.
+    TEST_ASSERT_EQUAL_INT32(liveBefore, livePacketPoolBytes());
 }
 
 void setUp(void)
