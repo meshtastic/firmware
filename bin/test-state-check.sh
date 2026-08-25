@@ -99,7 +99,11 @@ mkdir -p "$HOME/.portduino/default/prefs"
 # Detached from this shell's stdout so the wrapper's `| tee` sees EOF and the pipeline returns -
 # the survivor outlives the suite exactly as a spun loop() does.
 setsid sleep 300 >/dev/null 2>&1 &
-printf '%s\n' "$!" > "$HOME/../survivor.pid"
+survivor=$!
+# A real survivor has been running for the whole suite; this one is a microsecond old, and the
+# wrapper scans the instant this shell exits - so wait for the exec before reporting it up.
+for _ in {1..500}; do [[ "$(cat "/proc/$survivor/comm" 2>/dev/null)" == sleep ]] && break; sleep 0.01; done
+printf '%s\n' "$survivor" > "$HOME/../survivor.pid"
 exit 0
 EOF
 chmod +x "$LEAKY"
