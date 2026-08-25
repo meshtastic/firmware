@@ -706,14 +706,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
-#if HAS_PWM_BACKLIGHT
+#if HAS_BACKLIGHT
             graphics::backlightOn();
-#elif defined(PIN_EINK_EN)
-            if (uiconfig.screen_brightness == 1)
-                digitalWrite(PIN_EINK_EN, HIGH);
-#elif defined(PCA_PIN_EINK_EN)
-            if (uiconfig.screen_brightness > 0)
-                io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
 #endif
 
 #if defined(ST7789_CS) &&                                                                                                        \
@@ -772,12 +766,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             drawLockdownLockScreen(dispdev);
 #endif
 
-#if HAS_PWM_BACKLIGHT
+#if HAS_BACKLIGHT
             graphics::backlightOff();
-#elif defined(PIN_EINK_EN)
-            digitalWrite(PIN_EINK_EN, LOW);
-#elif defined(PCA_PIN_EINK_EN)
-            io.digitalWrite(PCA_PIN_EINK_EN, LOW);
 #endif
 
             dispdev->displayOff();
@@ -834,6 +824,11 @@ void Screen::setup()
 
     // Enable display rendering
     useDisplay = true;
+
+#if HAS_BACKLIGHT
+    // Settles uiconfig.screen_brightness for GPIO backlights, so read it only after this
+    graphics::backlightInit();
+#endif
 
     // Load saved brightness from UI config
     // For OLED displays (SSD1306), default brightness is 255 if not set
