@@ -85,6 +85,15 @@ bool sanitizeUtf8(char *buf, size_t bufSize);
 // left at the cut.
 void clampLongName(char *longName);
 
+// Is a received Waypoint still live? The clients send expire == 0 for "never expires" and expire == 1
+// to delete; now == 0 means we have no trustworthy clock, which must not expire anything.
+static inline bool waypointIsActive(uint32_t expire, uint32_t now)
+{
+    if (expire <= 1)
+        return expire == 0;
+    return now == 0 || expire > now;
+}
+
 /// Calculate 2^n without calling pow() - used for spreading factor and other calculations
 inline uint32_t pow_of_2(uint32_t n)
 {
