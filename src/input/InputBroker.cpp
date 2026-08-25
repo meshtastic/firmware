@@ -41,7 +41,7 @@
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
-#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN)
+#if HAS_BACKLIGHT
 static bool touchBacklightWasOn = false;
 static bool touchBacklightActive = false;
 #endif
@@ -247,41 +247,39 @@ void InputBroker::Init()
     };
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
-#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN)
+#if HAS_BACKLIGHT
     // Touch pad drives the backlight on devices that have one
     touchConfig.longPress = INPUT_BROKER_NONE;
+#endif
+#if HAS_BACKLIGHT || defined(HAPTIC_FEEDBACK_PIN)
     touchConfig.suppressLeadUpSound = true;
+#if defined(HAPTIC_FEEDBACK_PIN)
+    initHapticFeedback();
+#endif
+    // One handler per event, a second assignment would silently drop the first
     touchConfig.onPress = []() {
-        touchBacklightWasOn = uiconfig.screen_brightness > 0;
-        if (!touchBacklightWasOn) {
-#if HAS_PWM_BACKLIGHT
-            graphics::backlightOn();
-#else
-            digitalWrite(PIN_EINK_EN, HIGH);
-#endif
-        }
+#if HAS_BACKLIGHT
+        touchBacklightWasOn = graphics::backlightIsLit();
+        if (!touchBacklightWasOn)
+            graphics::backlightMomentaryOn();
         touchBacklightActive = true;
-    };
-    touchConfig.onRelease = []() {
-        if (touchBacklightActive && !touchBacklightWasOn) {
-#if HAS_PWM_BACKLIGHT
-            graphics::backlightOff();
-#else
-            digitalWrite(PIN_EINK_EN, LOW);
-#endif
-        }
-        touchBacklightActive = false;
-    };
 #endif
 #if defined(HAPTIC_FEEDBACK_PIN)
-    // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
-    touchConfig.suppressLeadUpSound = true;
-    initHapticFeedback();
-    touchConfig.onPress = []() {
+        // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
         hapticFeedback->pulse(80);
         hapticFeedback->armDelayedPulse(500, 80);
+#endif
     };
-    touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
+    touchConfig.onRelease = []() {
+#if HAS_BACKLIGHT
+        if (touchBacklightActive && !touchBacklightWasOn)
+            graphics::backlightOff();
+        touchBacklightActive = false;
+#endif
+#if defined(HAPTIC_FEEDBACK_PIN)
+        hapticFeedback->cancelDelayedPulse();
+#endif
+    };
 #endif
     TouchButtonThread->initButton(touchConfig);
 #endif
