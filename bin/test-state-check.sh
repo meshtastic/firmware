@@ -111,7 +111,7 @@ FIXTURE_SUITE=test_fixture_survivor \
 	MESHTASTIC_TEST_STATE_SUMMARY="$survivor_dir/summary.tsv" \
 	MESHTASTIC_TEST_STATE_MANIFEST="$MANIFEST" \
 	MESHTASTIC_TEST_KEEP_STATE=1 \
-	"$SCRIPT_DIR/pio-test-isolate.sh" "$LEAKY" >/dev/null 2>&1
+	"$SCRIPT_DIR/pio-test-isolate.sh" "$LEAKY" >/dev/null 2>"$survivor_dir/wrapper.err"
 
 # Find the pid file by search, not by a glob that assumes a directory depth: the wrapper renames
 # its mktemp'd sandbox to the suite name when it keeps it, so the path is not fixed.
@@ -129,15 +129,16 @@ else
 	if [[ -z $leaked_pid ]]; then
 		alive="no pid staged"
 		listed="n/a"
-		home_lines="n/a"
+		its_home=""
 	else
 		kill -0 "$leaked_pid" 2>/dev/null && alive="alive" || alive="gone"
 		grep -Fxq "$leaked_pid" <<<"$visible_pids" && listed="yes" || listed="no"
-		home_lines="$(tr '\0' '\n' <"/proc/$leaked_pid/environ" 2>/dev/null | grep -c '^HOME=')"
+		its_home="$(tr '\0' '\n' <"/proc/$leaked_pid/environ" 2>/dev/null | grep -m1 '^HOME=')"
 	fi
 	echo "        summary line: $(awk -F'\t' '$1 == "test_fixture_survivor"' "$survivor_dir/summary.tsv" 2>/dev/null | tr '\t' '|')"
-	echo "        staged pid ${leaked_pid:-<none>}: $alive, listed by ps: $listed, HOME entries in its environ: $home_lines"
-	echo "        ps -u $(id -u) listed $(grep -c . <<<"$visible_pids") pids; sandbox HOME was $survivor_dir/*/home"
+	echo "        staged pid ${leaked_pid:-<none>}: $alive, listed by ps: $listed, its ${its_home:-<no HOME in environ>}"
+	echo "        ps -u $(id -u) listed $(grep -c . <<<"$visible_pids") pids; the sandbox is under $survivor_dir"
+	echo "        wrapper stderr: $(tr '\n' '|' <"$survivor_dir/wrapper.err" 2>/dev/null)"
 	FAILURES=$((FAILURES + 1))
 fi
 
