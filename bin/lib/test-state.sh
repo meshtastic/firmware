@@ -65,14 +65,22 @@ state_fingerprint() {
 # Scoped to this user's processes: /proc/<pid>/environ is unreadable for anyone else's anyway, and
 # the narrower sweep costs ~270ms against ~460ms for all of /proc.
 state_find_survivors() {
-	local home="$1" pid
+	local home="$1" pid entry
+	local -a environ
 	[[ -n $home ]] || return 0
 	for pid in $(ps -u "$(id -u)" -o pid= 2>/dev/null); do
 		[[ $pid == "$$" ]] && continue
-		# Grouped so the redirect's own open failure is silenced too, not just tr's stderr.
-		if { tr '\0' '\n' <"/proc/$pid/environ"; } 2>/dev/null | grep -qxF "HOME=$home"; then
-			printf '%s\n' "$pid"
-		fi
+		environ=()
+		# Read the environment in-shell rather than through `tr | grep -qxF`: -q closes the pipe
+		# on the match, tr takes SIGPIPE, and under `set -o pipefail` the hit reports as a miss.
+		# The redirect is inside the group so a process that exits mid-scan is silent too.
+		{ mapfile -t -d '' environ <"/proc/$pid/environ"; } 2>/dev/null || continue
+		for entry in "${environ[@]}"; do
+			if [[ $entry == "HOME=$home" ]]; then
+				printf '%s\n' "$pid"
+				break
+			fi
+		done
 	done
 }
 

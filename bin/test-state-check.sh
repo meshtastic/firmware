@@ -104,11 +104,18 @@ chmod +x "$LEAKY"
 
 survivor_dir="$WORK/state-survivor"
 mkdir -p "$survivor_dir"
+# KEEP_STATE so the sandbox stays whatever the verdict: without it a missed survivor also deletes
+# the pid file staged inside it, and the reap assertion below fails for the wrong reason.
 FIXTURE_SUITE=test_fixture_survivor \
 	MESHTASTIC_TEST_STATE_DIR="$survivor_dir" \
 	MESHTASTIC_TEST_STATE_SUMMARY="$survivor_dir/summary.tsv" \
 	MESHTASTIC_TEST_STATE_MANIFEST="$MANIFEST" \
+	MESHTASTIC_TEST_KEEP_STATE=1 \
 	"$SCRIPT_DIR/pio-test-isolate.sh" "$LEAKY" >/dev/null 2>&1
+
+# Find the pid file by search, not by a glob that assumes a directory depth: the wrapper renames
+# its mktemp'd sandbox to the suite name when it keeps it, so the path is not fixed.
+leaked_pid="$(head -1 "$(find "$survivor_dir" -name survivor.pid -print -quit 2>/dev/null)" 2>/dev/null)"
 
 recorded="$(awk -F'\t' '$1 == "test_fixture_survivor" { print $6; exit }' "$survivor_dir/summary.tsv" 2>/dev/null)"
 if [[ -n ${recorded// /} ]]; then
@@ -116,14 +123,26 @@ if [[ -n ${recorded// /} ]]; then
 	PASSES=$((PASSES + 1))
 else
 	echo "  FAIL  a process outliving the suite went unreported"
+	# Name the cause here rather than spending a CI round-trip on it: whether the fixture's
+	# process exists at all, whether the scan can see it, and what the wrapper recorded instead.
+	visible_pids="$(ps -u "$(id -u)" -o pid= 2>/dev/null | tr -d ' ')"
+	if [[ -z $leaked_pid ]]; then
+		alive="no pid staged"
+		listed="n/a"
+		home_lines="n/a"
+	else
+		kill -0 "$leaked_pid" 2>/dev/null && alive="alive" || alive="gone"
+		grep -Fxq "$leaked_pid" <<<"$visible_pids" && listed="yes" || listed="no"
+		home_lines="$(tr '\0' '\n' <"/proc/$leaked_pid/environ" 2>/dev/null | grep -c '^HOME=')"
+	fi
+	echo "        summary line: $(awk -F'\t' '$1 == "test_fixture_survivor"' "$survivor_dir/summary.tsv" 2>/dev/null | tr '\t' '|')"
+	echo "        staged pid ${leaked_pid:-<none>}: $alive, listed by ps: $listed, HOME entries in its environ: $home_lines"
+	echo "        ps -u $(id -u) listed $(grep -c . <<<"$visible_pids") pids; sandbox HOME was $survivor_dir/*/home"
 	FAILURES=$((FAILURES + 1))
 fi
 
-# Find the pid file by search, not by a glob that assumes a directory depth: the wrapper renames
-# its mktemp'd sandbox to the suite name when it keeps it, so the path is not fixed. Assert the
-# file was found BEFORE asserting the process is gone - otherwise an empty pid takes the "not
-# running" branch and the check passes without having checked anything.
-leaked_pid="$(cat "$(find "$survivor_dir" -name survivor.pid -print -quit 2>/dev/null)" 2>/dev/null | head -1)"
+# Assert the pid file was found BEFORE asserting the process is gone - otherwise an empty pid takes
+# the "not running" branch and the check passes without having checked anything.
 if [[ -z $leaked_pid ]]; then
 	echo "  FAIL  no survivor pid recorded - the reap assertion would pass vacuously"
 	FAILURES=$((FAILURES + 1))
