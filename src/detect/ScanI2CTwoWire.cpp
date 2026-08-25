@@ -451,6 +451,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize) {
                 type = BBQ10KB;
                 logFoundDevice("BB Q10", (uint8_t)addr.address);
                 break;
+                SCAN_SIMPLE_CASE(TSTC8_KB_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
 #ifdef HAS_NCP5623
         SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623",
@@ -1145,6 +1146,54 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize) {
       deviceAddresses[type] = addr;
       foundDevices[addr] = type;
     }
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // AS3935 addresses (0x01-0x03) fall in the reserved range the loop above skips; probe
+    // them separately rather than widening that loop for every board.
+    static const uint8_t as3935Candidates[] = {AS3935_ADDR_ALT, AS3935_ADDR_ALT2, AS3935_ADDR};
+    for (uint8_t i = 0; i < sizeof(as3935Candidates); i++) {
+        // Respect the caller's address filter, same as the main loop above (line ~269).
+        if (asize != 0 && !in_array(address, asize, as3935Candidates[i]))
+            continue;
+
+        DeviceAddress as3935Addr(port, as3935Candidates[i]);
+        i2cBus->beginTransmission(as3935Candidates[i]);
+        uint8_t as3935Err = i2cBus->endTransmission();
+        if (as3935Err == 0) {
+            // No WHOAMI, and a POR-only check can't survive a warm reboot (initDevice rewrites
+            // REG0x00). Write a test pattern to bits[5:1] instead and confirm it reads back.
+            constexpr uint8_t AS3935_PROBE_PATTERN = 0b01010; // arbitrary, bits[5:1]
+            i2cBus->beginTransmission(as3935Candidates[i]);
+            i2cBus->write((uint8_t)0x00);                        // REG0x00 (AFE_GAIN)
+            i2cBus->write((uint8_t)(AS3935_PROBE_PATTERN << 1)); // PWD=0, gain bits = pattern
+            if (i2cBus->endTransmission() == 0) {
+                uint16_t reg0 = getRegisterValue(ScanI2CTwoWire::RegisterLocation(as3935Addr, 0x00), 1);
+                if (((reg0 >> 1) & 0x1F) == AS3935_PROBE_PATTERN) {
+                    logFoundDevice("AS3935", as3935Candidates[i]);
+                    deviceAddresses[AS3935] = as3935Addr;
+                    foundDevices[as3935Addr] = AS3935;
+                    break; // only one AS3935 expected per bus
+                } else {
+                    LOG_DEBUG("Unexpected REG0x00 readback for AS3935: addr=0x%x val=0x%x", as3935Candidates[i], reg0);
+                }
+            }
+        }
+    }
+#endif
+
+    // The QMC6309 magnetometer sits at 0x7C, above the general scan ceiling (the loop above stops at 0x77 to
+    // avoid the reserved 0x78-0x7F block). Probe it explicitly. Gated on the SensorLib driver being present so
+    // only boards that can actually drive the chip poke this reserved address.
+#if __has_include(<SensorQMC6309.hpp>)
+    addr.address = QMC6309_ADDR;
+    i2cBus->beginTransmission(addr.address);
+    if (i2cBus->endTransmission() == 0 &&
+        getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1) == 0x90 /* QMC6309 chip id */) {
+        deviceAddresses[QMC6309] = addr;
+        foundDevices[addr] = QMC6309;
+        logFoundDevice("QMC6309", (uint8_t)addr.address);
+    }
+#endif
   }
 }
 

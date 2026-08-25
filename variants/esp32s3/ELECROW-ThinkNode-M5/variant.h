@@ -45,8 +45,8 @@
 
 #define PIN_GPS_STANDBY 11 // An output to wake GPS, low means allow sleep, high means force wake
 
-#define GPS_TX_PIN 20 // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN 19 // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN 20 // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN 19 // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 

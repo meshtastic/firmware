@@ -195,6 +195,13 @@ jobs:
         timeout-minutes: 5
         run: ./bin/test-config-check.sh .pio/build/coverage/meshtasticd
 
+      - name: Shared-state checker self-test
+        # Fixtures that write nothing / exactly what they declare / something undeclared /
+        # a declared write they never make, asserting CLEAN / CLEAN / DIRTY / MISSING. A
+        # checker that has silently stopped matching looks identical to a clean codebase.
+        timeout-minutes: 5
+        run: ./bin/test-state-check.sh
+
       - name: Integration test
         # Cap the whole step: if the simulator ever fails to exit (e.g. the
         # exit_simulator admin path regresses again) the job must fail fast,
@@ -273,9 +280,12 @@ jobs:
           restore-keys: |
             pio-coverage-tests-
 
-      - name: Build test programs once
-        # One shared build of src + every test program. This is the single source build; gcov then
-        # accumulates coverage counts into this shared .pio/build/coverage/src as the chunks run.
+      - name: Warm the shared test build
+        # Compiles src + every test program once so no single area absorbs the whole src build in
+        # its reported duration; gcov then accumulates counts into this shared
+        # .pio/build/coverage/src as the areas run. NOT a substitute for building in the run step:
+        # PlatformIO links every test program to the one .pio/build/coverage/meshtasticd path, so a
+        # --without-building run executes whichever suite was linked last under every suite's name.
         run: platformio test -e coverage --without-testing
 
       - name: Save PlatformIO cache
@@ -368,12 +378,21 @@ jobs:
             echo "::group::area $a (${group[$a]# })"
             # Capture platformio's real exit status (not grep's) via a log file, then show the log
             # with the noisy per-variant SKIPPED rows filtered out.
-            if ! platformio test -e coverage --without-building -v ${group[$a]# } \
+            if ! platformio test -e coverage -v ${group[$a]# } \
                  --junit-output-path "testreport-$a.xml" > "area-$a.log" 2>&1; then
               fail=1
               echo "::error::area $a had test failures"
             fi
+            # Suites outside this area are reported SKIPPED by design (PlatformIO lists every suite
+            # in the env and marks the unselected ones finished), so those rows are noise here. The
+            # attribution check below is what catches a suite that was selected and did not run.
             grep -v "[[:space:]]SKIPPED$" "area-$a.log" || true
+            # Per area, so a mismatch names the area it happened in rather than the whole run.
+            if ! ./bin/check-test-attribution.py --label "area $a" \
+                 --expect "${group[$a]# }" "testreport-$a.xml"; then
+              fail=1
+              echo "::error::area $a ran suites that did not match their own test binaries"
+            fi
             echo "::endgroup::"
           done
           exit $fail
@@ -398,6 +417,18 @@ jobs:
           ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
           PY
 
+      - name: Verify every suite ran its own tests
+        # Whole-run gate over the merged report: every test_* directory must appear with at least
+        # one test case, and every case must come from the suite that reported it. The per-area
+        # check above cannot see an area that never executed - this can.
+        if: always() # a suite going missing is the finding; do not hide it behind an earlier failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t suites < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
+          ./bin/check-test-attribution.py --label "coverage (all areas)" \
+            --expect "${suites[*]}" testreport.xml
+
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
         run: |
@@ -405,8 +436,30 @@ jobs:
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
           sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
 
+      - name: Attribution canary
+        # Guards the guard above: runs two suites the broken way (--without-building, so PlatformIO
+        # does not relink and both execute the same leftover binary) and requires the checker to
+        # catch it. Fails if the checker regressed, or if the reproduction stops reproducing - in
+        # which case the reason both harnesses stopped passing that flag no longer holds.
+        #
+        # Lives in this job, not simulator-tests: it relinks $BUILD_DIR/$PROGNAME, and there that
+        # replaced the daemon binary with a test suite, so the integration test waited for a socket
+        # a test binary never opens. Here the binary is already per-suite and nothing later needs it.
+        timeout-minutes: 15
+        run: ./bin/test-attribution-canary.sh -e coverage
+
       - name: Event channel policy tests
         run: platformio test -e coverage-event-policy -v --junit-output-path event-policy-testreport.xml
+
+      - name: Verify the event-policy suites ran their own tests
+        # Expected set read through PlatformIO's own config parser, so it cannot drift from the
+        # env's test_filter the way a second hand-maintained list would.
+        run: |
+          set -euo pipefail
+          expect=$(python3 -c "from platformio.project.config import ProjectConfig; \
+            print(' '.join(ProjectConfig().get('env:coverage-event-policy', 'test_filter', [])))")
+          ./bin/check-test-attribution.py --label coverage-event-policy \
+            --expect "$expect" event-policy-testreport.xml
 
       - name: Save test results
         if: always() # run this step even if previous step failed

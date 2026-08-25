@@ -107,7 +107,7 @@ __attribute__((noinline)) void variantDefaultConfig() {}
 __attribute__((noinline)) void variantDefaultModuleConfig() __attribute__((weak));
 __attribute__((noinline)) void variantDefaultModuleConfig() {}
 
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(HELTEC_MESH_NODE_T114) || defined(TFT_NV3001B_DETECT)
 
 uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
@@ -157,6 +157,10 @@ uint32_t readwrite8(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_
     return ret;
 }
 
+#endif
+
+#ifdef HELTEC_MESH_NODE_T114
+
 uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
     pinMode(cs, OUTPUT);
@@ -174,6 +178,57 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
     readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
     uint32_t ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
     return ID;
+}
+
+#endif
+
+#ifdef TFT_NV3001B_DETECT
+
+// The NV3001B panel is an add-on module on these boards, so probe for it before assuming a screen.
+static constexpr uint32_t NV3001B_PANEL_ID = 0x300101;
+static constexpr uint32_t NV3001B_RESET_DELAY_MS = 120; // NV3001B_RST_DELAY, per the Arduino_GFX driver
+
+bool nv3001bPanelPresent(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst, uint8_t en, uint8_t bl)
+{
+    pinMode(en, OUTPUT);
+    digitalWrite(en, TFT_EN_ON);
+    pinMode(bl, OUTPUT);
+    digitalWrite(bl, TFT_BACKLIGHT_ON);
+    delay(NV3001B_RESET_DELAY_MS);
+
+    pinMode(cs, OUTPUT);
+    digitalWrite(cs, HIGH);
+    pinMode(sck, OUTPUT);
+    digitalWrite(sck, LOW);
+    pinMode(mosi, OUTPUT);
+    pinMode(dc, OUTPUT);
+    pinMode(rst, OUTPUT);
+    digitalWrite(rst, HIGH);
+    delay(NV3001B_RESET_DELAY_MS);
+    digitalWrite(rst, LOW); // Hardware Reset
+    delay(NV3001B_RESET_DELAY_MS);
+    digitalWrite(rst, HIGH);
+    delay(NV3001B_RESET_DELAY_MS);
+
+    // 0x04 reports the whole 24-bit display ID; 0xDA/0xDB/0xDC report it one byte at a time.
+    // A panel that answers either way is present.
+    uint32_t rddid = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    uint32_t rdid = (readwrite8(0xDA, 8, 0, cs, sck, mosi, dc, rst) << 16) |
+                    (readwrite8(0xDB, 8, 0, cs, sck, mosi, dc, rst) << 8) | readwrite8(0xDC, 8, 0, cs, sck, mosi, dc, rst);
+    LOG_INFO("NV3001B probe RDDID=0x%06x RDID=0x%06x", (unsigned int)rddid, (unsigned int)rdid);
+
+    if (rddid == NV3001B_PANEL_ID || rdid == NV3001B_PANEL_ID) {
+        LOG_INFO("NV3001B panel detected");
+        return true;
+    }
+
+    // All ones means the data line floated, all zeroes means something held it low; either way no panel
+    // answered, so drop the rail again rather than leave an empty header powered.
+    LOG_INFO("NV3001B panel not detected");
+    digitalWrite(bl, TFT_BACKLIGHT_OFF);
+    digitalWrite(en, TFT_EN_OFF);
+    pinMode(en, INPUT);
+    return false;
 }
 
 #endif
@@ -1032,7 +1087,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2)) &&            \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
+     defined(ELECROW_ThinkNode_M9) || defined(T_WATCH_ULTRA)) &&                                                                 \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1045,12 +1101,14 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if defined(USE_EINK) || defined(HAS_SPI_TFT) || defined(USE_SPISSD1306)
     bool hasScreen = true;
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(TFT_NV3001B_DETECT)
+    hasScreen = nv3001bPanelPresent(TFT_CS, TFT_SCL, TFT_SDA, TFT_RS, TFT_RST, TFT_EN, TFT_BL);
+#elif defined(HELTEC_MESH_NODE_T114)
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
     if (st7789_id == 0xFFFFFF) {
         hasScreen = false;
     }
-#endif // HELTEC_MESH_NODE_T114
+#endif // TFT_NV3001B_DETECT / HELTEC_MESH_NODE_T114
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (portduino_config.displayPanel)
@@ -1116,7 +1174,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.wake_on_tap_or_motion = true;
 #endif
 
-#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
+#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR) || defined(T_WATCH_ULTRA)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
@@ -1264,7 +1322,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
 #endif
 
-#if defined(PIN_VIBRATION)
+#if HAS_TFT
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
+        moduleConfig.external_notification.nag_timeout = 0;
+#elif defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
 #elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) ||                           \
     defined(HAS_I2S_SPEAKER_NRF52)
@@ -1276,12 +1337,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-#if HAS_TFT
-    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
-        moduleConfig.external_notification.nag_timeout = 0;
-#else
-    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
-#endif // HAS_TFT
 #endif // HAS_I2S
 
 #ifdef NANO_G2_ULTRA
@@ -2150,9 +2205,9 @@ void NodeDB::demoteOldestHotNodesToWarm()
         const meshtastic_NodeInfoLite &n = (*meshNodes)[i];
         if (n.num == 0)
             continue;
-        // Keep the public key if we have one (40 B warm record); keyless nodes
-        // still get a placeholder so re-admission restores last_heard.
-        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
+        // Warm entries carry no key length, so a partial key would be indistinguishable
+        // from a full one. nullptr keeps the keyless placeholder that restores last_heard.
+        warmStore.absorb(n.num, n.last_heard, n.public_key.size == 32 ? n.public_key.bytes : nullptr, n.role,
                          warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) - they'd otherwise orphan until the next
@@ -4448,12 +4503,30 @@ bool NodeDB::createNewIdentity()
 
     myNodeInfo.my_node_num = newNodeNum;
 
+    // The number has moved, so the caller must persist it whatever happens next. Returning false here
+    // would leave the new key saved against the old number, which is the break this exists to prevent.
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    if (!info)
-        return false;
-    TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    if (info)
+        TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    else
+        LOG_ERROR("No room for our own node 0x%08x, identity moved without a self record", newNodeNum);
 
     return true;
+}
+
+bool NodeDB::ensurePkiIdentity()
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    // A failed or declined keygen leaves the existing key, and so the existing node num, untouched.
+    if (!crypto || !crypto->ensurePkiKeys(config.security, owner))
+        return false;
+
+    // ensurePkiKeys() writes key material only, so my_node_num is still the stale MAC-derived value.
+    // createNewIdentity() early-returns when the key, and so the node num, did not actually change.
+    return createNewIdentity();
+#else
+    return false;
+#endif
 }
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
