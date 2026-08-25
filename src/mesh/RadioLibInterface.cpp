@@ -454,7 +454,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // transmit it on the current (home) config - and move on to the next queued packet.
                     LOG_DEBUG("Beacon: invalid TX radio config, drop packet 0x%08x", txp->id);
                     meshtastic_MeshPacket *bad = txQueue.dequeue();
-                    MeshBeaconModule::clearTargetRadioSettings(bad);
+                    abandonBeaconTarget(bad);
                     packetPool.release(bad);
                     setTransmitDelay();
                 } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {

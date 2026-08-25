@@ -19,8 +19,7 @@ meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
-// Switch state, at file scope so setTargetRadioSettings() can see which entry the restore is gated
-// on. Explicit rather than inferred: "live config differs from the snapshot" missed name/PSK-only
+// Explicit switch state, not inferred: "live config differs from the snapshot" missed name/PSK-only
 // swaps and fired on legitimate channel edits.
 static bool radioSwitched = false;
 static uint32_t switchedForId = 0;
