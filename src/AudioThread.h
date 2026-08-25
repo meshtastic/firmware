@@ -14,8 +14,7 @@
 
 // A board with an I2S amplifier opts in by defining AUDIO_AMP_ENABLE(on) in its variant.h to power the
 // amp on/off around playback (e.g. an enable pin on an I/O expander). The includes below expose the
-// expander instances (io / mcpIoExpander) those macros typically reference. A board whose amp needs time
-// to leave shutdown also defines AUDIO_AMP_SETTLE_MS (see ampEnable below).
+// expander instances (io / mcpIoExpander) those macros typically reference.
 #ifdef USE_XL9555
 #include "ExtensionIOXL9555.hpp"
 extern ExtensionIOXL9555 io;
@@ -90,10 +89,8 @@ class AudioThread : public concurrency::OSThread
     }
 
   private:
-    // Amplifiers such as the NS4150 need time to come out of shutdown before they pass audio, and where
-    // the enable line hangs off an I/O expander the write itself is slow too. Short system tones
-    // (playChirp 20 ms, playBoop 50 ms, playBeep ~62 ms) are otherwise finished before the amp is awake
-    // and are never heard. A variant opts into a settle window by defining AUDIO_AMP_SETTLE_MS.
+    // Amps like the NS4150 need time to leave shutdown, longer when the enable is an I/O expander write.
+    // Without a variant's AUDIO_AMP_SETTLE_MS the short system tones are over before any audio gets out.
     static void ampEnable(bool on)
     {
 #ifdef AUDIO_AMP_ENABLE

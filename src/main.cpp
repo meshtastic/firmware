@@ -1170,10 +1170,8 @@ void setup()
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
-    // Play the start melody here rather than earlier in setup(): boards that drive a speaker over I2S
-    // have no audioThread until it is created above, and their codec is only brought up by
-    // lateInitVariant(), so an earlier call is silently dropped. Skipped for tracker/sensor roles that
-    // are power saving.
+    // Must follow lateInitVariant(): on I2S boards audioThread and the codec are only up by this point.
+    // Skipped for power-saving tracker/sensor roles.
     if (config.power.is_power_saving == true &&
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
