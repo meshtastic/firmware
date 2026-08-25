@@ -97,10 +97,10 @@
 // SPI TFT on the "OLED"-silkscreened header / LCD FPC, sharing the LoRa SPI bus (pg1).
 // Vendor ships two panels on identical pins; the default kit has the ST7789 1.54" IPS 240x240.
 // Build with -D MESHNOLOGY_W10_LCD_ST7796_35 for the 3.5" ST7796 320x480 panel instead.
-#define TFT_CS 10  // pg1: OLED_CS=GPIO10
-#define TFT_DC 16  // pg1: OLED_DC=GPIO16
-#define TFT_BL 6   // pg1: OLED_BL=GPIO6 (backlight PWM)
-#define TFT_RST -1 // panel reset is EXIO1 on the expander, toggled in mcp23017EarlyInit()
+#define TFT_CS 10     // pg1: OLED_CS=GPIO10
+#define TFT_DC 16     // pg1: OLED_DC=GPIO16
+#define TFT_BL 6      // pg1: OLED_BL=GPIO6 (backlight PWM)
+#define TFT_RST -1    // panel reset is EXIO1 on the expander, toggled in mcp23017EarlyInit()
 #define HAS_SPI_TFT 1 // main.cpp keys SPI-TFT Screen creation on this since #10803
 #define USE_TFTDISPLAY 1
 
