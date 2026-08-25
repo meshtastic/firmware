@@ -1,5 +1,8 @@
 #pragma once
 
+#define LED_POWER 46
+#define LED_STATE_ON 1 // State when LED is lit
+
 #define BUTTON_PIN 0
 
 #define I2C_SDA 47
@@ -35,8 +38,8 @@
 #define USE_PCA95X5
 #define PCA95X5_CLS Pca9555
 #define PCA95X5_INC "Pca9555.h"
-#define BOARD_PCA9535_ADDR 0x21
-#define BOARD_PCA9535_INT 45
+#define PCA95X5_ADDR 0x21
+#define PCA95X5_INT 45
 // Button
 #define EXPANDS_BTN_WAKE_UP (0) // INPUT
 // I2C
@@ -60,9 +63,12 @@
 // Audio
 #define EXPANDS_PA_PWR_EN (12)
 #define AUDIO_AMP_ENABLE(on)                                                                                                     \
+    spiLock->lock();                                                                                                             \
     io.digitalWrite(EXPANDS_PA_PWR_EN, (on) ? HIGH : LOW);                                                                       \
+    spiLock->unlock();                                                                                                           \
     if (on)                                                                                                                      \
         delay(50);
+
 // Battery
 #define EXPANDS_BAT_ADC_EN (15)
 // Grove
@@ -99,3 +105,13 @@
 #define GPS_THREAD_INTERVAL 50
 // #define GPS_EN // TODO: add GPS enable pin control via io/expander
 #endif
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Display (NV3031B + QSPI via SPI3) - BaseUI adaptation
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// #define USE_TFTDISPLAY 1   // Enable legacy BaseUI TFTDisplay.cpp build
+#define TFT_WIDTH 320  // Required by BaseUI setGeometry
+#define TFT_HEIGHT 240 // Required by BaseUI setGeometry
+
+// Battery
+#define OCV_ARRAY 4200, 4040, 3864, 3800, 3745, 3710, 3687, 3663, 3623, 3482, 3000
