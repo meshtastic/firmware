@@ -220,6 +220,9 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             } else if (isTransmitting) {
                 // just received something weird.
                 sendControl(meshtastic_XModem_Control_CAN);
+                spiLock->lock();
+                file.close();
+                spiLock->unlock();
                 isTransmitting = false;
                 break;
             }

@@ -70,7 +70,8 @@
 
 #define USE_EINK
 // Note: this is really just backlight power
-#define PCA_PIN_EINK_EN 5 // This is the pin number on the GPIO expander
+#define PCA_PIN_EINK_EN 5         // This is the pin number on the GPIO expander
+#define GPIO_BACKLIGHT_DEFAULT_ON // matches the previous screen_brightness > 0 wake behaviour
 #define PIN_EINK_CS 39
 #define PIN_EINK_BUSY 42
 #define PIN_EINK_DC 40
