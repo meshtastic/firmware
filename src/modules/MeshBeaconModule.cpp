@@ -298,6 +298,38 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 }
 
 // ---------------------------------------------------------------------------
+// MeshBeaconTxHook
+// ---------------------------------------------------------------------------
+
+MeshBeaconTxHook *meshBeaconTxHook;
+
+RadioTxHook::PreTxAction MeshBeaconTxHook::beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p)
+{
+    // Invalid target config (bad preset/region, or an unlicensed node keying up on a ham-only
+    // region): the packet must never fall through onto the current (home) config, so drop it.
+    if (MeshBeaconModule::beaconTxConfigInvalid(p)) {
+        LOG_DEBUG("Beacon: invalid TX radio config, drop packet 0x%08x", p->id);
+        return PRETX_DROP;
+    }
+    // A switch leaves the radio on a channel we have not scanned yet, so the driver owes us a
+    // fresh transmit delay before it keys up.
+    return MeshBeaconModule::reconfigureForBeaconTX(iface, p) ? PRETX_DEFER : PRETX_SEND;
+}
+
+bool MeshBeaconTxHook::holdsRadio(const meshtastic_MeshPacket *p)
+{
+    return MeshBeaconModule::hasTargetRadioSettings(p);
+}
+
+void MeshBeaconTxHook::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
+{
+    // Clear first: the restore is gated on the switching packet still being live, so dropping our
+    // claim before asking is what lets the home config come back.
+    MeshBeaconModule::clearTargetRadioSettings(p);
+    MeshBeaconModule::reconfigureForBeaconTX(iface, nullptr);
+}
+
+// ---------------------------------------------------------------------------
 // MeshBeaconBroadcastModule
 // ---------------------------------------------------------------------------
 
@@ -337,6 +369,8 @@ void MeshBeaconBroadcastModule::rebuildCache()
 void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset,
                                                  bool has_channel, const meshtastic_ChannelSettings *overrideChannel)
 {
+    // Beacons uplink to MQTT like any other primary-slot packet - Router::send() publishes on slot 0's
+    // uplink_enabled, and under the swap below the topic is the beacon channel's. Both intentional.
     const bool cryptoOverride =
         has_channel && overrideChannel && (overrideChannel->name[0] != '\0' || overrideChannel->psk.size > 0);
     if (!cryptoOverride) {

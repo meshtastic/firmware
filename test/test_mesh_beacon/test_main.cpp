@@ -1510,6 +1510,113 @@ static void test_beaconRestore_deferredUntilPacketCompletes(void)
                                      "restore must put the home channel back");
 }
 
+// ---------------------------------------------------------------------------
+// MeshBeaconTxHook (the radio driver's view of the beacon)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normal traffic must pass straight through the hook: no radio switch, no drop, and nothing claimed
+ * that would stop the driver listening on a busy channel.
+ */
+static void test_txHook_normalPacket_isSend(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7A000001;
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_SEND, RadioTxHooks::beforeTransmit(&radio, &pkt),
+                                  "a packet with no beacon target must transmit as usual");
+    TEST_ASSERT_FALSE_MESSAGE(RadioTxHooks::holdsRadio(&pkt), "normal traffic must not claim the radio");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, radio.reconfigureCalls, "normal traffic must not reconfigure the radio");
+}
+
+/**
+ * A beacon asks the driver for a fresh transmit delay, because the switch leaves the radio on a
+ * channel the last channel scan never covered.
+ */
+static void test_txHook_beaconPacket_isDefer(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7A000002;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &pkt),
+                                  "a beacon switch must defer the transmit");
+    TEST_ASSERT_TRUE_MESSAGE(RadioTxHooks::holdsRadio(&pkt), "a queued beacon must claim the radio");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "the hook must leave the radio on the beacon preset");
+
+    // packetReleased() is what the driver calls once the packet is sent, cancelled or dropped.
+    RadioTxHooks::packetReleased(&radio, &pkt);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "releasing the packet must put the home preset back");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
+                                     "releasing the packet must put the home channel back");
+}
+
+/**
+ * SHORT_TURBO is not legal on EU_868, so the beacon has nowhere valid to transmit. The driver must be
+ * told to drop it rather than let it fall through onto the home config.
+ */
+static void test_txHook_invalidTarget_isDrop(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7A000003;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DROP, RadioTxHooks::beforeTransmit(&radio, &pkt),
+                                  "an invalid target config must be dropped, not transmitted");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, radio.reconfigureCalls, "a dropped beacon must not reconfigure the radio");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "a dropped beacon must leave the home preset alone");
+
+    RadioTxHooks::packetReleased(&radio, &pkt); // the driver's drop path, so the sidecar entry is freed
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&pkt), "the dropped packet's target must be released");
+}
+
+/**
+ * The hook list is what keeps the driver free of module includes: with nothing registered every call
+ * is a no-op, so a build without the beacon module behaves exactly as one with beacons idle.
+ */
+static void test_txHook_unregistered_isNoOp(void)
+{
+    resetConfig();
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7A000004;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_SEND, RadioTxHooks::beforeTransmit(&radio, &pkt),
+                                  "with no hook registered even a beacon is ordinary traffic to the driver");
+    TEST_ASSERT_FALSE_MESSAGE(RadioTxHooks::holdsRadio(&pkt), "with no hook registered nothing claims the radio");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, radio.reconfigureCalls, "with no hook registered the radio is never reconfigured");
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1640,6 +1747,13 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
     RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);
     RUN_TEST(test_beaconRestore_deferredUntilPacketCompletes);
+
+    printf("\n=== MeshBeaconTxHook ===\n");
+
+    RUN_TEST(test_txHook_normalPacket_isSend);
+    RUN_TEST(test_txHook_beaconPacket_isDefer);
+    RUN_TEST(test_txHook_invalidTarget_isDrop);
+    RUN_TEST(test_txHook_unregistered_isNoOp);
 
     exit(UNITY_END());
 }

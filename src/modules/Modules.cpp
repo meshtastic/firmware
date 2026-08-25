@@ -152,6 +152,7 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_BEACON
     meshBeaconBroadcastModule = new MeshBeaconBroadcastModule();
     meshBeaconListenerModule = new MeshBeaconListenerModule();
+    meshBeaconTxHook = new MeshBeaconTxHook(); // registers itself with the radio driver's TX hooks
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
     positionModule = new PositionModule();
