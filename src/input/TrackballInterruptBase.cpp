@@ -172,8 +172,9 @@ int32_t TrackballInterruptBase::runOnce()
     }
 
 #if TB_THRESHOLD
-    // A press starting this poll suppresses direction events, as it always has.
-    if (!pressLatched) {
+    // A starting press suppresses direction events as it always has, and a press event already
+    // emitted this poll (a release classified on a later poll) must not be overwritten either.
+    if (!pressLatched && e.inputEvent == INPUT_BROKER_NONE) {
         if (up_counter >= TB_THRESHOLD) {
 #ifdef INPUT_DEBUG
             LOG_DEBUG("Trackball event UP %u", millis());
