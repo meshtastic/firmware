@@ -1185,7 +1185,7 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
 #if HAS_TRAFFIC_MANAGEMENT
-    // Position dedup ships enabled at the 11-hour default window on all supported targets.
+    // Position dedup ships enabled at the 5-hour default window on all supported targets.
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
