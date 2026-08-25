@@ -69,7 +69,8 @@ state_find_survivors() {
 	[[ -n $home ]] || return 0
 	for pid in $(ps -u "$(id -u)" -o pid= 2>/dev/null); do
 		[[ $pid == "$$" ]] && continue
-		if tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null | grep -qxF "HOME=$home"; then
+		# Grouped so the redirect's own open failure is silenced too, not just tr's stderr.
+		if { tr '\0' '\n' <"/proc/$pid/environ"; } 2>/dev/null | grep -qxF "HOME=$home"; then
 			printf '%s\n' "$pid"
 		fi
 	done
