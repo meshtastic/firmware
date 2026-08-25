@@ -8,9 +8,11 @@
 
 #if HAS_SCREEN
 #include "gps/RTC.h"
+#include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/draw/NodeListRenderer.h"
+#include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #endif
 
@@ -107,6 +109,24 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     // Get our node, to use our own position
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
+    // Rows are pitched tighter than the font box, which plain text hides but a solid glyph does not,
+    // so a glyph row needs a top pad plus extra height. All deltas stay zero without emotes.
+    const int rowPitch = std::max(1, textPos[2] - textPos[1]);
+    const int rowOverhang = std::max(0, (textPos[1] + FONT_HEIGHT_SMALL) - textPos[2]);
+    const graphics::EmoteRenderer::LineMetrics nameMetrics = graphics::EmoteRenderer::analyzeLine(display, wp.name, 0);
+    const graphics::EmoteRenderer::LineMetrics descMetrics = graphics::EmoteRenderer::analyzeLine(display, wp.description, 0);
+    const int nameCost = nameMetrics.hasEmote ? rowOverhang + std::max(0, nameMetrics.tallestHeight - rowPitch) : 0;
+    const int descCost = descMetrics.hasEmote ? rowOverhang + std::max(0, descMetrics.tallestHeight - rowPitch) : 0;
+
+    // A glyph row is all-or-nothing: half its height just moves the collision onto the row below.
+    // One tall row always fits; a second only where the panel has room, else description stays plain.
+    const int growthBudget = std::max(0, SCREEN_HEIGHT - (textPos[4] + FONT_HEIGHT_SMALL));
+    const bool descTall = descCost > 0 && nameCost + descCost <= growthBudget;
+    const int namePad = nameCost > 0 ? rowOverhang : 0;
+    const int descPad = descTall ? rowOverhang : 0;
+    const int extraNameHeight = nameCost;
+    const int extraDescHeight = descTall ? descCost : 0;
+
     // Match compass sizing/placement to favorite node screen logic.
     const int w = display->getWidth();
     int16_t compassRadius = 8;
@@ -124,7 +144,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
     } else {
         // Waypoint content uses rows 1..4, so place the compass below that block.
-        const int yBelowContent = textPos[4] + FONT_HEIGHT_SMALL + 2;
+        const int yBelowContent = textPos[4] + FONT_HEIGHT_SMALL + extraNameHeight + extraDescHeight + 2;
         const int margin = 4;
 #if defined(USE_EINK)
         const int iconSize = (graphics::currentResolution == graphics::ScreenResolution::High) ? 16 : 8;
@@ -213,9 +233,16 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!
     display->drawString(0, textPos[line++], lastStr);
-    display->drawString(0, textPos[line++], wp.name);
-    display->drawString(0, textPos[line++], wp.description);
+    // Waypoint names routinely carry emoji from the phone clients, so render them as the message
+    // screens do; each following row drops by the height the glyphs above it added.
+    graphics::UIRenderer::drawStringWithEmotes(display, 0, textPos[line++] + namePad, wp.name, FONT_HEIGHT_SMALL, 1, false);
+    const int descY = textPos[line++] + extraNameHeight + descPad;
+    // descCost == 0 means the glyph already fits the row, so only a refused tall row falls back.
+    if (descTall || descCost == 0)
+        graphics::UIRenderer::drawStringWithEmotes(display, 0, descY, wp.description, FONT_HEIGHT_SMALL, 1, false);
+    else
+        display->drawString(0, descY, wp.description);
     if (distStr[0])
-        display->drawString(0, textPos[line++], distStr);
+        display->drawString(0, textPos[line++] + extraNameHeight + extraDescHeight, distStr);
 }
 #endif
