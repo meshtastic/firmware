@@ -19,6 +19,12 @@ meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
+// Switch state, at file scope so setTargetRadioSettings() can see which entry the restore is gated
+// on. Explicit rather than inferred: "live config differs from the snapshot" missed name/PSK-only
+// swaps and fired on legitimate channel edits.
+static bool radioSwitched = false;
+static uint32_t switchedForId = 0;
+
 static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset *preset,
                                    uint16_t *slot, bool *legacyHopOverride = nullptr,
                                    meshtastic_Config_LoRaConfig_RegionCode *region = nullptr, bool *has_channel = nullptr,
@@ -85,11 +91,20 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, me
             target = &entry;
     }
     if (!target) {
-        // All slots live: another beacon's target is about to be overwritten and that packet will key
-        // up on whatever config is running instead of its own.
+        // Table full. Never evict the entry the outstanding switch is gated on: dropping it would
+        // unblock the restore and put the home config back under a beacon that has not keyed up.
+        for (auto &entry : targetRadioSettings) {
+            if (!radioSwitched || entry.id != switchedForId) {
+                target = &entry;
+                break;
+            }
+        }
+        if (!target) {
+            LOG_WARN("Beacon: target table full and every slot is in flight, drop target for 0x%08x", p->id);
+            return;
+        }
         LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x",
-                 (unsigned)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0])), targetRadioSettings[0].id, p->id);
-        target = &targetRadioSettings[0];
+                 (unsigned)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0])), target->id, p->id);
     }
     target->inUse = true;
     target->id = p->id;
@@ -166,17 +181,9 @@ meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtas
 
 bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p)
 {
-    // The four statics below hold the switch state explicitly. Inferring it from "live config differs
-    // from the snapshot" instead missed name/PSK-only swaps and fired on legitimate channel edits.
-    static bool radioSwitched = false;
-
     // Consecutive switches with no restore between them, so a multi-target run can be read off the log
     // and the held home snapshot is attributable to a specific switch.
     static uint8_t switchDepth = 0;
-
-    // The packet that armed the outstanding switch. Every caller that abandons or completes a beacon
-    // clears its target settings first, so a live entry here means that TX has not finished yet.
-    static uint32_t switchedForId = 0;
 
     // Both branches end in iface->reconfigure(), whose setStandby() runs completeSending() and calls
     // straight back in here. Ignore that re-entry: the outer call owns the config it is applying.

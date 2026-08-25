@@ -250,9 +250,7 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
     auto p = txQueue.remove(from, id);
     if (p) {
 #if !MESHTASTIC_EXCLUDE_BEACON
-        // Every path that abandons a queued packet clears its beacon target first; the restore is
-        // gated on no target being live, so a leftover entry would pin the radio on the beacon config.
-        MeshBeaconModule::clearTargetRadioSettings(p);
+        abandonBeaconTarget(p);
 #endif
         packetPool.release(p); // free the packet we just removed
     }
@@ -567,6 +565,9 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
         LOG_DEBUG("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
+#if !MESHTASTIC_EXCLUDE_BEACON
+        abandonBeaconTarget(p);
+#endif
         packetPool.release(p);
         return true;
     }
@@ -581,6 +582,14 @@ void RadioLibInterface::handleTransmitInterrupt()
         completeSending();
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
 }
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+void RadioLibInterface::abandonBeaconTarget(meshtastic_MeshPacket *p)
+{
+    MeshBeaconModule::clearTargetRadioSettings(p);
+    MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+}
+#endif
 
 void RadioLibInterface::completeSending()
 {
@@ -779,11 +788,8 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet: LoRa Tx disabled");
 #if !MESHTASTIC_EXCLUDE_BEACON
-        // This packet may have already triggered a beacon radio switch in TRANSMIT_DELAY_COMPLETED;
-        // since it never reaches completeSending() here, restore the radio so it isn't left on the
-        // beacon config (which would also break RX on the home channel).
-        MeshBeaconModule::clearTargetRadioSettings(txp);
-        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+        // Never reaches completeSending(), so the radio would be left on the beacon config.
+        abandonBeaconTarget(txp);
 #endif
         packetPool.release(txp);
         return false;

@@ -1002,8 +1002,7 @@ void test_send_rejects_payload_larger_than_radio_buffer(void)
 
     p.id = 0x51000011;
     p.encrypted.size = MAX_RADIO_PAYLOAD_LEN;
-    TEST_ASSERT_EQUAL_MESSAGE(ERRNO_OK, shim->send(packetPool.allocCopy(p)),
-                              "a payload that exactly fills the radio buffer must still be sent");
+    TEST_ASSERT_EQUAL_MESSAGE(ERRNO_OK, shim->send(packetPool.allocCopy(p)), "a payload at the radio ceiling must still be sent");
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the fitting packet must reach the radio");
 }
 

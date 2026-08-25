@@ -64,7 +64,7 @@ class TestableRadioInterface : public RadioInterface
 
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
-    size_t getRadioBufferPayloadCapacity() const { return sizeof(radioBuffer.payload); }
+    void clearSendingPacketForTest() { sendingPacket = nullptr; }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
@@ -431,7 +431,7 @@ static int32_t packetPoolLiveBytes()
 }
 
 // Oversize is refused at the radio queue in Router::send(). If one ever gets this far the memcpy is
-// clamped to the buffer instead of failing, and the packet stays the caller's to release.
+// clamped instead of failing, and the packet stays the caller's to release.
 static void test_beginSending_oversizedPayloadIsClamped()
 {
     const int32_t liveBefore = packetPoolLiveBytes();
@@ -445,20 +445,19 @@ static void test_beginSending_oversizedPayloadIsClamped()
     p->to = 0x87654321;
     p->id = 0x10203040;
     p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = MAX_RADIO_PAYLOAD_LEN + 10;
 
-    const size_t capacity = testRadio->getRadioBufferPayloadCapacity();
-    p->encrypted.size = capacity + 10;
-
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(capacity + sizeof(PacketHeader), testRadio->beginSendingPublic(p),
-                                   "an oversized payload must be clamped to the buffer, not rejected");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(MAX_LORA_PAYLOAD_LEN, testRadio->beginSendingPublic(p),
+                                   "an oversized payload must be clamped to the PHY limit, not rejected");
     TEST_ASSERT_EQUAL_PTR_MESSAGE(p, testRadio->getSendingPacket(), "beginSending must still take the packet");
 
     // beginSending has no failure path that releases, so the packet is ours to free.
+    testRadio->clearSendingPacketForTest();
     packetPool.release(p);
     TEST_ASSERT_EQUAL_INT32(liveBefore, packetPoolLiveBytes());
 }
 
-// The clamp must not shorten ordinary traffic.
+// The clamp must not shorten ordinary traffic, and a maximum-size frame must still fit the PHY.
 static void test_beginSending_fittingPayloadIsSentWhole()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
@@ -467,13 +466,13 @@ static void test_beginSending_fittingPayloadIsSentWhole()
     p->to = 0x87654321;
     p->id = 0x10203041;
     p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    p->encrypted.size = testRadio->getRadioBufferPayloadCapacity();
+    p->encrypted.size = MAX_RADIO_PAYLOAD_LEN;
 
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(p->encrypted.size + sizeof(PacketHeader), testRadio->beginSendingPublic(p),
-                                   "a payload that exactly fills the buffer must be sent whole");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(MAX_LORA_PAYLOAD_LEN, testRadio->beginSendingPublic(p),
+                                   "the largest allowed payload must produce a frame at the PHY limit");
+    testRadio->clearSendingPacketForTest();
     packetPool.release(p);
 }
-
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
