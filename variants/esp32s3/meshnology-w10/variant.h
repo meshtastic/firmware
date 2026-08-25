@@ -176,6 +176,10 @@
 #define DAC_I2S_DIN 3  // pg3: record data (ES8311 -> ESP32)
 // AudioThread powers the NS4150 amp on/off around playback via this (opt-in) hook.
 #define AUDIO_AMP_ENABLE(on) mcpIoExpander.digitalWrite(EXIO_PA_CTRL, (on) ? HIGH : LOW)
+// The NS4150 does not pass audio the instant it leaves shutdown, and here the enable is an I2C write to
+// the MCP23017 rather than a GPIO toggle, so it is slower still. Without this settle window the short
+// system tones are over before the amp is awake and nothing is heard.
+#define AUDIO_AMP_SETTLE_MS 250
 
 // ─── On-board peripherals not wired up yet ────────────────────────────────────
 // SHT41 temp/humidity (0x44) and QMI8658 IMU (0x6B): auto-detected on the I2C scan

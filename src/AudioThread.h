@@ -14,7 +14,8 @@
 
 // A board with an I2S amplifier opts in by defining AUDIO_AMP_ENABLE(on) in its variant.h to power the
 // amp on/off around playback (e.g. an enable pin on an I/O expander). The includes below expose the
-// expander instances (io / mcpIoExpander) those macros typically reference.
+// expander instances (io / mcpIoExpander) those macros typically reference. A board whose amp needs time
+// to leave shutdown also defines AUDIO_AMP_SETTLE_MS (see ampEnable below).
 #ifdef USE_XL9555
 #include "ExtensionIOXL9555.hpp"
 extern ExtensionIOXL9555 io;
@@ -33,9 +34,7 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
@@ -61,9 +60,7 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
 
         setCPUFast(false);
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        ampEnable(false);
     }
 
     void readAloud(const char *text)
@@ -73,16 +70,12 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
         audioOut->stop();
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        ampEnable(false);
     }
 
   protected:
@@ -97,6 +90,23 @@ class AudioThread : public concurrency::OSThread
     }
 
   private:
+    // Amplifiers such as the NS4150 need time to come out of shutdown before they pass audio, and where
+    // the enable line hangs off an I/O expander the write itself is slow too. Short system tones
+    // (playChirp 20 ms, playBoop 50 ms, playBeep ~62 ms) are otherwise finished before the amp is awake
+    // and are never heard. A variant opts into a settle window by defining AUDIO_AMP_SETTLE_MS.
+    static void ampEnable(bool on)
+    {
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(on);
+#ifdef AUDIO_AMP_SETTLE_MS
+        if (on)
+            delay(AUDIO_AMP_SETTLE_MS);
+#endif
+#else
+        (void)on;
+#endif
+    }
+
     void initOutput()
     {
         audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
