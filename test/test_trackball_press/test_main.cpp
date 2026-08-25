@@ -116,6 +116,15 @@ void test_hold_across_the_millis_wrap()
     TEST_ASSERT_TRUE(PressProbe::PressResult::LongRepeat == tb.updatePress(false, 0, true));
 }
 
+// A delayed first poll must not report a long hold as a tap just because the pin is already high.
+void test_long_hold_released_before_first_poll_is_not_short()
+{
+    PressProbe tb;
+    const uint32_t irq = Time::getMillis();
+    Time::advanceTestMillis(LONG_PRESS_MS);
+    TEST_ASSERT_TRUE(PressProbe::PressResult::None == tb.updatePress(true, irq, false));
+}
+
 // A repeat emitted exactly when the clock reads 0 must not be mistaken for "no repeat sent yet".
 void test_repeat_emitted_at_clock_zero_still_waits()
 {
@@ -147,6 +156,7 @@ void setup()
     RUN_TEST(test_press_after_release_is_tracked_again);
     RUN_TEST(test_idle_poll_emits_nothing);
     RUN_TEST(test_hold_across_the_millis_wrap);
+    RUN_TEST(test_long_hold_released_before_first_poll_is_not_short);
     RUN_TEST(test_repeat_emitted_at_clock_zero_still_waits);
     exit(UNITY_END());
 }

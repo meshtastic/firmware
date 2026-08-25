@@ -31,9 +31,10 @@ TrackballInterruptBase::PressResult TrackballInterruptBase::updatePress(bool irq
     if (!irqLatched)
         return PressResult::None;
 
-    // Already released by the time we polled: the tap only exists as the latched interrupt.
+    // Already released by the time we polled: classify from the latched interrupt time, since a
+    // delayed poll can hide a long hold behind the same latch.
     if (!pinLow)
-        return PressResult::Short;
+        return Throttle::isWithinTimespanMs(irqTimeMs, LONG_PRESS_DURATION) ? PressResult::Short : PressResult::None;
 
     pressDetected = true;
     pressStartTime = irqTimeMs;
