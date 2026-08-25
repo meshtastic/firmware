@@ -1362,7 +1362,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lat_truncated = truncateCoordinate(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateCoordinate(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 12 h default
+    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 5 h default
     // is only for TTL sizing - feeding it here would silently defeat that contract.
     uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
 
