@@ -120,7 +120,18 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // A glyph row is all-or-nothing: half its height just moves the collision onto the row below. A
     // row only grows where the panel has the height for it, else that row stays plain text.
-    const int growthBudget = std::max(0, SCREEN_HEIGHT - (textPos[4] + FONT_HEIGHT_SMALL));
+    // Portrait puts the compass under the text, so its reserve comes out of the budget too;
+    // landscape keeps the compass beside the text and needs no reserve.
+    int growthBudget = std::max(0, SCREEN_HEIGHT - (textPos[4] + FONT_HEIGHT_SMALL));
+    if (SCREEN_WIDTH <= SCREEN_HEIGHT) {
+#if defined(USE_EINK)
+        const int navBar = ((graphics::currentResolution == graphics::ScreenResolution::High) ? 16 : 8) + 6;
+#else
+        const int navBar = 0;
+#endif
+        const int minCompassDiameter = 2 * 8; // matches the radius clamp applied below
+        growthBudget = std::max(0, growthBudget - (navBar + 4 + minCompassDiameter));
+    }
     const bool nameTall = nameCost > 0 && nameCost <= growthBudget;
     const bool descTall = descCost > 0 && (nameTall ? nameCost : 0) + descCost <= growthBudget;
     const int namePad = nameTall ? rowOverhang : 0;
