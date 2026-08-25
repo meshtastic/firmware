@@ -103,6 +103,9 @@ survivor=$!
 # A real survivor has been running for the whole suite; this one is a microsecond old, and the
 # wrapper scans the instant this shell exits - so wait for the exec before reporting it up.
 for _ in {1..500}; do [[ "$(cat "/proc/$survivor/comm" 2>/dev/null)" == sleep ]] && break; sleep 0.01; done
+# Recheck rather than trust the loop: falling out of it on the timeout would stage a pid the
+# fixture never saw reach exec, which is the race this wait exists to close.
+[[ "$(cat "/proc/$survivor/comm" 2>/dev/null)" == sleep ]] || { echo "fixture: survivor never reached exec" >&2; exit 1; }
 printf '%s\n' "$survivor" > "$HOME/../survivor.pid"
 exit 0
 EOF
