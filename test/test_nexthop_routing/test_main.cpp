@@ -987,6 +987,25 @@ void test_rebroadcast_declined_send_releases_packet(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
 }
 
+// An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
+// last gate before the radio queue: MeshPacket.encrypted holds 256 bytes, the radio buffer 240.
+void test_send_rejects_payload_larger_than_radio_buffer(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.id = 0x51000010;
+    p.encrypted.size = MAX_RADIO_PAYLOAD_LEN + 1;
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_TOO_LARGE, shim->send(packetPool.allocCopy(p)),
+                              "a payload larger than the radio buffer must be refused");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "the oversized packet must never reach the radio");
+
+    p.id = 0x51000011;
+    p.encrypted.size = MAX_RADIO_PAYLOAD_LEN;
+    TEST_ASSERT_EQUAL_MESSAGE(ERRNO_OK, shim->send(packetPool.allocCopy(p)), "a payload at the radio ceiling must still be sent");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the fitting packet must reach the radio");
+}
+
 #if USERPREFS_EVENT_MODE
 void test_event_mode_hop_behavior(void)
 {
@@ -1114,6 +1133,7 @@ void setup()
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
+    RUN_TEST(test_send_rejects_payload_larger_than_radio_buffer);
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);
 #endif
