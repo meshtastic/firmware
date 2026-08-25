@@ -19,6 +19,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
+# shellcheck source=bin/lib/test-state.sh
+source "$SCRIPT_DIR/lib/test-state.sh"
 
 WORK="$(mktemp -d -t meshstatecheck.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
@@ -139,6 +141,7 @@ else
 	echo "        staged pid ${leaked_pid:-<none>}: $alive, listed by ps: $listed, its ${its_home:-<no HOME in environ>}"
 	echo "        ps -u $(id -u) listed $(grep -c . <<<"$visible_pids") pids; the sandbox is under $survivor_dir"
 	echo "        wrapper stderr: $(tr '\n' '|' <"$survivor_dir/wrapper.err" 2>/dev/null)"
+	echo "        same scan, run again now: [$(state_find_survivors "${its_home#HOME=}" | tr '\n' ' ')]"
 	FAILURES=$((FAILURES + 1))
 fi
 
@@ -160,8 +163,6 @@ fi
 # it; exercise the assertion the wrapper actually calls instead - same function, same code path.
 echo
 echo "Before-empty assertion (state_assert_empty):"
-# shellcheck source=bin/lib/test-state.sh
-source "$SCRIPT_DIR/lib/test-state.sh"
 
 seeded="$WORK/seeded"
 mkdir -p "$seeded/$PREFS"
