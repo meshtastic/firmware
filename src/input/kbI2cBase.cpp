@@ -79,6 +79,9 @@ int32_t KbI2cBase::runOnce()
                 Q10keyboard.begin(BBQ10_KB_ADDR, i2cBus);
                 Q10keyboard.setBacklight(0);
             }
+            if (cardkb_found.address == MCP23017_KB_ADDR) {
+                MCPkeyboard.begin(MCP23017_KB_ADDR, &Wire1);
+            }
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, i2cBus);
             }
@@ -98,6 +101,9 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
                 Q10keyboard.setBacklight(0);
+            }
+            if (cardkb_found.address == MCP23017_KB_ADDR) {
+                MCPkeyboard.begin(MCP23017_KB_ADDR, &Wire);
             }
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
@@ -190,10 +196,14 @@ int32_t KbI2cBase::runOnce()
                 case 0x13: // Code scanner says the SYM key is 0x13
                     is_sym = !is_sym;
                     e.inputEvent = INPUT_BROKER_ANYKEY;
-                    e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that
-                                      : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // the modifier key is active
+                    e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell
+                                                                        // CannedMessages to
+                                                                        // display that
+                                      : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // the modifier
+                                                                        // key is active
                     break;
-                case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
+                case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage
+                           // return
                     e.inputEvent = INPUT_BROKER_SELECT;
                     break;
                 case 0x00: // nopress
@@ -418,7 +428,8 @@ int32_t KbI2cBase::runOnce()
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             switch (c) {
-            case 0x71: // This is the button q. If modifier and q pressed, it cancels the input
+            case 0x71: // This is the button q. If modifier and q pressed, it cancels
+                       // the input
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = INPUT_BROKER_CANCEL;
@@ -510,11 +521,14 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_RIGHT;
                 e.kbchar = 0;
                 break;
-            case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
+            case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea =
+                      // shift+mic button or 0x4 shift+$(speaker))
                 // toggle modifiers button.
                 is_sym = !is_sym;
                 e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
+                e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell
+                                                                    // CannedMessages to display
+                                                                    // that the
                                   : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // modifier key is active
                 break;
             case 0x9e: // fn+g      INPUT_BROKER_GPS_TOGGLE
@@ -561,6 +575,66 @@ int32_t KbI2cBase::runOnce()
             }
         }
         break;
+    }
+    case 0x20: { // MCP23017 (Dirección I2C por defecto)
+        MCPkeyboard.trigger();
+        InputEvent e = {};
+
+        while (MCPkeyboard.hasEvent()) {
+            char nextEvent = MCPkeyboard.dequeueEvent();
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = 0x00;
+            e.source = this->_originName;
+
+            switch (nextEvent) {
+            case 0x00: // KB_NONE
+                e.inputEvent = INPUT_BROKER_NONE;
+                e.kbchar = 0x00;
+                break;
+            case 0xb4: // KB_LEFT
+                e.inputEvent = INPUT_BROKER_LEFT;
+                e.kbchar = 0x00;
+                break;
+            case 0xb5: // KB_UP
+                e.inputEvent = INPUT_BROKER_UP;
+                e.kbchar = 0x00;
+                break;
+            case 0xb6: // KB_DOWN
+                e.inputEvent = INPUT_BROKER_DOWN;
+                e.kbchar = 0x00;
+                break;
+            case 0xb7: // KB_RIGHT
+                e.inputEvent = INPUT_BROKER_RIGHT;
+                e.kbchar = 0x00;
+                break;
+            case 0x1b: // KB_ESC
+                e.inputEvent = INPUT_BROKER_CANCEL;
+                e.kbchar = 0;
+                break;
+            case 0x08: // KB_BSP
+                e.inputEvent = INPUT_BROKER_BACK;
+                e.kbchar = 0x08;
+                break;
+            case 0x0d: // KB_SELECT
+                e.inputEvent = INPUT_BROKER_SELECT;
+                e.kbchar = 0x00;
+                break;
+            default:
+                if (nextEvent > 127) { // Invalid key, ignore it
+                    e.inputEvent = INPUT_BROKER_NONE;
+                    e.kbchar = 0x00;
+                    break;
+                }
+                // Normal character
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = nextEvent;
+                break;
+            }
+
+            if (e.inputEvent != INPUT_BROKER_NONE) {
+                this->notifyObservers(&e);
+            }
+        }
     }
 #if defined(ELECROW_ThinkNode_M9)
     case 0x12: { // STC8H companion-MCU keypad (ThinkNode-M9)
@@ -663,7 +737,12 @@ int32_t KbI2cBase::runOnce()
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
-    return 300;
+    break;
+}
+default:
+LOG_WARN("Unknown kb_model 0x%02x", kb_model);
+}
+return 300;
 }
 
 void KbI2cBase::toggleBacklight(bool on)
