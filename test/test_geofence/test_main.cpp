@@ -200,7 +200,7 @@ static void test_remoteWaypointUpdatePreservesLocalPreferences()
     TEST_ASSERT_EQUAL_UINT8(existing, WaypointStore::mergeNotificationPreferences(false, true, existing, wp));
 }
 
-static void test_storedWaypointClearsWirePreferences()
+static void test_storedWaypoint_clearsWirePreferences()
 {
     meshtastic_Waypoint wp = makeWireNotificationWaypoint();
     WaypointStore::clearWireNotificationPreferences(wp);
@@ -264,7 +264,7 @@ void setup()
     RUN_TEST(test_localWaypointInitializesPreferencesFromWireFields);
     RUN_TEST(test_newRemoteWaypointIgnoresWirePreferences);
     RUN_TEST(test_remoteWaypointUpdatePreservesLocalPreferences);
-    RUN_TEST(test_storedWaypointClearsWirePreferences);
+    RUN_TEST(test_storedWaypoint_clearsWirePreferences);
     RUN_TEST(test_first_sighting_no_notification);
     RUN_TEST(test_classify_noTransitionNeverNotifies);
     RUN_TEST(test_classify_enterFiresOnlyWhenEnabled);
