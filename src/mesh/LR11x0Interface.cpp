@@ -392,20 +392,76 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
-                                       .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+    // check if we can detect a LoRa preamble on the current channel.
+    // symNum is SetCadParams SymbolNum - a plain count - so take it straight from getCadSymbolCount(),
+    // which follows the band (8 on 2.4 GHz, as SX1280 scans) and is what sizes the CW slot.
+    const uint8_t symNum = getCadSymbolCount();
+    // detPeak: Semtech SWSD003 lr11xx/apps/cad/main_cad.c optimized_parameters[symbols][BW][SF5..SF12],
+    // its measured best CAD detection rates. RadioLib's  default is this table's [2 symbols][BW250] row.
+    // 50 = SWSD003's CAD_DETECT_PEAK fallback, used where it has no measured value.
+    static constexpr uint8_t CAD_DET_PEAK[4][4][8] = {
+        // Each block is one symbol count. Within a block the 4 rows are BW 62.5 / 125 / 250 / 500 kHz,
+        // and the 8 columns are SF5..SF12.
+        // 2 symbols:
+        {{39, 45, 47, 53, 59, 61, 64, 63},
+         {44, 51, 49, 55, 56, 60, 62, 68},
+         {48, 48, 50, 55, 55, 59, 61, 65},
+         {76, 80, 71, 77, 69, 50, 50, 50}}, // SF10-12: SWSD003 has no measurement, 50 is its fallback
+        // 4 symbols:
+        {{43, 45, 45, 50, 53, 57, 59, 63},
+         {44, 46, 49, 53, 53, 55, 57, 62},
+         {45, 47, 47, 51, 51, 56, 59, 62},
+         {58, 66, 58, 65, 62, 55, 60, 57}},
+        // 8 symbols:
+        {{43, 44, 46, 48, 51, 53, 56, 59},
+         {45, 43, 44, 50, 52, 55, 56, 61},
+         {42, 44, 45, 48, 50, 53, 55, 60},
+         {49, 52, 50, 59, 56, 57, 57, 60}},
+        // 16 symbols:
+        {{41, 44, 43, 46, 49, 52, 54, 60},
+         {42, 42, 43, 48, 49, 53, 55, 59},
+         {41, 42, 43, 48, 48, 53, 54, 58},
+         {44, 47, 45, 53, 52, 53, 57, 62}}};
+    // SWSD003 characterises symbol counts 2/4/8/16 against the sub-GHz LoRa modem's four bandwidths.
+    // Use exact matches to avoid mixing widelora (406.25/812.5/1625 kHz)
+    // Anything unmatched uses RadioLib default.
+    // Whole sub-GHz set today; a narrower BW or a symbol count outside 2/4/8/16 needs a row adding.
+    static constexpr float TABLE_BW_KHZ[4] = {62.5f, 125.0f, 250.0f, 500.0f};
+    const int symIdx = symNum == 2 ? 0 : symNum == 4 ? 1 : symNum == 8 ? 2 : symNum == 16 ? 3 : -1;
+    int bwIdx = -1;
+    for (int i = 0; i < 4; i++) {
+        if (bw > TABLE_BW_KHZ[i] - 1.0f && bw < TABLE_BW_KHZ[i] + 1.0f)
+            bwIdx = i;
+    }
+    const uint8_t detPeak = (symIdx < 0 || bwIdx < 0) ? (uint8_t)RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
+                                                      : CAD_DET_PEAK[symIdx][bwIdx][(sf >= 5 && sf <= 12) ? sf - 5 : 6];
+    // Keep preamble/header off the pin - they would fire the ISR mid-frame. Same set the normal RX path
+    // already programs (stageMode sends irqFlags & irqMask), so isActivelyReceiving() sees no change.
+    const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
+                                 (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+    // UM Table 8-8: the timeout bounds the RX that follows a detection, so use one max-length airtime.
+    // RadioLib scales it by 30.52 us against a real 31.25, landing ~2% long - not worth pre-compensating.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
+    ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
+                                       .detPeak = detPeak,
+                                       // PARAM_DEFAULT lands on 10 in RadioLib, which is SWSD003's CAD_DETECT_MIN
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
-                                       .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX,
+                                       .timeout = cadRxTimeoutUsec,
+                                       .irqFlags = cadIrqFlags,
+                                       .irqMask = cadIrqFlags}}; // ignored: startChannelScan() sends irqFlags twice
     int16_t result;
 
     setStandby();
     result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
+    if (result == RADIOLIB_LORA_DETECTED) {
+        // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
+        // RX_DONE is a clean edge.
+        lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+        noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
         return true;
+    }
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 

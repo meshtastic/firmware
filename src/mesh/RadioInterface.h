@@ -92,10 +92,15 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
-    static constexpr uint8_t NUM_SYM_CAD =
-        2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
-    static constexpr uint8_t NUM_SYM_CAD_24GHZ =
-        4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
+    // Fallback per-band counts for a driver that states nothing of its own. Every driver in the tree
+    // states its own, and they do NOT all agree: the slot has to match the scan each part really runs,
+    // so a mesh mixing RF95 (2.25 symbols, fixed in hardware) with SX126x/LR (4) runs two slot lengths.
+    // Uncited on purpose - no single vendor note covers every part they cover. AN1200.77 backs the
+    // 2.4 GHz figure for SX1280: a longer window moves P(Detection) away from P(False Detection).
+    static constexpr uint8_t NUM_SYM_CAD = 4;
+    static constexpr uint8_t NUM_SYM_CAD_24GHZ = 8;
+    // Runs during RadioInterface's own construction, so it uses the fallbacks above, never a driver
+    // override. applyModemConfig() recomputes it before anything reads it, and is authoritative.
     uint32_t slotTimeMsec = computeSlotTimeMsec();
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     static constexpr uint16_t preambleLengthDefault =
@@ -111,6 +116,15 @@ class RadioInterface
     uint32_t lastTxStart = 0L;
 
     uint32_t computeSlotTimeMsec();
+
+    // Symbols this part scans, declared per band: a part that works in both need not scan the same
+    // length in each, and the parts sharing a band do not all agree. Each driver states its own, and
+    // must pass a matching symNum - these are what size the CW slot, so a mismatch mis-scales backoff.
+    virtual uint8_t getCadSymbolCountSubGhz() const { return NUM_SYM_CAD; }
+    virtual uint8_t getCadSymbolCountWideLora() const { return NUM_SYM_CAD_24GHZ; }
+
+    /** Whichever of the two applies to the band actually in use. */
+    uint8_t getCadSymbolCount() const;
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need

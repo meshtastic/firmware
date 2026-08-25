@@ -421,7 +421,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     case ISR_RX:
         handleReceiveInterrupt();
-        startReceive();
+        // Re-arm for the next packet. rearmReceive() avoids a standby where the chip is already in RX,
+        // so a second packet that is already arriving is not aborted.
+        rearmReceive();
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
@@ -457,15 +459,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay();
 #endif
                 } else {
-                    if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-#if !MESHTASTIC_EXCLUDE_BEACON
-                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
-#endif
-                        {
-                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
-                        }
+                    // Listen-before-talk: a CAD preamble scan immediately before we key up.
+                    LOG_DEBUG("CAD arm");
+                    if (isChannelActive()) { // currently traffic on the channel?
+                        LOG_DEBUG("CAD busy");
+                        // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
+                        // config, so skipping this only ever left the node deaf in standby.
+                        rearmReceive();
                         setTransmitDelay();
                     } else {
+                        LOG_DEBUG("CAD free");
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -610,12 +613,26 @@ void RadioLibInterface::handleReceiveInterrupt()
 {
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
+    const bool wasCadHandoff = cadHandoffRxStart != 0;
+    cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
+
     if (!isReceiving) {
         LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
         return;
     }
 
     isReceiving = false;
+
+    // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
+    // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
+        LOG_DEBUG("CAD>RX empty");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
+        return;
+    }
+
+    if (wasCadHandoff)
+        LOG_DEBUG("CAD>RX pkt");
 
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
@@ -725,6 +742,7 @@ void RadioLibInterface::pollMissedIrqs()
     // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
     if (isReceiving) {
         checkRxDoneIrqFlag();
+        checkCadHandoffTimeout();
     }
     if (sendingPacket) {
         checkTxDoneIrqFlag();
@@ -734,6 +752,45 @@ void RadioLibInterface::pollMissedIrqs()
 void RadioLibInterface::resetAGC()
 {
     // Base implementation: no-op. Override in chip-specific subclasses.
+}
+
+void RadioLibInterface::noteCadHandoffToRx()
+{
+    LOG_DEBUG("CAD>RX started");
+    cadHandedToRx = true;
+    // Same clock Throttle compares against, so a native test can drive both across the wrap. 0 is the
+    // "none outstanding" sentinel and getMillis() does land on it once per wrap, so step past it.
+    const uint32_t now = Time::getMillis();
+    cadHandoffRxStart = now ? now : 1;
+}
+
+void RadioLibInterface::rearmReceive()
+{
+    // The flag is spent here, so every later call takes the full path - including RX_DONE after a
+    // handoff, whose bounded RX has already dropped the chip to standby.
+    if (!cadHandedToRx) {
+        startReceive();
+        return;
+    }
+    cadHandedToRx = false;
+    // Same order the drivers' own startReceive() uses: mark receiving BEFORE arming, or an ISR that
+    // fires in between reaches handleReceiveInterrupt() while isReceiving is still false and is dropped.
+    RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
+    // The line is not known-low here, and the ISR is rising-edge: catch an RX_DONE that beat the arm.
+    checkRxDoneIrqFlag();
+}
+
+void RadioLibInterface::checkCadHandoffTimeout()
+{
+    // Backstop to the chip's own cadTimeout, which is the primary bound. Doubled so the hardware always
+    // expires first; this only catches an RX whose timer stopped on a header that never completed.
+    const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    if (cadHandoffRxStart && Throttle::hasElapsed(cadHandoffRxStart, 2 * maxPacketTimeMsec)) {
+        LOG_WARN("CAD>RX timeout");
+        cadHandoffRxStart = 0;
+        startReceive();
+    }
 }
 
 void RadioLibInterface::checkRxDoneIrqFlag()
@@ -759,6 +816,13 @@ void RadioLibInterface::configHardwareForSend()
 
 void RadioLibInterface::setStandby()
 {
+    // Any handoff is void once the chip leaves RX. Left set, the flag would make the next rearmReceive()
+    // a no-op on a standby chip - deaf with no recovery - and the window would re-arm over a live packet.
+    if (cadHandedToRx) // standby between the handoff and the re-arm that adopts it: should not happen
+        LOG_WARN("CAD>RX void");
+    cadHandedToRx = false;
+    cadHandoffRxStart = 0;
+
     // neither sending nor receiving
     powerMon->clearState(meshtastic_PowerMon_State_Lora_RXOn);
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
@@ -767,6 +831,8 @@ void RadioLibInterface::setStandby()
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
+    cadHandoffRxStart = 0; // TX ends any handoff wait; completeSending() re-arms RX itself
+
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
@@ -779,6 +845,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
 #endif
         packetPool.release(txp);
+        // We got here through isChannelActive(), which left the chip in standby for a transmit that is
+        // no longer happening. Without this the node stays deaf until something else re-arms it.
+        startReceive();
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby

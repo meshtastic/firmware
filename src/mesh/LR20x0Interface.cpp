@@ -398,20 +398,56 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool LR20x0Interface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
-                                       .detPeak = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
+    // check if we can detect a LoRa preamble on the current channel.
+    // symNum is SetLoraCadParams nb_symbols - a plain count - so take it straight from
+    // getCadSymbolCount(), which follows the band (8 on 2.4 GHz, as SX1280 scans) and sizes the CW slot.
+    // det_peak is the peak-to-average ratio threshold: a higher value demands a stronger correlation
+    // peak and so detects less readily, which is why the recommended value falls as the scan lengthens.
+    // Indexed by that same count, so the threshold tracks the scan instead of drifting out of step.
+    // Table 6-19 stops at 4 symbols, so a longer scan reuses that row - the last measured point, and
+    // erring high, i.e. slightly less sensitive than a true 8-symbol value would be.
+    static constexpr uint8_t CAD_DET_PEAK[4][8] = {
+        // LR20xx datasheet rev 2.2, Table 6-19 - recommended det_peak, SF5..SF12
+        {60, 60, 60, 64, 64, 66, 70, 74}, // 1 symbol
+        {56, 56, 56, 58, 58, 60, 64, 68}, // 2 symbols (RadioLib's default row)
+        {51, 51, 52, 54, 56, 60, 60, 65}, // 3 symbols
+        {51, 51, 51, 54, 56, 60, 60, 64}, // 4 symbols
+    };
+    const uint8_t symNum = getCadSymbolCount();
+    const uint8_t detPeak = CAD_DET_PEAK[(symNum >= 1 && symNum <= 4) ? symNum - 1 : 3]
+                                        [(sf >= 5 && sf <= 12) ? sf - 5 : 6]; // out of range: 4 symbols, SF11
+    // Times the RX that follows a detection. lr20xx_driver calls this field PLL steps of 31.25 us (the
+    // datasheet's "32 MHz periods" disagrees); RadioLib scales it as 30.52, so we land ~2% long.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
+    ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
+                                       .detPeak = detPeak,
+                                       // ignored: SetLoraCadParams has no det_min - that byte carries
+                                       // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .exitMode = RADIOLIB_LR2021_CAD_EXIT_MODE_RX,
+                                       .timeout = cadRxTimeoutUsec,
+                                       // DS rev 2.2 6.8.3: only routes IRQs to a pin, so keep
+                                       // preamble/header off it - they would fire the ISR mid-frame
+                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) |
+                                                   (1UL << RADIOLIB_IRQ_TIMEOUT) | (1UL << RADIOLIB_IRQ_CRC_ERR) |
+                                                   (1UL << RADIOLIB_IRQ_HEADER_ERR),
+                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}}; // ignored: startChannelScan() drops it
     int16_t result;
+
+    // fastCad is not in ChannelScanConfig_t - scanChannel() reads it off the radio object - so pin it.
+    // false is pnr_delta 0: the scan runs the full nb_symbols, which is what the slot time assumes.
+    lora.fastCad = false;
 
     setStandby();
     result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
+    if (result == RADIOLIB_LORA_DETECTED) {
+        // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
+        // RX_DONE is a clean edge.
+        lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
+        noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
         return true;
+    }
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
