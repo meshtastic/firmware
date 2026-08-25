@@ -66,20 +66,19 @@ state_fingerprint() {
 # the narrower sweep costs ~270ms against ~460ms for all of /proc.
 state_find_survivors() {
 	local home="$1" pid entry
-	local -a environ
 	[[ -n $home ]] || return 0
 	for pid in $(ps -u "$(id -u)" -o pid= 2>/dev/null); do
 		[[ $pid == "$$" ]] && continue
-		environ=()
 		# In-shell, not `tr | grep -qxF`: -q closes the pipe on the match, tr takes SIGPIPE, and
 		# under `set -o pipefail` the hit reports as a miss. Grouped so a vanished pid is silent.
-		{ mapfile -t -d '' environ <"/proc/$pid/environ"; } 2>/dev/null || continue
-		for entry in "${environ[@]}"; do
-			if [[ $entry == "HOME=$home" ]]; then
-				printf '%s\n' "$pid"
-				break
-			fi
-		done
+		{
+			while IFS= read -r -d '' entry; do
+				if [[ $entry == "HOME=$home" ]]; then
+					printf '%s\n' "$pid"
+					break
+				fi
+			done <"/proc/$pid/environ"
+		} 2>/dev/null
 	done
 }
 
