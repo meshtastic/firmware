@@ -584,7 +584,7 @@ void RadioLibInterface::handleTransmitInterrupt()
 }
 
 #if !MESHTASTIC_EXCLUDE_BEACON
-void RadioLibInterface::abandonBeaconTarget(meshtastic_MeshPacket *p)
+void RadioLibInterface::abandonBeaconTarget(const meshtastic_MeshPacket *p)
 {
     MeshBeaconModule::clearTargetRadioSettings(p);
     MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);

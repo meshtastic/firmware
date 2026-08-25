@@ -314,7 +314,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 #if !MESHTASTIC_EXCLUDE_BEACON
     /// A queued packet is being abandoned: drop its beacon target, then restore the home config if it
     /// was the packet we switched for. The restore gate makes this a no-op for any other packet.
-    void abandonBeaconTarget(meshtastic_MeshPacket *p);
+    void abandonBeaconTarget(const meshtastic_MeshPacket *p);
 #endif
 
     /**
