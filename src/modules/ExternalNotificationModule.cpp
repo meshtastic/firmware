@@ -25,6 +25,9 @@
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
+#if !MESHTASTIC_EXCLUDE_I2C
+#include "buzz/I2CBuzzer.h"
+#endif
 #if defined(HAS_RGB_LED)
 #include "AmbientLightingThread.h"
 uint8_t red = 0;
@@ -82,6 +85,10 @@ int32_t ExternalNotificationModule::runOnce()
 #ifdef HAS_I2S
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
+#endif
+#if !MESHTASTIC_EXCLUDE_I2C
+        if (i2cBuzzer)
+            isRtttlPlaying = isRtttlPlaying || i2cBuzzer->isRtttlPlaying();
 #endif
 #if defined(HAS_I2S_SPEAKER_NRF52)
         isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
@@ -155,6 +162,17 @@ int32_t ExternalNotificationModule::runOnce()
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+        }
+#endif
+#if !MESHTASTIC_EXCLUDE_I2C
+        // Play RTTTL on an I2C (Modulino) buzzer found by the scanner.
+        if (i2cBuzzer && canBuzz() && buzzerShouldAlert) {
+            if (i2cBuzzer->isRtttlPlaying()) {
+                i2cBuzzer->playRtttl();
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+                i2cBuzzer->beginRtttl(rtttlConfig.ringtone);
+            }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
@@ -287,6 +305,10 @@ void ExternalNotificationModule::stopNow()
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
+#endif
+#if !MESHTASTIC_EXCLUDE_I2C
+    if (i2cBuzzer)
+        i2cBuzzer->stopRtttl();
 #endif
 #if defined(HAS_I2S_SPEAKER_NRF52)
     nrf52RtttlPlayer.stop();

@@ -109,7 +109,9 @@ class ScanI2C
         STC8HKB, // STC8H companion-MCU keypad (ThinkNode-M9)
         DS248X,
         HM330X,
-        AS3935
+        AS3935,
+        MODULINO_BUZZER,
+        QWIIC_BUZZER
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
@@ -167,6 +169,8 @@ class ScanI2C
     FoundDevice firstAQI() const;
 
     FoundDevice firstRGBLED() const;
+
+    FoundDevice firstBuzzer() const;
 
     virtual FoundDevice find(DeviceType) const;
 
