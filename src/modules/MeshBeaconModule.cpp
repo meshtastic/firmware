@@ -272,9 +272,9 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 
     } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) && radioSwitched) {
 
-        // Only restore once the beacon that armed the switch has finished; a caller arriving here on
-        // a radio state change would put the home config back under a beacon that has not keyed up.
-        if (targetRadioSettingsLive(switchedForId)) {
+        // Null p is "release if nothing holds it": hold off until the arming beacon has finished. A
+        // non-null untagged p is the driver about to transmit it, so that always restores.
+        if (!p && targetRadioSettingsLive(switchedForId)) {
             LOG_DEBUG("Beacon: skip restore, packet 0x%08x has not finished sending", switchedForId);
             return false;
         }

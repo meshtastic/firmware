@@ -1617,6 +1617,55 @@ static void test_txHook_unregistered_isNoOp(void)
     MeshBeaconModule::clearTargetRadioSettings(&pkt);
 }
 
+/**
+ * A higher-priority packet can enqueue ahead of a still-queued beacon, so the driver asks the hook about
+ * an untagged packet while the beacon that armed the switch is live. The restore gate is right to hold
+ * off a release then, and wrong to hold off this: the untagged packet is about to key up, and without
+ * the restore it transmits on the beacon's preset, slot and region.
+ */
+static void test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
+
+    // The beacon reaches the head of the queue and the hook switches the radio for it.
+    meshtastic_MeshPacket beacon = meshtastic_MeshPacket_init_zero;
+    beacon.id = 0x7A000005;
+    MeshBeaconModule::setTargetRadioSettings(&beacon, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &beacon),
+                                  "the beacon switch should have applied");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "the radio must be on the beacon preset before the queue jump");
+
+    // An ordinary packet now jumps the queue. The beacon is still queued, so its target is still live.
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&beacon),
+                             "the queued beacon must still hold its target, or this is not the case under test");
+    meshtastic_MeshPacket ordinary = meshtastic_MeshPacket_init_zero;
+    ordinary.id = 0x7A000006;
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &ordinary),
+                                  "restoring the radio owes the driver a fresh delay and scan");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "an untagged packet must never transmit on the beacon preset");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
+                                     "an untagged packet must never transmit on the beacon channel");
+
+    // The beacon is not lost by the restore: it switches the radio back when it next reaches the head.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &beacon),
+                                  "the beacon must switch back when it reaches the head again");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "the beacon must be back on its target preset");
+
+    MeshBeaconModule::clearTargetRadioSettings(&beacon);
+    RadioTxHooks::packetReleased(&radio, &beacon);
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1754,6 +1803,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_txHook_beaconPacket_isDefer);
     RUN_TEST(test_txHook_invalidTarget_isDrop);
     RUN_TEST(test_txHook_unregistered_isNoOp);
+    RUN_TEST(test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome);
 
     exit(UNITY_END());
 }
