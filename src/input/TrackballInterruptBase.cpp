@@ -246,7 +246,8 @@ int32_t TrackballInterruptBase::runOnce()
 
 void TrackballInterruptBase::intPressHandler()
 {
-    if (Throttle::isWithinTimespanMs(lastPressInterruptTime, 10))
+    // pressIrqSeq == 0 means nothing recorded yet, so a press at clock 0 is not read as a cooldown.
+    if (pressIrqSeq != 0 && Throttle::isWithinTimespanMs(lastPressInterruptTime, 10))
         return;
     lastPressInterruptTime = Time::getMillis();
     pressIrqTime = lastPressInterruptTime;
