@@ -71,9 +71,8 @@ state_find_survivors() {
 	for pid in $(ps -u "$(id -u)" -o pid= 2>/dev/null); do
 		[[ $pid == "$$" ]] && continue
 		environ=()
-		# Read the environment in-shell rather than through `tr | grep -qxF`: -q closes the pipe
-		# on the match, tr takes SIGPIPE, and under `set -o pipefail` the hit reports as a miss.
-		# The redirect is inside the group so a process that exits mid-scan is silent too.
+		# In-shell, not `tr | grep -qxF`: -q closes the pipe on the match, tr takes SIGPIPE, and
+		# under `set -o pipefail` the hit reports as a miss. Grouped so a vanished pid is silent.
 		{ mapfile -t -d '' environ <"/proc/$pid/environ"; } 2>/dev/null || continue
 		for entry in "${environ[@]}"; do
 			if [[ $entry == "HOME=$home" ]]; then
