@@ -118,13 +118,14 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const int nameCost = nameMetrics.hasEmote ? rowOverhang + std::max(0, nameMetrics.tallestHeight - rowPitch) : 0;
     const int descCost = descMetrics.hasEmote ? rowOverhang + std::max(0, descMetrics.tallestHeight - rowPitch) : 0;
 
-    // A glyph row is all-or-nothing: half its height just moves the collision onto the row below.
-    // One tall row always fits; a second only where the panel has room, else description stays plain.
+    // A glyph row is all-or-nothing: half its height just moves the collision onto the row below. A
+    // row only grows where the panel has the height for it, else that row stays plain text.
     const int growthBudget = std::max(0, SCREEN_HEIGHT - (textPos[4] + FONT_HEIGHT_SMALL));
-    const bool descTall = descCost > 0 && nameCost + descCost <= growthBudget;
-    const int namePad = nameCost > 0 ? rowOverhang : 0;
+    const bool nameTall = nameCost > 0 && nameCost <= growthBudget;
+    const bool descTall = descCost > 0 && (nameTall ? nameCost : 0) + descCost <= growthBudget;
+    const int namePad = nameTall ? rowOverhang : 0;
     const int descPad = descTall ? rowOverhang : 0;
-    const int extraNameHeight = nameCost;
+    const int extraNameHeight = nameTall ? nameCost : 0;
     const int extraDescHeight = descTall ? descCost : 0;
 
     // Match compass sizing/placement to favorite node screen logic.
@@ -234,10 +235,13 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!
     display->drawString(0, textPos[line++], lastStr);
     // Waypoint names routinely carry emoji from the phone clients, so render them as the message
-    // screens do; each following row drops by the height the glyphs above it added.
-    graphics::UIRenderer::drawStringWithEmotes(display, 0, textPos[line++] + namePad, wp.name, FONT_HEIGHT_SMALL, 1, false);
+    // screens do; a cost of 0 means the glyph already fits, so only a refused tall row falls back.
+    const int nameY = textPos[line++] + namePad;
+    if (nameTall || nameCost == 0)
+        graphics::UIRenderer::drawStringWithEmotes(display, 0, nameY, wp.name, FONT_HEIGHT_SMALL, 1, false);
+    else
+        display->drawString(0, nameY, wp.name);
     const int descY = textPos[line++] + extraNameHeight + descPad;
-    // descCost == 0 means the glyph already fits the row, so only a refused tall row falls back.
     if (descTall || descCost == 0)
         graphics::UIRenderer::drawStringWithEmotes(display, 0, descY, wp.description, FONT_HEIGHT_SMALL, 1, false);
     else
