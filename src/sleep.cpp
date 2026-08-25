@@ -31,7 +31,7 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 #include "Throttle.h"
 
-#ifdef USE_XL9555
+#if defined(USE_XL9555) && !defined(T_DECK_MAX)
 #include "ExtensionIOXL9555.hpp"
 extern ExtensionIOXL9555 io;
 #endif

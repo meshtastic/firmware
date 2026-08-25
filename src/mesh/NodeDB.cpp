@@ -1295,6 +1295,7 @@ void NodeDB::installDefaultModuleConfig()
 #define HAS_NOTIFICATION_LED
 #endif
 #if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(HAS_NOTIFICATION_LED) ||                                            \
+    ((defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_DRV2605)) ||                                  \
     defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) || defined(HAS_I2S_SPEAKER_NRF52)
     moduleConfig.external_notification.enabled = true;
 #endif
@@ -1315,6 +1316,11 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
 #endif
 
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_DRV2605)
+    moduleConfig.external_notification.alert_message_vibra = true;
+    moduleConfig.external_notification.output_ms = 500;
+#endif
+
 #if defined(LED_NOTIFICATION)
     moduleConfig.external_notification.output = LED_NOTIFICATION;
     moduleConfig.external_notification.active = LED_STATE_ON;
@@ -1325,7 +1331,7 @@ void NodeDB::installDefaultModuleConfig()
 #if HAS_TFT
     if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
         moduleConfig.external_notification.nag_timeout = 0;
-#elif defined(PIN_VIBRATION)
+#elif defined(PIN_VIBRATION) || ((defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_DRV2605))
     moduleConfig.external_notification.nag_timeout = 2;
 #elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) ||                           \
     defined(HAS_I2S_SPEAKER_NRF52)
@@ -1337,6 +1343,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
+#if HAS_TFT
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
+        moduleConfig.external_notification.nag_timeout = 0;
+#elif !defined(PIN_VIBRATION) && !(defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1))
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
+#endif // HAS_TFT
 #endif // HAS_I2S
 
 #ifdef NANO_G2_ULTRA
@@ -2834,6 +2846,19 @@ void NodeDB::loadFromDisk()
         moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+
+#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_DRV2605)
+    // Enable the DRV2605 message alert once on devices that predate this default.
+    static constexpr uint8_t HAPTIC_FEEDBACK_DEFAULT_VER = POSITION_TELEMETRY_OPTIN_VER + 1;
+    if (moduleConfig.version < HAPTIC_FEEDBACK_DEFAULT_VER) {
+        LOG_INFO("Installing DRV2605 haptic notification defaults");
+        moduleConfig.has_external_notification = true;
+        moduleConfig.external_notification.enabled = true;
+        moduleConfig.external_notification.alert_message_vibra = true;
+        moduleConfig.version = HAPTIC_FEEDBACK_DEFAULT_VER;
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
+#endif
 
     if (channels.ensureLicensedOperation()) {
         LOG_WARN("Licensed operation removed persisted channel encryption/admin access");

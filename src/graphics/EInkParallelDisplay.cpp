@@ -4,10 +4,16 @@
 
 #include "Wire.h"
 #include "variant.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include <Arduino.h>
 #include <atomic>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+#include "graphics/T5S3EpaperRotation.h"
+#endif
 
 #include "FastEPD.h"
 
@@ -19,9 +25,56 @@
 #define EPD_FULLSLOW_PERIOD 100 // every N full updates do a slow (CLEAR_SLOW) full refresh
 #endif
 #ifndef EPD_RESPONSIVE_MIN_MS
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+#define EPD_RESPONSIVE_MIN_MS EINK_FORCE_DISPLAY_THROTTLE_MS
+#else
 #define EPD_RESPONSIVE_MIN_MS 1000 // simple rate-limit (ms) for responsive updates
 #endif
+#endif
 
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+#ifndef EPD_BACKGROUND_UPDATE_MS
+#define EPD_BACKGROUND_UPDATE_MS (5 * 60 * 1000)
+#endif
+#endif
+
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rot)
+    : EInkParallelDisplay(width, height, width, height, rot)
+{
+}
+
+EInkParallelDisplay::EInkParallelDisplay(uint16_t logicalWidth, uint16_t logicalHeight, uint16_t panelWidth,
+                                         uint16_t panelHeight, EpdRotation rot)
+    : epaper(nullptr), rotation(rot), panelWidth(panelWidth), panelHeight(panelHeight),
+      panelRowBytes((panelWidth + 7) / 8), panelBufferSize(static_cast<uint32_t>(panelRowBytes) * panelHeight)
+{
+    LOG_INFO("init EInkParallelDisplay");
+    this->geometry = GEOMETRY_RAWMODE;
+    this->displayWidth = logicalWidth;
+    this->displayHeight = logicalHeight;
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    this->displayBufferSize = static_cast<uint32_t>(logicalWidth) * ((logicalHeight + 7) / 8);
+#else
+    uint16_t shortSide = min(logicalWidth, logicalHeight);
+    uint16_t longSide = max(logicalWidth, logicalHeight);
+    if (shortSide % 8 != 0)
+        shortSide = (shortSide | 7) + 1;
+    this->displayBufferSize = static_cast<uint32_t>(longSide) * (shortSide / 8);
+#endif
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    dirtyPixelsSize = panelBufferSize;
+#else
+    const size_t rowBytes = (this->displayWidth + 7) / 8;
+    dirtyPixelsSize = rowBytes * this->displayHeight;
+#endif
+    dirtyPixels = (uint8_t *)calloc(dirtyPixelsSize, 1);
+    ghostPixelCount = 0;
+#endif
+}
+#else
 EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rot) : epaper(nullptr), rotation(rot)
 {
     LOG_INFO("init EInkParallelDisplay");
@@ -46,6 +99,7 @@ EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRot
     ghostPixelCount = 0;
 #endif
 }
+#endif
 
 EInkParallelDisplay::~EInkParallelDisplay()
 {
@@ -89,6 +143,10 @@ bool EInkParallelDisplay::connect()
             epaper->ioPinMode(i, OUTPUT);
             epaper->ioWrite(i, HIGH);
         }
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        // FastEPD initializes PCA9535 port-1 display pins as outputs; IO12 is the side key.
+        epaper->ioPinMode(10, INPUT);
+#endif
 #else
 #error "unsupported EPD device!"
 #endif
@@ -192,15 +250,159 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
     vTaskDelete(nullptr);
 }
 
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+void EInkParallelDisplay::mapLogicalToPanel(uint16_t logicalX, uint16_t logicalY, uint16_t &panelX,
+                                            uint16_t &panelY) const
+{
+    const auto mapped = t5s3_epaper::logicalToPanel({logicalX, logicalY});
+    panelX = mapped.x;
+    panelY = mapped.y;
+}
+#endif
+
 /*
  * Convert the OLEDDisplay buffer (vertical byte layout) into the 1bpp horizontal-bytes
- * buffer used by the FASTEPD library. For performance we write directly into FASTEPD's
- * currentBuffer() while comparing against previousBuffer() to detect changed rows.
- * After conversion we call FASTEPD::partialUpdate() or FASTEPD::fullUpdate() according
- * to a heuristic so only the minimal region is refreshed.
+ * buffer used by the FASTEPD library. T5S3 V2 follows the T-Deck policy: responsive
+ * frames use the panel's FAST partial waveform, while background frames are rate-limited.
  */
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+bool EInkParallelDisplay::updateFrame(uint32_t msecLimit)
+{
+    if (!displayReady) // no framebuffer (PSRAM absent / init failed) -> nothing to push
+        return false;
+
+    if (asyncFullRunning.load()) {
+        LOG_DEBUG("full refresh in progress, skipping update");
+        return false;
+    }
+
+    const bool requestedFullRefresh = fullRefreshRequested;
+    const bool requestedResponsiveUpdate = responsiveUpdateRequested;
+    const uint32_t refreshLimit = (requestedFullRefresh || requestedResponsiveUpdate) ? EPD_RESPONSIVE_MIN_MS : msecLimit;
+    if (refreshLimit != 0 && lastUpdateMs != 0 && Throttle::isWithinTimespanMs(lastUpdateMs, refreshLimit)) {
+        LOG_DEBUG("rate-limited, skipping update");
+        return false;
+    }
+
+    const uint16_t logicalWidth = this->displayWidth;
+    const uint16_t logicalHeight = this->displayHeight;
+
+    // Get pointers to internal buffers
+    uint8_t *cur = epaper->currentBuffer();
+    const uint8_t *prev = epaper->previousBuffer(); // may be NULL on first init
+    if (!cur || !buffer)
+        return false;
+
+    // Track changed physical row and column ranges after rotation.
+    int newTop = panelHeight; // min changed row (initialized to out-of-range)
+    int newBottom = -1; // max changed row
+
+    // Compute a quick hash of the complete logical OLED buffer.
+    uint32_t imageHash = 0;
+    for (uint32_t bi = 0; bi < this->displayBufferSize; ++bi) {
+        imageHash ^= ((uint32_t)buffer[bi]) << (bi & 31);
+    }
+    if (hasPresentedFrame && imageHash == previousImageHash && !requestedFullRefresh) {
+        // LOG_DEBUG("image identical to previous, skipping update");
+        responsiveUpdateRequested = false;
+        return false;
+    }
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+    // reset ghost count for this conversion pass; we'll mark bits that change
+    ghostPixelCount = 0;
+#endif
+
+    // FastEPD uses 1 for white and 0 for black. Start with a complete white physical frame,
+    // then clear the bits corresponding to black logical pixels.
+    memset(cur, 0xFF, panelBufferSize);
+    for (uint16_t logicalY = 0; logicalY < logicalHeight; ++logicalY) {
+        const uint32_t base = (logicalY >> 3) * logicalWidth;
+        const uint8_t bitMask = static_cast<uint8_t>(1U << (logicalY & 7U));
+        for (uint16_t logicalX = 0; logicalX < logicalWidth; ++logicalX) {
+            if ((buffer[base + logicalX] & bitMask) == 0)
+                continue;
+
+            uint16_t panelX = 0;
+            uint16_t panelY = 0;
+            mapLogicalToPanel(logicalX, logicalY, panelX, panelY);
+            if (panelX >= panelWidth || panelY >= panelHeight)
+                continue;
+
+            const uint32_t pos = static_cast<uint32_t>(panelY) * panelRowBytes + panelX / 8;
+            cur[pos] &= static_cast<uint8_t>(~(0x80U >> (panelX & 7U)));
+        }
+    }
+
+    for (uint16_t panelY = 0; panelY < panelHeight; ++panelY) {
+        const uint32_t rowBase = static_cast<uint32_t>(panelY) * panelRowBytes;
+        for (uint16_t panelByte = 0; panelByte < panelRowBytes; ++panelByte) {
+            const uint32_t pos = rowBase + panelByte;
+            const uint8_t out = cur[pos];
+            const uint8_t mask = 0xFF;
+            const bool changed = (prev == nullptr) || (prev[pos] != out);
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+            if (changed && prev)
+                markDirtyBits(prev, pos, mask, out);
+#endif
+
+            if (changed) {
+                if (panelY < newTop)
+                    newTop = panelY;
+                if (panelY > newBottom)
+                    newBottom = panelY;
+            }
+        }
+    }
+
+    // If nothing changed, avoid any panel update
+    if (newBottom < 0 && !requestedFullRefresh) {
+        LOG_DEBUG("no pixel changes detected, skipping update (conv)");
+        previousImageHash = imageHash; // still remember that frame
+        hasPresentedFrame = true;
+        responsiveUpdateRequested = false;
+        return false;
+    }
+
+    // Use a slow full refresh only after enough fast frames to clear accumulated ghosting.
+    bool forceFull = requestedFullRefresh || (fastRefreshCount >= EPD_FULLSLOW_PERIOD);
+
+#ifdef EINK_LIMIT_GHOSTING_PX
+    // If ghost pixels exceed limit, force a full update to clear ghosting
+    if (ghostPixelCount > ghostPixelLimit) {
+        LOG_WARN("ghost pixels %u > limit %u, forcing full refresh", ghostPixelCount, ghostPixelLimit);
+        forceFull = true;
+    }
+#endif
+
+    LOG_DEBUG("EPD update rows=%d..%d rowBytes=%u", newTop, newBottom, panelRowBytes);
+
+    if (!forceFull) {
+        // Match T-Deck: use a full-screen partial window with the fast waveform.
+        epaper->partialUpdate(true, 0, panelHeight - 1);
+        epaper->backupPlane();
+        fastRefreshCount++;
+    } else {
+        // Periodic ghost cleanup and V2 UI refresh requests use a full update.
+        fullRefreshRequested = false;
+        startAsyncFullUpdate(CLEAR_SLOW);
+    }
+
+    lastUpdateMs = Time::getMillis();
+    previousImageHash = imageHash;
+    hasPresentedFrame = true;
+    responsiveUpdateRequested = false;
+    lastDrawMsec = lastUpdateMs;
+    return true;
+}
+#endif
+
 void EInkParallelDisplay::display(void)
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    updateFrame(EPD_BACKGROUND_UPDATE_MS);
+#else
     if (!displayReady) // no framebuffer (PSRAM absent / init failed) -> nothing to push
         return;
 
@@ -372,6 +574,7 @@ void EInkParallelDisplay::display(void)
 
     // Keep same behavior as before
     lastDrawMsec = millis();
+#endif
 }
 
 #ifdef EINK_LIMIT_GHOSTING_PX
@@ -413,10 +616,13 @@ void EInkParallelDisplay::resetGhostPixelTracking()
 #endif
 
 /*
- * forceDisplay: use lastDrawMsec
+ * forceDisplay: trigger the responsive policy for T5S3 V2, or preserve the legacy path.
  */
 bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    return updateFrame(msecLimit);
+#else
     if (!displayReady)
         return false;
 
@@ -426,6 +632,7 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
         return true;
     }
     return false;
+#endif
 }
 
 void EInkParallelDisplay::endUpdate()

@@ -6,6 +6,10 @@
 #include "sleep.h"
 #include <memory>
 
+#if defined(T_DECK_MAX)
+#include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
+#endif
+
 #ifdef HAS_I2S
 #include <AudioFileSourcePROGMEM.h>
 #include <AudioGeneratorRTTTL.h>
@@ -15,7 +19,7 @@
 // A board with an I2S amplifier opts in by defining AUDIO_AMP_ENABLE(on) in its variant.h to power the
 // amp on/off around playback (e.g. an enable pin on an I/O expander). The includes below expose the
 // expander instances (io / mcpIoExpander) those macros typically reference.
-#ifdef USE_XL9555
+#if defined(USE_XL9555) && !defined(T_DECK_MAX)
 #include "ExtensionIOXL9555.hpp"
 extern ExtensionIOXL9555 io;
 #endif
@@ -33,6 +37,11 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
+#if defined(T_DECK_MAX)
+        if (i2sRtttl != nullptr)
+            stop();
+        tDeckMaxSetAudioRoute(false);
+#endif
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(true);
 #endif
@@ -46,7 +55,12 @@ class AudioThread : public concurrency::OSThread
     bool isPlaying()
     {
         if (i2sRtttl != nullptr) {
-            return i2sRtttl->isRunning() && i2sRtttl->loop();
+            const bool playing = i2sRtttl->isRunning() && i2sRtttl->loop();
+#if defined(T_DECK_MAX)
+            if (!playing)
+                stop();
+#endif
+            return playing;
         }
         return false;
     }
@@ -64,17 +78,27 @@ class AudioThread : public concurrency::OSThread
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(false);
 #endif
+#if defined(T_DECK_MAX)
+        tDeckMaxSetAudioRoute(false);
+#endif
     }
 
     void readAloud(const char *text)
     {
         if (i2sRtttl != nullptr) {
+#if defined(T_DECK_MAX)
+            stop();
+#else
             i2sRtttl->stop();
             i2sRtttl = nullptr;
+#endif
         }
 
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(true);
+#endif
+#if defined(T_DECK_MAX)
+        tDeckMaxSetAudioRoute(false);
 #endif
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
@@ -82,6 +106,9 @@ class AudioThread : public concurrency::OSThread
         audioOut->stop();
 #ifdef AUDIO_AMP_ENABLE
         AUDIO_AMP_ENABLE(false);
+#endif
+#if defined(T_DECK_MAX)
+        tDeckMaxSetAudioRoute(false);
 #endif
     }
 

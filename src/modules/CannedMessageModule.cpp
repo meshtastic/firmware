@@ -17,6 +17,9 @@
 #include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+#include "graphics/TouchLayout.h"
+#endif
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/draw/UIRenderer.h"
@@ -130,13 +133,67 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     lastChannel = channel;
     lastDestSet = true;
 
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
+    startTextInput();
+#else
     updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
+#endif
 
     LOG_TRACE("[CannedMessage] LaunchFreetextWithDestination dest=0x%08x ch=%d", dest, channel);
 }
+
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
+void CannedMessageModule::startTextInput()
+{
+    updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+    if (!screen)
+        return;
+
+    char headerBuffer[64];
+    if (this->dest == NODENUM_BROADCAST) {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
+    } else {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
+    }
+
+    screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
+        if (!text.empty()) {
+            this->freetext = text.c_str();
+            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
+            currentMessageIndex = -1;
+
+            // T5S3Keyboard stops itself before invoking this callback. Clear the
+            // text-input overlay before dispatching the next UI event.
+            graphics::NotificationRenderer::resetBanner();
+
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REDRAW_ONLY;
+            this->notifyObservers(&e);
+            screen->forceDisplay();
+
+            setIntervalFromNow(500);
+            return;
+        }
+
+        graphics::NotificationRenderer::textInputCallback = nullptr;
+        graphics::NotificationRenderer::resetBanner();
+        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        this->currentMessageIndex = -1;
+        this->freetext = "";
+        this->cursor = 0;
+
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        this->notifyObservers(&e);
+        screen->forceDisplay();
+        setIntervalFromNow(50);
+    });
+}
+#endif
 
 static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
@@ -164,13 +221,17 @@ int CannedMessageModule::splitConfiguredMessages()
     int tempCount = 0;
     // Insert at position 0 (top)
     tempMessages[tempCount++] = "[Select Destination]";
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) && !defined(T5S3_EPD_TOUCH_KEYBOARD)
     // Add a "Free Text" entry at the top if using a touch screen virtual keyboard
+    tempMessages[tempCount++] = "[-- Free Text --]";
+#else
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
     tempMessages[tempCount++] = "[-- Free Text --]";
 #else
     if (osk_found && screen) {
         tempMessages[tempCount++] = "[-- Free Text --]";
     }
+#endif
 #endif
 
     // First message always starts at buffer start
@@ -394,40 +455,77 @@ static void drawWrappedEmoteText(OLEDDisplay *display, int x, int y, const char 
  */
 int CannedMessageModule::handleInputEvent(const InputEvent *event)
 {
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    if (event->inputEvent == INPUT_BROKER_T5S3_QUICK_MESSAGE)
+        return 0;
+#endif
+
     // Block ALL input if an alert banner is active
     if (screen && screen->isOverlayBannerShowing()) {
         return 0;
     }
 
+    InputEvent coordinateEvent = *event;
+    const InputEvent *dispatchEvent = event;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    const auto targetKind = static_cast<meshtastic::TouchTargetKind>(event->touchTargetKind);
+    if (event->touchTargetLongPress && targetKind != meshtastic::TouchTargetKind::None &&
+        event->inputEvent == INPUT_BROKER_NONE)
+        return 1;
+
+    if (targetKind == meshtastic::TouchTargetKind::NodeRow &&
+        runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        if (event->touchTargetValue >= static_cast<uint32_t>(activeChannelIndices.size() + filteredNodes.size()))
+            return 1;
+        destIndex = static_cast<int>(event->touchTargetValue);
+        coordinateEvent.inputEvent = INPUT_BROKER_SELECT;
+        dispatchEvent = &coordinateEvent;
+    } else if (targetKind == meshtastic::TouchTargetKind::MessageRow &&
+               runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+        if (event->touchTargetValue >= static_cast<uint32_t>(messagesCount))
+            return 1;
+        currentMessageIndex = static_cast<int>(event->touchTargetValue);
+        coordinateEvent.inputEvent = INPUT_BROKER_SELECT;
+        dispatchEvent = &coordinateEvent;
+    } else if (targetKind == meshtastic::TouchTargetKind::EmoteRow &&
+               runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+        if (event->touchTargetValue >= static_cast<uint32_t>(graphics::numEmotes))
+            return 1;
+        emotePickerIndex = static_cast<int>(event->touchTargetValue);
+        coordinateEvent.inputEvent = INPUT_BROKER_SELECT;
+        dispatchEvent = &coordinateEvent;
+    }
+#endif
+
     // Tab key: Always allow switching between canned/destination screens
-    if (event->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(event))
+    if (dispatchEvent->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(dispatchEvent))
         return 1;
 
     // Matrix keypad: If matrix key, trigger action select for canned message
-    if (event->inputEvent == INPUT_BROKER_MATRIXKEY) {
+    if (dispatchEvent->inputEvent == INPUT_BROKER_MATRIXKEY) {
         updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT, true);
         payload = INPUT_BROKER_MATRIXKEY;
-        currentMessageIndex = event->kbchar - 1;
+        currentMessageIndex = dispatchEvent->kbchar - 1;
         lastTouchMillis = millis();
         return 1;
     }
 
     // Always normalize navigation/select buttons for further handlers
-    bool isUp = isUpEvent(event);
-    bool isDown = isDownEvent(event);
-    bool isSelect = isSelectEvent(event);
+    bool isUp = isUpEvent(dispatchEvent);
+    bool isDown = isDownEvent(dispatchEvent);
+    bool isSelect = isSelectEvent(dispatchEvent);
 
     // Route event to handler for current UI state (no double-handling)
     switch (runState) {
     // Node/Channel destination selection mode: Handles character search, arrows, select, cancel, backspace
     case CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION:
-        if (handleDestinationSelectionInput(event, isUp, isDown, isSelect))
+        if (handleDestinationSelectionInput(dispatchEvent, isUp, isDown, isSelect))
             return 1;
         return 0; // prevent fall-through to selector input
 
     // Free text input mode: Handles character input, cancel, backspace, select, etc.
     case CANNED_MESSAGE_RUN_STATE_FREETEXT:
-        return handleFreeTextInput(event); // All allowed input for this state
+        return handleFreeTextInput(dispatchEvent); // All allowed input for this state
 
     // Virtual keyboard mode: Show virtual keyboard and handle input
 
@@ -437,7 +535,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     // If sending, block all input except global/system (handled above)
     case CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER:
-        return handleEmotePickerInput(event);
+        return handleEmotePickerInput(dispatchEvent);
 
     case CANNED_MESSAGE_RUN_STATE_INACTIVE:
         if (event->inputEvent == INPUT_BROKER_ALT_LONG) {
@@ -463,7 +561,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     // If no state handler above processed the event, let the message selector try to handle it
     // (Handles up/down/select on canned message list, exit/return)
-    if (handleMessageSelectorInput(event, isUp, isDown, isSelect))
+    if (handleMessageSelectorInput(dispatchEvent, isUp, isDown, isSelect))
         return 1;
 
     // Default: event not handled by canned message system, allow others to process
@@ -516,6 +614,13 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
     scrollIndex = 0;
     if (targetState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         updateDestinationSelectionList();
+
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
+    if (targetState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        startTextInput();
+        return true;
+    }
+#endif
 
     updateState(targetState, true);
 
@@ -714,7 +819,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         }
 
         // [Free Text] triggers the free text input (virtual keyboard)
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) && !defined(T5S3_EPD_TOUCH_KEYBOARD)
         if (strcmp(current, "[-- Free Text --]") == 0) {
             updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
@@ -724,6 +829,12 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         }
 #else
         if (strcmp(current, "[-- Free Text --]") == 0) {
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
+            if (screen) {
+                startTextInput();
+                return true;
+            }
+#else
             if (osk_found && screen) {
                 char headerBuffer[64];
                 if (this->dest == NODENUM_BROADCAST) {
@@ -771,6 +882,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 
                 return true;
             }
+#endif
         }
 #endif
 
@@ -810,7 +922,22 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (runState != CANNED_MESSAGE_RUN_STATE_FREETEXT)
         return false;
 
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) && !defined(T5S3_EPD_TOUCH_KEYBOARD)
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    InputEvent keyboardEvent{};
+    if (event->touchTargetKind == static_cast<uint8_t>(meshtastic::TouchTargetKind::KeyboardKey)) {
+        const uint8_t row = static_cast<uint8_t>((event->touchTargetValue >> 8) & 0xFF);
+        const uint8_t col = static_cast<uint8_t>(event->touchTargetValue & 0xFF);
+        if (row >= 4 || col >= 10)
+            return true;
+        const Letter &key = keyboard[this->charSet][row][col];
+        keyboardEvent = *event;
+        keyboardEvent.touchX = static_cast<uint16_t>(key.rectX + key.rectWidth / 2);
+        keyboardEvent.touchY = static_cast<uint16_t>(key.rectY + key.rectHeight / 2);
+        event = &keyboardEvent;
+    }
+#endif
+
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
         updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
@@ -880,7 +1007,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
             return true; // STOP: We handled a VKB touch
         }
     }
-#endif // USE_VIRTUAL_KEYBOARD
+#endif // USE_VIRTUAL_KEYBOARD && !T5S3_EPD_TOUCH_KEYBOARD
 
     // All hardware keys fall through to here (CardKB, physical, etc.)
 
@@ -1154,7 +1281,12 @@ int32_t CannedMessageModule::runOnce()
     // Normal module disable/idle handling
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         // Clean up virtual keyboard if needed when going inactive
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
+        if (graphics::OnScreenKeyboardModule::instance().isActive() &&
+            graphics::NotificationRenderer::textInputCallback == nullptr) {
+#else
         if (graphics::NotificationRenderer::virtualKeyboard && graphics::NotificationRenderer::textInputCallback == nullptr) {
+#endif
             LOG_INFO("Performing delayed virtual keyboard cleanup");
             graphics::OnScreenKeyboardModule::instance().stop(false);
         }
@@ -1165,16 +1297,27 @@ int32_t CannedMessageModule::runOnce()
     // Handle delayed virtual keyboard message sending
     if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         // Virtual keyboard message sending case - text was not empty
-        if (this->freetext.length() > 0) {
+        const bool sentMessage = this->freetext.length() > 0;
+        if (sentMessage) {
             LOG_INFO("Delayed vkbd send: '%s'", this->freetext.c_str());
             sendText(this->dest, this->channel, this->freetext.c_str(), true);
 
             // Clean up virtual keyboard after sending
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
+            const bool keyboardActive = graphics::OnScreenKeyboardModule::instance().isActive();
+            if (keyboardActive) {
+                LOG_INFO("Vkbd cleanup after send");
+                graphics::OnScreenKeyboardModule::instance().stop(false);
+            }
+            if (graphics::NotificationRenderer::current_notification_type == graphics::notificationTypeEnum::text_input)
+                graphics::NotificationRenderer::resetBanner();
+#else
             if (graphics::NotificationRenderer::virtualKeyboard) {
                 LOG_INFO("Vkbd cleanup after send");
                 graphics::OnScreenKeyboardModule::instance().stop(false);
                 graphics::NotificationRenderer::resetBanner();
             }
+#endif
 
             // Clear payload to indicate virtual keyboard processing is complete
             // But keep SENDING_ACTIVE state to show "Sending..." screen for 2 seconds
@@ -1186,7 +1329,11 @@ int32_t CannedMessageModule::runOnce()
         }
 
         UIFrameEvent e;
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        e.action = sentMessage ? UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE : UIFrameEvent::Action::REGENERATE_FRAMESET;
+#else
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+#endif
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
@@ -1195,12 +1342,18 @@ int32_t CannedMessageModule::runOnce()
     }
 
     UIFrameEvent e;
-    if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload != 0 &&
-         this->payload != CANNED_MESSAGE_RUN_STATE_FREETEXT) ||
+    const bool sentMessagePendingAck =
+        this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload != 0 &&
+        this->payload != CANNED_MESSAGE_RUN_STATE_FREETEXT;
+    if (sentMessagePendingAck ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION)) {
         this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        e.action = sentMessagePendingAck ? UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE : UIFrameEvent::Action::REGENERATE_FRAMESET;
+#else
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+#endif
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
@@ -1223,7 +1376,11 @@ int32_t CannedMessageModule::runOnce()
         this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
 
         // Clean up virtual keyboard if it exists during timeout
+#if defined(T5S3_EPD_TOUCH_KEYBOARD)
+        if (graphics::OnScreenKeyboardModule::instance().isActive()) {
+#else
         if (graphics::NotificationRenderer::virtualKeyboard) {
+#endif
             LOG_INFO("Vkbd cleanup on timeout");
             graphics::OnScreenKeyboardModule::instance().stop(false);
             graphics::NotificationRenderer::resetBanner();
@@ -1452,7 +1609,7 @@ int CannedMessageModule::getPrevIndex()
     }
 }
 
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) && !defined(T5S3_EPD_TOUCH_KEYBOARD)
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
@@ -1528,6 +1685,17 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
             }
 #endif
             this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            if (screen) {
+                screen->addTouchTarget(graphics::touchExpandedRect(updatedLetter.rectX, updatedLetter.rectY,
+                                                                    updatedLetter.rectWidth, updatedLetter.rectHeight, 2),
+                                       meshtastic::TouchTargetKind::KeyboardKey,
+                                       (static_cast<uint32_t>(static_cast<uint8_t>(outerIndex)) << 8) |
+                                           static_cast<uint32_t>(static_cast<uint8_t>(innerIndex)),
+                                       INPUT_BROKER_NONE);
+            }
+#endif
 
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));
 
@@ -1765,6 +1933,15 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                                                    FONT_HEIGHT_SMALL, 1, false);
         display->setColor(WHITE);
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        if (screen) {
+            screen->addTouchTarget(
+                graphics::touchExpandedRect(xOffset, yOffset, display->getWidth(), FONT_HEIGHT_SMALL - 4, 3),
+                                   meshtastic::TouchTargetKind::NodeRow, static_cast<uint32_t>(itemIndex),
+                                   INPUT_BROKER_NONE);
+        }
+#endif
+
         // Draw key icon (after highlight)
         /*
         if (itemIndex >= numActiveChannels) {
@@ -1867,6 +2044,14 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
         if (emoteIdx == emotePickerIndex)
             display->setColor(WHITE);
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+        if (screen) {
+            screen->addTouchTarget(graphics::touchExpandedRect(x, rowY, display->getWidth() - 8, rowHeight, 3),
+                                   meshtastic::TouchTargetKind::EmoteRow, static_cast<uint32_t>(emoteIdx),
+                                   INPUT_BROKER_NONE);
+        }
+#endif
     }
 
     // Draw scrollbar if needed
@@ -1923,7 +2108,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
         einkDisplay->enableUnlimitedFastMode();
 #endif
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) && !defined(T5S3_EPD_TOUCH_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
 #else
         display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -2091,6 +2276,14 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 #ifndef USE_EINK
             if (_highlight)
                 display->setColor(WHITE);
+#endif
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            if (screen) {
+                screen->addTouchTarget(graphics::touchExpandedRect(x, lineY, display->getWidth() - 8, rowHeight, 3),
+                                       meshtastic::TouchTargetKind::MessageRow, static_cast<uint32_t>(msgIdx),
+                                       INPUT_BROKER_NONE);
+            }
 #endif
 
             yCursor += rowHeight;

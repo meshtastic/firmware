@@ -1,5 +1,6 @@
 #pragma once
 
+#include "configuration.h"
 #include "Observer.h"
 #include "concurrency/OSThread.h"
 #include "freertosinc.h"
@@ -25,6 +26,9 @@ enum input_broker_event {
     INPUT_BROKER_USER_PRESS,
     INPUT_BROKER_ALT_PRESS,
     INPUT_BROKER_ALT_LONG,
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    INPUT_BROKER_T5S3_QUICK_MESSAGE = 0xB0,
+#endif
     INPUT_BROKER_FACTORY_RST = 0x9a,
     INPUT_BROKER_SHUTDOWN = 0x9b,
     INPUT_BROKER_GPS_TOGGLE = 0x9e,
@@ -56,6 +60,11 @@ typedef struct _InputEvent {
     unsigned char kbchar;
     uint16_t touchX;
     uint16_t touchY;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    uint8_t touchTargetKind;
+    uint32_t touchTargetValue;
+    uint8_t touchTargetLongPress;
+#endif
 } InputEvent;
 
 class InputPollable

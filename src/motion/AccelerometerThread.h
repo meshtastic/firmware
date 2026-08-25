@@ -30,7 +30,7 @@
 #ifdef HAS_STK8XXX
 #include "STK8XXXSensor.h"
 #endif
-#ifdef HAS_BHI260AP
+#if defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
 #include "BHI260APSensor.h"
 #endif
 
@@ -156,7 +156,7 @@ class AccelerometerThread : public concurrency::OSThread
             sensor.reset(new QMI8658Sensor(device));
             break;
 #endif
-#ifdef HAS_BHI260AP
+#if defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
         case ScanI2C::DeviceType::BHI260AP:
             sensor.reset(new BHI260APSensor(device));
             break;

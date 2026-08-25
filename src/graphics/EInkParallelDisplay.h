@@ -9,6 +9,12 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+#ifndef EINK_FORCE_DISPLAY_THROTTLE_MS
+#define EINK_FORCE_DISPLAY_THROTTLE_MS 200
+#endif
+#endif
+
 class FASTEPD;
 
 /**
@@ -25,6 +31,10 @@ class EInkParallelDisplay : public OLEDDisplay
     };
 
     EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rotation);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    EInkParallelDisplay(uint16_t logicalWidth, uint16_t logicalHeight, uint16_t panelWidth, uint16_t panelHeight,
+                        EpdRotation rotation);
+#endif
     virtual ~EInkParallelDisplay();
 
     // OLEDDisplay virtuals
@@ -33,7 +43,17 @@ class EInkParallelDisplay : public OLEDDisplay
     int getBufferOffset(void) override { return 0; }
 
     void display(void) override;
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    bool forceDisplay(uint32_t msecLimit = EINK_FORCE_DISPLAY_THROTTLE_MS);
+    void requestResponsiveUpdate() { responsiveUpdateRequested = true; }
+    void requestFullRefresh()
+    {
+        fullRefreshRequested = true;
+        responsiveUpdateRequested = true;
+    }
+#else
     bool forceDisplay(uint32_t msecLimit = 1000);
+#endif
     void endUpdate();
 
   protected:
@@ -49,6 +69,10 @@ class EInkParallelDisplay : public OLEDDisplay
     TaskHandle_t asyncTaskHandle = nullptr;
     void startAsyncFullUpdate(int clearMode);
     static void asyncFullUpdateTask(void *pvParameters);
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    bool updateFrame(uint32_t msecLimit);
+    void mapLogicalToPanel(uint16_t logicalX, uint16_t logicalY, uint16_t &panelX, uint16_t &panelY) const;
+#endif
 
 #ifdef EINK_LIMIT_GHOSTING_PX
     // helpers
@@ -64,7 +88,18 @@ class EInkParallelDisplay : public OLEDDisplay
 #endif
 
     EpdRotation rotation;
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    uint16_t panelWidth;
+    uint16_t panelHeight;
+    uint16_t panelRowBytes;
+    uint32_t panelBufferSize;
+#endif
     uint32_t previousImageHash = 0;
+#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    bool hasPresentedFrame = false;
+    bool fullRefreshRequested = false;
+    bool responsiveUpdateRequested = false;
+#endif
     uint32_t lastUpdateMs = 0;
     int fastRefreshCount = 0;
 };

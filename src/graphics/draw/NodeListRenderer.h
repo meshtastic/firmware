@@ -62,8 +62,12 @@ std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
 // Scrolling controls
 void scrollUp();
 void scrollDown();
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+bool isTouchRowValid(uint32_t rowIndex);
+#endif
 
 // Bitmap drawing function
+void drawScaledXBitmap(int x, int y, int width, int height, int scale, const uint8_t *bitmapXBM, OLEDDisplay *display);
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display);
 void drawScaledXBitmap3x(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display);
 

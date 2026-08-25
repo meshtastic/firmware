@@ -11,7 +11,7 @@
 
 // Limit how often we push a full E-Ink refresh. T-Deck Pro needs faster updates for typing.
 #ifndef EINK_FORCE_DISPLAY_THROTTLE_MS
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
 #define EINK_FORCE_DISPLAY_THROTTLE_MS 200
 #else
 #define EINK_FORCE_DISPLAY_THROTTLE_MS 1000
@@ -52,6 +52,13 @@ class EInkDisplay : public OLEDDisplay
      * @return true if we did draw the screen
      */
     virtual bool forceDisplay(uint32_t msecLimit = EINK_FORCE_DISPLAY_THROTTLE_MS);
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+    /**
+     * Refresh a stable framebuffer snapshot. The caller may run outside the main loop.
+     */
+    bool forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t msecLimit = EINK_FORCE_DISPLAY_THROTTLE_MS);
+#endif
 
     /**
      * Run any code needed to complete an update, after the physical refresh has completed.

@@ -75,6 +75,9 @@ class Screen
     void startAlert(const char *) {}
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    bool isMessageFrameShown() const { return false; }
+#endif
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
     bool getIsI2cScreen() const { return false; }
@@ -90,6 +93,7 @@ class Screen
 #include "../configuration.h"
 #include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/T5S3EpaperUI.h"
 
 #ifdef USE_ST7567
 #include <ST7567Wire.h>
@@ -126,6 +130,9 @@ class Screen
 #include "concurrency/OSThread.h"
 #include "graphics/draw/MenuHandler.h"
 #include "input/InputBroker.h"
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+#include "input/TouchTargetRegistry.h"
+#endif
 #include "mesh/MeshModule.h"
 #include "modules/AdminModule.h"
 #include <string>
@@ -196,7 +203,6 @@ class Point
 
 namespace graphics
 {
-
 enum class FrameDirection { NEXT, PREVIOUS };
 
 // Forward declarations
@@ -281,6 +287,10 @@ class Screen : public concurrency::OSThread
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
 
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || T5S3_EPD_UI_PROFILE
+    bool isMessageFrameShown() const;
+#endif
+
     bool isScreenOn() { return screenOn; }
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
@@ -351,6 +361,14 @@ class Screen : public concurrency::OSThread
                                 std::function<void(const std::string &)> bannerCallback);
     void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                        std::function<void(const std::string &)> textCallback);
+
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    void beginTouchFrame();
+    void markTouchFrameMapped();
+    bool addTouchTarget(meshtastic::TouchRect rect, meshtastic::TouchTargetKind kind, uint32_t value,
+                        input_broker_event tapAction, input_broker_event longPressAction = INPUT_BROKER_NONE);
+    void publishTouchFrame();
+#endif
 
     void requestMenu(graphics::menuHandler::screenMenus menuToShow)
     {
@@ -643,6 +661,9 @@ class Screen : public concurrency::OSThread
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    bool handleTouchTarget(const InputEvent *arg);
+#endif
     int handleAdminMessage(AdminModule_ObserverData *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
@@ -803,6 +824,11 @@ class Screen : public concurrency::OSThread
     bool showingNormalScreen = false;
     /// Track USB power state to only wake screen on actual power state changes
     bool lastPowerUSBState = false;
+#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+    uint32_t touchPageGeneration = 0;
+    uint32_t lastTouchSurfaceKey = 0;
+    bool touchSurfaceKeyValid = false;
+#endif
 
     // Implementation to Adjust Brightness
     uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103

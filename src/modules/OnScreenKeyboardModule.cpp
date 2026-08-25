@@ -23,6 +23,21 @@ OnScreenKeyboardModule::~OnScreenKeyboardModule() = default;
 void OnScreenKeyboardModule::start(const char *header, const char *initialText, uint32_t durationMs,
                                    std::function<void(const std::string &)> cb)
 {
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    if (!t5Keyboard)
+        t5Keyboard = std::make_unique<T5S3Keyboard>();
+    callback = cb;
+    t5Keyboard->start(header, initialText, durationMs, [this](const std::string &text) {
+        if (text.empty()) {
+            onCancel();
+        } else {
+            onSubmit(text);
+        }
+    });
+
+    // The T5 keyboard has a different type and owns its own rendering path.
+    NotificationRenderer::virtualKeyboard = nullptr;
+#else
     keyboard = std::make_unique<VirtualKeyboard>();
     callback = cb;
     if (header)
@@ -41,6 +56,7 @@ void OnScreenKeyboardModule::start(const char *header, const char *initialText, 
 
     // Maintain legacy compatibility hooks
     NotificationRenderer::virtualKeyboard = keyboard.get();
+#endif
     NotificationRenderer::textInputCallback = callback;
 }
 
@@ -48,7 +64,13 @@ void OnScreenKeyboardModule::stop(bool callEmptyCallback)
 {
     auto cb = callback;
     callback = nullptr;
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    // Keep the object alive until the current draw/callback stack unwinds.
+    if (t5Keyboard)
+        t5Keyboard->stop(false);
+#else
     keyboard.reset();
+#endif
     // Keep NotificationRenderer legacy pointers in sync
     NotificationRenderer::virtualKeyboard = nullptr;
     NotificationRenderer::textInputCallback = nullptr;
@@ -56,16 +78,30 @@ void OnScreenKeyboardModule::stop(bool callEmptyCallback)
         cb("");
 }
 
-void OnScreenKeyboardModule::handleInput(const InputEvent &event)
+bool OnScreenKeyboardModule::handleInput(const InputEvent &event)
 {
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    return t5Keyboard && t5Keyboard->handleInput(event);
+#else
     if (!keyboard)
-        return;
+        return false;
 
     if (processVirtualKeyboardInput(event, keyboard.get()))
-        return;
+        return true;
 
     if (event.inputEvent == INPUT_BROKER_CANCEL)
         onCancel();
+    return false;
+#endif
+}
+
+bool OnScreenKeyboardModule::isActive() const
+{
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    return t5Keyboard && t5Keyboard->isActive();
+#else
+    return keyboard != nullptr;
+#endif
 }
 
 bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event, VirtualKeyboard *targetKeyboard)
@@ -103,6 +139,15 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
 
 bool OnScreenKeyboardModule::draw(OLEDDisplay *display)
 {
+#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    if (!t5Keyboard)
+        return false;
+    if (t5Keyboard->isTimedOut()) {
+        onCancel();
+        return false;
+    }
+    return t5Keyboard->draw(display);
+#else
     if (!keyboard)
         return false;
 
@@ -118,6 +163,7 @@ bool OnScreenKeyboardModule::draw(OLEDDisplay *display)
     display->setColor(WHITE);
     keyboard->draw(display, 0, 0);
     return true;
+#endif
 }
 
 void OnScreenKeyboardModule::onSubmit(const std::string &text)
