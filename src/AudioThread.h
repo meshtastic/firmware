@@ -21,14 +21,6 @@
 extern PCA95X5_CLS io;
 #endif
 
-#ifdef AUDIO_AMP_ENABLE
-#define ENABLE_AUDIO_AMP AUDIO_AMP_ENABLE(true)
-#define DISABLE_AUDIO_AMP AUDIO_AMP_ENABLE(false)
-#else
-#define ENABLE_AUDIO_AMP
-#define DISABLE_AUDIO_AMP
-#endif
-
 #ifdef USE_MCP23017
 #include "platform/esp32/ExtensionIOMCP23017.h"
 #endif
@@ -42,7 +34,9 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
-        ENABLE_AUDIO_AMP;
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(true);
+#endif
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
@@ -68,7 +62,9 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
 
         setCPUFast(false);
-        DISABLE_AUDIO_AMP;
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(false);
+#endif
     }
 
     void readAloud(const char *text)
@@ -78,12 +74,16 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
-        ENABLE_AUDIO_AMP;
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(true);
+#endif
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
         audioOut->stop();
-        DISABLE_AUDIO_AMP;
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(false);
+#endif
     }
 
   protected:
