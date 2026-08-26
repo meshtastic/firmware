@@ -1,9 +1,10 @@
 #pragma once
 
 #define LED_POWER 46
-#define LED_STATE_ON 1 // State when LED is lit
+#define LED_STATE_ON 1
 
 #define BUTTON_PIN 0
+#define BUTTON_NEED_PULLUP
 
 #define I2C_SDA 47
 #define I2C_SCL 48
@@ -19,7 +20,6 @@
 
 // ES8311 DAC / AMP
 #define HAS_I2S
-
 #define HAS_ES8311
 #define DAC_I2S_BCK 11 // SCLK
 #define DAC_I2S_WS 12  // LRLK
@@ -102,7 +102,6 @@
 #define GPS_RX_PIN 18
 #define HAS_GPS 1
 #define GPS_THREAD_INTERVAL 50
-// #define GPS_EN // TODO: add GPS enable pin control via io/expander
 #endif
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -110,9 +109,11 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #if HAS_TFT
 #define HAS_SPI_TFT 1
+#define HAS_TOUCHSCREEN 1
 #define USE_TFTDISPLAY 1 // Enable legacy BaseUI TFTDisplay.cpp build
 #define TFT_WIDTH 320    // Required by BaseUI setGeometry
 #define TFT_HEIGHT 240   // Required by BaseUI setGeometry
+#define USE_VIRTUAL_KEYBOARD 1
 #endif
 
 // Battery
