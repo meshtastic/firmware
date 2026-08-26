@@ -45,8 +45,8 @@ class WakeKeyInterruptThread : public concurrency::OSThread
 
     void begin()
     {
-        pinMode(PCA95X5_INT, INPUT_PULLUP);
-        attachInterrupt(PCA95X5_INT, WakeKeyInterruptThread::isr, FALLING);
+        pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
+        attachInterrupt(BOARD_PCA9535_INT, WakeKeyInterruptThread::isr, FALLING);
     }
 
   protected:
@@ -54,8 +54,19 @@ class WakeKeyInterruptThread : public concurrency::OSThread
     {
         const uint32_t now = millis();
 
+        // Safe, sequential handling of the edge flag outside the ISR context
+        if (rawIrqSignaled) {
+            LOG_DEBUG("wake button signal");
+            rawIrqSignaled = false;
+            if (state == State::REST) {
+                state = State::IRQ_PENDING;
+                irqAtMs = now;
+            }
+        }
+
         // Ignore side-key handling while BOOT/user button is held.
         if (digitalRead(BUTTON_PIN) == LOW) {
+            LOG_WARN("ignore wake button press");
             resetStateAndStop();
             return OSThread::disable();
         }
@@ -64,6 +75,7 @@ class WakeKeyInterruptThread : public concurrency::OSThread
         case State::IRQ_PENDING:
             // Initial debounce after expander interrupt edge.
             if ((uint32_t)(now - irqAtMs) < DEBOUNCE_MS) {
+                LOG_DEBUG("wake button debounce");
                 return SAMPLE_MS;
             }
 
@@ -107,10 +119,15 @@ class WakeKeyInterruptThread : public concurrency::OSThread
 
     static WakeKeyInterruptThread *instance;
 
-    static void isr()
+    static void IRAM_ATTR isr()
     {
         if (instance) {
-            instance->onInterruptEdge();
+            instance->rawIrqSignaled = true;
+            instance->enabled = true;
+            instance->setInterval(0);
+            BaseType_t higherWake = 0;
+            concurrency::mainDelay.interruptFromISR(&higherWake);
+            runASAP = true;
         }
     }
 
@@ -145,11 +162,12 @@ class WakeKeyInterruptThread : public concurrency::OSThread
 #ifdef ARCH_ESP32
     int onLightSleep(void *)
     {
-        detachInterrupt(PCA95X5_INT);
+        detachInterrupt(BOARD_PCA9535_INT);
         // Clear any latched PCA9535 interrupt before enabling GPIO wake.
         // If INT is left asserted low, light sleep exits immediately.
         spiLock->lock();
-        (void)io.digitalRead(EXPANDS_BTN_WAKE_UP);
+        volatile bool dummy = io.digitalRead(EXPANDS_BTN_WAKE_UP);
+        (void)dummy;
         spiLock->unlock();
         resetStateAndStop();
         return 0;
@@ -161,12 +179,12 @@ class WakeKeyInterruptThread : public concurrency::OSThread
         // Consume any pending interrupt source before reattaching ISR.
         // Check BEFORE clearing: if INT is still asserted the button may still be held,
         // and no new falling edge will fire until it is released.
-        bool intAsserted = (digitalRead(PCA95X5_INT) == LOW);
+        bool intAsserted = (digitalRead(BOARD_PCA9535_INT) == LOW);
         spiLock->lock();
         (void)io.digitalRead(EXPANDS_BTN_WAKE_UP);
         spiLock->unlock();
-        pinMode(PCA95X5_INT, INPUT_PULLUP);
-        attachInterrupt(PCA95X5_INT, WakeKeyInterruptThread::isr, FALLING);
+        pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
+        attachInterrupt(BOARD_PCA9535_INT, WakeKeyInterruptThread::isr, FALLING);
         if (intAsserted) {
             onInterruptEdge();
         }
@@ -177,6 +195,7 @@ class WakeKeyInterruptThread : public concurrency::OSThread
     CallbackObserver<WakeKeyInterruptThread, esp_sleep_wakeup_cause_t> lsEndObserver{this,
                                                                                      &WakeKeyInterruptThread::onLightSleepEnd};
 
+    volatile bool rawIrqSignaled = false;
     volatile State state = State::REST;
     volatile uint32_t irqAtMs = 0;
 };
@@ -205,7 +224,7 @@ static bool initOK = false;
 
 void earlyInitVariant()
 {
-    if (io.begin(Wire, PCA95X5_ADDR, I2C_SDA, I2C_SCL)) {
+    if (io.begin(Wire, BOARD_PCA9535_ADDR, I2C_SDA, I2C_SCL)) {
         io.pinMode(EXPANDS_BTN_WAKE_UP, INPUT); // wakeup button
         io.pinMode(EXPANDS_I2C_0_INT, INPUT);   // I2C IRQ
         io.pinMode(EXPANDS_SD_DETECT, INPUT);   // SD detect

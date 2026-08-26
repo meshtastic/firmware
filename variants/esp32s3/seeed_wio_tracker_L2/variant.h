@@ -38,8 +38,8 @@
 #define USE_PCA95X5
 #define PCA95X5_CLS Pca9555
 #define PCA95X5_INC "Pca9555.h"
-#define PCA95X5_ADDR 0x21
-#define PCA95X5_INT 45
+#define BOARD_PCA9535_ADDR 0x21
+#define BOARD_PCA9535_INT 45 // wake from esp light sleep
 // Button
 #define EXPANDS_BTN_WAKE_UP (0) // INPUT
 // I2C
