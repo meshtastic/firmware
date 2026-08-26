@@ -179,6 +179,10 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 // so clear its failure count and refresh freshness (keeps a good route pinned).
                 if (!isBroadcast(getFrom(p)))
                     noteRouteSuccess(getFrom(p), millis());
+            } else if (c && c->error_reason == meshtastic_Routing_Error_DUTY_CYCLE_LIMIT && isFromUs(p)) {
+                // Our own duty-cycle rejection, looped straight back inline. send() keeps the pending
+                // record for this error on purpose, so erasing it here would undo that carve-out.
+                LOG_DEBUG("Duty cycle NAK for 0x%08x, keep retransmissions", nakId);
             } else {
                 stopRetransmission(p->to, nakId);
             }
