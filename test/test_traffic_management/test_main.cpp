@@ -2806,12 +2806,12 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
 /**
  * Verify TRACKER role caps the dedup window at 1 hour.
- * A duplicate position that would normally be blocked for 11 h (default) must
+ * A duplicate position that would normally be blocked for 5 h (default) must
  * be forwarded once the 1-hour tracker cap expires.
  */
 static void test_tm_trackerRole_capsDedupWindowAtOneHour(void)
 {
-    // Operator interval is 11 h - longer than the tracker cap.
+    // Operator interval is 5 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -2872,11 +2872,11 @@ static void test_tm_takTrackerRole_capsDedupWindowAtOneHour(void)
  * hot and warm NodeDB stores - the TMM unified cache is the third fallback. The
  * role is cached on the entry while NodeDB still knows the node; once NodeDB
  * forgets it (getNodeRole → CLIENT), the cached role must keep the 1-hour cap
- * applied instead of reverting to the 11-hour default interval.
+ * applied instead of reverting to the 5-hour default interval.
  */
 static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
 {
-    // Operator interval is 11 h - longer than the tracker cap.
+    // Operator interval is 5 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -2896,8 +2896,8 @@ static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
     mockNodeDB->clearCachedNode();
 
     ProcessMessage r2 = module.handleReceived(dup); // within 1-hour cap - still drop
-    // Advance past the tracker cap (3600 s) but stay well under the 11-hour default.
-    // Without the cached-role fallback this would still be inside the 11-hour window
+    // Advance past the tracker cap (3600 s) but stay well under the 5-hour default.
+    // Without the cached-role fallback this would still be inside the 5-hour window
     // (CLIENT → no exception) and wrongly drop; with it, the 1-hour cap lets it pass.
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     ProcessMessage r3 = module.handleReceived(afterCap);
@@ -2935,7 +2935,7 @@ static void test_tm_roleChange_viaNodeInfo_dropsTrackerException(void)
     meshtastic_MeshPacket info = makeNodeInfoPacketWithRole(kRemoteNode, meshtastic_Config_DeviceConfig_Role_CLIENT);
     module.handleReceived(info);
 
-    // Past the 1-hour tracker cap but within the 11-hour CLIENT interval. With the stale
+    // Past the 1-hour tracker cap but within the 5-hour CLIENT interval. With the stale
     // TRACKER role this would pass; after the demotion it must drop (full interval applies).
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -3042,12 +3042,12 @@ static void test_tm_trackerRole_doesNotLengthenShorterOperatorInterval(void)
 
 /**
  * Verify LOST_AND_FOUND role caps duplicate-position dedup at ~15 min (2 pos-ticks),
- * not the old one-tick fast-announce. A configured 11-hour interval is shortened to the
+ * not the old one-tick fast-announce. A configured 5-hour interval is shortened to the
  * 15-min cap; a duplicate one tick later still drops, but one past the 2-tick cap passes.
  */
 static void test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes(void)
 {
-    // Long interval that would normally suppress duplicates for 11 h.
+    // Long interval that would normally suppress duplicates for 5 h.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 

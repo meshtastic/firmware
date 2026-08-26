@@ -19,6 +19,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
+# shellcheck source=bin/lib/test-state.sh
+source "$SCRIPT_DIR/lib/test-state.sh"
 
 WORK="$(mktemp -d -t meshstatecheck.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
@@ -97,18 +99,32 @@ mkdir -p "$HOME/.portduino/default/prefs"
 # Detached from this shell's stdout so the wrapper's `| tee` sees EOF and the pipeline returns -
 # the survivor outlives the suite exactly as a spun loop() does.
 setsid sleep 300 >/dev/null 2>&1 &
-printf '%s\n' "$!" > "$HOME/../survivor.pid"
+survivor=$!
+# A real survivor has been running for the whole suite; this one is a microsecond old, and the
+# wrapper scans the instant this shell exits - so wait for the exec before reporting it up.
+for _ in {1..500}; do [[ "$(cat "/proc/$survivor/comm" 2>/dev/null)" == sleep ]] && break; sleep 0.01; done
+# Recheck rather than trust the loop: falling out of it on the timeout would stage a pid the
+# fixture never saw reach exec, which is the race this wait exists to close.
+[[ "$(cat "/proc/$survivor/comm" 2>/dev/null)" == sleep ]] || { echo "fixture: survivor never reached exec" >&2; exit 1; }
+printf '%s\n' "$survivor" > "$HOME/../survivor.pid"
 exit 0
 EOF
 chmod +x "$LEAKY"
 
 survivor_dir="$WORK/state-survivor"
 mkdir -p "$survivor_dir"
+# KEEP_STATE so the sandbox stays whatever the verdict: without it a missed survivor also deletes
+# the pid file staged inside it, and the reap assertion below fails for the wrong reason.
 FIXTURE_SUITE=test_fixture_survivor \
 	MESHTASTIC_TEST_STATE_DIR="$survivor_dir" \
 	MESHTASTIC_TEST_STATE_SUMMARY="$survivor_dir/summary.tsv" \
 	MESHTASTIC_TEST_STATE_MANIFEST="$MANIFEST" \
-	"$SCRIPT_DIR/pio-test-isolate.sh" "$LEAKY" >/dev/null 2>&1
+	MESHTASTIC_TEST_KEEP_STATE=1 \
+	"$SCRIPT_DIR/pio-test-isolate.sh" "$LEAKY" >/dev/null 2>"$survivor_dir/wrapper.err"
+
+# Find the pid file by search, not by a glob that assumes a directory depth: the wrapper renames
+# its mktemp'd sandbox to the suite name when it keeps it, so the path is not fixed.
+leaked_pid="$(head -1 "$(find "$survivor_dir" -name survivor.pid -print -quit 2>/dev/null)" 2>/dev/null)"
 
 recorded="$(awk -F'\t' '$1 == "test_fixture_survivor" { print $6; exit }' "$survivor_dir/summary.tsv" 2>/dev/null)"
 if [[ -n ${recorded// /} ]]; then
@@ -116,14 +132,28 @@ if [[ -n ${recorded// /} ]]; then
 	PASSES=$((PASSES + 1))
 else
 	echo "  FAIL  a process outliving the suite went unreported"
+	# Name the cause here rather than spending a CI round-trip on it: whether the fixture's
+	# process exists at all, whether the scan can see it, and what the wrapper recorded instead.
+	visible_pids="$(ps -u "$(id -u)" -o pid= 2>/dev/null | tr -d ' ')"
+	if [[ -z $leaked_pid ]]; then
+		alive="no pid staged"
+		listed="n/a"
+		its_home=""
+	else
+		kill -0 "$leaked_pid" 2>/dev/null && alive="alive" || alive="gone"
+		grep -Fxq "$leaked_pid" <<<"$visible_pids" && listed="yes" || listed="no"
+		its_home="$(tr '\0' '\n' <"/proc/$leaked_pid/environ" 2>/dev/null | grep -m1 '^HOME=')"
+	fi
+	echo "        summary line: $(awk -F'\t' '$1 == "test_fixture_survivor"' "$survivor_dir/summary.tsv" 2>/dev/null | tr '\t' '|')"
+	echo "        staged pid ${leaked_pid:-<none>}: $alive, listed by ps: $listed, its ${its_home:-<no HOME in environ>}"
+	echo "        ps -u $(id -u) listed $(grep -c . <<<"$visible_pids") pids; the sandbox is under $survivor_dir"
+	echo "        wrapper stderr: $(tr '\n' '|' <"$survivor_dir/wrapper.err" 2>/dev/null)"
+	echo "        same scan, run again now: [$(state_find_survivors "${its_home#HOME=}" | tr '\n' ' ')]"
 	FAILURES=$((FAILURES + 1))
 fi
 
-# Find the pid file by search, not by a glob that assumes a directory depth: the wrapper renames
-# its mktemp'd sandbox to the suite name when it keeps it, so the path is not fixed. Assert the
-# file was found BEFORE asserting the process is gone - otherwise an empty pid takes the "not
-# running" branch and the check passes without having checked anything.
-leaked_pid="$(cat "$(find "$survivor_dir" -name survivor.pid -print -quit 2>/dev/null)" 2>/dev/null | head -1)"
+# Assert the pid file was found BEFORE asserting the process is gone - otherwise an empty pid takes
+# the "not running" branch and the check passes without having checked anything.
 if [[ -z $leaked_pid ]]; then
 	echo "  FAIL  no survivor pid recorded - the reap assertion would pass vacuously"
 	FAILURES=$((FAILURES + 1))
@@ -140,8 +170,6 @@ fi
 # it; exercise the assertion the wrapper actually calls instead - same function, same code path.
 echo
 echo "Before-empty assertion (state_assert_empty):"
-# shellcheck source=bin/lib/test-state.sh
-source "$SCRIPT_DIR/lib/test-state.sh"
 
 seeded="$WORK/seeded"
 mkdir -p "$seeded/$PREFS"

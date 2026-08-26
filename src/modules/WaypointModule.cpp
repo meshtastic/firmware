@@ -60,7 +60,8 @@ bool WaypointModule::shouldDraw()
     meshtastic_Waypoint wp{}; // <- replaces memset
     if (pb_decode_from_bytes(devicestate.rx_waypoint.decoded.payload.bytes, devicestate.rx_waypoint.decoded.payload.size,
                              &meshtastic_Waypoint_msg, &wp)) {
-        return wp.expire > getTime();
+        // getTime() counts from boot until the RTC is set, which reads every real expiry as future.
+        return waypointIsActive(wp.expire, getValidTime(RTCQualityFromNet));
     }
     return false; // no LOG_ERROR, no flag writes
 #else
