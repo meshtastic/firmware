@@ -229,11 +229,7 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, bool loca
 
 bool WaypointStore::purgeExpired(uint32_t now)
 {
-    if (now == 0)
-        now = getTime();
-    if (now == 0)
-        return false;
-
+    // No local clock normalization: isExpired() owns that policy, including the delete convention.
     bool changed = false;
     for (auto it = waypoints.begin(); it != waypoints.end();) {
         if (!isExpired(*it, now)) {
