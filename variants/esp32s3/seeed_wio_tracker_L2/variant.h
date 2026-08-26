@@ -108,9 +108,12 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Display (NV3031B + QSPI via SPI3) - BaseUI adaptation
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// #define USE_TFTDISPLAY 1   // Enable legacy BaseUI TFTDisplay.cpp build
-#define TFT_WIDTH 320  // Required by BaseUI setGeometry
-#define TFT_HEIGHT 240 // Required by BaseUI setGeometry
+#if HAS_TFT
+#define HAS_SPI_TFT 1
+#define USE_TFTDISPLAY 1 // Enable legacy BaseUI TFTDisplay.cpp build
+#define TFT_WIDTH 320    // Required by BaseUI setGeometry
+#define TFT_HEIGHT 240   // Required by BaseUI setGeometry
+#endif
 
 // Battery
 #define OCV_ARRAY 4200, 4040, 3864, 3800, 3745, 3710, 3687, 3663, 3623, 3482, 3000
