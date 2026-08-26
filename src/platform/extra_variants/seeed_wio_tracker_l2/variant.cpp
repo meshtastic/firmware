@@ -56,7 +56,6 @@ class WakeKeyInterruptThread : public concurrency::OSThread
 
         // Safe, sequential handling of the edge flag outside the ISR context
         if (rawIrqSignaled) {
-            LOG_DEBUG("wake button signal");
             rawIrqSignaled = false;
             if (state == State::REST) {
                 state = State::IRQ_PENDING;
@@ -75,7 +74,6 @@ class WakeKeyInterruptThread : public concurrency::OSThread
         case State::IRQ_PENDING:
             // Initial debounce after expander interrupt edge.
             if ((uint32_t)(now - irqAtMs) < DEBOUNCE_MS) {
-                LOG_DEBUG("wake button debounce");
                 return SAMPLE_MS;
             }
 
@@ -224,6 +222,8 @@ static bool initOK = false;
 
 void earlyInitVariant()
 {
+    Wire.begin(I2C_SDA, I2C_SCL);
+    Wire.setClock(100000); // Pin main I2C0 bus to 100 kHz (TCA9535, ADS1115, AW35615, ES8311 share this Wire)
     if (io.begin(Wire, BOARD_PCA9535_ADDR, I2C_SDA, I2C_SCL)) {
         io.pinMode(EXPANDS_BTN_WAKE_UP, INPUT); // wakeup button
         io.pinMode(EXPANDS_I2C_0_INT, INPUT);   // I2C IRQ
