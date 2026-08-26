@@ -2383,29 +2383,31 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
 }
 
 /**
- * Verify a continuous stream of duplicates still refreshes once per window.
- * Important because a dropped duplicate must not re-stamp the entry: re-stamping slides the
- * window forward on every repeat, so a stationary node broadcasting faster than the window is
- * muted forever instead of getting through once per interval.
+ * Verify a dropped duplicate does not re-stamp the entry: re-stamping slides the window forward on
+ * every repeat, muting a node that broadcasts faster than the window instead of refreshing it.
  */
 static void test_tm_positionDedup_continuousDuplicatesStillRefresh(void)
 {
-    // 720 s = 2 pos-ticks (kPosTimeTickMs = 360 s), fed a duplicate every tick.
-    moduleConfig.traffic_management.position_min_interval_secs = 720;
+    constexpr uint32_t kPosTickMs = 360000; // mirrors the module's private kPosTimeTickMs
+    constexpr uint32_t kWindowTicks = 2;
+    constexpr uint32_t kTicksFed = kWindowTicks * 3; // a duplicate every tick, over whole windows
+    constexpr uint32_t kExpectedPasses = kTicksFed / kWindowTicks;
+    constexpr uint32_t kExpectedDrops = kTicksFed - kExpectedPasses;
+
+    moduleConfig.traffic_management.position_min_interval_secs = (kWindowTicks * kPosTickMs) / 1000;
     installWellKnownPrimaryChannelWithPrecision(16);
     TrafficManagementModuleTestShim module;
 
-    int passed = 0;
-    for (int tick = 0; tick < 6; tick++) {
+    uint32_t passed = 0;
+    for (uint32_t tick = 0; tick < kTicksFed; tick++) {
         meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
         if (module.handleReceived(dup) == ProcessMessage::CONTINUE)
             passed++;
-        TrafficManagementModule::s_testNowMs += 360000; // one pos-tick
+        TrafficManagementModule::s_testNowMs += kPosTickMs;
     }
 
-    // Ticks 0, 2 and 4 clear the 2-tick window; 1, 3 and 5 are duplicates inside it.
-    TEST_ASSERT_EQUAL_INT(3, passed);
-    TEST_ASSERT_EQUAL_UINT32(3, module.getStats().position_dedup_drops);
+    TEST_ASSERT_EQUAL_UINT32(kExpectedPasses, passed);
+    TEST_ASSERT_EQUAL_UINT32(kExpectedDrops, module.getStats().position_dedup_drops);
 }
 
 /**
