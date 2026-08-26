@@ -81,8 +81,8 @@ int32_t WakeKeyInterruptThread::runOnce(void)
                 screen->setOn(sleeping);
             if (sleeping) {
                 powerFSM.trigger(EVENT_PRESS);
-                sleeping = false;
             }
+            sleeping = !sleeping;
             state = State::PRESSED;
             return SAMPLE_MS;
         }
