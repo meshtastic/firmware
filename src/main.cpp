@@ -25,6 +25,7 @@
 #include "Power.h"
 #include "SPILock.h"
 #include "Throttle.h"
+#include "WaypointStore.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
@@ -882,18 +883,10 @@ void setup()
 
     router = new ReliableRouter();
 
-    // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true &&
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
-                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
-        LOG_DEBUG("Tracker/Sensor: Skip start melody");
-    else
-        playStartMelody();
-
 #if HAS_SCREEN
-        // fixed screen override?
-        // The geometry picks below are skipped on variants that pin the panel size with
-        // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
+    // fixed screen override?
+    // The geometry picks below are skipped on variants that pin the panel size with
+    // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
 #ifndef OLED_GEOMETRY_OVERRIDE
@@ -994,7 +987,7 @@ void setup()
     SPI.begin();
 #endif
 #else
-        // ESP32
+    // ESP32
 #if defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -1103,6 +1096,10 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.loadFromFlash();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_I2C
     // Inform modules about I2C devices
     ScanI2CCompleted(i2cScanner.get());
@@ -1177,6 +1174,15 @@ void setup()
     auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+
+    // Must follow lateInitVariant(): on I2S boards audioThread and the codec are only up by this point.
+    // Skipped for power-saving tracker/sensor roles.
+    if (config.power.is_power_saving == true &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
+        LOG_DEBUG("Tracker/Sensor: Skip start melody");
+    else
+        playStartMelody();
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
@@ -1540,6 +1546,12 @@ void loop()
 #endif
 #if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.purgeExpired();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT && ENABLE_WAYPOINT_PERSISTENCE
+    waypointStoreAutosaveTick();
 #endif
     long delayMsec = mainController.runOrDelay();
 

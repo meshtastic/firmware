@@ -92,7 +92,7 @@
 #define PERIPHERAL_WARMUP_MS 1000 // Make sure I2C QuickLink has stable power before continuing
 #define PIN_GPS_STANDBY (40)      // An output to wake GPS, low means allow sleep, high means force wake
 #define PIN_GPS_PPS (41)
-// Seems to be missing on this new board
-#define GPS_TX_PIN (38) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (39) // This is for bits going TOWARDS the GPS
+// GNSS is on the V4 expansion kit (CM121, 9600 baud by default), not on the bare board
+#define GPS_TX_PIN (38) // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (39) // This is for bits going TOWARDS the CPU
 #define GPS_THREAD_INTERVAL 50

@@ -188,10 +188,11 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_SENSOR_HUB
 #elif defined(ELECROW_PANEL)
 #define HW_VENDOR meshtastic_HardwareModel_CROWPANEL
-#elif defined(RAK3312)
-#define HW_VENDOR meshtastic_HardwareModel_RAK3312
+// The WisMesh Tap V2 is a RAK3312 board, so it must be matched before the generic one.
 #elif defined(RAK_WISMESH_TAP_V2)
 #define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP_V2
+#elif defined(RAK3312)
+#define HW_VENDOR meshtastic_HardwareModel_RAK3312
 #elif defined(LINK_32)
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
 #elif defined(T_DECK_PRO)
@@ -214,6 +215,16 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #elif defined(MESHNOLOGY_W10)
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
+#elif defined(ELECROW_ThinkNode_M9)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M9
+#elif defined(HELTEC_V4_R8)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_V4_R8
+#elif defined(MINI_EPAPER_S3)
+#define HW_VENDOR meshtastic_HardwareModel_MINI_EPAPER_S3
+#elif defined(HELTEC_RC32)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RC32
+#elif defined(HELTEC_RCC6)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RCC6
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

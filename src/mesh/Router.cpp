@@ -602,6 +602,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+    // Only already-encrypted frames (relayed, phone-sourced) reach here oversized; perhapsEncode()
+    // bounds everything it encodes. No NAK: p->channel is a wire hash by now, not an index.
+    if (p->encrypted.size > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_WARN("Drop 0x%08x: payload %u exceeds radio capacity %u", p->id, (unsigned)p->encrypted.size,
+                 (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        packetPool.release(p);
+        return meshtastic_Routing_Error_TOO_LARGE;
+    }
+
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
 }

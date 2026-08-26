@@ -20,6 +20,9 @@
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
 #include "error.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -107,7 +110,7 @@ __attribute__((noinline)) void variantDefaultConfig() {}
 __attribute__((noinline)) void variantDefaultModuleConfig() __attribute__((weak));
 __attribute__((noinline)) void variantDefaultModuleConfig() {}
 
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(HELTEC_MESH_NODE_T114) || defined(TFT_NV3001B_DETECT)
 
 uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
@@ -157,6 +160,10 @@ uint32_t readwrite8(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_
     return ret;
 }
 
+#endif
+
+#ifdef HELTEC_MESH_NODE_T114
+
 uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
     pinMode(cs, OUTPUT);
@@ -174,6 +181,57 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
     readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
     uint32_t ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
     return ID;
+}
+
+#endif
+
+#ifdef TFT_NV3001B_DETECT
+
+// The NV3001B panel is an add-on module on these boards, so probe for it before assuming a screen.
+static constexpr uint32_t NV3001B_PANEL_ID = 0x300101;
+static constexpr uint32_t NV3001B_RESET_DELAY_MS = 120; // NV3001B_RST_DELAY, per the Arduino_GFX driver
+
+bool nv3001bPanelPresent(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst, uint8_t en, uint8_t bl)
+{
+    pinMode(en, OUTPUT);
+    digitalWrite(en, TFT_EN_ON);
+    pinMode(bl, OUTPUT);
+    digitalWrite(bl, TFT_BACKLIGHT_ON);
+    delay(NV3001B_RESET_DELAY_MS);
+
+    pinMode(cs, OUTPUT);
+    digitalWrite(cs, HIGH);
+    pinMode(sck, OUTPUT);
+    digitalWrite(sck, LOW);
+    pinMode(mosi, OUTPUT);
+    pinMode(dc, OUTPUT);
+    pinMode(rst, OUTPUT);
+    digitalWrite(rst, HIGH);
+    delay(NV3001B_RESET_DELAY_MS);
+    digitalWrite(rst, LOW); // Hardware Reset
+    delay(NV3001B_RESET_DELAY_MS);
+    digitalWrite(rst, HIGH);
+    delay(NV3001B_RESET_DELAY_MS);
+
+    // 0x04 reports the whole 24-bit display ID; 0xDA/0xDB/0xDC report it one byte at a time.
+    // A panel that answers either way is present.
+    uint32_t rddid = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    uint32_t rdid = (readwrite8(0xDA, 8, 0, cs, sck, mosi, dc, rst) << 16) |
+                    (readwrite8(0xDB, 8, 0, cs, sck, mosi, dc, rst) << 8) | readwrite8(0xDC, 8, 0, cs, sck, mosi, dc, rst);
+    LOG_INFO("NV3001B probe RDDID=0x%06x RDID=0x%06x", (unsigned int)rddid, (unsigned int)rdid);
+
+    if (rddid == NV3001B_PANEL_ID || rdid == NV3001B_PANEL_ID) {
+        LOG_INFO("NV3001B panel detected");
+        return true;
+    }
+
+    // All ones means the data line floated, all zeroes means something held it low; either way no panel
+    // answered, so drop the rail again rather than leave an empty header powered.
+    LOG_INFO("NV3001B panel not detected");
+    digitalWrite(bl, TFT_BACKLIGHT_OFF);
+    digitalWrite(en, TFT_EN_OFF);
+    pinMode(en, INPUT);
+    return false;
 }
 
 #endif
@@ -784,6 +842,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #if HAS_SCREEN
     messageStore.clearAllMessages();
 #endif
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.clearAllWaypoints();
+#endif
 
 #if WARM_NODE_COUNT > 0
     // On nRF52840 the warm tier lives in raw flash outside /prefs, so rmDir
@@ -1046,12 +1107,14 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if defined(USE_EINK) || defined(HAS_SPI_TFT) || defined(USE_SPISSD1306)
     bool hasScreen = true;
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(TFT_NV3001B_DETECT)
+    hasScreen = nv3001bPanelPresent(TFT_CS, TFT_SCL, TFT_SDA, TFT_RS, TFT_RST, TFT_EN, TFT_BL);
+#elif defined(HELTEC_MESH_NODE_T114)
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
     if (st7789_id == 0xFFFFFF) {
         hasScreen = false;
     }
-#endif // HELTEC_MESH_NODE_T114
+#endif // TFT_NV3001B_DETECT / HELTEC_MESH_NODE_T114
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (portduino_config.displayPanel)
@@ -1185,7 +1248,7 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
 #if HAS_TRAFFIC_MANAGEMENT
-    // Position dedup ships enabled at the 11-hour default window on all supported targets.
+    // Position dedup ships enabled at the 5-hour default window on all supported targets.
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
