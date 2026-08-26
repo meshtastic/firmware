@@ -368,7 +368,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     case meshtastic_AdminMessage_set_ham_mode_tag:
         LOG_DEBUG("Client set ham mode");
-        handleSetHamMode(r->set_ham_mode);
+        // Without this a rejected request falls through to the generic Routing_Error_NONE ack below,
+        // so a client would report ham mode as enabled on a node that changed nothing.
+        if (!handleSetHamMode(r->set_ham_mode))
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         break;
     case meshtastic_AdminMessage_get_ui_config_request_tag: {
         LOG_DEBUG("Client is getting device-ui config");
@@ -1928,7 +1931,7 @@ static bool isBlankName(const char *start)
     return *start == '\0';
 }
 
-void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+bool AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
     // Validate ham parameters before setting since this would bypass validation in the owner struct.
 
@@ -1936,7 +1939,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     // without it we would license a node that never identifies itself on the air.
     if (isBlankName(p.call_sign)) {
         LOG_WARN("Rejected ham call_sign: needs 1+ non-whitespace char");
-        return;
+        return false;
     }
 
     // Set call sign and override lora limitations for licensed use. An optional long_name rides
@@ -1987,6 +1990,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    return true;
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
