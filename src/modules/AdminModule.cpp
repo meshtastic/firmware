@@ -1915,7 +1915,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 
 void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg)
 {
-#if HAS_SCREEN
+#if HAS_SCREEN || HAS_TFT
     nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
 #endif
 }

@@ -25,6 +25,10 @@
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
+#if defined(HAS_ELECROW_STC_BUZZER)
+#include "platform/esp32/ElecrowStc.h"
+#endif
+
 #if defined(HAS_RGB_LED)
 #include "AmbientLightingThread.h"
 uint8_t red = 0;
@@ -108,8 +112,14 @@ int32_t ExternalNotificationModule::runOnce()
             if (Throttle::hasElapsed(externalTurnedOn[1], delay)) {
                 setExternalState(1, !getExternal(1));
             }
-            // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
+            // The Elecrow STC buzzer is an I2C-controlled on/off output. The
+            // Device UI still stores use_pwm=true when sound is enabled, so do
+            // not let that generic flag suppress the STC notification path.
+#if defined(HAS_ELECROW_STC_BUZZER)
+            if (Throttle::hasElapsed(externalTurnedOn[2], delay)) {
+#else
             if (!moduleConfig.external_notification.use_pwm && Throttle::hasElapsed(externalTurnedOn[2], delay)) {
+#endif
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
                 setExternalState(2, !getExternal(2));
@@ -169,7 +179,9 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
-        // now let the PWM buzzer play
+        // Now let a real GPIO PWM buzzer play. The Elecrow buzzer is driven by
+        // the STC controller instead, even though Device UI sets use_pwm=true.
+#if !defined(HAS_ELECROW_STC_BUZZER)
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
@@ -180,21 +192,27 @@ int32_t ExternalNotificationModule::runOnce()
             // we need fast updates to play the RTTTL
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
+#endif
 
         return delay;
     }
 }
 
 /**
- * Based on buzzer mode, return true if we can buzz.
+ * Based on buzzer mode and ringtone selection, return true if we can buzz.
  */
 bool ExternalNotificationModule::canBuzz()
 {
-    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED &&
-        config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
-        return true;
-    }
-    return false;
+    if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
+        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY)
+        return false;
+
+#if defined(HAS_ELECROW_STC_BUZZER)
+    if (strncmp(rtttlConfig.ringtone, "Silent:", sizeof("Silent:") - 1) == 0)
+        return false;
+#endif
+
+    return true;
 }
 
 bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
@@ -222,9 +240,13 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
             digitalWrite(moduleConfig.external_notification.output_vibra, on);
         break;
     case 2:
+#if defined(HAS_ELECROW_STC_BUZZER)
+        elecrow_panel::setStcBuzzer(on);
+#else
         // Only control buzzer pin digitally if not using PWM mode
         if (moduleConfig.external_notification.output_buzzer && !moduleConfig.external_notification.use_pwm)
             digitalWrite(moduleConfig.external_notification.output_buzzer, on);
+#endif
         break;
     default:
         if (output > 0)
@@ -381,7 +403,17 @@ ExternalNotificationModule::ExternalNotificationModule()
             setExternalState(1, false);
             externalTurnedOn[1] = 0;
         }
-        if (moduleConfig.external_notification.output_buzzer && canBuzz()) {
+        if ((moduleConfig.external_notification.output_buzzer
+#if defined(HAS_ELECROW_STC_BUZZER)
+             || true
+#endif
+             ) &&
+            canBuzz()) {
+#if defined(HAS_ELECROW_STC_BUZZER)
+            LOG_INFO("Use Elecrow STC buzzer");
+            setExternalState(2, false);
+            externalTurnedOn[2] = 0;
+#else
             if (!moduleConfig.external_notification.use_pwm) {
                 LOG_INFO("Use Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
@@ -392,6 +424,7 @@ ExternalNotificationModule::ExternalNotificationModule()
                 // in PWM Mode we force the buzzer pin if it is set
                 LOG_INFO("Use Pin %i in PWM mode", config.device.buzzer_gpio);
             }
+#endif
         }
     } else {
         LOG_INFO("External Notification Module Disabled");
@@ -484,6 +517,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     LOG_INFO("Buzzer suppressed: mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
+#if defined(HAS_ELECROW_STC_BUZZER)
+                    setExternalState(2, true);
+#else
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
 #ifdef HAS_I2S
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
@@ -493,6 +529,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     } else {
                         setExternalState(2, true);
                     }
+#endif
                 }
             }
 

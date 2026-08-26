@@ -1295,7 +1295,7 @@ void NodeDB::installDefaultModuleConfig()
 #define HAS_NOTIFICATION_LED
 #endif
 #if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(HAS_NOTIFICATION_LED) ||                                            \
-    defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) || defined(HAS_I2S_SPEAKER_NRF52)
+    defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) || defined(HAS_I2S_SPEAKER_NRF52) || defined(HAS_ELECROW_STC_BUZZER)
     moduleConfig.external_notification.enabled = true;
 #endif
 
@@ -1307,6 +1307,9 @@ void NodeDB::installDefaultModuleConfig()
     // No PWM piezo pin - alert playback goes through NRF52RtttlPlayer/I2S instead,
     // gated only on alert_message_buzzer + canBuzz(), not output_buzzer/use_pwm.
     moduleConfig.external_notification.alert_message_buzzer = true;
+#elif defined(HAS_ELECROW_STC_BUZZER)
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.output_ms = 250;
 #endif
 
 #if defined(PIN_VIBRATION)
@@ -1328,7 +1331,7 @@ void NodeDB::installDefaultModuleConfig()
 #elif defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
 #elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) ||                           \
-    defined(HAS_I2S_SPEAKER_NRF52)
+    defined(HAS_I2S_SPEAKER_NRF52) || defined(HAS_ELECROW_STC_BUZZER)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 

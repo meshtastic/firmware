@@ -95,6 +95,7 @@ class Power : public concurrency::OSThread
     void readPowerStatus();
     void logHeapUsage();
     virtual bool setup();
+    void setupINABatteryMonitor();
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};

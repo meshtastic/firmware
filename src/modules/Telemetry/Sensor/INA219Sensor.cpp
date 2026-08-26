@@ -7,6 +7,11 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_INA219.h>
 
+#if defined(HAS_ELECROW_STC)
+#include "concurrency/LockGuard.h"
+#include "platform/esp32/ElecrowStc.h"
+#endif
+
 #ifndef INA219_MULTIPLIER
 #define INA219_MULTIPLIER 1.0f
 #endif
@@ -15,6 +20,9 @@ INA219Sensor::INA219Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_IN
 
 int32_t INA219Sensor::runOnce()
 {
+#if defined(HAS_ELECROW_STC)
+    concurrency::LockGuard i2cGuard(elecrow_panel::sharedI2cLock());
+#endif
     LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
@@ -32,6 +40,9 @@ void INA219Sensor::setup() {}
 
 bool INA219Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+#if defined(HAS_ELECROW_STC)
+    concurrency::LockGuard i2cGuard(elecrow_panel::sharedI2cLock());
+#endif
     measurement->variant.environment_metrics.has_voltage = true;
     measurement->variant.environment_metrics.has_current = true;
 
@@ -42,11 +53,17 @@ bool INA219Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
 uint16_t INA219Sensor::getBusVoltageMv()
 {
+#if defined(HAS_ELECROW_STC)
+    concurrency::LockGuard i2cGuard(elecrow_panel::sharedI2cLock());
+#endif
     return lround(ina219.getBusVoltage_V() * 1000);
 }
 
 int16_t INA219Sensor::getCurrentMa()
 {
+#if defined(HAS_ELECROW_STC)
+    concurrency::LockGuard i2cGuard(elecrow_panel::sharedI2cLock());
+#endif
     return lround(ina219.getCurrent_mA());
 }
 
