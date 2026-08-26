@@ -10,6 +10,7 @@
 #include "WaypointStore.h"
 #include "concurrency/LockGuard.h"
 #include "gps/RTC.h"
+#include "meshUtils.h"
 #include <cstring>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -78,13 +79,11 @@ void WaypointStore::notifyChanged()
 
 bool WaypointStore::isExpired(const meshtastic_Waypoint &wp, uint32_t now)
 {
-    if (wp.expire == 0)
-        return false;
-
+    // getTime() counts from boot until the RTC is set, which reads every real expiry as future.
     if (now == 0)
-        now = getTime();
+        now = getValidTime(RTCQuality::RTCQualityDevice);
 
-    return now != 0 && wp.expire <= now;
+    return !waypointIsActive(wp.expire, now);
 }
 
 bool WaypointStore::isExpired(const StoredWaypoint &entry, uint32_t now)

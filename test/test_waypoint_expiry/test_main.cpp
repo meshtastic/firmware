@@ -1,6 +1,7 @@
-// Unit tests for waypointIsActive() in src/meshUtils.h: the expire == 0 and expire == 1 sentinels,
-// ordinary expiry, and an untrusted clock.
+// Unit tests for waypointIsActive() and its caller WaypointStore::isExpired(): the expire == 0 and
+// expire == 1 sentinels, ordinary expiry, and an untrusted clock.
 #include "TestUtil.h"
+#include "WaypointStore.h"
 #include "meshUtils.h"
 #include <unity.h>
 
@@ -55,6 +56,21 @@ void test_untrusted_clock_still_honours_delete()
     TEST_ASSERT_FALSE(waypointIsActive(1, 0));
 }
 
+// The production caller: an explicit now keeps these off the wall clock.
+void test_store_expiry_matches_the_predicate()
+{
+    meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
+
+    wp.expire = 0;
+    TEST_ASSERT_FALSE(WaypointStore::isExpired(wp, NOW));
+    wp.expire = 1;
+    TEST_ASSERT_TRUE(WaypointStore::isExpired(wp, NOW));
+    wp.expire = NOW + 3600;
+    TEST_ASSERT_FALSE(WaypointStore::isExpired(wp, NOW));
+    wp.expire = NOW - 1;
+    TEST_ASSERT_TRUE(WaypointStore::isExpired(wp, NOW));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -67,6 +83,7 @@ void setup()
     RUN_TEST(test_int32_max_is_active);
     RUN_TEST(test_untrusted_clock_expires_nothing);
     RUN_TEST(test_untrusted_clock_still_honours_delete);
+    RUN_TEST(test_store_expiry_matches_the_predicate);
     exit(UNITY_END());
 }
 
