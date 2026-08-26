@@ -15,9 +15,24 @@
 #include "platform/nrf52/NRF52I2SOutput.h"
 #endif
 
+#if defined(ARCH_NRF52) && !defined(ARCH_NRF54L15)
+#include "HardwarePWM.h"
+#endif
+
 #if !defined(ARCH_PORTDUINO)
 extern "C" void delay(uint32_t dwMs);
 #endif
+
+// Perceived loudness on a piezo rises well past 50%, but so does average current and heating, so
+// the cap is enforced here rather than trusted to a variant.
+#ifndef BUZZER_DUTY_PERCENT
+#define BUZZER_DUTY_PERCENT 50
+#endif
+#define BUZZER_DUTY_MAX_PERCENT 80
+
+// Below this, a "note" is a rest. Driving a rest through a PWM backend would hold the pin at the
+// duty cycle for the whole note instead of staying quiet.
+#define BUZZER_MIN_AUDIBLE_HZ 20
 
 struct ToneDuration {
     int frequency_khz;
@@ -106,6 +121,105 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
 }
 #endif
 
+// Hold one tone at dutyPct for durationMs and leave the pin as it was found. False means no PWM
+// backend in this build, or the hardware could not be taken, and the caller falls back to tone().
+#if defined(ARCH_ESP32)
+#define BUZZER_LEDC_BITS 10   // matches what ledcWriteTone() configures, so the frequency range is the same
+#define BUZZER_LEDC_CHANNEL 5 // pre-3.0 cores need an explicit channel; 4 is the keyboard backlight
+static bool playToneDutyNative(uint8_t pin, uint16_t freqHz, uint32_t durationMs, uint8_t dutyPct)
+{
+    const uint32_t level = ((1u << BUZZER_LEDC_BITS) - 1) * dutyPct / 100;
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+    if (!ledcAttach(pin, freqHz, BUZZER_LEDC_BITS))
+        return false;
+    ledcWrite(pin, level);
+    delay(durationMs);
+    ledcWrite(pin, 0);
+    // Detach or ledcWriteTone() later reconfigures a channel it did not allocate; NonBlockingRTTTL
+    // drives the same pin through tone() from ExternalNotificationModule::runOnce().
+    ledcDetach(pin);
+#else
+    ledcSetup(BUZZER_LEDC_CHANNEL, freqHz, BUZZER_LEDC_BITS);
+    ledcAttachPin(pin, BUZZER_LEDC_CHANNEL);
+    ledcWrite(BUZZER_LEDC_CHANNEL, level);
+    delay(durationMs);
+    ledcWrite(BUZZER_LEDC_CHANNEL, 0);
+    ledcDetachPin(pin);
+#endif
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+    return true;
+}
+#elif defined(ARCH_NRF52) && !defined(ARCH_NRF54L15)
+static bool playToneDutyNative(uint8_t pin, uint16_t freqHz, uint32_t durationMs, uint8_t dutyPct)
+{
+    // 'Duty'. HwPWMx[2] is skipped because the core's tone() hard-codes it, and taking it would
+    // silence the ExternalNotificationModule ringtone, which drives tone() from another thread.
+    static const uint32_t kToken = 0x79747544;
+    for (int i = 0; i < HWPWM_MODULE_NUM; i++) {
+        if (i == 2)
+            continue;
+        HardwarePWM *pwm = HwPWMx[i];
+        if (!pwm->takeOwnership(kToken))
+            continue;
+        // 1 MHz base, so the counter top is the period in microseconds. Audible tones stay well
+        // inside the 15-bit COUNTERTOP.
+        const uint32_t top = 1000000UL / freqHz;
+        pwm->setClockDiv(PWM_PRESCALER_PRESCALER_DIV_16);
+        pwm->setMaxValue((uint16_t)top);
+        if (pwm->addPin(pin)) {
+            pwm->writePin(pin, (uint16_t)(top * dutyPct / 100));
+            delay(durationMs);
+            pwm->writePin(pin, 0);
+        }
+        // Ownership is refused while a pin is still attached, so the order matters.
+        pwm->removeAllPins();
+        pwm->releaseOwnership(kToken);
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+        return true;
+    }
+    LOG_WARN("No free PWM for buzzer duty, fall back to 50%%");
+    return false;
+}
+#elif defined(ARCH_RP2040)
+static bool playToneDutyNative(uint8_t pin, uint16_t freqHz, uint32_t durationMs, uint8_t dutyPct)
+{
+    // tone() drives this pad from a PIO state machine, not the PWM block; leaving that program
+    // running would put two drivers on one pin.
+    noTone(pin);
+    analogWriteFreq(freqHz);
+    analogWriteRange(100); // analogWrite() compensates for its own rescaling, so the value is a percentage
+    analogWrite(pin, dutyPct);
+    delay(durationMs);
+    analogWrite(pin, 0);
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+    return true;
+}
+#else
+static bool playToneDutyNative(uint8_t, uint16_t, uint32_t, uint8_t)
+{
+    return false;
+}
+#endif
+
+void playToneDuty(uint8_t pin, uint16_t freqHz, uint32_t durationMs, uint8_t dutyPct)
+{
+    if (dutyPct > BUZZER_DUTY_MAX_PERCENT)
+        dutyPct = BUZZER_DUTY_MAX_PERCENT;
+    if (dutyPct < 1)
+        dutyPct = 1;
+
+    if (dutyPct != 50 && freqHz >= BUZZER_MIN_AUDIBLE_HZ && playToneDutyNative(pin, freqHz, durationMs, dutyPct))
+        return;
+
+    // tone() is asynchronous everywhere, so the wait is what makes both paths hold the note for
+    // durationMs before playTones() adds the gap between notes.
+    tone(pin, freqHz, durationMs);
+    delay(durationMs);
+}
+
 void playTones(const ToneDuration *tone_durations, int size)
 {
     if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
@@ -152,9 +266,11 @@ void playTones(const ToneDuration *tone_durations, int size)
     if (config.device.buzzer_gpio) {
         for (int i = 0; i < size; i++) {
             const auto &tone_duration = tone_durations[i];
-            tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
+            // Holds the note for duration_ms, so the gap below is the remaining 0.3 and the total
+            // per note is unchanged.
+            playToneDuty(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms, BUZZER_DUTY_PERCENT);
             // to distinguish the notes, set a minimum time between them.
-            delay(1.3 * tone_duration.duration_ms);
+            delay(0.3 * tone_duration.duration_ms);
         }
     }
 }
