@@ -2383,6 +2383,32 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
 }
 
 /**
+ * Verify a continuous stream of duplicates still refreshes once per window.
+ * Important because a dropped duplicate must not re-stamp the entry: re-stamping slides the
+ * window forward on every repeat, so a stationary node broadcasting faster than the window is
+ * muted forever instead of getting through once per interval.
+ */
+static void test_tm_positionDedup_continuousDuplicatesStillRefresh(void)
+{
+    // 720 s = 2 pos-ticks (kPosTimeTickMs = 360 s), fed a duplicate every tick.
+    moduleConfig.traffic_management.position_min_interval_secs = 720;
+    installWellKnownPrimaryChannelWithPrecision(16);
+    TrafficManagementModuleTestShim module;
+
+    int passed = 0;
+    for (int tick = 0; tick < 6; tick++) {
+        meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+        if (module.handleReceived(dup) == ProcessMessage::CONTINUE)
+            passed++;
+        TrafficManagementModule::s_testNowMs += 360000; // one pos-tick
+    }
+
+    // Ticks 0, 2 and 4 clear the 2-tick window; 1, 3 and 5 are duplicates inside it.
+    TEST_ASSERT_EQUAL_INT(3, passed);
+    TEST_ASSERT_EQUAL_UINT32(3, module.getStats().position_dedup_drops);
+}
+
+/**
  * Verify interval=0 disables position deduplication.
  * Important because this is an explicit configuration escape hatch.
  */
@@ -3357,6 +3383,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
+    RUN_TEST(test_tm_positionDedup_continuousDuplicatesStillRefresh);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
     RUN_TEST(test_tm_positionDedup_precisionAbove32_usesDefaultPrecision);
     RUN_TEST(test_tm_positionDedup_distinctAtClampedChannelPrecision);
