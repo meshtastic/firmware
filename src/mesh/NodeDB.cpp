@@ -20,6 +20,9 @@
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
 #include "error.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -838,6 +841,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     }
 #if HAS_SCREEN
     messageStore.clearAllMessages();
+#endif
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.clearAllWaypoints();
 #endif
 
 #if WARM_NODE_COUNT > 0
