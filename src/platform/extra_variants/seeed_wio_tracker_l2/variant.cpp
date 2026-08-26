@@ -4,203 +4,16 @@
 
 #include "AudioBoard.h"
 #include "DebugConfiguration.h"
-#include "PowerFSM.h"
 #include "SPILock.h"
-#include "concurrency/OSThread.h"
-#include "graphics/DeviceScreen.h"
+#include "WakeKey.h"
 #include "input/InputBroker.h"
-#include "input/TouchScreenImpl1.h"
 #include "mesh/MeshLED.h"
-#include "sleep.h"
-#include "variant.h"
 
 #include PCA95X5_INC
 extern PCA95X5_CLS io;
 
-extern DeviceScreen *deviceScreen;
-
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
-
-// wake button handling
-static bool isPca9535WakeKeyPressed()
-{
-    concurrency::LockGuard guard(spiLock);
-    return !io.digitalRead(EXPANDS_BTN_WAKE_UP);
-}
-
-class WakeKeyInterruptThread : public concurrency::OSThread
-{
-  public:
-    WakeKeyInterruptThread() : concurrency::OSThread("WioL2WakeKeyInt", SAMPLE_MS)
-    {
-        // Do not run unless an edge arrives.
-        OSThread::disable();
-        instance = this;
-#ifdef ARCH_ESP32
-        lsObserver.observe(&notifyLightSleep);
-        lsEndObserver.observe(&notifyLightSleepEnd);
-#endif
-    }
-
-    void begin()
-    {
-        pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
-        attachInterrupt(BOARD_PCA9535_INT, WakeKeyInterruptThread::isr, FALLING);
-    }
-
-  protected:
-    int32_t runOnce() override
-    {
-        const uint32_t now = millis();
-
-        // Safe, sequential handling of the edge flag outside the ISR context
-        if (rawIrqSignaled) {
-            rawIrqSignaled = false;
-            if (state == State::REST) {
-                state = State::IRQ_PENDING;
-                irqAtMs = now;
-            }
-        }
-
-        // Ignore side-key handling while BOOT/user button is held.
-        if (digitalRead(BUTTON_PIN) == LOW) {
-            LOG_WARN("ignore wake button press");
-            resetStateAndStop();
-            return OSThread::disable();
-        }
-
-        switch (state) {
-        case State::IRQ_PENDING:
-            // Initial debounce after expander interrupt edge.
-            if ((uint32_t)(now - irqAtMs) < DEBOUNCE_MS) {
-                return SAMPLE_MS;
-            }
-
-            if (isPca9535WakeKeyPressed()) {
-                LOG_DEBUG("wake button pressed");
-                powerFSM.trigger(EVENT_PRESS);
-                if (deviceScreen)
-                    deviceScreen->toggleDisplay();
-                state = State::PRESSED;
-                return SAMPLE_MS;
-            }
-
-            // Spurious/cleared edge.
-            resetStateAndStop();
-            return OSThread::disable();
-
-        case State::PRESSED: {
-            if (isPca9535WakeKeyPressed()) {
-                return SAMPLE_MS;
-            }
-
-            resetStateAndStop();
-            return OSThread::disable();
-        }
-
-        case State::REST:
-        default:
-            return OSThread::disable();
-        }
-    }
-
-  private:
-    enum class State : uint8_t {
-        REST,
-        IRQ_PENDING,
-        PRESSED,
-    };
-
-    static constexpr uint32_t SAMPLE_MS = 15;
-    static constexpr uint32_t DEBOUNCE_MS = 25;
-
-    static WakeKeyInterruptThread *instance;
-
-    static void IRAM_ATTR isr()
-    {
-        if (instance) {
-            instance->rawIrqSignaled = true;
-            instance->enabled = true;
-            instance->setInterval(0);
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-            runASAP = true;
-        }
-    }
-
-    void onInterruptEdge()
-    {
-        if (state != State::REST) {
-            return;
-        }
-
-        state = State::IRQ_PENDING;
-        irqAtMs = millis();
-        startThread();
-    }
-
-    void startThread()
-    {
-        if (!OSThread::enabled) {
-            OSThread::setIntervalFromNow(0);
-            OSThread::enabled = true;
-            runASAP = true;
-        }
-    }
-
-    void resetStateAndStop()
-    {
-        state = State::REST;
-        if (OSThread::enabled) {
-            OSThread::disable();
-        }
-    }
-
-#ifdef ARCH_ESP32
-    int onLightSleep(void *)
-    {
-        detachInterrupt(BOARD_PCA9535_INT);
-        // Clear any latched PCA9535 interrupt before enabling GPIO wake.
-        // If INT is left asserted low, light sleep exits immediately.
-        spiLock->lock();
-        volatile bool dummy = io.digitalRead(EXPANDS_BTN_WAKE_UP);
-        (void)dummy;
-        spiLock->unlock();
-        resetStateAndStop();
-        return 0;
-    }
-
-    int onLightSleepEnd(esp_sleep_wakeup_cause_t cause)
-    {
-        (void)cause;
-        // Consume any pending interrupt source before reattaching ISR.
-        // Check BEFORE clearing: if INT is still asserted the button may still be held,
-        // and no new falling edge will fire until it is released.
-        bool intAsserted = (digitalRead(BOARD_PCA9535_INT) == LOW);
-        spiLock->lock();
-        (void)io.digitalRead(EXPANDS_BTN_WAKE_UP);
-        spiLock->unlock();
-        pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
-        attachInterrupt(BOARD_PCA9535_INT, WakeKeyInterruptThread::isr, FALLING);
-        if (intAsserted) {
-            onInterruptEdge();
-        }
-        return 0;
-    }
-
-    CallbackObserver<WakeKeyInterruptThread, void *> lsObserver{this, &WakeKeyInterruptThread::onLightSleep};
-    CallbackObserver<WakeKeyInterruptThread, esp_sleep_wakeup_cause_t> lsEndObserver{this,
-                                                                                     &WakeKeyInterruptThread::onLightSleepEnd};
-
-    volatile bool rawIrqSignaled = false;
-    volatile State state = State::REST;
-    volatile uint32_t irqAtMs = 0;
-};
-
-WakeKeyInterruptThread *WakeKeyInterruptThread::instance = nullptr;
-WakeKeyInterruptThread *wakeKeyThread = nullptr;
-#endif
 
 class WioTrackerMeshLED : public MeshLED
 {
@@ -294,10 +107,7 @@ void lateInitVariant()
     }
 
     // wake button initialization
-    if (!wakeKeyThread) {
-        wakeKeyThread = new WakeKeyInterruptThread();
-        wakeKeyThread->begin();
-    }
+    WakeKeyInterruptThread::instance()->begin();
 
     // AudioDriverLogger.begin(Serial, AudioDriverLogLevel::Debug);
     // I2C: function, scl, sda
