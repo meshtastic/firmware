@@ -62,12 +62,11 @@
 #define EXPANDS_EXP_OTG_EN (11)
 // Audio
 #define EXPANDS_PA_PWR_EN (12)
+#define AUDIO_AMP_SETTLE_MS 250
 #define AUDIO_AMP_ENABLE(on)                                                                                                     \
     spiLock->lock();                                                                                                             \
     io.digitalWrite(EXPANDS_PA_PWR_EN, (on) ? HIGH : LOW);                                                                       \
-    spiLock->unlock();                                                                                                           \
-    if (on)                                                                                                                      \
-        delay(50);
+    spiLock->unlock();
 
 // Battery
 #define EXPANDS_BAT_ADC_EN (15)
