@@ -104,6 +104,10 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #include "mesh/eth/ethClient.h"
 #endif
 
+#if HAS_USB_NET
+#include "mesh/usbnet/USBNet.h"
+#endif
+
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -1200,6 +1204,14 @@ void setup()
 #if HAS_ETHERNET
     // Initialize Ethernet
     initEthernet();
+#endif
+
+#if HAS_USB_NET
+    // Present a USB-Ethernet (CDC-NCM) gadget to whatever host is plugged in and
+    // serve the phone API over it. Deliberately not routed through
+    // onNetworkConnected() - that path is suppressed on colour-TFT builds, which
+    // are exactly the boards someone cables to an iPad.
+    initUsbNet();
 #endif
 #endif
 
