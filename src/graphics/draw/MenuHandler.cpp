@@ -227,33 +227,8 @@ void menuHandler::OnboardMessage()
     screen->showOverlayBanner(bannerOptions);
 }
 
-// Out-of-box US setup starts on LongTurbo rather than the region table's LongFast. Menu-only: the
-// US entry in `regions[]` keeps LongFast, so no other route onto US changes. Anything that already
-// states a preset - a pinned userpref, or a preset moved off the install default - outranks it.
-meshtastic_Config_LoRaConfig_ModemPreset menuHandler::presetForRegionSelection(const meshtastic_Config_LoRaConfig &lora,
-                                                                               meshtastic_Config_LoRaConfig_RegionCode selected)
-{
-#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
-    (void)selected; // the pinned preset wins outright; nothing to decide
-#else
-    if (lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET && selected == meshtastic_Config_LoRaConfig_RegionCode_US &&
-        lora.use_preset && lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST) {
-        return meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
-    }
-#endif
-    return lora.modem_preset;
-}
-
 static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
 {
-    // Decided first: it keys off the *outgoing* region being UNSET.
-    const meshtastic_Config_LoRaConfig_ModemPreset selectionPreset = menuHandler::presetForRegionSelection(config.lora, region);
-    if (selectionPreset != config.lora.modem_preset) {
-        LOG_INFO("First region is %s, default preset to %s", getRegion(region)->name,
-                 DisplayFormatters::getModemPresetDisplayName(selectionPreset, false, true));
-        config.lora.modem_preset = selectionPreset;
-    }
-
     config.lora.region = region;
     config.lora.channel_num = 0; // Reset to default channel
 
