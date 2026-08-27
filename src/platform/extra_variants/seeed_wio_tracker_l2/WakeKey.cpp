@@ -4,6 +4,7 @@
 #include "DebugConfiguration.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "Throttle.h"
 #include "graphics/DeviceScreen.h" // MUI
 #include "graphics/Screen.h"       // BaseUI
 #include "graphics/TFTDisplay.h"   // BaseUI
@@ -48,14 +49,12 @@ void WakeKeyInterruptThread::begin(void)
 
 int32_t WakeKeyInterruptThread::runOnce(void)
 {
-    const uint32_t now = millis();
-
     // Safe, sequential handling of the edge flag outside the ISR context
     if (rawIrqSignaled) {
         rawIrqSignaled = false;
         if (state == State::REST) {
             state = State::IRQ_PENDING;
-            irqAtMs = now;
+            irqAtMs = millis();
         }
     }
 
@@ -69,7 +68,7 @@ int32_t WakeKeyInterruptThread::runOnce(void)
     switch (state) {
     case State::IRQ_PENDING:
         // Initial debounce after expander interrupt edge.
-        if ((uint32_t)(now - irqAtMs) < DEBOUNCE_MS) {
+        if (Throttle::isWithinTimespanMs(irqAtMs, DEBOUNCE_MS)) {
             return SAMPLE_MS;
         }
 
@@ -111,7 +110,7 @@ void IRAM_ATTR WakeKeyInterruptThread::isr(void)
     if (wakeKey) {
         wakeKey->rawIrqSignaled = true;
         wakeKey->enabled = true;
-        wakeKey->setInterval(0);
+        wakeKey->setInterval(0); // TODO
         BaseType_t higherWake = 0;
         concurrency::mainDelay.interruptFromISR(&higherWake);
         runASAP = true;
