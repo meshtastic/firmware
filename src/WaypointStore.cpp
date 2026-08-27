@@ -202,7 +202,9 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, bool loca
     if (stored)
         *stored = entry;
 
-    if (isExpired(entry, entry.receivedTime)) {
+    // rx_time holds uptime, not an epoch, when has_rx_time is false; pass 0 so isExpired() resolves
+    // the clock itself rather than comparing an expiry against seconds since boot.
+    if (isExpired(entry, packet.has_rx_time ? packet.rx_time : 0)) {
         // Respect the lock: only the node a waypoint is locked to may delete it on our device.
         // An unauthorized deletion attempt is ignored entirely, rather than applied locally.
         for (const auto &storedEntry : waypoints) {

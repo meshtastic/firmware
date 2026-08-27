@@ -3,6 +3,7 @@
 #include "TestUtil.h"
 #include "WaypointStore.h"
 #include "meshUtils.h"
+#include <pb_encode.h>
 #include <unity.h>
 
 namespace
@@ -71,6 +72,28 @@ void test_store_expiry_matches_the_predicate()
     TEST_ASSERT_TRUE(WaypointStore::isExpired(wp, NOW));
 }
 
+// rx_time carries uptime rather than an epoch when has_rx_time is false (Router::computeRxTimeStamp),
+// so an already-expired waypoint must still be rejected rather than compared against seconds of uptime.
+void test_packet_without_rx_time_still_expires()
+{
+    meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
+    wp.id = 4242;
+    wp.expire = 1600000000; // September 2020
+
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    packet.from = 0x11223344;
+    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.decoded.payload.size = (uint16_t)pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes),
+                                                               &meshtastic_Waypoint_msg, &wp);
+    packet.has_rx_time = false;
+    packet.rx_time = 300; // uptime seconds, not an epoch
+
+    waypointStore.clearAllWaypoints();
+    TEST_ASSERT_TRUE(waypointStore.addFromPacket(packet, false));
+    TEST_ASSERT_NULL(waypointStore.findWaypoint(wp.id));
+    waypointStore.clearAllWaypoints();
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -84,6 +107,7 @@ void setup()
     RUN_TEST(test_untrusted_clock_expires_nothing);
     RUN_TEST(test_untrusted_clock_still_honours_delete);
     RUN_TEST(test_store_expiry_matches_the_predicate);
+    RUN_TEST(test_packet_without_rx_time_still_expires);
     exit(UNITY_END());
 }
 
