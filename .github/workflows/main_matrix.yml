@@ -73,8 +73,11 @@ jobs:
           # first env of each ADDED variant config. A new env in an existing one does not count.
           DIFF_BASE=""
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            git fetch --no-tags --depth=1 origin "$BASE_REF"
-            DIFF_BASE=$(git merge-base FETCH_HEAD HEAD)
+            # checkout above already fetched every branch (fetch-depth: 0), so the base ref
+            # is local. Do not re-fetch it with --depth=1: that grafts the fetched tip as
+            # parentless, and merge-base then finds no common commit whenever the base
+            # branch has moved past this merge commit, which is every re-run of an older run.
+            DIFF_BASE=$(git merge-base "origin/$BASE_REF" HEAD)
           elif [[ "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
             DIFF_BASE="$MERGE_GROUP_BASE_SHA"
           fi
