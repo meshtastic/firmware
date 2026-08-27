@@ -22,25 +22,18 @@ SemaphoreHandle_t lock = nullptr;
 // True only while the timer is servicing a song; pump() polls from the main loop whenever it is not.
 bool timerRunning = false;
 bool reportedInitFailure = false;
-bool reportedStackMargin = false;
 
 void onTick(TimerHandle_t)
 {
     // The main thread holds the lock only across begin()/stop(); skip this tick rather than block the timer task.
     if (xSemaphoreTake(lock, 0) != pdTRUE)
         return;
-    if (rtttl::isPlaying()) {
+    // onTick -> rtttl::play -> tone -> applyConfiguration is the deepest chain on the timer daemon's
+    // 256 word stack, shared with Bluefruit; measured 61 words peak on a T-Echo Plus.
+    if (rtttl::isPlaying())
         rtttl::play();
-    } else {
-        // onTick -> rtttl::play -> tone -> applyConfiguration is the deepest chain on the timer
-        // daemon's 1 KB stack, which is shared with Bluefruit. Report the margin once per boot.
-        if (!reportedStackMargin) {
-            reportedStackMargin = true;
-            LOG_DEBUG("RTTTL timer daemon stack free: %u words",
-                      (unsigned)uxTaskGetStackHighWaterMark(xTimerGetTimerDaemonTaskHandle()));
-        }
+    else
         xTimerStop(timer, 0); // song finished on its own
-    }
     xSemaphoreGive(lock);
 }
 
