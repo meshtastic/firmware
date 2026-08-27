@@ -2,6 +2,11 @@
 #include "NodeDB.h"
 #include "configuration.h"
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#include <NonBlockingRtttl.h>
+#define HAS_PWM_RTTTL 1
+#endif
+
 #if !defined(ARCH_ESP32) && !defined(ARCH_RP2040) && !defined(ARCH_PORTDUINO)
 #include "Tone.h"
 #endif
@@ -113,6 +118,10 @@ void playTones(const ToneDuration *tone_durations, int size)
         // Buzzer is disabled or not set to system tones
         return;
     }
+#ifdef HAS_PWM_RTTTL
+    if (rtttl::isPlaying())
+        return; // a notification ringtone owns the buzzer, don't reprogram PWM under it
+#endif
 #ifdef HAS_I2S
     if (moduleConfig.external_notification.use_i2s_as_buzzer && audioThread) {
         playTonesRTTTL(tone_durations, size);
