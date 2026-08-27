@@ -1203,9 +1203,11 @@ int32_t Screen::runOnce()
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
-            if (hasModalModule())
-                break; // only the owning module may release its own modal frame
+            // Cleared even while a module holds the screen: START_ALERT_FRAME set it and nothing
+            // else would, so swallowing it here would leave banners suppressed for good.
             NotificationRenderer::pauseBanner = false;
+            if (hasModalModule())
+                break; // only the owning module may take the screen back off its own frame
             // Return from one-off alert mode back to regular frames.
             if (!showingNormalScreen && NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
                 setFrames();
