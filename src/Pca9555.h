@@ -16,31 +16,39 @@ class Pca9555
         return wire.endTransmission() == 0;
     }
 
-    void pinMode(int pin, int mode)
+    bool pinMode(int pin, int mode)
     {
         if (pin > 15 || !_wire)
             return;
         uint8_t port = pin / 8, bit = pin % 8;
-        uint8_t cfg = readReg(0x06 + port);
-        bool isInput = (mode == INPUT || mode == INPUT_PULLUP);
-        if (isInput)
-            cfg |= (1u << bit);
-        else
-            cfg &= ~(1u << bit);
-        writeReg(0x06 + port, cfg);
+        uint8_t cfg;
+        uint8_t res = readReg(0x06 + port, cfg);
+        if (res) {
+            bool isInput = (mode == INPUT || mode == INPUT_PULLUP);
+            if (isInput)
+                cfg |= (1u << bit);
+            else
+                cfg &= ~(1u << bit);
+            return writeReg(0x06 + port, cfg);
+        }
+        return res;
     }
 
-    void digitalWrite(int pin, int value)
+    bool digitalWrite(int pin, int value)
     {
         if (pin > 15 || !_wire)
             return;
         uint8_t port = pin / 8, bit = pin % 8;
-        uint8_t out = readReg(0x02 + port);
-        if (value)
-            out |= (1u << bit);
-        else
-            out &= ~(1u << bit);
-        writeReg(0x02 + port, out);
+        uint8_t out;
+        bool res = readReg(0x02 + port, out);
+        if (res) {
+            if (value)
+                out |= (1u << bit);
+            else
+                out &= ~(1u << bit);
+            return writeReg(0x02 + port, out);
+        }
+        return res;
     }
 
     bool digitalRead(int pin)
@@ -48,32 +56,42 @@ class Pca9555
         if (pin > 15 || !_wire)
             return false;
         uint8_t port = pin / 8, bit = pin % 8;
-        return (readReg(0x00 + port) & (1u << bit)) != 0;
+        uint8_t reg;
+        if (readReg(0x00 + port, reg))
+            return (reg & (1u << bit)) != 0;
+        else
+            return 0;
     }
 
   private:
     TwoWire *_wire = nullptr;
     uint8_t _addr = 0x20;
 
-    uint8_t readReg(uint8_t reg)
+    bool readReg(uint8_t reg, uint8_t &out)
     {
         _wire->beginTransmission(_addr);
         _wire->write(reg);
         if (_wire->endTransmission(false) != 0) {
             _wire->end();
             _wire->begin();
-            return 0xFF;
+            return false;
         }
         if (_wire->requestFrom((uint8_t)_addr, (uint8_t)1) != 1)
-            return 0xFF;
-        return _wire->read();
+            return false;
+        out = _wire->read();
+        return true;
     }
 
-    void writeReg(uint8_t reg, uint8_t val)
+    bool writeReg(uint8_t reg, uint8_t val)
     {
         _wire->beginTransmission(_addr);
         _wire->write(reg);
         _wire->write(val);
-        _wire->endTransmission();
+        if (_wire->endTransmission(false) != 0) {
+            _wire->end();
+            _wire->begin();
+            return false;
+        }
+        return true;
     }
 };
