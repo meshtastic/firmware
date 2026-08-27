@@ -868,10 +868,8 @@ void Power::reboot()
 #elif defined(ARCH_NRF52)
     NVIC_SystemReset();
 #elif defined(ARCH_NRF54L15)
-    // sys_reboot() (Zephyr) rather than NVIC_SystemReset() directly - matches
-    // the recovery path already used by the crash handler on this platform
-    // (see platform/nrf54l15/nrf54l15_main.cpp), and lets Zephyr run its own
-    // pre-reset bookkeeping (e.g. reset-reason register) before the CPU reset.
+    // Zephyr's own cold reset, as the crash handler on this platform already uses,
+    // so it can do its pre-reset bookkeeping instead of dropping straight into NVIC.
     sys_reboot(SYS_REBOOT_COLD);
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
