@@ -2,6 +2,8 @@
 
 #include "./MapApplet.h"
 #include "./MapTile.h"
+#include "WaypointStore.h"
+#include "WaypointUtils.h"
 
 #include <math.h>
 #include <string.h>
@@ -21,11 +23,95 @@ static int tileTyAt(int tileIndex);
 static int tileMetadataZoomCount();
 static int tileMetadataZoomAt(int index);
 
-// Observe GPS position updates so the map redraws whenever a new location arrives.
+namespace
+{
+
+bool waypointHasAnchor(const meshtastic_Waypoint &waypoint)
+{
+    return waypoint.has_latitude_i && waypoint.has_longitude_i;
+}
+
+bool waypointHasMapGeometry(const meshtastic_Waypoint &waypoint)
+{
+    return waypointHasAnchor(waypoint) || waypoint.has_bounding_box;
+}
+
+void includeMapPoint(float latNode, float lngNode, float lngCenter, float &northernmost, float &southernmost, float &easternmost,
+                     float &westernmost)
+{
+    northernmost = max(northernmost, latNode);
+    southernmost = min(southernmost, latNode);
+
+    const float degEastward = fmodf(((lngNode - lngCenter) + 360.0f), 360.0f);
+    const float degWestward = fabsf(fmodf(((lngNode - lngCenter) - 360.0f), 360.0f));
+    if (degEastward < degWestward)
+        easternmost = max(easternmost, lngCenter + degEastward);
+    else
+        westernmost = min(westernmost, lngCenter - degWestward);
+}
+
+} // namespace
+
+bool InkHUD::MapApplet::mapWaypointIconGlyph(uint32_t codepoint, std::string &glyph)
+{
+    if (!codepoint)
+        return false;
+
+    const std::string utf8 = WaypointUtils::utf8FromCodepoint(codepoint);
+    if (utf8.empty())
+        return false;
+
+    glyph = getFont().decodeUTF8(utf8);
+    return glyph.size() == 1 && glyph[0] != '\x1A' && glyph[0] != '\x7F';
+}
+
+static int16_t markerScreenX(float eastMeters, float metersToPx, uint16_t width)
+{
+    return (width * 0.5f) + (eastMeters * metersToPx);
+}
+
+static int16_t markerScreenY(float northMeters, float metersToPx, uint16_t height)
+{
+    return (height * 0.5f) - (northMeters * metersToPx);
+}
+
+uint8_t InkHUD::MapApplet::fallbackBadgeNumber(const WaypointMarker &entry)
+{
+    uint8_t badge = 0;
+
+    for (auto it = waypointMarkers.rbegin(); it != waypointMarkers.rend(); ++it) {
+        if (!it->hasMarker)
+            continue;
+
+        std::string glyph;
+        if (mapWaypointIconGlyph(it->icon, glyph))
+            continue;
+
+        if (it->id == entry.id)
+            return badge;
+
+        if (badge < 9)
+            ++badge;
+    }
+
+    return 0;
+}
+
+void InkHUD::MapApplet::drawWaypointFallbackMarker(const WaypointMarker &entry, int16_t x, int16_t y)
+{
+    char badgeText[3];
+    snprintf(badgeText, sizeof(badgeText), "%u", (unsigned)fallbackBadgeNumber(entry));
+
+    // Keep fallback digits centered so they read like map markers.
+    setFont(fontSmall);
+    printAt(x, y + 1, badgeText, CENTER, MIDDLE);
+}
+
 InkHUD::MapApplet::MapApplet()
 {
     if (gpsStatus)
         gpsStatusObserver.observe(&gpsStatus->onNewStatus);
+    waypointStoreObserver.observe(&waypointStore);
 }
 
 int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
@@ -36,6 +122,17 @@ int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
         return 0;
 
     requestUpdate();
+    return 0;
+}
+
+int InkHUD::MapApplet::onWaypointStoreChanged(const WaypointStore *store)
+{
+    (void)store;
+
+    if (!isActive())
+        return 0;
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     return 0;
 }
 
@@ -72,6 +169,19 @@ void InkHUD::MapApplet::resetZoom()
 {
     s_zoomLocked = false;
     s_lockedZoom = -1;
+    focusedWaypointId = 0;
+}
+
+bool InkHUD::MapApplet::focusWaypoint(uint32_t waypointId)
+{
+    const StoredWaypoint *entry = waypointStore.findWaypoint(waypointId);
+    if (!entry || WaypointStore::isExpired(*entry) || !waypointHasMapGeometry(entry->waypoint))
+        return false;
+
+    s_zoomLocked = false;
+    s_lockedZoom = -1;
+    focusedWaypointId = waypointId;
+    return true;
 }
 
 bool InkHUD::MapApplet::canZoomIn() const
@@ -405,7 +515,7 @@ void InkHUD::MapApplet::onRender(bool full)
             chosenZoom = s_lockedZoom;
             float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
             chosenMetersToPx = 1.0f / mpp;
-        } else if ((markers.empty() || metersToPxFit <= 0.0f) && nzooms > 0) {
+        } else if (((markers.empty() && waypointMarkers.empty()) || metersToPxFit <= 0.0f) && nzooms > 0) {
             // No spread to fit (own node only, or single remote node at map center). Use highest zoom at native scale.
             chosenZoom = zooms[0];
             float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
@@ -488,6 +598,48 @@ void InkHUD::MapApplet::onRender(bool full)
         // Restore default font and color
         setFont(fontSmall);
         setTextColor(BLACK);
+    }
+
+    // Draw waypoint markers after nodes so the boxed icons stay legible.
+    for (const WaypointMarker &m : waypointMarkers) {
+        if (m.hasMarker && m.geofenceRadiusMeters > 0) {
+            const int16_t radiusPx = std::max<int16_t>(1, (int16_t)lroundf(m.geofenceRadiusMeters * metersToPx));
+            const int16_t centerX = markerScreenX(m.eastMeters, metersToPx, width());
+            const int16_t centerY = markerScreenY(m.northMeters, metersToPx, height());
+            drawCircle(centerX, centerY, radiusPx, BLACK);
+        }
+
+        if (m.hasBoundingBox) {
+            const int16_t westX = markerScreenX(m.boxWestMeters, metersToPx, width());
+            const int16_t eastX = markerScreenX(m.boxEastMeters, metersToPx, width());
+            const int16_t northY = markerScreenY(m.boxNorthMeters, metersToPx, height());
+            const int16_t southY = markerScreenY(m.boxSouthMeters, metersToPx, height());
+            const int16_t left = std::min(westX, eastX);
+            const int16_t right = std::max(westX, eastX);
+            const int16_t top = std::min(northY, southY);
+            const int16_t bottom = std::max(northY, southY);
+            drawRect(left, top, std::max<int16_t>(1, right - left + 1), std::max<int16_t>(1, bottom - top + 1), BLACK);
+        }
+
+        if (!m.hasMarker)
+            continue;
+
+        int16_t x = markerScreenX(m.eastMeters, metersToPx, width());
+        int16_t y = markerScreenY(m.northMeters, metersToPx, height());
+        constexpr int outlinePad = 1;
+        const int boxSize = fontSmall.lineHeight() + 2;
+        const int radius = max(2, boxSize / 6);
+
+        fillRoundedRect(x, y, boxSize + (outlinePad * 2), boxSize + (outlinePad * 2), radius + 1, WHITE);
+        drawRoundRect(x - (boxSize / 2), y - (boxSize / 2), boxSize, boxSize, radius, BLACK);
+
+        std::string glyph;
+        if (mapWaypointIconGlyph(m.icon, glyph)) {
+            setFont(fontSmall);
+            printAt(x, y + 1, glyph, CENTER, MIDDLE);
+        } else {
+            drawWaypointFallbackMarker(m, x, y);
+        }
     }
 
     // Dual map scale bars
@@ -588,6 +740,25 @@ void InkHUD::MapApplet::onRender(bool full)
 
 void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 {
+    if (focusedWaypointId != 0) {
+        const StoredWaypoint *entry = waypointStore.findWaypoint(focusedWaypointId);
+        if (entry && !WaypointStore::isExpired(*entry) && waypointHasMapGeometry(entry->waypoint)) {
+            *lat = waypointHasAnchor(entry->waypoint)
+                       ? entry->waypoint.latitude_i * 1e-7f
+                       : ((float)entry->waypoint.bounding_box.latitude_south_i + entry->waypoint.bounding_box.latitude_north_i) *
+                             0.5e-7f;
+            *lng = waypointHasAnchor(entry->waypoint)
+                       ? entry->waypoint.longitude_i * 1e-7f
+                       : ((float)entry->waypoint.bounding_box.longitude_west_i + entry->waypoint.bounding_box.longitude_east_i) *
+                             0.5e-7f;
+            latCenter = *lat;
+            lngCenter = *lng;
+            centerIsOurNode = false;
+            return;
+        }
+        focusedWaypointId = 0;
+    }
+
     // If we have a valid position for our own node, use that as the anchor
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
@@ -640,6 +811,34 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
             float z = sin(latRad);
 
             // To find mean values shortly
+            xAvg += x;
+            yAvg += y;
+            zAvg += z;
+            positionCount++;
+        }
+
+        for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+            if (WaypointStore::isExpired(entry))
+                continue;
+            if (!waypointHasMapGeometry(entry.waypoint))
+                continue;
+
+            const float latDeg =
+                waypointHasAnchor(entry.waypoint)
+                    ? (entry.waypoint.latitude_i * 1e-7f)
+                    : ((float)entry.waypoint.bounding_box.latitude_south_i + entry.waypoint.bounding_box.latitude_north_i) *
+                          0.5e-7f;
+            const float lngDeg =
+                waypointHasAnchor(entry.waypoint)
+                    ? (entry.waypoint.longitude_i * 1e-7f)
+                    : ((float)entry.waypoint.bounding_box.longitude_west_i + entry.waypoint.bounding_box.longitude_east_i) *
+                          0.5e-7f;
+            float latRad = latDeg * DEG_TO_RAD;
+            float lngRad = lngDeg * DEG_TO_RAD;
+            float x = cos(latRad) * cos(lngRad);
+            float y = cos(latRad) * sin(lngRad);
+            float z = sin(latRad);
+
             xAvg += x;
             yAvg += y;
             zAvg += z;
@@ -759,15 +958,24 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         float latNode = pos.latitude_i * 1e-7;
         float lngNode = pos.longitude_i * 1e-7;
 
-        northernmost = max(northernmost, latNode);
-        southernmost = min(southernmost, latNode);
+        includeMapPoint(latNode, lngNode, lngCenter, northernmost, southernmost, easternmost, westernmost);
+    }
 
-        float degEastward = fmod(((lngNode - lngCenter) + 360), 360);      // Degrees east from center to node
-        float degWestward = abs(fmod(((lngNode - lngCenter) - 360), 360)); // Degrees west from center to node
-        if (degEastward < degWestward)
-            easternmost = max(easternmost, lngCenter + degEastward);
-        else
-            westernmost = min(westernmost, lngCenter - degWestward);
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (WaypointStore::isExpired(entry))
+            continue;
+        if (waypointHasAnchor(entry.waypoint))
+            includeMapPoint(entry.waypoint.latitude_i * 1e-7f, entry.waypoint.longitude_i * 1e-7f, lngCenter, northernmost,
+                            southernmost, easternmost, westernmost);
+
+        if (entry.waypoint.has_bounding_box) {
+            includeMapPoint(entry.waypoint.bounding_box.latitude_south_i * 1e-7f,
+                            entry.waypoint.bounding_box.longitude_west_i * 1e-7f, lngCenter, northernmost, southernmost,
+                            easternmost, westernmost);
+            includeMapPoint(entry.waypoint.bounding_box.latitude_north_i * 1e-7f,
+                            entry.waypoint.bounding_box.longitude_east_i * 1e-7f, lngCenter, northernmost, southernmost,
+                            easternmost, westernmost);
+        }
     }
 
     // Todo: check for issues with map spans >180 deg. MQTT only..
@@ -787,10 +995,46 @@ void InkHUD::MapApplet::getMapSize(uint32_t *widthMeters, uint32_t *heightMeters
     *widthMeters = 0;
     *heightMeters = 0;
 
+    if (focusedWaypointId != 0) {
+        for (const WaypointMarker &m : waypointMarkers) {
+            if (m.id != focusedWaypointId)
+                continue;
+            if (m.hasMarker && m.geofenceRadiusMeters > 0) {
+                *widthMeters = m.geofenceRadiusMeters * 2;
+                *heightMeters = m.geofenceRadiusMeters * 2;
+            }
+            if (m.hasBoundingBox) {
+                *widthMeters = max(*widthMeters, (uint32_t)std::max(fabsf(m.boxWestMeters), fabsf(m.boxEastMeters)) * 2);
+                *heightMeters = max(*heightMeters, (uint32_t)std::max(fabsf(m.boxSouthMeters), fabsf(m.boxNorthMeters)) * 2);
+            }
+            *widthMeters *= 1.1;
+            *heightMeters *= 1.1;
+            return;
+        }
+    }
+
     // Find the greatest distance horizontally and vertically from map center
     for (Marker m : markers) {
         *widthMeters = max(*widthMeters, (uint32_t)abs(m.eastMeters) * 2);
         *heightMeters = max(*heightMeters, (uint32_t)abs(m.northMeters) * 2);
+    }
+
+    // Waypoints contribute to the fit-all bounding box just like nodes, including geofence extents.
+    for (const WaypointMarker &m : waypointMarkers) {
+        if (m.hasMarker) {
+            *widthMeters = max(*widthMeters, (uint32_t)fabsf(m.eastMeters) * 2);
+            *heightMeters = max(*heightMeters, (uint32_t)fabsf(m.northMeters) * 2);
+        }
+
+        if (m.hasMarker && m.geofenceRadiusMeters > 0) {
+            *widthMeters = max(*widthMeters, (uint32_t)(fabsf(m.eastMeters) + m.geofenceRadiusMeters) * 2);
+            *heightMeters = max(*heightMeters, (uint32_t)(fabsf(m.northMeters) + m.geofenceRadiusMeters) * 2);
+        }
+
+        if (m.hasBoundingBox) {
+            *widthMeters = max(*widthMeters, (uint32_t)std::max(fabsf(m.boxWestMeters), fabsf(m.boxEastMeters)) * 2);
+            *heightMeters = max(*heightMeters, (uint32_t)std::max(fabsf(m.boxSouthMeters), fabsf(m.boxNorthMeters)) * 2);
+        }
     }
 
     // Add padding
@@ -928,6 +1172,13 @@ bool InkHUD::MapApplet::enoughMarkers()
         if (nodeDB->hasValidPosition(node) && shouldDrawNode(node))
             return true;
     }
+
+    // Any live waypoint with a marker or box is enough to justify showing the map.
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (!WaypointStore::isExpired(entry) && waypointHasMapGeometry(entry.waypoint))
+            return true;
+    }
+
     return false;
 }
 
@@ -937,6 +1188,8 @@ void InkHUD::MapApplet::calculateAllMarkers()
 {
     // Clear old markers
     markers.clear();
+    waypointMarkers.clear();
+    waypointMarkers.reserve(waypointStore.getWaypoints().size());
 
     // For each node in db
     for (uint32_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
@@ -964,6 +1217,37 @@ void InkHUD::MapApplet::calculateAllMarkers()
             continue;
 
         markers.push_back(calculateMarker(pos.latitude_i * 1e-7, pos.longitude_i * 1e-7, node->hops_away));
+    }
+
+    // Cache waypoint markers once per render pass to avoid repeated geo math below.
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (WaypointStore::isExpired(entry))
+            continue;
+        if (!waypointHasMapGeometry(entry.waypoint))
+            continue;
+
+        WaypointMarker marker;
+        marker.id = entry.waypoint.id;
+        marker.icon = entry.waypoint.icon;
+        marker.geofenceRadiusMeters = entry.waypoint.geofence_radius;
+        marker.hasMarker = waypointHasAnchor(entry.waypoint);
+        marker.hasBoundingBox = entry.waypoint.has_bounding_box;
+        if (marker.hasMarker) {
+            Marker base = calculateMarker(entry.waypoint.latitude_i * 1e-7, entry.waypoint.longitude_i * 1e-7, 0);
+            marker.eastMeters = base.eastMeters;
+            marker.northMeters = base.northMeters;
+        }
+        if (entry.waypoint.has_bounding_box) {
+            Marker southWest = calculateMarker(entry.waypoint.bounding_box.latitude_south_i * 1e-7,
+                                               entry.waypoint.bounding_box.longitude_west_i * 1e-7, 0);
+            Marker northEast = calculateMarker(entry.waypoint.bounding_box.latitude_north_i * 1e-7,
+                                               entry.waypoint.bounding_box.longitude_east_i * 1e-7, 0);
+            marker.boxWestMeters = southWest.eastMeters;
+            marker.boxSouthMeters = southWest.northMeters;
+            marker.boxEastMeters = northEast.eastMeters;
+            marker.boxNorthMeters = northEast.northMeters;
+        }
+        waypointMarkers.push_back(marker);
     }
 }
 

@@ -1518,15 +1518,17 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-    // Runtime packet payload size bounds check against radioBuffer to prevent overflow in memcpy()
-    if (static_cast<size_t>(p->encrypted.size) > sizeof(radioBuffer.payload)) {
-        LOG_ERROR("Packet payload size %u exceeds radioBuffer capacity %u", static_cast<unsigned>(p->encrypted.size),
-                  static_cast<unsigned>(sizeof(radioBuffer.payload)));
-        packetPool.release(p);
-        return 0;
+
+    // Oversize is rejected at the radio queue in Router::send(); clamp rather than fail here so this
+    // stays a call that always succeeds, with no failure return for startSend() to unwind.
+    size_t payloadLen = p->encrypted.size;
+    if (payloadLen > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_ERROR("Payload %u exceeds radioBuffer capacity %u, truncate", (unsigned)payloadLen, (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        payloadLen = MAX_RADIO_PAYLOAD_LEN;
     }
-    memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
+
+    memcpy(radioBuffer.payload, p->encrypted.bytes, payloadLen);
 
     sendingPacket = p;
-    return p->encrypted.size + sizeof(PacketHeader);
+    return payloadLen + sizeof(PacketHeader);
 }
