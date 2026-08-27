@@ -323,12 +323,16 @@ template <typename T> void SX126xInterface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
-        LOG_DEBUG("SX126x standby %s%d", radioLibErr, err);
+        LOG_WARN("SX126x standby failed %s%d", radioLibErr, err);
 #ifdef ARCH_PORTDUINO
     if (err != RADIOLIB_ERR_NONE)
         portduino_status.LoRa_in_error = true;
 #else
-    assert(err == RADIOLIB_ERR_NONE);
+    // Do not assert. setStandby() runs on the radio thread from inside the TX
+    // path, so an assert kills that thread silently: the queued packet is never
+    // sent, every counter stays at zero and the log just stops mid-trace with no
+    // hint why. A failed standby is recoverable - the next startReceive() or
+    // startSend() reissues the mode change - so warn and carry on.
 #endif
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
