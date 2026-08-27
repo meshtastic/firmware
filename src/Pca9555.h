@@ -18,7 +18,7 @@ class Pca9555
 
     bool pinMode(int pin, int mode)
     {
-        if (pin > 15 || !_wire)
+        if (pin < 0 || pin > 15 || !_wire)
             return false;
         uint8_t port = pin / 8, bit = pin % 8;
         uint8_t cfg;
@@ -36,7 +36,7 @@ class Pca9555
 
     bool digitalWrite(int pin, int value)
     {
-        if (pin > 15 || !_wire)
+        if (pin < 0 || pin > 15 || !_wire)
             return false;
         uint8_t port = pin / 8, bit = pin % 8;
         uint8_t out;
@@ -53,7 +53,7 @@ class Pca9555
 
     bool digitalRead(int pin)
     {
-        if (pin > 15 || !_wire)
+        if (pin < 0 || pin > 15 || !_wire)
             return false;
         uint8_t port = pin / 8, bit = pin % 8;
         uint8_t reg;
