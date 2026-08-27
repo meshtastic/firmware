@@ -11,9 +11,8 @@ namespace NRF52RtttlTicker
 {
 namespace
 {
-// The stall this works around is tens of milliseconds, so 5 ms is inaudible and keeps the timer
-// daemon at 200 wakeups/s. Must stay above one tick (configTICK_RATE_HZ is 1024 here) or
-// pdMS_TO_TICKS() rounds to zero, xTimerCreate() fails, and we silently drop back to polling.
+// 5 ms is inaudible against the tens-of-ms stall being fixed, and holds the daemon to 200 wakeups/s.
+// Must exceed one tick, or pdMS_TO_TICKS() rounds to zero and xTimerCreate() fails back into polling.
 constexpr uint32_t kTickMs = 5;
 static_assert(kTickMs * configTICK_RATE_HZ >= 1000, "kTickMs rounds to zero ticks");
 
@@ -71,8 +70,18 @@ void begin(uint8_t pin, const char *song)
 
 void pump()
 {
-    if (!timerRunning && rtttl::isPlaying())
+    if (timerRunning || !rtttl::isPlaying())
+        return;
+    if (!lock) { // no mutex means ensureInit() never made a timer, so nothing can race us
         rtttl::play();
+        return;
+    }
+    // A rejected start or stop leaves the auto-reload timer live even with timerRunning clear, so take
+    // the lock rather than assume onTick() is idle. play() is time gated, so a skipped tick costs nothing.
+    if (xSemaphoreTake(lock, 0) != pdTRUE)
+        return;
+    rtttl::play();
+    xSemaphoreGive(lock);
 }
 
 void stop()
