@@ -2383,6 +2383,34 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
 }
 
 /**
+ * Verify a dropped duplicate does not re-stamp the entry: re-stamping slides the window forward on
+ * every repeat, muting a node that broadcasts faster than the window instead of refreshing it.
+ */
+static void test_tm_positionDedup_continuousDuplicatesStillRefresh(void)
+{
+    constexpr uint32_t kPosTickMs = 360000; // mirrors the module's private kPosTimeTickMs
+    constexpr uint32_t kWindowTicks = 2;
+    constexpr uint32_t kTicksFed = kWindowTicks * 3; // a duplicate every tick, over whole windows
+    constexpr uint32_t kExpectedPasses = kTicksFed / kWindowTicks;
+    constexpr uint32_t kExpectedDrops = kTicksFed - kExpectedPasses;
+
+    moduleConfig.traffic_management.position_min_interval_secs = (kWindowTicks * kPosTickMs) / 1000;
+    installWellKnownPrimaryChannelWithPrecision(16);
+    TrafficManagementModuleTestShim module;
+
+    uint32_t passed = 0;
+    for (uint32_t tick = 0; tick < kTicksFed; tick++) {
+        meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+        if (module.handleReceived(dup) == ProcessMessage::CONTINUE)
+            passed++;
+        TrafficManagementModule::s_testNowMs += kPosTickMs;
+    }
+
+    TEST_ASSERT_EQUAL_UINT32(kExpectedPasses, passed);
+    TEST_ASSERT_EQUAL_UINT32(kExpectedDrops, module.getStats().position_dedup_drops);
+}
+
+/**
  * Verify interval=0 disables position deduplication.
  * Important because this is an explicit configuration escape hatch.
  */
@@ -3357,6 +3385,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
+    RUN_TEST(test_tm_positionDedup_continuousDuplicatesStillRefresh);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
     RUN_TEST(test_tm_positionDedup_precisionAbove32_usesDefaultPrecision);
     RUN_TEST(test_tm_positionDedup_distinctAtClampedChannelPrecision);
