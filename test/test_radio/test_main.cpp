@@ -3,6 +3,8 @@
 #include "MeshService.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "memory/MemAudit.h"
+#include <string.h>
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
@@ -62,7 +64,7 @@ class TestableRadioInterface : public RadioInterface
 
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
-    size_t getRadioBufferPayloadCapacity() const { return sizeof(radioBuffer.payload); }
+    void clearSendingPacketForTest() { sendingPacket = nullptr; }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
@@ -417,30 +419,60 @@ static void test_regionPresetMap_unsetCarriesUserprefsIntent()
 #endif
 }
 
-static void test_beginSending_oversizedPayloadAbortsSafely()
+// In-flight packet bytes as packetPool reports them, 0 before the first alloc registers the tag.
+static int32_t packetPoolLiveBytes()
+{
+    memaudit::Tag rows[memaudit::kMaxTags];
+    size_t n = memaudit::snapshot(rows, memaudit::kMaxTags);
+    for (size_t i = 0; i < n; i++)
+        if (rows[i].tag && strcmp(rows[i].tag, "pktpool(live)") == 0)
+            return rows[i].bytes;
+    return 0;
+}
+
+// Oversize is refused at the radio queue in Router::send(). If one ever gets this far the memcpy is
+// clamped instead of failing, and the packet stays the caller's to release.
+static void test_beginSending_oversizedPayloadIsClamped()
+{
+    const int32_t liveBefore = packetPoolLiveBytes();
+
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    // Without this the check below would also pass against a dead probe.
+    TEST_ASSERT_GREATER_THAN_INT32(liveBefore, packetPoolLiveBytes());
+
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203040;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = MAX_RADIO_PAYLOAD_LEN + 10;
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(MAX_LORA_PAYLOAD_LEN, testRadio->beginSendingPublic(p),
+                                   "an oversized payload must be clamped to the PHY limit, not rejected");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(p, testRadio->getSendingPacket(), "beginSending must still take the packet");
+
+    // beginSending has no failure path that releases, so the packet is ours to free.
+    testRadio->clearSendingPacketForTest();
+    packetPool.release(p);
+    TEST_ASSERT_EQUAL_INT32(liveBefore, packetPoolLiveBytes());
+}
+
+// The clamp must not shorten ordinary traffic, and a maximum-size frame must still fit the PHY.
+static void test_beginSending_fittingPayloadIsSentWhole()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     TEST_ASSERT_NOT_NULL(p);
     p->from = 0x12345678;
     p->to = 0x87654321;
-    p->id = 0x10203040;
+    p->id = 0x10203041;
     p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = MAX_RADIO_PAYLOAD_LEN;
 
-    // Set encrypted size larger than sizeof(radioBuffer.payload) (which is 256 - sizeof(PacketHeader))
-    p->encrypted.size = testRadio->getRadioBufferPayloadCapacity() + 10;
-
-    size_t result = testRadio->beginSendingPublic(p);
-
-    TEST_ASSERT_EQUAL_UINT(0, result);
-    TEST_ASSERT_NULL(testRadio->getSendingPacket());
-
-    // Verify rejected packet was released to packetPool and its slot is reusable
-    meshtastic_MeshPacket *reallocated = packetPool.allocZeroed();
-    TEST_ASSERT_NOT_NULL(reallocated);
-    TEST_ASSERT_EQUAL_PTR(p, reallocated);
-    packetPool.release(reallocated);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(MAX_LORA_PAYLOAD_LEN, testRadio->beginSendingPublic(p),
+                                   "the largest allowed payload must produce a frame at the PHY limit");
+    testRadio->clearSendingPacketForTest();
+    packetPool.release(p);
 }
-
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -491,7 +523,8 @@ void setup()
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
     RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
-    RUN_TEST(test_beginSending_oversizedPayloadAbortsSafely);
+    RUN_TEST(test_beginSending_oversizedPayloadIsClamped);
+    RUN_TEST(test_beginSending_fittingPayloadIsSentWhole);
     exit(UNITY_END());
 }
 

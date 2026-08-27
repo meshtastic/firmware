@@ -25,9 +25,43 @@ uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 
 #if defined(CO5300_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for AMOLED driver chip
+
+// Panel_CO5300's init table sends Sleep Out and Display On with zero delay. The CO5300 needs up
+// to 120 ms after Sleep Out, or Display On is occasionally ignored and the panel stays dark.
+class Panel_CO5300_Delayed : public lgfx::Panel_CO5300
+{
+  protected:
+    const uint8_t *getInitCommands(uint8_t listno) const override
+    {
+        // clang-format off
+        static constexpr uint8_t list0[] = {
+            0xFE, 1, 0x00,                   // page 0
+            0xC4, 1, 0x80,
+            0x3A, 1, 0x55,                   // 16 bit/pixel
+            0x35, 1, 0x00,                   // TE on
+            0x53, 1, 0x20,
+            0x63, 1, 0xFF,
+            0x2A, 4, 0x00, 0x16, 0x01, 0xAF, // column 22..431
+            0x2B, 4, 0x00, 0x00, 0x01, 0xF5, // row 0..501
+            0x11, 0x80, 120,                 // sleep out, then the settle time the datasheet requires
+            0x51, 1, 0x01,                   // brightness dark
+            0x29, 0x80, 20,                  // display on
+            0x51, 1, 0x80,                   // brightness
+            0xff, 0xff
+        };
+        // clang-format on
+        switch (listno) {
+        case 0:
+            return list0;
+        default:
+            return nullptr;
+        }
+    }
+};
+
 class LGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_CO5300 _panel_instance;
+    Panel_CO5300_Delayed _panel_instance;
     lgfx::Bus_SPI _bus_instance;
 
   public:
