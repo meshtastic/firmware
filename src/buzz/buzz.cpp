@@ -118,10 +118,6 @@ void playTones(const ToneDuration *tone_durations, int size)
         // Buzzer is disabled or not set to system tones
         return;
     }
-#ifdef HAS_PWM_RTTTL
-    if (rtttl::isPlaying())
-        return; // a notification ringtone owns the buzzer, don't reprogram PWM under it
-#endif
 #ifdef HAS_I2S
     if (moduleConfig.external_notification.use_i2s_as_buzzer && audioThread) {
         playTonesRTTTL(tone_durations, size);
@@ -159,6 +155,10 @@ void playTones(const ToneDuration *tone_durations, int size)
         config.device.buzzer_gpio = PIN_BUZZER;
 #endif
     if (config.device.buzzer_gpio) {
+#ifdef HAS_PWM_RTTTL
+        if (rtttl::isPlaying())
+            return; // a notification ringtone owns the PWM, don't reprogram it mid-note
+#endif
         for (int i = 0; i < size; i++) {
             const auto &tone_duration = tone_durations[i];
             tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
