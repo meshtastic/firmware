@@ -5,15 +5,17 @@
 #include "PowerFSM.h"
 #include "SPILock.h"
 #include "Throttle.h"
-#include "graphics/DeviceScreen.h" // MUI
-#include "graphics/Screen.h"       // BaseUI
-#include "graphics/TFTDisplay.h"   // BaseUI
+#include "graphics/Screen.h"     // BaseUI
+#include "graphics/TFTDisplay.h" // BaseUI
 #include "main.h"
+
+#if defined(HAS_TFT) && HAS_TFT
+#include "graphics/DeviceScreen.h" // MUI
+extern DeviceScreen *deviceScreen;
+#endif
 
 #include PCA95X5_INC
 extern PCA95X5_CLS io;
-
-extern DeviceScreen *deviceScreen;
 
 // wake button handling
 static bool isPca9535WakeKeyPressed()
@@ -56,7 +58,8 @@ int32_t WakeKeyInterruptThread::runOnce(void)
             state = State::IRQ_PENDING;
             irqAtMs = millis();
         }
-    }
+    } else
+        return OSThread::disable();
 
     // Ignore side-key handling while BOOT/user button is held.
     if (digitalRead(BUTTON_PIN) == LOW) {
@@ -74,10 +77,14 @@ int32_t WakeKeyInterruptThread::runOnce(void)
 
         if (isPca9535WakeKeyPressed()) {
             LOG_DEBUG("wake button pressed");
+#if defined(HAS_TFT) && HAS_TFT
             if (deviceScreen)
                 deviceScreen->toggleDisplay();
+#endif
+#if defined(HAS_SCREEN) && HAS_SCREEN
             if (screen)
                 screen->setOn(sleeping);
+#endif
             if (sleeping) {
                 powerFSM.trigger(EVENT_PRESS);
             }
