@@ -1,28 +1,49 @@
 {
+  // A value here is a FACTORY DEFAULT. It is applied on first boot and on factory reset, and never
+  // again - once the device has a saved config, that config wins. There is no per-field lock. To
+  // stop a user changing a setting, ship USERPREFS_USE_ADMIN_KEY_0 and set
+  // USERPREFS_CONFIG_SECURITY_IS_MANAGED.
+  //
+  // Numbers must be plain decimal or 0x-prefixed hex; a shift expression such as "(1 << 15)" is
+  // passed to the compiler as a string, not evaluated.
+  //
+  // Channels: indices 0 to 7 are all supported. Setting any USERPREFS_CHANNEL_<n>_* key configures
+  // index <n>; the fields you leave out keep the values the firmware would have used anyway (default
+  // PSK, empty name, precision 0, not muted, no uplink or downlink). USERPREFS_CHANNELS_TO_WRITE is
+  // how many indices are written on first boot and cannot exceed 8.
   // "USERPREFS_BUTTON_PIN": "36",
   // "USERPREFS_CHANNELS_TO_WRITE": "3",
   // "USERPREFS_CHANNEL_0_DOWNLINK_ENABLED": "false",
+  // "USERPREFS_CHANNEL_0_IS_MUTED": "false",
   // "USERPREFS_CHANNEL_0_NAME": "REPLACEME",
   // "USERPREFS_CHANNEL_0_PRECISION": "14",
   // "USERPREFS_CHANNEL_0_PSK": "{ 0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36, 0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74, 0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1 }",
   // "USERPREFS_CHANNEL_0_UPLINK_ENABLED": "true",
   // "USERPREFS_CHANNEL_1_DOWNLINK_ENABLED": "false",
+  // "USERPREFS_CHANNEL_1_IS_MUTED": "false",
   // "USERPREFS_CHANNEL_1_NAME": "NodeChat",
   // "USERPREFS_CHANNEL_1_PRECISION": "14",
   // "USERPREFS_CHANNEL_1_PSK": "{ 0x4e, 0x22, 0x1d, 0x8b, 0xc3, 0x09, 0x1b, 0xe2, 0x11, 0x9c, 0x89, 0x12, 0xf2, 0x25, 0x19, 0x5d, 0x15, 0x3e, 0x30, 0x7b, 0x86, 0xb6, 0xec, 0xc4, 0x6a, 0xc3, 0x96, 0x5e, 0x9e, 0x10, 0x9d, 0xd5 }",
   // "USERPREFS_CHANNEL_1_UPLINK_ENABLED": "false",
   // "USERPREFS_CHANNEL_2_DOWNLINK_ENABLED": "false",
+  // "USERPREFS_CHANNEL_2_IS_MUTED": "false",
   // "USERPREFS_CHANNEL_2_NAME": "YardSale",
   // "USERPREFS_CHANNEL_2_PRECISION": "14",
   // "USERPREFS_CHANNEL_2_PSK": "{ 0x15, 0x6f, 0xfe, 0x46, 0xd4, 0x56, 0x63, 0x8a, 0x54, 0x43, 0x13, 0xf2, 0xef, 0x6c, 0x63, 0x89, 0xf0, 0x06, 0x30, 0x52, 0xce, 0x36, 0x5e, 0xb1, 0xe8, 0xbb, 0x86, 0xe6, 0x26, 0x5b, 0x1d, 0x58 }",
   // "USERPREFS_CHANNEL_2_UPLINK_ENABLED": "false",
+  // "USERPREFS_CHANNEL_3_NAME": "Ops",
+  // "USERPREFS_CHANNEL_3_PSK": "{ 0x01 }",
   // "USERPREFS_CONFIG_GPS_MODE": "meshtastic_Config_PositionConfig_GpsMode_ENABLED",
   // "USERPREFS_CONFIG_LORA_IGNORE_MQTT": "true",
+  // "USERPREFS_CONFIG_LORA_CONFIG_OK_TO_MQTT": "false",
   // "USERPREFS_LORA_TX_DISABLED": "1", // If set, forces config.lora.tx_enabled=false during lora bootstrap
   // "USERPREFS_CONFIG_LORA_REGION": "meshtastic_Config_LoRaConfig_RegionCode_US",
   // "USERPREFS_CONFIG_OWNER_LONG_NAME": "My Long Name",
   // "USERPREFS_CONFIG_OWNER_SHORT_NAME": "MLN",
   // "USERPREFS_CONFIG_DEVICE_ROLE": "meshtastic_Config_DeviceConfig_Role_CLIENT", // Defaults to CLIENT. ROUTER*, and LOST AND FOUND roles are restricted.
+  // "USERPREFS_CONFIG_DEVICE_REBROADCAST_MODE": "meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY", // NONE falls back to ALL on a router role
+  // "USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS": "10800", // Clamped to 3600 .. INT32_MAX
+  // "USERPREFS_CANNED_MESSAGES": "Hi|Bye|Yes|No|Ok",
   // "USERPREFS_EVENT_MODE": "1",
   // "USERPREFS_EVENT_MODE_HOP_LIMIT": "3", // Event-mode default and firmware-generated/relay hop cap (0-7; default 3)
   // "USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL": "1", // Block location TX + discard inbound location on channels keyed with USERPREFS_CHANNEL_0_PSK. Defaults off, and must be set explicitly.
@@ -50,6 +71,7 @@
   // "USERPREFS_USE_ADMIN_KEY_0": "{ 0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24, 0xdf, 0x13, 0xca, 0x5a, 0xa6, 0x0c, 0x0d, 0xec, 0x85, 0x5a, 0x4c, 0xf6, 0x1a, 0x96, 0x04, 0x1a, 0x3e, 0xfc, 0xbb, 0x8e, 0x33, 0x71, 0xe5, 0xfc, 0xff, 0x3c }",
   // "USERPREFS_USE_ADMIN_KEY_1": "{}",
   // "USERPREFS_USE_ADMIN_KEY_2": "{}",
+  // "USERPREFS_CONFIG_SECURITY_IS_MANAGED": "true", // Ignored unless an admin key is also set
   // "USERPREFS_OEM_TEXT": "Caterham Car Club",
   // "USERPREFS_OEM_FONT_SIZE": "0",
   // "USERPREFS_OEM_IMAGE_WIDTH": "50",
