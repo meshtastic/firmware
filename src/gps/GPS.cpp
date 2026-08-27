@@ -34,6 +34,19 @@
 #include <ctime>
 #endif
 
+#ifdef ARCH_RP2040
+#include <hardware/watchdog.h>
+#endif
+
+// GPS::setup() blocks the main loop for well over the RP2040 hardware watchdog window (8 s, fed only from loop()):
+// the u-blox M10 config alone is ~15 s of ACK waits and delays. Keep the watchdog fed while we wait on the module.
+static inline void feedWatchdogWhileWaiting()
+{
+#ifdef ARCH_RP2040
+    watchdog_update();
+#endif
+}
+
 #ifndef GPS_RESET_MODE
 #define GPS_RESET_MODE HIGH
 #endif
@@ -358,6 +371,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     std::string debugmsg = "";
 #endif
     while (Throttle::isWithinTimespanMs(waitStartMs, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
@@ -462,6 +476,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     }
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (ack > 9) {
             LOG_DEBUG_GPS("Got ACK for class %02X msg %02X in %dms", class_id, msg_id, millis() - startTime);
             return GNSS_RESPONSE_OK; // ACK received
@@ -513,6 +528,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
     uint16_t needRead = 0;
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (_serial_gps->available()) {
             int c = _serial_gps->read();
             switch (ubxFrameCounter) {
