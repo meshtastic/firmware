@@ -173,6 +173,8 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #define USERPREFS_APPLY_CHANNEL(n)                                                                                               \
     do {                                                                                                                         \
         static const uint8_t userprefsPsk[] = USERPREFS_CHANNEL_##n##_PSK;                                                       \
+        static_assert(sizeof(userprefsPsk) <= sizeof(channelSettings.psk.bytes),                                                 \
+                      "USERPREFS_CHANNEL_" #n "_PSK is wider than psk.bytes");                                                   \
         memcpy(channelSettings.psk.bytes, userprefsPsk, sizeof(userprefsPsk));                                                   \
         channelSettings.psk.size = sizeof(userprefsPsk);                                                                         \
         strncpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_##n##_NAME, sizeof(channelSettings.name) - 1);             \

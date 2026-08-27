@@ -310,7 +310,8 @@ CHANNEL_FIELD_DEFAULTS = {
     "UPLINK_ENABLED": "false",
     "DOWNLINK_ENABLED": "false",
 }
-channelsToWrite = int(userPrefs.get("USERPREFS_CHANNELS_TO_WRITE", "1"))
+channelsToWriteRaw = userPrefs.get("USERPREFS_CHANNELS_TO_WRITE", "1")
+channelsToWrite = int(channelsToWriteRaw, 16 if channelsToWriteRaw.lower().startswith("0x") else 10)
 if channelsToWrite > MAX_NUM_CHANNELS:
     sys.exit(
         f"userPrefs.jsonc: USERPREFS_CHANNELS_TO_WRITE is {channelsToWrite}, "
