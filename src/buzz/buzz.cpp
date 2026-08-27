@@ -153,6 +153,12 @@ static bool playToneDutyNative(uint8_t pin, uint16_t freqHz, uint32_t durationMs
 #elif defined(ARCH_NRF52) && !defined(ARCH_NRF54L15)
 static bool playToneDutyNative(uint8_t pin, uint16_t freqHz, uint32_t durationMs, uint8_t dutyPct)
 {
+    // 1 MHz base, so the counter top is the period in microseconds; below roughly 31 Hz it no
+    // longer fits the 15-bit COUNTERTOP, so leave those to tone() before taking any hardware.
+    const uint32_t top = 1000000UL / freqHz;
+    if (top > 0x7FFF)
+        return false;
+
     // 'Duty'. HwPWMx[2] is skipped because the core's tone() hard-codes it, and taking it would
     // silence the ExternalNotificationModule ringtone, which drives tone() from another thread.
     static const uint32_t kToken = 0x79747544;
@@ -162,9 +168,6 @@ static bool playToneDutyNative(uint8_t pin, uint16_t freqHz, uint32_t durationMs
         HardwarePWM *pwm = HwPWMx[i];
         if (!pwm->takeOwnership(kToken))
             continue;
-        // 1 MHz base, so the counter top is the period in microseconds. Audible tones stay well
-        // inside the 15-bit COUNTERTOP.
-        const uint32_t top = 1000000UL / freqHz;
         pwm->setClockDiv(PWM_PRESCALER_PRESCALER_DIV_16);
         pwm->setMaxValue((uint16_t)top);
         if (pwm->addPin(pin)) {
