@@ -410,7 +410,30 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     int16_t result;
     setTransmitEnable(false);
     setStandby();
+
+#ifdef SX126X_CAD_TIMEOUT_MS
+    // RadioLib's scanChannel() waits on DIO1 in a `while(!digitalRead(irq))` loop
+    // with no timeout (SX126x.cpp). If the chip never raises CADDone the radio
+    // thread is stuck there forever: nothing is transmitted and the stall is
+    // invisible, because the caller simply never returns. Boards that hit this
+    // can define SX126X_CAD_TIMEOUT_MS to drive the scan manually and treat a
+    // timeout as a free channel - the same verdict as RADIOLIB_CHANNEL_FREE.
+    result = lora.startChannelScan(cfg);
+    if (result == RADIOLIB_ERR_NONE) {
+        uint32_t started = millis();
+        while (!digitalRead(SX126X_DIO1)) {
+            if (millis() - started > SX126X_CAD_TIMEOUT_MS) {
+                LOG_WARN("SX126X CAD did not complete in %u ms, treating channel as free", (unsigned)SX126X_CAD_TIMEOUT_MS);
+                startReceive(); // the scan left the chip out of RX; put it back
+                return false;
+            }
+            yield();
+        }
+        result = lora.getChannelScanResult();
+    }
+#else
     result = lora.scanChannel(cfg);
+#endif
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
     if (result != RADIOLIB_CHANNEL_FREE)
