@@ -10,6 +10,7 @@
 #include "WaypointStore.h"
 #include "concurrency/LockGuard.h"
 #include "gps/RTC.h"
+#include "meshUtils.h"
 #include <cstring>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -78,13 +79,11 @@ void WaypointStore::notifyChanged()
 
 bool WaypointStore::isExpired(const meshtastic_Waypoint &wp, uint32_t now)
 {
-    if (wp.expire == 0)
-        return false;
-
+    // getTime() counts from boot until the RTC is set, which reads every real expiry as future.
     if (now == 0)
-        now = getTime();
+        now = getValidTime(RTCQuality::RTCQualityDevice);
 
-    return now != 0 && wp.expire <= now;
+    return !waypointIsActive(wp.expire, now);
 }
 
 bool WaypointStore::isExpired(const StoredWaypoint &entry, uint32_t now)
@@ -203,7 +202,9 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, bool loca
     if (stored)
         *stored = entry;
 
-    if (isExpired(entry, entry.receivedTime)) {
+    // rx_time holds uptime, not an epoch, when has_rx_time is false; pass 0 so isExpired() resolves
+    // the clock itself rather than comparing an expiry against seconds since boot.
+    if (isExpired(entry, packet.has_rx_time ? packet.rx_time : 0)) {
         // Respect the lock: only the node a waypoint is locked to may delete it on our device.
         // An unauthorized deletion attempt is ignored entirely, rather than applied locally.
         for (const auto &storedEntry : waypoints) {
@@ -230,11 +231,7 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, bool loca
 
 bool WaypointStore::purgeExpired(uint32_t now)
 {
-    if (now == 0)
-        now = getTime();
-    if (now == 0)
-        return false;
-
+    // No local clock normalization: isExpired() owns that policy, including the delete convention.
     bool changed = false;
     for (auto it = waypoints.begin(); it != waypoints.end();) {
         if (!isExpired(*it, now)) {
