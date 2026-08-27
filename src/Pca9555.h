@@ -87,7 +87,7 @@ class Pca9555
         _wire->beginTransmission(_addr);
         _wire->write(reg);
         _wire->write(val);
-        if (_wire->endTransmission(false) != 0) {
+        if (_wire->endTransmission() != 0) {
             _wire->end();
             _wire->begin();
             return false;
