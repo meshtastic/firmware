@@ -1231,7 +1231,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             screen->setOn(true);
         }
 
-        if (!suppressBanner && !menuShowing) {
+        if (!suppressBanner && !menuShowing && !screen->hasModalModule()) {
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
         }
     }

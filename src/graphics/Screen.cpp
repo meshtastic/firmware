@@ -1203,6 +1203,8 @@ int32_t Screen::runOnce()
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
+            if (hasModalModule())
+                break; // only the owning module may release its own modal frame
             NotificationRenderer::pauseBanner = false;
             // Return from one-off alert mode back to regular frames.
             if (!showingNormalScreen && NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
@@ -1262,7 +1264,7 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (config.display.auto_screen_carousel_secs > 0 &&
+        if (config.display.auto_screen_carousel_secs > 0 && !hasModalModule() &&
             NotificationRenderer::current_notification_type != notificationTypeEnum::text_input &&
             !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
