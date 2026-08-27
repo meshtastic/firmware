@@ -8,6 +8,7 @@
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "modules/NodeInfoModule.h"
+#include "modules/WaypointModule.h"
 #include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>
@@ -35,6 +36,10 @@ static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQual
         if (nodeDB)
             nodeDB->backfillHeardAt();
     }
+#if !MESHTASTIC_EXCLUDE_WAYPOINT && HAS_SCREEN
+    if (waypointModule && oldQuality != newQuality)
+        waypointModule->onDeviceTimeChanged();
+#endif
 }
 
 RTCQuality getRTCQuality()
