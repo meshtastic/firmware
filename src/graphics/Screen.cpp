@@ -706,14 +706,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
-#if HAS_PWM_BACKLIGHT
+#if HAS_BACKLIGHT
             graphics::backlightOn();
-#elif defined(PIN_EINK_EN)
-            if (uiconfig.screen_brightness == 1)
-                digitalWrite(PIN_EINK_EN, HIGH);
-#elif defined(PCA_PIN_EINK_EN)
-            if (uiconfig.screen_brightness > 0)
-                io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
 #endif
 
 #if defined(ST7789_CS) &&                                                                                                        \
@@ -772,12 +766,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             drawLockdownLockScreen(dispdev);
 #endif
 
-#if HAS_PWM_BACKLIGHT
+#if HAS_BACKLIGHT
             graphics::backlightOff();
-#elif defined(PIN_EINK_EN)
-            digitalWrite(PIN_EINK_EN, LOW);
-#elif defined(PCA_PIN_EINK_EN)
-            io.digitalWrite(PCA_PIN_EINK_EN, LOW);
 #endif
 
             dispdev->displayOff();
@@ -834,6 +824,11 @@ void Screen::setup()
 
     // Enable display rendering
     useDisplay = true;
+
+#if HAS_BACKLIGHT
+    // Settles uiconfig.screen_brightness for GPIO backlights, so read it only after this
+    graphics::backlightInit();
+#endif
 
     // Load saved brightness from UI config
     // For OLED displays (SSD1306), default brightness is 255 if not set
@@ -1377,6 +1372,7 @@ void Screen::setFrames(FrameFocus focus)
         return;
     }
 
+    const FramesetInfo previousFramesetInfo = framesetInfo;
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
@@ -1629,8 +1625,15 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        //  No more adjustment - force stay on same index
-        if (previousFrameCount > fsi.frameCount) {
+        if (previousFramesetInfo.positions.waypoint == 255 && fsi.positions.waypoint != 255) {
+            const uint8_t target = originalPosition >= fsi.positions.waypoint ? originalPosition + 1 : originalPosition;
+            ui->switchToFrame(target);
+        } else if (previousFramesetInfo.positions.waypoint != 255 && fsi.positions.waypoint == 255) {
+            const uint8_t target = originalPosition > previousFramesetInfo.positions.waypoint
+                                       ? originalPosition - 1
+                                       : std::min<uint8_t>(originalPosition, fsi.frameCount - 1);
+            ui->switchToFrame(target);
+        } else if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
             ui->switchToFrame(originalPosition + 1);
@@ -2365,6 +2368,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::nodeListMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
+                } else if (framesetInfo.positions.waypoint != 255 &&
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.waypoint) {
+                    menuHandler::waypointBaseMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showFrame(FrameDirection::PREVIOUS);

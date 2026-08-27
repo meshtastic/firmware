@@ -12,9 +12,16 @@
 
 // ─── Power management ─────────────────────────────────────────────────────────
 // AXP2101 PMIC on I2C (pg3). AXP_IRQ → EXIO5 (expander, whose /INT is not routed to the
-// ESP32), so no PMU_IRQ is possible; battery state is polled via the AXP2101 fuel gauge.
-// There is no direct battery ADC - the PMIC is the only voltage source.
+// ESP32), so there is no GPIO-backed PMU_IRQ; battery state is polled via the AXP2101 fuel
+// gauge. There is no direct battery ADC - the PMIC is the only voltage source.
 #define HAS_AXP2101
+
+// Power key: SW3 → R44 510R → PWRON (AXP2101 pin 30, schematic W10-MB-V1.1 pg3), used as a
+// second button. PMU_IRQ is defined below as the expander vpin for AXP_IRQ: Power.cpp keeps
+// the PMU IRQ *enable* (enableIRQ of PKEY_SHORT / VBUS insert+remove) behind #ifdef PMU_IRQ,
+// and init runs disableIRQ(ALL), so without it the status bit never latches and the polled
+// read in Power::runOnce() is always false.
+#define PMU_POWER_BUTTON_IS_CANCEL
 
 // ─── RTC ──────────────────────────────────────────────────────────────────────
 // PCF85063ATL on I2C (pg3); RTC_INT → EXIO4 (unused)
@@ -39,16 +46,23 @@
 #define LORA_DIO1_EXTENDED_IO
 
 // Expander pin map (pg2 "I/O Extensions"; EXIO0..7 = GPA0..7 / P00..P07, EXIO8..15 = GPB0..7 / P10..P17)
-// Not wired up here: EXIO0 CAM_PWDN, EXIO2 TP_INT, EXIO5 AXP_IRQ, EXIO6 SYS_OUT,
+// Not wired up here: EXIO0 CAM_PWDN, EXIO2 TP_INT, EXIO6 SYS_OUT,
 //                    EXIO11 GPS RESET_N (driver FET Q3 unpopulated), EXIO13 TP_RST
 #define EXIO_LCD_RST 1    // GPA1: LCD reset
 #define EXIO_LORA_NRST 3  // GPA3: E22 NRST
 #define EXIO_RTC_INT 4    // GPA4: PCF85063 INT (unused)
+#define EXIO_AXP_IRQ 5    // GPA5: AXP2101 IRQ (pin 38) - see PMU_IRQ below
 #define EXIO_PA_CTRL 7    // GPA7: NS4150 speaker amp enable (driven by AudioThread during playback)
 #define EXIO_IMU_INT1 8   // GPB0: QMI8658 INT1 (input only, no MCU interrupt)
 #define EXIO_LORA_DIO1 9  // GPB1: E22 DIO1
 #define EXIO_LORA_BUSY 10 // GPB2: E22 BUSY
 #define EXIO_GPS_WAKE 12  // GPB4: L76KB WAKE_UP (driven high at boot)
+
+// AXP2101 IRQ as an expander vpin, mirroring LORA_DIO1 below. This is not an ESP32 GPIO, so
+// the attachInterrupt()/gpio_wakeup_enable() uses of PMU_IRQ in Power.cpp and sleep.cpp are
+// inert here (both are unchecked calls, so an invalid pin is ignored rather than fatal); what
+// it buys us is the enableIRQ() of PKEY_SHORT, which Power::runOnce() then polls over I2C.
+#define PMU_IRQ (MCP23017_VPIN_BASE + EXIO_AXP_IRQ) // 105
 
 // ─── LoRa radio ───────────────────────────────────────────────────────────────
 // EBYTE E22-900MM22S (SX1262) - pg4 U10. SPI shared with the LCD, separate chip selects.
@@ -83,10 +97,10 @@
 // SPI TFT on the "OLED"-silkscreened header / LCD FPC, sharing the LoRa SPI bus (pg1).
 // Vendor ships two panels on identical pins; the default kit has the ST7789 1.54" IPS 240x240.
 // Build with -D MESHNOLOGY_W10_LCD_ST7796_35 for the 3.5" ST7796 320x480 panel instead.
-#define TFT_CS 10  // pg1: OLED_CS=GPIO10
-#define TFT_DC 16  // pg1: OLED_DC=GPIO16
-#define TFT_BL 6   // pg1: OLED_BL=GPIO6 (backlight PWM)
-#define TFT_RST -1 // panel reset is EXIO1 on the expander, toggled in mcp23017EarlyInit()
+#define TFT_CS 10     // pg1: OLED_CS=GPIO10
+#define TFT_DC 16     // pg1: OLED_DC=GPIO16
+#define TFT_BL 6      // pg1: OLED_BL=GPIO6 (backlight PWM)
+#define TFT_RST -1    // panel reset is EXIO1 on the expander, toggled in mcp23017EarlyInit()
 #define HAS_SPI_TFT 1 // main.cpp keys SPI-TFT Screen creation on this since #10803
 #define USE_TFTDISPLAY 1
 
@@ -162,6 +176,9 @@
 #define DAC_I2S_DIN 3  // pg3: record data (ES8311 -> ESP32)
 // AudioThread powers the NS4150 amp on/off around playback via this (opt-in) hook.
 #define AUDIO_AMP_ENABLE(on) mcpIoExpander.digitalWrite(EXIO_PA_CTRL, (on) ? HIGH : LOW)
+// NS4150 wake-up, slower here because the enable is an I2C write to the expander, not a GPIO toggle.
+// Without it the short system tones finish before the amp passes audio.
+#define AUDIO_AMP_SETTLE_MS 250
 
 // ─── On-board peripherals not wired up yet ────────────────────────────────────
 // SHT41 temp/humidity (0x44) and QMI8658 IMU (0x6B): auto-detected on the I2C scan

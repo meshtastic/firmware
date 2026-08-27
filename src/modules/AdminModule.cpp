@@ -368,7 +368,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     case meshtastic_AdminMessage_set_ham_mode_tag:
         LOG_DEBUG("Client set ham mode");
-        handleSetHamMode(r->set_ham_mode);
+        // Without this a rejected request falls through to the generic Routing_Error_NONE ack below,
+        // so a client would report ham mode as enabled on a node that changed nothing.
+        if (!handleSetHamMode(r->set_ham_mode))
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         break;
     case meshtastic_AdminMessage_get_ui_config_request_tag: {
         LOG_DEBUG("Client is getting device-ui config");
@@ -1920,30 +1923,40 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 #endif
 }
 
-void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+// Unset, or set to nothing but whitespace - the two ways a client can leave a name field empty.
+static bool isBlankName(const char *start)
 {
-    // Validate ham parameters before setting since this would bypass validation in the owner struct
-    const char *fieldsToCheck[] = {p.call_sign, p.short_name};
-    const char *fieldNames[] = {"call_sign", "short_name"};
-    for (int i = 0; i < 2; i++) {
-        if (*fieldsToCheck[i]) {
-            const char *start = fieldsToCheck[i];
-            while (*start && isspace((unsigned char)*start))
-                start++;
-            if (*start == '\0') {
-                LOG_WARN("Rejected ham %s: needs 1+ non-whitespace char", fieldNames[i]);
-                return;
-            }
-        }
+    while (*start && isspace((unsigned char)*start))
+        start++;
+    return *start == '\0';
+}
+
+bool AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+{
+    // Validate ham parameters before setting since this would bypass validation in the owner struct.
+
+    // The call sign is the station ID the whole licensed mode is built around, so it is required;
+    // without it we would license a node that never identifies itself on the air.
+    if (isBlankName(p.call_sign)) {
+        LOG_WARN("Rejected ham call_sign: needs 1+ non-whitespace char");
+        return false;
     }
 
-    // Set call sign and override lora limitations for licensed use
-    strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    // Set call sign and override lora limitations for licensed use. An optional long_name rides
+    // behind the call sign with the "//" separator hams already use on the air.
+    // e.g. call_sign "N0CALL" plus long_name "Attic Heltec" becomes "N0CALL//Attic Heltec".
+    if (!isBlankName(p.long_name))
+        snprintf(owner.long_name, sizeof(owner.long_name), "%s//%s", p.call_sign, p.long_name);
+    else
+        strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
     owner.long_name[sizeof(owner.long_name) - 1] = '\0';
-    sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
-    strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
-    owner.short_name[sizeof(owner.short_name) - 1] = '\0';
-    sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
+    clampLongName(owner.long_name);
+    // short_name is optional per the schema, so a blank one keeps the name the node already had
+    if (!isBlankName(p.short_name)) {
+        strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
+        owner.short_name[sizeof(owner.short_name) - 1] = '\0';
+        sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
+    }
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
     config.lora.tx_power = p.tx_power;
@@ -1977,6 +1990,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    return true;
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

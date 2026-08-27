@@ -33,9 +33,7 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
@@ -61,9 +59,7 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
 
         setCPUFast(false);
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        ampEnable(false);
     }
 
     void readAloud(const char *text)
@@ -73,16 +69,12 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
         audioOut->stop();
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        ampEnable(false);
     }
 
   protected:
@@ -97,6 +89,21 @@ class AudioThread : public concurrency::OSThread
     }
 
   private:
+    // Amps like the NS4150 need time to leave shutdown, longer when the enable is an I/O expander write.
+    // Without a variant's AUDIO_AMP_SETTLE_MS the short system tones are over before any audio gets out.
+    static void ampEnable(bool on)
+    {
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(on);
+#ifdef AUDIO_AMP_SETTLE_MS
+        if (on)
+            delay(AUDIO_AMP_SETTLE_MS);
+#endif
+#else
+        (void)on;
+#endif
+    }
+
     void initOutput()
     {
         audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
