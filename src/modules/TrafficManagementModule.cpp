@@ -1406,12 +1406,17 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     TM_LOG_TRACE("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
                  entry->pos_fingerprint, samePosition, withinInterval, isNew);
 
-    // Update cache entry (raw tick; 0 is a valid tick value)
-    entry->pos_fingerprint = fingerprint;
-    entry->pos_time = nowPosTick;
-
     // Drop only if same position AND within the minimum interval
-    return samePosition && withinInterval;
+    const bool drop = samePosition && withinInterval;
+
+    // Stamp only what we let through: re-stamping a dropped duplicate slides the window forward on
+    // every repeat, muting a node that broadcasts faster than the window instead of refreshing it.
+    if (!drop) {
+        entry->pos_fingerprint = fingerprint;
+        entry->pos_time = nowPosTick;
+    }
+
+    return drop;
 #endif
 }
 
