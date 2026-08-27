@@ -76,8 +76,8 @@ class Screen
     void increaseBrightness() {}
     void decreaseBrightness() {}
     void startAlert(const char *) {}
-    void setModalModule(MeshModule *) {}
-    void clearModalModule(MeshModule *) {}
+    void setModalModule(const MeshModule *) {}
+    void clearModalModule(const MeshModule *) {}
     bool hasModalModule() const { return false; }
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
@@ -349,8 +349,8 @@ class Screen : public concurrency::OSThread
 
     // Holds the screen against the carousel, the new-message banner and a foreign endAlert().
     // Only the owner can release it, unlike endAlert(), which any caller can fire.
-    void setModalModule(MeshModule *owner) { modalModule = owner; }
-    void clearModalModule(MeshModule *owner)
+    void setModalModule(const MeshModule *owner) { modalModule = owner; }
+    void clearModalModule(const MeshModule *owner)
     {
         if (modalModule == owner)
             modalModule = nullptr;
@@ -700,7 +700,7 @@ class Screen : public concurrency::OSThread
 
   private:
     // nullptr for every build with no modal module, which is why the three sites are unchanged.
-    MeshModule *modalModule = nullptr;
+    const MeshModule *modalModule = nullptr;
 
     FrameCallback alertFrames[1];
     struct ScreenCmd {
