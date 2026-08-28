@@ -29,11 +29,13 @@
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
 #elif defined(ARCH_RP2040)
+#include <FreeRTOS.h>
 #include <SimpleMDNS.h>
+#include <task.h>
 #endif
 
-#ifndef DISABLE_NTP
 #include "Throttle.h"
+#ifndef DISABLE_NTP
 #include <NTPClient.h>
 #endif
 
@@ -61,6 +63,31 @@ unsigned long lastrun_ntp = 0;
 
 bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
 bool isReconnecting = false; // If we are currently reconnecting
+
+#ifdef ARCH_RP2040
+// On the CYW43 under FreeRTOS even WiFi.beginNoBlock() holds the caller for several seconds (up to the WiFi timeout,
+// 15 s); from the main loop that trips the 8 s hardware watchdog. Join from a short-lived task and poll for the link.
+static TaskHandle_t wifiJoinTask = nullptr;
+
+static void wifiJoinTaskFn(void *)
+{
+    const char *psk = config.network.wifi_psk[0] ? config.network.wifi_psk : NULL;
+    WiFi.beginNoBlock(config.network.wifi_ssid, psk);
+    wifiJoinTask = nullptr;
+    vTaskDelete(NULL);
+}
+
+static bool startWifiJoin()
+{
+    if (wifiJoinTask)
+        return true; // previous join still in progress
+    if (xTaskCreate(wifiJoinTaskFn, "wifijoin", 1536, NULL, uxTaskPriorityGet(NULL), &wifiJoinTask) != pdPASS) {
+        LOG_ERROR("Could not start WiFi join task");
+        return false;
+    }
+    return true;
+}
+#endif
 #if defined(USE_WS5500) || defined(USE_CH390D)
 static volatile bool ethNetworkConnectedPending = false;
 #endif
@@ -281,7 +308,11 @@ static int32_t reconnectWiFi()
                 WiFi.useStaticBuffers(true);
                 WiFi.mode(WIFI_STA);
 #endif
+#ifdef ARCH_RP2040
+                startWifiJoin();
+#else
                 WiFi.begin(wifiName, wifiPsw);
+#endif
             }
             isReconnecting = false;
             wifiReconnectPending = false;
@@ -311,7 +342,9 @@ static int32_t reconnectWiFi()
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
-        needReconnect = APStartupComplete;
+        // Lost the link, or a join that has not come up within 30 s: start the join over once the join task is done.
+        needReconnect = !wifiJoinTask && (APStartupComplete || (!isReconnecting && !Throttle::isWithinTimespanMs(
+                                                                                     wifiReconnectStartMillis, 30000)));
 #endif
         return 1000; // check once per second
     } else {
