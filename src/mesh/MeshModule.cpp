@@ -80,6 +80,8 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     // ack is delivered locally (to == us), so Router::send() is bypassed and won't overwrite these.
     if (relaySource) {
         p->relay_node = relaySource->relay_node;
+        // rx_rssi has explicit presence: has_rx_rssi has to travel with it or the reading never encodes
+        p->has_rx_rssi = relaySource->has_rx_rssi;
         p->rx_rssi = relaySource->rx_rssi;
         p->rx_snr = relaySource->rx_snr;
     }
