@@ -155,7 +155,7 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     probe.use_preset = true;
     probe.modem_preset = preset;
     probe.region = region;
-    return !RadioInterface::validateConfigLora(probe);
+    return !RadioInterface::validateConfigLora(probe, nullptr, false);
 }
 
 meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtastic_ChannelSettings &base,

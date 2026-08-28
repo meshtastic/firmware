@@ -1,6 +1,7 @@
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
 #include "memory/MemAudit.h"
@@ -57,10 +58,46 @@ static void test_lr20x0ReconfigurePathSelection()
 class TestableRadioInterface : public RadioInterface
 {
   public:
+    enum class BandwidthProfile { SX128X, LR11X0, LR20X0 };
+
     TestableRadioInterface() : RadioInterface() {}
     uint8_t getCr() const { return cr; }
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
+    uint32_t getSlotTimeMsec() const { return slotTimeMsec; }
+    void emitConfigFailure(const char *operation, int16_t radioLibError) { reportConfigFailure(operation, radioLibError); }
+    BandwidthProfile bandwidthProfile = BandwidthProfile::LR11X0;
+
+    bool wideLora() override { return true; }
+    bool supportsSubGhz() override { return bandwidthProfile != BandwidthProfile::SX128X; }
+
+    bool supportsFrequency(float frequencyMHz) override
+    {
+        switch (bandwidthProfile) {
+        case BandwidthProfile::SX128X:
+            return frequencyMHz >= 2400.0f && frequencyMHz <= 2500.0f;
+        case BandwidthProfile::LR11X0:
+            return (frequencyMHz >= 150.0f && frequencyMHz <= 960.0f) || (frequencyMHz >= 1900.0f && frequencyMHz <= 2200.0f) ||
+                   (frequencyMHz >= 2400.0f && frequencyMHz <= 2500.0f);
+        case BandwidthProfile::LR20X0:
+            return (frequencyMHz >= 150.0f && frequencyMHz <= 1090.0f) || (frequencyMHz >= 1900.0f && frequencyMHz <= 2200.0f) ||
+                   (frequencyMHz >= 2400.0f && frequencyMHz <= 2500.0f);
+        }
+        return false;
+    }
+
+    bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
+    {
+        switch (bandwidthProfile) {
+        case BandwidthProfile::SX128X:
+            return supportsSx128xLoRaBandwidth(bandwidthKHz, wideBand);
+        case BandwidthProfile::LR11X0:
+            return supportsLr11x0LoRaBandwidth(bandwidthKHz, wideBand);
+        case BandwidthProfile::LR20X0:
+            return supportsLr20x0LoRaBandwidth(bandwidthKHz, wideBand);
+        }
+        return false;
+    }
 
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
@@ -72,6 +109,23 @@ class TestableRadioInterface : public RadioInterface
     // Stubs for pure virtual methods required by RadioInterface
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
+};
+
+static TestableRadioInterface *testRadio;
+
+class CapturingMeshService : public MockMeshService
+{
+  public:
+    void sendClientNotification(meshtastic_ClientNotification *notification) override
+    {
+        notificationCount++;
+        level = notification->level;
+        snprintf(message, sizeof(message), "%s", notification->message);
+        releaseClientNotificationToPool(notification);
+    }
+
+    char message[sizeof(meshtastic_ClientNotification::message)] = {};
+    meshtastic_LogRecord_Level level = meshtastic_LogRecord_Level_UNSET;
 };
 
 static void test_bwCodeToKHz_specialMappings()
@@ -177,11 +231,223 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+static meshtastic_Config_LoRaConfig makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode region, uint16_t bandwidth)
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = region;
+    cfg.use_preset = false;
+    cfg.bandwidth = bandwidth;
+    cfg.spread_factor = 7;
+    cfg.coding_rate = 5;
+    return cfg;
+}
+
+static void test_validateConfigLora_rejectsSubGhzBandwidthOnLora24()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 125);
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    TEST_ASSERT_EQUAL_UINT16(125, cfg.bandwidth);
+}
+
+static void test_clampConfigLora_repairsSubGhzBandwidthOnLora24()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 125);
+
+    RadioInterface::clampConfigLora(cfg, testRadio);
+
+    TEST_ASSERT_EQUAL_UINT16(800, cfg.bandwidth);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
+static void test_validateConfigLora_allowsSx128xWideBandwidths()
+{
+    const uint16_t bandwidths[] = {200, 400, 800, 1600};
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::SX128X;
+
+    for (auto bandwidth : bandwidths) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+}
+
+static void test_validateConfigLora_rejectsLr1121Wide1600()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
+static void test_validateConfigLora_lr2021WideBandwidths()
+{
+    const uint16_t validBandwidths[] = {31, 42, 62, 83, 101, 125, 200, 250, 400, 500, 800, 1000};
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR20X0;
+
+    for (auto bandwidth : validBandwidths) {
+        auto valid = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(valid, testRadio));
+    }
+
+    auto invalid = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(invalid, testRadio));
+}
+
+static void test_validateConfigLora_rejectsUnsupportedRadioBandwidths()
+{
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+    const uint16_t lr1121Valid[] = {62, 125, 250, 500};
+    for (auto bandwidth : lr1121Valid) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+
+    const uint16_t lr1121Invalid[] = {31, 42, 83, 101, 200, 1600};
+    for (auto bandwidth : lr1121Invalid) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR20X0;
+    const uint16_t lr2021Valid[] = {31, 42, 62, 83, 101, 125, 200, 250, 400, 500, 800, 1000};
+    for (auto bandwidth : lr2021Valid) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+
+    const uint16_t lr2021Aliases[] = {30, 41, 82, 102, 202, 405, 1600};
+    for (auto bandwidth : lr2021Aliases) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+}
+
+static void test_clampConfigLora_sx128xUnsetProducesValidBandwidth()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_UNSET, 125);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::SX128X;
+
+    RadioInterface::clampConfigLora(cfg, testRadio);
+
+    TEST_ASSERT_EQUAL_UINT16(800, cfg.bandwidth);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
+static void test_reconfigure_can_suppress_speculativeProbeErrors()
+{
+    config.lora = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    error_address = 0;
+
+    testRadio->setConfigErrorReporting(false);
+    TEST_ASSERT_TRUE(testRadio->reconfigure());
+    testRadio->setConfigErrorReporting(true);
+
+    TEST_ASSERT_EQUAL_UINT16(800, config.lora.bandwidth);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_UINT32(0, error_address);
+    TEST_ASSERT_EQUAL_UINT32(0, mockMeshService->notificationCount);
+}
+
+static void test_reconfigure_reportsOneNotificationForRepairedBandwidth()
+{
+    config.lora = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+
+    TEST_ASSERT_TRUE(testRadio->reconfigure());
+
+    TEST_ASSERT_EQUAL_UINT16(800, config.lora.bandwidth);
+    TEST_ASSERT_EQUAL_UINT32(1, mockMeshService->notificationCount);
+}
+
+static void assertTurboPresetsRepairToLongFast(TestableRadioInterface::BandwidthProfile profile)
+{
+    const meshtastic_Config_LoRaConfig_ModemPreset turboPresets[] = {
+        meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+    };
+    testRadio->bandwidthProfile = profile;
+
+    for (auto preset : turboPresets) {
+        meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+        cfg.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+        cfg.use_preset = true;
+        cfg.modem_preset = preset;
+
+        TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+        RadioInterface::clampConfigLora(cfg, testRadio);
+
+        TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+}
+
+static void test_clampConfigLora_repairsAllLr1121TurboPresets()
+{
+    assertTurboPresetsRepairToLongFast(TestableRadioInterface::BandwidthProfile::LR11X0);
+}
+
+static void test_clampConfigLora_repairsAllLr2021TurboPresets()
+{
+    assertTurboPresetsRepairToLongFast(TestableRadioInterface::BandwidthProfile::LR20X0);
+}
+
+static void test_applyModemConfig_dualBandOverrideUsesWideParametersAndSlotTiming()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.override_frequency = 2420.0f;
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, testRadio->getBw());
+    TEST_ASSERT_EQUAL_UINT32(17, testRadio->getSlotTimeMsec());
+}
+
+static void test_validateAndClampRejectUnsupportedOverrideFrequency()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, 125);
+    cfg.override_frequency = 1700.0f;
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    RadioInterface::clampConfigLora(cfg, testRadio);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, cfg.override_frequency);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
+static void test_configFailureIncludesOperationAndRadioLibCode()
+{
+    auto *capturingService = new CapturingMeshService();
+    delete mockMeshService;
+    mockMeshService = capturingService;
+    service = capturingService;
+
+    testRadio->emitConfigFailure("setBandwidth", -104);
+
+    TEST_ASSERT_EQUAL_UINT32(1, capturingService->notificationCount);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_ERROR, capturingService->level);
+    TEST_ASSERT_EQUAL_STRING("Radio config setBandwidth failed (-104)", capturingService->message);
+}
+
+static void test_validateConfigLora_preservesSubGhzBandwidth()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, 125);
+
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    RadioInterface::clampConfigLora(cfg, testRadio);
+    TEST_ASSERT_EQUAL_UINT16(125, cfg.bandwidth);
+}
+
 // -----------------------------------------------------------------------
 // applyModemConfig() coding rate tests (via reconfigure)
 // -----------------------------------------------------------------------
-
-static TestableRadioInterface *testRadio;
 
 // After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
 // CR should come from the preset (5 for LONG_FAST), not from the zero default.
@@ -199,6 +465,30 @@ static void test_applyModemConfig_freshFlashCodingRateNotZero()
     TEST_ASSERT_EQUAL_UINT8(5, testRadio->getCr());
     TEST_ASSERT_EQUAL_UINT8(11, testRadio->getSf());
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 250.0f, testRadio->getBw());
+}
+
+static void test_applyModemConfig_sx128xUsesSafeBandwidthWithUnsetRegion()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::SX128X;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, testRadio->getBw());
+}
+
+static void test_applyModemConfig_sx128xRepairsCustomBandwidthWithUnsetRegion()
+{
+    config.lora = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_UNSET, 125);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::SX128X;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT16(800, config.lora.bandwidth);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, testRadio->getBw());
 }
 
 // When coding_rate matches the preset exactly, should still use the preset value
@@ -513,7 +803,24 @@ void setup()
     RUN_TEST(test_validateConfigLora_rejectsInvalidPresetForRegion);
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_validateConfigLora_rejectsSubGhzBandwidthOnLora24);
+    RUN_TEST(test_clampConfigLora_repairsSubGhzBandwidthOnLora24);
+    RUN_TEST(test_validateConfigLora_allowsSx128xWideBandwidths);
+    RUN_TEST(test_validateConfigLora_rejectsLr1121Wide1600);
+    RUN_TEST(test_validateConfigLora_lr2021WideBandwidths);
+    RUN_TEST(test_validateConfigLora_rejectsUnsupportedRadioBandwidths);
+    RUN_TEST(test_clampConfigLora_sx128xUnsetProducesValidBandwidth);
+    RUN_TEST(test_reconfigure_can_suppress_speculativeProbeErrors);
+    RUN_TEST(test_reconfigure_reportsOneNotificationForRepairedBandwidth);
+    RUN_TEST(test_clampConfigLora_repairsAllLr1121TurboPresets);
+    RUN_TEST(test_clampConfigLora_repairsAllLr2021TurboPresets);
+    RUN_TEST(test_applyModemConfig_dualBandOverrideUsesWideParametersAndSlotTiming);
+    RUN_TEST(test_validateAndClampRejectUnsupportedOverrideFrequency);
+    RUN_TEST(test_configFailureIncludesOperationAndRadioLibCode);
+    RUN_TEST(test_validateConfigLora_preservesSubGhzBandwidth);
     RUN_TEST(test_applyModemConfig_freshFlashCodingRateNotZero);
+    RUN_TEST(test_applyModemConfig_sx128xUsesSafeBandwidthWithUnsetRegion);
+    RUN_TEST(test_applyModemConfig_sx128xRepairsCustomBandwidthWithUnsetRegion);
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);

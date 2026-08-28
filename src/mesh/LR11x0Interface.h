@@ -22,6 +22,11 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /// \return true if initialisation succeeded.
     virtual bool reconfigure() override;
 
+    bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
+    {
+        return supportsLr11x0LoRaBandwidth(bandwidthKHz, wideBand);
+    }
+
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() override;
 

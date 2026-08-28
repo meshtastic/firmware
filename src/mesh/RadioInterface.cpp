@@ -361,6 +361,62 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 // Global LoRa radio type
 LoRaRadioType radioType = NO_RADIO;
 
+static const char *radioTypeName(LoRaRadioType type)
+{
+    switch (type) {
+    case STM32WLx_RADIO:
+        return "STM32WL";
+    case SIM_RADIO:
+        return "SimRadio";
+    case RF95_RADIO:
+        return "RF95";
+    case SX1262_RADIO:
+        return "SX1262";
+    case SX1268_RADIO:
+        return "SX1268";
+    case LLCC68_RADIO:
+        return "LLCC68";
+    case SX1280_RADIO:
+        return "SX1280";
+    case LR1110_RADIO:
+        return "LR1110";
+    case LR1120_RADIO:
+        return "LR1120";
+    case LR1121_RADIO:
+        return "LR1121";
+    case LR2021_RADIO:
+        return "LR2021";
+    case NO_RADIO:
+    default:
+        return "unknown";
+    }
+}
+
+static std::unique_ptr<RadioInterface> probeRadio(std::unique_ptr<RadioInterface> candidate, LoRaRadioType type,
+                                                  const meshtastic_Config_LoRaConfig &originalConfig)
+{
+    candidate->setConfigErrorReporting(false);
+    const bool initialized = candidate->init();
+    config.lora = originalConfig;
+    candidate->setConfigErrorReporting(true);
+
+    if (!initialized) {
+        LOG_WARN("No %s radio", radioTypeName(type));
+        return nullptr;
+    }
+
+    if (!candidate->reconfigure()) {
+        LOG_WARN("%s reconfigure failed after probe", radioTypeName(type));
+        candidate->disable();
+        config.lora = originalConfig;
+        return nullptr;
+    }
+
+    LOG_INFO("%s init success", radioTypeName(type));
+    radioType = type;
+    return candidate;
+}
+
 extern RadioLibHal *RadioLibHAL;
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 #if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
@@ -373,6 +429,7 @@ extern SPIClass SPI1;
 std::unique_ptr<RadioInterface> initLoRa()
 {
     std::unique_ptr<RadioInterface> rIf = nullptr;
+    const auto loraConfigBeforeProbe = config.lora;
 
 #if ARCH_PORTDUINO
     SPISettings loraSpiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
@@ -381,6 +438,33 @@ std::unique_ptr<RadioInterface> initLoRa()
 #endif
 
 #ifdef ARCH_PORTDUINO
+    auto selectedRadioType = []() {
+        switch (portduino_config.lora_module) {
+        case use_rf95:
+            return RF95_RADIO;
+        case use_sx1262:
+            return SX1262_RADIO;
+        case use_sx1268:
+            return SX1268_RADIO;
+        case use_sx1280:
+            return SX1280_RADIO;
+        case use_lr1110:
+            return LR1110_RADIO;
+        case use_lr1120:
+            return LR1120_RADIO;
+        case use_lr1121:
+            return LR1121_RADIO;
+        case use_llcc68:
+            return LLCC68_RADIO;
+        case use_lr2021:
+            return LR2021_RADIO;
+        case use_simradio:
+            return SIM_RADIO;
+        default:
+            return NO_RADIO;
+        }
+    };
+
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                   RADIOLIB_PIN_TYPE busy) {
@@ -426,12 +510,9 @@ std::unique_ptr<RadioInterface> initLoRa()
         loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin, portduino_config.lora_irq_pin.pin,
                             portduino_config.lora_reset_pin.pin, portduino_config.lora_busy_pin.pin);
 
-    if (!rIf->init()) {
-        LOG_WARN("No %s radio", portduino_config.loraModules[portduino_config.lora_module].c_str());
-        rIf = nullptr;
+    rIf = probeRadio(std::move(rIf), selectedRadioType(), loraConfigBeforeProbe);
+    if (!rIf) {
         exit(EXIT_FAILURE);
-    } else {
-        LOG_INFO("%s init success", portduino_config.loraModules[portduino_config.lora_module].c_str());
     }
 
 #elif defined(HW_SPI1_DEVICE)
@@ -579,43 +660,25 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #if defined(USE_LR1120) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
-        rIf = std::unique_ptr<LR1120Interface>(
+        auto candidate = std::unique_ptr<LR1120Interface>(
             new LR1120Interface(loraHal, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN));
-        if (!rIf->init()) {
-            LOG_WARN("No LR1120 radio");
-            rIf = nullptr;
-        } else {
-            LOG_INFO("LR1120 init success");
-            radioType = LR1120_RADIO;
-        }
+        rIf = probeRadio(std::move(candidate), LR1120_RADIO, loraConfigBeforeProbe);
     }
 #endif
 
 #if defined(USE_LR1121) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
-        rIf = std::unique_ptr<LR1121Interface>(
+        auto candidate = std::unique_ptr<LR1121Interface>(
             new LR1121Interface(loraHal, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN));
-        if (!rIf->init()) {
-            LOG_WARN("No LR1121 radio");
-            rIf = nullptr;
-        } else {
-            LOG_INFO("LR1121 init success");
-            radioType = LR1121_RADIO;
-        }
+        rIf = probeRadio(std::move(candidate), LR1121_RADIO, loraConfigBeforeProbe);
     }
 #endif
 
 #if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
     if (!rIf) {
-        rIf = std::unique_ptr<LR2021Interface>(
+        auto candidate = std::unique_ptr<LR2021Interface>(
             new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
-        if (!rIf->init()) {
-            LOG_WARN("No LR2021 radio");
-            rIf = nullptr;
-        } else {
-            LOG_INFO("LR2021 init success");
-            radioType = LR2021_RADIO;
-        }
+        rIf = probeRadio(std::move(candidate), LR2021_RADIO, loraConfigBeforeProbe);
     }
 #endif
 
@@ -1031,6 +1094,27 @@ static void sendErrorNotification(const char *msg, meshtastic_LogRecord_Level le
     service->sendClientNotification(cn);
 }
 
+void RadioInterface::reportConfigFailure(const char *operation, int16_t radioLibError)
+{
+    if (!shouldReportConfigErrors()) {
+        LOG_DEBUG("Radio config %s failed (%d) during probe", operation, radioLibError);
+        return;
+    }
+
+    char message[96];
+    snprintf(message, sizeof(message), "Radio config %s failed (%d)", operation, radioLibError);
+    LOG_ERROR("%s", message);
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    sendErrorNotification(message);
+}
+
+static bool useWideLoRaParameters(const RegionInfo *region, RadioInterface *radio, float overrideFrequency = 0.0f)
+{
+    if (radio && overrideFrequency > 0.0f)
+        return radio->usesWideLoRaParameters(overrideFrequency);
+    return region->wideLora || (radio && !radio->supportsSubGhz());
+}
+
 /**
  * If currentRegion is one of the swappable EU regions and preset belongs to a sibling in
  * that trio, return the sibling region that owns the preset. Returns nullptr otherwise.
@@ -1118,18 +1202,36 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
  * When clamp==false, returns false on first error (pure validation).
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
-bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp)
+bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, RadioInterface *radio,
+                                            bool reportErrors)
 {
     char err_string[160];
     float check_bw;
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
+    RadioInterface *candidateRadio = radio ? radio : RadioLibInterface::instance;
+    auto useWideModemParameters = [&]() {
+        return useWideLoRaParameters(newRegion, candidateRadio, loraConfig.override_frequency);
+    };
+
+    if (candidateRadio && loraConfig.override_frequency > 0.0f &&
+        !candidateRadio->supportsFrequency(loraConfig.override_frequency)) {
+        snprintf(err_string, sizeof(err_string), "Frequency %.3fMHz invalid for this radio", loraConfig.override_frequency);
+        if (reportErrors) {
+            LOG_ERROR("%s", err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(err_string);
+        }
+        if (!clamp)
+            return false;
+        loraConfig.override_frequency = 0.0f;
+    }
 
     const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
 
     // Check preset validity (only when use_preset is true)
     if (loraConfig.use_preset) {
-        check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+        check_bw = modemPresetToBwKHz(loraConfig.modem_preset, useWideModemParameters());
 
         bool preset_valid = newRegion->supportsPreset(loraConfig.modem_preset);
         if (!preset_valid) {
@@ -1141,18 +1243,21 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                     // Validation must still fail so callers route into the clamp, but quietly:
                     // the clamp will accept this config by swapping regions, so don't record a
                     // critical error or alarm the user over a change that is about to succeed.
-                    LOG_INFO("Preset %s implies region swap %s to %s, defer to clamp", presetName, newRegion->name,
-                             swapRegion->name);
+                    if (reportErrors)
+                        LOG_INFO("Preset %s implies region swap %s to %s, deferring to clamp", presetName, newRegion->name,
+                                 swapRegion->name);
                     return false;
                 }
                 snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
                          swapRegion->name);
-                LOG_INFO("%s", err_string);
-                sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+                if (reportErrors) {
+                    LOG_INFO("%s", err_string);
+                    sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+                }
 
                 loraConfig.region = swapRegion->code;
                 newRegion = swapRegion;
-                check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                check_bw = modemPresetToBwKHz(loraConfig.modem_preset, useWideModemParameters());
                 preset_valid = true;
             }
         }
@@ -1164,13 +1269,15 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             } else {
                 snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s", presetName, newRegion->name);
             }
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
+            if (reportErrors) {
+                LOG_ERROR("%s", err_string);
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+                sendErrorNotification(err_string);
+            }
 
             if (clamp) {
                 loraConfig.modem_preset = newRegion->getDefaultPreset();
-                check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                check_bw = modemPresetToBwKHz(loraConfig.modem_preset, useWideModemParameters());
             } else {
                 return false;
             }
@@ -1178,6 +1285,25 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     } else {
         // Clamp at the source so numFreqSlots below can never be 0 (bandwidth 0 is reachable from a crafted set_config)
         check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    }
+
+    if (candidateRadio && !candidateRadio->supportsLoRaBandwidth(check_bw, useWideModemParameters())) {
+        const float defaultBandwidth = modemPresetToBwKHz(newRegion->getDefaultPreset(), useWideModemParameters());
+        snprintf(err_string, sizeof(err_string), "Bandwidth %.3fkHz invalid for this radio in %s", check_bw, newRegion->name);
+        if (reportErrors) {
+            LOG_ERROR("%s", err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(err_string);
+        }
+
+        if (!clamp)
+            return false;
+
+        if (loraConfig.use_preset)
+            loraConfig.modem_preset = newRegion->getDefaultPreset();
+        else
+            loraConfig.bandwidth = bwKHzToCode(defaultBandwidth);
+        check_bw = defaultBandwidth;
     }
 
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
@@ -1190,12 +1316,14 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         snprintf(err_string, sizeof(err_string), "%s span %.0fkHz < requested %.0fkHz", newRegion->name, regionSpanKHz, check_bw);
-        LOG_ERROR("%s", err_string);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        sendErrorNotification(err_string);
+        if (reportErrors) {
+            LOG_ERROR("%s", err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(err_string);
+        }
 
         if (clamp) {
-            loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
+            loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), useWideModemParameters()));
             check_bw = bwCodeToKHz(loraConfig.bandwidth);
 
             // Recompute slot width and number of slots based on the new bandwidth
@@ -1232,9 +1360,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         if (loraConfig.channel_num > numFreqSlots) {
             snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
                      newRegion->name, numFreqSlots);
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
+            if (reportErrors) {
+                LOG_ERROR("%s", err_string);
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+                sendErrorNotification(err_string);
+            }
 
             if (clamp) {
                 if (uses_custom_channel_name) { // clamp to channel name hash
@@ -1264,15 +1394,15 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     return true;
 }
 
-bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio, bool reportErrors)
 {
     auto copy = loraConfig;
-    return checkOrClampConfigLora(copy, false);
+    return checkOrClampConfigLora(copy, false, radio, reportErrors);
 }
 
-void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio, bool reportErrors)
 {
-    checkOrClampConfigLora(loraConfig, true);
+    checkOrClampConfigLora(loraConfig, true, radio, reportErrors);
 }
 
 /**
@@ -1285,14 +1415,19 @@ void RadioInterface::applyModemConfig()
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     const RegionInfo *newRegion = getRegion(loraConfig.region);
+    if (!validateConfigLora(loraConfig, this, false)) {
+        if (reportConfigErrors)
+            LOG_WARN("Invalid LoRa config settings, falling back to compatible %s defaults", newRegion->name);
+        clampConfigLora(loraConfig, this, reportConfigErrors);
+        newRegion = getRegion(loraConfig.region);
+    }
+
+    const bool useWideModemParameters = useWideLoRaParameters(newRegion, this, loraConfig.override_frequency);
     myRegion = newRegion;
 
     if (loraConfig.use_preset) {
-        if (!validateConfigLora(loraConfig)) {
-            loraConfig.modem_preset = newRegion->getDefaultPreset();
-        }
         uint8_t newcr;
-        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
+        modemPresetToParams(loraConfig.modem_preset, useWideModemParameters, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
             cr = newcr;
@@ -1307,13 +1442,13 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        if (validateConfigLora(loraConfig)) {
-        } else {
-            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
-            clampConfigLora(loraConfig);
-        }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+        if (!supportsLoRaBandwidth(bw, useWideModemParameters)) {
+            // Keep 2.4 GHz-only radios operational while an incompatible or UNSET region is being corrected.
+            bw = modemPresetToBwKHz(newRegion->getDefaultPreset(), useWideModemParameters);
+            loraConfig.bandwidth = bwKHzToCode(bw);
+        }
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
     }
@@ -1385,7 +1520,8 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
 
-    if (newRegion->wideLora) {                          // clamp if wide freq range
+    const bool appliedWideParameters = usesWideLoRaParameters(getFreq());
+    if (appliedWideParameters) {                        // clamp if wide freq range
         preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
     } else {
         preambleLength =
@@ -1421,7 +1557,7 @@ uint32_t RadioInterface::computeSlotTimeMsec()
     float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
-    if (myRegion->wideLora) {
+    if (usesWideLoRaParameters(getFreq())) {
         // CAD duration derived from AN1200.22 of SX1280
         return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {

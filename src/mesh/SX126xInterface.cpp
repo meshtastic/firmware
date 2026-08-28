@@ -190,42 +190,39 @@ template <typename T> bool SX126xInterface<T>::init()
 
 template <typename T> bool SX126xInterface<T>::reconfigure()
 {
-    RadioLibInterface::reconfigure();
+    bool success = RadioLibInterface::reconfigure();
+    auto captureFailure = [&](const char *operation, int error) {
+        if (error == RADIOLIB_ERR_NONE)
+            return;
+        if (success)
+            reportConfigFailure(operation, error);
+        success = false;
+    };
 
     // set mode to standby
     setStandby();
 
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    captureFailure("setSpreadingFactor", err);
 
     err = lora.setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    captureFailure("setBandwidth", err);
 
     err = lora.setCodingRate(cr);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    captureFailure("setCodingRate", err);
 
     err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setSyncWord %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    captureFailure("setSyncWord", err);
 
     err = lora.setCurrentLimit(currentLimit);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setCurrentLimit %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    captureFailure("setCurrentLimit", err);
 
     err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setPreambleLength %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    captureFailure("setPreambleLength", err);
 
     err = lora.setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    captureFailure("setFrequency", err);
 
     limitPower(SX126X_MAX_POWER);
     // Make sure we reach the minimum power supported to turn the chip on (-9dBm)
@@ -240,18 +237,17 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE) {
         // Don't abort: this power is operator config (tx_power/SX126X_MAX_POWER); a value above the
         // driver's max would crash the daemon before reloadConfig() persists. Flag it and keep prior power.
-        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        reportConfigFailure("setOutputPower", err);
     }
 
     // Apply RX gain mode - valid in STDBY (datasheet §9.6), matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_WARN("SX126X setRxBoostedGainMode %s%d", radioLibErr, err);
+    captureFailure("setRxBoostedGainMode", err);
 
-    startReceive(); // restart receiving
+    if (success)
+        startReceive(); // restart receiving
 
-    return true;
+    return success;
 }
 
 template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()

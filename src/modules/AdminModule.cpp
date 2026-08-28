@@ -1378,7 +1378,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             probe.modem_preset = beaconCfg.broadcast_on_preset;
             if (beaconCfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                 probe.region = beaconCfg.broadcast_on_region;
-            if (!RadioInterface::validateConfigLora(probe)) {
+            if (!RadioInterface::validateConfigLora(probe, nullptr, false)) {
                 LOG_WARN("Beacon: broadcast_on_preset %d invalid for region, clearing", beaconCfg.broadcast_on_preset);
                 beaconCfg.has_broadcast_on_preset = false;
                 beaconCfg.has_broadcast_on_channel = false;
@@ -1391,7 +1391,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             probe.modem_preset = beaconCfg.broadcast_offer_preset;
             if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                 probe.region = beaconCfg.broadcast_offer_region;
-            if (!RadioInterface::validateConfigLora(probe)) {
+            if (!RadioInterface::validateConfigLora(probe, nullptr, false)) {
                 LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clearing", beaconCfg.broadcast_offer_preset);
                 beaconCfg.has_broadcast_offer_preset = false;
             }
@@ -1423,7 +1423,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 probe.modem_preset = t.preset;
                 if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                     probe.region = t.region;
-                if (!RadioInterface::validateConfigLora(probe)) {
+                if (!RadioInterface::validateConfigLora(probe, nullptr, false)) {
                     LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clearing", i, t.preset);
                     t.has_preset = false;
                     t.has_channel_index = false;

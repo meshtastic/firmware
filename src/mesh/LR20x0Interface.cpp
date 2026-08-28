@@ -232,16 +232,14 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         }
 #endif
         if (res != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("LR20x0 band-hop begin %s%d", radioLibErr, res);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            reportConfigFailure("begin", res);
             return false;
         }
         lr20x0LastFreqMHz = freq;
 
         res = lora.setCRC(2);
         if (res != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("LR20x0 band-hop setCRC %s%d", radioLibErr, res);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            reportConfigFailure("setCRC", res);
             return false;
         }
 
@@ -254,8 +252,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
         res = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
         if (res != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("LR20x0 band-hop setRxBoostedGainMode %s%d", radioLibErr, res);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            reportConfigFailure("setRxBoostedGainMode", res);
             return false;
         }
 
@@ -266,55 +263,37 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     // Same-band reconfigure (previous incremental path)
     setStandby();
 
-    int err = lora.setFrequency(freq);
-    if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR20x0 setFrequency %.3f MHz %s%d", freq, radioLibErr, err);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    auto captureFailure = [&](const char *operation, int error) {
+        if (error == RADIOLIB_ERR_NONE)
+            return;
+        if (success)
+            reportConfigFailure(operation, error);
         success = false;
-    }
+    };
+
+    int err = lora.setFrequency(freq);
+    captureFailure("setFrequency", err);
 
     err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
+    captureFailure("setSpreadingFactor", err);
 
     err = lora.setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
+    captureFailure("setBandwidth", err);
 
     err = lora.setCodingRate(cr, cr != 7);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
+    captureFailure("setCodingRate", err);
 
     err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
+    captureFailure("setSyncWord", err);
 
     err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
+    captureFailure("setPreambleLength", err);
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
+    captureFailure("setOutputPower", err);
 
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-    if (err != RADIOLIB_ERR_NONE) {
-        LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
-        success = false;
-    }
+    captureFailure("setRxBoostedGainMode", err);
 
     if (success) {
         startReceive();

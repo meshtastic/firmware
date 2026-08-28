@@ -12,5 +12,10 @@ class LR1121Interface : public LR11x0Interface<LR1121>
     LR1121Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                     RADIOLIB_PIN_TYPE busy);
     bool wideLora() override;
+    bool supportsFrequency(float frequencyMHz) override
+    {
+        return (frequencyMHz >= 150.0f && frequencyMHz <= 960.0f) || (frequencyMHz >= 1900.0f && frequencyMHz <= 2200.0f) ||
+               (frequencyMHz >= 2400.0f && frequencyMHz <= 2500.0f);
+    }
 };
 #endif
