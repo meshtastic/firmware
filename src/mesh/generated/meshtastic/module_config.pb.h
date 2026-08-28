@@ -130,6 +130,25 @@ typedef enum _meshtastic_ModuleConfig_MeshBeaconConfig_Flags {
     meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT = 4
 } meshtastic_ModuleConfig_MeshBeaconConfig_Flags;
 
+/* What a node changed about an entry it was asked to store. */
+typedef enum _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField {
+    /* Stored exactly as sent. */
+    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_NONE = 0,
+    /* region was not a known region code and was reset to UNSET. */
+    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION = 1,
+    /* channel_index was outside the channel table and was dropped. */
+    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_CHANNEL_INDEX = 2,
+    /* preset was not usable in this region and was replaced by one that is. */
+    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_PRESET = 4,
+    /* The preset was kept and region moved to a sibling that permits it. Reported
+ separately from CLAMPED_PRESET: the operator's preset survived, their region
+ did not. */
+    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION_SWAPPED = 8,
+    /* frequency_slot did not exist in the region at this bandwidth and was dropped,
+ so the slot falls back to the channel name hash. */
+    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT = 16
+} meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField;
+
 /* Struct definitions */
 /* Settings for reporting unencrypted information about our node to a map via MQTT */
 typedef struct _meshtastic_ModuleConfig_MapReportSettings {
@@ -481,10 +500,9 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget {
  override_frequency, which keeps the tag and wire format but changes the C API. */
     bool has_frequency_slot;
     uint32_t frequency_slot;
-    /* Bitmask, set by firmware when this entry was altered on write; read-only from a
- client's perspective and overwritten on every set. Note a region SWAP (a preset
- locked to a sibling EU region) is reported distinctly from a preset being CLAMPED:
- the first keeps the operator's preset and moves the region, the second discards it. */
+    /* Bitmask of ClampedField, set by firmware when this entry was altered on write.
+ Read-only from a client's perspective and overwritten on every set, so a client
+ that writes a config and reads it back learns what its node would not accept. */
     bool has_clamped_fields;
     uint32_t clamped_fields;
 } meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget;
@@ -622,6 +640,10 @@ extern "C" {
 #define _meshtastic_ModuleConfig_MeshBeaconConfig_Flags_MIN meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_NONE
 #define _meshtastic_ModuleConfig_MeshBeaconConfig_Flags_MAX meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT
 #define _meshtastic_ModuleConfig_MeshBeaconConfig_Flags_ARRAYSIZE ((meshtastic_ModuleConfig_MeshBeaconConfig_Flags)(meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT+1))
+
+#define _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_MIN meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_NONE
+#define _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_MAX meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT
+#define _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_ARRAYSIZE ((meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField)(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT+1))
 
 
 
