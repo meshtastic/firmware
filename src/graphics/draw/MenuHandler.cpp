@@ -28,11 +28,16 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
+#include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #include "modules/TraceRouteModule.h"
+#include "modules/WaypointModule.h"
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -44,6 +49,10 @@ namespace graphics
 
 namespace
 {
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+uint32_t selectedGeofenceWaypointId = 0;
+#endif
 
 // Caller must ensure the provided options array outlives the banner callback.
 template <typename T, size_t N, typename Callback>
@@ -148,27 +157,31 @@ void menuHandler::loraMenu()
         "Radio Preset",
         "Frequency Slot",
         "LoRa Region",
+        "Transmit Enabled",
 #if HAS_LORA_FEM
         "FEM LNA",
 #endif
     };
+    // NOTE: "FEM LNA" must stay last; it is the only entry that can be hidden at runtime by
+    // trimming optionsCount, which only works for a trailing option.
     enum optionsNumbers {
         Back = 0,
         DeviceRolePicker = 1,
         RadioPresetPicker = 2,
         FrequencySlot = 3,
         LoraPicker = 4,
+        TxEnabled = 5,
 #if HAS_LORA_FEM
-        LoraFemLna = 5
+        LoraFemLna = 6
 #endif
     };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
 #if HAS_LORA_FEM
-    bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? 6 : 5;
+    bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? 7 : 6;
 #else
-    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsCount = 6;
 #endif
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
@@ -181,6 +194,8 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::FrequencySlot;
         } else if (selected == LoraPicker) {
             menuHandler::menuQueue = menuHandler::LoraPicker;
+        } else if (selected == TxEnabled) {
+            menuHandler::menuQueue = menuHandler::TXEnabledMenu;
         }
 #if HAS_LORA_FEM
         else if (selected == LoraFemLna) {
@@ -212,8 +227,33 @@ void menuHandler::OnboardMessage()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// Out-of-box US setup starts on LongTurbo rather than the region table's LongFast. Menu-only: the
+// US entry in `regions[]` keeps LongFast, so no other route onto US changes. Anything that already
+// states a preset - a pinned userpref, or a preset moved off the install default - outranks it.
+meshtastic_Config_LoRaConfig_ModemPreset menuHandler::presetForRegionSelection(const meshtastic_Config_LoRaConfig &lora,
+                                                                               meshtastic_Config_LoRaConfig_RegionCode selected)
+{
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    (void)selected; // the pinned preset wins outright; nothing to decide
+#else
+    if (lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET && selected == meshtastic_Config_LoRaConfig_RegionCode_US &&
+        lora.use_preset && lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST) {
+        return meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
+    }
+#endif
+    return lora.modem_preset;
+}
+
 static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
 {
+    // Decided first: it keys off the *outgoing* region being UNSET.
+    const meshtastic_Config_LoRaConfig_ModemPreset selectionPreset = menuHandler::presetForRegionSelection(config.lora, region);
+    if (selectionPreset != config.lora.modem_preset) {
+        LOG_INFO("First region is %s, default preset to %s", getRegion(region)->name,
+                 DisplayFormatters::getModemPresetDisplayName(selectionPreset, false, true));
+        config.lora.modem_preset = selectionPreset;
+    }
+
     config.lora.region = region;
     config.lora.channel_num = 0; // Reset to default channel
 
@@ -239,8 +279,9 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     }
     auto changes = SEGMENT_CONFIG;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (crypto) {
-        crypto->ensurePkiKeys(config.security, owner);
+    // Minting the key moves our node num with it, and nothing reboots on this path to repair it later.
+    if (nodeDB->ensurePkiIdentity()) {
+        changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
     }
 #endif
     initRegion();
@@ -569,6 +610,31 @@ static BannerOverlayOptions buildRegionPresetBanner()
 void menuHandler::radioPresetPicker()
 {
     screen->showOverlayBanner(buildRegionPresetBanner());
+}
+
+void menuHandler::txEnabledMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    enum optionsNumbers { Back = 0, Enabled = 1, Disabled = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Transmit Enabled";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.InitialSelected = config.lora.tx_enabled ? Enabled : Disabled;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        // -1 is the timeout/dismiss case; treat it like Back so we never write config.
+        if (selected <= Back) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+            return;
+        }
+        bool wanted = (selected == Enabled);
+        if (config.lora.tx_enabled == wanted)
+            return;
+        config.lora.tx_enabled = wanted;
+        service->reloadConfig(SEGMENT_CONFIG);
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::twelveHourPicker()
@@ -1145,7 +1211,7 @@ void menuHandler::homeBaseMenu()
         }
         optionsEnumArray[options++] = Mute;
     }
-#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
+#if HAS_BACKLIGHT
     optionsArray[options] = "Toggle Backlight";
     optionsEnumArray[options++] = Backlight;
 #else
@@ -1175,26 +1241,8 @@ void menuHandler::homeBaseMenu()
             }
         } else if (selected == Backlight) {
             screen->setOn(false);
-#if HAS_PWM_BACKLIGHT
+#if HAS_BACKLIGHT
             graphics::backlightToggle();
-            saveUIConfig();
-#elif defined(PIN_EINK_EN)
-            if (uiconfig.screen_brightness == 1) {
-                uiconfig.screen_brightness = 0;
-                digitalWrite(PIN_EINK_EN, LOW);
-            } else {
-                uiconfig.screen_brightness = 1;
-                digitalWrite(PIN_EINK_EN, HIGH);
-            }
-            saveUIConfig();
-#elif defined(PCA_PIN_EINK_EN)
-            if (uiconfig.screen_brightness > 0) {
-                uiconfig.screen_brightness = 0;
-                io.digitalWrite(PCA_PIN_EINK_EN, LOW);
-            } else {
-                uiconfig.screen_brightness = 1;
-                io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
-            }
             saveUIConfig();
 #endif
         } else if (selected == Sleep) {
@@ -2386,6 +2434,158 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::waypointBaseMenu()
+{
+    enum optionsNumbers { Back, GeofenceAlerts, RemoveWaypoint };
+    static const char *optionsArray[] = {"Back", "Geofence Alerts", "Remove Waypoint"};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Waypoint Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == GeofenceAlerts) {
+            menuQueue = GeofenceWaypointMenu;
+            screen->runNow();
+        } else if (selected == RemoveWaypoint) {
+            menuQueue = RemoveWaypointMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::geofenceWaypointMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    static const char *optionsArray[WAYPOINT_HISTORY_LIMIT + 1];
+    static uint32_t waypointIds[WAYPOINT_HISTORY_LIMIT + 1];
+    static std::string labelStorage[WAYPOINT_HISTORY_LIMIT + 1];
+
+    optionsArray[0] = "Back";
+    int options = 1;
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (options > WAYPOINT_HISTORY_LIMIT || !GeofenceModule::hasGeofence(entry.waypoint))
+            continue;
+        std::string name = sanitizeString(entry.waypoint.name);
+        if (name.empty())
+            name = "Unnamed Geofence";
+        labelStorage[options] = name.substr(0, 20);
+        optionsArray[options] = labelStorage[options].c_str();
+        waypointIds[options] = entry.waypoint.id;
+        options++;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = options > 1 ? "Geofence Alerts" : "No Geofences";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = WaypointBaseMenu;
+        } else {
+            selectedGeofenceWaypointId = waypointIds[selected];
+            menuQueue = GeofenceOptionsMenu;
+        }
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
+void menuHandler::geofenceOptionsMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    const StoredWaypoint *entry = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+    if (!entry) {
+        menuQueue = GeofenceWaypointMenu;
+        screen->runNow();
+        return;
+    }
+
+    static std::string labels[4];
+    static const char *optionsArray[4];
+    labels[0] = "Back";
+    labels[1] = std::string("Enter Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_ENTER) ? "On" : "Off");
+    labels[2] = std::string("Exit Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_EXIT) ? "On" : "Off");
+    labels[3] = std::string("Favorites Only: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY) ? "On" : "Off");
+    for (size_t i = 0; i < 4; ++i)
+        optionsArray[i] = labels[i].c_str();
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Geofence Alerts";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = GeofenceWaypointMenu;
+        } else {
+            const StoredWaypoint *current = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+            if (current) {
+                const WaypointNotificationPreference preference =
+                    selected == 1 ? WAYPOINT_NOTIFY_ENTER
+                                  : (selected == 2 ? WAYPOINT_NOTIFY_EXIT : WAYPOINT_NOTIFY_FAVORITES_ONLY);
+                waypointStore.setNotificationPreference(selectedGeofenceWaypointId, preference,
+                                                        !current->notificationEnabled(preference));
+            }
+            menuQueue = GeofenceOptionsMenu;
+        }
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
+void menuHandler::removeWaypointMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    static const char *optionsArray[WAYPOINT_HISTORY_LIMIT + 1];
+    static uint32_t waypointIds[WAYPOINT_HISTORY_LIMIT + 1];
+    static std::string labelStorage[WAYPOINT_HISTORY_LIMIT + 1];
+
+    optionsArray[0] = "Back";
+    int options = 1;
+
+    for (const auto &entry : waypointStore.getWaypoints()) {
+        if (options > WAYPOINT_HISTORY_LIMIT)
+            break;
+        std::string name = sanitizeString(entry.waypoint.name);
+        if (name.empty())
+            name = "Unnamed Waypoint";
+        labelStorage[options] = name.substr(0, 20);
+        optionsArray[options] = labelStorage[options].c_str();
+        waypointIds[options] = entry.waypoint.id;
+        options++;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Remove Waypoint";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = WaypointBaseMenu;
+            screen->runNow();
+            return;
+        }
+        const uint32_t waypointId = waypointIds[selected];
+        LOG_INFO("Removing waypoint 0x%08x", waypointId);
+        if (waypointModule)
+            waypointModule->broadcastDelete(waypointId);
+        else
+            waypointStore.removeWaypoint(waypointId);
+        screen->setFrames(graphics::Screen::FOCUS_DEFAULT);
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
 void menuHandler::traceRouteMenu()
 {
     screen->showNodePicker("Node to Trace", 30000, [](uint32_t nodenum) -> void {
@@ -2943,6 +3143,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case RadioPresetPicker:
         radioPresetPicker();
         break;
+    case TXEnabledMenu:
+        txEnabledMenu();
+        break;
     case FrequencySlot:
         FrequencySlotPicker();
         break;
@@ -3019,6 +3222,18 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case RemoveFavorite:
         removeFavoriteMenu();
+        break;
+    case WaypointBaseMenu:
+        waypointBaseMenu();
+        break;
+    case GeofenceWaypointMenu:
+        geofenceWaypointMenu();
+        break;
+    case GeofenceOptionsMenu:
+        geofenceOptionsMenu();
+        break;
+    case RemoveWaypointMenu:
+        removeWaypointMenu();
         break;
     case TraceRouteMenu:
         traceRouteMenu();

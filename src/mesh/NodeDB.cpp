@@ -19,6 +19,10 @@
 #include "SafeFile.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
 #include "error.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -106,7 +110,7 @@ __attribute__((noinline)) void variantDefaultConfig() {}
 __attribute__((noinline)) void variantDefaultModuleConfig() __attribute__((weak));
 __attribute__((noinline)) void variantDefaultModuleConfig() {}
 
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(HELTEC_MESH_NODE_T114) || defined(TFT_NV3001B_DETECT)
 
 uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
@@ -156,6 +160,10 @@ uint32_t readwrite8(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_
     return ret;
 }
 
+#endif
+
+#ifdef HELTEC_MESH_NODE_T114
+
 uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
     pinMode(cs, OUTPUT);
@@ -173,6 +181,57 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
     readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
     uint32_t ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
     return ID;
+}
+
+#endif
+
+#ifdef TFT_NV3001B_DETECT
+
+// The NV3001B panel is an add-on module on these boards, so probe for it before assuming a screen.
+static constexpr uint32_t NV3001B_PANEL_ID = 0x300101;
+static constexpr uint32_t NV3001B_RESET_DELAY_MS = 120; // NV3001B_RST_DELAY, per the Arduino_GFX driver
+
+bool nv3001bPanelPresent(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst, uint8_t en, uint8_t bl)
+{
+    pinMode(en, OUTPUT);
+    digitalWrite(en, TFT_EN_ON);
+    pinMode(bl, OUTPUT);
+    digitalWrite(bl, TFT_BACKLIGHT_ON);
+    delay(NV3001B_RESET_DELAY_MS);
+
+    pinMode(cs, OUTPUT);
+    digitalWrite(cs, HIGH);
+    pinMode(sck, OUTPUT);
+    digitalWrite(sck, LOW);
+    pinMode(mosi, OUTPUT);
+    pinMode(dc, OUTPUT);
+    pinMode(rst, OUTPUT);
+    digitalWrite(rst, HIGH);
+    delay(NV3001B_RESET_DELAY_MS);
+    digitalWrite(rst, LOW); // Hardware Reset
+    delay(NV3001B_RESET_DELAY_MS);
+    digitalWrite(rst, HIGH);
+    delay(NV3001B_RESET_DELAY_MS);
+
+    // 0x04 reports the whole 24-bit display ID; 0xDA/0xDB/0xDC report it one byte at a time.
+    // A panel that answers either way is present.
+    uint32_t rddid = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    uint32_t rdid = (readwrite8(0xDA, 8, 0, cs, sck, mosi, dc, rst) << 16) |
+                    (readwrite8(0xDB, 8, 0, cs, sck, mosi, dc, rst) << 8) | readwrite8(0xDC, 8, 0, cs, sck, mosi, dc, rst);
+    LOG_INFO("NV3001B probe RDDID=0x%06x RDID=0x%06x", (unsigned int)rddid, (unsigned int)rdid);
+
+    if (rddid == NV3001B_PANEL_ID || rdid == NV3001B_PANEL_ID) {
+        LOG_INFO("NV3001B panel detected");
+        return true;
+    }
+
+    // All ones means the data line floated, all zeroes means something held it low; either way no panel
+    // answered, so drop the rail again rather than leave an empty header powered.
+    LOG_INFO("NV3001B panel not detected");
+    digitalWrite(bl, TFT_BACKLIGHT_OFF);
+    digitalWrite(en, TFT_EN_OFF);
+    pinMode(en, INPUT);
+    return false;
 }
 
 #endif
@@ -429,6 +488,14 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
+
+    // likewise the edition: it lives in persisted devicestate, so a vanilla install must
+    // overwrite the previous event build's value. Before the CRC compare, so the change persists.
+#ifdef USERPREFS_FIRMWARE_EDITION
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
+#else
+    myNodeInfo.firmware_edition = meshtastic_FirmwareEdition_VANILLA;
+#endif
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -614,9 +681,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-#ifdef USERPREFS_FIRMWARE_EDITION
-    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
-#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -777,6 +841,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     }
 #if HAS_SCREEN
     messageStore.clearAllMessages();
+#endif
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.clearAllWaypoints();
 #endif
 
 #if WARM_NODE_COUNT > 0
@@ -943,6 +1010,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.ignore_mqtt = false;
 #endif
+#ifdef USERPREFS_CONFIG_LORA_CONFIG_OK_TO_MQTT
+    config.lora.config_ok_to_mqtt = USERPREFS_CONFIG_LORA_CONFIG_OK_TO_MQTT;
+#endif
 
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
@@ -976,6 +1046,16 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
     config.security.admin_key_count = numAdminKeys;
 
+#ifdef USERPREFS_CONFIG_SECURITY_IS_MANAGED
+    // is_managed is the supported way for a vendor to lock configuration, but without an admin key
+    // it locks the vendor out too and only a factory reset recovers it.
+    if (USERPREFS_CONFIG_SECURITY_IS_MANAGED && numAdminKeys == 0) {
+        LOG_WARN("USERPREFS is_managed needs an admin key, ignored");
+    } else {
+        config.security.is_managed = USERPREFS_CONFIG_SECURITY_IS_MANAGED;
+    }
+#endif
+
     // Left at COMPATIBLE when signature checking is compiled out, so we never report a policy
     // nothing enforces (mirrors the set-config guard in AdminModule).
 #if defined(USERPREFS_CONFIG_SECURITY_PACKET_SIGNATURE_POLICY) && !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
@@ -985,7 +1065,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
-        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+        // Never log the key bytes: debug logs get pasted into public bug reports.
+        LOG_DEBUG("Restored preserved private key");
     } else {
         config.security.private_key.size = 0;
     }
@@ -1025,7 +1106,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2)) &&            \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
+     defined(ELECROW_ThinkNode_M9) || defined(T_WATCH_ULTRA)) &&                                                                 \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1038,12 +1120,14 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if defined(USE_EINK) || defined(HAS_SPI_TFT) || defined(USE_SPISSD1306)
     bool hasScreen = true;
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(TFT_NV3001B_DETECT)
+    hasScreen = nv3001bPanelPresent(TFT_CS, TFT_SCL, TFT_SDA, TFT_RS, TFT_RST, TFT_EN, TFT_BL);
+#elif defined(HELTEC_MESH_NODE_T114)
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
     if (st7789_id == 0xFFFFFF) {
         hasScreen = false;
     }
-#endif // HELTEC_MESH_NODE_T114
+#endif // TFT_NV3001B_DETECT / HELTEC_MESH_NODE_T114
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (portduino_config.displayPanel)
@@ -1109,7 +1193,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.wake_on_tap_or_motion = true;
 #endif
 
-#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
+#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR) || defined(T_WATCH_ULTRA)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
@@ -1131,6 +1215,23 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Apply role-specific defaults when role is set via user preferences
     installRoleDefaults(config.device.role);
+#endif
+
+#ifdef USERPREFS_CONFIG_DEVICE_REBROADCAST_MODE
+    config.device.rebroadcast_mode = USERPREFS_CONFIG_DEVICE_REBROADCAST_MODE;
+    // Same restriction AdminModule enforces on a set-config; apply it here so a vendor build can't
+    // ship a combination the device would silently refuse later.
+    if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+        LOG_WARN("Rebroadcast mode can't be NONE for a router role, use ALL");
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    }
+#endif
+#ifdef USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS
+    // Clamped to the same window AdminModule enforces on a set-config
+    config.device.node_info_broadcast_secs = clamp((uint32_t)USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS,
+                                                   (uint32_t)min_node_info_broadcast_secs, (uint32_t)MAX_INTERVAL);
 #endif
 
     initConfigIntervals();
@@ -1177,7 +1278,7 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
 #if HAS_TRAFFIC_MANAGEMENT
-    // Position dedup ships enabled at the 11-hour default window on all supported targets.
+    // Position dedup ships enabled at the 5-hour default window on all supported targets.
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
@@ -1217,7 +1318,7 @@ void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc)
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
-    memset(&moduleConfig, 0, sizeof(meshtastic_ModuleConfig));
+    memset(&moduleConfig, 0, sizeof(meshtastic_LocalModuleConfig));
 
     moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_mqtt = true;
@@ -1257,7 +1358,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
 #endif
 
-#if defined(PIN_VIBRATION)
+#if HAS_TFT
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
+        moduleConfig.external_notification.nag_timeout = 0;
+#elif defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
 #elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) ||                           \
     defined(HAS_I2S_SPEAKER_NRF52)
@@ -1269,12 +1373,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-#if HAS_TFT
-    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
-        moduleConfig.external_notification.nag_timeout = 0;
-#else
-    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
-#endif // HAS_TFT
 #endif // HAS_I2S
 
 #ifdef NANO_G2_ULTRA
@@ -2143,9 +2241,9 @@ void NodeDB::demoteOldestHotNodesToWarm()
         const meshtastic_NodeInfoLite &n = (*meshNodes)[i];
         if (n.num == 0)
             continue;
-        // Keep the public key if we have one (40 B warm record); keyless nodes
-        // still get a placeholder so re-admission restores last_heard.
-        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
+        // Warm entries carry no key length, so a partial key would be indistinguishable
+        // from a full one. nullptr keeps the keyless placeholder that restores last_heard.
+        warmStore.absorb(n.num, n.last_heard, n.public_key.size == 32 ? n.public_key.bytes : nullptr, n.role,
                          warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) - they'd otherwise orphan until the next
@@ -3194,6 +3292,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+        moduleConfig.has_traffic_management = true;
         moduleConfig.has_tak = true;
 #if !MESHTASTIC_EXCLUDE_BEACON
         moduleConfig.has_mesh_beacon = true;
@@ -3268,7 +3367,7 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // rx_time may be an uptime-seconds placeholder while has_rx_time is false - don't age it as
     // wall-clock, and don't pass it off as "just now" either.
     if (!p->has_rx_time)
         return SINCE_UNKNOWN;
@@ -3482,7 +3581,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         }
     }
     info->num = contact.node_num;
+    // CopyUserToNodeInfoLite assigns public_key unconditionally, and clients send add_contact before every
+    // DM - often from an entry that carries no key at all. A contact may still supply or update a full
+    // 32-byte key (that's what add_contact is for), but it must never *erase* a key we already hold, which
+    // would be persisted below and break subsequent DMs with PKI_SEND_FAIL_PUBLIC_KEY.
+    const meshtastic_NodeInfoLite_public_key_t storedKey = info->public_key;
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
+    if (storedKey.size == 32 && info->public_key.size != 32) {
+        LOG_INFO("Contact 0x%08x has no key, keep the stored one", contact.node_num);
+        info->public_key = storedKey;
+    }
     if (contact.should_ignore) {
         // Block the contact and drop its rich satellite data, but keep the
         // public key copied above - an ignored peer keeps a usable identity
@@ -3506,16 +3614,18 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
             // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
             // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
-            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
-            // last_heard to now, so that the add_contact node doesn't immediately get evicted.
-            info->last_heard = getTime();
+            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll
+            // stamp the contact as heard now, so that the add_contact node doesn't immediately get evicted.
+            stampContactHeardNow(info);
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            // If the protected cap refuses the favorite, fall back to stamping last_heard so the
+            // If the protected cap refuses the favorite, fall back to a heard-now stamp so the
             // contact still isn't the first eviction victim.
-            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
-                info->last_heard = getTime();
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
+                stampContactHeardNow(info);
+            }
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
@@ -3668,9 +3778,13 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             return;
         }
 
-        // Gate on has_rx_time, not truthiness - rx_time may hold a millis() placeholder.
+        // Gate on has_rx_time, not truthiness - rx_time may hold an uptime-seconds placeholder.
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
+        else
+            // rx_time is the arrival instant in uptime seconds. It goes to the RAM sidecar, not
+            // last_heard, which only ever holds a real epoch or 0.
+            recordHeardWhileClockUntrusted(getFrom(&mp), mp.rx_time);
 
         // Gate on the packet actually having been received over our own radio, not on rx_snr being
         // truthy, because 0 dB is valid. TRANSPORT_LORA is set only on the real over-the-air RX path
@@ -4086,6 +4200,84 @@ meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
     return meshtastic_Config_DeviceConfig_Role_CLIENT;
 }
 
+void NodeDB::recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptime)
+{
+    // Update in place if the node already has a stamp.
+    for (auto &h : heardAt) {
+        if (h.num == num) {
+            h.heardAtUptimeSecs = heardAtUptime;
+            return;
+        }
+    }
+    // Otherwise take an empty slot, or reuse the oldest stamp.
+    NodeHeardAt *victim = &heardAt[0];
+    for (auto &h : heardAt) {
+        if (h.num == 0) {
+            victim = &h;
+            break;
+        }
+        if (h.heardAtUptimeSecs < victim->heardAtUptimeSecs)
+            victim = &h;
+    }
+    victim->num = num;
+    victim->heardAtUptimeSecs = heardAtUptime;
+}
+
+bool NodeDB::getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const
+{
+    for (const auto &h : heardAt) {
+        if (h.num == num) {
+            stamp = h.heardAtUptimeSecs;
+            return true;
+        }
+    }
+    return false;
+}
+
+NodeDB::EvictionRecency NodeDB::evictionRecency(const meshtastic_NodeInfoLite *n) const
+{
+    uint32_t stamp = 0;
+    const bool heardThisBoot = getHeardAtUptimeSecs(n->num, stamp);
+    return {heardThisBoot ? stamp : n->last_heard, heardThisBoot};
+}
+
+bool NodeDB::evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent)
+{
+    if (candidate.heardThisBoot != incumbent.heardThisBoot)
+        return !candidate.heardThisBoot;
+    return candidate.value < incumbent.value;
+}
+
+void NodeDB::stampContactHeardNow(meshtastic_NodeInfoLite *info)
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch)
+        info->last_heard = nowEpoch;
+    else
+        recordHeardWhileClockUntrusted(info->num, Time::getUptimeSecs());
+}
+
+void NodeDB::backfillHeardAt()
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch == 0) // called before the clock was actually valid - nothing to date against
+        return;
+    const uint32_t nowUptimeSecs = Time::getUptimeSecs();
+    for (auto &h : heardAt) {
+        if (h.num == 0)
+            continue;
+        meshtastic_NodeInfoLite *info = getMeshNode(h.num);
+        if (info) {
+            // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
+            // Never move last_heard backwards: the node may since have been re-heard on a good clock.
+            const uint32_t elapsedSecs = nowUptimeSecs - h.heardAtUptimeSecs;
+            if (elapsedSecs < nowEpoch && nowEpoch - elapsedSecs > info->last_heard)
+                info->last_heard = nowEpoch - elapsedSecs;
+        }
+        h = {}; // evicted or converted either way, the stamp's job is done
+    }
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
@@ -4095,8 +4287,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         if (isFull()) {
             LOG_INFO("Node database full: %i nodes, %u bytes free. Erase oldest", numMeshNodes, memGet.getFreeHeap());
             // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            uint32_t oldestBoring = UINT32_MAX;
+            // Newest-possible sentinel: a zeroed init ranks older than every candidate, so nothing
+            // would ever be selected. Keep it maximal even though the index guards below also cover it.
+            EvictionRecency oldest = {UINT32_MAX, true};
+            EvictionRecency oldestBoring = {UINT32_MAX, true};
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
@@ -4104,14 +4298,19 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
                 const bool isIgnored = nodeInfoLiteIsIgnored(cand);
                 const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
+                // last_heard, except that nodes heard this boot before the clock became trusted
+                // rank by their RAM arrival stamp instead of the 0 in the stored field.
+                const EvictionRecency candRecency = evictionRecency(cand);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavoriteNode && !isIgnored && !isVerified && cand->last_heard < oldest) {
-                    oldest = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && !isVerified &&
+                    (oldestIndex == -1 || evictionRecencyOlder(candRecency, oldest))) {
+                    oldest = candRecency;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 && cand->last_heard < oldestBoring) {
-                    oldestBoring = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 &&
+                    (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
+                    oldestBoring = candRecency;
                     oldestBoringIndex = i;
                 }
             }
@@ -4341,12 +4540,30 @@ bool NodeDB::createNewIdentity()
 
     myNodeInfo.my_node_num = newNodeNum;
 
+    // The number has moved, so the caller must persist it whatever happens next. Returning false here
+    // would leave the new key saved against the old number, which is the break this exists to prevent.
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    if (!info)
-        return false;
-    TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    if (info)
+        TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    else
+        LOG_ERROR("No room for our own node 0x%08x, identity moved without a self record", newNodeNum);
 
     return true;
+}
+
+bool NodeDB::ensurePkiIdentity()
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    // A failed or declined keygen leaves the existing key, and so the existing node num, untouched.
+    if (!crypto || !crypto->ensurePkiKeys(config.security, owner))
+        return false;
+
+    // ensurePkiKeys() writes key material only, so my_node_num is still the stale MAC-derived value.
+    // createNewIdentity() early-returns when the key, and so the node num, did not actually change.
+    return createNewIdentity();
+#else
+    return false;
+#endif
 }
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)

@@ -77,6 +77,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     void stopNow();
 
+    // Fire the configured message outputs for a non-message event such as a geofence crossing.
+    void startNotification();
+
 #if !MESHTASTIC_EXCLUDE_RTTTL
     void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetRingtone(const char *from_msg);
@@ -92,6 +95,11 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     virtual int32_t runOnce() override;
 
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override;
+
+    // Drive the configured buzzer output (I2S, PWM ringtone, or plain GPIO).
+    void triggerBuzzerOutput();
+    void triggerVibraOutput();
+    void armNagCycle();
 
     bool isNagging = false;
 

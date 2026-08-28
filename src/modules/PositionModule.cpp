@@ -2,6 +2,7 @@
 #include "PositionModule.h"
 #include "Default.h"
 #include "GPS.h"
+#include "GeofenceModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
@@ -55,6 +56,7 @@ PositionModule::PositionModule()
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
 {
     auto p = *pptr;
+    const NodeNum sender = getFrom(&mp);
 
     const auto transport = mp.transport_mechanism;
     if (isFromUs(&mp) && !IS_ONE_OF(transport, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
@@ -71,7 +73,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         if (config.position.fixed_position) {
             LOG_DEBUG("Ignore own position update except time: position.fixed_position true");
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_WATCH_ULTRA)
             // Since we return early if position.fixed_position is true, set the T-Watch's RTC to the time received from the
             // client device here
             if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
@@ -90,7 +92,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Log packet size and data fields
     LOG_TRACE("POSITION node=0x%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
               "time=%d",
-              getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
+              sender, mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
               p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
               p.time);
 
@@ -107,8 +109,13 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         trySetRtc(p, isLocal, force);
     }
 
-    nodeDB->updatePosition(getFrom(&mp), p);
+    nodeDB->updatePosition(sender, p);
     precision = getPositionPrecisionForChannel(mp.channel);
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    if (geofenceModule && !isLocal)
+        geofenceModule->evaluatePosition(sender, p);
+#endif
 
     return false; // Let others look at this message also if they want
 }
@@ -289,6 +296,27 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     return reply;
 }
 
+void PositionModule::replyOnPositionChannel(const meshtastic_MeshPacket &req)
+{
+    uint8_t positionChannel;
+    if (!findPositionChannel(positionChannel)) {
+        LOG_DEBUG("Skip position reply to 0x%08x: position sharing disabled on all channels", getFrom(&req));
+        return;
+    }
+    if (!service)
+        return;
+
+    precision = getPositionPrecisionForChannel(positionChannel);
+    meshtastic_MeshPacket *reply = allocReply(); // reply throttle + precision-0/no-fix guards live here
+    if (!reply)
+        return;
+
+    setReplyTo(reply, req);
+    reply->channel = positionChannel; // not the channel the request came in on
+    LOG_INFO("Reply to position request from 0x%08x on position channel %u", getFrom(&req), positionChannel);
+    service->sendToMesh(reply);
+}
+
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
     LOG_INFO("Send TAK V2 PLI packet");
@@ -374,12 +402,11 @@ void PositionModule::sendOurPosition()
     currentGeneration = radioGeneration;
 
     // If we changed channels, ask everyone else for their latest info
-    for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
-        if (getPositionPrecisionForChannel(channelNum) != 0) {
-            LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-            sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
-            return;
-        }
+    uint8_t positionChannel;
+    if (findPositionChannel(positionChannel)) {
+        LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
+        sendOurPosition(NODENUM_BROADCAST, requestReplies, positionChannel);
+        return;
     }
     LOG_INFO("Skip pos@%x:6 broadcast; position sharing disabled on all channels", localPosition.timestamp);
 }
@@ -467,12 +494,10 @@ bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLit
     // precision). Default nodes gauge movement at that on-wire (public-clamped) resolution;
     // trackers use their own configured (unclamped) precision so finer moves still count.
     uint32_t precisionBits = 0;
-    for (uint8_t ch = 0; ch < 8; ch++) {
-        if (getPositionPrecisionForChannel(ch) == 0)
-            continue;
+    uint8_t ch;
+    if (findPositionChannel(ch)) {
         precisionBits =
             useConfiguredPrecision ? getPositionPrecisionForChannel(channels.getByIndex(ch)) : getPositionPrecisionForChannel(ch);
-        break;
     }
 
     return positionWithinPrecisionCell(selfPos.latitude_i, selfPos.longitude_i, lastGpsLatitude, lastGpsLongitude, precisionBits);
@@ -540,7 +565,7 @@ int32_t PositionModule::runOnce()
 
     bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
 
-    // Hold to the 12h floor when fixed_position (every role: pinning yourself forfeits the
+    // Hold to the 6h floor when fixed_position (every role: pinning yourself forfeits the
     // exception) or when stationary. A real move still goes out early via smart-broadcast below.
     // Not-fixed exceptions: lost-and-found broadcasts freely; trackers judge movement at their
     // own (unclamped) precision rather than the on-wire one (useConfiguredPrecision).

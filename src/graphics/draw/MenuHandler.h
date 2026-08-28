@@ -13,6 +13,7 @@ class menuHandler
         LoraPicker,
         DeviceRolePicker,
         RadioPresetPicker,
+        TXEnabledMenu,
         FrequencySlot,
         NoTimeoutLoraPicker,
         TzPicker,
@@ -36,6 +37,10 @@ class menuHandler
         NodePickerMenu,
         ManageNodeMenu,
         RemoveFavorite,
+        WaypointBaseMenu,
+        GeofenceWaypointMenu,
+        GeofenceOptionsMenu,
+        RemoveWaypointMenu,
         TestMenu,
         NumberTest,
         EnvironmentTelemetryMenu,
@@ -73,6 +78,7 @@ class menuHandler
     static void loraMenu();
     static void deviceRolePicker();
     static void radioPresetPicker();
+    static void txEnabledMenu();
     static void FrequencySlotPicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
@@ -106,6 +112,10 @@ class menuHandler
     static void manageNodeMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
+    static void waypointBaseMenu();
+    static void geofenceWaypointMenu();
+    static void geofenceOptionsMenu();
+    static void removeWaypointMenu();
     static void traceRouteMenu();
     static void testMenu();
     static void numberTest();
@@ -130,6 +140,11 @@ class menuHandler
     // Lifted out of its banner-callback lambda so it is reachable without a Screen. The lambda only
     // ever runs via screen->showOverlayBanner(), which is why nothing here was unit-testable.
     static void toggleNodeMuted(uint32_t nodeNum); // uint32_t, matching pickedNodeNum above
+
+    // Preset a region selection should leave installed. `lora` is the config as it stands *before*
+    // the selection is written.
+    static meshtastic_Config_LoRaConfig_ModemPreset presetForRegionSelection(const meshtastic_Config_LoRaConfig &lora,
+                                                                             meshtastic_Config_LoRaConfig_RegionCode selected);
 
   private:
     static void saveUIConfig();

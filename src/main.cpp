@@ -16,6 +16,7 @@
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
@@ -24,6 +25,7 @@
 #include "Power.h"
 #include "SPILock.h"
 #include "Throttle.h"
+#include "WaypointStore.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
@@ -321,6 +323,8 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 __attribute__((noinline)) void lateInitVariant() __attribute__((weak));
 __attribute__((noinline)) void lateInitVariant() {}
 
+// earlyInitVariant() runs before consoleInit(): a LOG_* macro here CRASHES the device,
+// it is not a silent no-op. Defer any logging to lateInitVariant() or later.
 __attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
 __attribute__((noinline)) void earlyInitVariant() {}
 
@@ -390,6 +394,11 @@ void setup()
 #ifdef LED_NOTIFICATION
     pinMode(LED_NOTIFICATION, OUTPUT);
     digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
+#endif
+
+#ifdef LED_LORA
+    pinMode(LED_LORA, OUTPUT);
+    digitalWrite(LED_LORA, HIGH ^ LED_STATE_ON);
 #endif
 
 #ifdef WIFI_LED
@@ -755,6 +764,10 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x84;
             break;
+        case ScanI2C::DeviceType::STC8HKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x12;
+            break;
         default:
             // use this as default since it's also just zero
             LOG_WARN("kb_info.type unknown(0x%02x), set kb_model=0x00", kb_info.type);
@@ -870,18 +883,10 @@ void setup()
 
     router = new ReliableRouter();
 
-    // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true &&
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
-                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
-        LOG_DEBUG("Tracker/Sensor: Skip start melody");
-    else
-        playStartMelody();
-
 #if HAS_SCREEN
-        // fixed screen override?
-        // The geometry picks below are skipped on variants that pin the panel size with
-        // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
+    // fixed screen override?
+    // The geometry picks below are skipped on variants that pin the panel size with
+    // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
 #ifndef OLED_GEOMETRY_OVERRIDE
@@ -982,7 +987,7 @@ void setup()
     SPI.begin();
 #endif
 #else
-        // ESP32
+    // ESP32
 #if defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -1091,6 +1096,10 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.loadFromFlash();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_I2C
     // Inform modules about I2C devices
     ScanI2CCompleted(i2cScanner.get());
@@ -1165,6 +1174,15 @@ void setup()
     auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+
+    // Must follow lateInitVariant(): on I2S boards audioThread and the codec are only up by this point.
+    // Skipped for power-saving tracker/sensor roles.
+    if (config.power.is_power_saving == true &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
+        LOG_DEBUG("Tracker/Sensor: Skip start melody");
+    else
+        playStartMelody();
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
@@ -1360,6 +1378,9 @@ void loop()
 {
     runASAP = false;
 
+    // The single writer of the monotonic wrap carry; every other caller only reads it.
+    Time::serviceMonotonic();
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
     if (lockdownDisablePending) {
         lockdownDisablePending = false;
@@ -1489,14 +1510,13 @@ void loop()
         LOG_ERROR("LoRa error detected, recovering");
         router->addInterface(nullptr);
         if (portduino_config.lora_spi_dev == "ch341") {
-            if (ch341Hal != nullptr) {
-                delete ch341Hal;
-                ch341Hal = nullptr;
+            if (ch341Hal) {
+                ch341Hal.reset();
                 sleep(3);
             }
             try {
-                ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                        portduino_config.lora_usb_pid);
+                ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                                      portduino_config.lora_usb_pid);
             } catch (std::exception &e) {
                 std::cerr << e.what() << std::endl;
                 std::cerr << "Could not initialize CH341 device!" << std::endl;
@@ -1526,6 +1546,12 @@ void loop()
 #endif
 #if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.purgeExpired();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT && ENABLE_WAYPOINT_PERSISTENCE
+    waypointStoreAutosaveTick();
 #endif
     long delayMsec = mainController.runOrDelay();
 

@@ -414,7 +414,7 @@ std::unique_ptr<RadioInterface> initLoRa()
     LOG_DEBUG("Activate %s radio on SPI port %s", portduino_config.loraModules[portduino_config.lora_module].c_str(),
               portduino_config.lora_spi_dev.c_str());
     if (portduino_config.lora_spi_dev == "ch341") {
-        RadioLibHAL = ch341Hal;
+        RadioLibHAL = ch341Hal.get(); // non-owning: the ch341 HAL stays owned by the global unique_ptr
     } else {
         if (RadioLibHAL != nullptr) {
             delete RadioLibHAL;
@@ -672,6 +672,19 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     return r;
 }
 
+bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    // Walks profile->presets directly rather than RegionInfo::supportsPreset(), which calls
+    // back here for the UNSET entry. UNSET terminates the table, so it is checked last.
+    for (const RegionInfo *r = regions;; r++) {
+        for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END; i++)
+            if (r->profile->presets[i] == preset)
+                return true;
+        if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            return false;
+    }
+}
+
 void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
 {
     map = meshtastic_LoRaRegionPresetMap_init_zero;
@@ -731,6 +744,26 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
         rg.region = r->code;
         rg.group_index = (uint8_t)gi;
     }
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    // A pinned preset is a statement of intent, not enforcement: supportsPreset() still accepts any
+    // known preset while unset. Stock builds emit no UNSET entry, which clients read as unconstrained.
+    if (map.groups_count < maxGroups && map.region_groups_count < maxRegions) {
+        const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+        meshtastic_LoRaPresetGroup &grp = map.groups[map.groups_count];
+        grp.presets_count = 1;
+        grp.presets[0] = USERPREFS_LORACONFIG_MODEM_PRESET;
+        grp.default_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
+        grp.licensed_only = unset->profile->licensedOnly;
+
+        meshtastic_LoRaRegionPresets &rg = map.region_groups[map.region_groups_count++];
+        rg.region = unset->code;
+        rg.group_index = (uint8_t)map.groups_count++;
+    } else {
+        // Costs only the intent signal - clients fall back to unconstrained - but must not be silent.
+        LOG_ERROR("Region preset map full; UNSET intent omitted");
+    }
+#endif
 }
 
 /**
@@ -1485,9 +1518,17 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
-    memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
+
+    // Oversize is rejected at the radio queue in Router::send(); clamp rather than fail here so this
+    // stays a call that always succeeds, with no failure return for startSend() to unwind.
+    size_t payloadLen = p->encrypted.size;
+    if (payloadLen > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_ERROR("Payload %u exceeds radioBuffer capacity %u, truncate", (unsigned)payloadLen, (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        payloadLen = MAX_RADIO_PAYLOAD_LEN;
+    }
+
+    memcpy(radioBuffer.payload, p->encrypted.bytes, payloadLen);
 
     sendingPacket = p;
-    return p->encrypted.size + sizeof(PacketHeader);
+    return payloadLen + sizeof(PacketHeader);
 }
