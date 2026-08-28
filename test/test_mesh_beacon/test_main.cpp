@@ -195,11 +195,11 @@ static void installTestSecondaryChannel(uint8_t index, const char *name, const u
 // ===========================================================================
 
 /**
- * Verify SHORT_TURBO is rejected when the region is EU_868 (turbo presets are not in that
- * region's allowed preset set). Important to catch regressions where admin stores unlawful
- * radio settings that would violate regional radio regulations.
+ * Verify SHORT_TURBO is clamped to the region default when the region is EU_868 (turbo presets are
+ * not in that region's allowed preset set). Important to catch regressions where admin stores
+ * unlawful radio settings that would violate regional radio regulations.
  */
-static void test_adminValidation_turboPresetOnEU868_isCleared(void)
+static void test_adminValidation_turboPresetOnEU868_isClamped(void)
 {
     resetConfig();
 
@@ -212,14 +212,17 @@ static void test_adminValidation_turboPresetOnEU868_isCleared(void)
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE(moduleConfig.has_mesh_beacon);
-    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset, "SHORT_TURBO must be cleared for EU_868");
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                              moduleConfig.mesh_beacon.broadcast_targets[0].preset,
+                              "SHORT_TURBO must clamp to the EU_868 default, not be cleared");
 }
 
 /**
- * Verify LONG_TURBO is also cleared for EU_868, not just SHORT_TURBO.
+ * Verify LONG_TURBO is also clamped for EU_868, not just SHORT_TURBO.
  * Important to confirm rejection covers the entire turbo preset family rather than one variant.
  */
-static void test_adminValidation_longTurboPresetOnEU868_isCleared(void)
+static void test_adminValidation_longTurboPresetOnEU868_isClamped(void)
 {
     resetConfig();
 
@@ -230,7 +233,8 @@ static void test_adminValidation_longTurboPresetOnEU868_isCleared(void)
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset);
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, moduleConfig.mesh_beacon.broadcast_targets[0].preset);
 }
 
 /**
@@ -255,10 +259,10 @@ static void test_adminValidation_turboPresetOnUS_isAccepted(void)
 }
 
 /**
- * Verify MEDIUM_TURBO is also cleared for EU_868. Like SHORT_TURBO/LONG_TURBO it is a 500 kHz preset
+ * Verify MEDIUM_TURBO is also clamped for EU_868. Like SHORT_TURBO/LONG_TURBO it is a 500 kHz preset
  * that does not fit EU_868's 250 kHz band, so it must not survive admin validation there.
  */
-static void test_adminValidation_mediumTurboPresetOnEU868_isCleared(void)
+static void test_adminValidation_mediumTurboPresetOnEU868_isClamped(void)
 {
     resetConfig();
 
@@ -270,7 +274,8 @@ static void test_adminValidation_mediumTurboPresetOnEU868_isCleared(void)
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE(moduleConfig.has_mesh_beacon);
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset);
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, moduleConfig.mesh_beacon.broadcast_targets[0].preset);
 }
 
 /**
@@ -347,10 +352,10 @@ static void test_adminValidation_targetUnknownRegion_isCleared(void)
 }
 
 /**
- * Verify a preset that is illegal for a broadcast target's region clears that entry's preset
- * and its channel.
+ * Verify a preset that is illegal for a broadcast target's region clamps that entry's preset to the
+ * region default and leaves its channel alone - the channel is a separate setting.
  */
-static void test_adminValidation_targetInvalidPresetForRegion_isCleared(void)
+static void test_adminValidation_targetInvalidPresetForRegion_clampsPresetKeepsChannel(void)
 {
     resetConfig();
 
@@ -364,9 +369,13 @@ static void test_adminValidation_targetInvalidPresetForRegion_isCleared(void)
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset,
-                              "SHORT_TURBO must be cleared for EU_868 target");
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index);
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                              moduleConfig.mesh_beacon.broadcast_targets[0].preset,
+                              "SHORT_TURBO must clamp to the EU_868 default for the target");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index,
+                             "a rejected preset must not take the target's channel with it");
+    TEST_ASSERT_EQUAL(1, moduleConfig.mesh_beacon.broadcast_targets[0].channel_index);
 }
 
 /**
@@ -1671,15 +1680,15 @@ BEACON_TEST_ENTRY void setup()
 
     printf("\n=== AdminModule config validation ===\n");
 
-    RUN_TEST(test_adminValidation_turboPresetOnEU868_isCleared);
-    RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isCleared);
+    RUN_TEST(test_adminValidation_turboPresetOnEU868_isClamped);
+    RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isClamped);
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
-    RUN_TEST(test_adminValidation_mediumTurboPresetOnEU868_isCleared);
+    RUN_TEST(test_adminValidation_mediumTurboPresetOnEU868_isClamped);
     RUN_TEST(test_adminValidation_mediumTurboPresetOnUS_isAccepted);
     RUN_TEST(test_adminValidation_unknownOfferRegion_isCleared);
     RUN_TEST(test_adminValidation_validOfferRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetUnknownRegion_isCleared);
-    RUN_TEST(test_adminValidation_targetInvalidPresetForRegion_isCleared);
+    RUN_TEST(test_adminValidation_targetInvalidPresetForRegion_clampsPresetKeepsChannel);
     RUN_TEST(test_adminValidation_targetValidPresetForRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_targetChannelIndexInRange_isPreserved);
