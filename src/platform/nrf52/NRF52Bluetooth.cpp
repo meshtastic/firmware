@@ -246,14 +246,8 @@ void NRF52Bluetooth::shutdown()
     LOG_INFO("Disable NRF52 bluetooth");
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
 
-    // Clear Bluefruit's restart-on-disconnect before dropping the link, and do it in that order.
-    // Phone-originated admin messages run synchronously on the BLE event task (toRadio's write
-    // callback is registered undeferred), so the BLE_GAP_EVT_DISCONNECTED we are about to cause is
-    // only handled after we return - and that handler re-starts advertising while the flag is set.
-    // Stopping advertising afterwards does not help: a live connection means the SoftDevice is not
-    // advertising, so sd_ble_gap_adv_stop() is a no-op and the deferred event brings advertising
-    // straight back. The phone then reconnects during the reboot delay only to be dropped again by
-    // the reset. startAdv()/resumeAdvertising() set the flag again on the re-enable path.
+    // Clear the auto-restart flag before dropping the link: our DISCONNECTED event is only processed
+    // after this callback returns and would re-start advertising. startAdv()/resumeAdvertising() re-set it.
     Bluefruit.Advertising.restartOnDisconnect(false);
     Bluefruit.Advertising.stop();
     disconnect();
