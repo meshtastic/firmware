@@ -1412,6 +1412,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 }
             }
             // Before the preset check, so the name hashed below is the one this target will run on.
+            // Range only. Role_DISABLED is the zero value, so an unprovisioned slot reads as
+            // disabled and rejecting that here would force channels to be created before beacons.
+            // A slot that is retired later is handled by dropBeaconTargetsForChannel().
             if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
                 LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
                 t.has_channel_index = false;
@@ -1457,9 +1460,40 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     return true;
 }
 
+// A beacon target names a channel-table slot, so retiring that slot leaves the target pointing at a
+// channel the node no longer has. Clear the reference rather than let it fail at encrypt time.
+static bool dropBeaconTargetsForChannel(ChannelIndex index)
+{
+#if !MESHTASTIC_EXCLUDE_BEACON
+    if (!moduleConfig.has_mesh_beacon)
+        return false;
+    auto &beacon = moduleConfig.mesh_beacon;
+    bool changed = false;
+    for (pb_size_t i = 0; i < beacon.broadcast_targets_count; i++) {
+        auto &t = beacon.broadcast_targets[i];
+        if (t.has_channel_index && t.channel_index == index) {
+            LOG_WARN("Beacon: channel %u retired, clearing broadcast_targets[%u] reference", index, i);
+            t.has_channel_index = false;
+            changed = true;
+        }
+    }
+    if (changed && meshBeaconBroadcastModule)
+        meshBeaconBroadcastModule->invalidateCache();
+    return changed;
+#else
+    (void)index;
+    return false;
+#endif
+}
+
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
+
+    const meshtastic_Channel &saved = channels.getByIndex(cc.index);
+    const bool retired =
+        saved.role == meshtastic_Channel_Role_DISABLED || (saved.settings.name[0] == '\0' && saved.settings.psk.size == 0);
+    const bool beaconChanged = retired && dropBeaconTargetsForChannel(cc.index);
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();
     }
@@ -1483,7 +1517,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS, false);
+    saveChanges(beaconChanged ? (SEGMENT_CHANNELS | SEGMENT_MODULECONFIG) : SEGMENT_CHANNELS, false);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
