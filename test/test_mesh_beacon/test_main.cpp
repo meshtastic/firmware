@@ -512,7 +512,7 @@ static void test_adminValidation_clampedFields_reportsUnknownRegion(void)
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields);
-    TEST_ASSERT_EQUAL_UINT32(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION,
+    TEST_ASSERT_EQUAL_UINT32(meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_REGION,
                              moduleConfig.mesh_beacon.broadcast_targets[0].clamped_fields);
 }
 
@@ -531,7 +531,7 @@ static void test_adminValidation_clampedFields_reportsDroppedFrequencySlot(void)
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields);
-    TEST_ASSERT_EQUAL_UINT32(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT,
+    TEST_ASSERT_EQUAL_UINT32(meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_FREQUENCY_SLOT,
                              moduleConfig.mesh_beacon.broadcast_targets[0].clamped_fields);
 }
 
@@ -552,7 +552,7 @@ static void test_adminValidation_clampedFields_reportsClampedPreset(void)
 
     const uint32_t reported = moduleConfig.mesh_beacon.broadcast_targets[0].clamped_fields;
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields);
-    TEST_ASSERT_TRUE_MESSAGE(reported & meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_PRESET,
+    TEST_ASSERT_TRUE_MESSAGE(reported & meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_PRESET,
                              "a discarded preset must be reported");
 }
 
@@ -593,6 +593,75 @@ static void test_adminValidation_clampedFields_clientValueIsDiscarded(void)
 
     TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields,
                               "a client-supplied clamped_fields must be discarded, not stored");
+}
+
+/**
+ * The offer gets the same partial-accept treatment as a target: a preset the region cannot run
+ * must not take the region and channel the operator set with it.
+ */
+static void test_adminValidation_offerInvalidPreset_clampsAndKeepsRest(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_preset,
+                             "an invalid offer preset must clamp, not clear");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, moduleConfig.mesh_beacon.broadcast_offer_preset,
+                              "SHORT_TURBO must clamp to the EU_868 default");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index,
+                             "a rejected preset must not take the offer channel with it");
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_offer_clamped_fields);
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_offer_clamped_fields &
+                     meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_PRESET);
+}
+
+/**
+ * Region is validated before preset, so an unknown region cannot drag down a preset that is
+ * perfectly good once that region is discarded.
+ */
+static void test_adminValidation_offerUnknownRegion_keepsValidPreset(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_offer_region = (meshtastic_Config_LoRaConfig_RegionCode)255;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, moduleConfig.mesh_beacon.broadcast_offer_region);
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_preset,
+                             "a discarded region must not take a valid preset with it");
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_offer_clamped_fields &
+                     meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_REGION);
+}
+
+/**
+ * An offer stored exactly as sent must read back clean.
+ */
+static void test_adminValidation_offerClampedFields_cleanWhenUntouched(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = 0;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_clamped_fields,
+                              "an unaltered offer must report nothing clamped");
 }
 
 /**
@@ -2074,6 +2143,9 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetFrequencySlotInRange_isPreserved);
     RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_offerChannelIndexOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_offerInvalidPreset_clampsAndKeepsRest);
+    RUN_TEST(test_adminValidation_offerUnknownRegion_keepsValidPreset);
+    RUN_TEST(test_adminValidation_offerClampedFields_cleanWhenUntouched);
     RUN_TEST(test_adminValidation_clampedFields_reportsUnknownRegion);
     RUN_TEST(test_adminValidation_clampedFields_reportsDroppedFrequencySlot);
     RUN_TEST(test_adminValidation_clampedFields_reportsClampedPreset);

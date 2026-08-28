@@ -1379,24 +1379,23 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (beaconCfg.broadcast_interval_secs != 0 &&
             beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
             beaconCfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-        // Validate broadcast_offer_preset against broadcast_offer_region (or current region if unset).
-        if (beaconCfg.has_broadcast_offer_preset) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.use_preset = true;
-            probe.modem_preset = beaconCfg.broadcast_offer_preset;
-            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                probe.region = beaconCfg.broadcast_offer_region;
-            if (!RadioInterface::validateConfigLora(probe)) {
-                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clearing", beaconCfg.broadcast_offer_preset);
-                beaconCfg.has_broadcast_offer_preset = false;
-            }
-        }
-        // Validate broadcast_offer_region is a known region code.
+        // The generated enumerator names are unwieldy inline.
+        constexpr uint32_t CLAMP_REGION = meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_REGION;
+        constexpr uint32_t CLAMP_CHANNEL_INDEX = meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_CHANNEL_INDEX;
+        constexpr uint32_t CLAMP_PRESET = meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_PRESET;
+        constexpr uint32_t CLAMP_REGION_SWAPPED = meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_REGION_SWAPPED;
+        constexpr uint32_t CLAMP_FREQUENCY_SLOT = meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_FREQUENCY_SLOT;
+        // The offer is validated in the same order, and by the same rules, as a target below:
+        // region first so a bad region cannot reject a good preset, then the channel it names,
+        // then the preset against both, then a pinned slot against what the preset settled on.
+        uint32_t offerClamped = 0;
+        // Region must be a known region code (UNSET = use running config).
         if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             const RegionInfo *r = getRegion(beaconCfg.broadcast_offer_region);
             if (r->code != beaconCfg.broadcast_offer_region) {
                 LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", beaconCfg.broadcast_offer_region);
                 beaconCfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+                offerClamped |= CLAMP_REGION;
             }
         }
         // Range only, as for a target: an unprovisioned slot must not be rejected here, and a
@@ -1404,6 +1403,40 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (beaconCfg.has_broadcast_offer_channel_index && beaconCfg.broadcast_offer_channel_index >= MAX_NUM_CHANNELS) {
             LOG_WARN("Beacon: broadcast_offer_channel_index %u out of range, clearing", beaconCfg.broadcast_offer_channel_index);
             beaconCfg.has_broadcast_offer_channel_index = false;
+            offerClamped |= CLAMP_CHANNEL_INDEX;
+        }
+        // Clamp rather than clear, as for a target: a wrong preset must not take the region and
+        // channel the operator set with it.
+        if (beaconCfg.has_broadcast_offer_preset) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            probe.modem_preset = beaconCfg.broadcast_offer_preset;
+            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = beaconCfg.broadcast_offer_region;
+
+            // Hash the channel the offer advertises, not the running primary.
+            const meshtastic_ChannelSettings *offerSlot =
+                beaconCfg.has_broadcast_offer_channel_index
+                    ? &channels.getByIndex((ChannelIndex)beaconCfg.broadcast_offer_channel_index).settings
+                    : nullptr;
+            const meshtastic_ChannelSettings offerChannel = MeshBeaconModule::beaconChannelSettings(
+                channels.getByIndex(channels.getPrimaryIndex()).settings, beaconCfg.broadcast_offer_preset, offerSlot);
+
+            if (!RadioInterface::validateConfigLora(probe, offerChannel.name)) {
+                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clamping", beaconCfg.broadcast_offer_preset);
+                const auto probedRegion = probe.region;
+                const auto sentPreset = beaconCfg.broadcast_offer_preset;
+                RadioInterface::clampConfigLora(probe, offerChannel.name);
+                beaconCfg.broadcast_offer_preset = probe.modem_preset;
+                if (beaconCfg.broadcast_offer_preset != sentPreset)
+                    offerClamped |= CLAMP_PRESET;
+                // Only on an actual swap, as for a target: assigning it always would turn an
+                // UNSET region into a pin on today's running region.
+                if (probe.region != probedRegion) {
+                    beaconCfg.broadcast_offer_region = probe.region;
+                    offerClamped |= CLAMP_REGION_SWAPPED;
+                }
+            }
         }
         // A pinned slot must exist in the region it will be advertised for.
         if (beaconCfg.has_broadcast_offer_frequency_slot) {
@@ -1418,19 +1451,13 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 LOG_WARN("Beacon: broadcast_offer_frequency_slot %u outside 1..%u, clearing",
                          beaconCfg.broadcast_offer_frequency_slot, slots);
                 beaconCfg.has_broadcast_offer_frequency_slot = false;
+                offerClamped |= CLAMP_FREQUENCY_SLOT;
             }
         }
+        beaconCfg.has_broadcast_offer_clamped_fields = offerClamped != 0;
+        beaconCfg.broadcast_offer_clamped_fields = offerClamped;
         // Validate each broadcast target so a bad preset/region is cleared on write rather than
         // relying on the runtime TX drop.
-        // The generated enumerator names are unwieldy inline.
-        constexpr uint32_t CLAMP_REGION = meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION;
-        constexpr uint32_t CLAMP_CHANNEL_INDEX =
-            meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_CHANNEL_INDEX;
-        constexpr uint32_t CLAMP_PRESET = meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_PRESET;
-        constexpr uint32_t CLAMP_REGION_SWAPPED =
-            meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION_SWAPPED;
-        constexpr uint32_t CLAMP_FREQUENCY_SLOT =
-            meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT;
         for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
             auto &t = beaconCfg.broadcast_targets[i];
             // Firmware owns this field, so whatever a client sent is discarded and rebuilt here.

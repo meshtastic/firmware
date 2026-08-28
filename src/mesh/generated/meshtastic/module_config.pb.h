@@ -130,24 +130,25 @@ typedef enum _meshtastic_ModuleConfig_MeshBeaconConfig_Flags {
     meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT = 4
 } meshtastic_ModuleConfig_MeshBeaconConfig_Flags;
 
-/* What a node changed about an entry it was asked to store. */
-typedef enum _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField {
+/* What a node changed about a target or offer it was asked to store.
+ A bitmask, not an enumeration of states: several can apply to one entry at once. */
+typedef enum _meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField {
     /* Stored exactly as sent. */
-    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_NONE = 0,
+    meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_NONE = 0,
     /* region was not a known region code and was reset to UNSET. */
-    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION = 1,
+    meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_REGION = 1,
     /* channel_index was outside the channel table and was dropped. */
-    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_CHANNEL_INDEX = 2,
+    meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_CHANNEL_INDEX = 2,
     /* preset was not usable in this region and was replaced by one that is. */
-    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_PRESET = 4,
+    meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_PRESET = 4,
     /* The preset was kept and region moved to a sibling that permits it. Reported
  separately from CLAMPED_PRESET: the operator's preset survived, their region
  did not. */
-    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION_SWAPPED = 8,
+    meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_REGION_SWAPPED = 8,
     /* frequency_slot did not exist in the region at this bandwidth and was dropped,
  so the slot falls back to the channel name hash. */
-    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT = 16
-} meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField;
+    meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_FREQUENCY_SLOT = 16
+} meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField;
 
 /* Struct definitions */
 /* Settings for reporting unencrypted information about our node to a map via MQTT */
@@ -533,6 +534,10 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
  Set it only where the mesh deliberately pins a non-default slot. Do not send 0. */
     bool has_broadcast_offer_frequency_slot;
     uint32_t broadcast_offer_frequency_slot;
+    /* Bitmask of ClampedField for the offer settings, set by firmware when they were altered
+ on write. Read-only from a client's perspective and overwritten on every set. */
+    bool has_broadcast_offer_clamped_fields;
+    uint32_t broadcast_offer_clamped_fields;
 } meshtastic_ModuleConfig_MeshBeaconConfig;
 
 /* TAK team/role configuration */
@@ -641,9 +646,9 @@ extern "C" {
 #define _meshtastic_ModuleConfig_MeshBeaconConfig_Flags_MAX meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT
 #define _meshtastic_ModuleConfig_MeshBeaconConfig_Flags_ARRAYSIZE ((meshtastic_ModuleConfig_MeshBeaconConfig_Flags)(meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT+1))
 
-#define _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_MIN meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_NONE
-#define _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_MAX meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT
-#define _meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_ARRAYSIZE ((meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField)(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT+1))
+#define _meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_MIN meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_NONE
+#define _meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_MAX meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_FREQUENCY_SLOT
+#define _meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_ARRAYSIZE ((meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField)(meshtastic_ModuleConfig_MeshBeaconConfig_ClampedField_CLAMPED_FREQUENCY_SLOT+1))
 
 
 
@@ -699,7 +704,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
-#define meshtastic_ModuleConfig_MeshBeaconConfig_init_default {0, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, false, 0, 0, {meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default}, false, 0}
+#define meshtastic_ModuleConfig_MeshBeaconConfig_init_default {0, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, false, 0, 0, {meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default}, false, 0, false, 0}
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_default {false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, 0, false, 0, false, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_default {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
@@ -720,7 +725,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
-#define meshtastic_ModuleConfig_MeshBeaconConfig_init_zero {0, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, false, 0, 0, {meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero}, false, 0}
+#define meshtastic_ModuleConfig_MeshBeaconConfig_init_zero {0, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, false, 0, 0, {meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero, meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero}, false, 0, false, 0}
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero {false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, 0, false, 0, false, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_zero {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_zero   {0, "", _meshtastic_RemoteHardwarePinType_MIN}
@@ -845,6 +850,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_offer_channel_index_tag 12
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_targets_tag 13
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_offer_frequency_slot_tag 14
+#define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_offer_clamped_fields_tag 15
 #define meshtastic_ModuleConfig_TAKConfig_team_tag 1
 #define meshtastic_ModuleConfig_TAKConfig_role_tag 2
 #define meshtastic_RemoteHardwarePin_gpio_pin_tag 1
@@ -1093,7 +1099,8 @@ X(a, STATIC,   OPTIONAL, UENUM,    broadcast_offer_preset,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_interval_secs,  11) \
 X(a, STATIC,   OPTIONAL, UINT32,   broadcast_offer_channel_index,  12) \
 X(a, STATIC,   REPEATED, MESSAGE,  broadcast_targets,  13) \
-X(a, STATIC,   OPTIONAL, UINT32,   broadcast_offer_frequency_slot,  14)
+X(a, STATIC,   OPTIONAL, UINT32,   broadcast_offer_frequency_slot,  14) \
+X(a, STATIC,   OPTIONAL, UINT32,   broadcast_offer_clamped_fields,  15)
 #define meshtastic_ModuleConfig_MeshBeaconConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_MeshBeaconConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_targets_MSGTYPE meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget
@@ -1175,7 +1182,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_size 22
-#define meshtastic_ModuleConfig_MeshBeaconConfig_size 226
+#define meshtastic_ModuleConfig_MeshBeaconConfig_size 232
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
@@ -1186,7 +1193,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 30
-#define meshtastic_ModuleConfig_size             230
+#define meshtastic_ModuleConfig_size             236
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus
