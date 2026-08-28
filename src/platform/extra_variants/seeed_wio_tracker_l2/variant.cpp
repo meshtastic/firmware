@@ -7,29 +7,12 @@
 #include "SPILock.h"
 #include "WakeKey.h"
 #include "input/InputBroker.h"
-#include "mesh/MeshLED.h"
 
 #include PCA95X5_INC
 extern PCA95X5_CLS io;
 
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
-
-class WioTrackerMeshLED : public MeshLED
-{
-  public:
-    void init() override { io.digitalWrite(EXPANDS_LED_USER, LOW); }
-    void on() override
-    {
-        concurrency::LockGuard guard(spiLock);
-        io.digitalWrite(EXPANDS_LED_USER, HIGH);
-    }
-    void off() override
-    {
-        concurrency::LockGuard guard(spiLock);
-        io.digitalWrite(EXPANDS_LED_USER, LOW);
-    }
-};
 
 static bool initOK = false;
 
@@ -93,9 +76,6 @@ void earlyInitVariant()
         io.digitalWrite(EXPANDS_TP_RST, HIGH); // TP RST high
         delay(60);
         initOK = true;
-
-        meshLED = std::make_shared<WioTrackerMeshLED>();
-        meshLED->init();
     }
 }
 
