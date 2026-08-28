@@ -1010,6 +1010,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.ignore_mqtt = false;
 #endif
+#ifdef USERPREFS_CONFIG_LORA_CONFIG_OK_TO_MQTT
+    config.lora.config_ok_to_mqtt = USERPREFS_CONFIG_LORA_CONFIG_OK_TO_MQTT;
+#endif
 
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
@@ -1042,6 +1045,16 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
     config.security.admin_key_count = numAdminKeys;
+
+#ifdef USERPREFS_CONFIG_SECURITY_IS_MANAGED
+    // is_managed is the supported way for a vendor to lock configuration, but without an admin key
+    // it locks the vendor out too and only a factory reset recovers it.
+    if (USERPREFS_CONFIG_SECURITY_IS_MANAGED && numAdminKeys == 0) {
+        LOG_WARN("USERPREFS is_managed needs an admin key, ignored");
+    } else {
+        config.security.is_managed = USERPREFS_CONFIG_SECURITY_IS_MANAGED;
+    }
+#endif
 
     // Left at COMPATIBLE when signature checking is compiled out, so we never report a policy
     // nothing enforces (mirrors the set-config guard in AdminModule).
@@ -1204,6 +1217,23 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     installRoleDefaults(config.device.role);
 #endif
 
+#ifdef USERPREFS_CONFIG_DEVICE_REBROADCAST_MODE
+    config.device.rebroadcast_mode = USERPREFS_CONFIG_DEVICE_REBROADCAST_MODE;
+    // Same restriction AdminModule enforces on a set-config; apply it here so a vendor build can't
+    // ship a combination the device would silently refuse later.
+    if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+        LOG_WARN("Rebroadcast mode can't be NONE for a router role, use ALL");
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    }
+#endif
+#ifdef USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS
+    // Clamped to the same window AdminModule enforces on a set-config
+    config.device.node_info_broadcast_secs = clamp((uint32_t)USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS,
+                                                   (uint32_t)min_node_info_broadcast_secs, (uint32_t)MAX_INTERVAL);
+#endif
+
     initConfigIntervals();
     variantDefaultConfig();
     variantDefaultModuleConfig();
@@ -1288,7 +1318,7 @@ void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc)
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
-    memset(&moduleConfig, 0, sizeof(meshtastic_ModuleConfig));
+    memset(&moduleConfig, 0, sizeof(meshtastic_LocalModuleConfig));
 
     moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_mqtt = true;
@@ -3262,6 +3292,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+        moduleConfig.has_traffic_management = true;
         moduleConfig.has_tak = true;
 #if !MESHTASTIC_EXCLUDE_BEACON
         moduleConfig.has_mesh_beacon = true;
