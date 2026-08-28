@@ -411,11 +411,6 @@ void setup()
     digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
-#ifdef LED_LORA
-    pinMode(LED_LORA, OUTPUT);
-    digitalWrite(LED_LORA, LED_STATE_OFF);
-#endif
-
     concurrency::hasBeenSetup = true;
 #if HAS_SCREEN
     meshtastic_Config_DisplayConfig_OledType screen_model =

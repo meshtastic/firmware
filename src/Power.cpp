@@ -540,13 +540,34 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 
         if (voltage_mv == 0) {
-            const int bits = adcBitWidthToBits(adc_width);
-            const float max_code = powf(2.0f, bits) - 1.0f;
-            voltage_mv = (int)((raw / max_code) * DEFAULT_VREF);
+            // Approximate conversion when ADC calibration is unavailable
+            float attenuationScale;
+
+            switch (atten) {
+            case ADC_ATTEN_DB_0:
+                attenuationScale = 1.0f;
+                break;
+            case ADC_ATTEN_DB_2_5:
+                attenuationScale = 1.0f / 0.75f;
+                break;
+            case ADC_ATTEN_DB_6:
+                attenuationScale = 1.0f / 0.50f;
+                break;
+            case ADC_ATTEN_DB_12:
+                attenuationScale = 1.0f / 0.25f;
+                break;
+            default:
+                LOG_ERROR("Unsupported ADC attenuation: %d", (int)atten);
+                return 0;
         }
 
-        return voltage_mv;
+        const int bits = adcBitWidthToBits(adc_width);
+        const float max_code = powf(2.0f, bits) - 1.0f;
+        voltage_mv = (int)((raw / max_code) * DEFAULT_VREF * attenuationScale);
     }
+
+    return voltage_mv;
+}
 #endif
 
     /**
