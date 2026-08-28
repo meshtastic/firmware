@@ -175,6 +175,36 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     return !RadioInterface::validateConfigLora(probe, targetChannel.name);
 }
 
+void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+{
+    if (const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg)) {
+        beacon.has_offer_channel = true;
+        beacon.offer_channel = *offerCh;
+        // PSK is included intentionally: this beacon is a public join-invitation. The offered
+        // channel is not secret - the PSK here is a convenience token, not a security boundary.
+    }
+    beacon.has_offer_preset = bcfg.has_broadcast_offer_preset;
+    beacon.offer_preset = bcfg.broadcast_offer_preset;
+    beacon.offer_region = bcfg.broadcast_offer_region;
+
+    // Advertise the slot only where a receiver could not work it out from the region, preset and
+    // channel name already in the offer - which covers a region that mandates a slot.
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.use_preset = true;
+    if (bcfg.has_broadcast_offer_preset)
+        probe.modem_preset = bcfg.broadcast_offer_preset;
+    if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        probe.region = bcfg.broadcast_offer_region;
+    probe.channel_num = 0;
+    const uint32_t derived =
+        RadioInterface::resolveFrequencySlot(probe, beacon.has_offer_channel ? beacon.offer_channel.name : nullptr);
+    const uint32_t advertised = bcfg.has_broadcast_offer_frequency_slot ? bcfg.broadcast_offer_frequency_slot : derived;
+    if (advertised != derived) {
+        beacon.has_offer_frequency_slot = true;
+        beacon.offer_frequency_slot = advertised;
+    }
+}
+
 const meshtastic_ChannelSettings *MeshBeaconModule::offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     if (!bcfg.has_broadcast_offer_channel_index || bcfg.broadcast_offer_channel_index >= (uint32_t)channels.getNumChannels())
@@ -360,17 +390,7 @@ void MeshBeaconBroadcastModule::rebuildCache()
     const auto &bcfg = moduleConfig.mesh_beacon;
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     strncpy(beacon.message, bcfg.broadcast_message, sizeof(beacon.message) - 1);
-    if (const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg)) {
-        beacon.has_offer_channel = true;
-        beacon.offer_channel = *offerCh;
-        // PSK is included intentionally: this beacon is a public join-invitation.
-        // The offered channel is not secret - the PSK here is a convenience token,
-        // not a security boundary.  Operators who want a private channel must
-        // distribute the PSK out-of-band and leave offer_channel unset.
-    }
-    beacon.has_offer_preset = bcfg.has_broadcast_offer_preset;
-    beacon.offer_preset = bcfg.broadcast_offer_preset;
-    beacon.offer_region = bcfg.broadcast_offer_region;
+    fillOffer(beacon, bcfg);
     // Note: an empty config legitimately encodes to 0 bytes, and pb_encode_to_bytes can't distinguish
     // that from a (here effectively impossible - buffer is max-sized) failure, so we always clear the
     // dirty flag. The combined send is gated on payloadCacheSize > 0, so an empty payload is never TX'd.
@@ -430,13 +450,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     pb_size_t offerSize = 0;
     if (sendOfferOnly) {
         meshtastic_MeshBeacon offerOnly = meshtastic_MeshBeacon_init_zero;
-        if (const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg)) {
-            offerOnly.has_offer_channel = true;
-            offerOnly.offer_channel = *offerCh;
-        }
-        offerOnly.has_offer_preset = bcfg.has_broadcast_offer_preset;
-        offerOnly.offer_preset = bcfg.broadcast_offer_preset;
-        offerOnly.offer_region = bcfg.broadcast_offer_region;
+        fillOffer(offerOnly, bcfg);
         offerSize = (pb_size_t)pb_encode_to_bytes(offerBuf, sizeof(offerBuf), &meshtastic_MeshBeacon_msg, &offerOnly);
         if (offerSize == 0)
             LOG_WARN("Beacon: offer encode failed, skip");
@@ -456,6 +470,19 @@ void MeshBeaconBroadcastModule::sendBeacon()
         bool has_channel;
         ChannelIndex channelIndex; // table slot to encrypt on; primary when has_channel is false
         meshtastic_ChannelSettings channel;
+    };
+
+    // One place where a target's slot is worked out, so a pinned slot and a derived one see the
+    // same region, preset and bandwidth. An out-of-range pin falls back to the hash.
+    const auto targetSlot = [](const meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget &bt, const EffTarget &tgt,
+                               const char *channelName) {
+        meshtastic_Config_LoRaConfig probe = config.lora;
+        probe.use_preset = true;
+        probe.modem_preset = tgt.preset;
+        if (bt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            probe.region = bt.region;
+        probe.channel_num = bt.has_frequency_slot ? bt.frequency_slot : 0;
+        return (uint16_t)RadioInterface::resolveFrequencySlot(probe, channelName);
     };
 
     // The slot the node is already on, resolved the same way a target's is, so the two compare.
@@ -518,19 +545,15 @@ void MeshBeaconBroadcastModule::sendBeacon()
                         tgt.channelIndex = (ChannelIndex)bt.channel_index;
                         // Pin the slot this channel's name would hash to. The channel is no longer
                         // installed as primary, so nothing else would derive it from that name.
-                        meshtastic_Config_LoRaConfig probe = config.lora;
-                        probe.use_preset = true;
-                        probe.modem_preset = tgt.preset;
-                        if (bt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                            probe.region = bt.region;
-                        probe.channel_num = 0;
-                        tgt.slot =
-                            (uint16_t)RadioInterface::resolveFrequencySlot(probe, beaconChannelSettings(cs, tgt.preset).name);
+                        tgt.slot = targetSlot(bt, tgt, beaconChannelSettings(cs, tgt.preset).name);
                     } else {
                         LOG_DEBUG("Beacon: target %d channel_index %u blank, use preset default", ti, bt.channel_index);
                     }
                 }
             }
+            // A pinned slot wins over the name hash, and applies with or without a channel.
+            if (bt.has_frequency_slot && bt.frequency_slot > 0)
+                tgt.slot = targetSlot(bt, tgt, tgt.has_channel ? beaconChannelSettings(tgt.channel, tgt.preset).name : nullptr);
         }
 
         // Skip a target whose effective radio config duplicates one already sent this cycle.

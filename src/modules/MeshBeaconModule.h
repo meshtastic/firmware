@@ -85,6 +85,9 @@ class MeshBeaconModule
      * the name it will actually run on rather than the running primary's. Pure - depends only on
      * its arguments.
      */
+    /** Copy every offer field from config onto an outgoing beacon. */
+    static void fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+
     /**
      * The channel the offer advertises, resolved from its table slot, or nullptr when the
      * config names no slot or the slot is unusable.
