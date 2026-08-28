@@ -1499,20 +1499,19 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_OFFER_REGION
     moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
 #endif
-#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
-    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
-            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
-    moduleConfig.mesh_beacon.broadcast_offer_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1] =
-        '\0';
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX;
 #endif
-#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
-    static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
-    static_assert(sizeof(beaconOfferPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes),
-                  "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
-    memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
-    moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+#ifdef USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
+#endif
+// The offer channel is now a slot in the device's channel table rather than an inline name and
+// PSK, so an integrator provisions the channel and points at it.
+#if defined(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK)
+#error                                                                                                                           \
+    "USERPREFS_MESH_BEACON_OFFER_CHANNEL_{NAME,PSK} removed; provision the channel and use USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX"
 #endif
 // The USERPREFS_MESH_BEACON_ON_* keys were removed with the broadcast_on_* config fields. Fail the
 // build rather than silently dropping a preconfigured beacon channel: define the equivalent

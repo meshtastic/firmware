@@ -1399,6 +1399,12 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 beaconCfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
             }
         }
+        // Range only, as for a target: an unprovisioned slot must not be rejected here, and a
+        // slot retired later is handled by dropBeaconTargetsForChannel().
+        if (beaconCfg.has_broadcast_offer_channel_index && beaconCfg.broadcast_offer_channel_index >= MAX_NUM_CHANNELS) {
+            LOG_WARN("Beacon: broadcast_offer_channel_index %u out of range, clearing", beaconCfg.broadcast_offer_channel_index);
+            beaconCfg.has_broadcast_offer_channel_index = false;
+        }
         // Validate each broadcast target so a bad preset/region is cleared on write rather than
         // relying on the runtime TX drop.
         for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
