@@ -258,7 +258,9 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
-    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    // channelName is the name whose hash picks the default frequency slot. Null means "the current
+    // primary" - pass one explicitly to ask about a config that is not the running one.
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName = nullptr);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
@@ -270,11 +272,12 @@ class RadioInterface
     // records a critical error, and sends a client notification.
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
-    // Check if a candidate radio configuration is valid.
-    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
+    // Check if a candidate radio configuration is valid. Side-effect free: pass channelName to
+    // evaluate against a channel other than the running primary.
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
 
     // Make a candidate radio configuration valid, even if it isn't.
-    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
