@@ -1781,6 +1781,122 @@ static void test_broadcaster_targetPinnedHomeSlot_armsNoSwitch(void)
 }
 
 /**
+ * A target that already transmits on the mesh being offered must not carry the offer: everyone
+ * hearing it is on that mesh. Reached by pointing a target at the offered channel after the
+ * offer was set, which is valid config at write time and only redundant at TX.
+ */
+static void test_broadcaster_offerMatchesTarget_offerIsOmitted(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xDD, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "hello", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "the text must still go out");
+    const meshtastic_MeshPacket &p = mockRouter->sentPackets[0];
+    meshtastic_MeshBeacon decoded = meshtastic_MeshBeacon_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(p.decoded.payload.bytes, p.decoded.payload.size);
+    TEST_ASSERT_TRUE(pb_decode(&stream, &meshtastic_MeshBeacon_msg, &decoded));
+    TEST_ASSERT_EQUAL_STRING("hello", decoded.message);
+    TEST_ASSERT_FALSE_MESSAGE(decoded.has_offer_channel, "a target already on the offered mesh must not carry the offer");
+}
+
+/**
+ * The suppression is per target: an offer redundant for one target is still worth sending on
+ * another, so it must not be dropped wholesale.
+ */
+static void test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xDD, 0x11, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    static const uint8_t otherPsk[16] = {0xEE, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                         0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestSecondaryChannel(1, "Other", otherPsk, sizeof(otherPsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "hello", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.broadcast_targets_count = 2;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.broadcast_targets[1].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[1].channel_index = 1;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(2, mockRouter->sentPackets.size(), "both targets must be sent");
+    meshtastic_MeshBeacon first = meshtastic_MeshBeacon_init_zero;
+    meshtastic_MeshBeacon second = meshtastic_MeshBeacon_init_zero;
+    pb_istream_t s0 =
+        pb_istream_from_buffer(mockRouter->sentPackets[0].decoded.payload.bytes, mockRouter->sentPackets[0].decoded.payload.size);
+    pb_istream_t s1 =
+        pb_istream_from_buffer(mockRouter->sentPackets[1].decoded.payload.bytes, mockRouter->sentPackets[1].decoded.payload.size);
+    TEST_ASSERT_TRUE(pb_decode(&s0, &meshtastic_MeshBeacon_msg, &first));
+    TEST_ASSERT_TRUE(pb_decode(&s1, &meshtastic_MeshBeacon_msg, &second));
+    TEST_ASSERT_FALSE_MESSAGE(first.has_offer_channel, "the matching target must not carry the offer");
+    TEST_ASSERT_TRUE_MESSAGE(second.has_offer_channel, "a different channel is a different mesh, still worth offering");
+}
+
+/**
+ * With no text there is nothing left once the offer is dropped, so that target sends nothing at
+ * all rather than an empty beacon.
+ */
+static void test_broadcaster_offerMatchesTargetNoText_sendsNothing(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xDD, 0x22, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.broadcast_message[0] = '\0';
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockRouter->sentPackets.size(), "nothing left to say, so nothing is sent");
+}
+
+/**
+ * An offer that names no channel is an announcement, not an invitation elsewhere, so it is still
+ * sent even when its preset and region are the ones the target already runs. Guards the redundancy
+ * gate against swallowing the plain offer-only beacon.
+ */
+static void test_broadcaster_offerWithoutChannelMatchingTarget_isStillSent(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = config.lora.modem_preset;
+    moduleConfig.mesh_beacon.broadcast_offer_region = config.lora.region;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "a channel-less offer must not be suppressed");
+}
+
+/**
  * The restore must clear its guard before reconfiguring, or completeSending() re-enters the restore
  * branch and it reconfigures the radio once per level until the stack runs out. Seen in the field as
  * a run of "Beacon: restore radio config after TX" with a full applyModemConfig() between each.
@@ -2216,6 +2332,10 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_targetMatchingRunningConfig_armsNoSwitch);
     RUN_TEST(test_broadcaster_targetPinnedSlot_armsThatSlot);
     RUN_TEST(test_broadcaster_targetPinnedHomeSlot_armsNoSwitch);
+    RUN_TEST(test_broadcaster_offerMatchesTarget_offerIsOmitted);
+    RUN_TEST(test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther);
+    RUN_TEST(test_broadcaster_offerMatchesTargetNoText_sendsNothing);
+    RUN_TEST(test_broadcaster_offerWithoutChannelMatchingTarget_isStillSent);
     RUN_TEST(test_beaconRestore_isNotReenteredByCompleteSending);
     RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
     RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);

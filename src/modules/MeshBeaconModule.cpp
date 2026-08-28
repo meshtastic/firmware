@@ -485,6 +485,23 @@ void MeshBeaconBroadcastModule::sendBeacon()
         return (uint16_t)RadioInterface::resolveFrequencySlot(probe, channelName);
     };
 
+    // The mesh the offer describes, resolved the same way a target's is so the two compare.
+    const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg);
+    const auto offerPreset = bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : config.lora.modem_preset;
+    const auto offerRegion = (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                                 ? bcfg.broadcast_offer_region
+                                 : config.lora.region;
+    uint16_t offerSlot;
+    {
+        meshtastic_Config_LoRaConfig probe = config.lora;
+        probe.use_preset = true;
+        probe.modem_preset = offerPreset;
+        probe.region = offerRegion;
+        probe.channel_num = bcfg.has_broadcast_offer_frequency_slot ? bcfg.broadcast_offer_frequency_slot : 0;
+        offerSlot = (uint16_t)RadioInterface::resolveFrequencySlot(
+            probe, offerCh ? beaconChannelSettings(*offerCh, offerPreset).name : nullptr);
+    }
+
     // The slot the node is already on, resolved the same way a target's is, so the two compare.
     const uint16_t homeSlot =
         (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
@@ -574,6 +591,17 @@ void MeshBeaconBroadcastModule::sendBeacon()
         sentRegion[sentCount] = resolvedRegion;
         sentCount++;
 
+        // Everyone hearing this target is already on the mesh the offer describes, so the offer
+        // tells them nothing. Config drifts into this by pointing a target at the offered channel
+        // after the offer was set, so it has to be caught here rather than on write.
+        // Only when the offer names a channel: an offer carrying just a preset and region is an
+        // announcement, not an invitation to somewhere else, and stays a valid thing to send.
+        const bool offerRedundant = bcfg.has_broadcast_offer_channel_index &&
+                                    (uint32_t)tgt.channelIndex == bcfg.broadcast_offer_channel_index &&
+                                    offerPreset == tgt.preset && offerRegion == resolvedRegion && offerSlot == tgt.slot;
+        if (offerRedundant)
+            LOG_DEBUG("Beacon: target %d already runs the offered mesh, omit offer", ti);
+
         // Only RF parameters can require a switch now; the channel is named on the packet instead.
         const bool radioDiffers =
             (tgt.preset != config.lora.modem_preset) || (tgt.slot != homeSlot) ||
@@ -590,7 +618,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             sendBeaconPacket(p);
         };
 
-        if (sendOfferOnly && offerSize > 0) {
+        if (sendOfferOnly && offerSize > 0 && !offerRedundant) {
             meshtastic_MeshPacket *pA = allocDataPacket();
             if (!pA) {
                 LOG_WARN("Beacon: split-A alloc failed (target %d)", ti);
@@ -619,14 +647,25 @@ void MeshBeaconBroadcastModule::sendBeacon()
             applyTarget(pB);
         }
 
-        if (sendCombined && payloadCacheSize > 0) {
+        // Re-encode without the offer for a target that already runs it; the text still stands.
+        uint8_t msgOnlyBuf[meshtastic_MeshBeacon_size];
+        const uint8_t *combinedBuf = payloadCache;
+        pb_size_t combinedSize = payloadCacheSize;
+        if (sendCombined && offerRedundant) {
+            meshtastic_MeshBeacon msgOnly = meshtastic_MeshBeacon_init_zero;
+            strncpy(msgOnly.message, bcfg.broadcast_message, sizeof(msgOnly.message) - 1);
+            combinedBuf = msgOnlyBuf;
+            combinedSize = (pb_size_t)pb_encode_to_bytes(msgOnlyBuf, sizeof(msgOnlyBuf), &meshtastic_MeshBeacon_msg, &msgOnly);
+        }
+
+        if (sendCombined && combinedSize > 0) {
             meshtastic_MeshPacket *p = allocDataPacket();
             if (!p) {
                 LOG_WARN("Beacon: failed to allocate beacon packet (target %d)", ti);
                 return;
             }
-            memcpy(p->decoded.payload.bytes, payloadCache, payloadCacheSize);
-            p->decoded.payload.size = payloadCacheSize;
+            memcpy(p->decoded.payload.bytes, combinedBuf, combinedSize);
+            p->decoded.payload.size = combinedSize;
             p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
             stampPacket(p);
             LOG_INFO("Beacon: MESH_BEACON_APP offer+msg from=0x%08x msg='%.40s' target=%d", p->from, bcfg.broadcast_message, ti);
