@@ -121,19 +121,15 @@ bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
     return getTargetRadioSettings(p, nullptr, nullptr);
 }
 
-// Dispose of a beacon packet according to what router->send() did with it. Only ERRNO_OK means the
-// interface queued it and now owns both the packet and its target radio settings, which the TX
-// hook frees on release. Every other return means the packet will never reach the radio, so the
-// settings entry has to be freed here or it leaks its slot in the fixed pool for good - the drop
-// paths inside Router (duty cycle, oversized, precision) release the packet without notifying any
-// hook. ERRNO_SHOULD_RELEASE additionally leaves the packet itself ours to free.
-static void releaseIfNotQueued(ErrorCode res, meshtastic_MeshPacket *p)
+// Only ERRNO_OK means the interface queued the packet and now owns its target radio settings too.
+// Any other return means it never reaches the radio, so free the settings entry here or it leaks.
+static void releaseIfNotQueued(ErrorCode sendResult, meshtastic_MeshPacket *p)
 {
-    if (res == ERRNO_OK)
+    if (sendResult == ERRNO_OK)
         return;
     MeshBeaconModule::clearTargetRadioSettings(p);
-    if (res == ERRNO_SHOULD_RELEASE)
-        packetPool.release(p);
+    if (sendResult == ERRNO_SHOULD_RELEASE)
+        packetPool.release(p); // this one is still ours to free
 }
 
 void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
@@ -151,8 +147,11 @@ void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
 bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
 {
     meshtastic_Config_LoRaConfig_ModemPreset preset;
+    uint16_t slot = 0;
     meshtastic_Config_LoRaConfig_RegionCode sidecarRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-    if (!getTargetRadioSettings(p, &preset, nullptr, nullptr, &sidecarRegion))
+    bool sidecarHasChannel = false;
+    meshtastic_ChannelSettings sidecarChannel = {};
+    if (!getTargetRadioSettings(p, &preset, &slot, nullptr, &sidecarRegion, &sidecarHasChannel, &sidecarChannel))
         return false; // not a beacon-switch packet - nothing to validate, normal traffic unaffected
 
     const meshtastic_Config_LoRaConfig_RegionCode region =
@@ -165,12 +164,17 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     if (r && r->profile->licensedOnly && !owner.is_licensed)
         return true;
 
-    // Preset must be valid for the target region.
+    // The slot is picked by hashing the channel name, so evaluate against the channel this target
+    // will install as primary, not the running one. Never empty - beaconChannelSettings fills it.
+    const meshtastic_ChannelSettings targetChannel = beaconChannelSettings(
+        channels.getByIndex(channels.getPrimaryIndex()).settings, preset, sidecarHasChannel ? &sidecarChannel : nullptr);
+
     meshtastic_Config_LoRaConfig probe = config.lora;
     probe.use_preset = true;
     probe.modem_preset = preset;
     probe.region = region;
-    return !RadioInterface::validateConfigLora(probe);
+    probe.channel_num = slot;
+    return !RadioInterface::validateConfigLora(probe, targetChannel.name);
 }
 
 meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtastic_ChannelSettings &base,
