@@ -653,8 +653,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                                        SEGMENT_DEVICESTATE | SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_CHANNELS)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
             LOG_DEBUG("Rebooting after preferences restore");
-            reboot(1000);
             disableBluetooth();
+            reboot(DEFAULT_REBOOT_SECONDS);
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
@@ -1233,10 +1233,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
-    // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
-    // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
-                                              meshtastic_ModuleConfig_serial_tag, meshtastic_ModuleConfig_statusmessage_tag)) {
+    // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
+    // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
+    // next PowerFSM transition. Everything else reboots, so take BLE down before the phone interferes.
+    if (!hasOpenEditTransaction &&
+        !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag, meshtastic_ModuleConfig_serial_tag,
+                   meshtastic_ModuleConfig_statusmessage_tag, meshtastic_ModuleConfig_mesh_beacon_tag)) {
         disableBluetooth();
     }
 
@@ -1250,8 +1252,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (!MQTT::isValidConfig(c.payload_variant.mqtt)) {
             return false;
         }
-        // Disable Bluetooth to prevent interference during MQTT configuration
-        disableBluetooth();
+        // Disable Bluetooth to prevent interference during MQTT configuration, except inside an edit
+        // transaction: saveChanges() defers the reboot there, so nothing would bring BLE back.
+        if (!hasOpenEditTransaction)
+            disableBluetooth();
         moduleConfig.has_mqtt = true;
         {
             char prevPass[sizeof(moduleConfig.mqtt.password)];
@@ -1269,7 +1273,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             LOG_ERROR("Invalid serial config");
             return false;
         }
-        disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
+        // Same transaction caveat as MQTT above: a deferred reboot would leave BLE down with no restore.
+        if (!hasOpenEditTransaction)
+            disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
         moduleConfig.has_serial = true;
         moduleConfig.serial = c.payload_variant.serial;
         break;
