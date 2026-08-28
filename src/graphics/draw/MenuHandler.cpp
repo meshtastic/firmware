@@ -272,6 +272,10 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
         gps->enable();
 #endif
+    if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && !config.lora.tx_enabled) {
+        LOG_WARN("Setting config.lora.tx_enabled to true");
+        config.lora.tx_enabled = true;
+    }
     service->reloadConfig(changes);
 }
 
