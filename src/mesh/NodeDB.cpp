@@ -1375,6 +1375,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif // HAS_I2S
 
+#if ARCH_PORTDUINO
+    // meshtasticd has no buzzer or LED to drive, but the module is what raises desktop
+    // notifications (ExternalNotificationModule::portduinoNotify), so default it on.
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif // ARCH_PORTDUINO
+
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.alert_message = true;

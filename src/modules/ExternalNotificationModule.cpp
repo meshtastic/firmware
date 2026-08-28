@@ -25,6 +25,10 @@
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
+#if HAS_LIBNOTIFY
+#include <libnotify/notify.h>
+#endif
+
 #if defined(HAS_RGB_LED)
 #include "AmbientLightingThread.h"
 uint8_t red = 0;
@@ -457,6 +461,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (genericShouldAlert) {
                 LOG_INFO("externalNotificationModule - Generic alert");
                 setExternalState(0, true);
+#if HAS_LIBNOTIFY
+                portduinoNotify(mp);
+#endif
             }
 
             if (vibraShouldAlert) {
@@ -624,3 +631,108 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
     }
     return 0;
 }
+
+#if HAS_LIBNOTIFY
+/// Cap on undelivered notifications. A burst of traffic shouldn't grow the queue without bound while
+/// the notification daemon is slow; the oldest entries are the ones worth keeping.
+static constexpr size_t maxQueuedNotifications = 16;
+/// Consecutive show() failures before we stop trying. One failure can be a daemon restart; a run of
+/// them means there is nothing listening, and retrying per message just burns work and spams the log.
+static constexpr int maxNotifyFailures = 3;
+
+void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp)
+{
+    std::string senderName;
+    const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+    if (nodeInfoLiteHasUser(sender)) {
+        if (sender->long_name[0] != '\0') {
+            senderName = sender->long_name;
+        } else {
+            senderName = sender->short_name;
+        }
+    } else {
+        senderName = std::to_string(mp.from);
+    }
+
+    // nodeDB is only safe to touch on this thread, so the strings are resolved here and the worker
+    // gets owned copies.
+    std::string notificationSummary = "From: " + senderName;
+    std::string notificationBody((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
+
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        if (notifyDisabled)
+            return;
+        if (notifyQueue.size() >= maxQueuedNotifications) {
+            LOG_WARN("Desktop notification queue full, dropping notification");
+            return;
+        }
+        notifyQueue.emplace_back(std::move(notificationSummary), std::move(notificationBody));
+        if (!notifyThread.joinable())
+            notifyThread = std::thread([this] { notifyWorker(); });
+    }
+    notifyWake.notify_one();
+}
+
+void ExternalNotificationModule::notifyWorker()
+{
+    if (!notify_is_initted() && !notify_init("Meshtasticd")) {
+        LOG_WARN("Failed to initialize libnotify, disabling desktop notifications");
+        std::lock_guard<std::mutex> lock(notifyLock);
+        notifyDisabled = true;
+        notifyQueue.clear();
+        return;
+    }
+
+    int consecutiveFailures = 0;
+    std::unique_lock<std::mutex> lock(notifyLock);
+    while (true) {
+        notifyWake.wait(lock, [this] { return notifyDisabled || !notifyQueue.empty(); });
+        if (notifyDisabled)
+            return;
+
+        std::pair<std::string, std::string> entry = std::move(notifyQueue.front());
+        notifyQueue.pop_front();
+
+        // Unlocked for the DBus round trip so handleReceived() never blocks behind the daemon.
+        lock.unlock();
+        bool failed = true;
+        NotifyNotification *notification =
+            notify_notification_new(entry.first.c_str(), entry.second.c_str(), "org.meshtastic.meshtasticd");
+        if (notification) {
+            GError *error = nullptr;
+            if (notify_notification_show(notification, &error)) {
+                failed = false;
+            } else {
+                LOG_WARN("Failed to show notification: %s", error ? error->message : "unknown error");
+                if (error)
+                    g_error_free(error);
+            }
+            g_object_unref(G_OBJECT(notification));
+        } else {
+            LOG_WARN("Failed to create notification");
+        }
+        lock.lock();
+
+        consecutiveFailures = failed ? consecutiveFailures + 1 : 0;
+        if (consecutiveFailures >= maxNotifyFailures) {
+            LOG_WARN("Disabling desktop notifications after %d consecutive failures", consecutiveFailures);
+            notifyDisabled = true;
+            notifyQueue.clear();
+            return;
+        }
+    }
+}
+
+ExternalNotificationModule::~ExternalNotificationModule()
+{
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        notifyDisabled = true;
+        notifyQueue.clear();
+    }
+    notifyWake.notify_one();
+    if (notifyThread.joinable())
+        notifyThread.join();
+}
+#endif
