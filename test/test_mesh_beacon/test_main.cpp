@@ -69,9 +69,7 @@ class MockRouter : public Router
 
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
-        // Capture the primary channel as seen AT send() time. sendBeaconPacket() temporarily swaps
-        // the beacon channel into the primary slot around this call so perhapsEncode keys off it,
-        // so this snapshot reflects which channel the packet would actually be encrypted on.
+        // Capture the primary channel as seen AT send() time, to prove the beacon never swaps it.
         if (channelFile.channels_count > 0)
             primaryAtSend.push_back(channels.getByIndex(channels.getPrimaryIndex()).settings);
         sentPackets.push_back(*p);
@@ -1176,9 +1174,9 @@ static void test_broadcaster_noChannelOverride_doesNotSwapPrimary(void)
 }
 
 /**
- * A broadcast_target whose channel_index points at a configured table slot must transmit encrypted
- * on THAT slot's channel (name + PSK), not the primary. Verifies the slot-index → channel-table
- * resolution introduced when BroadcastTarget dropped its embedded ChannelSettings.
+ * A broadcast_target whose channel_index points at a configured table slot must transmit on THAT
+ * slot's channel, not the primary - and must do so by naming the slot on the packet rather than
+ * installing it as primary, so no other traffic can pick up the beacon's channel.
  */
 static void test_broadcaster_targetChannelIndex_usesTableSlot(void)
 {
@@ -1200,14 +1198,17 @@ static void test_broadcaster_targetChannelIndex_usesTableSlot(void)
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
 
-    TEST_ASSERT_TRUE_MESSAGE(mockRouter->primaryAtSend.size() >= 1, "expected at least one send");
-    const meshtastic_ChannelSettings &atSend = mockRouter->primaryAtSend[0];
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("BeaconNet", atSend.name, "beacon must be encrypted on the referenced slot's channel");
-    TEST_ASSERT_EQUAL_UINT(sizeof(beaconPsk), atSend.psk.size);
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0xBB, atSend.psk.bytes[0], "encryption must use the slot's PSK");
-    // Primary slot restored to home after send (no leak into normal traffic).
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->sentPackets.size() >= 1, "expected at least one send");
+    // The packet names the slot; perhapsEncode() keys off that index and stamps its hash.
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, mockRouter->sentPackets[0].channel,
+                                   "beacon must be addressed at the referenced channel-table slot");
+    // Stronger than "restored": the primary is never touched, at send time or after.
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", mockRouter->primaryAtSend[0].name,
+                                     "primary channel must not be swapped during send");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0xAA, mockRouter->primaryAtSend[0].psk.bytes[0],
+                                    "primary PSK must not be swapped during send");
     const meshtastic_ChannelSettings &after = channels.getByIndex(channels.getPrimaryIndex()).settings;
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", after.name, "primary channel must be restored after send");
+    TEST_ASSERT_EQUAL_STRING("Home", after.name);
     TEST_ASSERT_EQUAL_UINT(sizeof(homePsk), after.psk.size);
     TEST_ASSERT_EQUAL_UINT8(0xAA, after.psk.bytes[0]);
 }
@@ -1333,6 +1334,35 @@ class ReentrantRadioInterface : public RadioInterface
         return true;
     }
 };
+
+/**
+ * A target that resolves to the radio config the node is already on must arm no switch at all.
+ * The slot a channel lands on is resolved (1-based) while config.lora.channel_num may still be 0,
+ * meaning "derive it", so comparing the two directly reads as a difference and switches the radio
+ * to the frequency it is already using - opening the swap window this design exists to close.
+ */
+static void test_broadcaster_targetMatchingRunningConfig_armsNoSwitch(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.channel_num = 0; // derive the slot, as an unconfigured node does
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true; // content to send
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->sentPackets.size() >= 1, "expected at least one send");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                              "a target on the running preset, region and slot must arm no radio switch");
+}
 
 /**
  * The restore must clear its guard before reconfiguring, or completeSending() re-enters the restore
@@ -1747,6 +1777,7 @@ BEACON_TEST_ENTRY void setup()
 
     printf("\n=== Radio switch/restore re-entrancy ===\n");
 
+    RUN_TEST(test_broadcaster_targetMatchingRunningConfig_armsNoSwitch);
     RUN_TEST(test_beaconRestore_isNotReenteredByCompleteSending);
     RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
     RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);
