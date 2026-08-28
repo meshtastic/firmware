@@ -28,4 +28,10 @@ Do not expect a working Meshtastic device with this target.
 #define HAS_LSE 1
 #define STM32WL_LSE_DRIVE RCC_LSEDRIVE_LOW
 
+// LoRa
+// Hardware varies by unit: SN >= 3202995 has a TCXO, older units have XTAL only -
+// https://github.com/olliw42/mLRS-docu/blob/main/docs/EBYTE_E77_MBL.md
+#define TCXO_OPTIONAL
+#define SX126X_DIO3_TCXO_VOLTAGE 1.7
+
 #endif
