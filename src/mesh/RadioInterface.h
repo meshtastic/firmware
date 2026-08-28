@@ -262,6 +262,11 @@ class RadioInterface
     // primary" - pass one explicitly to ask about a config that is not the running one.
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName = nullptr);
 
+    // 1-based frequency slot this config lands on for the given channel name, resolving the region
+    // override or the name hash the way applyModemConfig() does. Lets a caller pin the slot a
+    // channel would have picked for itself without making that channel primary first.
+    static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
+
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
     // confirmation before it sets the owner licensed. errBuf, if given, receives the failure reason.

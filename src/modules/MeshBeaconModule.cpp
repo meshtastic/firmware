@@ -15,7 +15,6 @@
 meshtastic_Config_LoRaConfig_ModemPreset MeshBeaconModule::originalModemPreset;
 uint16_t MeshBeaconModule::originalLoraChannel;
 meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
-meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
@@ -70,7 +69,6 @@ MeshBeaconModule::MeshBeaconModule()
     originalModemPreset = config.lora.modem_preset;
     originalLoraChannel = config.lora.channel_num;
     originalRegion = config.lora.region;
-    originalPrimaryChannel = channels.getPrimary();
 }
 
 void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
@@ -217,15 +215,8 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         ~ApplyingScope() { flag = false; }
     } applyingScope(applying);
 
-    meshtastic_ChannelSettings *primaryCh = &channels.getByIndex(channels.getPrimaryIndex()).settings;
     meshtastic_Config_LoRaConfig_ModemPreset targetPreset;
     uint16_t targetSlot;
-
-    const auto channelDiffers = [&](const meshtastic_ChannelSettings &target) {
-        return strncmp(primaryCh->name, target.name, sizeof(primaryCh->name)) != 0 || primaryCh->psk.size != target.psk.size ||
-               memcmp(primaryCh->psk.bytes, target.psk.bytes, primaryCh->psk.size) != 0 ||
-               primaryCh->channel_num != target.channel_num;
-    };
 
     bool legacyHopOverride = false;
     meshtastic_Config_LoRaConfig_RegionCode sidecarRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
@@ -243,12 +234,12 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 
         const meshtastic_Config_LoRaConfig_RegionCode targetRegion =
             (sidecarRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? sidecarRegion : config.lora.region;
-        const meshtastic_ChannelSettings *overrideCh = sidecarHasChannel ? &sidecarChannel : nullptr;
-
-        meshtastic_ChannelSettings targetChannel = beaconChannelSettings(*primaryCh, targetPreset, overrideCh);
-
-        if (targetPreset == config.lora.modem_preset && targetSlot == config.lora.channel_num &&
-            targetRegion == config.lora.region && !channelDiffers(targetChannel))
+        // Only RF parameters are switched; the channel travels on the packet.
+        // Resolve the live slot too: targetSlot is concrete, config.lora.channel_num may be 0
+        // meaning "derive", and comparing those directly would switch to the frequency we are on.
+        const uint16_t liveSlot =
+            (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
+        if (targetPreset == config.lora.modem_preset && targetSlot == liveSlot && targetRegion == config.lora.region)
             return false;
 
         // Guard: never key up on an invalid target config - bad preset for the region, or an
@@ -266,7 +257,6 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
             originalModemPreset = config.lora.modem_preset;
             originalLoraChannel = config.lora.channel_num;
             originalRegion = config.lora.region;
-            originalPrimaryChannel = *primaryCh;
             switchDepth = 0;
         }
         switchDepth++;
@@ -280,10 +270,6 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         config.lora.channel_num = targetSlot;
         if (targetRegion != config.lora.region)
             config.lora.region = targetRegion;
-        *primaryCh = targetChannel;
-
-        channels.fixupChannel(channels.getPrimaryIndex());
-        p->channel = channels.getHash(channels.getPrimaryIndex());
         radioSwitched = true; // set before reconfigure(), so the flag never lags the radio it describes
         switchedForId = p->id;
         iface->reconfigure();
@@ -303,10 +289,6 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         config.lora.modem_preset = originalModemPreset;
         config.lora.channel_num = originalLoraChannel;
         config.lora.region = originalRegion;
-        *primaryCh = originalPrimaryChannel;
-        primaryCh->name[sizeof(primaryCh->name) - 1] = '\0';
-
-        channels.fixupChannel(channels.getPrimaryIndex());
         radioSwitched = false; // cleared before reconfigure(), so the flag never lags the radio it describes
         switchDepth = 0;
         switchedForId = 0;
@@ -385,33 +367,11 @@ void MeshBeaconBroadcastModule::rebuildCache()
     LOG_DEBUG("Beacon: payload cache rebuilt (%u bytes)", payloadCacheSize);
 }
 
-void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset,
-                                                 bool has_channel, const meshtastic_ChannelSettings *overrideChannel)
+void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p)
 {
-    // Beacons uplink to MQTT like any other primary-slot packet - Router::send() publishes on slot 0's
-    // uplink_enabled, and under the swap below the topic is the beacon channel's. Both intentional.
-    const bool cryptoOverride =
-        has_channel && overrideChannel && (overrideChannel->name[0] != '\0' || overrideChannel->psk.size > 0);
-    if (!cryptoOverride) {
-        releaseIfNotQueued(router->send(p), p);
-        return;
-    }
-
-    // perhapsEncode() keys encryption (and the channel-hash hint) off the PRIMARY channel slot, and
-    // the radio-thread channel switch only happens AFTER encryption - so a beacon on an override
-    // channel would otherwise be encrypted with the PRIMARY PSK, not the beacon channel's. Install the
-    // beacon channel into the primary slot for the synchronous duration of send(), then restore.
-    // Meshtastic threading is cooperative (no preemption between the swap and restore).
-    meshtastic_Channel &primary = channels.getByIndex(channels.getPrimaryIndex());
-    const meshtastic_ChannelSettings saved = primary.settings;
-    primary.settings = beaconChannelSettings(saved, targetPreset, overrideChannel);
-    channels.fixupChannel(channels.getPrimaryIndex());
-
-    // encrypts with the beacon channel's key and stamps its hash
+    // p->channel already names the target's channel-table slot, so perhapsEncode() picks that
+    // channel's key and stamps its hash. Beacons uplink to MQTT on that channel's uplink_enabled.
     releaseIfNotQueued(router->send(p), p);
-
-    primary.settings = saved;
-    channels.fixupChannel(channels.getPrimaryIndex());
 }
 
 void MeshBeaconBroadcastModule::sendBeacon()
@@ -482,8 +442,13 @@ void MeshBeaconBroadcastModule::sendBeacon()
         uint16_t slot;
         meshtastic_Config_LoRaConfig_RegionCode region;
         bool has_channel;
+        ChannelIndex channelIndex; // table slot to encrypt on; primary when has_channel is false
         meshtastic_ChannelSettings channel;
     };
+
+    // The slot the node is already on, resolved the same way a target's is, so the two compare.
+    const uint16_t homeSlot =
+        (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
 
     // An empty list still beacons once, on the node's running preset and region over the primary
     // channel. Each entry below overrides only what it sets.
@@ -511,7 +476,10 @@ void MeshBeaconBroadcastModule::sendBeacon()
         // Defaults: running radio config, primary channel. A target entry overrides from here.
         EffTarget tgt = {};
         tgt.preset = config.lora.modem_preset;
-        tgt.slot = config.lora.channel_num;
+        // Resolved, never the raw channel_num: a target that names a channel gets a concrete slot
+        // below, and comparing that against an unresolved 0 ("derive") would read as a difference.
+        tgt.slot = homeSlot;
+        tgt.channelIndex = channels.getPrimaryIndex();
         if (ti < (int)bcfg.broadcast_targets_count) {
             const auto &bt = bcfg.broadcast_targets[ti];
             if (bt.has_preset)
@@ -525,11 +493,27 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 if (bt.channel_index >= (uint32_t)channels.getNumChannels()) {
                     LOG_WARN("Beacon: target %d channel_index %u out of range, use preset default", ti, bt.channel_index);
                 } else {
-                    const meshtastic_ChannelSettings &cs = channels.getByIndex(bt.channel_index).settings;
-                    if (cs.name[0] != '\0' || cs.psk.size > 0) {
+                    const meshtastic_Channel &slot = channels.getByIndex(bt.channel_index);
+                    const meshtastic_ChannelSettings &cs = slot.settings;
+                    // A disabled slot still holds the settings of whatever channel was deleted from
+                    // it, and the beacon encrypts on the slot itself now, so treat it as unusable
+                    // and fall back to the primary rather than transmitting a retired identity.
+                    if (slot.role == meshtastic_Channel_Role_DISABLED) {
+                        LOG_WARN("Beacon: target %d channel_index %u disabled, use primary", ti, bt.channel_index);
+                    } else if (cs.name[0] != '\0' || cs.psk.size > 0) {
                         tgt.has_channel = true;
                         tgt.channel = cs;
-                        tgt.slot = cs.channel_num;
+                        tgt.channelIndex = (ChannelIndex)bt.channel_index;
+                        // Pin the slot this channel's name would hash to. The channel is no longer
+                        // installed as primary, so nothing else would derive it from that name.
+                        meshtastic_Config_LoRaConfig probe = config.lora;
+                        probe.use_preset = true;
+                        probe.modem_preset = tgt.preset;
+                        if (bt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                            probe.region = bt.region;
+                        probe.channel_num = 0;
+                        tgt.slot =
+                            (uint16_t)RadioInterface::resolveFrequencySlot(probe, beaconChannelSettings(cs, tgt.preset).name);
                     } else {
                         LOG_DEBUG("Beacon: target %d channel_index %u blank, use preset default", ti, bt.channel_index);
                     }
@@ -555,18 +539,20 @@ void MeshBeaconBroadcastModule::sendBeacon()
         sentRegion[sentCount] = resolvedRegion;
         sentCount++;
 
-        const bool channelOverrideConfigured = tgt.has_channel && (tgt.channel.name[0] != '\0' || tgt.channel.psk.size > 0 ||
-                                                                   tgt.channel.channel_num != config.lora.channel_num);
-        const bool presetDiffers =
-            (tgt.preset != config.lora.modem_preset) ||
-            (tgt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && tgt.region != config.lora.region) ||
-            channelOverrideConfigured;
+        // Only RF parameters can require a switch now; the channel is named on the packet instead.
+        const bool radioDiffers =
+            (tgt.preset != config.lora.modem_preset) || (tgt.slot != homeSlot) ||
+            (tgt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && tgt.region != config.lora.region);
         const meshtastic_ChannelSettings *chPtr = tgt.has_channel ? &tgt.channel : nullptr;
 
         const auto applyTarget = [&](meshtastic_MeshPacket *p) {
-            if (presetDiffers || legacySplit)
+            // Address the packet at the target's channel-table slot. perhapsEncode() keys the
+            // cipher off this index and replaces it with the wire hash, so a beacon encrypts on its
+            // own channel without the primary slot ever being touched.
+            p->channel = tgt.channelIndex;
+            if (radioDiffers || legacySplit)
                 setTargetRadioSettings(p, tgt.preset, tgt.slot, legacySplit, tgt.region, tgt.has_channel, chPtr);
-            sendBeaconPacket(p, tgt.preset, tgt.has_channel, chPtr);
+            sendBeaconPacket(p);
         };
 
         if (sendOfferOnly && offerSize > 0) {

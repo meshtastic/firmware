@@ -1273,6 +1273,30 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     return true;
 }
 
+uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
+{
+    const RegionInfo *region = getRegion(loraConfig.region);
+    const float checkBw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
+                                                : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    const float freqSlotWidth = region->profile->spacing + (region->profile->padding * 2) + (checkBw / 1000);
+    const uint32_t numFreqSlots = round((region->freqEnd - region->freqStart + region->profile->spacing) / freqSlotWidth);
+
+    if (loraConfig.channel_num > 0 && loraConfig.channel_num <= numFreqSlots)
+        return loraConfig.channel_num; // already pinned
+
+    if (region->overrideSlot > 0)
+        return region->overrideSlot;
+    if (!numFreqSlots) // UNSET/degenerate region; % 0 is a SIGFPE
+        return 1;
+
+    const char *presetNameDisplay =
+        DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    if (!channelName || !*channelName)
+        channelName = presetNameDisplay;
+    const char *hashOf = (region->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) ? presetNameDisplay : channelName;
+    return (hash(hashOf) % numFreqSlots) + 1; // hash slots are 0-based, channel_num is 1-based
+}
+
 bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
 {
     auto copy = loraConfig;

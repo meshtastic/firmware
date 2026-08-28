@@ -93,7 +93,6 @@ class MeshBeaconModule
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
-    static meshtastic_ChannelSettings originalPrimaryChannel;
 };
 
 /**
@@ -142,8 +141,7 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
 
     // Send one beacon packet. When overrideChannel is set and has a name/PSK override,
     // the packet is encrypted with that channel's key (not the primary's).
-    void sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset,
-                          bool has_channel = false, const meshtastic_ChannelSettings *overrideChannel = nullptr);
+    void sendBeaconPacket(meshtastic_MeshPacket *p);
 
     bool payloadCacheDirty = true;
     uint8_t payloadCache[meshtastic_MeshBeacon_size] = {};
