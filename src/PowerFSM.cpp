@@ -195,6 +195,24 @@ static void lsExit()
     t5BacklightWakeFromSleep();
 }
 
+/// Re-enable BLE, unless we are already on our way out.
+///
+/// A reboot or shutdown is armed a few seconds ahead of the reset so the client gets its ack and the
+/// user gets the banner, and the paths that arm it (AdminModule::disableBluetooth()) deliberately take
+/// the radio down first. Any state transition landing in that window - a button press, the screen
+/// timeout, USB being plugged in - would otherwise turn BLE straight back on and let the phone
+/// reconnect to a node that is about to disappear, so the user sees a reconnect immediately followed by
+/// a second disconnect at the reset. Every writer of these two deadlines is an imminent restart, so
+/// suppressing the re-enable here costs nothing in normal operation.
+static void setBluetoothEnableUnlessRestarting()
+{
+    if (rebootAtMsec || shutdownAtMsec) {
+        LOG_POWERFSM("Skip BLE enable, restart pending");
+        return;
+    }
+    setBluetoothEnable(true);
+}
+
 static void nbEnter()
 {
     LOG_POWERFSM("State: nbEnter");
@@ -211,7 +229,7 @@ static void nbEnter()
 static void darkEnter()
 {
     LOG_POWERFSM("State: darkEnter");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
     if (screen)
         screen->setOn(false);
     // Screen timeout enters DARK; ensure backlight also turns off.
@@ -235,7 +253,7 @@ static void serialExit()
 {
     LOG_POWERFSM("State: serialExit");
     // Turn bluetooth back on when we leave serial stream API
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void powerEnter()
@@ -248,7 +266,7 @@ static void powerEnter()
     } else {
         if (screen)
             screen->setOn(true);
-        setBluetoothEnable(true);
+        setBluetoothEnableUnlessRestarting();
         // within enter() the function getState() returns the state we came from
     }
 }
@@ -266,7 +284,7 @@ static void powerIdle()
 static void powerExit()
 {
     LOG_POWERFSM("State: powerExit");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onEnter()
@@ -274,7 +292,7 @@ static void onEnter()
     LOG_POWERFSM("State: onEnter");
     if (screen)
         screen->setOn(true);
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onIdle()
