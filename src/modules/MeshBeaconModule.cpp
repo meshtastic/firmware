@@ -121,6 +121,21 @@ bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
     return getTargetRadioSettings(p, nullptr, nullptr);
 }
 
+// Dispose of a beacon packet according to what router->send() did with it. Only ERRNO_OK means the
+// interface queued it and now owns both the packet and its target radio settings, which the TX
+// hook frees on release. Every other return means the packet will never reach the radio, so the
+// settings entry has to be freed here or it leaks its slot in the fixed pool for good - the drop
+// paths inside Router (duty cycle, oversized, precision) release the packet without notifying any
+// hook. ERRNO_SHOULD_RELEASE additionally leaves the packet itself ours to free.
+static void releaseIfNotQueued(ErrorCode res, meshtastic_MeshPacket *p)
+{
+    if (res == ERRNO_OK)
+        return;
+    MeshBeaconModule::clearTargetRadioSettings(p);
+    if (res == ERRNO_SHOULD_RELEASE)
+        packetPool.release(p);
+}
+
 void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
     if (!p)
@@ -374,10 +389,7 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, mesht
     const bool cryptoOverride =
         has_channel && overrideChannel && (overrideChannel->name[0] != '\0' || overrideChannel->psk.size > 0);
     if (!cryptoOverride) {
-        if (router->send(p) == ERRNO_SHOULD_RELEASE) {
-            MeshBeaconModule::clearTargetRadioSettings(p);
-            packetPool.release(p);
-        }
+        releaseIfNotQueued(router->send(p), p);
         return;
     }
 
@@ -391,10 +403,8 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, mesht
     primary.settings = beaconChannelSettings(saved, targetPreset, overrideChannel);
     channels.fixupChannel(channels.getPrimaryIndex());
 
-    if (router->send(p) == ERRNO_SHOULD_RELEASE) { // encrypts with the beacon channel's key and stamps its hash
-        MeshBeaconModule::clearTargetRadioSettings(p);
-        packetPool.release(p);
-    }
+    // encrypts with the beacon channel's key and stamps its hash
+    releaseIfNotQueued(router->send(p), p);
 
     primary.settings = saved;
     channels.fixupChannel(channels.getPrimaryIndex());
