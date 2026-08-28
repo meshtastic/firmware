@@ -498,6 +498,104 @@ static void test_adminValidation_offerChannelIndexOutOfRange_isCleared(void)
 }
 
 /**
+ * A client cannot see a LOG_WARN, so anything the node had to change must come back in
+ * clamped_fields or the write looks like it was accepted verbatim.
+ */
+static void test_adminValidation_clampedFields_reportsUnknownRegion(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].region = (meshtastic_Config_LoRaConfig_RegionCode)255;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields);
+    TEST_ASSERT_EQUAL_UINT32(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_REGION,
+                             moduleConfig.mesh_beacon.broadcast_targets[0].clamped_fields);
+}
+
+/**
+ * A dropped pin is otherwise invisible: the entry still beacons, just on the hashed slot.
+ */
+static void test_adminValidation_clampedFields_reportsDroppedFrequencySlot(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_frequency_slot = true;
+    bcfg.broadcast_targets[0].frequency_slot = RadioInterface::frequencySlotCount(config.lora) + 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields);
+    TEST_ASSERT_EQUAL_UINT32(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_FREQUENCY_SLOT,
+                             moduleConfig.mesh_beacon.broadcast_targets[0].clamped_fields);
+}
+
+/**
+ * A discarded preset is reported as CLAMPED_PRESET, distinct from a region swap that keeps it.
+ */
+static void test_adminValidation_clampedFields_reportsClampedPreset(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    const uint32_t reported = moduleConfig.mesh_beacon.broadcast_targets[0].clamped_fields;
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields);
+    TEST_ASSERT_TRUE_MESSAGE(reported & meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_ClampedField_CLAMPED_PRESET,
+                             "a discarded preset must be reported");
+}
+
+/**
+ * An entry stored exactly as sent must read back clean, or a client cannot tell the difference
+ * between "accepted" and "altered".
+ */
+static void test_adminValidation_clampedFields_cleanOnUntouchedEntry(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_channel_index = true;
+    bcfg.broadcast_targets[0].channel_index = 0;
+    bcfg.broadcast_targets[0].has_frequency_slot = true;
+    bcfg.broadcast_targets[0].frequency_slot = 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields,
+                              "an unaltered entry must report nothing clamped");
+}
+
+/**
+ * clamped_fields is firmware-owned, so a stale value a client sends back must not survive.
+ */
+static void test_adminValidation_clampedFields_clientValueIsDiscarded(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_clamped_fields = true;
+    bcfg.broadcast_targets[0].clamped_fields = 0xFFFFFFFF;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_clamped_fields,
+                              "a client-supplied clamped_fields must be discarded, not stored");
+}
+
+/**
  * Verify a valid preset/region multi-target entry survives admin validation unchanged.
  * Positive-path control for the per-target validation.
  */
@@ -1976,6 +2074,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetFrequencySlotInRange_isPreserved);
     RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_offerChannelIndexOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_clampedFields_reportsUnknownRegion);
+    RUN_TEST(test_adminValidation_clampedFields_reportsDroppedFrequencySlot);
+    RUN_TEST(test_adminValidation_clampedFields_reportsClampedPreset);
+    RUN_TEST(test_adminValidation_clampedFields_cleanOnUntouchedEntry);
+    RUN_TEST(test_adminValidation_clampedFields_clientValueIsDiscarded);
     RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt100);
     RUN_TEST(test_adminValidation_intervalTooLow_isClamped);
     RUN_TEST(test_adminValidation_intervalTooHigh_isPreserved);
