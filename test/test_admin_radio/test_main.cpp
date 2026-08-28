@@ -2178,6 +2178,91 @@ static void test_toggleNodeMuted_currentlyRewritesEverySegment()
     for (const char *f : segmentFiles)
         TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(f), f);
 }
+
+// -----------------------------------------------------------------------
+// BaseUI region chooser preset default (graphics::menuHandler::presetForRegionSelection)
+// -----------------------------------------------------------------------
+//
+// Out-of-box US setup starts on LongTurbo. Each guard below is load-bearing: widening the rule past
+// "first region ever chosen, US, no preset on record" re-presets nodes that already have an opinion.
+
+// `region` is the region still in place when the user highlights `selected`.
+static meshtastic_Config_LoRaConfig loraAt(meshtastic_Config_LoRaConfig_RegionCode region,
+                                           meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset = true)
+{
+    meshtastic_Config_LoRaConfig lora = meshtastic_Config_LoRaConfig_init_default;
+    lora.region = region;
+    lora.modem_preset = preset;
+    lora.use_preset = usePreset;
+    return lora;
+}
+
+#ifndef USERPREFS_LORACONFIG_MODEM_PRESET
+static void test_presetForRegionSelection_firstUsSelectionDefaultsToLongTurbo()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+
+    // Unusable unless US offers it: applyLoraRegion()'s reconciliation would throw it straight back.
+    TEST_ASSERT_TRUE_MESSAGE(getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)
+                                 ->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO),
+                             "US no longer supports LongTurbo");
+}
+#else
+// A pinned preset owns the decision outright.
+static void test_presetForRegionSelection_pinnedUserprefWins()
+{
+    const meshtastic_Config_LoRaConfig_ModemPreset pinned = USERPREFS_LORACONFIG_MODEM_PRESET;
+    const meshtastic_Config_LoRaConfig lora = loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, pinned);
+
+    TEST_ASSERT_EQUAL(pinned, graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
+#endif
+
+// US on a node that already has a region is a region change, not first-time setup.
+static void test_presetForRegionSelection_laterUsSelectionKeepsCurrentPreset()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
+
+// The default is US-only; no other region's first selection is touched.
+static void test_presetForRegionSelection_firstNonUsSelectionKeepsCurrentPreset()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    for (auto region : {meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_RegionCode_ANZ,
+                        meshtastic_Config_LoRaConfig_RegionCode_JP})
+        TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                          graphics::menuHandler::presetForRegionSelection(lora, region));
+}
+
+// A preset off the install default is a preference on record (phone app, admin, preset menu).
+static void test_presetForRegionSelection_respectsAPresetAlreadyChosen()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
+
+// use_preset false means raw bandwidth/SF/CR: rewriting modem_preset only misleads the preset menu.
+static void test_presetForRegionSelection_ignoresNodesOnRawModemSettings()
+{
+    const meshtastic_Config_LoRaConfig lora = loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET,
+                                                     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, /*usePreset=*/false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
 #endif // HAS_SCREEN
 
 // -----------------------------------------------------------------------
@@ -2342,6 +2427,17 @@ void setup()
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
     RUN_TEST(test_toggleNodeMuted_unknownNodeDoesNothing);
     RUN_TEST(test_toggleNodeMuted_currentlyRewritesEverySegment);
+
+    // BaseUI region chooser preset default
+#ifndef USERPREFS_LORACONFIG_MODEM_PRESET
+    RUN_TEST(test_presetForRegionSelection_firstUsSelectionDefaultsToLongTurbo);
+#else
+    RUN_TEST(test_presetForRegionSelection_pinnedUserprefWins);
+#endif
+    RUN_TEST(test_presetForRegionSelection_laterUsSelectionKeepsCurrentPreset);
+    RUN_TEST(test_presetForRegionSelection_firstNonUsSelectionKeepsCurrentPreset);
+    RUN_TEST(test_presetForRegionSelection_respectsAPresetAlreadyChosen);
+    RUN_TEST(test_presetForRegionSelection_ignoresNodesOnRawModemSettings);
 #endif
 
     exit(UNITY_END());
