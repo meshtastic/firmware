@@ -19,4 +19,8 @@ Do not expect a working Meshtastic device with this target.
 
 #define WIO_E5
 
+// LoRa
+// https://github.com/Seeed-Studio/LoRaWan-E5-Node/blob/163c05379b1805dd8f2c061d4557a69985acc953/Middlewares/Third_Party/SubGHz_Phy/stm32_radio_driver/radio_driver.c#L94
+#define SX126X_DIO3_TCXO_VOLTAGE 1.7
+
 #endif
