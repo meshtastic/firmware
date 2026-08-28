@@ -178,9 +178,9 @@ MagnetometerThread *magnetometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
-#ifdef USE_XL9555
-#include "ExtensionIOXL9555.hpp"
-ExtensionIOXL9555 io;
+#ifdef USE_PCA95X5
+#include PCA95X5_INC
+PCA95X5_CLS io;
 #endif
 
 #ifdef USE_MCP23017
