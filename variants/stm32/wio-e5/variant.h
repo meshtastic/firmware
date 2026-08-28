@@ -1,12 +1,8 @@
 /*
-Wio-E5 mini (formerly LoRa-E5 mini)
-https://www.seeedstudio.com/LoRa-E5-mini-STM32WLE5JC-p-4869.html
-https://www.seeedstudio.com/LoRa-E5-Wireless-Module-p-4745.html
-*/
-
-/*
-This variant is a work in progress.
-Do not expect a working Meshtastic device with this target.
+Seeed LoRa-E5 (STM32WLE5JC) module - Wio-E5 Development Kit and Wio-E5 mini
+https://wiki.seeedstudio.com/LoRa_E5_Dev_Board/
+https://wiki.seeedstudio.com/LoRa_E5_mini/
+LED_POWER (PB5) and the module pin map are common to both boards.
 */
 
 #ifndef _VARIANT_WIOE5_
