@@ -4,7 +4,6 @@
 #include "DebugConfiguration.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
-#include "Throttle.h"
 #include "graphics/Screen.h"     // BaseUI
 #include "graphics/TFTDisplay.h" // BaseUI
 #include "main.h"
@@ -51,15 +50,16 @@ void WakeKeyInterruptThread::begin(void)
 
 int32_t WakeKeyInterruptThread::runOnce(void)
 {
+    const uint32_t now = millis();
+
     // Safe, sequential handling of the edge flag outside the ISR context
     if (rawIrqSignaled) {
         rawIrqSignaled = false;
         if (state == State::REST) {
             state = State::IRQ_PENDING;
-            irqAtMs = millis();
+            irqAtMs = now;
         }
-    } else
-        return OSThread::disable();
+    }
 
     // Ignore side-key handling while BOOT/user button is held.
     if (digitalRead(BUTTON_PIN) == LOW) {
@@ -71,7 +71,7 @@ int32_t WakeKeyInterruptThread::runOnce(void)
     switch (state) {
     case State::IRQ_PENDING:
         // Initial debounce after expander interrupt edge.
-        if (Throttle::isWithinTimespanMs(irqAtMs, DEBOUNCE_MS)) {
+        if ((uint32_t)(now - irqAtMs) < DEBOUNCE_MS) {
             return SAMPLE_MS;
         }
 
