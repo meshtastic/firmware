@@ -1897,6 +1897,50 @@ static void test_broadcaster_offerWithoutChannelMatchingTarget_isStillSent(void)
 }
 
 /**
+ * A client built before the consolidation still sends broadcast_send_as_node on MeshBeaconConfig
+ * tag 3. nanopb must skip a retired tag as an unknown field rather than failing the decode, or
+ * such a client cannot write a beacon config at all.
+ */
+static void test_proto_retiredSendAsNodeTag_isSkipped(void)
+{
+    const uint8_t wire[] = {
+        0x08, 0x03,       // field 1 (flags) varint 3
+        0x18, 0x01,       // field 3 (retired broadcast_send_as_node) varint 1
+        0x58, 0x90, 0x1c, // field 11 (broadcast_interval_secs) varint 3600
+    };
+    meshtastic_ModuleConfig_MeshBeaconConfig decoded = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(wire, sizeof(wire));
+
+    TEST_ASSERT_TRUE_MESSAGE(pb_decode(&stream, &meshtastic_ModuleConfig_MeshBeaconConfig_msg, &decoded),
+                             "a retired tag must be skipped, not fail the whole decode");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(3, decoded.flags, "fields before the retired tag must survive");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(3600, decoded.broadcast_interval_secs, "fields after it must survive too");
+}
+
+/**
+ * BroadcastTarget tag 3 was an embedded ChannelSettings before channel_index replaced it, so the
+ * skipped field is length-delimited rather than a varint. Different skip path in nanopb.
+ */
+static void test_proto_retiredTargetChannelTag_isSkipped(void)
+{
+    const uint8_t wire[] = {
+        0x08, 0x04,             // field 1 (preset) varint 4
+        0x1a, 0x02, 0x0a, 0x00, // field 3 (retired ChannelSettings) length-delimited, 2 bytes
+        0x20, 0x07,             // field 4 (channel_index) varint 7
+    };
+    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget decoded =
+        meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(wire, sizeof(wire));
+
+    TEST_ASSERT_TRUE_MESSAGE(pb_decode(&stream, &meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_msg, &decoded),
+                             "a retired length-delimited tag must be skipped, not fail the decode");
+    TEST_ASSERT_TRUE(decoded.has_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, decoded.preset);
+    TEST_ASSERT_TRUE(decoded.has_channel_index);
+    TEST_ASSERT_EQUAL_UINT32(7, decoded.channel_index);
+}
+
+/**
  * The restore must clear its guard before reconfiguring, or completeSending() re-enters the restore
  * branch and it reconfigures the radio once per level until the stack runs out. Seen in the field as
  * a run of "Beacon: restore radio config after TX" with a full applyModemConfig() between each.
@@ -2336,6 +2380,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther);
     RUN_TEST(test_broadcaster_offerMatchesTargetNoText_sendsNothing);
     RUN_TEST(test_broadcaster_offerWithoutChannelMatchingTarget_isStillSent);
+
+    printf("\n=== Retired proto tags ===\n");
+
+    RUN_TEST(test_proto_retiredSendAsNodeTag_isSkipped);
+    RUN_TEST(test_proto_retiredTargetChannelTag_isSkipped);
     RUN_TEST(test_beaconRestore_isNotReenteredByCompleteSending);
     RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
     RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);
