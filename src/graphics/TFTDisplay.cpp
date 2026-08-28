@@ -1843,6 +1843,16 @@ void TFTDisplay::sdlLoop()
 #endif
 }
 
+#ifdef TFT_SLEEP_WHEN_OFF
+// TFT_eSPI has no sleep()/wakeup(), so drive the MIPI DCS commands directly. Frame memory is retained
+// through sleep-in, so the last frame reappears on sleep-out and the dirty-window diff carries on.
+static constexpr uint8_t kDcsSleepIn = 0x10;
+static constexpr uint8_t kDcsSleepOut = 0x11;
+static constexpr uint8_t kDcsDisplayOff = 0x28;
+static constexpr uint8_t kDcsDisplayOn = 0x29;
+static bool panelAsleep = false;
+#endif
+
 // Send a command to the display (low level function)
 void TFTDisplay::sendCommand(uint8_t com)
 {
@@ -1873,6 +1883,14 @@ void TFTDisplay::sendCommand(uint8_t com)
     !defined(HELTEC_MESH_NODE_T1)
         tft->wakeup();
         tft->powerSaveOff();
+#elif defined(TFT_SLEEP_WHEN_OFF)
+        // Screen::handleSetOn() calls displayOn() twice per wake; only the first one has work to do.
+        if (panelAsleep) {
+            tft->writecommand(kDcsSleepOut);
+            delay(120); // datasheet minimum before the panel accepts DISPON
+            tft->writecommand(kDcsDisplayOn);
+            panelAsleep = false;
+        }
 #endif
 
 #if defined(TFT_NV3001B)
@@ -1907,6 +1925,11 @@ void TFTDisplay::sendCommand(uint8_t com)
     !defined(HELTEC_MESH_NODE_T1)
         tft->sleep();
         tft->powerSaveOn();
+#elif defined(TFT_SLEEP_WHEN_OFF)
+        // Without this the LCD keeps driving the last frame unlit, which is what builds image retention.
+        tft->writecommand(kDcsDisplayOff);
+        tft->writecommand(kDcsSleepIn);
+        panelAsleep = true;
 #endif
 
 #ifdef VTFT_CTRL
