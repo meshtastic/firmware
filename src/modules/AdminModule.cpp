@@ -1411,23 +1411,36 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                     t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
                 }
             }
-            // Preset must be valid for the target region (or current region if unset).
+            // Before the preset check, so the name hashed below is the one this target will run on.
+            if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
+                LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
+                t.has_channel_index = false;
+            }
+            // Preset must be valid for the target region (or current region if unset). Clamp rather
+            // than clear, and leave has_channel_index alone - it is a separate setting.
             if (t.has_preset) {
                 meshtastic_Config_LoRaConfig probe = config.lora;
                 probe.use_preset = true;
                 probe.modem_preset = t.preset;
                 if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                     probe.region = t.region;
-                if (!RadioInterface::validateConfigLora(probe)) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clearing", i, t.preset);
-                    t.has_preset = false;
-                    t.has_channel_index = false;
+
+                // Hash the channel this target will install as primary, not the running one.
+                const meshtastic_ChannelSettings *slotChannel =
+                    t.has_channel_index ? &channels.getByIndex(t.channel_index).settings : nullptr;
+                const meshtastic_ChannelSettings targetChannel = MeshBeaconModule::beaconChannelSettings(
+                    channels.getByIndex(channels.getPrimaryIndex()).settings, t.preset, slotChannel);
+
+                if (!RadioInterface::validateConfigLora(probe, targetChannel.name)) {
+                    LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clamping", i, t.preset);
+                    const auto probedRegion = probe.region;
+                    RadioInterface::clampConfigLora(probe, targetChannel.name);
+                    t.preset = probe.modem_preset;
+                    // Only on an actual swap: assigning it always would turn an UNSET region
+                    // ("inherit at TX time") into a pin on today's running region.
+                    if (probe.region != probedRegion)
+                        t.region = probe.region;
                 }
-            }
-            // channel_index must reference a real channel-table slot.
-            if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
-                LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
-                t.has_channel_index = false;
             }
         }
         moduleConfig.has_mesh_beacon = true;

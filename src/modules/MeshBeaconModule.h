@@ -74,17 +74,22 @@ class MeshBeaconModule
      */
     static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
 
-  protected:
     /**
      * Build the ChannelSettings the beacon transmits on: the base (primary) channel overlaid with
      * the target's channel-table slot, defaulting an empty name to the target preset's display
      * name. Shared by the encrypt-time channel swap and the radio-thread RF swap so the channel
      * key + hash are identical at both points.
+     *
+     * Public because admin-side validation needs the same answer before anything is applied: the
+     * frequency slot is picked by hashing the channel name, so a target must be validated against
+     * the name it will actually run on rather than the running primary's. Pure - depends only on
+     * its arguments.
      */
     static meshtastic_ChannelSettings beaconChannelSettings(const meshtastic_ChannelSettings &base,
                                                             meshtastic_Config_LoRaConfig_ModemPreset preset,
                                                             const meshtastic_ChannelSettings *overrideChannel = nullptr);
 
+  protected:
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
