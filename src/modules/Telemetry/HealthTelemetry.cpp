@@ -127,13 +127,18 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->drawString(x, y, "Measurement Error");
-        LOG_ERROR("Unable to decode last packet");
+        LOG_ERROR("Can't decode last packet");
         return;
     }
 
     // Display "Health From: ..." on its own
+    char agoStr[16];
+    if (agoSecs == SINCE_UNKNOWN)
+        snprintf(agoStr, sizeof(agoStr), "?"); // no trustworthy arrival time to age against
+    else
+        snprintf(agoStr, sizeof(agoStr), "%us", (unsigned)agoSecs);
     char headerStr[64];
-    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%ds)", lastSender, (int)agoSecs);
+    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%s)", lastSender, agoStr);
     display->drawString(x, y, headerStr);
 
     char last_temp[16];
@@ -218,7 +223,7 @@ meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding HealthTelemetry module!");
+            LOG_ERROR("Error decoding HealthTelemetry module");
             return NULL;
         }
         // Check for a request for health metrics

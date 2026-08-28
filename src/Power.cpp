@@ -19,6 +19,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
+#include "WaypointStore.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
@@ -61,6 +62,9 @@
 #define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #else
+// The ST HAL headers that define these are outside cppcheck's include path (check_skip_packages), so static
+// analysis always lands here even though real builds resolve one of the branches above.
+// cppcheck-suppress preprocessorErrorDirective
 #error "ADC resolution could not be defined!"
 #endif
 #define ADC_RANGE (1 << BATTERY_SENSE_RESOLUTION_BITS)
@@ -81,6 +85,12 @@
 
 #ifndef DELAY_FOREVER
 #define DELAY_FOREVER portMAX_DELAY
+#endif
+
+// How often the free-heap line is written to the debug log. The Power thread polls every
+// 20s once it is initialized, so that is the effective granularity. Set to 0 to disable.
+#ifndef HEAP_LOG_INTERVAL_MS
+#define HEAP_LOG_INTERVAL_MS (5 * 60 * 1000)
 #endif
 
 #if defined(BATTERY_PIN) && defined(ARCH_ESP32)
@@ -162,7 +172,7 @@ static bool initAdcCalibration()
     }
 #endif
 
-    LOG_INFO("ADC calibration not supported; using approximate scaling");
+    LOG_INFO("ADC calibration unsupported; use approx scaling");
     return false;
 }
 
@@ -566,7 +576,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
         return powerHAL_isVBUSConnected();
 #endif
         return getBattVoltage() > chargingVolt;
@@ -585,6 +595,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
         }
 #endif
+        // A configured INA outranks the board's own charge-status pin, as it does BATTERY_PIN in
+        // getBattVoltage(): an external charger leaves that pin idle, reading "not charging" forever.
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(DISABLE_INA_CHARGING_DETECTION)
+        if (hasINA()) {
+            // get current flow from INA sensor - negative value means power flowing
+            // into the battery default assuming  BATTERY+  <--> INA_VIN+ <--> SHUNT
+            // RESISTOR <--> INA_VIN- <--> LOAD
+            LOG_TRACE("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
+#if defined(INA_CHARGING_DETECTION_INVERT)
+            return getINACurrent() > 0;
+#else
+            return getINACurrent() < 0;
+#endif
+        }
+#endif
 #if defined(ELECROW_ThinkNode_M6)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
 #elif defined(EXT_CHRG_DETECT)
@@ -593,17 +618,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return !digitalRead(BATTERY_CHARGING_INV);
 #else
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(DISABLE_INA_CHARGING_DETECTION)
-        if (hasINA()) {
-            // get current flow from INA sensor - negative value means power flowing
-            // into the battery default assuming  BATTERY+  <--> INA_VIN+ <--> SHUNT
-            // RESISTOR <--> INA_VIN- <--> LOAD
-            LOG_DEBUG("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
-#if defined(INA_CHARGING_DETECTION_INVERT)
-            return getINACurrent() > 0;
-#else
-            return getINACurrent() < 0;
-#endif
-        }
+        // No charge-status pin and no INA: infer from battery presence plus external power.
         return isBatteryConnect() && isVbusIn();
 #endif
 #endif
@@ -670,6 +685,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
                    config.power.device_battery_ina_address) {
             return ina226Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
+                   config.power.device_battery_ina_address) {
+            return ina260Sensor.getCurrentMa();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
                    config.power.device_battery_ina_address) {
             return ina3221Sensor.getCurrentMa();
@@ -677,30 +695,29 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return 0;
     }
 
+    // Open the sensor if it isn't open yet, then report whether it is actually running. runOnce()
+    // answers with a poll interval, so only isRunning() tells us the device replied.
+    static bool sensorReady(TelemetrySensor &sensor)
+    {
+        if (!sensor.isInitialized())
+            sensor.runOnce();
+        return sensor.isRunning();
+    }
+
     bool hasINA()
     {
-        if (!config.power.device_battery_ina_address) {
+        const uint8_t inaAddress = config.power.device_battery_ina_address;
+        if (!inaAddress) {
             return false;
         }
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
-            if (!ina219Sensor.isInitialized())
-                return ina219Sensor.runOnce() > 0;
-            return ina219Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
-                   config.power.device_battery_ina_address) {
-            if (!ina226Sensor.isInitialized())
-                return ina226Sensor.runOnce() > 0;
-            return ina226Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
-                   config.power.device_battery_ina_address) {
-            if (!ina260Sensor.isInitialized())
-                return ina260Sensor.runOnce() > 0;
-            return ina260Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
-                   config.power.device_battery_ina_address) {
-            if (!ina3221Sensor.isInitialized())
-                return ina3221Sensor.runOnce() > 0;
-            return ina3221Sensor.isRunning();
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == inaAddress) {
+            return sensorReady(ina219Sensor);
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first == inaAddress) {
+            return sensorReady(ina226Sensor);
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == inaAddress) {
+            return sensorReady(ina260Sensor);
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == inaAddress) {
+            return sensorReady(ina3221Sensor);
         }
         return false;
     }
@@ -828,12 +845,13 @@ bool Power::setup()
 
 void Power::powerCommandsCheck()
 {
-    if (rebootAtMsec && millis() > rebootAtMsec) {
+    // 0 means "not scheduled" for both, and reads as long expired - test it first.
+    if (rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec)) {
         LOG_INFO("Rebooting");
         reboot();
     }
 
-    if (shutdownAtMsec && millis() > shutdownAtMsec) {
+    if (shutdownAtMsec && Throttle::deadlinePassed(shutdownAtMsec)) {
         shutdownAtMsec = 0;
         shutdown();
     }
@@ -842,6 +860,9 @@ void Power::powerCommandsCheck()
 void Power::reboot()
 {
     notifyReboot.notifyObservers(NULL);
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.saveToFlash();
+#endif
 #if defined(ARCH_ESP32)
     ESP.restart();
 #elif defined(ARCH_NRF52)
@@ -870,12 +891,13 @@ void Power::reboot()
     if (screen) {
         screen = nullptr;
     }
-    LOG_DEBUG("final reboot!");
+    LOG_DEBUG("final reboot");
     ::reboot();
 #elif defined(ARCH_STM32)
     HAL_NVIC_SystemReset();
 #else
-    rebootAtMsec = -1;
+    // 0 disarms; UINT32_MAX would read as long expired and reboot-loop.
+    rebootAtMsec = 0;
     LOG_WARN("FIXME implement reboot for this platform. Note that some settings "
              "require a restart to be applied");
 #endif
@@ -904,6 +926,9 @@ void Power::shutdown()
     nodeDB->saveToDisk();
 #if HAS_SCREEN
     messageStore.saveToFlash();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.saveToFlash();
 #endif
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
 #ifdef PIN_LED1
@@ -1072,9 +1097,43 @@ void Power::readPowerStatus()
     }
 }
 
+/**
+ * Emit a free-heap line to the debug log every HEAP_LOG_INTERVAL_MS, so a slow leak shows up
+ * as a trend in a field log instead of only as an out-of-memory reboot. Unlike the DEBUG_HEAP
+ * instrumentation above this is always on, and costs one line per interval.
+ */
+void Power::logHeapUsage()
+{
+#if HEAP_LOG_INTERVAL_MS > 0
+    if (Throttle::isWithinTimespanMs(lastHeapLogTime, HEAP_LOG_INTERVAL_MS))
+        return;
+
+    const uint32_t heapTotal = memGet.getHeapSize();
+    // Platforms without heap accounting report UINT32_MAX (or 0) - nothing worth logging
+    if (heapTotal == 0 || heapTotal == UINT32_MAX)
+        return;
+
+    const uint32_t heapFree = memGet.getFreeHeap();
+    // The first line has no earlier sample to difference against
+    const int32_t delta = lastHeapLogTime ? (int32_t)(heapFree - lastHeapLogFree) : 0;
+
+    const uint32_t psramTotal = memGet.getPsramSize();
+    if (psramTotal)
+        LOG_INFO("Heap: %u/%u bytes free (%d since last), PSRAM: %u/%u bytes free", heapFree, heapTotal, delta,
+                 memGet.getFreePsram(), psramTotal);
+    else
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)", heapFree, heapTotal, delta);
+
+    lastHeapLogFree = heapFree;
+    lastHeapLogTime = millis();
+#endif
+}
+
 int32_t Power::runOnce()
 {
     readPowerStatus();
+    logHeapUsage();
+    lipoChargerRetry();
 
 #ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from
@@ -1097,8 +1156,10 @@ int32_t Power::runOnce()
         // cancel action also turns the screen on and off.
         if (PMU->isPekeyShortPressIrq()) {
             LOG_INFO("Input: Corona Button Click");
-            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
-            inputBroker->injectInputEvent(&event);
+            if (inputBroker) {
+                InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
+                inputBroker->injectInputEvent(&event);
+            }
         }
 #endif
         /*
@@ -1401,6 +1462,64 @@ bool Power::axpChipInit()
             PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_VBACKUP);
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA) {
+            PMU->clearIrqStatus();
+
+            // Turn off the PMU charging indicator light, no physical connection
+            PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF); // NO LED
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300); // SD Card
+            PMU->enablePowerOutput(XPOWERS_ALDO1);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300); // Display
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300); // LoRa
+            PMU->enablePowerOutput(XPOWERS_ALDO3);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 1800); // Sensor
+            PMU->enablePowerOutput(XPOWERS_ALDO4);
+
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300); // GPS
+            PMU->enablePowerOutput(XPOWERS_BLDO1);
+
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300); // Speaker
+            PMU->enablePowerOutput(XPOWERS_BLDO2);
+
+            PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300); // RTC Button battery
+            PMU->enablePowerOutput(XPOWERS_VBACKUP);
+
+            // PMU->enablePowerOutput(XPOWERS_DLDO1); // NFC
+
+            // UNUSED POWER CHANNEL
+            PMU->disablePowerOutput(XPOWERS_DCDC2);
+            PMU->disablePowerOutput(XPOWERS_DCDC3);
+            PMU->disablePowerOutput(XPOWERS_DCDC4);
+            PMU->disablePowerOutput(XPOWERS_DCDC5);
+            PMU->disablePowerOutput(XPOWERS_CPULDO);
+
+            // Enable Measure
+            PMU->enableBattDetection();
+            PMU->enableVbusVoltageMeasure();
+            PMU->enableBattVoltageMeasure();
+            PMU->enableSystemVoltageMeasure();
+            PMU->enableTemperatureMeasure();
+        } else if (HW_VENDOR == meshtastic_HardwareModel_TBEAM_BPF) {
+            // T-Beam BPF rail map (per schematic LilyGo_TBeam_BPF r2025-05-08):
+            //   DCDC1  -> ESP32 + OLED 3V3 (always on, protected)
+            //   ALDO2  -> MicroSD 3V3    (OFF at reset, must enable)
+            //   ALDO4  -> L76K GNSS 3V3  (OFF at reset, must enable)
+            //   ALDO1/3, BLDO1/2, DLDO1 -> user headers / unused at boot, leave at reset defaults.
+            // LoRa power is outside the PMU (external P-MOSFET switched by RF95_POWER_EN / IO16).
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO4);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+            // Make sure nothing's driving into an unused rail
+            PMU->disablePowerOutput(XPOWERS_DCDC5);
+            PMU->disablePowerOutput(XPOWERS_DLDO1);
         }
 
         // disable all axp chip interrupt
@@ -1675,13 +1794,32 @@ bool Power::cw2015Init()
 
 #if defined(HAS_PPM) && HAS_PPM
 
+// The gauge is soldered on, so a failed init means wedged rather than absent - retry from
+// the power thread before writing it off.
+#define BQ27220_INIT_ATTEMPTS 3
+#define BQ27220_RETRY_INTERVAL_MS (60 * 1000)
+
 /**
  * Adapter class for BQ25896/BQ27220 Lipo battery charger.
+ *
+ * The gauge only adds time-to-full/empty, so its failure must not take the charger down.
  */
 class LipoCharger : public HasBatteryLevel
 {
   private:
     BQ27220 *bq = nullptr;
+    uint8_t gaugeAttemptsLeft = BQ27220_INIT_ATTEMPTS;
+    uint32_t lastGaugeAttemptMs = 0;
+
+    // An aborted transfer leaves the i2c_master driver holding a stale transaction, which
+    // the next transfer trips over. Deleting the bus frees it along with the interrupt.
+    void recoverI2CBus()
+    {
+#ifdef ARCH_ESP32
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+#endif
+    }
 
   public:
     /**
@@ -1728,24 +1866,46 @@ class LipoCharger : public HasBatteryLevel
                 return false;
             }
         }
-        if (bq == nullptr) {
-            bq = new BQ27220;
-            bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
+        gaugeRunOnce();
+        // Ready on the charger alone, so Power stays enabled and can retry the gauge later.
+        return true;
+    }
 
-            bool result = bq->init();
-            if (result) {
-                LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
-                LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
-                LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
-                return true;
-            } else {
-                LOG_WARN("BQ27220 init failed");
-                delete bq;
-                bq = nullptr;
-                return false;
-            }
+    /// Bring up the BQ27220 fuel gauge, unless it is already up or out of attempts
+    void gaugeRunOnce()
+    {
+        if (bq != nullptr || gaugeAttemptsLeft == 0)
+            return;
+        if (gaugeAttemptsLeft < BQ27220_INIT_ATTEMPTS &&
+            Throttle::isWithinTimespanMs(lastGaugeAttemptMs, BQ27220_RETRY_INTERVAL_MS))
+            return;
+
+        lastGaugeAttemptMs = millis();
+        gaugeAttemptsLeft--;
+
+        // Cheap probe first: a silent gauge costs one transaction instead of the
+        // multi-second unseal/reset/provision sequence inside init().
+        Wire.beginTransmission(BQ27220_I2C_ADDRESS);
+        if (Wire.endTransmission() != 0) {
+            LOG_WARN("BQ27220 not responding at 0x%x", BQ27220_I2C_ADDRESS);
+            return;
         }
-        return false;
+
+        bq = new BQ27220;
+        bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
+
+        if (bq->init()) {
+            LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
+            LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
+            LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
+            return;
+        }
+
+        delete bq;
+        bq = nullptr;
+        // init() bails out mid-sequence, so hand the next bus user a sane driver state.
+        recoverI2CBus();
+        LOG_WARN("BQ27220 init failed (%d retries left), use BQ25896 for battery state", (int)gaugeAttemptsLeft);
     }
 
     /**
@@ -1761,7 +1921,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); }
+    virtual uint16_t getBattVoltage() override { return bq ? bq->getVoltage() : PPM->getBattVoltage(); }
 
     /**
      * return true if there is a battery installed in this unit
@@ -1779,11 +1939,13 @@ class LipoCharger : public HasBatteryLevel
     virtual bool isCharging() override
     {
         bool isCharging = PPM->isCharging();
-        if (isCharging) {
-            LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
-        } else {
-            if (!PPM->isVbusIn()) {
-                LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
+        if (bq) {
+            if (isCharging) {
+                LOG_TRACE("BQ27220 time to full charge: %d min", bq->getTimeToFull());
+            } else {
+                if (!PPM->isVbusIn()) {
+                    LOG_TRACE("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
+                }
             }
         }
         return isCharging;
@@ -1805,6 +1967,12 @@ bool Power::lipoChargerInit()
     return true;
 }
 
+/// Retry a fuel gauge that did not come up during setup
+void Power::lipoChargerRetry()
+{
+    lipoCharger.gaugeRunOnce();
+}
+
 #else
 /**
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
@@ -1813,6 +1981,8 @@ bool Power::lipoChargerInit()
 {
     return false;
 }
+
+void Power::lipoChargerRetry() {}
 #endif
 
 #ifdef HELTEC_MESH_SOLAR
@@ -1868,7 +2038,7 @@ meshSolarBatteryLevel meshSolarLevel;
 bool Power::meshSolarInit()
 {
     bool result = meshSolarLevel.runOnce();
-    LOG_DEBUG("Power::meshSolarInit mesh solar sensor is %s", result ? "ready" : "not ready yet");
+    LOG_DEBUG("Power::meshSolarInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
         return false;
     batteryLevel = &meshSolarLevel;
@@ -2001,7 +2171,7 @@ bool Power::serialBatteryInit()
 #endif
 
     bool result = serialBatteryLevel.runOnce();
-    LOG_DEBUG("Power::serialBatteryInit serial battery sensor is %s", result ? "ready" : "not ready yet");
+    LOG_DEBUG("Power::serialBatteryInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
         return false;
     batteryLevel = &serialBatteryLevel;

@@ -299,12 +299,38 @@ with open(jsonLoc) as f:
     jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
     userPrefs = json.loads(jsonStr)
 
+# Channels::initDefaultChannel() applies a configured index as a whole, so resolve per-field
+# optionality here: any field the vendor left out gets the value that function would have kept.
+MAX_NUM_CHANNELS = 8
+CHANNEL_FIELD_DEFAULTS = {
+    "PSK": "{ 0x01 }",  # short-form index into the well-known default PSK
+    "NAME": "",
+    "PRECISION": "0",
+    "IS_MUTED": "false",
+    "UPLINK_ENABLED": "false",
+    "DOWNLINK_ENABLED": "false",
+}
+channelsToWriteRaw = userPrefs.get("USERPREFS_CHANNELS_TO_WRITE", "1")
+channelsToWrite = int(channelsToWriteRaw, 16 if channelsToWriteRaw.lower().startswith("0x") else 10)
+if channelsToWrite > MAX_NUM_CHANNELS:
+    sys.exit(
+        f"userPrefs.jsonc: USERPREFS_CHANNELS_TO_WRITE is {channelsToWrite}, "
+        f"the channel table holds {MAX_NUM_CHANNELS}"
+    )
+for i in range(MAX_NUM_CHANNELS):
+    prefix = f"USERPREFS_CHANNEL_{i}_"
+    if any(k.startswith(prefix) for k in list(userPrefs)):
+        for field, default in CHANNEL_FIELD_DEFAULTS.items():
+            userPrefs.setdefault(prefix + field, default)
+
 pref_flags = []
 # Pre-process the userPrefs
 for pref in userPrefs:
     if userPrefs[pref].startswith("{"):
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
     elif userPrefs[pref].lstrip("-").replace(".", "").isdigit():
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif re.fullmatch(r"0[xX][0-9a-fA-F]+", userPrefs[pref]):
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
     elif userPrefs[pref] == "true" or userPrefs[pref] == "false":
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])

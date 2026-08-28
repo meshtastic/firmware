@@ -42,12 +42,12 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora.setIrqAction(callback); }
+    virtual void setRadioIsr(void (*callback)()) override { lora.setIrqAction(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;

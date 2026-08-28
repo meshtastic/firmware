@@ -67,6 +67,11 @@ typedef struct {
 
 } RadioBuffer;
 
+/// On-air ceiling for MeshPacket.encrypted. RadioBuffer holds one byte more, but the PHY caps a whole
+/// frame at MAX_LORA_PAYLOAD_LEN, so the header comes out of the same budget (matches perhapsEncode).
+constexpr size_t MAX_RADIO_PAYLOAD_LEN = MAX_LORA_PAYLOAD_LEN - sizeof(PacketHeader);
+static_assert(MAX_RADIO_PAYLOAD_LEN < sizeof(RadioBuffer::payload), "payload ceiling must fit the buffer");
+
 /**
  * Basic operations all radio chipsets must implement.
  *
@@ -256,8 +261,10 @@ class RadioInterface
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
-    // speculative UI checks). errBuf, if given, receives the failure reason.
-    static bool checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf = nullptr, size_t errLen = 0);
+    // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
+    // confirmation before it sets the owner licensed. errBuf, if given, receives the failure reason.
+    static bool checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf = nullptr, size_t errLen = 0,
+                                  bool prospectiveLicensedOwner = false);
 
     // Check if a candidate region is compatible and valid. On failure, logs at ERROR,
     // records a critical error, and sends a client notification.

@@ -19,6 +19,11 @@ meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
+// Explicit switch state, not inferred: "live config differs from the snapshot" missed name/PSK-only
+// swaps and fired on legitimate channel edits.
+static bool radioSwitched = false;
+static uint32_t switchedForId = 0;
+
 static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset *preset,
                                    uint16_t *slot, bool *legacyHopOverride = nullptr,
                                    meshtastic_Config_LoRaConfig_RegionCode *region = nullptr, bool *has_channel = nullptr,
@@ -43,6 +48,16 @@ static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Co
             return true;
         }
     }
+    return false;
+}
+
+// Is a target entry still live for this packet id? Unlike sendingPacket or the radio's standby
+// state, this is our own bookkeeping - it answers "has that beacon finished" without asking the radio.
+static bool targetRadioSettingsLive(uint32_t id)
+{
+    for (const auto &entry : targetRadioSettings)
+        if (entry.inUse && entry.id == id)
+            return true;
     return false;
 }
 
@@ -74,8 +89,22 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, me
         if (!target && !entry.inUse)
             target = &entry;
     }
-    if (!target)
-        target = &targetRadioSettings[0];
+    if (!target) {
+        // Table full. Never evict the entry the outstanding switch is gated on: dropping it would
+        // unblock the restore and put the home config back under a beacon that has not keyed up.
+        for (auto &entry : targetRadioSettings) {
+            if (!radioSwitched || entry.id != switchedForId) {
+                target = &entry;
+                break;
+            }
+        }
+        if (!target) {
+            LOG_WARN("Beacon: target table full and every slot is in flight, drop target for 0x%08x", p->id);
+            return;
+        }
+        LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x",
+                 (unsigned)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0])), target->id, p->id);
+    }
     target->inUse = true;
     target->id = p->id;
     target->preset = preset;
@@ -151,13 +180,23 @@ meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtas
 
 bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p)
 {
-    // True while a beacon radio switch is in effect and still needs undoing. We track the switch
-    // explicitly rather than inferring it from "live config differs from the snapshot", because that
-    // heuristic both missed cases (a channel name/PSK swap that left preset/slot/region unchanged would
-    // never be restored) and fired falsely (a legitimate non-beacon channel edit would be reverted on
-    // the next TX). With the flag the restore fires for ANY field we changed and only when we changed
-    // it - including on TX-failure paths, which route through this same restore call.
-    static bool radioSwitched = false;
+    // Consecutive switches with no restore between them, so a multi-target run can be read off the log
+    // and the held home snapshot is attributable to a specific switch.
+    static uint8_t switchDepth = 0;
+
+    // Both branches end in iface->reconfigure(), whose setStandby() runs completeSending() and calls
+    // straight back in here. Ignore that re-entry: the outer call owns the config it is applying.
+    static bool applying = false;
+    if (applying) {
+        // Expected once per switch and once per restore. A burst of these means something new re-enters.
+        LOG_DEBUG("Beacon: ignore re-entrant reconfigure while a radio config is being applied");
+        return false;
+    }
+    struct ApplyingScope {
+        bool &flag;
+        explicit ApplyingScope(bool &f) : flag(f) { flag = true; }
+        ~ApplyingScope() { flag = false; }
+    } applyingScope(applying);
 
     meshtastic_ChannelSettings *primaryCh = &channels.getByIndex(channels.getPrimaryIndex()).settings;
     meshtastic_Config_LoRaConfig_ModemPreset targetPreset;
@@ -198,22 +237,26 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         // transmit on it; the radio driver drops the packet outright (see RadioLibInterface,
         // beaconTxConfigInvalid) rather than letting it fall through onto the current config.
         if (beaconTxConfigInvalid(p)) {
-            LOG_DEBUG("Beacon: target preset %d/region %d invalid (or ham mismatch), not switching", targetPreset, targetRegion);
+            LOG_DEBUG("Beacon: target preset %d/region %d invalid (or ham mismatch), skip", targetPreset, targetRegion);
             return false;
         }
 
-        // Snapshot current (non-beacon) settings so we restore to the latest config. Skip while a
-        // switch is already active, so a second switch before the restore can't capture the beacon
-        // config as the "home" we later restore to.
+        // Snapshot the live (non-beacon) config as "home". Skipped while a switch is already active,
+        // so a second switch before the restore cannot capture the beacon config instead.
         if (!radioSwitched) {
             originalModemPreset = config.lora.modem_preset;
             originalLoraChannel = config.lora.channel_num;
             originalRegion = config.lora.region;
             originalPrimaryChannel = *primaryCh;
+            switchDepth = 0;
         }
+        switchDepth++;
 
-        LOG_INFO("Beacon: switch radio for packet 0x%08x to preset=%d slot=%u region=%d", p->id, targetPreset, targetSlot,
-                 targetRegion);
+        LOG_INFO("Beacon: switch #%u radio for packet 0x%08x to preset=%d slot=%u region=%d", switchDepth, p->id, targetPreset,
+                 targetSlot, targetRegion);
+        if (switchDepth > 1)
+            LOG_WARN("Beacon: switching again with no restore between; home preset=%d slot=%u region=%d still held",
+                     originalModemPreset, originalLoraChannel, originalRegion);
         config.lora.modem_preset = targetPreset;
         config.lora.channel_num = targetSlot;
         if (targetRegion != config.lora.region)
@@ -222,13 +265,22 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 
         channels.fixupChannel(channels.getPrimaryIndex());
         p->channel = channels.getHash(channels.getPrimaryIndex());
+        radioSwitched = true; // set before reconfigure(), so the flag never lags the radio it describes
+        switchedForId = p->id;
         iface->reconfigure();
-        radioSwitched = true;
         return true;
 
     } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) && radioSwitched) {
 
-        LOG_INFO("Beacon: restoring radio config after beacon TX");
+        // Null p is "release if nothing holds it": hold off until the arming beacon has finished. A
+        // non-null untagged p is the driver about to transmit it, so that always restores.
+        if (!p && targetRadioSettingsLive(switchedForId)) {
+            LOG_DEBUG("Beacon: skip restore, packet 0x%08x has not finished sending", switchedForId);
+            return false;
+        }
+
+        LOG_INFO("Beacon: restore radio config after TX, undoing %u switch(es) -> preset=%d slot=%u region=%d", switchDepth,
+                 originalModemPreset, originalLoraChannel, originalRegion);
         config.lora.modem_preset = originalModemPreset;
         config.lora.channel_num = originalLoraChannel;
         config.lora.region = originalRegion;
@@ -236,11 +288,45 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         primaryCh->name[sizeof(primaryCh->name) - 1] = '\0';
 
         channels.fixupChannel(channels.getPrimaryIndex());
+        radioSwitched = false; // cleared before reconfigure(), so the flag never lags the radio it describes
+        switchDepth = 0;
+        switchedForId = 0;
         iface->reconfigure();
-        radioSwitched = false;
         return true;
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// MeshBeaconTxHook
+// ---------------------------------------------------------------------------
+
+MeshBeaconTxHook *meshBeaconTxHook;
+
+RadioTxHook::PreTxAction MeshBeaconTxHook::beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p)
+{
+    // Invalid target config (bad preset/region, or an unlicensed node keying up on a ham-only
+    // region): the packet must never fall through onto the current (home) config, so drop it.
+    if (MeshBeaconModule::beaconTxConfigInvalid(p)) {
+        LOG_DEBUG("Beacon: invalid TX radio config, drop packet 0x%08x", p->id);
+        return PRETX_DROP;
+    }
+    // A switch leaves the radio on a channel we have not scanned yet, so the driver owes us a
+    // fresh transmit delay before it keys up.
+    return MeshBeaconModule::reconfigureForBeaconTX(iface, p) ? PRETX_DEFER : PRETX_SEND;
+}
+
+bool MeshBeaconTxHook::holdsRadio(const meshtastic_MeshPacket *p)
+{
+    return MeshBeaconModule::hasTargetRadioSettings(p);
+}
+
+void MeshBeaconTxHook::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
+{
+    // Clear first: the restore is gated on the switching packet still being live, so dropping our
+    // claim before asking is what lets the home config come back.
+    MeshBeaconModule::clearTargetRadioSettings(p);
+    MeshBeaconModule::reconfigureForBeaconTX(iface, nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +369,15 @@ void MeshBeaconBroadcastModule::rebuildCache()
 void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset,
                                                  bool has_channel, const meshtastic_ChannelSettings *overrideChannel)
 {
+    // Beacons uplink to MQTT like any other primary-slot packet - Router::send() publishes on slot 0's
+    // uplink_enabled, and under the swap below the topic is the beacon channel's. Both intentional.
     const bool cryptoOverride =
         has_channel && overrideChannel && (overrideChannel->name[0] != '\0' || overrideChannel->psk.size > 0);
     if (!cryptoOverride) {
-        router->send(p);
+        if (router->send(p) == ERRNO_SHOULD_RELEASE) {
+            MeshBeaconModule::clearTargetRadioSettings(p);
+            packetPool.release(p);
+        }
         return;
     }
 
@@ -300,7 +391,10 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, mesht
     primary.settings = beaconChannelSettings(saved, targetPreset, overrideChannel);
     channels.fixupChannel(channels.getPrimaryIndex());
 
-    router->send(p); // encrypts with the beacon channel's key and stamps its hash
+    if (router->send(p) == ERRNO_SHOULD_RELEASE) { // encrypts with the beacon channel's key and stamps its hash
+        MeshBeaconModule::clearTargetRadioSettings(p);
+        packetPool.release(p);
+    }
 
     primary.settings = saved;
     channels.fixupChannel(channels.getPrimaryIndex());
@@ -315,7 +409,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
                                  (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     if (!hasText && !hasRadioContent) {
-        LOG_DEBUG("Beacon: nothing to send (empty message, no offer), skipping");
+        LOG_DEBUG("Beacon: empty msg, no offer, skip");
         return;
     }
 
@@ -342,7 +436,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         p->hop_limit = 0; // all beacon packets are zero hopped to limit spamming.
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         p->want_ack = false;
-        p->rx_time = getValidTime(RTCQualityFromNet);
+        stampRxTime(p);
     };
 
     // ── Packet type decisions ────────────────────────────────────────────────
@@ -375,7 +469,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         offerOnly.offer_region = bcfg.broadcast_offer_region;
         offerSize = (pb_size_t)pb_encode_to_bytes(offerBuf, sizeof(offerBuf), &meshtastic_MeshBeacon_msg, &offerOnly);
         if (offerSize == 0)
-            LOG_WARN("Beacon: offer encode failed, skipping offer packet(s)");
+            LOG_WARN("Beacon: offer encode failed, skip");
     }
     if (sendCombined && payloadCacheDirty)
         rebuildCache();
@@ -429,8 +523,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             tgt.slot = config.lora.channel_num;
             if (bt.has_channel_index) {
                 if (bt.channel_index >= (uint32_t)channels.getNumChannels()) {
-                    LOG_WARN("Beacon: target %d channel_index %u out of range, using default channel for preset", ti,
-                             bt.channel_index);
+                    LOG_WARN("Beacon: target %d channel_index %u out of range, use preset default", ti, bt.channel_index);
                 } else {
                     const meshtastic_ChannelSettings &cs = channels.getByIndex(bt.channel_index).settings;
                     if (cs.name[0] != '\0' || cs.psk.size > 0) {
@@ -438,8 +531,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
                         tgt.channel = cs;
                         tgt.slot = cs.channel_num;
                     } else {
-                        LOG_DEBUG("Beacon: target %d channel_index %u is a blank slot, using default channel for preset", ti,
-                                  bt.channel_index);
+                        LOG_DEBUG("Beacon: target %d channel_index %u blank, use preset default", ti, bt.channel_index);
                     }
                 }
             }
@@ -463,7 +555,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             }
         }
         if (duplicate) {
-            LOG_DEBUG("Beacon: target %d duplicates an earlier target's radio config, skipping", ti);
+            LOG_DEBUG("Beacon: target %d dup radio config, skip", ti);
             continue;
         }
         sent[sentCount] = tgt;
@@ -487,7 +579,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         if (sendOfferOnly && offerSize > 0) {
             meshtastic_MeshPacket *pA = allocDataPacket();
             if (!pA) {
-                LOG_WARN("Beacon: failed to allocate split-A packet (target %d)", ti);
+                LOG_WARN("Beacon: split-A alloc failed (target %d)", ti);
                 return;
             }
             memcpy(pA->decoded.payload.bytes, offerBuf, offerSize);
@@ -501,7 +593,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         if (sendTextOnly) {
             meshtastic_MeshPacket *pB = allocDataPacket();
             if (!pB) {
-                LOG_WARN("Beacon: failed to allocate split-B packet (target %d)", ti);
+                LOG_WARN("Beacon: split-B alloc failed (target %d)", ti);
                 return;
             }
             pb_size_t msgLen = (pb_size_t)strnlen(bcfg.broadcast_message, sizeof(bcfg.broadcast_message) - 1);
