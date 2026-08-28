@@ -1405,6 +1405,21 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             LOG_WARN("Beacon: broadcast_offer_channel_index %u out of range, clearing", beaconCfg.broadcast_offer_channel_index);
             beaconCfg.has_broadcast_offer_channel_index = false;
         }
+        // A pinned slot must exist in the region it will be advertised for.
+        if (beaconCfg.has_broadcast_offer_frequency_slot) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            if (beaconCfg.has_broadcast_offer_preset)
+                probe.modem_preset = beaconCfg.broadcast_offer_preset;
+            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = beaconCfg.broadcast_offer_region;
+            const uint32_t slots = RadioInterface::frequencySlotCount(probe);
+            if (beaconCfg.broadcast_offer_frequency_slot == 0 || beaconCfg.broadcast_offer_frequency_slot > slots) {
+                LOG_WARN("Beacon: broadcast_offer_frequency_slot %u outside 1..%u, clearing",
+                         beaconCfg.broadcast_offer_frequency_slot, slots);
+                beaconCfg.has_broadcast_offer_frequency_slot = false;
+            }
+        }
         // Validate each broadcast target so a bad preset/region is cleared on write rather than
         // relying on the runtime TX drop.
         for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
@@ -1449,6 +1464,21 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                     // ("inherit at TX time") into a pin on today's running region.
                     if (probe.region != probedRegion)
                         t.region = probe.region;
+                }
+            }
+            // Last, so it is checked against the preset and region the clamp above settled on.
+            if (t.has_frequency_slot) {
+                meshtastic_Config_LoRaConfig probe = config.lora;
+                probe.use_preset = true;
+                if (t.has_preset)
+                    probe.modem_preset = t.preset;
+                if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                    probe.region = t.region;
+                const uint32_t slots = RadioInterface::frequencySlotCount(probe);
+                if (t.frequency_slot == 0 || t.frequency_slot > slots) {
+                    LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot %u outside 1..%u, clearing", i, t.frequency_slot,
+                             slots);
+                    t.has_frequency_slot = false;
                 }
             }
         }

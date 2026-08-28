@@ -413,6 +413,91 @@ static void test_adminValidation_targetChannelIndexInRange_isPreserved(void)
 }
 
 /**
+ * A pinned frequency_slot past the last slot the target's region holds must be cleared, not left
+ * to fall back to the name hash silently at TX time.
+ */
+static void test_adminValidation_targetFrequencySlotOutOfRange_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_frequency_slot = true;
+    bcfg.broadcast_targets[0].frequency_slot = RadioInterface::frequencySlotCount(config.lora) + 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot);
+}
+
+/**
+ * Slots are 1-based, so a pinned 0 means the same as unset and must not survive as a pin.
+ */
+static void test_adminValidation_targetFrequencySlotZero_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_frequency_slot = true;
+    bcfg.broadcast_targets[0].frequency_slot = 0;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot);
+}
+
+/**
+ * Positive-path control: an in-range pin survives admin validation unchanged.
+ */
+static void test_adminValidation_targetFrequencySlotInRange_isPreserved(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_frequency_slot = true;
+    bcfg.broadcast_targets[0].frequency_slot = 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot);
+    TEST_ASSERT_EQUAL_UINT32(1, moduleConfig.mesh_beacon.broadcast_targets[0].frequency_slot);
+}
+
+/**
+ * The offer's own pin gets the same range check as a target's.
+ */
+static void test_adminValidation_offerFrequencySlotOutOfRange_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = RadioInterface::frequencySlotCount(config.lora) + 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot);
+}
+
+/**
+ * An offer channel_index past the channel table must be cleared on write.
+ */
+static void test_adminValidation_offerChannelIndexOutOfRange_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = MAX_NUM_CHANNELS;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index);
+}
+
+/**
  * Verify a valid preset/region multi-target entry survives admin validation unchanged.
  * Positive-path control for the per-target validation.
  */
@@ -1365,6 +1450,170 @@ static void test_broadcaster_targetMatchingRunningConfig_armsNoSwitch(void)
 }
 
 /**
+ * A slot a receiver can work out for itself from the advertised region, preset and channel name
+ * must not be spent on the air.
+ */
+static void test_offer_derivableSlot_isNotAdvertised(void)
+{
+    resetConfig();
+    static const uint8_t offerPsk[16] = {0xBB, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                         0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Offer", offerPsk, sizeof(offerPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, bcfg);
+
+    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_channel, "the offer must carry the channel it names");
+    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_frequency_slot, "a derivable slot must not be advertised");
+}
+
+/**
+ * Pinning the very slot derivation would produce is still derivable, so it stays off the air.
+ */
+static void test_offer_pinnedButDerivableSlot_isNotAdvertised(void)
+{
+    resetConfig();
+    static const uint8_t offerPsk[16] = {0xBB, 0x11, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                         0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Offer", offerPsk, sizeof(offerPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot =
+        RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, bcfg);
+
+    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_frequency_slot, "a pin equal to the derived slot adds nothing");
+}
+
+/**
+ * A pin that deviates from derivation is the whole point of the field, so it must be advertised.
+ */
+static void test_offer_pinnedSlot_isAdvertised(void)
+{
+    resetConfig();
+    static const uint8_t offerPsk[16] = {0xBB, 0x22, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                         0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Offer", offerPsk, sizeof(offerPsk));
+    // EU_868 holds a single 250kHz slot, so there is no second slot to deviate to.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
+    const uint32_t pinned = (derived == 1) ? 2 : 1;
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = pinned;
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, bcfg);
+
+    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_frequency_slot, "a deviating slot must be advertised");
+    TEST_ASSERT_EQUAL_UINT32(pinned, beacon.offer_frequency_slot);
+}
+
+/**
+ * A disabled slot keeps the settings of whatever channel was deleted from it, so the offer must
+ * advertise nothing rather than hand out a retired name and PSK.
+ */
+static void test_offer_disabledChannelSlot_advertisesNothing(void)
+{
+    resetConfig();
+    static const uint8_t offerPsk[16] = {0xBB, 0x33, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                         0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Offer", offerPsk, sizeof(offerPsk));
+    const ChannelIndex idx = channels.getPrimaryIndex();
+    meshtastic_Channel retired = channels.getByIndex(idx);
+    retired.role = meshtastic_Channel_Role_DISABLED;
+    channels.setChannel(retired);
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = idx;
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, bcfg);
+
+    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_channel, "a disabled slot must not be advertised");
+}
+
+/**
+ * A pinned frequency_slot applies with no target channel at all, and moves the radio to exactly
+ * that slot.
+ */
+static void test_broadcaster_targetPinnedSlot_armsThatSlot(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xCC, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.channel_num = 0;
+    // EU_868 holds a single 250kHz slot, so there is no second slot to pin.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+    const uint32_t home = RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
+    const uint32_t pinned = (home == 1) ? 2 : 1;
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true; // content to send
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].frequency_slot = pinned;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->sentPackets.size() >= 1, "expected at least one send");
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                             "a pin away from the home slot must arm a switch");
+
+    ReentrantRadioInterface iface;
+    MeshBeaconModule::reconfigureForBeaconTX(&iface, &mockRouter->sentPackets[0]);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(pinned, config.lora.channel_num, "the radio must move to the pinned slot");
+    MeshBeaconModule::reconfigureForBeaconTX(&iface, nullptr);
+}
+
+/**
+ * Pinning the slot the node already runs on must arm nothing. This is the pinned-slot form of the
+ * 0-vs-resolved trap: config.lora.channel_num may still be 0 meaning "derive", so a pin of the
+ * derived value has to compare equal or the radio switches to the frequency it is already on.
+ */
+static void test_broadcaster_targetPinnedHomeSlot_armsNoSwitch(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xCC, 0x11, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.channel_num = 0; // derive the slot, as an unconfigured node does
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].frequency_slot =
+        RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->sentPackets.size() >= 1, "expected at least one send");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                              "a pin equal to the home slot must arm no radio switch");
+}
+
+/**
  * The restore must clear its guard before reconfiguring, or completeSending() re-enters the restore
  * branch and it reconfigures the radio once per level until the stack runs out. Seen in the field as
  * a run of "Beacon: restore radio config after TX" with a full applyModemConfig() between each.
@@ -1722,6 +1971,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetValidPresetForRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_targetChannelIndexInRange_isPreserved);
+    RUN_TEST(test_adminValidation_targetFrequencySlotOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_targetFrequencySlotZero_isCleared);
+    RUN_TEST(test_adminValidation_targetFrequencySlotInRange_isPreserved);
+    RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_offerChannelIndexOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt100);
     RUN_TEST(test_adminValidation_intervalTooLow_isClamped);
     RUN_TEST(test_adminValidation_intervalTooHigh_isPreserved);
@@ -1775,9 +2029,18 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_duplicateTargets_dedupedToOnePacket);
     RUN_TEST(test_broadcaster_distinctTargets_bothSent);
 
+    printf("\n=== Offer advertisement ===\n");
+
+    RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
+    RUN_TEST(test_offer_pinnedButDerivableSlot_isNotAdvertised);
+    RUN_TEST(test_offer_pinnedSlot_isAdvertised);
+    RUN_TEST(test_offer_disabledChannelSlot_advertisesNothing);
+
     printf("\n=== Radio switch/restore re-entrancy ===\n");
 
     RUN_TEST(test_broadcaster_targetMatchingRunningConfig_armsNoSwitch);
+    RUN_TEST(test_broadcaster_targetPinnedSlot_armsThatSlot);
+    RUN_TEST(test_broadcaster_targetPinnedHomeSlot_armsNoSwitch);
     RUN_TEST(test_beaconRestore_isNotReenteredByCompleteSending);
     RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
     RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);
