@@ -175,6 +175,18 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     return !RadioInterface::validateConfigLora(probe, targetChannel.name);
 }
 
+const meshtastic_ChannelSettings *MeshBeaconModule::offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+{
+    if (!bcfg.has_broadcast_offer_channel_index || bcfg.broadcast_offer_channel_index >= (uint32_t)channels.getNumChannels())
+        return nullptr;
+    // A disabled slot still holds the settings of whatever channel was deleted from it, so
+    // advertising it would hand out a retired name and PSK.
+    const meshtastic_Channel &slot = channels.getByIndex((ChannelIndex)bcfg.broadcast_offer_channel_index);
+    if (slot.role == meshtastic_Channel_Role_DISABLED || (slot.settings.name[0] == '\0' && slot.settings.psk.size == 0))
+        return nullptr;
+    return &slot.settings;
+}
+
 meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtastic_ChannelSettings &base,
                                                                    meshtastic_Config_LoRaConfig_ModemPreset preset,
                                                                    const meshtastic_ChannelSettings *overrideChannel)
@@ -348,9 +360,9 @@ void MeshBeaconBroadcastModule::rebuildCache()
     const auto &bcfg = moduleConfig.mesh_beacon;
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     strncpy(beacon.message, bcfg.broadcast_message, sizeof(beacon.message) - 1);
-    if (bcfg.has_broadcast_offer_channel) {
+    if (const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg)) {
         beacon.has_offer_channel = true;
-        beacon.offer_channel = bcfg.broadcast_offer_channel;
+        beacon.offer_channel = *offerCh;
         // PSK is included intentionally: this beacon is a public join-invitation.
         // The offered channel is not secret - the PSK here is a convenience token,
         // not a security boundary.  Operators who want a private channel must
@@ -379,7 +391,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const auto &bcfg = moduleConfig.mesh_beacon;
 
     const bool hasText = bcfg.broadcast_message[0] != '\0';
-    const bool hasRadioContent = bcfg.has_broadcast_offer_preset || bcfg.has_broadcast_offer_channel ||
+    const bool hasRadioContent = bcfg.has_broadcast_offer_preset || offerChannelSettings(bcfg) != nullptr ||
                                  (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     if (!hasText && !hasRadioContent) {
@@ -418,9 +430,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
     pb_size_t offerSize = 0;
     if (sendOfferOnly) {
         meshtastic_MeshBeacon offerOnly = meshtastic_MeshBeacon_init_zero;
-        if (bcfg.has_broadcast_offer_channel) {
+        if (const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg)) {
             offerOnly.has_offer_channel = true;
-            offerOnly.offer_channel = bcfg.broadcast_offer_channel;
+            offerOnly.offer_channel = *offerCh;
         }
         offerOnly.has_offer_preset = bcfg.has_broadcast_offer_preset;
         offerOnly.offer_preset = bcfg.broadcast_offer_preset;
