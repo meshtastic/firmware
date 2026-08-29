@@ -58,23 +58,6 @@ static bool isPowered()
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
-static bool isBluetoothEnabledForPowerFSM()
-{
-#if HAS_BLUETOOTH && !MESHTASTIC_EXCLUDE_BLUETOOTH
-    return config.bluetooth.enabled;
-#else
-    return false;
-#endif
-}
-
-static uint32_t getBluetoothWaitMs()
-{
-    if (!isBluetoothEnabledForPowerFSM())
-        return 0;
-
-    return Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
-}
-
 #if defined(T5_S3_EPAPER_PRO)
 static void t5BacklightOffForSleep()
 {
@@ -173,21 +156,23 @@ static void lsIdle()
                 powerFSM.trigger(EVENT_SERIAL_CONNECTED);
                 break;
 
-            default:
-                // We woke for some other reason (button press, device IRQ interrupt)
-
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#else
+            case ESP_SLEEP_WAKEUP_GPIO: {
                 bool pressed = false;
+#if defined(BUTTON_PIN)
+                pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#elif defined(KB_INT)
+                // keyboard press (probably) triggered GPIO interrupt
+                pressed = true;
 #endif
-                if (pressed) { // If we woke because of press, instead generate a PRESS event.
+                if (pressed) {
                     powerFSM.trigger(EVENT_PRESS);
-                } else {
-                    // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
-                    // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
-                    powerFSM.trigger(EVENT_WAKE_TIMER);
                 }
+                break;
+            }
+            default:
+                // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
+                // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
+                powerFSM.trigger(EVENT_WAKE_TIMER);
                 break;
             }
         } else {
@@ -210,6 +195,17 @@ static void lsExit()
     t5BacklightWakeFromSleep();
 }
 
+/// Skip the BLE re-enable while a reboot/shutdown is armed: AdminModule tears BLE down before
+/// scheduling the restart, and a state transition in that window would otherwise bring it back up.
+static void setBluetoothEnableUnlessRestarting()
+{
+    if (rebootAtMsec || shutdownAtMsec) {
+        LOG_POWERFSM("Skip BLE enable, restart pending");
+        return;
+    }
+    setBluetoothEnable(true);
+}
+
 static void nbEnter()
 {
     LOG_POWERFSM("State: nbEnter");
@@ -226,7 +222,7 @@ static void nbEnter()
 static void darkEnter()
 {
     LOG_POWERFSM("State: darkEnter");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
     if (screen)
         screen->setOn(false);
     // Screen timeout enters DARK; ensure backlight also turns off.
@@ -250,7 +246,7 @@ static void serialExit()
 {
     LOG_POWERFSM("State: serialExit");
     // Turn bluetooth back on when we leave serial stream API
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void powerEnter()
@@ -263,7 +259,7 @@ static void powerEnter()
     } else {
         if (screen)
             screen->setOn(true);
-        setBluetoothEnable(true);
+        setBluetoothEnableUnlessRestarting();
         // within enter() the function getState() returns the state we came from
     }
 }
@@ -281,7 +277,7 @@ static void powerIdle()
 static void powerExit()
 {
     LOG_POWERFSM("State: powerExit");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onEnter()
@@ -289,7 +285,7 @@ static void onEnter()
     LOG_POWERFSM("State: onEnter");
     if (screen)
         screen->setOn(true);
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onIdle()
@@ -446,7 +442,10 @@ void PowerFSM_setup()
 
         // If ESP32 and using power-saving, timer mover from DARK to light-sleep
         // Also serves purpose of the old DARK to DARK transition(?) See https://github.com/meshtastic/firmware/issues/3517
-        powerFSM.add_timed_transition(&stateDARK, &stateLS, getBluetoothWaitMs(), NULL, "Bluetooth timeout");
+        powerFSM.add_timed_transition(
+            &stateDARK, &stateLS,
+            Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
+            "Bluetooth timeout");
     } else {
         // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
         powerFSM.add_timed_transition(&stateDARK, &stateDARK,

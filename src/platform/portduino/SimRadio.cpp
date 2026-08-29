@@ -27,7 +27,7 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 
     // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
-    LOG_DEBUG("Set random delay before tx");
+    LOG_TRACE("Set random delay before tx");
     setTransmitDelay();
     return res;
 }
@@ -47,7 +47,7 @@ void SimRadio::setTransmitDelay()
         startTransmitTimer(true);
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
-        LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
+        LOG_TRACE("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
         startTransmitTimerRebroadcast(p);
     }
 }
@@ -169,7 +169,7 @@ void SimRadio::onNotify(uint32_t notification)
             startTransmitTimer();
             break;
         }
-        LOG_DEBUG("delay done");
+        LOG_TRACE("delay done");
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
@@ -363,7 +363,7 @@ void SimRadio::handleReceiveInterrupt()
         return;
     }
 
-    LOG_DEBUG("HANDLE RECEIVE INTERRUPT");
+    LOG_TRACE("HANDLE RECEIVE INTERRUPT");
     rxGood++;
 
     meshtastic_MeshPacket *mp = packetPool.allocCopy(*receivingPacket); // keep a copy in packetPool

@@ -96,7 +96,7 @@ template <typename T> class FlashData
 
             f.close();
         } else {
-            LOG_ERROR("Can't open / read %s", filename.c_str());
+            LOG_ERROR("Can't open/read %s", filename.c_str());
             okay = false;
         }
 #else

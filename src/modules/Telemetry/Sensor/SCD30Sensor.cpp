@@ -19,29 +19,20 @@ bool SCD30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
 
-    LOG_INFO("%s: reclock to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     scd30.begin(*_bus, _address);
 
     if (!startMeasurement()) {
-        LOG_ERROR("%s: Periodic measurement start failed", sensorName);
-#ifdef SCD30_I2C_CLOCK_SPEED
-        LOG_INFO("%s: restoring clock speed", sensorName);
-        reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
+        LOG_ERROR("%s: Failed to start periodic measurement", sensorName);
         return false;
     }
 
     if (!getASC(ascActive)) {
         LOG_WARN("%s: Can't determine ASC state", sensorName);
     }
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (state == SCD30_MEASUREMENT) {
         status = 1;
@@ -59,23 +50,14 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float co2, temperature, humidity;
 
 #ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: reclock to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (scd30.readMeasurementData(co2, temperature, humidity) != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Measurement read failed", sensorName);
-#ifdef SCD30_I2C_CLOCK_SPEED
-        LOG_DEBUG("%s: restoring clock speed", sensorName);
-        reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
+        LOG_ERROR("%s: Failed to read measurement data", sensorName);
         return false;
     }
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (co2 == 0) {
         LOG_ERROR("%s: Invalid CO₂ reading", sensorName);
@@ -366,16 +348,11 @@ bool SCD30Sensor::isActive()
 uint32_t SCD30Sensor::wakeUp()
 {
 #ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_INFO("%s: reclock to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     startMeasurement();
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     return 0;
 }
@@ -387,16 +364,11 @@ uint32_t SCD30Sensor::wakeUp()
 void SCD30Sensor::sleep()
 {
 #ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_INFO("%s: reclock to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     stopMeasurement();
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 }
 
 bool SCD30Sensor::canSleep()
@@ -420,8 +392,8 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
     AdminMessageHandleResult result;
 
 #ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_INFO("%s: reclock to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     switch (request->which_payload_variant) {
@@ -436,37 +408,34 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
             LOG_DEBUG("%s: Requested soft reset", sensorName);
             this->softReset();
         } else {
+            const auto &cfg = request->sensor_config.scd30_config;
 
-            if (request->sensor_config.scd30_config.has_set_asc) {
-                this->setASC(request->sensor_config.scd30_config.set_asc);
-                if (request->sensor_config.scd30_config.set_asc == false) {
-                    LOG_DEBUG("%s: Request for FRC", sensorName);
-                    if (request->sensor_config.scd30_config.has_set_target_co2_conc) {
-                        this->performFRC(request->sensor_config.scd30_config.set_target_co2_conc);
-                    } else {
-                        // FRC requested but no target CO2 provided
-                        LOG_ERROR("%s: target CO2 not provided", sensorName);
-                        result = AdminMessageHandleResult::NOT_HANDLED;
-                        break;
-                    }
+            // ASC/FRC/altitude calibration branching is shared with SCD4XSensor and the
+            // CO2-capable SEN6X variants via CO2CalibrationSensor.
+            if (cfg.has_set_asc || cfg.has_set_altitude) {
+                Co2AdminRequest co2req;
+                co2req.hasSetAsc = cfg.has_set_asc;
+                co2req.setAsc = cfg.set_asc;
+                co2req.hasTargetCo2 = cfg.has_set_target_co2_conc;
+                co2req.targetCo2 = cfg.set_target_co2_conc;
+                co2req.hasSetAltitude = cfg.has_set_altitude;
+                co2req.setAltitude = cfg.set_altitude;
+                if (!this->handleCo2AdminRequest(co2req, sensorName)) {
+                    result = AdminMessageHandleResult::NOT_HANDLED;
+                    break;
                 }
             }
 
             // Check for temperature offset
             // NOTE: this requires to have a sensor working on stable environment
             // And to make it between readings
-            if (request->sensor_config.scd30_config.has_set_temperature) {
-                this->setTemperature(request->sensor_config.scd30_config.set_temperature);
-            }
-
-            // Check for altitude
-            if (request->sensor_config.scd30_config.has_set_altitude) {
-                this->setAltitude(request->sensor_config.scd30_config.set_altitude);
+            if (cfg.has_set_temperature) {
+                this->setTemperature(cfg.set_temperature);
             }
 
             // Check for set measuremen interval
-            if (request->sensor_config.scd30_config.has_set_measurement_interval) {
-                this->setMeasurementInterval(request->sensor_config.scd30_config.set_measurement_interval);
+            if (cfg.has_set_measurement_interval) {
+                this->setMeasurementInterval(cfg.set_measurement_interval);
             }
         }
 
@@ -476,11 +445,6 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
     default:
         result = AdminMessageHandleResult::NOT_HANDLED;
     }
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     return result;
 }

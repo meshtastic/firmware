@@ -54,7 +54,7 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/LTR390UVSensor.h"
 #endif
 
-#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
+#if __has_include(<Adafruit_BME680.h>)
 #include "Sensor/BME680Sensor.h"
 #endif
 
@@ -102,6 +102,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/DFRobotGravitySensor.h"
 #endif
 
+#if __has_include(<SparkFun_AS3935.h>)
+#include "Sensor/AS3935Sensor.h"
+#endif
+
 #if __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
 #include "Sensor/NAU7802Sensor.h"
 #endif
@@ -131,6 +135,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/BH1750Sensor.h"
 #endif
 
+#if __has_include(<Adafruit_ADS1X15.h>)
+#include "Sensor/ADS1X15Sensor.h"
+#endif
+
 #if __has_include(<Adafruit_DS248x.h>)
 #include "Sensor/DS248XSensor.h"
 #endif
@@ -150,6 +158,7 @@ EnvironmentTelemetryModule::DisplaySource gDisplaySource = EnvironmentTelemetryM
 } // namespace
 
 static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
+static constexpr uint32_t IMMEDIATE_SEND_MAX_STALENESS_MS = 5UL * 60UL * 1000; // 5 minutes
 static constexpr uint32_t LOCAL_DISPLAY_REFRESH_INTERVAL_MS = 1000;
 
 EnvironmentTelemetryModule::DisplaySource EnvironmentTelemetryModule::getDisplaySource()
@@ -290,6 +299,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<DFRobot_RainfallSensor.h>)
     addSensor<DFRobotGravitySensor>(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN);
 #endif
+#if __has_include(<SparkFun_AS3935.h>)
+    addSensor<AS3935Sensor>(i2cScanner, ScanI2C::DeviceType::AS3935);
+#endif
 #if __has_include(<Adafruit_AHTX0.h>)
     addSensor<AHT10Sensor>(i2cScanner, ScanI2C::DeviceType::AHT10);
 #endif
@@ -302,7 +314,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_LTR390.h>)
     addSensor<LTR390UVSensor>(i2cScanner, ScanI2C::DeviceType::LTR390UV);
 #endif
-#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
+#if __has_include(<Adafruit_BME680.h>)
     addSensor<BME680Sensor>(i2cScanner, ScanI2C::DeviceType::BME_680);
 #endif
 #if __has_include(<Adafruit_BMP280.h>)
@@ -346,6 +358,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<BH1750_WE.h>)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
+#endif
+#if __has_include(<Adafruit_ADS1X15.h>)
+    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15);
+    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15_ALT);
 #endif
 #if __has_include(<SHTSensor.h>)
     // TODO Can we scan for multiple sensors connected on the same bus?
@@ -426,9 +442,15 @@ int32_t EnvironmentTelemetryModule::runOnce()
         }
         refreshDisplayedMeasurement();
 
+        // Give up on a stale immediate-send request rather than fire an arbitrarily late broadcast.
+        if (immediateSendRequested &&
+            !Throttle::isWithinTimespanMs(immediateSendRequestedAtMs, IMMEDIATE_SEND_MAX_STALENESS_MS)) {
+            immediateSendRequested = false;
+        }
+
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
-        if (((lastTelemetry == 0) ||
+        if (((lastTelemetry == 0) || immediateSendRequested ||
              !Throttle::isWithinTimespanMs(
                  lastTelemetry, Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
                                                                         default_telemetry_broadcast_interval_secs, numOnlineNodes,
@@ -436,6 +458,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
+            immediateSendRequested = false;
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
@@ -449,7 +472,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
     if (sleepOnNextExecution) {
         // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
         // this return value, which would otherwise override setIntervalFromNow() with the sensor
-        // polling interval (35 ms for BSEC2) and trigger deep sleep while the TX is still on air
+        // polling interval (sub-second while a BME680 reading is in flight) and trigger deep sleep
+        // while the TX is still on air
         return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, result);
@@ -512,7 +536,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     const auto &m = telemetry.variant.environment_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.iaq != 0 || m.voltage != 0 ||
+    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.has_iaq || m.voltage != 0 ||
                   m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
 
     if (!hasAny) {
@@ -547,7 +571,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Hum: " + String(m.relative_humidity, 0) + "%");
     if (m.barometric_pressure != 0)
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
-    if (m.iaq != 0) {
+    if (m.has_iaq) {
         String aqi = "IAQ: " + String(m.iaq);
         const char *bannerMsg = nullptr; // Default: no banner
 
@@ -759,21 +783,52 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
 
     bool validTelemetry = getEnvironmentTelemetry(&m);
+
     if (validTelemetry) {
-        LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
-                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
-                 m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-                 m.variant.environment_metrics.temperature);
-        LOG_INFO("Send: voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
-                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
+        if (m.variant.environment_metrics.has_temperature || m.variant.environment_metrics.has_relative_humidity ||
+            m.variant.environment_metrics.has_barometric_pressure)
+            LOG_INFO("Send: barometric_pressure=%fkPa, relative_humidity=%f%RH, temperature=%fdegC",
+                     m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.relative_humidity,
+                     m.variant.environment_metrics.temperature);
 
-        LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
-                 m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
+        if (m.variant.environment_metrics.has_voltage || m.variant.environment_metrics.has_current ||
+            m.variant.environment_metrics.has_iaq || m.variant.environment_metrics.has_gas_resistance)
+            LOG_INFO("Send: voltage=%f, current=%f, IAQ=%d, gas_resistance=%f", m.variant.environment_metrics.voltage,
+                     m.variant.environment_metrics.current, m.variant.environment_metrics.iaq,
+                     m.variant.environment_metrics.gas_resistance);
 
-        LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+        if (m.variant.environment_metrics.has_distance || m.variant.environment_metrics.has_lux)
+            LOG_INFO("Send: distance=%f, lux=%f", m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
-                 m.variant.environment_metrics.soil_moisture);
+        if (m.variant.environment_metrics.has_wind_speed || m.variant.environment_metrics.has_wind_direction)
+            LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees", m.variant.environment_metrics.wind_speed,
+                     m.variant.environment_metrics.wind_direction);
+
+        if (m.variant.environment_metrics.has_weight)
+            LOG_INFO("Send: weight=%fkg", m.variant.environment_metrics.weight);
+
+        if (m.variant.environment_metrics.has_radiation)
+            LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+
+        if (m.variant.environment_metrics.has_soil_temperature || m.variant.environment_metrics.has_soil_moisture)
+            LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                     m.variant.environment_metrics.soil_moisture);
+
+        if (m.variant.environment_metrics.has_adc_voltage_ch0 || m.variant.environment_metrics.has_adc_voltage_ch1 ||
+            m.variant.environment_metrics.has_adc_voltage_ch2 || m.variant.environment_metrics.has_adc_voltage_ch3)
+            LOG_INFO("Send: adc_ch0=%f, adc_ch1=%f, adc_ch2=%f, adc_ch3=%f", m.variant.environment_metrics.adc_voltage_ch0,
+                     m.variant.environment_metrics.adc_voltage_ch1, m.variant.environment_metrics.adc_voltage_ch2,
+                     m.variant.environment_metrics.adc_voltage_ch3);
+
+        if (m.variant.environment_metrics.has_adc_voltage_ch4 || m.variant.environment_metrics.has_adc_voltage_ch5 ||
+            m.variant.environment_metrics.has_adc_voltage_ch6 || m.variant.environment_metrics.has_adc_voltage_ch7)
+            LOG_INFO("Send: adc_ch4=%f, adc_ch5=%f, adc_ch6=%f, adc_ch7=%f", m.variant.environment_metrics.adc_voltage_ch4,
+                     m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
+                     m.variant.environment_metrics.adc_voltage_ch7);
+
+        if (m.variant.environment_metrics.has_lightning_strike_count_1h)
+            LOG_INFO("Send: lightning=%u, distance=%fkm", m.variant.environment_metrics.lightning_strike_count_1h,
+                     m.variant.environment_metrics.lightning_distance_km);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         if (!p) {
@@ -809,7 +864,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
 
     // Arm the pre-sleep sequence even when no valid reading was available this cycle (e.g. a
-    // BSEC2 call timing violation): a power-saving SENSOR node must still return to deep sleep,
+    // failed sensor read): a power-saving SENSOR node must still return to deep sleep,
     // otherwise it stays awake until the next telemetry interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)

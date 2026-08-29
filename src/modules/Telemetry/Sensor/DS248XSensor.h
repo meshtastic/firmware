@@ -66,6 +66,7 @@ class DS248XSensor : public TelemetrySensor
     ds248x_variant_t _variant = DS248X_UNKNOWN;
     _DS248XData ds248xData{};
     _DS2482800Data ds2482800Data{};
+    uint8_t mainTemperatureChannel = 0;
 #ifdef DS248X_I2C_CLOCK_SPEED
     ReClockI2C reClockI2C;
 #endif
@@ -73,12 +74,16 @@ class DS248XSensor : public TelemetrySensor
     bool isValidROM(const uint8_t *rom);
     float readTemperatureROM(const uint8_t *rom);
     bool readTemperatureChannel(uint8_t channel);
+    void setMainTemperature(uint8_t channel);
 
   public:
     DS248XSensor();
     ds248x_variant_t detectVariant();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+
+    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                meshtastic_AdminMessage *response) override;
 };
 
 #endif

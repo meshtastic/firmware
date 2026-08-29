@@ -137,8 +137,8 @@ class MeshService
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
 
-    // Rewrite any queued-for-phone packet still carrying a millis() rx_time placeholder into a
-    // real epoch, now that the wall clock is trustworthy.
+    // Rewrite any queued-for-phone packet still carrying an uptime-seconds rx_time placeholder
+    // into a real epoch, now that the wall clock is trustworthy.
     void reconcilePendingRxTimes();
 
     // Release QueueStatus packet to pool
@@ -222,6 +222,9 @@ class MeshService
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
+#ifdef PIO_UNIT_TESTING
+    friend class MeshServicePhoneDeliveryTest;
+#endif
 };
 
 extern MeshService *service;
