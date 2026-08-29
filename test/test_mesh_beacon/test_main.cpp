@@ -1562,6 +1562,61 @@ static void test_adminValidation_targetClamp_leavesRunningSlotState(void)
 }
 
 /**
+ * A slot pinned outside the region must not be advertised verbatim - a userPrefs build installs the
+ * offer without passing through admin validation, so fillOffer() has to resolve it itself.
+ */
+static void test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim(void)
+{
+    resetConfig();
+    static const uint8_t psk[16] = {0xEE, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", psk, sizeof(psk));
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = RadioInterface::frequencySlotCount(config.lora) + 99;
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, moduleConfig.mesh_beacon);
+
+    // Unset is fine (the derived slot stands); what must never happen is the pin going out verbatim.
+    TEST_ASSERT_TRUE_MESSAGE(beacon.offer_frequency_slot <= RadioInterface::frequencySlotCount(config.lora),
+                             "an advertised slot must exist in the advertised region");
+}
+
+/**
+ * An offer whose channel_index names a disabled slot advertises no channel, so it is an
+ * announcement - the redundancy gate must not swallow it just because the index was set.
+ */
+static void test_broadcaster_offerOnDisabledSlot_isStillSent(void)
+{
+    resetConfig();
+    static const uint8_t psk[16] = {0xEF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", psk, sizeof(psk));
+    installTestSecondaryChannel(1, "Retired", psk, sizeof(psk));
+    channelFile.channels[1].role = meshtastic_Channel_Role_DISABLED;
+    channels.onConfigChanged();
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = config.lora.modem_preset;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1; // falls back to the primary
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "an offer with no channel must not be suppressed");
+}
+
+/**
  * A slot a receiver can work out for itself from the advertised region, preset and channel name
  * must not be spent on the air.
  */
@@ -2478,6 +2533,8 @@ BEACON_TEST_ENTRY void setup()
     printf("\n=== Offer advertisement ===\n");
 
     RUN_TEST(test_adminValidation_targetClamp_leavesRunningSlotState);
+    RUN_TEST(test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim);
+    RUN_TEST(test_broadcaster_offerOnDisabledSlot_isStillSent);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedButDerivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedSlot_isAdvertised);
