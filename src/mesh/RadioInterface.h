@@ -268,13 +268,9 @@ class RadioInterface
     static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
 
     /**
-     * How many frequency slots a region holds at a given bandwidth, optionally reporting the
-     * slot width in MHz. Shared so validation, slot resolution and the applied config cannot
-     * disagree about how many slots exist.
+     * How many frequency slots this config's region holds, deriving the bandwidth from it so
+     * every caller gets the count the radio will actually run on.
      */
-    static uint32_t frequencySlotCount(const RegionInfo *region, float bwKHz, float *slotWidthMHz = nullptr);
-
-    /** Slot count for a config, deriving region and bandwidth from it. */
     static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
