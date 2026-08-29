@@ -19,6 +19,9 @@ typedef struct {
     // serves both. Zero means the entry is free; set by setTargetRadioSettings(), not by callers.
     uint8_t idCount;
     PacketId ids[2];
+    // When the entry was armed. A beacon still queued a full broadcast interval later is
+    // advertising stale mesh info, so it is dropped rather than transmitted.
+    uint32_t armedAtMs;
     // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
     // (which drops hop_start==0 packets) accepts the zero-hop beacon.
     bool legacyHopOverride;

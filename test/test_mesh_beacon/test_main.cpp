@@ -18,6 +18,7 @@
 
 #if !MESHTASTIC_EXCLUDE_BEACON
 
+#include "Default.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -1727,6 +1728,76 @@ static void test_sidecar_fourLegacySplitTargets_allFit(void)
         MeshBeaconModule::clearTargetRadioSettings(&pkts[i]);
 }
 
+// Backdate an armed entry so it reads as older than a broadcast interval. The table entry is not
+// itself const - only the accessor's return - so writing through it is well defined.
+static void backdateArmedAt(const meshtastic_MeshPacket &p, uint32_t byMs)
+{
+    const MeshBeaconModule_TargetRadioSettings *got = MeshBeaconModule::getTargetRadioSettings(&p);
+    TEST_ASSERT_NOT_NULL_MESSAGE(got, "backdating requires an armed entry");
+    const_cast<MeshBeaconModule_TargetRadioSettings *>(got)->armedAtMs = millis() - byMs;
+}
+
+static const uint32_t kBeaconIntervalMs = (uint32_t)default_mesh_beacon_min_broadcast_interval_secs * 1000UL;
+
+/**
+ * A beacon still queued a broadcast interval later describes a mesh that has moved on, and the next
+ * beacon is already due. It must be dropped, not transmitted on an hour-old description.
+ */
+static void test_sidecar_entryQueuedPastItsInterval_dropsThePacket(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0400;
+    MeshBeaconModule::setTargetRadioSettings(&pkt,
+                                             targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true, 1, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Stale"));
+
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt),
+                              "a freshly armed beacon on a valid config must not be dropped");
+
+    backdateArmedAt(pkt, kBeaconIntervalMs + 1000);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt),
+                             "a beacon queued past its broadcast interval must be dropped");
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+}
+
+/**
+ * The table is one cycle deep, so an entry a previous cycle never sent must not hold its slot
+ * against the next one - otherwise the new target evicts a live entry and keys up on the home config.
+ */
+static void test_sidecar_staleEntry_freesItsSlotForTheNextCycle(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket old[4];
+    for (int t = 0; t < 4; t++) {
+        old[t] = meshtastic_MeshPacket_init_zero;
+        old[t].id = 0x5EED0500 + t;
+        MeshBeaconModule::setTargetRadioSettings(&old[t], targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true,
+                                                                         (uint16_t)(t + 1), false,
+                                                                         meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Old"));
+    }
+    // The table is now full. Age one entry out, as a cycle that never drained would.
+    backdateArmedAt(old[1], kBeaconIntervalMs + 1000);
+
+    meshtastic_MeshPacket fresh = meshtastic_MeshPacket_init_zero;
+    fresh.id = 0x5EED0600;
+    MeshBeaconModule::setTargetRadioSettings(&fresh,
+                                             targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 2, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_EU_868, "New"));
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&fresh), "the new cycle must take the expired slot");
+    TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&old[1]), "the expired entry must be gone");
+    for (int t = 0; t < 4; t++) {
+        if (t == 1)
+            continue;
+        TEST_ASSERT_NOT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&old[t]),
+                                     "a live entry must not be evicted while an expired one was reapable");
+    }
+
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
 /**
  * A slot pinned outside the region must not be advertised verbatim - a userPrefs build installs the
  * offer without passing through admin validation, so fillOffer() has to resolve it itself.
@@ -2696,6 +2767,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sidecar_carriesCustomModemParams);
     RUN_TEST(test_sidecar_legacySplitPair_sharesOneEntryUntilBothRelease);
     RUN_TEST(test_sidecar_fourLegacySplitTargets_allFit);
+    RUN_TEST(test_sidecar_entryQueuedPastItsInterval_dropsThePacket);
+    RUN_TEST(test_sidecar_staleEntry_freesItsSlotForTheNextCycle);
     RUN_TEST(test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim);
     RUN_TEST(test_broadcaster_offerOnDisabledSlot_isStillSent);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
