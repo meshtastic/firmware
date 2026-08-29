@@ -18,6 +18,18 @@ meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
+static bool channelSlotPopulated(const meshtastic_Channel &slot)
+{
+    return slot.settings.name[0] != '\0' || slot.settings.psk.size > 0;
+}
+
+// Role_DISABLED is the zero value, so an unprovisioned slot reads as disabled; a disabled slot that
+// is populated still holds a deleted channel's name and PSK. Neither may be transmitted on.
+static bool channelSlotUsable(const meshtastic_Channel &slot)
+{
+    return slot.role != meshtastic_Channel_Role_DISABLED && channelSlotPopulated(slot);
+}
+
 // Explicit switch state, not inferred: "live config differs from the snapshot" missed name/PSK-only
 // swaps and fired on legitimate channel edits.
 static bool radioSwitched = false;
@@ -210,32 +222,40 @@ const meshtastic_ChannelSettings *MeshBeaconModule::offerChannelSettings(const m
 {
     if (!bcfg.has_broadcast_offer_channel_index || bcfg.broadcast_offer_channel_index >= (uint32_t)channels.getNumChannels())
         return nullptr;
-    // A disabled slot still holds the settings of whatever channel was deleted from it, so
-    // advertising it would hand out a retired name and PSK.
+    // Unlike a target, an unusable slot advertises nothing rather than falling back to the primary:
+    // the offer describes a mesh to join, and a retired slot would hand out a deleted PSK.
     const meshtastic_Channel &slot = channels.getByIndex((ChannelIndex)bcfg.broadcast_offer_channel_index);
-    if (slot.role == meshtastic_Channel_Role_DISABLED || (slot.settings.name[0] == '\0' && slot.settings.psk.size == 0))
-        return nullptr;
-    return &slot.settings;
+    return channelSlotUsable(slot) ? &slot.settings : nullptr;
 }
 
 meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtastic_ChannelSettings &base,
-                                                                   meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                                                   const meshtastic_ChannelSettings *overrideChannel)
+                                                                   meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
     meshtastic_ChannelSettings ch = base;
-    if (overrideChannel) {
-        ch.channel_num = overrideChannel->channel_num;
-        if (overrideChannel->name[0] != '\0')
-            strncpy(ch.name, overrideChannel->name, sizeof(ch.name) - 1);
-        if (overrideChannel->psk.size > 0)
-            ch.psk = overrideChannel->psk;
-    }
-    // If no usable name survived (no override, or a blank-named one), default to the preset's
-    // display name so the beacon channel is identifiable rather than borrowing the primary's name.
+    // A blank name defaults to the preset's display name, so the beacon channel is identifiable
+    // rather than borrowing whatever the running node happens to call its primary.
     if (ch.name[0] == '\0')
         strncpy(ch.name, DisplayFormatters::getModemPresetDisplayName(preset, false, true), sizeof(ch.name) - 1);
     ch.name[sizeof(ch.name) - 1] = '\0';
     return ch;
+}
+
+MeshBeaconModule::BeaconChannel MeshBeaconModule::resolveBeaconChannel(bool hasIndex, uint32_t index,
+                                                                       meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    BeaconChannel out = {};
+    out.index = channels.getPrimaryIndex();
+    if (hasIndex && index < (uint32_t)channels.getNumChannels()) {
+        const meshtastic_Channel &slot = channels.getByIndex((ChannelIndex)index);
+        if (channelSlotUsable(slot))
+            out.index = (ChannelIndex)index;
+        else if (slot.role == meshtastic_Channel_Role_DISABLED && channelSlotPopulated(slot))
+            out.retired = true; // a deleted channel's settings, not an unprovisioned slot
+    }
+    const meshtastic_ChannelSettings resolved = beaconChannelSettings(channels.getByIndex(out.index).settings, preset);
+    strncpy(out.name, resolved.name, sizeof(out.name) - 1);
+    out.name[sizeof(out.name) - 1] = '\0';
+    return out;
 }
 
 bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p)
@@ -536,34 +556,24 @@ void MeshBeaconBroadcastModule::sendBeacon()
             if (bt.has_preset)
                 tgt.preset = bt.preset;
             tgt.region = bt.region;
-            // Resolve the channel from the device's channel table by index. A slot is only usable
-            // if it is actually configured (has a name or PSK - its key is needed to encrypt). An
-            // out-of-range index, or a blank slot, falls back to the default channel for the target
-            // preset (see beaconChannelSettings), exactly as an unset channel_index would.
-            if (bt.has_channel_index) {
-                if (bt.channel_index >= (uint32_t)channels.getNumChannels()) {
-                    LOG_WARN("Beacon: target %d channel_index %u out of range, use preset default", ti, bt.channel_index);
-                } else {
-                    const meshtastic_Channel &slot = channels.getByIndex(bt.channel_index);
-                    const meshtastic_ChannelSettings &cs = slot.settings;
-                    // A disabled slot keeps the deleted channel's settings, and the beacon now
-                    // encrypts on the slot itself, so fall back to the primary.
-                    if (slot.role == meshtastic_Channel_Role_DISABLED) {
-                        LOG_WARN("Beacon: target %d channel_index %u disabled, use primary", ti, bt.channel_index);
-                    } else if (cs.name[0] != '\0' || cs.psk.size > 0) {
-                        tgt.channelIndex = (ChannelIndex)bt.channel_index;
-                        strncpy(tgt.channelName, beaconChannelSettings(cs, tgt.preset).name, sizeof(tgt.channelName) - 1);
-                        // Pin the slot this channel's name would hash to. The channel is no longer
-                        // installed as primary, so nothing else would derive it from that name.
-                        tgt.slot = targetSlot(bt, tgt, tgt.channelName);
-                    } else {
-                        LOG_DEBUG("Beacon: target %d channel_index %u blank, use preset default", ti, bt.channel_index);
-                    }
-                }
+            // The channel decides both the key and, through its name, the frequency slot. An index
+            // out of range, disabled or blank falls back to the primary - see resolveBeaconChannel.
+            const BeaconChannel bc = resolveBeaconChannel(bt.has_channel_index, bt.channel_index, tgt.preset);
+            tgt.channelIndex = bc.index;
+            strncpy(tgt.channelName, bc.name, sizeof(tgt.channelName) - 1);
+            if (bt.has_channel_index && bc.index != bt.channel_index) {
+                if (bc.retired)
+                    LOG_WARN("Beacon: target %d channel_index %u retired, use primary", ti, bt.channel_index);
+                else
+                    LOG_DEBUG("Beacon: target %d channel_index %u unusable, use primary", ti, bt.channel_index);
             }
+            // Pin the slot this channel's name would hash to. The channel is no longer installed as
+            // primary, so nothing else would derive it from that name.
+            if (bc.index != channels.getPrimaryIndex())
+                tgt.slot = targetSlot(bt, tgt, tgt.channelName);
             // A pinned slot wins over the name hash, and applies with or without a channel.
             if (bt.has_frequency_slot && bt.frequency_slot > 0)
-                tgt.slot = targetSlot(bt, tgt, tgt.channelName[0] ? tgt.channelName : nullptr);
+                tgt.slot = targetSlot(bt, tgt, tgt.channelName);
         }
 
         // Skip a target whose effective radio config duplicates one already sent this cycle.

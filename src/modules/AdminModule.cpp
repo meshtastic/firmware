@@ -1404,12 +1404,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 probe.region = beaconCfg.broadcast_offer_region;
 
             // Hash the channel the offer advertises, not the running primary.
-            const meshtastic_ChannelSettings *offerSlot =
-                beaconCfg.has_broadcast_offer_channel_index
-                    ? &channels.getByIndex((ChannelIndex)beaconCfg.broadcast_offer_channel_index).settings
-                    : nullptr;
-            const meshtastic_ChannelSettings offerChannel = MeshBeaconModule::beaconChannelSettings(
-                channels.getByIndex(channels.getPrimaryIndex()).settings, beaconCfg.broadcast_offer_preset, offerSlot);
+            const MeshBeaconModule::BeaconChannel offerChannel =
+                MeshBeaconModule::resolveBeaconChannel(beaconCfg.has_broadcast_offer_channel_index,
+                                                       beaconCfg.broadcast_offer_channel_index, beaconCfg.broadcast_offer_preset);
 
             if (!RadioInterface::validateConfigLora(probe, offerChannel.name)) {
                 LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clamping", beaconCfg.broadcast_offer_preset);
@@ -1464,11 +1461,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                     probe.region = t.region;
 
-                // Hash the channel this target will install as primary, not the running one.
-                const meshtastic_ChannelSettings *slotChannel =
-                    t.has_channel_index ? &channels.getByIndex(t.channel_index).settings : nullptr;
-                const meshtastic_ChannelSettings targetChannel = MeshBeaconModule::beaconChannelSettings(
-                    channels.getByIndex(channels.getPrimaryIndex()).settings, t.preset, slotChannel);
+                // Hash the channel this target transmits on, resolved exactly as sendBeacon() does.
+                const MeshBeaconModule::BeaconChannel targetChannel =
+                    MeshBeaconModule::resolveBeaconChannel(t.has_channel_index, t.channel_index, t.preset);
 
                 if (!RadioInterface::validateConfigLora(probe, targetChannel.name)) {
                     LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clamping", i, t.preset);
