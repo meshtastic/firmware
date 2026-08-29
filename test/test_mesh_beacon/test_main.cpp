@@ -1967,7 +1967,7 @@ static void test_beaconRestore_isNotReenteredByCompleteSending(void)
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
     pkt.id = 0x5EED0001;
     MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     // Switch to the beacon config. Not the case under test, so leave re-entry off.
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt), "beacon switch should have applied");
@@ -2003,14 +2003,14 @@ static void test_beaconSwitch_isNotUndoneByCompleteSending(void)
     meshtastic_MeshPacket first = meshtastic_MeshPacket_init_zero;
     first.id = 0x5EED0002;
     MeshBeaconModule::setTargetRadioSettings(&first, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &first), "first switch should have applied");
 
     // Second switch with the restore still outstanding, and reconfigure() re-entering.
     meshtastic_MeshPacket second = meshtastic_MeshPacket_init_zero;
     second.id = 0x5EED0003;
     MeshBeaconModule::setTargetRadioSettings(&second, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     radio.reconfigureCalls = 0;
     radio.reenterOnReconfigure = true;
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &second), "second switch should have applied");
@@ -2064,7 +2064,7 @@ static void test_beaconRestore_deferredUntilPacketCompletes(void)
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
     pkt.id = 0x5EED0004;
     MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt), "beacon switch should have applied");
 
     // The packet has not been sent yet, so its target settings are still live.
@@ -2126,7 +2126,7 @@ static void test_txHook_beaconPacket_isDefer(void)
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
     pkt.id = 0x7A000002;
     MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &pkt),
                                   "a beacon switch must defer the transmit");
@@ -2158,7 +2158,7 @@ static void test_txHook_invalidTarget_isDrop(void)
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
     pkt.id = 0x7A000003;
     MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DROP, RadioTxHooks::beforeTransmit(&radio, &pkt),
                                   "an invalid target config must be dropped, not transmitted");
@@ -2181,7 +2181,7 @@ static void test_txHook_unregistered_isNoOp(void)
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
     pkt.id = 0x7A000004;
     MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_SEND, RadioTxHooks::beforeTransmit(&radio, &pkt),
                                   "with no hook registered even a beacon is ordinary traffic to the driver");
@@ -2211,7 +2211,7 @@ static void test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome(void)
     meshtastic_MeshPacket beacon = meshtastic_MeshPacket_init_zero;
     beacon.id = 0x7A000005;
     MeshBeaconModule::setTargetRadioSettings(&beacon, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
-                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET, false, nullptr);
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &beacon),
                                   "the beacon switch should have applied");
     TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
