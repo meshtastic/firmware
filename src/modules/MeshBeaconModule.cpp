@@ -17,7 +17,8 @@ uint16_t MeshBeaconModule::originalLoraChannel;
 meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
 bool MeshBeaconModule::originalUsePreset;
 
-static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
+// One entry per broadcast target - the proto holds 4 - each covering the legacy split pair.
+static MeshBeaconModule_TargetRadioSettings targetRadioSettings[4];
 
 static bool channelSlotPopulated(const meshtastic_Channel &slot)
 {
@@ -36,12 +37,32 @@ static bool channelSlotUsable(const meshtastic_Channel &slot)
 static bool radioSwitched = false;
 static uint32_t switchedForId = 0;
 
+static bool entryHoldsId(const MeshBeaconModule_TargetRadioSettings &entry, PacketId id)
+{
+    for (uint8_t i = 0; i < entry.idCount; i++)
+        if (entry.ids[i] == id)
+            return true;
+    return false;
+}
+
+// The settings two packets would have to agree on to ride one entry. Field-wise, not memcmp:
+// the padding in a copied LoRaConfig is not guaranteed zero.
+static bool sameRadioSettings(const MeshBeaconModule_TargetRadioSettings &a, const MeshBeaconModule_TargetRadioSettings &b)
+{
+    return a.legacyHopOverride == b.legacyHopOverride && a.lora.region == b.lora.region &&
+           a.lora.modem_preset == b.lora.modem_preset && a.lora.use_preset == b.lora.use_preset &&
+           a.lora.channel_num == b.lora.channel_num && a.lora.bandwidth == b.lora.bandwidth &&
+           a.lora.spread_factor == b.lora.spread_factor && a.lora.coding_rate == b.lora.coding_rate &&
+           a.lora.override_frequency == b.lora.override_frequency && a.lora.tx_power == b.lora.tx_power &&
+           strncmp(a.channelName, b.channelName, sizeof(a.channelName)) == 0;
+}
+
 const MeshBeaconModule_TargetRadioSettings *MeshBeaconModule::getTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
     if (!p)
         return nullptr;
     for (const auto &entry : targetRadioSettings)
-        if (entry.inUse && entry.id == p->id)
+        if (entry.idCount && entryHoldsId(entry, p->id))
             return &entry;
     return nullptr;
 }
@@ -51,7 +72,7 @@ const MeshBeaconModule_TargetRadioSettings *MeshBeaconModule::getTargetRadioSett
 static bool targetRadioSettingsLive(uint32_t id)
 {
     for (const auto &entry : targetRadioSettings)
-        if (entry.inUse && entry.id == id)
+        if (entry.idCount && entryHoldsId(entry, id))
             return true;
     return false;
 }
@@ -72,20 +93,29 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, co
 {
     if (!p)
         return;
+    clearTargetRadioSettingsById(p->id); // a re-arm must not leave this id on its old entry
+
+    // An entry already describing these settings takes the id, so the legacy split pair costs one
+    // entry rather than two identical ones.
+    for (auto &entry : targetRadioSettings) {
+        if (entry.idCount && entry.idCount < (uint8_t)(sizeof(entry.ids) / sizeof(entry.ids[0])) && sameRadioSettings(entry, s)) {
+            entry.ids[entry.idCount++] = p->id;
+            return;
+        }
+    }
+
     MeshBeaconModule_TargetRadioSettings *target = nullptr;
     for (auto &entry : targetRadioSettings) {
-        if (entry.inUse && entry.id == p->id) {
+        if (!entry.idCount) {
             target = &entry;
             break;
         }
-        if (!target && !entry.inUse)
-            target = &entry;
     }
     if (!target) {
         // Table full. Never evict the entry the outstanding switch is gated on: dropping it would
         // unblock the restore and put the home config back under a beacon that has not keyed up.
         for (auto &entry : targetRadioSettings) {
-            if (!radioSwitched || entry.id != switchedForId) {
+            if (!radioSwitched || !entryHoldsId(entry, switchedForId)) {
                 target = &entry;
                 break;
             }
@@ -95,11 +125,11 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, co
             return;
         }
         LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x",
-                 (unsigned)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0])), target->id, p->id);
+                 (unsigned)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0])), target->ids[0], p->id);
     }
     *target = s;
-    target->inUse = true;
-    target->id = p->id;
+    target->idCount = 1;
+    target->ids[0] = p->id;
     target->channelName[sizeof(target->channelName) - 1] = '\0'; // s may carry an unterminated name
 }
 
@@ -122,8 +152,13 @@ static void releaseIfNotQueued(ErrorCode sendResult, meshtastic_MeshPacket *p, P
 void MeshBeaconModule::clearTargetRadioSettingsById(PacketId id)
 {
     for (auto &entry : targetRadioSettings) {
-        if (entry.inUse && entry.id == id) {
-            entry.inUse = false;
+        for (uint8_t i = 0; i < entry.idCount; i++) {
+            if (entry.ids[i] != id)
+                continue;
+            // The other half of a legacy split may still be queued on these settings, so the entry
+            // is only freed once its last packet has gone.
+            entry.ids[i] = entry.ids[entry.idCount - 1];
+            entry.idCount--;
             return;
         }
     }
@@ -133,6 +168,12 @@ void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
     if (p)
         clearTargetRadioSettingsById(p->id);
+}
+
+void MeshBeaconModule::clearAllTargetRadioSettings()
+{
+    for (auto &entry : targetRadioSettings)
+        entry.idCount = 0;
 }
 
 bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)

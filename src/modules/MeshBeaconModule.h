@@ -13,10 +13,12 @@
 #define MESH_BEACON_FLAG_BROADCAST_ENABLED meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED
 #define MESH_BEACON_FLAG_LEGACY_SPLIT meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT
 
-// Sidecar entry pairing a packet ID with target radio settings for beacon TX.
+// Sidecar entry pairing packet IDs with the target radio settings they share for beacon TX.
 typedef struct {
-    bool inUse;
-    PacketId id;
+    // Legacy split sends the offer and the text as two packets on identical settings, so one entry
+    // serves both. Zero means the entry is free; set by setTargetRadioSettings(), not by callers.
+    uint8_t idCount;
+    PacketId ids[2];
     // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
     // (which drops hop_start==0 packets) accepts the zero-hop beacon.
     bool legacyHopOverride;
@@ -68,6 +70,9 @@ class MeshBeaconModule
 
     /** Same, by id, for a packet the send path may already have freed. */
     static void clearTargetRadioSettingsById(PacketId id);
+
+    /** Drop every entry. For tests, which reuse the table across cases. */
+    static void clearAllTargetRadioSettings();
 
     /**
      * True if p is tagged for a beacon radio switch whose target config must NOT be transmitted:

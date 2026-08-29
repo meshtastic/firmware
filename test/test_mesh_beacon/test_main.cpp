@@ -174,6 +174,10 @@ static void resetConfig()
 
     myNodeInfo.my_node_num = kLocalNode;
 
+    // The sidecar is module state that outlives a case: the mock router never releases a packet,
+    // so entries armed by an earlier test would otherwise still occupy the table.
+    MeshBeaconModule::clearAllTargetRadioSettings();
+
     initRegion();
 }
 
@@ -1660,6 +1664,70 @@ static void test_sidecar_carriesCustomModemParams(void)
 }
 
 /**
+ * Legacy split sends the offer and the text on identical settings. They share one entry, so
+ * releasing the first must not pull the settings out from under the second still queued.
+ */
+static void test_sidecar_legacySplitPair_sharesOneEntryUntilBothRelease(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket offerHalf = meshtastic_MeshPacket_init_zero;
+    meshtastic_MeshPacket textHalf = meshtastic_MeshPacket_init_zero;
+    offerHalf.id = 0x5EED0200;
+    textHalf.id = 0x5EED0201;
+
+    const MeshBeaconModule_TargetRadioSettings s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 3,
+                                                                  true, meshtastic_Config_LoRaConfig_RegionCode_US, "Split");
+    MeshBeaconModule::setTargetRadioSettings(&offerHalf, s);
+    MeshBeaconModule::setTargetRadioSettings(&textHalf, s);
+
+    const MeshBeaconModule_TargetRadioSettings *a = MeshBeaconModule::getTargetRadioSettings(&offerHalf);
+    const MeshBeaconModule_TargetRadioSettings *b = MeshBeaconModule::getTargetRadioSettings(&textHalf);
+    TEST_ASSERT_NOT_NULL_MESSAGE(a, "the offer half must resolve");
+    TEST_ASSERT_NOT_NULL_MESSAGE(b, "the text half must resolve");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(a, b, "identical settings must share one entry, not occupy two");
+
+    MeshBeaconModule::clearTargetRadioSettings(&offerHalf);
+    TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&offerHalf), "the released half must be gone");
+    TEST_ASSERT_NOT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&textHalf),
+                                 "the still-queued half must keep its settings, or it keys up on the home config");
+
+    MeshBeaconModule::clearTargetRadioSettings(&textHalf);
+    TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&textHalf), "the last release must free the entry");
+}
+
+/**
+ * The shape legacy mode actually produces: four targets, each split into two packets. All eight
+ * must hold their own settings at once - the table is four entries because the pairs share.
+ */
+static void test_sidecar_fourLegacySplitTargets_allFit(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket pkts[8];
+    for (int t = 0; t < 4; t++) {
+        // One distinct config per target; both of its packets carry that config.
+        const MeshBeaconModule_TargetRadioSettings s =
+            targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, (uint16_t)(t + 1), true,
+                           meshtastic_Config_LoRaConfig_RegionCode_US, "Split");
+        for (int half = 0; half < 2; half++) {
+            meshtastic_MeshPacket &p = pkts[t * 2 + half];
+            p = meshtastic_MeshPacket_init_zero;
+            p.id = 0x5EED0300 + t * 2 + half;
+            MeshBeaconModule::setTargetRadioSettings(&p, s);
+        }
+    }
+
+    for (int i = 0; i < 8; i++) {
+        const MeshBeaconModule_TargetRadioSettings *got = MeshBeaconModule::getTargetRadioSettings(&pkts[i]);
+        TEST_ASSERT_NOT_NULL_MESSAGE(got, "every packet of a full legacy cycle must keep its settings");
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE((uint32_t)(i / 2 + 1), got->lora.channel_num,
+                                         "each packet must resolve to its own target's slot");
+    }
+
+    for (int i = 0; i < 8; i++)
+        MeshBeaconModule::clearTargetRadioSettings(&pkts[i]);
+}
+
+/**
  * A slot pinned outside the region must not be advertised verbatim - a userPrefs build installs the
  * offer without passing through admin validation, so fillOffer() has to resolve it itself.
  */
@@ -2626,6 +2694,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetClamp_leavesRunningSlotState);
     RUN_TEST(test_applyModemConfig_publishesTheSlotVerdict);
     RUN_TEST(test_sidecar_carriesCustomModemParams);
+    RUN_TEST(test_sidecar_legacySplitPair_sharesOneEntryUntilBothRelease);
+    RUN_TEST(test_sidecar_fourLegacySplitTargets_allFit);
     RUN_TEST(test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim);
     RUN_TEST(test_broadcaster_offerOnDisabledSlot_isStillSent);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
