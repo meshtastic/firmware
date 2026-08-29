@@ -183,6 +183,97 @@ static void test_clampConfigLora_validPresetUnchanged()
 
 static TestableRadioInterface *testRadio;
 
+// ---------------------------------------------------------------------------
+// Frequency slot boundaries
+//
+// A region that tiles its band exactly is the sharpest check on the slot arithmetic: the top
+// slot has to finish flush against freqEnd, never past it. Pinning a handful of these guards
+// both halves of the calculation - how many slots there are, and where each one sits - without
+// sweeping every region and preset.
+//
+// Slot width is spacing + 2*padding + bandwidth, and slots carry one fewer gap than their count,
+// which is the +spacing the count formula adds back. getFreq() returns the slot CENTRE, so the
+// upper edge is centre + bw/2 (getBw() is kHz, hence /2000 for MHz).
+// ---------------------------------------------------------------------------
+
+/** US: 26MHz of band at 250kHz tiles into exactly 104 slots, the last ending on 928.000. */
+static void test_frequencySlot_usTopSlotEndsOnBandEdge()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(104, RadioInterface::frequencySlotCount(config.lora),
+                                     "902-928MHz at 250kHz is exactly 104 slots");
+
+    config.lora.channel_num = 104; // top slot, 1-based
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 927.875f, testRadio->getFreq(), "top slot centre");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 928.0f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "the top slot must end on the band edge, never past it");
+}
+
+/** NZ_865 at 125kHz: 4MHz tiles into 32 slots, the last ending on 868.000. */
+static void test_frequencySlot_nz865NarrowBandwidthTopSlot()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_NZ_865;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW; // 125kHz
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(32, RadioInterface::frequencySlotCount(config.lora),
+                                     "864-868MHz at 125kHz is exactly 32 slots");
+
+    config.lora.channel_num = 32;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 867.9375f, testRadio->getFreq(), "top slot centre");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 868.0f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "halving the bandwidth must not push the top slot past the edge");
+}
+
+/** EU_868: a single 250kHz slot filling the whole 869.4-869.65 allocation. */
+static void test_frequencySlot_eu868IsExactlyOneSlot()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, RadioInterface::frequencySlotCount(config.lora),
+                                     "869.4-869.65MHz at 250kHz holds one slot and no more");
+
+    config.lora.channel_num = 1;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 869.525f, testRadio->getFreq(), "the only slot sits mid-band");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 869.65f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "the single slot fills the band exactly");
+}
+
+/** ITU1_2M: padding brackets each slot, coercing 15.6kHz onto the 20kHz ham raster. */
+static void test_frequencySlot_itu1_2mPaddingBracketsTopSlot()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_TINY_FAST; // 15.6kHz + 2*2.2kHz = 20kHz
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(100, RadioInterface::frequencySlotCount(config.lora),
+                                     "144-146MHz on a 20kHz raster is 100 slots");
+
+    config.lora.channel_num = 100;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 145.99f, testRadio->getFreq(), "top slot centre");
+    // Upper edge plus the trailing padding lands on 146.000: padding is a per-slot bracket, so the
+    // last slot stops 2.2kHz short of the edge rather than on it.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 145.9978f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "the padded raster must leave its trailing guard inside the band");
+}
+
 // After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
 // CR should come from the preset (5 for LONG_FAST), not from the zero default.
 static void test_applyModemConfig_freshFlashCodingRateNotZero()
@@ -504,6 +595,10 @@ void setup()
     RUN_TEST(test_lr20x0BandClassification);
     RUN_TEST(test_lr20x0BandHopDetection);
     RUN_TEST(test_lr20x0ReconfigurePathSelection);
+    RUN_TEST(test_frequencySlot_usTopSlotEndsOnBandEdge);
+    RUN_TEST(test_frequencySlot_nz865NarrowBandwidthTopSlot);
+    RUN_TEST(test_frequencySlot_eu868IsExactlyOneSlot);
+    RUN_TEST(test_frequencySlot_itu1_2mPaddingBracketsTopSlot);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
     RUN_TEST(test_bwCodeToKHz_roundTrip);
