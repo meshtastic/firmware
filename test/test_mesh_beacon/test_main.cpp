@@ -1,3 +1,4 @@
+// trunk-ignore-all(trufflehog/Lob): matches test_* function names, not credentials
 /**
  * Unit tests for MeshBeaconModule:
  *  - AdminModule::handleSetModuleConfig validation (invalid/valid inputs)
@@ -1524,6 +1525,24 @@ class ReentrantRadioInterface : public RadioInterface
     }
 };
 
+// Keeps the base reconfigure(), so applyModemConfig() actually runs.
+class ApplyingRadioInterface : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+};
+
 /**
  * A target on the config the node already runs must arm no switch. A resolved 1-based slot compared
  * against a channel_num still 0 ("derive it") reads as a difference and switches to the same freq.
@@ -1571,9 +1590,73 @@ static void test_adminValidation_targetClamp_leavesRunningSlotState(void)
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot,
-                             "a speculative clamp must not rewrite the running radio's slot state");
+                             "a candidate clamp must not rewrite the running radio's slot state");
     TEST_ASSERT_FALSE_MESSAGE(RadioInterface::uses_custom_channel_name,
-                              "a speculative clamp must not rewrite the running channel-name state");
+                              "a candidate clamp must not rewrite the running channel-name state");
+}
+
+/**
+ * The other half of the above, and the reason it is not vacuous: no clamp publishes the flags any
+ * more, so something still has to. A config the node runs must move them when it is applied.
+ */
+static void test_applyModemConfig_publishesTheSlotVerdict(void)
+{
+    resetConfig();
+    static const uint8_t psk[16] = {0xA1, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    // A name that is not the preset's display name is what uses_custom_channel_name reports on.
+    installTestPrimaryChannel("NotAPreset", psk, sizeof(psk));
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    // Pin a slot the name would not hash to, so "uses the default slot" must come out false.
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(config.lora, "NotAPreset");
+    const uint32_t slots = RadioInterface::frequencySlotCount(config.lora);
+    config.lora.channel_num = (derived % slots) + 1; // any valid slot that is not the derived one
+
+    RadioInterface::uses_default_frequency_slot = true;
+    RadioInterface::uses_custom_channel_name = false;
+
+    ApplyingRadioInterface radio;
+    radio.reconfigure();
+
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::uses_default_frequency_slot,
+                              "applying a config on a pinned slot must publish uses_default_frequency_slot=false");
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_custom_channel_name,
+                             "applying a config on a non-preset channel name must publish uses_custom_channel_name=true");
+}
+
+/**
+ * The sidecar carries a whole LoRaConfig so a target can vary more than a preset. Nothing in the
+ * beacon config can ask for that yet, so pin it at the sidecar: custom modem params must survive
+ * the round trip rather than being flattened onto a preset.
+ */
+static void test_sidecar_carriesCustomModemParams(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0100;
+
+    MeshBeaconModule_TargetRadioSettings s = {};
+    s.lora = config.lora;
+    s.lora.use_preset = false; // custom params: bandwidth/SF/CR are the config, not the preset
+    s.lora.bandwidth = 125;
+    s.lora.spread_factor = 11;
+    s.lora.coding_rate = 8;
+    s.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    strncpy(s.channelName, "Custom", sizeof(s.channelName) - 1);
+    MeshBeaconModule::setTargetRadioSettings(&pkt, s);
+
+    const MeshBeaconModule_TargetRadioSettings *got = MeshBeaconModule::getTargetRadioSettings(&pkt);
+    TEST_ASSERT_NOT_NULL_MESSAGE(got, "the entry must be retrievable by packet id");
+    TEST_ASSERT_FALSE_MESSAGE(got->lora.use_preset, "use_preset must survive the sidecar");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(125, got->lora.bandwidth, "bandwidth must survive the sidecar");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(11, got->lora.spread_factor, "spread_factor must survive the sidecar");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(8, got->lora.coding_rate, "coding_rate must survive the sidecar");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Custom", got->channelName, "the hashed channel name must survive the sidecar");
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
 }
 
 /**
@@ -2541,6 +2624,8 @@ BEACON_TEST_ENTRY void setup()
     printf("\n=== Offer advertisement ===\n");
 
     RUN_TEST(test_adminValidation_targetClamp_leavesRunningSlotState);
+    RUN_TEST(test_applyModemConfig_publishesTheSlotVerdict);
+    RUN_TEST(test_sidecar_carriesCustomModemParams);
     RUN_TEST(test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim);
     RUN_TEST(test_broadcaster_offerOnDisabledSlot_isStillSent);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
