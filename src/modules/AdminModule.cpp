@@ -1389,7 +1389,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             }
         }
         // Range only, as for a target: an unprovisioned slot must not be rejected here, and a
-        // slot retired later is handled by dropBeaconTargetsForChannel().
+        // slot retired later is handled by dropBeaconRefsForChannel().
         if (beaconCfg.has_broadcast_offer_channel_index && beaconCfg.broadcast_offer_channel_index >= MAX_NUM_CHANNELS) {
             LOG_WARN("Beacon: broadcast_offer_channel_index %u out of range, clearing", beaconCfg.broadcast_offer_channel_index);
             beaconCfg.has_broadcast_offer_channel_index = false;

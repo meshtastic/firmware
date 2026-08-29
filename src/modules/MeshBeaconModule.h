@@ -20,9 +20,8 @@ typedef struct {
     // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
     // (which drops hop_start==0 packets) accepts the zero-hop beacon.
     bool legacyHopOverride;
-    // The radio this packet needs, whole: region, preset, use_preset and channel_num are all
-    // resolved at send time, and a future per-target bandwidth or SF needs no field added here.
-    // Region is already resolved - never UNSET - so nothing downstream re-derives it.
+    // The radio this packet needs, whole and already resolved at send time - region is never
+    // UNSET here, and a future per-target bandwidth or SF needs no field added.
     meshtastic_Config_LoRaConfig lora;
     // The channel name the slot was hashed from, resolved once at send time so the TX path and
     // the pre-key-up validation cannot derive it two different ways.
