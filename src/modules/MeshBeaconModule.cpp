@@ -37,6 +37,13 @@ static bool channelSlotUsable(const meshtastic_Channel &slot)
 static bool radioSwitched = false;
 static uint32_t switchedForId = 0;
 
+// A beacon still queued a broadcast interval after it was armed describes a mesh that has moved on,
+// and the next cycle is due. Expire it so it cannot transmit, and so it frees its table slot.
+static bool targetRadioSettingsStale(const MeshBeaconModule_TargetRadioSettings &entry)
+{
+    return entry.idCount && Throttle::hasElapsed(entry.armedAtMs, default_mesh_beacon_min_broadcast_interval_secs * 1000UL);
+}
+
 static bool entryHoldsId(const MeshBeaconModule_TargetRadioSettings &entry, PacketId id)
 {
     for (uint8_t i = 0; i < entry.idCount; i++)
@@ -95,6 +102,15 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, co
         return;
     clearTargetRadioSettingsById(p->id); // a re-arm must not leave this id on its old entry
 
+    // Reap anything a previous cycle left behind before looking for room, so a beacon that never
+    // transmitted cannot hold a slot against the cycle that follows it.
+    for (auto &entry : targetRadioSettings) {
+        if (targetRadioSettingsStale(entry)) {
+            LOG_WARN("Beacon: target entry for 0x%08x expired unsent, freeing its slot", entry.ids[0]);
+            entry.idCount = 0;
+        }
+    }
+
     // An entry already describing these settings takes the id, so the legacy split pair costs one
     // entry rather than two identical ones.
     for (auto &entry : targetRadioSettings) {
@@ -130,6 +146,8 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, co
     *target = s;
     target->idCount = 1;
     target->ids[0] = p->id;
+    // Armed on allocation, not on attach: the split pair expires together, timed from the first.
+    target->armedAtMs = millis();
     target->channelName[sizeof(target->channelName) - 1] = '\0'; // s may carry an unterminated name
 }
 
@@ -181,6 +199,13 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     const MeshBeaconModule_TargetRadioSettings *s = getTargetRadioSettings(p);
     if (!s)
         return false; // not a beacon-switch packet - nothing to validate, normal traffic unaffected
+
+    // Queued for a whole broadcast interval: the mesh it advertises has moved on and the next
+    // beacon is due, so drop it rather than transmit an hour-old description.
+    if (targetRadioSettingsStale(*s)) {
+        LOG_WARN("Beacon: packet 0x%08x queued past its broadcast interval, drop", p->id);
+        return true;
+    }
 
     // An unlicensed node must never key up on a ham-only (licensed-only) region. The reverse is
     // allowed: a licensed (ham) node may operate in a non-ham region - and the switch only touches
