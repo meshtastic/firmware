@@ -99,11 +99,13 @@ static MeshBeaconModule_TargetRadioSettings targetSettings(meshtastic_Config_LoR
                                                            const char *channelName = nullptr)
 {
     MeshBeaconModule_TargetRadioSettings s = {};
-    s.preset = preset;
-    s.usePreset = usePreset;
-    s.slot = slot;
+    s.lora = config.lora;
+    s.lora.modem_preset = preset;
+    s.lora.use_preset = usePreset;
+    s.lora.channel_num = slot;
+    // UNSET means "inherit the running region", which sendBeacon() resolves before it stores.
+    s.lora.region = (region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? region : config.lora.region;
     s.legacyHopOverride = legacyHopOverride;
-    s.region = region;
     if (channelName)
         strncpy(s.channelName, channelName, sizeof(s.channelName) - 1);
     return s;
