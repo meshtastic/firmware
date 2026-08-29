@@ -1659,6 +1659,65 @@ static void test_broadcaster_targetPinnedHomeSlot_armsNoSwitch(void)
 }
 
 /**
+ * Two channel-less targets that pin different frequency slots are two different destinations, so
+ * both must go out. The dedup key has to carry the slot: while it keyed on the channel alone, a
+ * target with no channel compared equal to any other and the pinned one was silently dropped.
+ */
+static void test_broadcaster_twoPinnedSlotsNoChannel_bothSent(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    // EU_868 holds a single slot, so there is no second slot to pin.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.channel_num = 0;
+
+    const uint32_t home = RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
+    const uint32_t pinned = (home == 1) ? 2 : 1;
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 2;
+    // [0] takes the home slot by omission, [1] pins a different one. Same preset and region.
+    moduleConfig.mesh_beacon.broadcast_targets[1].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[1].frequency_slot = pinned;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, mockRouter->sentPackets.size(),
+                                     "a pinned slot is a distinct destination, not a duplicate");
+}
+
+/**
+ * The mirror of the above: naming the primary index explicitly and leaving it unset are the same
+ * destination when the target does not override the preset, so they must collapse to one packet.
+ */
+static void test_broadcaster_bareTargetAndPrimaryIndexTarget_dedupToOne(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC1, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.channel_num = 0; // derive, so the bare target and the named one land on one slot
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 2;
+    moduleConfig.mesh_beacon.broadcast_targets[1].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[1].channel_index = channels.getPrimaryIndex();
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(),
+                                     "naming the primary index is the same destination as omitting it");
+}
+
+/**
  * A target that already transmits on the mesh being offered must not carry the offer: everyone
  * hearing it is on that mesh. Reached by pointing a target at the offered channel after the
  * offer was set, which is valid config at write time and only redundant at TX.
@@ -2248,6 +2307,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_targetMatchingRunningConfig_armsNoSwitch);
     RUN_TEST(test_broadcaster_targetPinnedSlot_armsThatSlot);
     RUN_TEST(test_broadcaster_targetPinnedHomeSlot_armsNoSwitch);
+    RUN_TEST(test_broadcaster_twoPinnedSlotsNoChannel_bothSent);
+    RUN_TEST(test_broadcaster_bareTargetAndPrimaryIndexTarget_dedupToOne);
     RUN_TEST(test_broadcaster_offerMatchesTarget_offerIsOmitted);
     RUN_TEST(test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther);
     RUN_TEST(test_broadcaster_offerMatchesTargetNoText_sendsNothing);

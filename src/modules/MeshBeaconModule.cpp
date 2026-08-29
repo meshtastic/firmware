@@ -472,7 +472,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
     };
 
     // One place where a target's slot is worked out, so a pinned slot and a derived one see the
-    // same region, preset and bandwidth. An out-of-range pin falls back to the hash.
+    // same region, preset and bandwidth. An out-of-range pin falls back to the region's override
+    // slot when it has one, else the name hash.
     const auto targetSlot = [](const meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget &bt, const EffTarget &tgt,
                                const char *channelName) {
         meshtastic_Config_LoRaConfig probe = config.lora;
@@ -510,21 +511,17 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const int targetCount = bcfg.broadcast_targets_count > 0 ? (int)bcfg.broadcast_targets_count : 1;
 
     // Dedup state: the beacon payload is identical across targets, so two targets that resolve to
-    // the same effective radio config (preset + resolved region + channel) would just re-broadcast
-    // the same packet - wasted airtime and a redundant radio switch each. We skip the later one.
+    // the same preset, region, frequency slot and channel index would just re-broadcast the same
+    // packet - wasted airtime and a redundant radio switch each. We skip the later one.
     // Keyed on the *resolved* values so an explicit "current region" dedups against an UNSET one.
     EffTarget sent[4];
     meshtastic_Config_LoRaConfig_RegionCode sentRegion[4];
     int sentCount = 0;
+    // Everything that reaches the air: the RF the packet goes out on, plus the channel slot that
+    // keys its encryption. Equal on all four means a byte-identical transmission.
     const auto sameEffectiveTarget = [](const EffTarget &a, meshtastic_Config_LoRaConfig_RegionCode ar, const EffTarget &b,
                                         meshtastic_Config_LoRaConfig_RegionCode br) {
-        if (a.preset != b.preset || ar != br || a.has_channel != b.has_channel)
-            return false;
-        if (!a.has_channel)
-            return true; // both fall back to the default channel for the (same) preset
-        return a.slot == b.slot && strncmp(a.channel.name, b.channel.name, sizeof(a.channel.name)) == 0 &&
-               a.channel.psk.size == b.channel.psk.size &&
-               memcmp(a.channel.psk.bytes, b.channel.psk.bytes, a.channel.psk.size) == 0;
+        return a.preset == b.preset && ar == br && a.slot == b.slot && a.channelIndex == b.channelIndex;
     };
 
     for (int ti = 0; ti < targetCount; ti++) {
