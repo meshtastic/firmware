@@ -11,6 +11,7 @@ class AdminModuleTestShim : public AdminModule
     using AdminModule::handleGetConfig;
     using AdminModule::handleGetModuleConfig;
     using AdminModule::handleReceivedProtobuf;
+    using AdminModule::handleSetChannel;
     using AdminModule::handleSetConfig;
     using AdminModule::handleSetModuleConfig;
     using AdminModule::handleSetOwner;
