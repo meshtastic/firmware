@@ -84,17 +84,21 @@ class MeshBeaconModule
     /** The channel the offer advertises, or nullptr when no slot is named or it is unusable. */
     static const meshtastic_ChannelSettings *offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
-    /**
-     * Build the ChannelSettings a target's slot is derived from: the base channel overlaid with the
-     * target's channel-table slot, defaulting an empty name to the TARGET preset's display name -
-     * deliberately not Channels::getName(), which resolves a blank name against the running preset.
-     * A node that joins on the target preset derives the same name, so the slots agree.
-     *
-     * Public because admin validation must hash the same name before anything is applied.
-     */
+    // Default a blank name to the TARGET preset's display name - not Channels::getName(), which
+    // resolves it against the RUNNING preset. A node joining on the target preset derives the same.
     static meshtastic_ChannelSettings beaconChannelSettings(const meshtastic_ChannelSettings &base,
-                                                            meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                                            const meshtastic_ChannelSettings *overrideChannel = nullptr);
+                                                            meshtastic_Config_LoRaConfig_ModemPreset preset);
+
+    /** Where a target transmits: the channel-table slot, and the name its frequency slot hashes from. */
+    struct BeaconChannel {
+        ChannelIndex index;                                  // the primary when no usable slot is named
+        char name[sizeof(meshtastic_ChannelSettings::name)]; // never empty
+        bool retired;                                        // the named slot held settings but was disabled
+    };
+
+    // Out of range, disabled or blank all fall back to the primary, so admin validation and the TX
+    // path cannot disagree about which channel a target runs on, nor which slot it lands on.
+    static BeaconChannel resolveBeaconChannel(bool hasIndex, uint32_t index, meshtastic_Config_LoRaConfig_ModemPreset preset);
 
   protected:
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
