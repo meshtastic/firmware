@@ -1694,6 +1694,8 @@ static void test_sidecar_legacySplitPair_sharesOneEntryUntilBothRelease(void)
 
     MeshBeaconModule::clearTargetRadioSettings(&textHalf);
     TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&textHalf), "the last release must free the entry");
+    TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&offerHalf),
+                             "and must not resurrect the half released before it");
 }
 
 /**
@@ -2811,6 +2813,100 @@ static void test_txHook_invalidTarget_isDrop(void)
 }
 
 /**
+ * The driver drops one packet and carries on with the queue, so a drop must take only its own
+ * entry with it - the targets still queued behind it have to reach the air on their own settings.
+ */
+static void test_txHook_dropTakesOnlyItsOwnTarget(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC1, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook; // registers itself, so RadioTxHooks routes through the beacon
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket bad = meshtastic_MeshPacket_init_zero;
+    meshtastic_MeshPacket good = meshtastic_MeshPacket_init_zero;
+    bad.id = 0x7A000010;
+    good.id = 0x7A000011;
+
+    // SHORT_TURBO is invalid on EU_868, so this one is refused before transmit.
+    MeshBeaconModule::setTargetRadioSettings(&bad, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, true, 0,
+                                                                  false, meshtastic_Config_LoRaConfig_RegionCode_UNSET));
+    MeshBeaconModule::setTargetRadioSettings(&good, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1,
+                                                                   false, meshtastic_Config_LoRaConfig_RegionCode_EU_868));
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DROP, RadioTxHooks::beforeTransmit(&radio, &bad),
+                                  "the invalid target must be dropped");
+    RadioTxHooks::packetReleased(&radio, &bad); // the driver's drop path
+
+    const MeshBeaconModule_TargetRadioSettings *survivor = MeshBeaconModule::getTargetRadioSettings(&good);
+    TEST_ASSERT_NOT_NULL_MESSAGE(survivor, "a drop must not release the entry of a packet still queued");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, survivor->lora.modem_preset,
+                              "and must not disturb its settings");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, survivor->lora.channel_num, "including the slot it will switch to");
+
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
+/**
+ * The legacy split pair shares one entry, so a drop of the offer half runs the release path against
+ * settings the text half is still queued on. The survivor must keep them, or it keys up on the home
+ * config - the exact failure the sidecar exists to prevent.
+ */
+static void test_txHook_dropOfOneSplitHalf_leavesTheOtherArmed(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC2, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook; // registers itself, so RadioTxHooks routes through the beacon
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket offerHalf = meshtastic_MeshPacket_init_zero;
+    meshtastic_MeshPacket textHalf = meshtastic_MeshPacket_init_zero;
+    offerHalf.id = 0x7A000020;
+    textHalf.id = 0x7A000021;
+
+    // Identical settings, so both halves land on one entry - what legacy split produces.
+    const MeshBeaconModule_TargetRadioSettings s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1,
+                                                                  true, meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    MeshBeaconModule::setTargetRadioSettings(&offerHalf, s);
+    MeshBeaconModule::setTargetRadioSettings(&textHalf, s);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&offerHalf),
+                                  MeshBeaconModule::getTargetRadioSettings(&textHalf), "the pair must share one entry");
+
+    RadioTxHooks::packetReleased(&radio, &offerHalf); // the driver drops or finishes the first half
+
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&offerHalf), "the released half must be gone");
+    const MeshBeaconModule_TargetRadioSettings *survivor = MeshBeaconModule::getTargetRadioSettings(&textHalf);
+    TEST_ASSERT_NOT_NULL_MESSAGE(survivor, "the half still queued must keep the shared entry");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, survivor->lora.modem_preset,
+                              "with its settings intact");
+    TEST_ASSERT_TRUE_MESSAGE(survivor->legacyHopOverride, "including the hop override the split depends on");
+
+    // Releasing the last id compacts a duplicate of it into the tail slot. Every reader bounds by
+    // idCount, so neither half may answer afterwards - iterate ids[] by its size and both come back.
+    RadioTxHooks::packetReleased(&radio, &textHalf);
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&textHalf), "the last half released must be gone");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&offerHalf),
+                              "and the half released first must not come back with it");
+
+    // The entry is genuinely free, not merely unreadable: a fresh target must be able to take it.
+    meshtastic_MeshPacket reuse = meshtastic_MeshPacket_init_zero;
+    reuse.id = 0x7A000022;
+    MeshBeaconModule::setTargetRadioSettings(&reuse, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true, 1,
+                                                                    false, meshtastic_Config_LoRaConfig_RegionCode_EU_868));
+    TEST_ASSERT_NOT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&reuse), "the freed entry must be reusable");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&offerHalf),
+                              "and reusing it must not revive either released id");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&textHalf),
+                              "nor the second, whose value is still sitting in the tail slot");
+
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
+/**
  * The hook list is what keeps the driver free of module includes: with nothing registered every call
  * is a no-op, so a build without the beacon module behaves exactly as one with beacons idle.
  */
@@ -3063,6 +3159,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_txHook_normalPacket_isSend);
     RUN_TEST(test_txHook_beaconPacket_isDefer);
     RUN_TEST(test_txHook_invalidTarget_isDrop);
+    RUN_TEST(test_txHook_dropTakesOnlyItsOwnTarget);
+    RUN_TEST(test_txHook_dropOfOneSplitHalf_leavesTheOtherArmed);
     RUN_TEST(test_txHook_unregistered_isNoOp);
     RUN_TEST(test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome);
 
