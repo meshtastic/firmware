@@ -29,10 +29,8 @@ extern "C" {
 #define BUTTON_NEED_PULLUP
 
 // LEDs
-#define PIN_LED1 (24) // Built in white led for status
-#define LED_BLUE PIN_LED1
-
-#define LED_STATE_ON 0 // State when LED is lit
+#define LED_HEARTBEAT (24)     // Force strictly heartbeat on Pin 24
+#define LED_STATE_ON 0         // Active LOW
 
 // Testing USB detection
 // #define NRF_APM
