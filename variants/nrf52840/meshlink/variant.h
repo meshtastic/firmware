@@ -131,6 +131,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 
 // Battery
+//our INA219 is reversed (+ sign when discharging and - when charging)
+#define INA219_MULTIPLIER -1.0f //with this we fix the sign shown
 // The battery sense is hooked to pin A0 (2)
 #define BATTERY_PIN (2)
 // and has 12 bit resolution
