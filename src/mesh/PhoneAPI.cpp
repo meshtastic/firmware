@@ -919,9 +919,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!getAdminAuthorized()) {
-                // Unauthenticated: emit an empty MeshBeaconConfig (zero-init from the
-                // top-of-loop memset). No PSK rides in this config any more, but it still
-                // names the beacon message and which channel slots are advertised.
+                // Unauthenticated: emit an empty MeshBeaconConfig (zero-init from the top-of-loop
+                // memset). No PSK now, but it still names the message and the advertised slots.
             } else
 #endif
             {

@@ -276,9 +276,8 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 
         const meshtastic_Config_LoRaConfig_RegionCode targetRegion =
             (sidecarRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? sidecarRegion : config.lora.region;
-        // Only RF parameters are switched; the channel travels on the packet.
-        // Resolve the live slot too: targetSlot is concrete, config.lora.channel_num may be 0
-        // meaning "derive", and comparing those directly would switch to the frequency we are on.
+        // Only RF parameters are switched; the channel travels on the packet. Resolve the live slot
+        // too - channel_num may still be 0 ("derive"), which compares unequal to a concrete slot.
         const uint16_t liveSlot =
             (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
         if (targetPreset == config.lora.modem_preset && targetSlot == liveSlot && targetRegion == config.lora.region)
@@ -551,9 +550,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 } else {
                     const meshtastic_Channel &slot = channels.getByIndex(bt.channel_index);
                     const meshtastic_ChannelSettings &cs = slot.settings;
-                    // A disabled slot still holds the settings of whatever channel was deleted from
-                    // it, and the beacon encrypts on the slot itself now, so treat it as unusable
-                    // and fall back to the primary rather than transmitting a retired identity.
+                    // A disabled slot keeps the deleted channel's settings, and the beacon now
+                    // encrypts on the slot itself, so fall back to the primary.
                     if (slot.role == meshtastic_Channel_Role_DISABLED) {
                         LOG_WARN("Beacon: target %d channel_index %u disabled, use primary", ti, bt.channel_index);
                     } else if (cs.name[0] != '\0' || cs.psk.size > 0) {
@@ -591,11 +589,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         sentRegion[sentCount] = resolvedRegion;
         sentCount++;
 
-        // Everyone hearing this target is already on the mesh the offer describes, so the offer
-        // tells them nothing. Config drifts into this by pointing a target at the offered channel
-        // after the offer was set, so it has to be caught here rather than on write.
-        // Only when the offer names a channel: an offer carrying just a preset and region is an
-        // announcement, not an invitation to somewhere else, and stays a valid thing to send.
+        // A target already on the offered mesh gains nothing from the offer, and config reaches
+        // this after the fact. Only when the offer names a channel; a bare preset/region is valid.
         const bool offerRedundant = bcfg.has_broadcast_offer_channel_index &&
                                     (uint32_t)tgt.channelIndex == bcfg.broadcast_offer_channel_index &&
                                     offerPreset == tgt.preset && offerRegion == resolvedRegion && offerSlot == tgt.slot;
@@ -609,9 +604,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         const meshtastic_ChannelSettings *chPtr = tgt.has_channel ? &tgt.channel : nullptr;
 
         const auto applyTarget = [&](meshtastic_MeshPacket *p) {
-            // Address the packet at the target's channel-table slot. perhapsEncode() keys the
-            // cipher off this index and replaces it with the wire hash, so a beacon encrypts on its
-            // own channel without the primary slot ever being touched.
+            // Address the packet at the target's channel slot; perhapsEncode() keys off this index
+            // and swaps in the wire hash, so the primary slot is never touched.
             p->channel = tgt.channelIndex;
             if (radioDiffers || legacySplit)
                 setTargetRadioSettings(p, tgt.preset, tgt.slot, legacySplit, tgt.region, tgt.has_channel, chPtr);

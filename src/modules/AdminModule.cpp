@@ -1379,10 +1379,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (beaconCfg.broadcast_interval_secs != 0 &&
             beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
             beaconCfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-        // The offer is validated in the same order, and by the same rules, as a target below:
-        // region first so a bad region cannot reject a good preset, then the channel it names,
-        // then the preset against both, then a pinned slot against what the preset settled on.
-        // Region must be a known region code (UNSET = use running config).
+        // Same order and rules as a target below: region first so a bad one cannot reject a good
+        // preset, then channel index, preset, and the pinned slot. UNSET region = use running.
         if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             const RegionInfo *r = getRegion(beaconCfg.broadcast_offer_region);
             if (r->code != beaconCfg.broadcast_offer_region) {
@@ -1451,10 +1449,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                     t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
                 }
             }
-            // Before the preset check, so the name hashed below is the one this target will run on.
-            // Range only. Role_DISABLED is the zero value, so an unprovisioned slot reads as
-            // disabled and rejecting that here would force channels to be created before beacons.
-            // A slot that is retired later is handled by dropBeaconTargetsForChannel().
+            // Before the preset check, so the name hashed below is this target's. Range only:
+            // Role_DISABLED is the zero value, so an unprovisioned slot would read as disabled.
             if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
                 LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
                 t.has_channel_index = false;
