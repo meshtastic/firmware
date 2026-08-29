@@ -262,15 +262,12 @@ class RadioInterface
     // primary" - pass one explicitly to ask about a config that is not the running one.
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName = nullptr);
 
-    // 1-based frequency slot this config lands on for the given channel name, resolving the region
-    // override or the name hash the way applyModemConfig() does. Lets a caller pin the slot a
-    // channel would have picked for itself without making that channel primary first.
+    // 1-based slot this config lands on for a channel name, resolving the region override or name
+    // hash as applyModemConfig() does. Asks about a channel without making it primary first.
     static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
 
-    /**
-     * How many frequency slots this config's region holds, deriving the bandwidth from it so
-     * every caller gets the count the radio will actually run on.
-     */
+    // How many slots this config's region holds, deriving the bandwidth from it so every caller
+    // gets the count the radio will actually run on.
     static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for

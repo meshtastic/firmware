@@ -1118,10 +1118,8 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
  * When clamp==false, returns false on first error (pure validation).
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
-// Slot geometry for a bandwidth the CALLER has already resolved - it must apply use_preset and the
-// region's wideLora itself, or the count will not match the one the radio runs on. Deliberately not
-// a member: RadioInterface::frequencySlotCount() derives the bandwidth correctly and is the only
-// entry point anything outside this file should use.
+// Caller must resolve bwKHz itself (use_preset, wideLora) or the count will not match the radio.
+// Not a member: frequencySlotCount() is the only entry point anything outside this file should use.
 static uint32_t slotCountForBandwidth(const RegionInfo *region, float bwKHz, float *slotWidthMHz = nullptr)
 {
     // spacing = gap between slots, one fewer than the slot count; padding brackets each slot
@@ -1229,8 +1227,6 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 
         // Check if we use the default frequency slot
         // overrideSlot: 0 = channel hash, -1 = preset hash, >0 = explicit slot
-        // Only published on the clamp path: validation must not rewrite state NeighborInfoModule
-        // and Channels::hasDefaultChannel() read.
         const bool usesDefaultSlot =
             (loraConfig.channel_num == 0) || // user choice unset, no frequency override, so use default
             (newRegion->overrideSlot > 0 &&
@@ -1242,6 +1238,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 
         // A custom name may hash to the default slot or not, so this is independent of the above.
         const bool usesCustomChannelName = (strcmp(channelName, presetNameDisplay) != 0);
+        // Clamp path only: validation must not rewrite state NeighborInfoModule and
+        // Channels::hasDefaultChannel() read.
         if (clamp) {
             uses_default_frequency_slot = usesDefaultSlot;
             uses_custom_channel_name = usesCustomChannelName;
@@ -1337,9 +1335,8 @@ void RadioInterface::applyModemConfig()
     myRegion = newRegion;
 
     if (loraConfig.use_preset) {
-        // Clamp rather than validate-then-fall-back: the clamp is what publishes
-        // uses_default_frequency_slot, and it swaps to the sibling EU region where this path used to
-        // discard the preset instead. A valid config is left untouched.
+        // Clamp, not validate-then-fall-back: the clamp publishes uses_default_frequency_slot and
+        // swaps to the sibling EU region. A valid config is left untouched.
         clampConfigLora(loraConfig);
         newRegion = getRegion(loraConfig.region); // the clamp may have swapped it
         myRegion = newRegion;
