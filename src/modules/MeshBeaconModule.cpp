@@ -136,9 +136,8 @@ bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
     return getTargetRadioSettings(p, nullptr, nullptr);
 }
 
-// Only ERRNO_OK means the interface queued the packet and now owns its target radio settings too.
-// Every other return has already freed p - except ERRNO_SHOULD_RELEASE, which hands it back - so
-// clear by id, never by dereferencing p.
+// Only ERRNO_OK means the interface queued the packet and now owns its sidecar entry too. Every
+// other return has already freed p - bar ERRNO_SHOULD_RELEASE - so clear by id, never through p.
 static void releaseIfNotQueued(ErrorCode sendResult, meshtastic_MeshPacket *p, PacketId id)
 {
     if (sendResult == ERRNO_OK)
@@ -206,8 +205,8 @@ void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic
     beacon.offer_preset = bcfg.broadcast_offer_preset;
     beacon.offer_region = bcfg.broadcast_offer_region;
 
-    // Advertise the slot only where a receiver could not work it out from the region, preset and
-    // channel name already in the offer - which covers a region that mandates a slot.
+    // Spend a slot on the air only where a receiver could not work it out from the region, preset
+    // and channel name already in the offer - which covers a region that mandates a slot.
     uint32_t derived = 0;
     const uint32_t advertised = offerFrequencySlot(bcfg, &derived);
     if (advertised != derived) {
@@ -519,13 +518,12 @@ void MeshBeaconBroadcastModule::sendBeacon()
         uint16_t slot;
         meshtastic_Config_LoRaConfig_RegionCode region;
         ChannelIndex channelIndex; // table slot to encrypt on; the primary when no channel is named
-        // Resolved once here, then reused for the slot hash and the sidecar. Empty = the primary.
+        // Resolved once here, then reused for the slot hash and the sidecar. Never empty.
         char channelName[sizeof(meshtastic_ChannelSettings::name)];
     };
 
-    // One place where a target's slot is worked out, so a pinned slot and a derived one see the
-    // same region, preset and bandwidth. An out-of-range pin falls back to the region's override
-    // slot when it has one, else the name hash.
+    // The only place a target's slot is worked out, so a pin and a derivation see the same region,
+    // preset and bandwidth. A seed slot the target's own band cannot hold falls back to the hash.
     const auto targetSlot = [](const EffTarget &tgt, uint32_t seedSlot) {
         meshtastic_Config_LoRaConfig probe = config.lora;
         probe.use_preset = tgt.usePreset;
@@ -552,15 +550,13 @@ void MeshBeaconBroadcastModule::sendBeacon()
     // channel. Each entry below overrides only what it sets.
     const int targetCount = bcfg.broadcast_targets_count > 0 ? (int)bcfg.broadcast_targets_count : 1;
 
-    // Dedup state: the beacon payload is identical across targets, so two targets that resolve to
-    // the same preset, region, frequency slot and channel index would just re-broadcast the same
-    // packet - wasted airtime and a redundant radio switch each. We skip the later one.
-    // Keyed on the *resolved* values so an explicit "current region" dedups against an UNSET one.
+    // The payload is identical across targets, so a repeat of one already sent is pure wasted
+    // airtime. Keyed on resolved values, so an explicit "current region" dedups against an UNSET one.
     EffTarget sent[4];
     meshtastic_Config_LoRaConfig_RegionCode sentRegion[4];
     int sentCount = 0;
     // Everything that reaches the air: the RF the packet goes out on, plus the channel slot that
-    // keys its encryption. Equal on all four means a byte-identical transmission.
+    // keys its encryption. All equal means a byte-identical transmission.
     const auto sameEffectiveTarget = [](const EffTarget &a, meshtastic_Config_LoRaConfig_RegionCode ar, const EffTarget &b,
                                         meshtastic_Config_LoRaConfig_RegionCode br) {
         return a.preset == b.preset && a.usePreset == b.usePreset && ar == br && a.slot == b.slot &&
@@ -568,7 +564,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     };
 
     for (int ti = 0; ti < targetCount; ti++) {
-        // Defaults: running radio config, primary channel. A target entry overrides from here.
+        // Defaults: the running radio config over the primary channel. An entry overrides from here.
         EffTarget tgt = {};
         tgt.preset = config.lora.modem_preset;
         tgt.usePreset = config.lora.use_preset;
