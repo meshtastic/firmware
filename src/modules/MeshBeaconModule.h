@@ -24,8 +24,9 @@ typedef struct {
     bool legacyHopOverride;
     // Per-target radio settings. UNSET region means use current lora.region.
     meshtastic_Config_LoRaConfig_RegionCode region;
-    bool has_channel;
-    meshtastic_ChannelSettings channel;
+    // The channel name this target's slot was hashed from, resolved once at send time so the TX
+    // path and the pre-key-up validation cannot derive it two different ways. Empty = the primary.
+    char channelName[sizeof(meshtastic_ChannelSettings::name)];
 } MeshBeaconModule_TargetRadioSettings;
 
 /**
@@ -52,7 +53,7 @@ class MeshBeaconModule
     setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset, uint16_t slot,
                            bool legacyHopOverride = false,
                            meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET,
-                           bool has_channel = false, const meshtastic_ChannelSettings *channel = nullptr);
+                           const char *channelName = nullptr);
 
     /**
      * Returns true if the sidecar table contains an entry for this packet's ID.
@@ -84,10 +85,10 @@ class MeshBeaconModule
     static const meshtastic_ChannelSettings *offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     /**
-     * Build the ChannelSettings the beacon transmits on: the base (primary) channel overlaid with
-     * the target's channel-table slot, defaulting an empty name to the target preset's display
-     * name. Shared by the encrypt-time channel swap and the radio-thread RF swap so the channel
-     * key + hash are identical at both points.
+     * Build the ChannelSettings a target's slot is derived from: the base channel overlaid with the
+     * target's channel-table slot, defaulting an empty name to the TARGET preset's display name -
+     * deliberately not Channels::getName(), which resolves a blank name against the running preset.
+     * A node that joins on the target preset derives the same name, so the slots agree.
      *
      * Public because admin validation must hash the same name before anything is applied.
      */
@@ -145,8 +146,8 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
     void sendBeacon();
     void rebuildCache();
 
-    // Send one beacon packet. When overrideChannel is set and has a name/PSK override,
-    // the packet is encrypted with that channel's key (not the primary's).
+    // Send one beacon packet. p->channel names the target's channel-table slot, so it is
+    // encrypted with that channel's key rather than the primary's.
     void sendBeaconPacket(meshtastic_MeshPacket *p);
 
     bool payloadCacheDirty = true;
