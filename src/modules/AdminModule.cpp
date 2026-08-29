@@ -1479,9 +1479,11 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             // Last, so it is checked against the preset and region the clamp above settled on.
             if (t.has_frequency_slot) {
                 meshtastic_Config_LoRaConfig probe = config.lora;
-                probe.use_preset = true;
-                if (t.has_preset)
+                // A target without a preset keeps the node's modem params, custom bandwidth included.
+                if (t.has_preset) {
+                    probe.use_preset = true;
                     probe.modem_preset = t.preset;
+                }
                 if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                     probe.region = t.region;
                 const uint32_t slots = RadioInterface::frequencySlotCount(probe);
