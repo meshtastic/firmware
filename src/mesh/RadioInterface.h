@@ -292,9 +292,8 @@ class RadioInterface
     // evaluate against a channel other than the running primary.
     static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
 
-    // Make a candidate radio configuration valid, even if it isn't. Reports what it settled the two
-    // published flags to; only applyModemConfig() applies them. Pass announce=false to clamp a
-    // config the node will not itself run: no log, no critical error, no client notification.
+    // Make a candidate radio configuration valid, even if it isn't; only applyModemConfig() applies
+    // the verdict. announce=false asks about a config the node will not run, and stays silent.
     static LoraSlotVerdict clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
                                            bool announce = true);
 
