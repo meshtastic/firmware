@@ -503,6 +503,43 @@ static void test_adminValidation_offerChannelIndexOutOfRange_isCleared(void)
 }
 
 /**
+ * Retiring a channel must clear every beacon reference to it - the offer as well as the targets.
+ * A dangling offer index does not fail loudly; the offer just quietly stops naming a channel.
+ */
+static void test_adminValidation_retiredChannel_clearsOfferAndTarget(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC3, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    static const uint8_t sidePsk[16] = {0xC4, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "Side", sidePsk, sizeof(sidePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+
+    // Defer persistence: this asserts on the in-RAM edit, and a real SEGMENT_CHANNELS save needs
+    // disk state the beacon fixture does not stand up.
+    testAdmin->deferSaves();
+    meshtastic_Channel retired = channels.getByIndex(1);
+    retired.role = meshtastic_Channel_Role_DISABLED;
+    testAdmin->handleSetChannel(retired);
+
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index,
+                              "a target naming the retired channel must be cleared");
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index,
+                              "the offer naming the retired channel must be cleared too");
+    // The module config was edited, so it has to be in the save set or the clear is lost on reboot.
+    TEST_ASSERT_TRUE_MESSAGE(testAdmin->savedSegments() & SEGMENT_MODULECONFIG,
+                             "clearing a beacon reference must add SEGMENT_MODULECONFIG to the save");
+}
+
+/**
  * The offer gets the same partial-accept treatment as a target: a preset the region cannot run
  * must not take the region and channel the operator set with it.
  */
@@ -2277,6 +2314,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetFrequencySlotInRange_isPreserved);
     RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_offerChannelIndexOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_retiredChannel_clearsOfferAndTarget);
     RUN_TEST(test_adminValidation_offerInvalidPreset_clampsAndKeepsRest);
     RUN_TEST(test_adminValidation_offerUnknownRegion_keepsValidPreset);
     RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt100);

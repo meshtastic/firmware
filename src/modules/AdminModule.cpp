@@ -1511,9 +1511,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     return true;
 }
 
-// A beacon target names a channel-table slot, so retiring that slot leaves the target pointing at a
-// channel the node no longer has. Clear the reference rather than let it fail at encrypt time.
-static bool dropBeaconTargetsForChannel(ChannelIndex index)
+// A beacon target and the offer both name a channel-table slot, so retiring that slot leaves them
+// pointing at a channel the node no longer has. Clear the references rather than let a target fail
+// at encrypt time, or the offer silently degrade to preset-and-region only.
+static bool dropBeaconRefsForChannel(ChannelIndex index)
 {
 #if !MESHTASTIC_EXCLUDE_BEACON
     if (!moduleConfig.has_mesh_beacon)
@@ -1527,6 +1528,11 @@ static bool dropBeaconTargetsForChannel(ChannelIndex index)
             t.has_channel_index = false;
             changed = true;
         }
+    }
+    if (beacon.has_broadcast_offer_channel_index && beacon.broadcast_offer_channel_index == index) {
+        LOG_WARN("Beacon: channel %u retired, clearing broadcast_offer_channel_index", index);
+        beacon.has_broadcast_offer_channel_index = false;
+        changed = true;
     }
     if (changed && meshBeaconBroadcastModule)
         meshBeaconBroadcastModule->invalidateCache();
@@ -1544,7 +1550,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     const meshtastic_Channel &saved = channels.getByIndex(cc.index);
     const bool retired =
         saved.role == meshtastic_Channel_Role_DISABLED || (saved.settings.name[0] == '\0' && saved.settings.psk.size == 0);
-    const bool beaconChanged = retired && dropBeaconTargetsForChannel(cc.index);
+    const bool beaconChanged = retired && dropBeaconRefsForChannel(cc.index);
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();
     }
