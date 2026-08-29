@@ -2,6 +2,7 @@
 #include "PositionModule.h"
 #include "Default.h"
 #include "GPS.h"
+#include "GeofenceModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
@@ -55,6 +56,7 @@ PositionModule::PositionModule()
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
 {
     auto p = *pptr;
+    const NodeNum sender = getFrom(&mp);
 
     const auto transport = mp.transport_mechanism;
     if (isFromUs(&mp) && !IS_ONE_OF(transport, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
@@ -90,7 +92,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Log packet size and data fields
     LOG_TRACE("POSITION node=0x%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
               "time=%d",
-              getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
+              sender, mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
               p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
               p.time);
 
@@ -107,8 +109,13 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         trySetRtc(p, isLocal, force);
     }
 
-    nodeDB->updatePosition(getFrom(&mp), p);
+    nodeDB->updatePosition(sender, p);
     precision = getPositionPrecisionForChannel(mp.channel);
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    if (geofenceModule && !isLocal)
+        geofenceModule->evaluatePosition(sender, p);
+#endif
 
     return false; // Let others look at this message also if they want
 }
@@ -558,7 +565,7 @@ int32_t PositionModule::runOnce()
 
     bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
 
-    // Hold to the 12h floor when fixed_position (every role: pinning yourself forfeits the
+    // Hold to the 6h floor when fixed_position (every role: pinning yourself forfeits the
     // exception) or when stationary. A real move still goes out early via smart-broadcast below.
     // Not-fixed exceptions: lost-and-found broadcasts freely; trackers judge movement at their
     // own (unclamped) precision rather than the on-wire one (useConfiguredPrecision).

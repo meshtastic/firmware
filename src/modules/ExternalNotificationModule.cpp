@@ -64,15 +64,16 @@ bool ascending = true;
 
 #define ASCII_BELL 0x07
 
+#if !MESHTASTIC_EXCLUDE_RTTTL
 meshtastic_RTTTLConfig rtttlConfig;
+static const char *rtttlConfigFile = "/prefs/ringtone.proto";
+#endif
 
 ExternalNotificationModule *externalNotificationModule;
 
 bool externalCurrentState[3] = {};
 
 uint32_t externalTurnedOn[3] = {};
-
-static const char *rtttlConfigFile = "/prefs/ringtone.proto";
 
 int32_t ExternalNotificationModule::runOnce()
 {
@@ -81,14 +82,16 @@ int32_t ExternalNotificationModule::runOnce()
     } else {
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
         bool isRtttlPlaying = false;
+#if !MESHTASTIC_EXCLUDE_RTTTL
         if (buzzerPlaybackBackend == BuzzerPlaybackBackend::PWM) {
             isRtttlPlaying = rtttl::isPlaying();
             if (!isRtttlPlaying) {
                 buzzerPlaybackBackend = BuzzerPlaybackBackend::NONE;
             }
         }
-#ifdef HAS_I2S
-        // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
+#endif
+#if defined(HAS_I2S) && !MESHTASTIC_EXCLUDE_RTTTL
+        // isPlaying(owner) also services RTTTL playback while keeping ownership visible.
         const bool isI2sPlaying = audioThread->isPlaying(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION);
         if (buzzerPlaybackBackend == BuzzerPlaybackBackend::I2S) {
             isRtttlPlaying = isI2sPlaying;
@@ -97,7 +100,7 @@ int32_t ExternalNotificationModule::runOnce()
             }
         }
 #endif
-#if defined(HAS_I2S_SPEAKER_NRF52)
+#if defined(HAS_I2S_SPEAKER_NRF52) && !MESHTASTIC_EXCLUDE_RTTTL
         if (buzzerPlaybackBackend == BuzzerPlaybackBackend::NRF52_I2S) {
             isRtttlPlaying = nrf52RtttlPlayer.isPlaying();
             if (!isRtttlPlaying) {
@@ -111,6 +114,7 @@ int32_t ExternalNotificationModule::runOnce()
             stopBuzzerNow();
             isRtttlPlaying = false;
         }
+
         // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
         // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
@@ -133,7 +137,6 @@ int32_t ExternalNotificationModule::runOnce()
             if (Throttle::hasElapsed(externalTurnedOn[1], delay)) {
                 setExternalState(1, !getExternal(1));
             }
-            // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
             if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer &&
                 buzzerPlaybackBackend == BuzzerPlaybackBackend::DIGITAL && buzzerShouldAlert &&
                 Throttle::hasElapsed(externalTurnedOn[2], delay)) {
@@ -174,9 +177,9 @@ int32_t ExternalNotificationModule::runOnce()
         }
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
-#ifdef HAS_I2S
+#if defined(HAS_I2S) && !MESHTASTIC_EXCLUDE_RTTTL
         if (moduleConfig.external_notification.use_i2s_as_buzzer && buzzerShouldAlert) {
-            if (audioThread->isPlaying()) {
+            if (isI2sPlaying) {
                 // Continue playing
             } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff) &&
                        (!buzzerPlaybackStarted || moduleConfig.external_notification.nag_timeout) &&
@@ -185,11 +188,10 @@ int32_t ExternalNotificationModule::runOnce()
                 buzzerPlaybackStarted = true;
                 buzzerPlaybackBackend = BuzzerPlaybackBackend::I2S;
             }
-            // we need fast updates to play the RTTTL
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
-#if defined(HAS_I2S_SPEAKER_NRF52)
+#if defined(HAS_I2S_SPEAKER_NRF52) && !MESHTASTIC_EXCLUDE_RTTTL
         // Play RTTTL over the I2S speaker (no piezo on this board).
         if (canBuzz() && buzzerShouldAlert) {
             if (nrf52RtttlPlayer.isPlaying()) {
@@ -203,6 +205,7 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
+#if !MESHTASTIC_EXCLUDE_RTTTL
         // now let the PWM buzzer play
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
@@ -217,6 +220,7 @@ int32_t ExternalNotificationModule::runOnce()
             // we need fast updates to play the RTTTL
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
+#endif
 
         return delay;
     }
@@ -280,7 +284,9 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         blue = 0;
         white = 0;
     }
-    ambientLightingThread->setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
+    if (ambientLightingThread) {
+        ambientLightingThread->setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
+    }
 #endif
 
 #ifdef HAS_DRV2605
@@ -317,15 +323,17 @@ void ExternalNotificationModule::stopBuzzerNow()
     if (buzzerShouldAlert) {
         switch (buzzerPlaybackBackend) {
         case BuzzerPlaybackBackend::PWM:
+#if !MESHTASTIC_EXCLUDE_RTTTL
             rtttl::stop();
+#endif
             break;
         case BuzzerPlaybackBackend::I2S:
-#ifdef HAS_I2S
+#if defined(HAS_I2S) && !MESHTASTIC_EXCLUDE_RTTTL
             audioThread->stopRtttlIfOwnedBy(AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION);
 #endif
             break;
         case BuzzerPlaybackBackend::NRF52_I2S:
-#if defined(HAS_I2S_SPEAKER_NRF52)
+#if defined(HAS_I2S_SPEAKER_NRF52) && !MESHTASTIC_EXCLUDE_RTTTL
             nrf52RtttlPlayer.stop();
 #endif
             break;
@@ -398,16 +406,18 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
-#if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
         if (inputBroker) // put our callback in the inputObserver list
             inputObserver.observe(inputBroker);
 #endif
+#if !MESHTASTIC_EXCLUDE_RTTTL
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
             // The default ringtone is always loaded from userPrefs.jsonc
             strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL, sizeof(rtttlConfig.ringtone));
         }
+#endif
 
         LOG_INFO("Init External Notification Module");
 
@@ -499,15 +509,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                                                    (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
 
             if (genericShouldAlert || vibraShouldAlert || currentBuzzerShouldAlert) {
-                const uint32_t alertDuration =
-                    moduleConfig.external_notification.nag_timeout
-                        ? (moduleConfig.external_notification.nag_timeout * 1000)
-                        : (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                        : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
                 const uint32_t alertStarted = Time::getMillis();
-                nagCycleCutoff = alertStarted + alertDuration;
-                LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
-                isNagging = true;
+                const uint32_t alertDuration = armNagCycle(alertStarted);
                 if (currentBuzzerShouldAlert) {
                     buzzerShouldAlert = true;
                     buzzerPlaybackStarted = false;
@@ -524,44 +527,12 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             if (vibraShouldAlert) {
                 LOG_INFO("externalNotificationModule - Vibra alert");
-#ifdef HAS_DRV2605
-                // Set DRV2605 waveform when vibration alert is triggered
-                drv.setWaveform(0, 16); // Long buzzer 100%
-                drv.setWaveform(1, 0);  // Pause
-                drv.setWaveform(2, 16);
-                drv.setWaveform(3, 0);
-                drv.setWaveform(4, 16);
-                drv.setWaveform(5, 0);
-                drv.setWaveform(6, 16);
-                drv.setWaveform(7, 0);
-                drv.go();
-#endif
-                setExternalState(1, true);
+                triggerVibraOutput();
             }
 
             if (currentBuzzerShouldAlert) {
                 LOG_INFO("externalNotificationModule - Buzzer alert");
-                if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-#ifdef HAS_I2S
-                    if (audioThread->beginRttlIfIdle(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone),
-                                                     AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION)) {
-                        buzzerPlaybackStarted = true;
-                        buzzerPlaybackBackend = BuzzerPlaybackBackend::I2S;
-                    }
-#endif
-                } else if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio) {
-                    rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-                    buzzerPlaybackStarted = true;
-                    buzzerPlaybackBackend = BuzzerPlaybackBackend::PWM;
-                } else {
-#if defined(HAS_I2S_SPEAKER_NRF52)
-                    // runOnce starts this backend and records playback only after begin().
-#else
-                    setExternalState(2, true);
-                    buzzerPlaybackStarted = true;
-                    buzzerPlaybackBackend = BuzzerPlaybackBackend::DIGITAL;
-#endif
-                }
+                triggerBuzzerOutput();
             }
 
             setIntervalFromNow(0); // run once so we know if we should do something
@@ -573,6 +544,105 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
+void ExternalNotificationModule::triggerBuzzerOutput()
+{
+    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+#if defined(HAS_I2S) && !MESHTASTIC_EXCLUDE_RTTTL
+        if (audioThread->beginRttlIfIdle(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone),
+                                         AudioThread::RtttlOwner::EXTERNAL_NOTIFICATION)) {
+            buzzerPlaybackStarted = true;
+            buzzerPlaybackBackend = BuzzerPlaybackBackend::I2S;
+        }
+#endif
+    } else if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio) {
+#if !MESHTASTIC_EXCLUDE_RTTTL
+        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+        buzzerPlaybackStarted = true;
+        buzzerPlaybackBackend = BuzzerPlaybackBackend::PWM;
+#endif
+    } else {
+#if defined(HAS_I2S_SPEAKER_NRF52) && !MESHTASTIC_EXCLUDE_RTTTL
+        // runOnce starts this backend and records playback only after begin().
+#else
+        setExternalState(2, true);
+        buzzerPlaybackStarted = true;
+        buzzerPlaybackBackend = BuzzerPlaybackBackend::DIGITAL;
+#endif
+    }
+}
+
+void ExternalNotificationModule::triggerVibraOutput()
+{
+#ifdef HAS_DRV2605
+    drv.setWaveform(0, 16);
+    drv.setWaveform(1, 0);
+    drv.setWaveform(2, 16);
+    drv.setWaveform(3, 0);
+    drv.setWaveform(4, 16);
+    drv.setWaveform(5, 0);
+    drv.setWaveform(6, 16);
+    drv.setWaveform(7, 0);
+    drv.go();
+#endif
+    setExternalState(1, true);
+}
+
+uint32_t ExternalNotificationModule::armNagCycle(uint32_t startedAt)
+{
+    const uint32_t durationMs =
+        moduleConfig.external_notification.nag_timeout
+            ? moduleConfig.external_notification.nag_timeout * 1000UL
+            : (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+                                                            : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
+    nagCycleCutoff = startedAt + durationMs;
+    LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
+    isNagging = true;
+    return durationMs;
+}
+
+void ExternalNotificationModule::startNotification()
+{
+    if (!moduleConfig.external_notification.enabled || isSilenced)
+        return;
+
+    // Waypoint and geofence events are not direct messages.
+    const bool generic = moduleConfig.external_notification.alert_message;
+    const bool vibra = moduleConfig.external_notification.alert_message_vibra;
+    const bool pwmBuzzerReady = !moduleConfig.external_notification.use_pwm || config.device.buzzer_gpio;
+    const bool buzzer = buzzerModeAllowsNotification(config.device.buzzer_mode, false) && pwmBuzzerReady &&
+                        moduleConfig.external_notification.alert_message_buzzer;
+    if (moduleConfig.external_notification.alert_message_buzzer &&
+        !buzzerModeAllowsNotification(config.device.buzzer_mode, false)) {
+        LOG_INFO("Non-message buzzer suppressed by buzzer mode");
+    }
+    if (!generic && !vibra && !buzzer)
+        return;
+
+    const uint32_t alertStarted = Time::getMillis();
+    const uint32_t alertDuration = armNagCycle(alertStarted);
+    if (buzzer) {
+        buzzerShouldAlert = true;
+        buzzerPlaybackStarted = false;
+        buzzerAlertIsDirectMessage = false;
+        buzzerAlertStarted = alertStarted;
+        buzzerAlertDurationMs = alertDuration;
+    }
+
+    if (generic) {
+        LOG_INFO("externalNotificationModule - Generic alert");
+        setExternalState(0, true);
+    }
+    if (vibra) {
+        LOG_INFO("externalNotificationModule - Vibra alert");
+        triggerVibraOutput();
+    }
+    if (buzzer) {
+        LOG_INFO("externalNotificationModule - Buzzer alert");
+        triggerBuzzerOutput();
+    }
+
+    setIntervalFromNow(0); // run once so the nag/stop lifecycle in runOnce() takes over
+}
 /**
  * @brief An admin message arrived to AdminModule. We are asked whether we want to handle that.
  *
@@ -589,6 +659,7 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
     AdminMessageHandleResult result;
 
     switch (request->which_payload_variant) {
+#if !MESHTASTIC_EXCLUDE_RTTTL
     case meshtastic_AdminMessage_get_ringtone_request_tag:
         LOG_INFO("Client getting ringtone");
         this->handleGetRingtone(mp, response);
@@ -600,6 +671,7 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
         this->handleSetRingtone(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
+#endif
 
     default:
         result = AdminMessageHandleResult::NOT_HANDLED;
@@ -608,6 +680,7 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
     return result;
 }
 
+#if !MESHTASTIC_EXCLUDE_RTTTL
 void ExternalNotificationModule::handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response)
 {
     LOG_INFO("*** handleGetRingtone");
@@ -631,7 +704,9 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
 }
+#endif
 
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
 int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 {
     if (nagCycleCutoff != UINT32_MAX) {
@@ -640,3 +715,4 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
     }
     return 0;
 }
+#endif

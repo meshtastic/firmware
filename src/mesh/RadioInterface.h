@@ -67,6 +67,11 @@ typedef struct {
 
 } RadioBuffer;
 
+/// On-air ceiling for MeshPacket.encrypted. RadioBuffer holds one byte more, but the PHY caps a whole
+/// frame at MAX_LORA_PAYLOAD_LEN, so the header comes out of the same budget (matches perhapsEncode).
+constexpr size_t MAX_RADIO_PAYLOAD_LEN = MAX_LORA_PAYLOAD_LEN - sizeof(PacketHeader);
+static_assert(MAX_RADIO_PAYLOAD_LEN < sizeof(RadioBuffer::payload), "payload ceiling must fit the buffer");
+
 /**
  * Basic operations all radio chipsets must implement.
  *

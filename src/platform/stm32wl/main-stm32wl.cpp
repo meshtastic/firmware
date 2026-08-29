@@ -1,4 +1,6 @@
+#include "FSCommon.h"
 #include "configuration.h"
+#include "error.h"
 #include "gps/RTC.h"
 #include <Throttle.h>
 #include <cstring>
@@ -161,6 +163,41 @@ void cpuDeepSleep(uint32_t msecToWake)
 }
 
 // ─── Linker hacks to reduce code size ─────────────────────────────────────────
+
+// Requests a reformat-on-next-boot instead of reformatting mid-callback (see lfs_assert() below).
+// Same .noinit survives-NVIC_SystemReset() trick as g_bootloaderMagic above.
+#define LFS_CORRUPT_MAGIC 0xC0FFEEEEUL
+
+__attribute__((section(".noinit"), used)) static volatile uint32_t g_lfsCorruptMagic;
+
+// Not .noinit - resets every boot, so this only throttles reformats within one power-on session.
+static constexpr uint32_t LFS_CORRUPTION_RETRY_DELAY_MS = 20 * 60 * 1000;
+static uint32_t lastLfsFormatMs = 0;
+
+extern "C" void lfs_assert(const char *reason)
+{
+    LOG_ERROR("LittleFS corruption detected: %s", reason);
+    if (lastLfsFormatMs != 0 && Throttle::isWithinTimespanMs(lastLfsFormatMs, LFS_CORRUPTION_RETRY_DELAY_MS)) {
+        uint32_t msRemain = LFS_CORRUPTION_RETRY_DELAY_MS - (millis() - lastLfsFormatMs);
+        LOG_WARN("Pausing %u seconds to avoid wearing the flash with repeated reformats", msRemain / 1000);
+        delay(msRemain);
+    }
+    LOG_INFO("Rebooting to reformat LittleFS");
+    g_lfsCorruptMagic = LFS_CORRUPT_MAGIC;
+    HAL_NVIC_SystemReset();
+}
+
+// Weak hook in FSCommon.cpp, called before FSBegin(). Reformats if the last boot's lfs_assert() requested it.
+void preFSBegin()
+{
+    if (g_lfsCorruptMagic != LFS_CORRUPT_MAGIC)
+        return;
+    g_lfsCorruptMagic = 0;
+    lastLfsFormatMs = millis();
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+    fsFormat();
+    LOG_INFO("LittleFS format complete; restoring default settings");
+}
 
 // By default strerror has a lot of strings we probably don't use. Make it return an empty string instead.
 char empty = 0;

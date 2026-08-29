@@ -23,10 +23,10 @@ extern AmbientLightingThread *ambientLightingThread;
 #endif
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !MESHTASTIC_EXCLUDE_RTTTL
 #include <NonBlockingRtttl.h>
 #else
-// Noop class for portduino.
+// Noop class for portduino/STM32WL/ESP32C6 - none can drive PWM RTTTL playback.
 class rtttl
 {
   public:
@@ -47,8 +47,10 @@ class rtttl
  */
 class ExternalNotificationModule : public SinglePortModule, private concurrency::OSThread
 {
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
     CallbackObserver<ExternalNotificationModule, const InputEvent *> inputObserver =
         CallbackObserver<ExternalNotificationModule, const InputEvent *>(this, &ExternalNotificationModule::handleInputEvent);
+#endif
     uint32_t output = 0;
 
 #ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
@@ -58,7 +60,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
   public:
     ExternalNotificationModule();
 
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
     int handleInputEvent(const InputEvent *arg);
+#endif
 
     uint32_t nagCycleCutoff = 1;
 
@@ -79,8 +83,13 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     void stopNow();
 
+    // Fire the configured message outputs for a non-message event such as a geofence crossing.
+    void startNotification();
+
+#if !MESHTASTIC_EXCLUDE_RTTTL
     void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetRingtone(const char *from_msg);
+#endif
 
   protected:
     enum class BuzzerPlaybackBackend : uint8_t { NONE, DIGITAL, PWM, I2S, NRF52_I2S };
@@ -95,6 +104,12 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override;
 
+    // Drive the configured buzzer output (I2S, PWM ringtone, or plain GPIO).
+    void triggerBuzzerOutput();
+    void triggerVibraOutput();
+    uint32_t armNagCycle(uint32_t startedAt);
+    void stopBuzzerNow();
+
     bool isNagging = false;
 
     bool isSilenced = false;
@@ -104,8 +119,6 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     bool buzzerAlertIsDirectMessage = false;
     uint32_t buzzerAlertStarted = 0;
     uint32_t buzzerAlertDurationMs = 0;
-
-    void stopBuzzerNow();
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,

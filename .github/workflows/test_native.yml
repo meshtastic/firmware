@@ -461,6 +461,17 @@ jobs:
           ./bin/check-test-attribution.py --label coverage-event-policy \
             --expect "$expect" event-policy-testreport.xml
 
+      - name: Channel table userPrefs tests
+        run: platformio test -e coverage-channel-table -v --junit-output-path channel-table-testreport.xml
+
+      - name: Verify the channel-table suite ran its own tests
+        run: |
+          set -euo pipefail
+          expect=$(python3 -c "from platformio.project.config import ProjectConfig; \
+            print(' '.join(ProjectConfig().get('env:coverage-channel-table', 'test_filter', [])))")
+          ./bin/check-test-attribution.py --label coverage-channel-table \
+            --expect "$expect" channel-table-testreport.xml
+
       - name: Save test results
         if: always() # run this step even if previous step failed
         uses: actions/upload-artifact@v7

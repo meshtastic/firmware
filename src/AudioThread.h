@@ -1,5 +1,6 @@
 #pragma once
 #include "PowerFSM.h"
+#include "SPILock.h"
 #include "concurrency/Lock.h"
 #include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
@@ -17,9 +18,9 @@
 // A board with an I2S amplifier opts in by defining AUDIO_AMP_ENABLE(on) in its variant.h to power the
 // amp on/off around playback (e.g. an enable pin on an I/O expander). The includes below expose the
 // expander instances (io / mcpIoExpander) those macros typically reference.
-#ifdef USE_XL9555
-#include "ExtensionIOXL9555.hpp"
-extern ExtensionIOXL9555 io;
+#ifdef USE_PCA95X5
+#include PCA95X5_INC
+extern PCA95X5_CLS io;
 #endif
 
 #ifdef USE_MCP23017
@@ -91,16 +92,12 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
         rtttlOwner = RtttlOwner::NONE;
 
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
         audioOut->stop();
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        ampEnable(false);
         restoreOutputPinMode();
     }
 
@@ -121,9 +118,7 @@ class AudioThread : public concurrency::OSThread
         if (i2sRtttl != nullptr) {
             i2sRtttl->stop();
         }
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
@@ -152,9 +147,7 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
         rtttlOwner = RtttlOwner::NONE;
         setCPUFast(false);
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        ampEnable(false);
         restoreOutputPinMode();
     }
 
@@ -162,6 +155,21 @@ class AudioThread : public concurrency::OSThread
     {
 #if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
         pinMode(0, INPUT);
+#endif
+    }
+
+    // Amps like the NS4150 need time to leave shutdown, longer when the enable is an I/O expander write.
+    // Without a variant's AUDIO_AMP_SETTLE_MS the short system tones are over before any audio gets out.
+    static void ampEnable(bool on)
+    {
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(on);
+#ifdef AUDIO_AMP_SETTLE_MS
+        if (on)
+            delay(AUDIO_AMP_SETTLE_MS);
+#endif
+#else
+        (void)on;
 #endif
     }
 
