@@ -36,31 +36,14 @@ static bool channelSlotUsable(const meshtastic_Channel &slot)
 static bool radioSwitched = false;
 static uint32_t switchedForId = 0;
 
-static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset *preset,
-                                   uint16_t *slot, bool *legacyHopOverride = nullptr,
-                                   meshtastic_Config_LoRaConfig_RegionCode *region = nullptr, const char **channelName = nullptr,
-                                   bool *usePreset = nullptr)
+const MeshBeaconModule_TargetRadioSettings *MeshBeaconModule::getTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
     if (!p)
-        return false;
-    for (const auto &entry : targetRadioSettings) {
-        if (entry.inUse && entry.id == p->id) {
-            if (preset)
-                *preset = entry.preset;
-            if (usePreset)
-                *usePreset = entry.usePreset;
-            if (slot)
-                *slot = entry.slot;
-            if (legacyHopOverride)
-                *legacyHopOverride = entry.legacyHopOverride;
-            if (region)
-                *region = entry.region;
-            if (channelName)
-                *channelName = entry.channelName;
-            return true;
-        }
-    }
-    return false;
+        return nullptr;
+    for (const auto &entry : targetRadioSettings)
+        if (entry.inUse && entry.id == p->id)
+            return &entry;
+    return nullptr;
 }
 
 // Is a target entry still live for this packet id? Unlike sendingPacket or the radio's standby
@@ -85,9 +68,7 @@ MeshBeaconModule::MeshBeaconModule()
     originalRegion = config.lora.region;
 }
 
-void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                              bool usePreset, uint16_t slot, bool legacyHopOverride,
-                                              meshtastic_Config_LoRaConfig_RegionCode region, const char *channelName)
+void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s)
 {
     if (!p)
         return;
@@ -116,24 +97,15 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, me
         LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x",
                  (unsigned)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0])), target->id, p->id);
     }
+    *target = s;
     target->inUse = true;
     target->id = p->id;
-    target->preset = preset;
-    target->usePreset = usePreset;
-    target->slot = slot;
-    target->legacyHopOverride = legacyHopOverride;
-    target->region = region;
-    if (channelName) {
-        strncpy(target->channelName, channelName, sizeof(target->channelName) - 1);
-        target->channelName[sizeof(target->channelName) - 1] = '\0';
-    } else {
-        target->channelName[0] = '\0';
-    }
+    target->channelName[sizeof(target->channelName) - 1] = '\0'; // s may carry an unterminated name
 }
 
 bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
-    return getTargetRadioSettings(p, nullptr, nullptr);
+    return getTargetRadioSettings(p) != nullptr;
 }
 
 // Only ERRNO_OK means the interface queued the packet and now owns its sidecar entry too. Every
@@ -165,16 +137,12 @@ void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
 
 bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
 {
-    meshtastic_Config_LoRaConfig_ModemPreset preset;
-    uint16_t slot = 0;
-    bool usePreset = true;
-    meshtastic_Config_LoRaConfig_RegionCode sidecarRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-    const char *sidecarChannelName = nullptr;
-    if (!getTargetRadioSettings(p, &preset, &slot, nullptr, &sidecarRegion, &sidecarChannelName, &usePreset))
+    const MeshBeaconModule_TargetRadioSettings *s = getTargetRadioSettings(p);
+    if (!s)
         return false; // not a beacon-switch packet - nothing to validate, normal traffic unaffected
 
     const meshtastic_Config_LoRaConfig_RegionCode region =
-        (sidecarRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? sidecarRegion : config.lora.region;
+        (s->region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? s->region : config.lora.region;
 
     // An unlicensed node must never key up on a ham-only (licensed-only) region. The reverse is
     // allowed: a licensed (ham) node may operate in a non-ham region - and the switch only touches
@@ -186,11 +154,11 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     // Validate the modem config the switch will actually install, against the channel name this
     // target resolved at send time - the slot is picked by hashing it.
     meshtastic_Config_LoRaConfig probe = config.lora;
-    probe.use_preset = usePreset;
-    probe.modem_preset = preset;
+    probe.use_preset = s->usePreset;
+    probe.modem_preset = s->preset;
     probe.region = region;
-    probe.channel_num = slot;
-    return !RadioInterface::validateConfigLora(probe, sidecarChannelName);
+    probe.channel_num = s->slot;
+    return !RadioInterface::validateConfigLora(probe, s->channelName);
 }
 
 void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
@@ -301,24 +269,21 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         ~ApplyingScope() { flag = false; }
     } applyingScope(applying);
 
-    meshtastic_Config_LoRaConfig_ModemPreset targetPreset;
-    uint16_t targetSlot;
-    bool targetUsePreset = true;
-
-    bool legacyHopOverride = false;
-    meshtastic_Config_LoRaConfig_RegionCode sidecarRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-    if (p &&
-        getTargetRadioSettings(p, &targetPreset, &targetSlot, &legacyHopOverride, &sidecarRegion, nullptr, &targetUsePreset)) {
+    const MeshBeaconModule_TargetRadioSettings *s = getTargetRadioSettings(p);
+    if (s) {
+        const meshtastic_Config_LoRaConfig_ModemPreset targetPreset = s->preset;
+        const bool targetUsePreset = s->usePreset;
+        const uint16_t targetSlot = s->slot;
 
         // Legacy compatibility: older firmware (pre-v2.7.20) drops hop_start==0 packets via the
         // pre-hop check before decryption, so they can't see has_bitfield to validate them.
         // Setting hop_start=1 (with hop_limit remaining 0) makes the packet pass the old check
         // while still being zero-hop (hop_limit=0 prevents any rebroadcast).
-        if (legacyHopOverride)
+        if (s->legacyHopOverride)
             p->hop_start = 1;
 
         const meshtastic_Config_LoRaConfig_RegionCode targetRegion =
-            (sidecarRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? sidecarRegion : config.lora.region;
+            (s->region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? s->region : config.lora.region;
         // Only RF parameters are switched; the channel travels on the packet. Resolve the live slot
         // too - channel_num may still be 0 ("derive"), which compares unequal to a concrete slot.
         const uint16_t liveSlot =
@@ -364,7 +329,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         iface->reconfigure();
         return true;
 
-    } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) && radioSwitched) {
+    } else if (radioSwitched) { // s is null here: either no packet, or one carrying no target
 
         // Null p is "release if nothing holds it": hold off until the arming beacon has finished. A
         // non-null untagged p is the driver about to transmit it, so that always restores.
@@ -630,8 +595,16 @@ void MeshBeaconBroadcastModule::sendBeacon()
             // Address the packet at the target's channel slot; perhapsEncode() keys off this index
             // and swaps in the wire hash, so the primary slot is never touched.
             p->channel = tgt.channelIndex;
-            if (radioDiffers || legacySplit)
-                setTargetRadioSettings(p, tgt.preset, tgt.usePreset, tgt.slot, legacySplit, tgt.region, tgt.channelName);
+            if (radioDiffers || legacySplit) {
+                MeshBeaconModule_TargetRadioSettings s = {};
+                s.preset = tgt.preset;
+                s.usePreset = tgt.usePreset;
+                s.slot = tgt.slot;
+                s.legacyHopOverride = legacySplit;
+                s.region = tgt.region;
+                strncpy(s.channelName, tgt.channelName, sizeof(s.channelName) - 1);
+                setTargetRadioSettings(p, s);
+            }
             sendBeaconPacket(p);
         };
 

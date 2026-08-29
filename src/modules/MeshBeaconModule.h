@@ -49,14 +49,14 @@ class MeshBeaconModule
     static bool reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p);
 
     /**
-     * Associate target radio settings with an outgoing packet by its ID.
+     * Associate target radio settings with an outgoing packet by its ID. inUse and id are the
+     * table's own bookkeeping and are set here, whatever s carries.
      * Sidecar holds 8 entries; evicts slot 0 on overflow.
      */
-    static void
-    setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset,
-                           uint16_t slot, bool legacyHopOverride = false,
-                           meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET,
-                           const char *channelName = nullptr);
+    static void setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s);
+
+    /** The entry for this packet, or nullptr when it is not a beacon-switch packet. */
+    static const MeshBeaconModule_TargetRadioSettings *getTargetRadioSettings(const meshtastic_MeshPacket *p);
 
     /**
      * Returns true if the sidecar table contains an entry for this packet's ID.
