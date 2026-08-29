@@ -18,6 +18,9 @@ typedef struct {
     bool inUse;
     PacketId id;
     meshtastic_Config_LoRaConfig_ModemPreset preset;
+    // False mirrors a node running custom modem params: a target that names no preset must not
+    // switch the modem onto one, and its slot must be sized by the bandwidth actually in use.
+    bool usePreset;
     uint16_t slot;
     // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
     // (which drops hop_start==0 packets) accepts the zero-hop beacon.
@@ -50,8 +53,8 @@ class MeshBeaconModule
      * Sidecar holds 8 entries; evicts slot 0 on overflow.
      */
     static void
-    setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset, uint16_t slot,
-                           bool legacyHopOverride = false,
+    setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset,
+                           uint16_t slot, bool legacyHopOverride = false,
                            meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET,
                            const char *channelName = nullptr);
 
@@ -104,6 +107,7 @@ class MeshBeaconModule
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
+    static bool originalUsePreset;
 };
 
 /**
