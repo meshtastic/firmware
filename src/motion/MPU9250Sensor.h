@@ -62,6 +62,7 @@ class MPU9250Sensor : public MotionSensor
     virtual bool init() override;
     virtual int32_t runOnce() override;
     virtual void calibrate(uint16_t forSeconds) override;
+    virtual bool providesHeading() const override { return true; }
 };
 
 #endif

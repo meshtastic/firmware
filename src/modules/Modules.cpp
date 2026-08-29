@@ -55,6 +55,7 @@
 #include "modules/TraceRouteModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "modules/GeofenceModule.h"
 #include "modules/WaypointModule.h"
 #endif
 #if ARCH_PORTDUINO
@@ -152,12 +153,14 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_BEACON
     meshBeaconBroadcastModule = new MeshBeaconBroadcastModule();
     meshBeaconListenerModule = new MeshBeaconListenerModule();
+    meshBeaconTxHook = new MeshBeaconTxHook(); // registers itself with the radio driver's TX hooks
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
     positionModule = new PositionModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
     waypointModule = new WaypointModule();
+    geofenceModule = new GeofenceModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_TEXTMESSAGE
     textMessageModule = new TextMessageModule();
@@ -223,7 +226,7 @@ void setupModules()
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
     if (moduleConfig.has_telemetry &&
         (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
-        new EnvironmentTelemetryModule();
+        environmentTelemetryModule = new EnvironmentTelemetryModule();
     }
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
     if (moduleConfig.has_telemetry &&

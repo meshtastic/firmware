@@ -99,7 +99,7 @@ static bool authenticateClient(EthernetClient &client)
     // Rate-limit after failed auth - close silently so the error byte is not
     // misinterpreted as part of the nonce by a re-trying client.
     if (lastAuthFailure != 0 && (millis() - lastAuthFailure) < OTA_AUTH_COOLDOWN_MS) {
-        LOG_WARN("ETH OTA: Auth cooldown active, rejecting connection");
+        LOG_WARN("ETH OTA: Auth cooldown, reject connection");
         client.stop();
         return false;
     }
@@ -260,7 +260,7 @@ static void handleOTAClient(EthernetClient &client)
         return;
     }
 
-    LOG_INFO("ETH OTA: Update staged successfully (%u bytes). Rebooting...", hdr.firmwareSize);
+    LOG_INFO("ETH OTA: Update staged (%u bytes). Rebooting", hdr.firmwareSize);
     client.write(OTA_OK);
     client.flush();
     delay(500);

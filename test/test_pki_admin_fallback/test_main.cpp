@@ -9,6 +9,7 @@
 // The whole feature is compiled out when PKI is excluded.
 #if !(MESHTASTIC_EXCLUDE_PKI)
 
+#include "UptimeClock.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/NodeDB.h"
@@ -148,6 +149,11 @@ void setUp(void)
 
 void tearDown(void)
 {
+    // The rate-limit case drives a virtual timebase; leave the real clock for everyone else, and
+    // re-stamp the budget so the next case does not measure a virtual stamp against real millis.
+    Time::useRealClock();
+    resetAdminKeyFallbackBudget();
+
     delete mockNodeDB;
     mockNodeDB = nullptr;
     nodeDB = nullptr;
@@ -205,8 +211,10 @@ void test_wrong_admin_key_does_not_decode(void)
 // The fallback is budget-limited against flooding; see Router.cpp for why the budget is global.
 void test_admin_key_fallback_is_rate_limited(void)
 {
-    // Start from a full bucket regardless of what earlier tests consumed (8 tokens, one per 250ms).
-    delay(2500);
+    // Drive the virtual clock: on the wall clock the eight decodes below have to beat the 250ms
+    // refill, which is ~31ms each - CI misses that and the bucket refills mid-drain.
+    Time::setTestMillis(1000000);
+    resetAdminKeyFallbackBudget(); // re-stamp against the virtual clock we just switched to
 
     uint8_t otherPub[32], otherPriv[32];
     crypto->generateKeyPair(otherPub, otherPriv);
@@ -225,7 +233,7 @@ void test_admin_key_fallback_is_rate_limited(void)
     TEST_ASSERT_NOT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&blocked), "fallback should be budget-limited");
 
     // The budget refills, so the throttle is not a permanent lockout.
-    delay(600);
+    Time::advanceTestMillis(600);
     meshtastic_MeshPacket allowed = makePkiPacket(ADMIN_NODE, meshtastic_PortNum_PRIVATE_APP, 16, adminPriv);
     TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&allowed), "budget should refill over time");
     assertDecodedAndLearned(&allowed, adminPub);

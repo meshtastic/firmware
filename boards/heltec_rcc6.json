@@ -1,0 +1,29 @@
+{
+  "build": {
+    "arduino": {
+      "partitions": "default_16MB.csv"
+    },
+    "core": "esp32",
+    "f_cpu": "160000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "qio",
+    "hwids": [["0x303A", "0x1001"]],
+    "mcu": "esp32c6",
+    "variant": "heltec_rcc6"
+  },
+  "connectivity": ["bluetooth", "wifi", "lora"],
+  "debug": {
+    "openocd_target": "esp32c6.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "Heltec RCC6",
+  "upload": {
+    "flash_size": "16MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 16777216,
+    "require_upload_port": true,
+    "speed": 921600
+  },
+  "url": "https://heltec.org/",
+  "vendor": "Heltec"
+}

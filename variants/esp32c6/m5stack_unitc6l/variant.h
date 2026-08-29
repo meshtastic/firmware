@@ -15,6 +15,8 @@ void c6l_init();
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 #define ENABLE_AMBIENTLIGHTING               // Turn on Ambient Lighting
 
+#define OLED_COMPACT_UI
+
 // #define BUTTON_PIN 9
 #define BUTTON_EXTENDER
 

@@ -77,9 +77,9 @@ template <typename T> bool SX126xInterface<T>::init()
     }
 #endif
     if (tcxoVoltage == 0.0)
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
     else
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", tcxoVoltage);
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", tcxoVoltage);
     setTransmitEnable(false);
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
@@ -139,21 +139,21 @@ template <typename T> bool SX126xInterface<T>::init()
 // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", portduino_config.lora_rxen_pin.pin,
+        LOG_DEBUG("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", portduino_config.lora_rxen_pin.pin,
                   portduino_config.lora_txen_pin.pin);
         lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #else
 #ifndef SX126X_RXEN
 #define SX126X_RXEN RADIOLIB_NC
-    LOG_DEBUG("SX126X_RXEN not defined, defaulting to RADIOLIB_NC");
+    LOG_DEBUG("SX126X_RXEN not defined, default RADIOLIB_NC");
 #endif
 #ifndef SX126X_TXEN
 #define SX126X_TXEN RADIOLIB_NC
-    LOG_DEBUG("SX126X_TXEN not defined, defaulting to RADIOLIB_NC");
+    LOG_DEBUG("SX126X_TXEN not defined, default RADIOLIB_NC");
 #endif
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", SX126X_RXEN, SX126X_TXEN);
+        LOG_DEBUG("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
@@ -162,19 +162,25 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_INFO("Set RX gain to boosted mode; result: %d", result);
     } else {
         uint16_t result = lora.setRxBoostedGainMode(false);
-        LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
+        LOG_INFO("Set RX gain to power saving mode; result: %d", result);
     }
 
     // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity.
     // Sets bit 0 of register 0x8B5.
     if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE) {
-        LOG_INFO("Applied SX1262 register 0x8B5 patch for RX improvement");
+        LOG_INFO("Applied SX1262 reg 0x8B5 RX patch");
     } else {
-        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for RX improvement");
+        LOG_WARN("Can't apply SX1262 reg 0x8B5 RX patch");
     }
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
+
+#ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
+    // begin() applied the optimization table; re-apply the fixed PA config.
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setOutputPower(power, false);
+#endif
 
     if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
@@ -226,11 +232,15 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (power < -9)
         power = -9;
 
+#ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
+    err = lora.setOutputPower(power, false); // external PA: fixed PA config
+#else
     err = lora.setOutputPower(power);
+#endif
     if (err != RADIOLIB_ERR_NONE) {
         // Don't abort: this power is operator config (tx_power/SX126X_MAX_POWER); a value above the
         // driver's max would crash the daemon before reloadConfig() persists. Flag it and keep prior power.
-        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keeping previous Tx power", power, radioLibErr, err);
+        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
     }
 
@@ -250,7 +260,7 @@ template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-template <typename T> void SX126xInterface<T>::enableInterrupt(void (*callback)())
+template <typename T> void SX126xInterface<T>::setRadioIsr(void (*callback)())
 {
 #ifdef LORA_DIO1_SOFTWARE_POLL
     irqPollingActive = true;
@@ -261,7 +271,7 @@ template <typename T> void SX126xInterface<T>::enableInterrupt(void (*callback)(
 #endif
 }
 
-template <typename T> void SX126xInterface<T>::disableInterrupt()
+template <typename T> void SX126xInterface<T>::clearRadioIsr()
 {
 #ifdef LORA_DIO1_SOFTWARE_POLL
     irqPollingActive = false;
@@ -336,7 +346,7 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
-    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
+    LOG_TRACE("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
@@ -478,7 +488,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     }
 
     if (module.hal->digitalRead(module.getGpio())) {
-        LOG_WARN("SX126x AGC reset: calibration did not complete within 50ms");
+        LOG_WARN("SX126x AGC reset: calibration not done in 50ms");
         startReceive();
         return;
     }
@@ -506,7 +516,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     // Without this re-apply, every SX1262 node loses its RX boost ~60s after boot
     // and never recovers until reboot. See empirical evidence in the PR description.
     if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) != RADIOLIB_ERR_NONE) {
-        LOG_WARN("SX126x resetAGC: failed to re-apply 0x8B5 RX sensitivity patch");
+        LOG_WARN("SX126x resetAGC: 0x8B5 RX patch re-apply failed");
     }
 
     // 6. Resume receiving

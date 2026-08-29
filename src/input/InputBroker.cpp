@@ -20,6 +20,7 @@
 #include "input/RotaryEncoderImpl.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/SerialKeyboardImpl.h"
+#include "input/TCA6408Rotary.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/i2cButton.h"
 #if HAS_TRACKBALL
@@ -40,7 +41,7 @@
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
-#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN)
+#if HAS_BACKLIGHT
 static bool touchBacklightWasOn = false;
 static bool touchBacklightActive = false;
 #endif
@@ -56,6 +57,10 @@ ButtonThread *BackButtonThread = nullptr;
 
 #if defined(CANCEL_BUTTON_PIN)
 ButtonThread *CancelButtonThread = nullptr;
+#endif
+
+#if defined(DOWN_BUTTON_PIN)
+ButtonThread *DownButtonThread = nullptr;
 #endif
 
 #endif
@@ -242,41 +247,39 @@ void InputBroker::Init()
     };
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
-#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN)
+#if HAS_BACKLIGHT
     // Touch pad drives the backlight on devices that have one
     touchConfig.longPress = INPUT_BROKER_NONE;
+#endif
+#if HAS_BACKLIGHT || defined(HAPTIC_FEEDBACK_PIN)
     touchConfig.suppressLeadUpSound = true;
+#if defined(HAPTIC_FEEDBACK_PIN)
+    initHapticFeedback();
+#endif
+    // One handler per event, a second assignment would silently drop the first
     touchConfig.onPress = []() {
-        touchBacklightWasOn = uiconfig.screen_brightness > 0;
-        if (!touchBacklightWasOn) {
-#if HAS_PWM_BACKLIGHT
-            graphics::backlightOn();
-#else
-            digitalWrite(PIN_EINK_EN, HIGH);
-#endif
-        }
+#if HAS_BACKLIGHT
+        touchBacklightWasOn = graphics::backlightIsLit();
+        if (!touchBacklightWasOn)
+            graphics::backlightMomentaryOn();
         touchBacklightActive = true;
-    };
-    touchConfig.onRelease = []() {
-        if (touchBacklightActive && !touchBacklightWasOn) {
-#if HAS_PWM_BACKLIGHT
-            graphics::backlightOff();
-#else
-            digitalWrite(PIN_EINK_EN, LOW);
-#endif
-        }
-        touchBacklightActive = false;
-    };
 #endif
 #if defined(HAPTIC_FEEDBACK_PIN)
-    // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
-    touchConfig.suppressLeadUpSound = true;
-    initHapticFeedback();
-    touchConfig.onPress = []() {
+        // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
         hapticFeedback->pulse(80);
         hapticFeedback->armDelayedPulse(500, 80);
+#endif
     };
-    touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
+    touchConfig.onRelease = []() {
+#if HAS_BACKLIGHT
+        if (touchBacklightActive && !touchBacklightWasOn)
+            graphics::backlightOff();
+        touchBacklightActive = false;
+#endif
+#if defined(HAPTIC_FEEDBACK_PIN)
+        hapticFeedback->cancelDelayedPulse();
+#endif
+    };
 #endif
     TouchButtonThread->initButton(touchConfig);
 #endif
@@ -323,6 +326,28 @@ void InputBroker::Init()
     BackButtonThread->initButton(backConfig);
 #endif
 
+#if defined(DOWN_BUTTON_PIN)
+    // Sends literal INPUT_BROKER_DOWN/DOWN_LONG (needed for message/nodelist scroll),
+    // unlike ALT_BUTTON_PIN which sends ALT_PRESS/ALT_LONG (treated as UP/previous).
+    DownButtonThread = new ButtonThread("DownButton");
+    ButtonConfig downConfig;
+    downConfig.pinNumber = DOWN_BUTTON_PIN;
+    downConfig.activeLow = DOWN_BUTTON_ACTIVE_LOW;
+    downConfig.activePullup = DOWN_BUTTON_ACTIVE_PULLUP;
+    downConfig.pullupSense = pullup_sense;
+    downConfig.intRoutine = []() {
+        DownButtonThread->userButton.tick();
+        DownButtonThread->setIntervalFromNow(0);
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        concurrency::mainDelay.interruptFromISR(&higherWake);
+    };
+    downConfig.singlePress = INPUT_BROKER_DOWN;
+    downConfig.longPress = INPUT_BROKER_DOWN_LONG;
+    downConfig.longPressTime = 500;
+    DownButtonThread->initButton(downConfig);
+#endif
+
 #if defined(BUTTON_PIN)
 #if defined(USERPREFS_BUTTON_PIN)
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
@@ -356,7 +381,7 @@ void InputBroker::Init()
         userConfig.singlePress = INPUT_BROKER_SEND_PING;
         userConfig.longPress = INPUT_BROKER_SHUTDOWN;
         userConfig.longPressTime = 5000;
-        userConfig.doublePress = INPUT_BROKER_GPS_TOGGLE;
+        userConfig.doublePress = INPUT_BROKER_PRIVACY_TOGGLE;
         UserButtonThread->initButton(userConfig);
     }
 #else
@@ -441,6 +466,13 @@ void InputBroker::Init()
         cardKbI2cImpl->init();
 #if defined(M5STACK_UNITC6L)
         i2cButton = new i2cButtonThread("i2cButtonThread");
+#endif
+#if defined(HAS_TCA6408_ROTARY)
+        tca6408Rotary = new TCA6408Rotary("TCA6408Rotary");
+        if (!tca6408Rotary->init()) {
+            delete tca6408Rotary;
+            tca6408Rotary = nullptr;
+        }
 #endif
 #ifdef INPUTBROKER_MATRIX_TYPE
         kbMatrixImpl = new KbMatrixImpl();

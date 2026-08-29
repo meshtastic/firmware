@@ -12,6 +12,7 @@
 #include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
 #include "modules/Telemetry/UnitConversions.h"
 
+#include "mesh/Throttle.h"
 #include <string>
 
 DropzoneModule *dropzoneModule;
@@ -19,7 +20,7 @@ DropzoneModule *dropzoneModule;
 int32_t DropzoneModule::runOnce()
 {
     // Send on a 5 second delay from receiving the matching request
-    if (startSendConditions != 0 && (startSendConditions + 5000U) < millis()) {
+    if (startSendConditions != 0 && Throttle::hasElapsed(startSendConditions, 5000U)) {
         service->sendToMesh(sendConditions(), RX_SRC_LOCAL);
         startSendConditions = 0;
     }
@@ -82,11 +83,11 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         auto windDirection = telemetry.variant.environment_metrics.wind_direction;
         auto temp = telemetry.variant.environment_metrics.temperature;
         auto baro = UnitConversions::HectoPascalToInchesOfMercury(telemetry.variant.environment_metrics.barometric_pressure);
-        sprintf(replyStr, "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus, hour, min, sec,
-                windSpeed, windDirection, baro, temp);
+        snprintf(replyStr, sizeof(replyStr), "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus,
+                 hour, min, sec, windSpeed, windDirection, baro, temp);
     } else {
         LOG_ERROR("No sensor found");
-        sprintf(replyStr, "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
+        snprintf(replyStr, sizeof(replyStr), "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
     }
     LOG_DEBUG("Conditions reply: %s", replyStr);
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply

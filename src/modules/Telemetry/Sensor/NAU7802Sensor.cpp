@@ -107,7 +107,7 @@ bool NAU7802Sensor::saveCalibrationData()
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_Nau7802Config_size};
 
     if (!pb_encode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
-        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+        LOG_ERROR("Can't encode protobuf %s", PB_GET_ERROR(&stream));
     } else {
         okay = true;
     }
@@ -126,7 +126,7 @@ bool NAU7802Sensor::loadCalibrationData()
         LOG_INFO("%s state read from %s", sensorName, nau7802ConfigFileName);
         pb_istream_t stream = {&readcb, &file, meshtastic_Nau7802Config_size};
         if (!pb_decode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+            LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
         } else {
             nau7802.setZeroOffset(nau7802config.zeroOffset);
             nau7802.setCalibrationFactor(nau7802config.calibrationFactor);
