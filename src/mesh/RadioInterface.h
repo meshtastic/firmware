@@ -258,10 +258,17 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
+    // What a config settles the two published flags to. Reported by the clamp, applied by
+    // applyModemConfig() - so asking about a config the node will not run cannot move them.
+    struct LoraSlotVerdict {
+        bool usesDefaultFrequencySlot;
+        bool usesCustomChannelName;
+    };
+
     // channelName is the name whose hash picks the default frequency slot. Null means "the current
     // primary" - pass one explicitly to ask about a config that is not the running one.
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName = nullptr,
-                                       bool speculative = false);
+                                       bool speculative = false, LoraSlotVerdict *verdict = nullptr);
 
     // 1-based slot this config lands on for a channel name, resolving the region override or name
     // hash as applyModemConfig() does. Asks about a channel without making it primary first.
@@ -285,9 +292,9 @@ class RadioInterface
     // evaluate against a channel other than the running primary.
     static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
 
-    // Make a candidate radio configuration valid, even if it isn't. Publishes
-    // uses_default_frequency_slot / uses_custom_channel_name, so pass only the config the node runs.
-    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
+    // Make a candidate radio configuration valid, even if it isn't. Reports what it settled the two
+    // published flags to; only applyModemConfig() applies them.
+    static LoraSlotVerdict clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
 
     // Clamp a config the node will not itself run: no critical error, no client notification, and
     // the published slot state keeps describing the running radio.

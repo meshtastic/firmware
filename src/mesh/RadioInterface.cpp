@@ -1130,7 +1130,7 @@ static uint32_t slotCountForBandwidth(const RegionInfo *region, float bwKHz, flo
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
 bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName,
-                                            bool speculative)
+                                            bool speculative, LoraSlotVerdict *verdict)
 {
     char err_string[160];
     float check_bw;
@@ -1276,11 +1276,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             }
         } // end of channel number check
 
-        // Clamp path only, and never speculatively: NeighborInfoModule and
-        // Channels::hasDefaultChannel() read these as the state of the running radio.
-        if (clamp && !speculative) {
-            uses_default_frequency_slot = defaultSlot;
-            uses_custom_channel_name = usesCustomChannelName;
+        // Reported, never applied here: NeighborInfoModule and Channels::hasDefaultChannel() read
+        // the published flags as the state of the running radio.
+        if (verdict) {
+            verdict->usesDefaultFrequencySlot = defaultSlot;
+            verdict->usesCustomChannelName = usesCustomChannelName;
         }
     } else {
         // if we have a frequency override, we ignore the channel number and just use the override frequency
@@ -1326,9 +1326,13 @@ bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &lora
     return checkOrClampConfigLora(copy, false, channelName);
 }
 
-void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
+RadioInterface::LoraSlotVerdict RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
 {
-    checkOrClampConfigLora(loraConfig, true, channelName);
+    // Seeded live so an override_frequency config, which settles neither flag, reports them
+    // unchanged rather than resetting them.
+    LoraSlotVerdict verdict = {uses_default_frequency_slot, uses_custom_channel_name};
+    checkOrClampConfigLora(loraConfig, true, channelName, false, &verdict);
+    return verdict;
 }
 
 void RadioInterface::clampCandidateConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
@@ -1348,10 +1352,12 @@ void RadioInterface::applyModemConfig()
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     myRegion = newRegion;
 
+    LoraSlotVerdict slotVerdict = {uses_default_frequency_slot, uses_custom_channel_name};
+
     if (loraConfig.use_preset) {
-        // Clamp, not validate-then-fall-back: the clamp publishes uses_default_frequency_slot and
-        // swaps to the sibling EU region. A valid config is left untouched.
-        clampConfigLora(loraConfig);
+        // Clamp, not validate-then-fall-back: the clamp settles the slot flags and swaps to the
+        // sibling EU region. A valid config is left untouched.
+        slotVerdict = clampConfigLora(loraConfig);
         newRegion = getRegion(loraConfig.region); // the clamp may have swapped it
         myRegion = newRegion;
         uint8_t newcr;
@@ -1369,13 +1375,17 @@ void RadioInterface::applyModemConfig()
             cr = newcr;
         }
 
-    } else {                         // if not using preset, then just use the custom settings
-        clampConfigLora(loraConfig); // also publishes uses_default_frequency_slot on the valid path
+    } else { // if not using preset, then just use the custom settings
+        slotVerdict = clampConfigLora(loraConfig);
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
     }
+
+    // The one place these are applied: this config is the radio now, so the flags describe it.
+    uses_default_frequency_slot = slotVerdict.usesDefaultFrequencySlot;
+    uses_custom_channel_name = slotVerdict.usesCustomChannelName;
 
     power = loraConfig.tx_power;
 
