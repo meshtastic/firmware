@@ -25,7 +25,7 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (2)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define BUTTON_PIN (-1) // If defined, this will be used for user button presses,
+#define BUTTON_PIN (10) // If defined, this will be used for user button presses,
 #define BUTTON_NEED_PULLUP
 
 // LEDs
@@ -129,10 +129,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define PIN_BUZZER (31) // P0.31/AIN7
 
-/*
- * Buttons
- */
-#define PIN_BUTTON1 (10) // Default GPIO pin used for user button.
 
 // Battery
 // The battery sense is hooked to pin A0 (2)
