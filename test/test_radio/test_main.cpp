@@ -184,16 +184,8 @@ static void test_clampConfigLora_validPresetUnchanged()
 static TestableRadioInterface *testRadio;
 
 // ---------------------------------------------------------------------------
-// Frequency slot boundaries
-//
-// A region that tiles its band exactly is the sharpest check on the slot arithmetic: the top
-// slot has to finish flush against freqEnd, never past it. Pinning a handful of these guards
-// both halves of the calculation - how many slots there are, and where each one sits - without
-// sweeping every region and preset.
-//
-// Slot width is spacing + 2*padding + bandwidth, and slots carry one fewer gap than their count,
-// which is the +spacing the count formula adds back. getFreq() returns the slot CENTRE, so the
-// upper edge is centre + bw/2 (getBw() is kHz, hence /2000 for MHz).
+// Frequency slot boundaries. Width is spacing + 2*padding + bandwidth; getFreq() returns the slot
+// CENTRE, so the upper edge is centre + bw/2 (getBw() is kHz, hence /2000 for MHz).
 // ---------------------------------------------------------------------------
 
 /** US: 26MHz of band at 250kHz tiles into exactly 104 slots, the last ending on 928.000. */

@@ -28,7 +28,7 @@ typedef struct {
     // Per-target radio settings. UNSET region means use current lora.region.
     meshtastic_Config_LoRaConfig_RegionCode region;
     // The channel name this target's slot was hashed from, resolved once at send time so the TX
-    // path and the pre-key-up validation cannot derive it two different ways. Empty = the primary.
+    // path and the pre-key-up validation cannot derive it two different ways.
     char channelName[sizeof(meshtastic_ChannelSettings::name)];
 } MeshBeaconModule_TargetRadioSettings;
 

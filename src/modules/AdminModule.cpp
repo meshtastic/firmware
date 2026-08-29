@@ -1508,9 +1508,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     return true;
 }
 
-// A beacon target and the offer both name a channel-table slot, so retiring that slot leaves them
-// pointing at a channel the node no longer has. Clear the references rather than let a target fail
-// at encrypt time, or the offer silently degrade to preset-and-region only.
+// Retiring a channel leaves any target or offer naming its slot pointing at a channel the node no
+// longer has - clear them, rather than fail at encrypt time or advertise a preset-only offer.
 static bool dropBeaconRefsForChannel(ChannelIndex index)
 {
 #if !MESHTASTIC_EXCLUDE_BEACON

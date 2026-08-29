@@ -198,9 +198,8 @@ static void installTestSecondaryChannel(uint8_t index, const char *name, const u
 // ===========================================================================
 
 /**
- * Verify SHORT_TURBO is clamped to the region default when the region is EU_868 (turbo presets are
- * not in that region's allowed preset set). Important to catch regressions where admin stores
- * unlawful radio settings that would violate regional radio regulations.
+ * SHORT_TURBO is clamped to the region default on EU_868, which does not allow the turbo presets.
+ * Guards against admin storing radio settings that would breach regional regulations.
  */
 static void test_adminValidation_turboPresetOnEU868_isClamped(void)
 {
@@ -1346,9 +1345,8 @@ static void test_broadcaster_noChannelOverride_doesNotSwapPrimary(void)
 }
 
 /**
- * A broadcast_target whose channel_index points at a configured table slot must transmit on THAT
- * slot's channel, not the primary - and must do so by naming the slot on the packet rather than
- * installing it as primary, so no other traffic can pick up the beacon's channel.
+ * A target naming a configured table slot transmits on THAT channel, by addressing the packet at the
+ * slot rather than installing it as primary - so no other traffic picks up the beacon's channel.
  */
 static void test_broadcaster_targetChannelIndex_usesTableSlot(void)
 {
@@ -1386,11 +1384,10 @@ static void test_broadcaster_targetChannelIndex_usesTableSlot(void)
 }
 
 /**
- * A broadcast_target whose channel_index points at a BLANK table slot (no name, no PSK) must fall
- * back to the default channel for the preset rather than borrowing the primary's name/PSK with a
- * clobbered channel_num. Guards the blank-slot handling for multi-target configs.
+ * A broadcast_target whose channel_index points at a BLANK table slot (no name, no PSK) has no key
+ * to encrypt with, so it transmits on the primary - without swapping anything into the primary slot.
  */
-static void test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset(void)
+static void test_broadcaster_targetChannelIndex_blankSlotFallsBackToPrimary(void)
 {
     resetConfig();
     static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -1408,10 +1405,11 @@ static void test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset(void)
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
 
-    // Exactly one beacon goes out, and a blank slot does NOT trigger a crypto swap - the primary
-    // stays "Home" (no garbage / no clobber), matching the no-channel-override default-for-preset path.
+    // Exactly one beacon goes out, addressed at the primary, and the primary itself is untouched.
     TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
     TEST_ASSERT_TRUE_MESSAGE(mockRouter->primaryAtSend.size() >= 1, "expected at least one send");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(channels.getPrimaryIndex(), mockRouter->sentPackets[0].channel,
+                                   "a blank slot has no key, so the beacon must fall back to the primary");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", mockRouter->primaryAtSend[0].name,
                                      "blank slot must not swap the beacon onto a borrowed channel");
 }
@@ -1508,10 +1506,8 @@ class ReentrantRadioInterface : public RadioInterface
 };
 
 /**
- * A target that resolves to the radio config the node is already on must arm no switch at all.
- * The slot a channel lands on is resolved (1-based) while config.lora.channel_num may still be 0,
- * meaning "derive it", so comparing the two directly reads as a difference and switches the radio
- * to the frequency it is already using - opening the swap window this design exists to close.
+ * A target on the config the node already runs must arm no switch. A resolved 1-based slot compared
+ * against a channel_num still 0 ("derive it") reads as a difference and switches to the same freq.
  */
 static void test_broadcaster_targetMatchingRunningConfig_armsNoSwitch(void)
 {
@@ -1832,9 +1828,8 @@ static void test_broadcaster_presetTargetOnCustomModemNode_switchesUsePreset(voi
 }
 
 /**
- * Pinning the slot the node already runs on must arm nothing. This is the pinned-slot form of the
- * 0-vs-resolved trap: config.lora.channel_num may still be 0 meaning "derive", so a pin of the
- * derived value has to compare equal or the radio switches to the frequency it is already on.
+ * Pinning the slot the node already runs on must arm nothing - the pinned form of the 0-vs-resolved
+ * trap, where a pin of the derived value has to compare equal against a channel_num still 0.
  */
 static void test_broadcaster_targetPinnedHomeSlot_armsNoSwitch(void)
 {
@@ -1861,9 +1856,8 @@ static void test_broadcaster_targetPinnedHomeSlot_armsNoSwitch(void)
 }
 
 /**
- * Two channel-less targets that pin different frequency slots are two different destinations, so
- * both must go out. The dedup key has to carry the slot: while it keyed on the channel alone, a
- * target with no channel compared equal to any other and the pinned one was silently dropped.
+ * Two channel-less targets pinning different slots are two destinations, so both go out. The dedup
+ * key has to carry the slot, or a channel-less target compares equal to any other and is dropped.
  */
 static void test_broadcaster_twoPinnedSlotsNoChannel_bothSent(void)
 {
@@ -1920,10 +1914,8 @@ static void test_broadcaster_bareTargetAndPrimaryIndexTarget_dedupToOne(void)
 }
 
 /**
- * Router::send() frees the packet on every failure path, so the sidecar entry must be cleared by
- * id. Reading it back off the packet is a use-after-free wherever packetPool is the dynamic pool -
- * native, STM32WL, PSRAM boards. The assertion below only covers the leak; the use-after-free
- * needs a sanitizer, so run this suite in the default (coverage) env, not -e native.
+ * Router::send() frees the packet on every failure path, so the sidecar must be cleared by id -
+ * reading it back off the packet is a use-after-free. Needs the coverage env's ASan to catch that.
  */
 static void test_broadcaster_sendFailure_releasesTargetEntry(void)
 {
@@ -1952,9 +1944,8 @@ static void test_broadcaster_sendFailure_releasesTargetEntry(void)
 }
 
 /**
- * A target that already transmits on the mesh being offered must not carry the offer: everyone
- * hearing it is on that mesh. Reached by pointing a target at the offered channel after the
- * offer was set, which is valid config at write time and only redundant at TX.
+ * A target already transmitting on the offered mesh must not carry the offer - everyone hearing it
+ * is already there. Valid config at write time, redundant only at TX.
  */
 static void test_broadcaster_offerMatchesTarget_offerIsOmitted(void)
 {
@@ -2049,9 +2040,8 @@ static void test_broadcaster_offerMatchesTargetNoText_sendsNothing(void)
 }
 
 /**
- * An offer that names no channel is an announcement, not an invitation elsewhere, so it is still
- * sent even when its preset and region are the ones the target already runs. Guards the redundancy
- * gate against swallowing the plain offer-only beacon.
+ * An offer naming no channel is an announcement, not an invitation elsewhere, so it is sent even on
+ * a target already running its preset and region. Guards the redundancy gate against eating it.
  */
 static void test_broadcaster_offerWithoutChannelMatchingTarget_isStillSent(void)
 {
@@ -2068,9 +2058,8 @@ static void test_broadcaster_offerWithoutChannelMatchingTarget_isStillSent(void)
 }
 
 /**
- * A client built before the consolidation still sends broadcast_send_as_node on MeshBeaconConfig
- * tag 3. nanopb must skip a retired tag as an unknown field rather than failing the decode, or
- * such a client cannot write a beacon config at all.
+ * A pre-consolidation client still sends broadcast_send_as_node on MeshBeaconConfig tag 3. nanopb
+ * must skip a retired tag as unknown, or that client cannot write a beacon config at all.
  */
 static void test_proto_retiredSendAsNodeTag_isSkipped(void)
 {
@@ -2526,7 +2515,7 @@ BEACON_TEST_ENTRY void setup()
 
     RUN_TEST(test_broadcaster_noChannelOverride_doesNotSwapPrimary);
     RUN_TEST(test_broadcaster_targetChannelIndex_usesTableSlot);
-    RUN_TEST(test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset);
+    RUN_TEST(test_broadcaster_targetChannelIndex_blankSlotFallsBackToPrimary);
     RUN_TEST(test_broadcaster_duplicateTargets_dedupedToOnePacket);
     RUN_TEST(test_broadcaster_distinctTargets_bothSent);
 
