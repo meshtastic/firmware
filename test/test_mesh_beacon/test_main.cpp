@@ -2280,6 +2280,256 @@ static void test_broadcaster_offerMatchesTargetNoText_sendsNothing(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, mockRouter->sentPackets.size(), "nothing left to say, so nothing is sent");
 }
 
+// ---------------------------------------------------------------------------
+// The four target shapes in one config, and the four offer-vs-setting cases.
+// ---------------------------------------------------------------------------
+
+// Decode a sent beacon packet's payload. Returns false if it is not a MeshBeacon.
+static bool decodeBeaconPacket(const meshtastic_MeshPacket &p, meshtastic_MeshBeacon &out)
+{
+    out = meshtastic_MeshBeacon_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(p.decoded.payload.bytes, p.decoded.payload.size);
+    return pb_decode(&stream, &meshtastic_MeshBeacon_msg, &out);
+}
+
+/**
+ * Case 1: all four target shapes in a single config - the home channel, a second channel on the
+ * same frequency slot, a different slot, and a different region/preset/slot together. Each must
+ * reach the air as its own packet on its own settings.
+ */
+static void test_broadcaster_homeSameSlotOtherSlotAndOtherRegion_allSent(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xB0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    static const uint8_t altPsk[16] = {0xB1, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "Alt", altPsk, sizeof(altPsk));
+    channels.onConfigChanged();
+    // US holds many slots, so there is a second slot to pin. EU_868 holds one.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.channel_num = 0;
+
+    const uint32_t homeSlot = RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
+    const uint32_t otherSlot = (homeSlot == 1) ? 2 : 1;
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "hi", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_targets_count = 4;
+
+    // [0] the home channel, inheriting everything.
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].frequency_slot = homeSlot;
+    // [1] the other channel, pinned to the SAME slot as home - the channel differs, the RF does not.
+    moduleConfig.mesh_beacon.broadcast_targets[1].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[1].channel_index = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[1].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[1].frequency_slot = homeSlot;
+    // [2] the other channel again, on a different slot.
+    moduleConfig.mesh_beacon.broadcast_targets[2].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[2].channel_index = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[2].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[2].frequency_slot = otherSlot;
+    // [3] a different region, preset and slot together.
+    moduleConfig.mesh_beacon.broadcast_targets[3].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[3].channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.broadcast_targets[3].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    moduleConfig.mesh_beacon.broadcast_targets[3].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[3].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets[3].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[3].frequency_slot = 1; // EU_868 holds exactly one
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(4, mockRouter->sentPackets.size(),
+                              "four targets differing in channel, slot or region are four transmissions");
+
+    // [0] is the running config, so it arms no switch; the rest each differ in RF or channel.
+    TEST_ASSERT_EQUAL_MESSAGE(channels.getPrimaryIndex(), mockRouter->sentPackets[0].channel, "target 0 rides the primary");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets[1].channel, "target 1 rides the second channel");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets[2].channel, "target 2 rides the second channel too");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                              "the home target runs the live config, so it must arm no radio switch");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[1]),
+                              "a channel change on the home slot is not a radio change");
+
+    const MeshBeaconModule_TargetRadioSettings *other = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[2]);
+    TEST_ASSERT_NOT_NULL_MESSAGE(other, "a different frequency slot must arm a switch");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(otherSlot, other->lora.channel_num, "and it must be the slot the target named");
+
+    const MeshBeaconModule_TargetRadioSettings *far = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[3]);
+    TEST_ASSERT_NOT_NULL_MESSAGE(far, "a different region must arm a switch");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_EU_868, far->lora.region, "on the target's region");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, far->lora.modem_preset,
+                              "on the target's preset");
+}
+
+/**
+ * Case 2: the offer describes a mesh other than the one the node runs. Region, preset and slot all
+ * differ, and all three have to reach the air - that is the whole point of an offer.
+ */
+static void test_offer_differentFromHome_advertisesItsOwnSettings(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xB2, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    static const uint8_t altPsk[16] = {0xB3, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "Offered", altPsk, sizeof(altPsk));
+    channels.onConfigChanged();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    meshtastic_Config_LoRaConfig offered = config.lora;
+    offered.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(offered, "Offered");
+    const uint32_t pinned = (derived == 1) ? 2 : 1; // deliberately not the derivable one
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = pinned;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "an offer alone is still a beacon");
+    meshtastic_MeshBeacon decoded;
+    TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
+    TEST_ASSERT_TRUE_MESSAGE(decoded.has_offer_channel, "the offered channel must be advertised");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Offered", decoded.offer_channel.name, "and it must be the channel named, not the primary");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, decoded.offer_preset,
+                              "a preset unlike home must be advertised");
+    TEST_ASSERT_TRUE_MESSAGE(decoded.has_offer_frequency_slot, "a slot the name does not hash to must be advertised");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(pinned, decoded.offer_frequency_slot, "and it must be the slot pinned");
+}
+
+/**
+ * Case 3: the offer describes the mesh the node already runs, advertised onto a target that is
+ * somewhere else - "I am over here, come and join me". The offer is only suppressed on a target
+ * that already runs it (case 5), so here it must go out in full.
+ */
+static void test_offer_sameAsHome_isAdvertisedOntoAnotherMesh(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xB4, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    static const uint8_t awayPsk[16] = {0xB8, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "Away", awayPsk, sizeof(awayPsk));
+    channels.onConfigChanged();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    moduleConfig.has_mesh_beacon = true;
+    // The offer is everything the node already is: its own channel, preset and region.
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    moduleConfig.mesh_beacon.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    // The target is the other mesh, which is the audience for that offer.
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "an offer matching home is still worth broadcasting");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets[0].channel, "onto the mesh that does not already have it");
+    meshtastic_MeshBeacon decoded;
+    TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
+    TEST_ASSERT_TRUE_MESSAGE(decoded.has_offer_channel, "the offered channel must be advertised");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", decoded.offer_channel.name, "which is the node's own");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, decoded.offer_preset, "on the node's preset");
+    TEST_ASSERT_FALSE_MESSAGE(decoded.has_offer_frequency_slot,
+                              "a receiver derives this slot from the name, so spending bytes on it is waste");
+}
+
+/**
+ * Case 4: the offer names the same mesh as one of the broadcast targets. A legal configuration -
+ * the beacon still goes out on that target, carrying its text.
+ */
+static void test_offer_sameAsABeaconTarget_targetIsStillSent(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xB5, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    static const uint8_t altPsk[16] = {0xB6, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "Shared", altPsk, sizeof(altPsk));
+    channels.onConfigChanged();
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "join us", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    // The offer and the single target name the same channel.
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "naming the same mesh twice is legal, and still transmits");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets[0].channel, "on the channel both name");
+    meshtastic_MeshBeacon decoded;
+    TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("join us", decoded.message, "the text survives");
+}
+
+/**
+ * Case 5: the offer is exactly the mesh the packet is going out on, so it tells the listener
+ * nothing it does not already have. The offer is dropped; the text it was riding with is not.
+ */
+static void test_offer_identicalToItsOwnTarget_offerDroppedTextKept(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xB7, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    channels.onConfigChanged();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "still here", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    // Offer and target are the same channel, preset, region and slot - identical in every field.
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    moduleConfig.mesh_beacon.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    moduleConfig.mesh_beacon.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "the text still goes out");
+    meshtastic_MeshBeacon decoded;
+    TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("still here", decoded.message, "the text must not be dropped with the offer");
+    TEST_ASSERT_FALSE_MESSAGE(decoded.has_offer_channel,
+                              "a listener on this packet already has the offer, so it must not be spent on the air");
+}
+
 /**
  * An offer naming no channel is an announcement, not an invitation elsewhere, so it is sent even on
  * a target already running its preset and region. Guards the redundancy gate against eating it.
@@ -2790,6 +3040,14 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther);
     RUN_TEST(test_broadcaster_offerMatchesTargetNoText_sendsNothing);
     RUN_TEST(test_broadcaster_offerWithoutChannelMatchingTarget_isStillSent);
+
+    printf("\n=== Target shapes and offer-vs-setting ===\n");
+
+    RUN_TEST(test_broadcaster_homeSameSlotOtherSlotAndOtherRegion_allSent);
+    RUN_TEST(test_offer_differentFromHome_advertisesItsOwnSettings);
+    RUN_TEST(test_offer_sameAsHome_isAdvertisedOntoAnotherMesh);
+    RUN_TEST(test_offer_sameAsABeaconTarget_targetIsStillSent);
+    RUN_TEST(test_offer_identicalToItsOwnTarget_offerDroppedTextKept);
 
     printf("\n=== Retired proto tags ===\n");
 
