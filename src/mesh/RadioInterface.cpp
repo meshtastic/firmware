@@ -1130,15 +1130,15 @@ static uint32_t slotCountForBandwidth(const RegionInfo *region, float bwKHz, flo
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
 bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName,
-                                            bool speculative, LoraSlotVerdict *verdict)
+                                            bool announce, LoraSlotVerdict *verdict)
 {
     char err_string[160];
     float check_bw;
 
-    // A speculative clamp asks about a config the node will not run, so it must stay silent and
-    // leave the published slot state below describing the running radio.
+    // A caller asking about a config the node will not run wants the clamp silent: the errors
+    // belong to whoever is applying a config, not to whoever is asking about one.
     const auto announceError = [&]() {
-        if (speculative)
+        if (!announce)
             return;
         LOG_ERROR("%s", err_string);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
@@ -1169,7 +1169,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                 }
                 snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
                          swapRegion->name);
-                if (!speculative) {
+                if (announce) {
                     LOG_INFO("%s", err_string);
                     sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
                 }
@@ -1326,18 +1326,14 @@ bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &lora
     return checkOrClampConfigLora(copy, false, channelName);
 }
 
-RadioInterface::LoraSlotVerdict RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
+RadioInterface::LoraSlotVerdict RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName,
+                                                                bool announce)
 {
     // Seeded live so an override_frequency config, which settles neither flag, reports them
     // unchanged rather than resetting them.
     LoraSlotVerdict verdict = {uses_default_frequency_slot, uses_custom_channel_name};
-    checkOrClampConfigLora(loraConfig, true, channelName, false, &verdict);
+    checkOrClampConfigLora(loraConfig, true, channelName, announce, &verdict);
     return verdict;
-}
-
-void RadioInterface::clampCandidateConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
-{
-    checkOrClampConfigLora(loraConfig, true, channelName, true);
 }
 
 /**
