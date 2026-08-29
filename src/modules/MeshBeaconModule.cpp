@@ -208,20 +208,38 @@ void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic
 
     // Advertise the slot only where a receiver could not work it out from the region, preset and
     // channel name already in the offer - which covers a region that mandates a slot.
-    meshtastic_Config_LoRaConfig probe = config.lora;
-    probe.use_preset = true;
-    if (bcfg.has_broadcast_offer_preset)
-        probe.modem_preset = bcfg.broadcast_offer_preset;
-    if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-        probe.region = bcfg.broadcast_offer_region;
-    probe.channel_num = 0;
-    const uint32_t derived =
-        RadioInterface::resolveFrequencySlot(probe, beacon.has_offer_channel ? beacon.offer_channel.name : nullptr);
-    const uint32_t advertised = bcfg.has_broadcast_offer_frequency_slot ? bcfg.broadcast_offer_frequency_slot : derived;
+    uint32_t derived = 0;
+    const uint32_t advertised = offerFrequencySlot(bcfg, &derived);
     if (advertised != derived) {
         beacon.has_offer_frequency_slot = true;
         beacon.offer_frequency_slot = advertised;
     }
+}
+
+uint32_t MeshBeaconModule::offerFrequencySlot(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, uint32_t *derivedOut)
+{
+    const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg);
+    const auto preset = bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : config.lora.modem_preset;
+
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.use_preset = true;
+    probe.modem_preset = preset;
+    if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        probe.region = bcfg.broadcast_offer_region;
+
+    // An offer with no channel leaves this empty, which resolveFrequencySlot() reads as "hash the
+    // preset name" - what a receiver derives when the offer names no channel to hash.
+    char name[sizeof(meshtastic_ChannelSettings::name)] = "";
+    if (offerCh)
+        strncpy(name, beaconChannelSettings(*offerCh, preset).name, sizeof(name) - 1);
+
+    probe.channel_num = 0;
+    if (derivedOut)
+        *derivedOut = RadioInterface::resolveFrequencySlot(probe, name);
+    // Resolved, not verbatim: a pin outside the region falls back to the derived slot rather than
+    // advertising one no receiver can tune.
+    probe.channel_num = bcfg.has_broadcast_offer_frequency_slot ? bcfg.broadcast_offer_frequency_slot : 0;
+    return RadioInterface::resolveFrequencySlot(probe, name);
 }
 
 const meshtastic_ChannelSettings *MeshBeaconModule::offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
@@ -524,16 +542,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const auto offerRegion = (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                                  ? bcfg.broadcast_offer_region
                                  : config.lora.region;
-    uint16_t offerSlot;
-    {
-        meshtastic_Config_LoRaConfig probe = config.lora;
-        probe.use_preset = true;
-        probe.modem_preset = offerPreset;
-        probe.region = offerRegion;
-        probe.channel_num = bcfg.has_broadcast_offer_frequency_slot ? bcfg.broadcast_offer_frequency_slot : 0;
-        offerSlot = (uint16_t)RadioInterface::resolveFrequencySlot(
-            probe, offerCh ? beaconChannelSettings(*offerCh, offerPreset).name : nullptr);
-    }
+    const uint16_t offerSlot = (uint16_t)offerFrequencySlot(bcfg);
 
     // The slot the node is already on, resolved the same way a target's is, so the two compare.
     const uint16_t homeSlot =
@@ -610,10 +619,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
         sentRegion[sentCount] = resolvedRegion;
         sentCount++;
 
-        // A target already on the offered mesh gains nothing from the offer, and config reaches
-        // this after the fact. Only when the offer names a channel; a bare preset/region is valid.
-        const bool offerRedundant = bcfg.has_broadcast_offer_channel_index &&
-                                    (uint32_t)tgt.channelIndex == bcfg.broadcast_offer_channel_index &&
+        // A target already on the offered mesh gains nothing from the offer. Gated on the offer
+        // actually carrying a channel: without one it is an announcement, valid on any target.
+        const bool offerRedundant = offerCh && (uint32_t)tgt.channelIndex == bcfg.broadcast_offer_channel_index &&
                                     offerPreset == tgt.preset && offerRegion == resolvedRegion && offerSlot == tgt.slot;
         if (offerRedundant)
             LOG_DEBUG("Beacon: target %d already runs the offered mesh, omit offer", ti);
@@ -661,9 +669,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
         }
 
         // Re-encode without the offer for a target that already runs it; the text still stands.
-        uint8_t msgOnlyBuf[meshtastic_MeshBeacon_size];
         const uint8_t *combinedBuf = payloadCache;
         pb_size_t combinedSize = payloadCacheSize;
+        uint8_t msgOnlyBuf[meshtastic_MeshBeacon_size];
         if (sendCombined && offerRedundant) {
             meshtastic_MeshBeacon msgOnly = meshtastic_MeshBeacon_init_zero;
             strncpy(msgOnly.message, bcfg.broadcast_message, sizeof(msgOnly.message) - 1);

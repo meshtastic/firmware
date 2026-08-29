@@ -87,6 +87,10 @@ class MeshBeaconModule
     /** The channel the offer advertises, or nullptr when no slot is named or it is unusable. */
     static const meshtastic_ChannelSettings *offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
+    // The frequency slot the offer describes, and via derivedOut the one a receiver works out for
+    // itself. They differ only where the mesh deliberately pins a slot that derivation would miss.
+    static uint32_t offerFrequencySlot(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, uint32_t *derivedOut = nullptr);
+
     // Default a blank name to the TARGET preset's display name - not Channels::getName(), which
     // resolves it against the RUNNING preset. A node joining on the target preset derives the same.
     static meshtastic_ChannelSettings beaconChannelSettings(const meshtastic_ChannelSettings &base,
