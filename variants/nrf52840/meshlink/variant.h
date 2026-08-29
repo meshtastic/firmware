@@ -33,7 +33,7 @@ extern "C" {
 #define LED_STATE_ON 0         // Active LOW
 
 // Testing USB detection
-// #define NRF_APM
+//#define NRF_APM
 
 /*
  * Analog pins
@@ -48,8 +48,8 @@ extern "C" {
 /*
  * Serial interfaces
  */
-#define PIN_SERIAL1_RX (32 + 8)
-#define PIN_SERIAL1_TX (7)
+#define PIN_SERIAL1_TX (32 + 8)
+#define PIN_SERIAL1_RX (7)
 #define SERIAL_PRINT_PORT 0
 
 /*
@@ -124,10 +124,15 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define GPS_THREAD_INTERVAL 50
 
 // Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
-#define PIN_GPS_EN (0)
+#define PIN_GPS_EN (4)
 #define GPS_EN_ACTIVE LOW
 
 #define PIN_BUZZER (31) // P0.31/AIN7
+
+/*
+ * Buttons
+ */
+#define PIN_BUTTON1 (10) // Default GPIO pin used for user button.
 
 // Battery
 // The battery sense is hooked to pin A0 (2)
