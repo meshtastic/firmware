@@ -268,7 +268,7 @@ class RadioInterface
     // channelName is the name whose hash picks the default frequency slot. Null means "the current
     // primary" - pass one explicitly to ask about a config that is not the running one.
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName = nullptr,
-                                       bool speculative = false, LoraSlotVerdict *verdict = nullptr);
+                                       bool announce = true, LoraSlotVerdict *verdict = nullptr);
 
     // 1-based slot this config lands on for a channel name, resolving the region override or name
     // hash as applyModemConfig() does. Asks about a channel without making it primary first.
@@ -293,12 +293,10 @@ class RadioInterface
     static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
 
     // Make a candidate radio configuration valid, even if it isn't. Reports what it settled the two
-    // published flags to; only applyModemConfig() applies them.
-    static LoraSlotVerdict clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
-
-    // Clamp a config the node will not itself run: no critical error, no client notification, and
-    // the published slot state keeps describing the running radio.
-    static void clampCandidateConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
+    // published flags to; only applyModemConfig() applies them. Pass announce=false to clamp a
+    // config the node will not itself run: no log, no critical error, no client notification.
+    static LoraSlotVerdict clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
+                                           bool announce = true);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
