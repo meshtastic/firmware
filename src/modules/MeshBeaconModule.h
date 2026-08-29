@@ -17,18 +17,15 @@
 typedef struct {
     bool inUse;
     PacketId id;
-    meshtastic_Config_LoRaConfig_ModemPreset preset;
-    // False mirrors a node running custom modem params: a target that names no preset must not
-    // switch the modem onto one, and its slot must be sized by the bandwidth actually in use.
-    bool usePreset;
-    uint16_t slot;
     // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
     // (which drops hop_start==0 packets) accepts the zero-hop beacon.
     bool legacyHopOverride;
-    // Per-target radio settings. UNSET region means use current lora.region.
-    meshtastic_Config_LoRaConfig_RegionCode region;
-    // The channel name this target's slot was hashed from, resolved once at send time so the TX
-    // path and the pre-key-up validation cannot derive it two different ways.
+    // The radio this packet needs, whole: region, preset, use_preset and channel_num are all
+    // resolved at send time, and a future per-target bandwidth or SF needs no field added here.
+    // Region is already resolved - never UNSET - so nothing downstream re-derives it.
+    meshtastic_Config_LoRaConfig lora;
+    // The channel name the slot was hashed from, resolved once at send time so the TX path and
+    // the pre-key-up validation cannot derive it two different ways.
     char channelName[sizeof(meshtastic_ChannelSettings::name)];
 } MeshBeaconModule_TargetRadioSettings;
 
