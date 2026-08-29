@@ -1537,6 +1537,31 @@ static void test_broadcaster_targetMatchingRunningConfig_armsNoSwitch(void)
 }
 
 /**
+ * Clamping a beacon target is a question about a config the radio will never run, so it must not
+ * republish uses_default_frequency_slot - NeighborInfoModule reads that as the running radio's state.
+ */
+static void test_adminValidation_targetClamp_leavesRunningSlotState(void)
+{
+    resetConfig();
+    RadioInterface::uses_default_frequency_slot = true;
+    RadioInterface::uses_custom_channel_name = false;
+
+    // A turbo preset on EU_868 forces the clamp path inside admin validation.
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    bcfg.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot,
+                             "a speculative clamp must not rewrite the running radio's slot state");
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::uses_custom_channel_name,
+                              "a speculative clamp must not rewrite the running channel-name state");
+}
+
+/**
  * A slot a receiver can work out for itself from the advertised region, preset and channel name
  * must not be spent on the air.
  */
@@ -2372,6 +2397,7 @@ BEACON_TEST_ENTRY void setup()
 
     printf("\n=== Offer advertisement ===\n");
 
+    RUN_TEST(test_adminValidation_targetClamp_leavesRunningSlotState);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedButDerivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedSlot_isAdvertised);

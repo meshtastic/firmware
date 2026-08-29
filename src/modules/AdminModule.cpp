@@ -1414,7 +1414,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             if (!RadioInterface::validateConfigLora(probe, offerChannel.name)) {
                 LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clamping", beaconCfg.broadcast_offer_preset);
                 const auto probedRegion = probe.region;
-                RadioInterface::clampConfigLora(probe, offerChannel.name);
+                RadioInterface::clampCandidateConfigLora(probe, offerChannel.name);
                 beaconCfg.broadcast_offer_preset = probe.modem_preset;
                 // Only on an actual swap, as for a target: assigning it always would turn an
                 // UNSET region into a pin on today's running region.
@@ -1473,7 +1473,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 if (!RadioInterface::validateConfigLora(probe, targetChannel.name)) {
                     LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clamping", i, t.preset);
                     const auto probedRegion = probe.region;
-                    RadioInterface::clampConfigLora(probe, targetChannel.name);
+                    RadioInterface::clampCandidateConfigLora(probe, targetChannel.name);
                     t.preset = probe.modem_preset;
                     // Only on an actual swap: assigning it always would turn an UNSET region
                     // ("inherit at TX time") into a pin on today's running region.
