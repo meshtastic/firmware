@@ -66,6 +66,9 @@ class MeshBeaconModule
      */
     static void clearTargetRadioSettings(const meshtastic_MeshPacket *p);
 
+    /** Same, by id, for a packet the send path may already have freed. */
+    static void clearTargetRadioSettingsById(PacketId id);
+
     /**
      * True if p is tagged for a beacon radio switch whose target config must NOT be transmitted:
      * preset invalid for the target region, or an unlicensed node would key up on a ham-only

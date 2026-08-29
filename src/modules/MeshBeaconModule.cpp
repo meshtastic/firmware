@@ -120,26 +120,31 @@ bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
 }
 
 // Only ERRNO_OK means the interface queued the packet and now owns its target radio settings too.
-// Any other return means it never reaches the radio, so free the settings entry here or it leaks.
-static void releaseIfNotQueued(ErrorCode sendResult, meshtastic_MeshPacket *p)
+// Every other return has already freed p - except ERRNO_SHOULD_RELEASE, which hands it back - so
+// clear by id, never by dereferencing p.
+static void releaseIfNotQueued(ErrorCode sendResult, meshtastic_MeshPacket *p, PacketId id)
 {
     if (sendResult == ERRNO_OK)
         return;
-    MeshBeaconModule::clearTargetRadioSettings(p);
+    MeshBeaconModule::clearTargetRadioSettingsById(id);
     if (sendResult == ERRNO_SHOULD_RELEASE)
         packetPool.release(p); // this one is still ours to free
 }
 
-void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
+void MeshBeaconModule::clearTargetRadioSettingsById(PacketId id)
 {
-    if (!p)
-        return;
     for (auto &entry : targetRadioSettings) {
-        if (entry.inUse && entry.id == p->id) {
+        if (entry.inUse && entry.id == id) {
             entry.inUse = false;
             return;
         }
     }
+}
+
+void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
+{
+    if (p)
+        clearTargetRadioSettingsById(p->id);
 }
 
 bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
@@ -402,7 +407,8 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p)
 {
     // p->channel already names the target's channel-table slot, so perhapsEncode() picks that
     // channel's key and stamps its hash. Beacons uplink to MQTT on that channel's uplink_enabled.
-    releaseIfNotQueued(router->send(p), p);
+    const PacketId id = p->id; // every send() failure path frees p before returning
+    releaseIfNotQueued(router->send(p), p, id);
 }
 
 void MeshBeaconBroadcastModule::sendBeacon()

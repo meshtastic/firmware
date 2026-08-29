@@ -73,9 +73,14 @@ class MockRouter : public Router
         if (channelFile.channels_count > 0)
             primaryAtSend.push_back(channels.getByIndex(channels.getPrimaryIndex()).settings);
         sentPackets.push_back(*p);
-        packetPool.release(p);
-        return ERRNO_OK;
+        // Mirror Router::send: every return but ERRNO_SHOULD_RELEASE has already freed the packet,
+        // so a caller that reads p afterwards is reading freed memory.
+        if (nextSendResult != ERRNO_SHOULD_RELEASE)
+            packetPool.release(p);
+        return nextSendResult;
     }
+
+    ErrorCode nextSendResult = ERRNO_OK;
 
     // Locally-addressed packets land here instead of send().  Release immediately
     // rather than queuing into fromRadioQueue (which is never drained in tests).
@@ -1718,6 +1723,38 @@ static void test_broadcaster_bareTargetAndPrimaryIndexTarget_dedupToOne(void)
 }
 
 /**
+ * Router::send() frees the packet on every failure path, so the sidecar entry must be cleared by
+ * id. Reading it back off the packet is a use-after-free wherever packetPool is the dynamic pool -
+ * native, STM32WL, PSRAM boards. The assertion below only covers the leak; the use-after-free
+ * needs a sanitizer, so run this suite in the default (coverage) env, not -e native.
+ */
+static void test_broadcaster_sendFailure_releasesTargetEntry(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC2, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+
+    // NO_CHANNEL is what perhapsEncode() returns for an unusable channel; it reaches us through
+    // abortSendAndNak(), which has already released the packet.
+    mockRouter->nextSendResult = (ErrorCode)meshtastic_Routing_Error_NO_CHANNEL;
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+    mockRouter->nextSendResult = ERRNO_OK;
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "expected one send attempt");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                              "a failed send must free its sidecar entry or the table leaks");
+}
+
+/**
  * A target that already transmits on the mesh being offered must not carry the offer: everyone
  * hearing it is on that mesh. Reached by pointing a target at the offered channel after the
  * offer was set, which is valid config at write time and only redundant at TX.
@@ -2309,6 +2346,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_targetPinnedHomeSlot_armsNoSwitch);
     RUN_TEST(test_broadcaster_twoPinnedSlotsNoChannel_bothSent);
     RUN_TEST(test_broadcaster_bareTargetAndPrimaryIndexTarget_dedupToOne);
+    RUN_TEST(test_broadcaster_sendFailure_releasesTargetEntry);
     RUN_TEST(test_broadcaster_offerMatchesTarget_offerIsOmitted);
     RUN_TEST(test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther);
     RUN_TEST(test_broadcaster_offerMatchesTargetNoText_sendsNothing);
