@@ -1,3 +1,4 @@
+// trunk-ignore-all(trufflehog/Lob): matches test_* function names, not credentials
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -342,6 +343,63 @@ static void test_applyModemConfig_mediumTurbo()
 }
 
 // MEDIUM_TURBO is a 500 kHz preset, so it is invalid for EU_868 and must clamp to the region default.
+/**
+ * UNSET is "no region chosen yet", not a regulatory domain, so validation accepts every preset some
+ * region offers - not just the LONG_FAST default. Rejecting would clamp away a preset the user
+ * picked, on every boot and every set_config until they set a region.
+ */
+static void test_validateConfigLora_unsetRegionAcceptsEveryOfferedPreset()
+{
+    for (int p = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; p <= meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+         p++) {
+        // VERY_LONG_SLOW was deprecated in 2.5 and no region lists it, so it is not a preset a
+        // user can be holding - it is rejected under UNSET like any other unknown value.
+        if (p == meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW)
+            continue;
+
+        meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+        cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        cfg.use_preset = true;
+        cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)p;
+
+        char msg[64];
+        snprintf(msg, sizeof(msg), "preset %d must validate under UNSET", p);
+        TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), msg);
+
+        // And a clamp must leave it alone rather than rewriting it to the default.
+        meshtastic_Config_LoRaConfig clamped = cfg;
+        RadioInterface::clampConfigLora(clamped);
+        TEST_ASSERT_EQUAL_MESSAGE(p, clamped.modem_preset, msg);
+    }
+}
+
+/** The deprecated preset no region offers is rejected under UNSET, and clamped to the default. */
+static void test_clampConfigLora_unsetRegionClampsTheDeprecatedPreset()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW;
+
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "VERY_LONG_SLOW is offered by no region");
+    RadioInterface::clampConfigLora(cfg);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+/** A fabricated preset value is still rejected under UNSET, and clamped to the default. */
+static void test_clampConfigLora_unsetRegionStillClampsABogusPreset()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+    cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset,
+                              "a value no region offers is not a preset, and is clamped");
+}
+
 static void test_clampConfigLora_mediumTurboInvalidForEU868()
 {
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
@@ -605,6 +663,9 @@ void setup()
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
     RUN_TEST(test_applyModemConfig_mediumTurbo);
+    RUN_TEST(test_validateConfigLora_unsetRegionAcceptsEveryOfferedPreset);
+    RUN_TEST(test_clampConfigLora_unsetRegionClampsTheDeprecatedPreset);
+    RUN_TEST(test_clampConfigLora_unsetRegionStillClampsABogusPreset);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
