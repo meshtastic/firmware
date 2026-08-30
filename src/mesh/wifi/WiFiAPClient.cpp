@@ -343,8 +343,8 @@ static int32_t reconnectWiFi()
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
         // Lost the link, or a join that has not come up within 30 s: start the join over once the join task is done.
-        needReconnect = !wifiJoinTask && (APStartupComplete || (!isReconnecting && !Throttle::isWithinTimespanMs(
-                                                                                     wifiReconnectStartMillis, 30000)));
+        needReconnect =
+            !wifiJoinTask && (APStartupComplete || (!isReconnecting && Throttle::hasElapsed(wifiReconnectStartMillis, 30000)));
 #endif
         return 1000; // check once per second
     } else {
