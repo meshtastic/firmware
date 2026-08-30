@@ -44,6 +44,16 @@ static bool targetRadioSettingsStale(const MeshBeaconModule_TargetRadioSettings 
     return entry.idCount && Throttle::hasElapsed(entry.armedAtMs, default_mesh_beacon_min_broadcast_interval_secs * 1000UL);
 }
 
+// The config this entry transmits on, right now. An inherited region is resolved here rather than
+// at send time, so a region changed while the beacon was queued cannot key it up on the old one.
+static meshtastic_Config_LoRaConfig effectiveLora(const MeshBeaconModule_TargetRadioSettings &entry)
+{
+    meshtastic_Config_LoRaConfig lora = entry.lora;
+    if (entry.regionInherited)
+        lora.region = config.lora.region;
+    return lora;
+}
+
 static bool entryHoldsId(const MeshBeaconModule_TargetRadioSettings &entry, PacketId id)
 {
     for (uint8_t i = 0; i < entry.idCount; i++)
@@ -56,12 +66,14 @@ static bool entryHoldsId(const MeshBeaconModule_TargetRadioSettings &entry, Pack
 // the padding in a copied LoRaConfig is not guaranteed zero.
 static bool sameRadioSettings(const MeshBeaconModule_TargetRadioSettings &a, const MeshBeaconModule_TargetRadioSettings &b)
 {
-    return a.legacyHopOverride == b.legacyHopOverride && a.lora.region == b.lora.region &&
-           a.lora.modem_preset == b.lora.modem_preset && a.lora.use_preset == b.lora.use_preset &&
-           a.lora.channel_num == b.lora.channel_num && a.lora.bandwidth == b.lora.bandwidth &&
-           a.lora.spread_factor == b.lora.spread_factor && a.lora.coding_rate == b.lora.coding_rate &&
-           a.lora.override_frequency == b.lora.override_frequency && a.lora.tx_power == b.lora.tx_power &&
-           strncmp(a.channelName, b.channelName, sizeof(a.channelName)) == 0;
+    // regionInherited is part of the key: two entries resolving to the same region today diverge
+    // the moment the node's region moves, so they cannot share one.
+    return a.legacyHopOverride == b.legacyHopOverride && a.regionInherited == b.regionInherited &&
+           a.lora.region == b.lora.region && a.lora.modem_preset == b.lora.modem_preset &&
+           a.lora.use_preset == b.lora.use_preset && a.lora.channel_num == b.lora.channel_num &&
+           a.lora.bandwidth == b.lora.bandwidth && a.lora.spread_factor == b.lora.spread_factor &&
+           a.lora.coding_rate == b.lora.coding_rate && a.lora.override_frequency == b.lora.override_frequency &&
+           a.lora.tx_power == b.lora.tx_power && strncmp(a.channelName, b.channelName, sizeof(a.channelName)) == 0;
 }
 
 const MeshBeaconModule_TargetRadioSettings *MeshBeaconModule::getTargetRadioSettings(const meshtastic_MeshPacket *p)
@@ -207,16 +219,18 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
         return true;
     }
 
+    const meshtastic_Config_LoRaConfig lora = effectiveLora(*s);
+
     // An unlicensed node must never key up on a ham-only (licensed-only) region. The reverse is
     // allowed: a licensed (ham) node may operate in a non-ham region - and the switch only touches
     // preset/region/channel, never owner.is_licensed, so it cannot deactivate licensed mode.
-    const RegionInfo *r = getRegion(s->lora.region);
+    const RegionInfo *r = getRegion(lora.region);
     if (r && r->profile->licensedOnly && !owner.is_licensed)
         return true;
 
     // Validate the config the switch will actually install, against the channel name this target
     // resolved at send time - the slot is picked by hashing it.
-    return !RadioInterface::validateConfigLora(s->lora, s->channelName);
+    return !RadioInterface::validateConfigLora(lora, s->channelName);
 }
 
 void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
@@ -336,12 +350,14 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         if (s->legacyHopOverride)
             p->hop_start = 1;
 
+        const meshtastic_Config_LoRaConfig target = effectiveLora(*s);
+
         // Only RF parameters are switched; the channel travels on the packet. Resolve the live slot
         // too - channel_num may still be 0 ("derive"), which compares unequal to a concrete slot.
         const uint16_t liveSlot =
             (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
-        if (s->lora.modem_preset == config.lora.modem_preset && s->lora.use_preset == config.lora.use_preset &&
-            s->lora.channel_num == liveSlot && s->lora.region == config.lora.region)
+        if (target.modem_preset == config.lora.modem_preset && target.use_preset == config.lora.use_preset &&
+            target.channel_num == liveSlot && target.region == config.lora.region)
             return false;
 
         // Guard: never key up on an invalid target config - bad preset for the region, or an
@@ -349,7 +365,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         // transmit on it; the radio driver drops the packet outright (see RadioLibInterface,
         // beaconTxConfigInvalid) rather than letting it fall through onto the current config.
         if (beaconTxConfigInvalid(p)) {
-            LOG_DEBUG("Beacon: target preset %d/region %d invalid (or ham mismatch), skip", s->lora.modem_preset, s->lora.region);
+            LOG_DEBUG("Beacon: target preset %d/region %d invalid (or ham mismatch), skip", target.modem_preset, target.region);
             return false;
         }
 
@@ -365,18 +381,18 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         switchDepth++;
 
         LOG_INFO("Beacon: switch #%u radio for packet 0x%08x to preset=%d slot=%u region=%d", switchDepth, p->id,
-                 s->lora.modem_preset, s->lora.channel_num, s->lora.region);
+                 target.modem_preset, target.channel_num, target.region);
         if (switchDepth > 1)
             LOG_WARN("Beacon: switching again with no restore between; home preset=%d slot=%u region=%d still held",
                      originalModemPreset, originalLoraChannel, originalRegion);
         // Only the RF fields: the sidecar's copy of the rest is a snapshot of this same config, and
         // installing it wholesale would undo any edit made while the beacon was in flight.
-        config.lora.modem_preset = s->lora.modem_preset;
+        config.lora.modem_preset = target.modem_preset;
         // A target naming a preset means "run this preset", which a node on custom modem params
         // would otherwise ignore entirely - applyModemConfig() only reads modem_preset when set.
-        config.lora.use_preset = s->lora.use_preset;
-        config.lora.channel_num = s->lora.channel_num;
-        config.lora.region = s->lora.region;
+        config.lora.use_preset = target.use_preset;
+        config.lora.channel_num = target.channel_num;
+        config.lora.region = target.region;
         radioSwitched = true; // set before reconfigure(), so the flag never lags the radio it describes
         switchedForId = p->id;
         iface->reconfigure();
@@ -657,6 +673,10 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 s.lora.use_preset = tgt.usePreset;
                 s.lora.channel_num = tgt.slot;
                 s.lora.region = resolvedRegion;
+                // A target naming no region follows the node's, re-read at key-up. Storing the
+                // resolved one alone would pin this beacon to the region the node was on when it
+                // was queued, and transmit there even after the operator moved region.
+                s.regionInherited = (tgt.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
                 s.legacyHopOverride = legacySplit;
                 strncpy(s.channelName, tgt.channelName, sizeof(s.channelName) - 1);
                 setTargetRadioSettings(p, s);

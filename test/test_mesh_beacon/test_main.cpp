@@ -2295,6 +2295,101 @@ static bool decodeBeaconPacket(const meshtastic_MeshPacket &p, meshtastic_MeshBe
 }
 
 /**
+ * UNSET region means "the node's" on both the offer and a target, so the two are the same mesh
+ * whichever way each was spelled. All four combinations must suppress the offer - the mixed ones
+ * are where a resolution that compared the raw fields instead of the resolved ones would show.
+ */
+static void test_offer_redundancyHoldsAcrossUnsetAndExplicitRegion(void)
+{
+    static const struct {
+        bool offerExplicit;
+        bool targetExplicit;
+        const char *what;
+    } cases[] = {
+        {false, false, "offer UNSET, target UNSET"},
+        {false, true, "offer UNSET, target explicit"},
+        {true, false, "offer explicit, target UNSET"},
+        {true, true, "offer explicit, target explicit"},
+    };
+
+    for (const auto &c : cases) {
+        resetConfig();
+        mockRouter->sentPackets.clear(); // one router across the whole case, so start each empty
+        static const uint8_t psk[16] = {0xB9, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+        installTestPrimaryChannel("Home", psk, sizeof(psk));
+        channels.onConfigChanged();
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+        config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+        moduleConfig.has_mesh_beacon = true;
+        strncpy(moduleConfig.mesh_beacon.broadcast_message, "still here", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+        moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+        moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+        moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+        moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        if (c.offerExplicit)
+            moduleConfig.mesh_beacon.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+        moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+        moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+        moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+        if (c.targetExplicit)
+            moduleConfig.mesh_beacon.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+        MeshBeaconBroadcastModuleTestShim bcast;
+        bcast.sendBeacon();
+
+        TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), c.what);
+        meshtastic_MeshBeacon decoded;
+        TEST_ASSERT_TRUE_MESSAGE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded), c.what);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("still here", decoded.message, c.what);
+        TEST_ASSERT_FALSE_MESSAGE(decoded.has_offer_channel, c.what);
+    }
+}
+
+/**
+ * A target inheriting the region follows the node. Move from US to EU_868 while the beacon is
+ * queued and MEDIUM_TURBO stops being legal - EU_868 has no room for its bandwidth - so the beacon
+ * must be dropped. Pinning the send-time region instead would key it up on US from inside the EU.
+ */
+static void test_sidecar_inheritedRegion_dropsAPresetTheNewRegionCannotRun(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0700;
+    // targetSettings() resolves UNSET to the running region, as sendBeacon does.
+    MeshBeaconModule_TargetRadioSettings s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO, true, 1, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_UNSET, "Home");
+    s.regionInherited = true;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, s);
+
+    const MeshBeaconModule_TargetRadioSettings *got = MeshBeaconModule::getTargetRadioSettings(&pkt);
+    TEST_ASSERT_NOT_NULL(got);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_US, got->lora.region,
+                              "the stored region is what it resolved to at send time");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt), "MEDIUM_TURBO is legal on US");
+
+    // The operator moves the node while the beacon is still queued.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt),
+                             "MEDIUM_TURBO does not fit EU_868, so a node that moved must drop the beacon");
+
+    // An explicitly pinned region is a different statement and is left alone by the move.
+    meshtastic_MeshPacket pinned = meshtastic_MeshPacket_init_zero;
+    pinned.id = 0x5EED0701;
+    MeshBeaconModule::setTargetRadioSettings(&pinned,
+                                             targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO, true, 1, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_US, "Home"));
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pinned),
+                              "a target that named US still means US, whatever the node moved to");
+
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
+/**
  * Case 1: all four target shapes in a single config - the home channel, a second channel on the
  * same frequency slot, a different slot, and a different region/preset/slot together. Each must
  * reach the air as its own packet on its own settings.
@@ -3144,6 +3239,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_offer_sameAsHome_isAdvertisedOntoAnotherMesh);
     RUN_TEST(test_offer_sameAsABeaconTarget_targetIsStillSent);
     RUN_TEST(test_offer_identicalToItsOwnTarget_offerDroppedTextKept);
+    RUN_TEST(test_offer_redundancyHoldsAcrossUnsetAndExplicitRegion);
+    RUN_TEST(test_sidecar_inheritedRegion_dropsAPresetTheNewRegionCannotRun);
 
     printf("\n=== Retired proto tags ===\n");
 
