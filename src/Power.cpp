@@ -733,6 +733,19 @@ Power::Power() : OSThread("Power")
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
+
+#ifdef ARCH_ESP32
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
+}
+
+Power::~Power()
+{
+#ifdef ARCH_ESP32
+    lsObserver.unobserve(&notifyLightSleep);
+    lsEndObserver.unobserve(&notifyLightSleepEnd);
+#endif
 }
 
 bool Power::analogInit()
@@ -832,13 +845,6 @@ bool Power::setup()
     attachPowerInterrupts();
     enabled = found;
     low_voltage_counter = 0;
-
-#ifdef ARCH_ESP32
-    // Register callbacks for before and after lightsleep
-    // Used to detach and reattach interrupts
-    lsObserver.observe(&notifyLightSleep);
-    lsEndObserver.observe(&notifyLightSleepEnd);
-#endif
 
     return found;
 }
@@ -962,6 +968,8 @@ void Power::readPowerStatus()
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM
                                           // code doesn't run every time
     OptionalBool isChargingNow = OptUnknown;
+
+    powerFSM.trigger(EVENT_WAKE_TIMER); // ensure we're not light-sleeping
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
@@ -1182,28 +1190,34 @@ int32_t Power::runOnce()
         PMU->clearIrqStatus();
     }
 #endif
-    // Only read once every 20 seconds once the power status for the app has been
-    // initialized
-    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
+
+    // Only read once every 20 seconds once the power status for the app has been initialized
+    if (statusHandler && statusHandler->isInitialized() && interval == 0) {
+        setInterval(20 * 1000UL);
+    }
+
+    return RUN_SAME;
 }
 
 #ifdef ARCH_ESP32
-
-// Detach our class' interrupts before lightsleep
-// Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
 int Power::beforeLightSleep(void *unused)
 {
-    LOG_WARN("Detaching power interrupts for sleep");
+    unsigned long sleepInterval = config.power.ls_secs;
+    if (sleepInterval < 20) {
+        sleepInterval = 20;
+    }
+    setInterval(sleepInterval * 1000UL);
+#if !HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     detachPowerInterrupts();
-    return 0; // Indicates success
+#endif
+    return 0;
 }
 
-// Reconfigure our interrupts
-// Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
 int Power::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 {
     attachPowerInterrupts();
-    return 0; // Indicates success
+    setInterval(20 * 1000UL);
+    return 0;
 }
 
 #endif
@@ -1277,7 +1291,6 @@ void Power::detachPowerInterrupts()
     }
 #endif
 }
-
 /**
  * Init the power manager chip
  *

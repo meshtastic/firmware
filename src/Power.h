@@ -90,6 +90,7 @@ class Power : public concurrency::OSThread
     Observable<const meshtastic::PowerStatus *> newStatus;
 
     Power();
+    ~Power();
 
     void powerCommandsCheck();
     void readPowerStatus();

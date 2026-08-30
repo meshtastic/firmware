@@ -950,7 +950,7 @@ bool RadioInterface::init()
     LOG_INFO("Start meshradio init");
 
     configChangedObserver.observe(&service->configChanged);
-    preflightSleepObserver.observe(&preflightSleep);
+    observePreflightSleep(preflightSleepObserver);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
     // we now expect interfaces to operate in promiscuous mode

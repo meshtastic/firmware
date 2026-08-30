@@ -1,6 +1,7 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "PowerMon.h"
 #include "RadioTxHook.h"
 #include "SPILock.h"
@@ -404,6 +405,9 @@ void RadioLibInterface::deliverPendingIrqFromPoll(PendingISR cause)
 
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+    powerFSM.trigger(EVENT_RADIO_INTERRUPT);
+#endif
 
     switch (notification) {
     case ISR_TX:

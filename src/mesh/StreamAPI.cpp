@@ -212,6 +212,8 @@ bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
     if (len == 0 || !canWrite)
         return false;
 
+    powerFSM.trigger(EVENT_WAKE_TIMER);
+
     const size_t totalLen = buildFrameHeader(buf, len);
     // Serialize write-readiness checks, writes and write-failure handling
     // against concurrent stream writes/close.

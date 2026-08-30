@@ -57,6 +57,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     Router();
 
     /**
+     * Destructor
+     *
+     */
+    ~Router();
+
+    /**
      * Currently we only allow one interface, that may change in the future
      */
     void addInterface(std::unique_ptr<RadioInterface> _iface) { iface = std::move(_iface); }
@@ -252,6 +258,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Number of deferred local packets currently queued.
     uint8_t deferredLocalPending() const { return deferredLocalCount; }
 #endif
+
+    int preflightSleepCb(void *unused = NULL) { return !fromRadioQueue.isEmpty(); }
+
+    CallbackObserver<Router, void *> preflightSleepObserver = CallbackObserver<Router, void *>(this, &Router::preflightSleepCb);
 };
 
 enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_OPAQUE, DECODE_FATAL, DECODE_POLICY_REJECT };

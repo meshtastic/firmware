@@ -398,10 +398,21 @@ bool initWifi()
             // before the handler is registered, causing onNetworkConnected() to never run.
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
-            WiFi.setSleep(false);
 
-            // This is needed to improve performance.
-            esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+            bool wifi_high_performance = false;
+
+#if HAS_UDP_MULTICAST
+            // need to increase WiFi performance (decrease DTIM interval) to avoid missing UDP packet broadcasts
+            wifi_high_performance |=
+                udpHandler && (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST);
+#endif
+
+            const wifi_ps_type_t wifiPowerSaveMode = wifi_high_performance
+                                                         ? (config.power.is_power_saving ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE)
+                                                         : (config.power.is_power_saving ? WIFI_PS_MAX_MODEM : WIFI_PS_MIN_MODEM);
+            if (!WiFi.setSleep(wifiPowerSaveMode)) {
+                LOG_WARN("Failed to set WiFi power save mode");
+            }
 
             WiFi.onEvent(
                 [](WiFiEvent_t event, WiFiEventInfo_t info) {

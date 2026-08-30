@@ -24,6 +24,7 @@
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
+#include "sleep.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -244,6 +245,13 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
         routingAuthCacheLock = new concurrency::Lock();
     // Runtime default for the auth-cache snapshot policy. Keep it here, saves flash.
     routingAuthCache.policy = meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+
+    observePreflightSleep(preflightSleepObserver);
+}
+
+Router::~Router()
+{
+    unobservePreflightSleep(preflightSleepObserver);
 }
 
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
@@ -298,6 +306,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 int32_t Router::runOnce()
 {
     meshtastic_MeshPacket *mp;
+
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
         // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);

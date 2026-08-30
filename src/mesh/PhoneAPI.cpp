@@ -25,6 +25,7 @@
 #include "concurrency/LockGuard.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
+#include "sleep.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -246,10 +247,13 @@ PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
     std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
+
+    observePreflightSleep(preflightSleepObserver);
 }
 
 PhoneAPI::~PhoneAPI()
 {
+    unobservePreflightSleep(preflightSleepObserver);
     close();
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     // Free the auth slot unconditionally, regardless of whether close()'s
@@ -262,6 +266,11 @@ PhoneAPI::~PhoneAPI()
         clearAuthSlot_LH(this);
     }
 #endif
+}
+
+int PhoneAPI::preflightSleepCb(void *)
+{
+    return Throttle::isWithinTimespanMs(lastContactMsec.load(), WAKE_SESSION_TIMEOUT_MS);
 }
 
 void PhoneAPI::handleStartConfig()

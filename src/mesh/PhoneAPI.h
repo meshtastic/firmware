@@ -27,6 +27,7 @@
 
 #define SPECIAL_NONCE_ONLY_CONFIG 69420
 #define SPECIAL_NONCE_ONLY_NODES 69421 // ( ͡° ͜ʖ ͡°)
+#define WAKE_SESSION_TIMEOUT_MS 10000
 
 /**
  * Provides our protobuf based API which phone/PC clients can use to talk to our device
@@ -220,7 +221,7 @@ class PhoneAPI
     meshtastic_FromRadio fromRadioScratch = {};
 
     /** the last msec we heard from the client on the other side of this link */
-    uint32_t lastContactMsec = 0;
+    std::atomic<uint32_t> lastContactMsec = 0;
 
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
@@ -333,4 +334,10 @@ class PhoneAPI
     /// client can forge) and deciding on the connection's authorization. Fills outAdmin for lockdown.
     static LocalAdminGate classifyLocalAdminPacket(const meshtastic_MeshPacket &p, bool adminAuthorized,
                                                    meshtastic_AdminMessage &outAdmin);
+
+  private:
+    int preflightSleepCb(void *unused = NULL);
+
+    CallbackObserver<PhoneAPI, void *> preflightSleepObserver =
+        CallbackObserver<PhoneAPI, void *>(this, &PhoneAPI::preflightSleepCb);
 };

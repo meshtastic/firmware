@@ -1196,10 +1196,14 @@ void setup()
 #endif
 
 #ifndef ARCH_PORTDUINO
-
-        // Initialize Wifi
 #if HAS_WIFI
+    // Initialize Wifi
     initWifi();
+#endif
+
+#if HAS_BLUETOOTH
+    // Enable Bluetooth
+    setBluetoothEnable(true);
 #endif
 
 #if HAS_ETHERNET
@@ -1239,12 +1243,28 @@ void setup()
         router->addInterface(std::move(rIf));
     }
 
+#ifdef ARCH_ESP32
+    const bool usesPowerSaving =
+        config.power.is_power_saving || IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
+    if (usesPowerSaving) {
+        initLightSleep();
+    }
+#endif
+
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
-#if !HAS_TFT
-    setCPUFast(false); // 80MHz is fine for our slow peripherals
+#ifndef ARCH_PORTDUINO
+    auto cpuFast = false;
+#if HAS_TFT
+    cpuFast |= true;
+#endif
+#if HAS_WIFI
+    cpuFast |= !config.power.is_power_saving && isWifiAvailable();
+#endif
+    setCPUFast(cpuFast);
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
