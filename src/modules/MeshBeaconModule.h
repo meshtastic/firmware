@@ -90,9 +90,8 @@ class MeshBeaconModule
     static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
 
     /**
-     * Make a beacon config transmittable: clamp a preset its region cannot run, swap the EU sibling
-     * that owns it, drop channel and slot references that do not resolve. Called on every admin
-     * write and once at boot, since a userPrefs config never passes through admin.
+     * Reject only what can never become valid; sendBeacon() resolves the rest against the settings
+     * in force. Called on an admin write, at boot, and when a LoRa change moves what can be run.
      */
     static void sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 

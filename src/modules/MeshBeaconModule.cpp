@@ -110,9 +110,8 @@ int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, con
         }
     }
 
-    // The caller says which packets are one target - the legacy split pair - so they ride one
-    // entry. Inferring it by comparing settings would guess, and guessing loose shares an entry
-    // between packets that need different radios.
+    // The caller names the split pair rather than us inferring it: guessing loose would share an
+    // entry between packets that need different radios.
     if (shareWith >= 0 && shareWith < kEntries) {
         auto &entry = targetRadioSettings[shareWith];
         if (entry.idCount && entry.idCount < (uint8_t)(sizeof(entry.ids) / sizeof(entry.ids[0]))) {
@@ -223,10 +222,8 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     return !RadioInterface::validateConfigLora(lora, s->channelName);
 }
 
-// Bring a beacon config into a state the node can actually transmit: clamp a preset its region
-// cannot run, swap the EU siblings that own it, and drop references to channels or slots that do
-// not exist. Runs on every admin write AND at boot, because a userPrefs build installs this config
-// without passing through admin and could otherwise hold a combination no radio can key up on.
+// Reject only what can never become valid, leaving the rest as the operator wrote it; sendBeacon()
+// resolves the rest. Also runs at boot, since a userPrefs config never passes through admin.
 void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     // Hard cap at 100 chars.
@@ -249,8 +246,7 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
         LOG_WARN("Beacon: broadcast_offer_channel_index %u out of range, clearing", bcfg.broadcast_offer_channel_index);
         bcfg.has_broadcast_offer_channel_index = false;
     }
-    // Admissible, not resolved: keep what the operator asked for so a later region change can make
-    // it good again. fillOffer() resolves where it runs against the settings in force.
+    // Only a value that is no preset at all: one this region cannot run may be right after a move.
     if (bcfg.has_broadcast_offer_preset && !isKnownModemPreset(bcfg.broadcast_offer_preset)) {
         LOG_WARN("Beacon: broadcast_offer_preset %d is not a preset any region offers, clearing", bcfg.broadcast_offer_preset);
         bcfg.has_broadcast_offer_preset = false;
@@ -288,9 +284,7 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
             LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
             t.has_channel_index = false;
         }
-        // Admissible, not resolved: the entry records what was asked for, and sendBeacon() works
-        // out where that runs when it transmits. Only a value that is no preset at all is cleared -
-        // one this region cannot run may become good again after the node moves.
+        // As for the offer: only a value that is no preset at all, never one this region cannot run.
         if (t.has_preset && !isKnownModemPreset(t.preset)) {
             LOG_WARN("Beacon: broadcast_targets[%u] preset %d is not a preset any region offers, clearing", i, t.preset);
             t.has_preset = false;
@@ -391,9 +385,8 @@ MeshBeaconModule::BeaconChannel MeshBeaconModule::resolveBeaconChannel(bool hasI
     out.index = channels.getPrimaryIndex();
     out.usable = true;
     if (hasIndex) {
-        // A target aimed at a channel the operator has turned off goes quiet. Falling back to the
-        // primary would put it on the home channel, which is not what was asked for and is worse
-        // than silence. The index is kept, so re-enabling the channel restores the target.
+        // Unusable means the caller skips this target: redirecting to the primary would beacon on
+        // a channel nobody named.
         out.usable = index < (uint32_t)channels.getNumChannels() && channelSlotUsable(channels.getByIndex((ChannelIndex)index));
         if (out.usable)
             out.index = (ChannelIndex)index;
@@ -717,10 +710,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         tgt.channelIndex = bc.index;
         strncpy(tgt.channelName, bc.name, sizeof(tgt.channelName) - 1);
 
-        // The config records what was asked for, so resolve it here against the settings in force
-        // now. An EU sibling owns the preset outright, so naming one is naming its region. This
-        // must precede the slot: the band decides how many slots there are, so deriving one from
-        // the region as written would put two spellings of the same mesh on different frequencies.
+        // Must precede the slot: the band sets the slot count, so deriving from the region as
+        // written puts two spellings of one mesh on different frequencies.
         meshtastic_Config_LoRaConfig_RegionCode resolvedRegion =
             (tgt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? tgt.region : config.lora.region;
         if (tgt.usePreset) {
@@ -787,9 +778,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 s.lora.use_preset = tgt.usePreset;
                 s.lora.channel_num = tgt.slot;
                 s.lora.region = resolvedRegion;
-                // A target naming no region follows the node's, re-read at key-up. Storing the
-                // resolved one alone would pin this beacon to the region the node was on when it
-                // was queued, and transmit there even after the operator moved region.
+                // Re-read at key-up: the resolved value alone would pin this beacon to the region
+                // the node has since left.
                 s.regionInherited = (tgt.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
                 s.legacyHopOverride = legacySplit;
                 strncpy(s.channelName, tgt.channelName, sizeof(s.channelName) - 1);
