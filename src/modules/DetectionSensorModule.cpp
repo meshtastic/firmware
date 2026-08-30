@@ -96,11 +96,13 @@ int32_t DetectionSensorModule::runOnce()
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
+    // Sample the pin and evaluate the trigger on every poll so a transition is never missed between
+    // sends; minimum_broadcast_secs only rate-limits how often we're allowed to actually transmit.
+    bool isDetected = hasDetectionEvent();
+    DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
+    wasDetected = isDetected;
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
-        bool isDetected = hasDetectionEvent();
-        DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
-        wasDetected = isDetected;
         switch (verdict) {
         case DetectionSensorVerdictDetected:
             sendDetectionMessage();
@@ -119,7 +121,7 @@ int32_t DetectionSensorModule::runOnce()
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                         default_telemetry_broadcast_interval_secs))) {
-        sendCurrentStateMessage(hasDetectionEvent());
+        sendCurrentStateMessage(isDetected);
         return DELAYED_INTERVAL;
     }
     return GPIO_POLLING_INTERVAL;
