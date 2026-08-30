@@ -89,6 +89,13 @@ class MeshBeaconModule
      */
     static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
 
+    /**
+     * Make a beacon config transmittable: clamp a preset its region cannot run, swap the EU sibling
+     * that owns it, drop channel and slot references that do not resolve. Called on every admin
+     * write and once at boot, since a userPrefs config never passes through admin.
+     */
+    static void sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+
     /** Copy every offer field from config onto an outgoing beacon. */
     static void fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
@@ -106,8 +113,9 @@ class MeshBeaconModule
 
     /** Where a target transmits: the channel-table slot, and the name its frequency slot hashes from. */
     struct BeaconChannel {
-        ChannelIndex index;                                  // the primary when no usable slot is named
+        ChannelIndex index;                                  // the primary when the target names none
         char name[sizeof(meshtastic_ChannelSettings::name)]; // never empty
+        bool usable;                                         // false = the named slot cannot be transmitted on
         bool retired;                                        // the named slot held settings but was disabled
     };
 

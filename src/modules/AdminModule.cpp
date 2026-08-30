@@ -1165,6 +1165,20 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             loraPresetWarnPending = true;
         }
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // A LoRa change applies live - no reboot - so nothing else would re-check the beacon config
+        // against the region and preset it now inherits. A target left holding an unrunnable
+        // combination would go quiet at the TX gate with nothing telling the operator why.
+        if (moduleConfig.has_mesh_beacon &&
+            (validatedLora.region != oldLoraConfig.region || validatedLora.modem_preset != oldLoraConfig.modem_preset ||
+             validatedLora.use_preset != oldLoraConfig.use_preset)) {
+            MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
+            changes |= SEGMENT_MODULECONFIG;
+            if (meshBeaconBroadcastModule)
+                meshBeaconBroadcastModule->invalidateCache();
+        }
+#endif
+
         break;
     }
     case meshtastic_Config_bluetooth_tag:
@@ -1373,127 +1387,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Sanitize a local copy rather than const_cast-ing the const input (UB if a truly-const
         // object is ever passed); the validated copy is assigned into moduleConfig below.
         auto beaconCfg = c.payload_variant.mesh_beacon;
-        // Hard cap at 100 chars.
-        beaconCfg.broadcast_message[100] = '\0';
-        // Enforce interval minimum (0 means unset/use default).
-        if (beaconCfg.broadcast_interval_secs != 0 &&
-            beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
-            beaconCfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-        // Same order and rules as a target below: region first so a bad one cannot reject a good
-        // preset, then channel index, preset, and the pinned slot. UNSET region = use running.
-        if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            const RegionInfo *r = getRegion(beaconCfg.broadcast_offer_region);
-            if (r->code != beaconCfg.broadcast_offer_region) {
-                LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", beaconCfg.broadcast_offer_region);
-                beaconCfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-            }
-        }
-        // Range only, as for a target: an unprovisioned slot must not be rejected here, and a
-        // slot retired later is handled by dropBeaconRefsForChannel().
-        if (beaconCfg.has_broadcast_offer_channel_index && beaconCfg.broadcast_offer_channel_index >= MAX_NUM_CHANNELS) {
-            LOG_WARN("Beacon: broadcast_offer_channel_index %u out of range, clearing", beaconCfg.broadcast_offer_channel_index);
-            beaconCfg.has_broadcast_offer_channel_index = false;
-        }
-        // Clamp rather than clear, as for a target: a wrong preset must not take the region and
-        // channel the operator set with it.
-        if (beaconCfg.has_broadcast_offer_preset) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.use_preset = true;
-            probe.modem_preset = beaconCfg.broadcast_offer_preset;
-            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                probe.region = beaconCfg.broadcast_offer_region;
-
-            // Hash the channel the offer advertises, not the running primary.
-            const MeshBeaconModule::BeaconChannel offerChannel =
-                MeshBeaconModule::resolveBeaconChannel(beaconCfg.has_broadcast_offer_channel_index,
-                                                       beaconCfg.broadcast_offer_channel_index, beaconCfg.broadcast_offer_preset);
-
-            if (!RadioInterface::validateConfigLora(probe, offerChannel.name)) {
-                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clamping", beaconCfg.broadcast_offer_preset);
-                const auto probedRegion = probe.region;
-                RadioInterface::clampConfigLora(probe, offerChannel.name, /*announce=*/false);
-                beaconCfg.broadcast_offer_preset = probe.modem_preset;
-                // Only on an actual swap, as for a target: assigning it always would turn an
-                // UNSET region into a pin on today's running region.
-                if (probe.region != probedRegion)
-                    beaconCfg.broadcast_offer_region = probe.region;
-            }
-        }
-        // A pinned slot must exist in the region it will be advertised for.
-        if (beaconCfg.has_broadcast_offer_frequency_slot) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.use_preset = true;
-            if (beaconCfg.has_broadcast_offer_preset)
-                probe.modem_preset = beaconCfg.broadcast_offer_preset;
-            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                probe.region = beaconCfg.broadcast_offer_region;
-            const uint32_t slots = RadioInterface::frequencySlotCount(probe);
-            if (beaconCfg.broadcast_offer_frequency_slot == 0 || beaconCfg.broadcast_offer_frequency_slot > slots) {
-                LOG_WARN("Beacon: broadcast_offer_frequency_slot %u outside 1..%u, clearing",
-                         beaconCfg.broadcast_offer_frequency_slot, slots);
-                beaconCfg.has_broadcast_offer_frequency_slot = false;
-            }
-        }
-        // Validate each broadcast target so a bad preset/region is cleared on write rather than
-        // relying on the runtime TX drop.
-        for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
-            auto &t = beaconCfg.broadcast_targets[i];
-            // Region must be a known region code (UNSET = use running config at TX time).
-            if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-                const RegionInfo *r = getRegion(t.region);
-                if (r->code != t.region) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] region %d invalid, clearing", i, t.region);
-                    t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-                }
-            }
-            // Before the preset check, so the name hashed below is this target's. Range only:
-            // Role_DISABLED is the zero value, so an unprovisioned slot would read as disabled.
-            if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
-                LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
-                t.has_channel_index = false;
-            }
-            // Preset must be valid for the target region (or current region if unset). Clamp rather
-            // than clear, and leave has_channel_index alone - it is a separate setting.
-            if (t.has_preset) {
-                meshtastic_Config_LoRaConfig probe = config.lora;
-                probe.use_preset = true;
-                probe.modem_preset = t.preset;
-                if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                    probe.region = t.region;
-
-                // Hash the channel this target transmits on, resolved exactly as sendBeacon() does.
-                const MeshBeaconModule::BeaconChannel targetChannel =
-                    MeshBeaconModule::resolveBeaconChannel(t.has_channel_index, t.channel_index, t.preset);
-
-                if (!RadioInterface::validateConfigLora(probe, targetChannel.name)) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clamping", i, t.preset);
-                    const auto probedRegion = probe.region;
-                    RadioInterface::clampConfigLora(probe, targetChannel.name, /*announce=*/false);
-                    t.preset = probe.modem_preset;
-                    // Only on an actual swap: assigning it always would turn an UNSET region
-                    // ("inherit at TX time") into a pin on today's running region.
-                    if (probe.region != probedRegion)
-                        t.region = probe.region;
-                }
-            }
-            // Last, so it is checked against the preset and region the clamp above settled on.
-            if (t.has_frequency_slot) {
-                meshtastic_Config_LoRaConfig probe = config.lora;
-                // A target without a preset keeps the node's modem params, custom bandwidth included.
-                if (t.has_preset) {
-                    probe.use_preset = true;
-                    probe.modem_preset = t.preset;
-                }
-                if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                    probe.region = t.region;
-                const uint32_t slots = RadioInterface::frequencySlotCount(probe);
-                if (t.frequency_slot == 0 || t.frequency_slot > slots) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot %u outside 1..%u, clearing", i, t.frequency_slot,
-                             slots);
-                    t.has_frequency_slot = false;
-                }
-            }
-        }
+        MeshBeaconModule::sanitiseConfig(beaconCfg);
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
@@ -1508,34 +1402,46 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     return true;
 }
 
-// Retiring a channel leaves any target or offer naming its slot pointing at a channel the node no
-// longer has - clear them, rather than fail at encrypt time or advertise a preset-only offer.
-static bool dropBeaconRefsForChannel(ChannelIndex index)
+// A channel edit changes what the beacon can transmit on: a slot turned off takes its targets and
+// the offer quiet with it, and turning it back on brings them back. The references are deliberately
+// kept - sendBeacon() skips what it cannot resolve, so a reversible operator action stays reversible.
+static void recheckBeaconAfterChannelEdit(ChannelIndex index)
 {
 #if !MESHTASTIC_EXCLUDE_BEACON
     if (!moduleConfig.has_mesh_beacon)
-        return false;
+        return;
     auto &beacon = moduleConfig.mesh_beacon;
-    bool changed = false;
-    for (pb_size_t i = 0; i < beacon.broadcast_targets_count; i++) {
-        auto &t = beacon.broadcast_targets[i];
-        if (t.has_channel_index && t.channel_index == index) {
-            LOG_WARN("Beacon: channel %u retired, clearing broadcast_targets[%u] reference", index, i);
-            t.has_channel_index = false;
-            changed = true;
+
+    // A retired channel takes its beacon entries with it, rather than leaving them pointed at the
+    // slot. Provisioning an unrelated channel there later would otherwise revive a beacon nobody
+    // asked for - a target is deleted outright, since clearing only its index would silently move
+    // it onto the primary.
+    const meshtastic_Channel &slot = channels.getByIndex(index);
+    const bool retired =
+        slot.role == meshtastic_Channel_Role_DISABLED || (slot.settings.name[0] == '\0' && slot.settings.psk.size == 0);
+    if (retired) {
+        pb_size_t kept = 0;
+        for (pb_size_t i = 0; i < beacon.broadcast_targets_count; i++) {
+            const auto &t = beacon.broadcast_targets[i];
+            if (t.has_channel_index && t.channel_index == index) {
+                LOG_WARN("Beacon: channel %u retired, deleting broadcast_targets[%u]", index, i);
+                continue;
+            }
+            beacon.broadcast_targets[kept++] = beacon.broadcast_targets[i];
+        }
+        beacon.broadcast_targets_count = kept;
+
+        if (beacon.has_broadcast_offer_channel_index && beacon.broadcast_offer_channel_index == index) {
+            LOG_WARN("Beacon: channel %u retired, clearing broadcast_offer_channel_index", index);
+            beacon.has_broadcast_offer_channel_index = false;
         }
     }
-    if (beacon.has_broadcast_offer_channel_index && beacon.broadcast_offer_channel_index == index) {
-        LOG_WARN("Beacon: channel %u retired, clearing broadcast_offer_channel_index", index);
-        beacon.has_broadcast_offer_channel_index = false;
-        changed = true;
-    }
-    if (changed && meshBeaconBroadcastModule)
+
+    MeshBeaconModule::sanitiseConfig(beacon);
+    if (meshBeaconBroadcastModule)
         meshBeaconBroadcastModule->invalidateCache();
-    return changed;
 #else
     (void)index;
-    return false;
 #endif
 }
 
@@ -1543,10 +1449,6 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
 
-    const meshtastic_Channel &saved = channels.getByIndex(cc.index);
-    const bool retired =
-        saved.role == meshtastic_Channel_Role_DISABLED || (saved.settings.name[0] == '\0' && saved.settings.psk.size == 0);
-    const bool beaconChanged = retired && dropBeaconRefsForChannel(cc.index);
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();
     }
@@ -1554,6 +1456,9 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
     // running the clamp first could evaluate secondaries against the previous primary and skip the clamp/warning.
     channels.onConfigChanged(); // tell the radios about this change
+
+    // After onConfigChanged(), so the beacon is re-checked against the channel table as it now is.
+    recheckBeaconAfterChannelEdit(cc.index);
 
     // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
     // that inherit a now-public primary key) and warn the client once if anything was coarsened.
@@ -1570,7 +1475,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(beaconChanged ? (SEGMENT_CHANNELS | SEGMENT_MODULECONFIG) : SEGMENT_CHANNELS, false);
+    saveChanges(SEGMENT_CHANNELS | SEGMENT_MODULECONFIG, false);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
