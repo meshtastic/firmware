@@ -62,20 +62,6 @@ static bool entryHoldsId(const MeshBeaconModule_TargetRadioSettings &entry, Pack
     return false;
 }
 
-// The settings two packets would have to agree on to ride one entry. Field-wise, not memcmp:
-// the padding in a copied LoRaConfig is not guaranteed zero.
-static bool sameRadioSettings(const MeshBeaconModule_TargetRadioSettings &a, const MeshBeaconModule_TargetRadioSettings &b)
-{
-    // regionInherited is part of the key: two entries resolving to the same region today diverge
-    // the moment the node's region moves, so they cannot share one.
-    return a.legacyHopOverride == b.legacyHopOverride && a.regionInherited == b.regionInherited &&
-           a.lora.region == b.lora.region && a.lora.modem_preset == b.lora.modem_preset &&
-           a.lora.use_preset == b.lora.use_preset && a.lora.channel_num == b.lora.channel_num &&
-           a.lora.bandwidth == b.lora.bandwidth && a.lora.spread_factor == b.lora.spread_factor &&
-           a.lora.coding_rate == b.lora.coding_rate && a.lora.override_frequency == b.lora.override_frequency &&
-           a.lora.tx_power == b.lora.tx_power && strncmp(a.channelName, b.channelName, sizeof(a.channelName)) == 0;
-}
-
 const MeshBeaconModule_TargetRadioSettings *MeshBeaconModule::getTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
     if (!p)
@@ -86,8 +72,7 @@ const MeshBeaconModule_TargetRadioSettings *MeshBeaconModule::getTargetRadioSett
     return nullptr;
 }
 
-// Is a target entry still live for this packet id? Unlike sendingPacket or the radio's standby
-// state, this is our own bookkeeping - it answers "has that beacon finished" without asking the radio.
+// Has that beacon finished? Answered from the table, without asking the radio.
 static bool targetRadioSettingsLive(uint32_t id)
 {
     for (const auto &entry : targetRadioSettings)
@@ -108,10 +93,12 @@ MeshBeaconModule::MeshBeaconModule()
     originalRegion = config.lora.region;
 }
 
-void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s)
+int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s,
+                                             int shareWith)
 {
+    constexpr int kEntries = (int)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0]));
     if (!p)
-        return;
+        return -1;
     clearTargetRadioSettingsById(p->id); // a re-arm must not leave this id on its old entry
 
     // Reap anything a previous cycle left behind before looking for room, so a beacon that never
@@ -123,12 +110,14 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, co
         }
     }
 
-    // An entry already describing these settings takes the id, so the legacy split pair costs one
-    // entry rather than two identical ones.
-    for (auto &entry : targetRadioSettings) {
-        if (entry.idCount && entry.idCount < (uint8_t)(sizeof(entry.ids) / sizeof(entry.ids[0])) && sameRadioSettings(entry, s)) {
+    // The caller says which packets are one target - the legacy split pair - so they ride one
+    // entry. Inferring it by comparing settings would guess, and guessing loose shares an entry
+    // between packets that need different radios.
+    if (shareWith >= 0 && shareWith < kEntries) {
+        auto &entry = targetRadioSettings[shareWith];
+        if (entry.idCount && entry.idCount < (uint8_t)(sizeof(entry.ids) / sizeof(entry.ids[0]))) {
             entry.ids[entry.idCount++] = p->id;
-            return;
+            return shareWith;
         }
     }
 
@@ -150,10 +139,10 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, co
         }
         if (!target) {
             LOG_WARN("Beacon: target table full and every slot is in flight, drop target for 0x%08x", p->id);
-            return;
+            return -1;
         }
-        LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x",
-                 (unsigned)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0])), target->ids[0], p->id);
+        LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x", (unsigned)kEntries, target->ids[0],
+                 p->id);
     }
     *target = s;
     target->idCount = 1;
@@ -161,6 +150,7 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, co
     // Armed on allocation, not on attach: the split pair expires together, timed from the first.
     target->armedAtMs = millis();
     target->channelName[sizeof(target->channelName) - 1] = '\0'; // s may carry an unterminated name
+    return (int)(target - targetRadioSettings);
 }
 
 bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
@@ -660,6 +650,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         const bool radioDiffers =
             (tgt.preset != config.lora.modem_preset) || (tgt.usePreset != config.lora.use_preset) || (tgt.slot != homeSlot) ||
             (tgt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && tgt.region != config.lora.region);
+        // Both halves of a legacy split are this one target, so the second joins the first's entry.
+        int sharedEntry = -1;
         const auto applyTarget = [&](meshtastic_MeshPacket *p) {
             // Address the packet at the target's channel slot; perhapsEncode() keys off this index
             // and swaps in the wire hash, so the primary slot is never touched.
@@ -679,7 +671,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 s.regionInherited = (tgt.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
                 s.legacyHopOverride = legacySplit;
                 strncpy(s.channelName, tgt.channelName, sizeof(s.channelName) - 1);
-                setTargetRadioSettings(p, s);
+                sharedEntry = setTargetRadioSettings(p, s, sharedEntry);
             }
             sendBeaconPacket(p);
         };

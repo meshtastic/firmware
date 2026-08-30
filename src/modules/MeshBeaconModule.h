@@ -53,11 +53,12 @@ class MeshBeaconModule
     static bool reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p);
 
     /**
-     * Associate target radio settings with an outgoing packet by its ID. inUse and id are the
-     * table's own bookkeeping and are set here, whatever s carries.
-     * Sidecar holds 8 entries; evicts slot 0 on overflow.
+     * Associate target radio settings with an outgoing packet by its ID, returning the entry used
+     * or -1 if none could be taken. Pass that value back as shareWith for the second half of a
+     * legacy split: the two packets are one target, so they ride one entry.
      */
-    static void setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s);
+    static int setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s,
+                                      int shareWith = -1);
 
     /** The entry for this packet, or nullptr when it is not a beacon-switch packet. */
     static const MeshBeaconModule_TargetRadioSettings *getTargetRadioSettings(const meshtastic_MeshPacket *p);
