@@ -103,9 +103,13 @@ int32_t DetectionSensorModule::runOnce()
     wasDetected = isDetected;
     switch (verdict) {
     case DetectionSensorVerdictDetected:
+        if (!pendingDetected && !pendingState)
+            pendingDetectedFirst = true;
         pendingDetected = true;
         break;
     case DetectionSensorVerdictSendState:
+        if (!pendingDetected && !pendingState)
+            pendingDetectedFirst = false;
         pendingState = true;
         pendingStateIsDetected = isDetected;
         break;
@@ -115,7 +119,9 @@ int32_t DetectionSensorModule::runOnce()
     if ((pendingDetected || pendingState) &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
-        if (pendingDetected) {
+        // Send whichever verdict occurred first when both are outstanding, so the mesh sees them
+        // in the order they actually happened.
+        if (pendingDetected && (!pendingState || pendingDetectedFirst)) {
             pendingDetected = false;
             sendDetectionMessage();
         } else {
