@@ -98,21 +98,34 @@ int32_t DetectionSensorModule::runOnce()
 
     // Sample the pin and evaluate the trigger on every poll so a transition is never missed between
     // sends; minimum_broadcast_secs only rate-limits how often we're allowed to actually transmit.
+    // wasDetected always advances so edge comparisons stay correct; a verdict produced while still
+    // throttled is latched in pendingSend rather than discarded, so it isn't lost.
     bool isDetected = hasDetectionEvent();
     DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
     wasDetected = isDetected;
-    if (!Throttle::isWithinTimespanMs(lastSentToMesh,
+    switch (verdict) {
+    case DetectionSensorVerdictDetected:
+        pendingSend = true;
+        pendingSendIsState = false;
+        break;
+    case DetectionSensorVerdictSendState:
+        pendingSend = true;
+        pendingSendIsState = true;
+        pendingIsDetected = isDetected;
+        break;
+    case DetectionSensorVerdictNoop:
+        break;
+    }
+    if (pendingSend &&
+        !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
-        switch (verdict) {
-        case DetectionSensorVerdictDetected:
+        pendingSend = false;
+        if (pendingSendIsState) {
+            sendCurrentStateMessage(pendingIsDetected);
+        } else {
             sendDetectionMessage();
-            return DELAYED_INTERVAL;
-        case DetectionSensorVerdictSendState:
-            sendCurrentStateMessage(isDetected);
-            return DELAYED_INTERVAL;
-        case DetectionSensorVerdictNoop:
-            break;
         }
+        return DELAYED_INTERVAL;
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
