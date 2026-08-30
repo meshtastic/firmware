@@ -103,13 +103,13 @@ int32_t DetectionSensorModule::runOnce()
     wasDetected = isDetected;
     switch (verdict) {
     case DetectionSensorVerdictDetected:
-        if (!pendingDetected && !pendingState)
-            pendingDetectedFirst = true;
+        if (!pendingDetected)
+            pendingDetectedFirst = !pendingState;
         pendingDetected = true;
         break;
     case DetectionSensorVerdictSendState:
-        if (!pendingDetected && !pendingState)
-            pendingDetectedFirst = false;
+        if (!pendingState)
+            pendingDetectedFirst = pendingDetected;
         pendingState = true;
         pendingStateIsDetected = isDetected;
         break;

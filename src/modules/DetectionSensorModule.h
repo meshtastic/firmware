@@ -20,8 +20,8 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     bool pendingDetected = false;
     bool pendingState = false;
     bool pendingStateIsDetected = false;
-    // Which of the two above became pending first, while neither was already outstanding; used to
-    // preserve send order when both end up pending at once.
+    // Which of the two above is the older still-outstanding one; updated whenever pendingDetected
+    // or pendingState newly transitions false->true, so send order matches occurrence order.
     bool pendingDetectedFirst = false;
     void sendDetectionMessage();
     void sendCurrentStateMessage(bool state);
