@@ -1107,7 +1107,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
      defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
-     defined(ELECROW_ThinkNode_M9) || defined(T_WATCH_ULTRA)) &&                                                                 \
+     defined(ELECROW_ThinkNode_M9) || defined(SEEED_WIO_TRACKER_L2) || defined(T_WATCH_ULTRA)) &&                                \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1514,30 +1514,14 @@ void NodeDB::installDefaultModuleConfig()
     memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
     moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
 #endif
-#ifdef USERPREFS_MESH_BEACON_ON_PRESET
-    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
-    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_REGION
-    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
-            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
-    moduleConfig.mesh_beacon.broadcast_on_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1] = '\0';
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
-    static_assert(sizeof(beaconOnPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes),
-                  "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
-    memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
-    moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    moduleConfig.mesh_beacon.broadcast_on_channel.channel_num = USERPREFS_MESH_BEACON_ON_CHANNEL_NUM;
+// The USERPREFS_MESH_BEACON_ON_* keys were removed with the broadcast_on_* config fields. Fail the
+// build rather than silently dropping a preconfigured beacon channel: define the equivalent
+// USERPREFS_MESH_BEACON_TARGET_0_{PRESET,REGION,CHANNEL_INDEX} keys instead. CHANNEL_INDEX names a
+// slot in the device's channel table, so the channel must also be provisioned on the node.
+#if defined(USERPREFS_MESH_BEACON_ON_PRESET) || defined(USERPREFS_MESH_BEACON_ON_REGION) ||                                      \
+    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_ON_CHANNEL_PSK) ||                           \
+    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NUM)
+#error "USERPREFS_MESH_BEACON_ON_* removed; use USERPREFS_MESH_BEACON_TARGET_0_* (channel must be in the channel table)"
 #endif
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
     BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);

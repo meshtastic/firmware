@@ -2117,6 +2117,21 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
     return 0;
 }
 
+// Only the environmental telemetry frame answers SELECT with a menu. A module frame that has none
+// must not claim the press, or every frame matched after it in the dispatch chain is unreachable.
+static bool moduleFrameHasMenu(size_t frame)
+{
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // moduleFrames bounds the module-frame region, before favorites are appended; its leading slots
+    // are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
+    const MeshModule *module = frame < moduleFrames.size() ? moduleFrames.at(frame) : nullptr;
+    return module != nullptr && environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(module);
+#else
+    (void)frame;
+    return false;
+#endif
+}
+
 int Screen::handleInputEvent(const InputEvent *event)
 {
     LOG_INPUT("Screen Input event %u! kb %u", event->inputEvent, event->kbchar);
@@ -2344,16 +2359,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
-                    // moduleFrames.size() bounds the module-frame region, before favorites are appended; its leading
-                    // slots are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
-                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
-                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
-#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-                    const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
-                    if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
-                        menuHandler::environmentTelemetryMenu();
-                    }
-#endif
+                } else if (moduleFrameHasMenu(this->ui->getUiState()->currentFrame)) {
+                    menuHandler::environmentTelemetryMenu();
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
