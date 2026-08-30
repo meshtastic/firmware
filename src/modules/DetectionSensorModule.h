@@ -16,10 +16,12 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     uint32_t lastSentToMesh = 0;
     // Pin/pullup actually behind the current pinMode()+attachInterrupt() setup; 0 = not configured
     // yet. Compared against moduleConfig each poll so a runtime change gets picked up without a
-    // reboot instead of leaving the interrupt bound to a stale pin.
-    uint32_t configuredMonitorPin = 0;
+    // reboot instead of leaving the interrupt bound to a stale pin. hasDetectionEvent() (interrupt
+    // and poll alike) samples this pin, not moduleConfig's, so it never races ahead of the rebind.
+    volatile uint32_t configuredMonitorPin = 0;
     bool configuredUsePullup = false;
-    void configureMonitorPin();
+    // Returns false (and leaves monitoring disabled) if monitor_pin is 0.
+    bool configureMonitorPin();
     // Below: written from both runOnce() and the monitor-pin interrupt (see attachInterrupt and
     // updatePendingVerdict()); volatile so neither side caches a stale value across that boundary.
     volatile bool wasDetected = false;

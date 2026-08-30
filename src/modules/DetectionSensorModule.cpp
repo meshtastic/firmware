@@ -84,9 +84,7 @@ int32_t DetectionSensorModule::runOnce()
 
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
-        if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            configureMonitorPin();
-        } else {
+        if (!configureMonitorPin()) {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
         }
@@ -101,20 +99,20 @@ int32_t DetectionSensorModule::runOnce()
     // a stale pin until reboot.
     if (moduleConfig.detection_sensor.monitor_pin != configuredMonitorPin ||
         moduleConfig.detection_sensor.use_pullup != configuredUsePullup) {
-        if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            configureMonitorPin();
-        } else {
-            detachInterrupt(configuredMonitorPin);
-            configuredMonitorPin = 0;
+        if (!configureMonitorPin()) {
             LOG_WARN("Detection Sensor Module: monitor pin cleared at runtime. Disable module");
             return disable();
         }
     }
-    // Also evaluated directly from the monitor-pin interrupt; disable interrupts around this call so
-    // that interrupt can't reenter it mid-update on this thread.
+    // Also evaluated directly from the monitor-pin interrupt. The whole decide-and-clear sequence
+    // stays inside one interrupt-disabled section - not just the update - so a verdict the interrupt
+    // latches can't be read as part of one decision and then clobbered before the flag it belongs to
+    // is actually cleared; the (possibly slow) send itself happens after interrupts are restored.
     noInterrupts();
     updatePendingVerdict();
-    interrupts();
+    bool sendDetected = false;
+    bool sendState = false;
+    bool stateValue = false;
     if ((pendingDetected || pendingState) &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
@@ -122,11 +120,20 @@ int32_t DetectionSensorModule::runOnce()
         // in the order they actually happened.
         if (pendingDetected && (!pendingState || pendingDetectedFirst)) {
             pendingDetected = false;
-            sendDetectionMessage();
+            sendDetected = true;
         } else {
             pendingState = false;
-            sendCurrentStateMessage(pendingStateIsDetected);
+            stateValue = pendingStateIsDetected;
+            sendState = true;
         }
+    }
+    interrupts();
+    if (sendDetected) {
+        sendDetectionMessage();
+        return DELAYED_INTERVAL;
+    }
+    if (sendState) {
+        sendCurrentStateMessage(stateValue);
         return DELAYED_INTERVAL;
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
@@ -194,17 +201,27 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
 
 bool DetectionSensorModule::hasDetectionEvent()
 {
-    bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
+    // Read the pin actually behind pinMode()/attachInterrupt(), not moduleConfig directly: on a
+    // runtime pin change, moduleConfig updates before the next poll gets a chance to rebind, so the
+    // still-armed interrupt must keep sampling the pin it's actually attached to.
+    bool currentState = digitalRead(configuredMonitorPin);
     // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);
     return (configuredTriggerType() & 1) ? currentState : !currentState;
 }
 
-void DetectionSensorModule::configureMonitorPin()
+bool DetectionSensorModule::configureMonitorPin()
 {
     if (configuredMonitorPin > 0)
         detachInterrupt(configuredMonitorPin);
     configuredMonitorPin = moduleConfig.detection_sensor.monitor_pin;
     configuredUsePullup = moduleConfig.detection_sensor.use_pullup;
+    // A pin/pullup change invalidates any tracked state from the old pin.
+    wasDetected = false;
+    pendingDetected = false;
+    pendingState = false;
+    pendingDetectedFirst = false;
+    if (configuredMonitorPin == 0)
+        return false;
     pinMode(configuredMonitorPin, configuredUsePullup ? INPUT_PULLUP : INPUT);
     // Evaluate the trigger right here in the ISR (safe: just a digitalRead and bool bookkeeping, no
     // allocation/logging/sending) so a transition is captured the instant it happens, then wake the
@@ -218,11 +235,7 @@ void DetectionSensorModule::configureMonitorPin()
             runASAP = true;
         },
         CHANGE);
-    // A pin/pullup change invalidates any tracked state from the old pin.
-    wasDetected = false;
-    pendingDetected = false;
-    pendingState = false;
-    pendingDetectedFirst = false;
+    return true;
 }
 
 void DetectionSensorModule::updatePendingVerdict()
