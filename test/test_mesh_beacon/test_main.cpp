@@ -454,21 +454,51 @@ static void test_adminValidation_targetChannelIndexInRange_isPreserved(void)
 }
 
 /**
- * A pinned frequency_slot past the last slot the target's region holds must be cleared, not left
- * to fall back to the name hash silently at TX time.
+ * With an explicit region AND preset the bandwidth is fixed, so the slot count cannot move under
+ * the pin later: a pin past the last slot is permanently wrong and is cleared on write.
  */
-static void test_adminValidation_targetFrequencySlotOutOfRange_isCleared(void)
+static void test_adminValidation_targetFrequencySlotOutOfRangeExplicitPair_isCleared(void)
 {
     resetConfig();
 
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    probe.use_preset = true;
+    probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].region = probe.region;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = probe.modem_preset;
     bcfg.broadcast_targets[0].has_frequency_slot = true;
-    bcfg.broadcast_targets[0].frequency_slot = RadioInterface::frequencySlotCount(config.lora) + 1;
+    bcfg.broadcast_targets[0].frequency_slot = RadioInterface::frequencySlotCount(probe) + 1;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot);
+}
+
+/**
+ * REGRESSION: a pin on a target with an inherited region was checked against the RUNNING region, so
+ * a slot valid where the target will be advertised was deleted on write - and deleted again on
+ * every set_config(lora) that moved region or preset. Region and preset are both recorded as
+ * asked for and resolved at send; the slot has to follow the same rule or it is lost on a move.
+ */
+static void test_adminValidation_targetFrequencySlotOutOfRangeInheritedRegion_isKept(void)
+{
+    resetConfig(); // EU_868, which holds a single 250kHz slot
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_frequency_slot = true;
+    bcfg.broadcast_targets[0].frequency_slot = 48; // valid in US, not in EU_868
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot,
+                             "an inherited region resolves at send, so the pin is recorded as written");
+    TEST_ASSERT_EQUAL_UINT32(48, moduleConfig.mesh_beacon.broadcast_targets[0].frequency_slot);
 }
 
 /**
@@ -507,15 +537,58 @@ static void test_adminValidation_targetFrequencySlotInRange_isPreserved(void)
 }
 
 /**
- * The offer's own pin gets the same range check as a target's.
+ * The offer's own pin gets the same range check as a target's: cleared only when its region and
+ * preset are both explicit.
  */
-static void test_adminValidation_offerFrequencySlotOutOfRange_isCleared(void)
+static void test_adminValidation_offerFrequencySlotOutOfRangeExplicitPair_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    probe.use_preset = true;
+    probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_offer_region = probe.region;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = probe.modem_preset;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = RadioInterface::frequencySlotCount(probe) + 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot);
+}
+
+/**
+ * And the offer keeps a pin it cannot yet place, for the same reason a target does.
+ */
+static void test_adminValidation_offerFrequencySlotOutOfRangeInheritedRegion_isKept(void)
+{
+    resetConfig(); // EU_868, which holds a single 250kHz slot
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = 48; // valid in US, not in EU_868
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot,
+                             "an inherited region resolves at send, so the offer's pin is kept too");
+    TEST_ASSERT_EQUAL_UINT32(48, moduleConfig.mesh_beacon.broadcast_offer_frequency_slot);
+}
+
+/**
+ * Slot 0 is unset in the proto whatever the region, so it never survives as a pin.
+ */
+static void test_adminValidation_offerFrequencySlotZero_isCleared(void)
 {
     resetConfig();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_offer_frequency_slot = true;
-    bcfg.broadcast_offer_frequency_slot = RadioInterface::frequencySlotCount(config.lora) + 1;
+    bcfg.broadcast_offer_frequency_slot = 0;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
@@ -2118,6 +2191,67 @@ static void test_broadcaster_targetPinnedSlot_armsThatSlot(void)
 }
 
 /**
+ * A pin the resolved region cannot hold takes its target off the air. Deriving a slot instead would
+ * put the beacon on hash(name) % N while the operator believes it is on the frequency they named.
+ */
+static void test_broadcaster_targetPinnedSlotOutsideResolvedRegion_isSkipped(void)
+{
+    resetConfig(); // EU_868, which holds a single 250kHz slot
+    static const uint8_t homePsk[16] = {0xCD, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true; // content to send
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].frequency_slot = 48; // valid in US, not in EU_868
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
+                                     "a pin the region cannot hold must go quiet, not fall back to the name hash");
+}
+
+/**
+ * The other half of the same config, and the case #11516 describes: the pin the write-time check no
+ * longer deletes is honoured verbatim as soon as the node is on a region that holds it.
+ */
+static void test_broadcaster_targetPinnedSlotAfterRegionMove_armsThatSlot(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xCE, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    // Written on the EU_868 node, where the slot does not exist yet.
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_preset = true; // content to send
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_frequency_slot = true;
+    bcfg.broadcast_targets[0].frequency_slot = 48;
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot, "the pin must have survived");
+
+    // The node moves to a region that holds it.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.channel_num = 0;
+    initRegion();
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::frequencySlotCount(config.lora) >= 48, "US/LONG_FAST must hold slot 48");
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "the target is placeable now, so it transmits");
+    const MeshBeaconModule_TargetRadioSettings *armed = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[0]);
+    TEST_ASSERT_NOT_NULL_MESSAGE(armed, "a slot away from home must arm a switch");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(48, armed->lora.channel_num, "and it must be the slot the operator pinned");
+}
+
+/**
  * A preset-only target derives its slot for THAT preset's bandwidth. Carrying the home slot number
  * over is a silent drop: a wider preset halves the count, so the number can fall outside the band.
  */
@@ -3428,10 +3562,13 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetValidPresetForRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_targetChannelIndexInRange_isPreserved);
-    RUN_TEST(test_adminValidation_targetFrequencySlotOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_targetFrequencySlotOutOfRangeExplicitPair_isCleared);
+    RUN_TEST(test_adminValidation_targetFrequencySlotOutOfRangeInheritedRegion_isKept);
     RUN_TEST(test_adminValidation_targetFrequencySlotZero_isCleared);
     RUN_TEST(test_adminValidation_targetFrequencySlotInRange_isPreserved);
-    RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRangeExplicitPair_isCleared);
+    RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRangeInheritedRegion_isKept);
+    RUN_TEST(test_adminValidation_offerFrequencySlotZero_isCleared);
     RUN_TEST(test_adminValidation_offerChannelIndexOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_retiredChannel_deletesTargetAndClearsOffer);
     RUN_TEST(test_adminValidation_cleartextUnnamedPrimaryEdit_keepsBeaconRefs);
@@ -3513,6 +3650,8 @@ BEACON_TEST_ENTRY void setup()
 
     RUN_TEST(test_broadcaster_targetMatchingRunningConfig_armsNoSwitch);
     RUN_TEST(test_broadcaster_targetPinnedSlot_armsThatSlot);
+    RUN_TEST(test_broadcaster_targetPinnedSlotOutsideResolvedRegion_isSkipped);
+    RUN_TEST(test_broadcaster_targetPinnedSlotAfterRegionMove_armsThatSlot);
     RUN_TEST(test_broadcaster_presetOnlyTargetOnNarrowerBand_isNotDropped);
     RUN_TEST(test_broadcaster_presetTargetOnCustomModemNode_switchesUsePreset);
     RUN_TEST(test_broadcaster_targetPinnedHomeSlot_armsNoSwitch);

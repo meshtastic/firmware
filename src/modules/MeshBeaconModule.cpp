@@ -247,19 +247,25 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
         LOG_WARN("Beacon: broadcast_offer_preset %d is not a preset any region offers, clearing", bcfg.broadcast_offer_preset);
         bcfg.has_broadcast_offer_preset = false;
     }
-    // A pinned slot must exist in the region it will be advertised for.
+    // Bounds-checked only with both a region and a preset: that pair fixes the bandwidth, so the
+    // slot count cannot move under the pin later. Otherwise only 0, which the proto reserves as
+    // unset - checking against the running region would delete a pin on the next region change.
     if (bcfg.has_broadcast_offer_frequency_slot) {
-        meshtastic_Config_LoRaConfig probe = config.lora;
-        probe.use_preset = true;
-        if (bcfg.has_broadcast_offer_preset)
-            probe.modem_preset = bcfg.broadcast_offer_preset;
-        if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-            probe.region = bcfg.broadcast_offer_region;
-        const uint32_t slots = RadioInterface::frequencySlotCount(probe);
-        if (bcfg.broadcast_offer_frequency_slot == 0 || bcfg.broadcast_offer_frequency_slot > slots) {
-            LOG_WARN("Beacon: broadcast_offer_frequency_slot %u outside 1..%u, clearing", bcfg.broadcast_offer_frequency_slot,
-                     slots);
+        if (bcfg.broadcast_offer_frequency_slot == 0) {
+            LOG_WARN("Beacon: broadcast_offer_frequency_slot 0 means unset, clearing");
             bcfg.has_broadcast_offer_frequency_slot = false;
+        } else if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+                   bcfg.has_broadcast_offer_preset) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            probe.modem_preset = bcfg.broadcast_offer_preset;
+            probe.region = bcfg.broadcast_offer_region;
+            const uint32_t slots = RadioInterface::frequencySlotCount(probe);
+            if (bcfg.broadcast_offer_frequency_slot > slots) {
+                LOG_WARN("Beacon: broadcast_offer_frequency_slot %u outside 1..%u, clearing", bcfg.broadcast_offer_frequency_slot,
+                         slots);
+                bcfg.has_broadcast_offer_frequency_slot = false;
+            }
         }
     }
     // Validate each broadcast target so a bad preset/region is cleared on write rather than
@@ -285,20 +291,23 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
             LOG_WARN("Beacon: broadcast_targets[%u] preset %d is not a preset any region offers, clearing", i, t.preset);
             t.has_preset = false;
         }
-        // Last, so it is checked against the preset and region the clamp above settled on.
+        // Last, so it is checked against the preset and region the clamp above settled on - and
+        // only when both are explicit, exactly as for the offer above.
         if (t.has_frequency_slot) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            // A target without a preset keeps the node's modem params, custom bandwidth included.
-            if (t.has_preset) {
+            if (t.frequency_slot == 0) {
+                LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot 0 means unset, clearing", i);
+                t.has_frequency_slot = false;
+            } else if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && t.has_preset) {
+                meshtastic_Config_LoRaConfig probe = config.lora;
                 probe.use_preset = true;
                 probe.modem_preset = t.preset;
-            }
-            if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                 probe.region = t.region;
-            const uint32_t slots = RadioInterface::frequencySlotCount(probe);
-            if (t.frequency_slot == 0 || t.frequency_slot > slots) {
-                LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot %u outside 1..%u, clearing", i, t.frequency_slot, slots);
-                t.has_frequency_slot = false;
+                const uint32_t slots = RadioInterface::frequencySlotCount(probe);
+                if (t.frequency_slot > slots) {
+                    LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot %u outside 1..%u, clearing", i, t.frequency_slot,
+                             slots);
+                    t.has_frequency_slot = false;
+                }
             }
         }
     }
@@ -631,16 +640,21 @@ void MeshBeaconBroadcastModule::sendBeacon()
     };
 
     // The only place a target's slot is worked out, so a pin and a derivation see the same region,
-    // preset and bandwidth. A seed slot the target's own band cannot hold falls back to the hash.
+    // preset and bandwidth. An inherited home slot the target's band cannot hold falls back to the
+    // hash; a pin that does not fit is skipped before it reaches here.
     // Takes the resolved region, not the requested one: an EU sibling swap changes the band, and
     // with it the slot count the hash divides by.
-    const auto targetSlot = [](const EffTarget &tgt, meshtastic_Config_LoRaConfig_RegionCode region, uint32_t seedSlot) {
+    const auto targetProbe = [](const EffTarget &tgt, meshtastic_Config_LoRaConfig_RegionCode region, uint32_t seedSlot) {
         meshtastic_Config_LoRaConfig probe = config.lora;
         probe.use_preset = tgt.usePreset;
         probe.modem_preset = tgt.preset;
         probe.region = region;
         probe.channel_num = seedSlot;
-        return (uint16_t)RadioInterface::resolveFrequencySlot(probe, tgt.channelName);
+        return probe;
+    };
+    const auto targetSlot = [&targetProbe](const EffTarget &tgt, meshtastic_Config_LoRaConfig_RegionCode region,
+                                           uint32_t seedSlot) {
+        return (uint16_t)RadioInterface::resolveFrequencySlot(targetProbe(tgt, region, seedSlot), tgt.channelName);
     };
 
     // The mesh the offer describes, resolved the same way a target's is so the two compare.
@@ -719,9 +733,16 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
         // A pin wins; a target on its own channel derives from that name; one on the primary
         // inherits the home slot, re-derived when the target's band is too small to hold it.
-        const uint32_t seedSlot = (bt && bt->has_frequency_slot && bt->frequency_slot > 0) ? bt->frequency_slot
-                                  : (bc.index != channels.getPrimaryIndex())               ? 0
-                                                                                           : config.lora.channel_num;
+        const bool pinned = bt && bt->has_frequency_slot && bt->frequency_slot > 0;
+        if (pinned && bt->frequency_slot > RadioInterface::frequencySlotCount(targetProbe(tgt, resolvedRegion, 0))) {
+            // Skipped rather than derived, as for a channel or a preset: the operator named a
+            // frequency, and beaconing on a different one is worse than not beaconing at all.
+            LOG_DEBUG("Beacon: target %d frequency_slot %u not in the resolved region, skip", ti, bt->frequency_slot);
+            continue;
+        }
+        const uint32_t seedSlot = pinned                                     ? bt->frequency_slot
+                                  : (bc.index != channels.getPrimaryIndex()) ? 0
+                                                                             : config.lora.channel_num;
         tgt.slot = targetSlot(tgt, resolvedRegion, seedSlot);
 
         // Skip a target whose effective radio config duplicates one already sent this cycle.
