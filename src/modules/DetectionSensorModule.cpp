@@ -85,16 +85,7 @@ int32_t DetectionSensorModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
-            // Wake the module the moment the pin actually changes, instead of relying solely on the
-            // GPIO_POLLING_INTERVAL fallback below to notice it.
-            attachInterrupt(
-                moduleConfig.detection_sensor.monitor_pin,
-                []() {
-                    detectionSensorModule->setIntervalFromNow(0);
-                    runASAP = true;
-                },
-                CHANGE);
+            configureMonitorPin();
         } else {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
@@ -106,26 +97,24 @@ int32_t DetectionSensorModule::runOnce()
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
-    // Sample and evaluate the trigger every poll so a transition is never missed; minimum_broadcast_secs
-    // only rate-limits sends, not sampling.
-    bool isDetected = hasDetectionEvent();
-    DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
-    wasDetected = isDetected;
-    switch (verdict) {
-    case DetectionSensorVerdictDetected:
-        if (!pendingDetected)
-            pendingDetectedFirst = !pendingState;
-        pendingDetected = true;
-        break;
-    case DetectionSensorVerdictSendState:
-        if (!pendingState)
-            pendingDetectedFirst = pendingDetected;
-        pendingState = true;
-        pendingStateIsDetected = isDetected;
-        break;
-    case DetectionSensorVerdictNoop:
-        break;
+    // Pick up a runtime change to monitor_pin/use_pullup instead of leaving the interrupt bound to
+    // a stale pin until reboot.
+    if (moduleConfig.detection_sensor.monitor_pin != configuredMonitorPin ||
+        moduleConfig.detection_sensor.use_pullup != configuredUsePullup) {
+        if (moduleConfig.detection_sensor.monitor_pin > 0) {
+            configureMonitorPin();
+        } else {
+            detachInterrupt(configuredMonitorPin);
+            configuredMonitorPin = 0;
+            LOG_WARN("Detection Sensor Module: monitor pin cleared at runtime. Disable module");
+            return disable();
+        }
     }
+    // Also evaluated directly from the monitor-pin interrupt; disable interrupts around this call so
+    // that interrupt can't reenter it mid-update on this thread.
+    noInterrupts();
+    updatePendingVerdict();
+    interrupts();
     if ((pendingDetected || pendingState) &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
@@ -149,7 +138,7 @@ int32_t DetectionSensorModule::runOnce()
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                         default_telemetry_broadcast_interval_secs))) {
-        sendCurrentStateMessage(isDetected);
+        sendCurrentStateMessage(wasDetected);
         return DELAYED_INTERVAL;
     }
     return GPIO_POLLING_INTERVAL;
@@ -208,4 +197,52 @@ bool DetectionSensorModule::hasDetectionEvent()
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
     // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);
     return (configuredTriggerType() & 1) ? currentState : !currentState;
+}
+
+void DetectionSensorModule::configureMonitorPin()
+{
+    if (configuredMonitorPin > 0)
+        detachInterrupt(configuredMonitorPin);
+    configuredMonitorPin = moduleConfig.detection_sensor.monitor_pin;
+    configuredUsePullup = moduleConfig.detection_sensor.use_pullup;
+    pinMode(configuredMonitorPin, configuredUsePullup ? INPUT_PULLUP : INPUT);
+    // Evaluate the trigger right here in the ISR (safe: just a digitalRead and bool bookkeeping, no
+    // allocation/logging/sending) so a transition is captured the instant it happens, then wake the
+    // module to send it - instead of relying solely on the GPIO_POLLING_INTERVAL fallback below,
+    // which could miss a transition that reverses before the thread gets scheduled.
+    attachInterrupt(
+        configuredMonitorPin,
+        []() {
+            detectionSensorModule->updatePendingVerdict();
+            detectionSensorModule->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        CHANGE);
+    // A pin/pullup change invalidates any tracked state from the old pin.
+    wasDetected = false;
+    pendingDetected = false;
+    pendingState = false;
+    pendingDetectedFirst = false;
+}
+
+void DetectionSensorModule::updatePendingVerdict()
+{
+    bool isDetected = hasDetectionEvent();
+    DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
+    wasDetected = isDetected;
+    switch (verdict) {
+    case DetectionSensorVerdictDetected:
+        if (!pendingDetected)
+            pendingDetectedFirst = !pendingState;
+        pendingDetected = true;
+        break;
+    case DetectionSensorVerdictSendState:
+        if (!pendingState)
+            pendingDetectedFirst = pendingDetected;
+        pendingState = true;
+        pendingStateIsDetected = isDetected;
+        break;
+    case DetectionSensorVerdictNoop:
+        break;
+    }
 }
