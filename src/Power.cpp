@@ -739,7 +739,7 @@ static AnalogBatteryLevel analogLevel;
  * Channel 0 measures battery voltage through a 1:2 resistive divider.
  * USB / Charging status is managed via an AW35615 USB-C CC controller.
  */
-class ADS1115BatteryLevel : public AnalogBatteryLevel
+class ADS1115BatteryLevel : public HasBatteryLevel
 {
   public:
     bool init()
@@ -765,6 +765,8 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         return true;
     }
 
+    virtual int getBatteryPercent() override { return -1; }
+    virtual bool isBatteryConnect() override { return true; }
     virtual uint16_t getBattVoltage() override
     {
         if (!initialized)
@@ -800,7 +802,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
     {
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isVbusPresent();
+            return _aw35615.isVbusPresent() && cached_mv >= 4200;
         }
         // Fallback to base GPIO/board checks (or false) if CC chip is absent
         return false;
@@ -813,7 +815,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isSinkAttached();
+            return _aw35615.isSinkAttached() && cached_mv >= 4200;
         }
         return isVbusIn();
     }
