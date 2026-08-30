@@ -1678,14 +1678,14 @@ static void test_sidecar_legacySplitPair_sharesOneEntryUntilBothRelease(void)
 
     const MeshBeaconModule_TargetRadioSettings s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 3,
                                                                   true, meshtastic_Config_LoRaConfig_RegionCode_US, "Split");
-    MeshBeaconModule::setTargetRadioSettings(&offerHalf, s);
-    MeshBeaconModule::setTargetRadioSettings(&textHalf, s);
+    const int shared = MeshBeaconModule::setTargetRadioSettings(&offerHalf, s);
+    MeshBeaconModule::setTargetRadioSettings(&textHalf, s, shared);
 
     const MeshBeaconModule_TargetRadioSettings *a = MeshBeaconModule::getTargetRadioSettings(&offerHalf);
     const MeshBeaconModule_TargetRadioSettings *b = MeshBeaconModule::getTargetRadioSettings(&textHalf);
     TEST_ASSERT_NOT_NULL_MESSAGE(a, "the offer half must resolve");
     TEST_ASSERT_NOT_NULL_MESSAGE(b, "the text half must resolve");
-    TEST_ASSERT_EQUAL_PTR_MESSAGE(a, b, "identical settings must share one entry, not occupy two");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(a, b, "a pair armed as one target must share one entry, not occupy two");
 
     MeshBeaconModule::clearTargetRadioSettings(&offerHalf);
     TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&offerHalf), "the released half must be gone");
@@ -1711,11 +1711,12 @@ static void test_sidecar_fourLegacySplitTargets_allFit(void)
         const MeshBeaconModule_TargetRadioSettings s =
             targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, (uint16_t)(t + 1), true,
                            meshtastic_Config_LoRaConfig_RegionCode_US, "Split");
+        int shared = -1; // the target's two halves share one entry, as sendBeacon arranges
         for (int half = 0; half < 2; half++) {
             meshtastic_MeshPacket &p = pkts[t * 2 + half];
             p = meshtastic_MeshPacket_init_zero;
             p.id = 0x5EED0300 + t * 2 + half;
-            MeshBeaconModule::setTargetRadioSettings(&p, s);
+            shared = MeshBeaconModule::setTargetRadioSettings(&p, s, shared);
         }
     }
 
@@ -2963,11 +2964,11 @@ static void test_txHook_dropOfOneSplitHalf_leavesTheOtherArmed(void)
     offerHalf.id = 0x7A000020;
     textHalf.id = 0x7A000021;
 
-    // Identical settings, so both halves land on one entry - what legacy split produces.
+    // Armed as one target, so both halves land on one entry - what legacy split produces.
     const MeshBeaconModule_TargetRadioSettings s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1,
                                                                   true, meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    MeshBeaconModule::setTargetRadioSettings(&offerHalf, s);
-    MeshBeaconModule::setTargetRadioSettings(&textHalf, s);
+    const int shared = MeshBeaconModule::setTargetRadioSettings(&offerHalf, s);
+    MeshBeaconModule::setTargetRadioSettings(&textHalf, s, shared);
     TEST_ASSERT_EQUAL_PTR_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&offerHalf),
                                   MeshBeaconModule::getTargetRadioSettings(&textHalf), "the pair must share one entry");
 
