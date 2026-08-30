@@ -1237,8 +1237,8 @@ void Power::logHeapUsage()
     // The first line has no earlier sample to difference against
     const int32_t delta = lastHeapLogTime ? (int32_t)(heapFree - lastHeapLogFree) : 0;
 
-    // A falling watermark is a leak; a steady watermark with a shrinking largest block is
-    // fragmentation. Stack buffer, empty where the platform reports neither.
+    // min only ever falls: one step down is a transient alloc, repeated new lows are a leak.
+    // A steady min with a shrinking largest block is fragmentation. Empty where unsupported.
     char detail[64] = "";
     const uint32_t minFree = memGet.getMinFreeHeap();
     const uint32_t maxAlloc = memGet.getMaxAllocHeap();
