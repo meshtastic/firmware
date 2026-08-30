@@ -577,6 +577,31 @@ static void test_configuredUsesDefaultSlot_ignoresALiveSlotMove(void)
     TEST_ASSERT_TRUE_MESSAGE(channels.hasDefaultChannel(), "so hasDefaultChannel() does not flip mid-move either");
 }
 
+/**
+ * The configured region must resolve exactly as initRegion() did for the same committed config.
+ *
+ * This is the invariant that covers REGULATORY_LORA_REGIONCODE without needing the flag set: on a
+ * regulatory build initRegion() pins myRegion to the compile-time region and ignores
+ * config.lora.region entirely, so a configuredRegion() that read the configured code would diverge
+ * here. On an ordinary build the two agree trivially, and the test still pins that they must.
+ */
+static void test_configuredRegion_agreesWithInitRegionAtCommitTime(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true); // settleOn() calls initRegion() then captures
+
+    TEST_ASSERT_NOT_NULL(myRegion);
+    TEST_ASSERT_EQUAL_MESSAGE(myRegion->code, RadioInterface::configuredRegion()->code,
+                              "the configured region must resolve the same way initRegion() does, override included");
+
+    // And again for a second committed region, so the first is not a coincidence of the default.
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    initRegion();
+    RadioInterface::captureConfiguredRadio();
+    TEST_ASSERT_EQUAL_MESSAGE(myRegion->code, RadioInterface::configuredRegion()->code, "still agreeing after a second commit");
+}
+
 /** The configured region backs the module gates that read myRegion today. */
 static void test_configuredRegion_ignoresALiveRegionMove(void)
 {
@@ -649,6 +674,7 @@ void setup()
     RUN_TEST(test_configuredRadio_followsASettingsCommit);
     RUN_TEST(test_configuredUsesDefaultSlot_ignoresALiveSlotMove);
     RUN_TEST(test_configuredRegion_ignoresALiveRegionMove);
+    RUN_TEST(test_configuredRegion_agreesWithInitRegionAtCommitTime);
     exit(UNITY_END());
 }
 
