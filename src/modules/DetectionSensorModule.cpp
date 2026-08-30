@@ -8,7 +8,11 @@
 #include <Throttle.h>
 DetectionSensorModule *detectionSensorModule;
 
-#define GPIO_POLLING_INTERVAL 100
+// A CHANGE interrupt on the monitor pin (attached in firstTime setup) gives near-immediate reaction
+// to a real transition, so this is now only a safety-net cadence: it re-arms a level trigger
+// (LOGIC_HIGH/LOGIC_LOW) that's still held once minimum_broadcast_secs reopens, and services the
+// state_broadcast_secs heartbeat. Both are configured in whole seconds, so 1s resolution is exact.
+#define GPIO_POLLING_INTERVAL 1000
 #define DELAYED_INTERVAL 1000
 
 typedef enum {
@@ -85,6 +89,15 @@ int32_t DetectionSensorModule::runOnce()
         firstTime = false;
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
+            // Wake the module the moment the pin actually changes, instead of relying solely on the
+            // GPIO_POLLING_INTERVAL fallback below to notice it.
+            attachInterrupt(
+                moduleConfig.detection_sensor.monitor_pin,
+                []() {
+                    detectionSensorModule->setIntervalFromNow(0);
+                    runASAP = true;
+                },
+                CHANGE);
         } else {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
