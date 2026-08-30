@@ -41,10 +41,20 @@ PlatformIO supports local library dependencies by path. From this firmware repos
 ```ini
 [device-ui_base]
 lib_deps =
+	# DEVELOPMENT ONLY for feature/heltec-r8-quick-messages:
+	# use the editable local checkout at C:\Users\JPJYR\Documents\device-ui.
+	# Final reproducible builds must switch back to an exact pinned commit archive.
 	../device-ui
 ```
 
 This should be treated as a development-only dependency. Do not use this as the final production/release dependency reference.
+
+Current firmware feature branch dependency switch:
+
+- Branch: `feature/heltec-r8-quick-messages`
+- Local path dependency: `../device-ui`
+- Absolute local source path: `C:\Users\JPJYR\Documents\device-ui`
+- Device UI baseline at switch time: `9d9b9df81fcde646811a10942d00d5f45f72af7b`
 
 ## Final Reproducible Dependency
 
@@ -122,4 +132,3 @@ git -C ..\device-ui rev-parse HEAD
 ```
 
 Then modify files under `..\device-ui`, not under `.pio\libdeps`.
-
