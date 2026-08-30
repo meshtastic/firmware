@@ -762,6 +762,7 @@ class ADS1115BatteryLevel : public HasBatteryLevel
         } else {
             LOG_WARN("[AW35615] not found at 0x22");
         }
+        getBattVoltage(); // initial read cached_mv
         return true;
     }
 
