@@ -1412,10 +1412,10 @@ static void recheckBeaconAfterChannelEdit(ChannelIndex index)
 
     // Deleted, not left pointed at the slot: an unrelated channel provisioned there later would
     // otherwise inherit the beacon. Clearing only the index would redirect it onto the primary.
+    // Disabled is the whole test: a blank name and an empty PSK are both valid on a live channel,
+    // and reading them as "retired" deleted the operator's targets on an ordinary edit.
     const meshtastic_Channel &slot = channels.getByIndex(index);
-    const bool retired =
-        slot.role == meshtastic_Channel_Role_DISABLED || (slot.settings.name[0] == '\0' && slot.settings.psk.size == 0);
-    if (retired) {
+    if (slot.role == meshtastic_Channel_Role_DISABLED) {
         pb_size_t kept = 0;
         for (pb_size_t i = 0; i < beacon.broadcast_targets_count; i++) {
             const auto &t = beacon.broadcast_targets[i];

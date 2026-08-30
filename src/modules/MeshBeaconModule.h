@@ -115,11 +115,10 @@ class MeshBeaconModule
         ChannelIndex index;                                  // the primary when the target names none
         char name[sizeof(meshtastic_ChannelSettings::name)]; // never empty
         bool usable;                                         // false = the named slot cannot be transmitted on
-        bool retired;                                        // the named slot held settings but was disabled
     };
 
-    // Out of range, disabled or blank all fall back to the primary, so admin validation and the TX
-    // path cannot disagree about which channel a target runs on, nor which slot it lands on.
+    // Out of range or disabled means the target is skipped, so admin validation and the TX path
+    // cannot disagree about which channel a target runs on, nor which slot it lands on.
     static BeaconChannel resolveBeaconChannel(bool hasIndex, uint32_t index, meshtastic_Config_LoRaConfig_ModemPreset preset);
 
   protected:

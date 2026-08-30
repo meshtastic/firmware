@@ -20,16 +20,12 @@ bool MeshBeaconModule::originalUsePreset;
 // One entry per broadcast target - the proto holds 4 - each covering the legacy split pair.
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[4];
 
-static bool channelSlotPopulated(const meshtastic_Channel &slot)
-{
-    return slot.settings.name[0] != '\0' || slot.settings.psk.size > 0;
-}
-
-// Role_DISABLED is the zero value, so an unprovisioned slot reads as disabled; a disabled slot that
-// is populated still holds a deleted channel's name and PSK. Neither may be transmitted on.
+// Role_DISABLED is the zero value, so an unprovisioned slot reads as disabled. Neither a blank name
+// nor an empty PSK says anything: the name falls back to the preset's, and Channels::getKey() reads
+// an empty PSK as either the primary's key or deliberate cleartext. Same test the firmware uses.
 static bool channelSlotUsable(const meshtastic_Channel &slot)
 {
-    return slot.role != meshtastic_Channel_Role_DISABLED && channelSlotPopulated(slot);
+    return slot.has_settings && slot.role != meshtastic_Channel_Role_DISABLED;
 }
 
 // Explicit switch state, not inferred: "live config differs from the snapshot" missed name/PSK-only
@@ -241,7 +237,7 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
         }
     }
     // Range only, as for a target: an unprovisioned slot must not be rejected here, and a
-    // slot retired later is handled by dropBeaconRefsForChannel().
+    // slot disabled later is handled by recheckBeaconAfterChannelEdit().
     if (bcfg.has_broadcast_offer_channel_index && bcfg.broadcast_offer_channel_index >= MAX_NUM_CHANNELS) {
         LOG_WARN("Beacon: broadcast_offer_channel_index %u out of range, clearing", bcfg.broadcast_offer_channel_index);
         bcfg.has_broadcast_offer_channel_index = false;
@@ -390,10 +386,6 @@ MeshBeaconModule::BeaconChannel MeshBeaconModule::resolveBeaconChannel(bool hasI
         out.usable = index < (uint32_t)channels.getNumChannels() && channelSlotUsable(channels.getByIndex((ChannelIndex)index));
         if (out.usable)
             out.index = (ChannelIndex)index;
-        else if (index < (uint32_t)channels.getNumChannels() &&
-                 channels.getByIndex((ChannelIndex)index).role == meshtastic_Channel_Role_DISABLED &&
-                 channelSlotPopulated(channels.getByIndex((ChannelIndex)index)))
-            out.retired = true; // a deleted channel's settings, not an unprovisioned slot
     }
     const meshtastic_ChannelSettings resolved = beaconChannelSettings(channels.getByIndex(out.index).settings, preset);
     strncpy(out.name, resolved.name, sizeof(out.name) - 1);
@@ -696,15 +688,12 @@ void MeshBeaconBroadcastModule::sendBeacon()
         }
 
         // The channel decides both the key and, through its name, the frequency slot. An index that
-        // is out of range, disabled or blank falls back to the primary - see resolveBeaconChannel.
+        // is out of range or disabled cannot be transmitted on - see resolveBeaconChannel.
         const BeaconChannel bc = resolveBeaconChannel(bt && bt->has_channel_index, bt ? bt->channel_index : 0, tgt.preset);
         if (!bc.usable) {
             // Skipped, not redirected: the config still asks for that channel, so turning it back
             // on brings this target back without the operator having to rewrite anything.
-            if (bc.retired)
-                LOG_WARN("Beacon: target %d channel_index %u retired, skip", ti, bt->channel_index);
-            else
-                LOG_DEBUG("Beacon: target %d channel_index %u unusable, skip", ti, bt->channel_index);
+            LOG_DEBUG("Beacon: target %d channel_index %u unusable, skip", ti, bt->channel_index);
             continue;
         }
         tgt.channelIndex = bc.index;

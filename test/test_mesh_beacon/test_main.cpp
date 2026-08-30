@@ -201,13 +201,15 @@ static void installTestPrimaryChannel(const char *name, const uint8_t *psk, size
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
     strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
-    ch.settings.psk.size = (pb_size_t)pskLen;
-    memcpy(ch.settings.psk.bytes, psk, pskLen);
+    if (psk && pskLen) {
+        ch.settings.psk.size = (pb_size_t)pskLen;
+        memcpy(ch.settings.psk.bytes, psk, pskLen);
+    }
     channels.onConfigChanged(); // set primaryIndex + recompute hashes
 }
 
-// Install a secondary channel at the given table index. Pass psk=nullptr/pskLen=0 for a blank slot
-// (no name, no PSK) to exercise the "referenced slot is unconfigured" fallback.
+// Install a secondary channel at the given table index. Pass psk=nullptr/pskLen=0 and name=nullptr
+// for a blank slot - which is a usable channel: it borrows the primary's key and the preset's name.
 static void installTestSecondaryChannel(uint8_t index, const char *name, const uint8_t *psk, size_t pskLen)
 {
     if (channelFile.channels_count < (pb_size_t)(index + 1))
@@ -572,6 +574,65 @@ static void test_adminValidation_retiredChannel_deletesTargetAndClearsOffer(void
     // The module config was edited, so it has to be in the save set or the clear is lost on reboot.
     TEST_ASSERT_TRUE_MESSAGE(testAdmin->savedSegments() & SEGMENT_MODULECONFIG,
                              "deleting a beacon reference must add SEGMENT_MODULECONFIG to the save");
+}
+
+/**
+ * REGRESSION: editing the primary to be unnamed cleartext deleted every beacon target naming it.
+ *
+ * "Retired" was `DISABLED || (blank name && empty PSK)`, but a blank name is what the stock primary
+ * ships with and an empty PSK is how encryption is switched off. Both are ordinary edits, and both
+ * used to silently destroy the operator's broadcast_targets and offer index.
+ */
+static void test_adminValidation_cleartextUnnamedPrimaryEdit_keepsBeaconRefs(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC5, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    const ChannelIndex idx = channels.getPrimaryIndex();
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = idx;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = idx;
+
+    testAdmin->deferSaves();
+    meshtastic_Channel cleartext = channels.getByIndex(idx);
+    cleartext.settings.name[0] = '\0';
+    cleartext.settings.psk.size = 0;
+    testAdmin->handleSetChannel(cleartext);
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, moduleConfig.mesh_beacon.broadcast_targets_count,
+                              "a channel with no name and no PSK is still enabled, so its target must survive");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index, "and the offer must still name it");
+}
+
+/**
+ * The everyday case around it: renaming a channel touches no beacon reference at all.
+ */
+static void test_adminValidation_channelRename_keepsBeaconRefs(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC6, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    const ChannelIndex idx = channels.getPrimaryIndex();
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = idx;
+
+    testAdmin->deferSaves();
+    meshtastic_Channel renamed = channels.getByIndex(idx);
+    strncpy(renamed.settings.name, "Away", sizeof(renamed.settings.name) - 1);
+    testAdmin->handleSetChannel(renamed);
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, moduleConfig.mesh_beacon.broadcast_targets_count, "a rename retires nothing");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index,
+                             "and the target still names its channel");
 }
 
 /**
@@ -1421,10 +1482,14 @@ static void test_broadcaster_targetChannelIndex_usesTableSlot(void)
 }
 
 /**
- * A broadcast_target whose channel_index points at a BLANK table slot (no name, no PSK) has no key
- * to encrypt with, so it transmits on the primary - without swapping anything into the primary slot.
+ * REGRESSION: a target naming an enabled-but-blank secondary went quiet.
+ *
+ * "Usable" was read as `name non-empty || psk non-empty`, which is not how the firmware decides a
+ * channel can be transmitted on. Channels::getKey() hands a secondary with no PSK the PRIMARY's
+ * key, and a blank name resolves to the preset's display name - so this slot is a working channel,
+ * and the only test that is `role != DISABLED`.
  */
-static void test_broadcaster_targetChannelIndex_blankSlotIsSkipped(void)
+static void test_broadcaster_targetChannelIndex_blankSecondaryIsSent(void)
 {
     resetConfig();
     static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -1442,10 +1507,37 @@ static void test_broadcaster_targetChannelIndex_blankSlotIsSkipped(void)
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
 
-    // The target asked for a channel that cannot be transmitted on, so it is skipped. Redirecting
-    // it onto the primary would put the beacon somewhere the operator never named.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(),
+                                     "a blank enabled secondary is a real channel, so its target must transmit");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets[0].channel, "and it rides the slot the operator named");
+}
+
+/**
+ * The complement, and the rule that survived: a DISABLED slot holds a deleted channel's settings,
+ * so its target is skipped rather than redirected onto the primary.
+ */
+static void test_broadcaster_targetChannelIndex_disabledSlotIsSkipped(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x02, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "Gone", homePsk, sizeof(homePsk));
+    channelFile.channels[1].role = meshtastic_Channel_Role_DISABLED;
+    channels.onConfigChanged();
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
-                                     "a blank slot has no key, so its target must go quiet, not borrow the primary");
+                                     "a disabled slot must take its target quiet, not borrow the primary");
 }
 
 /**
@@ -1966,6 +2058,26 @@ static void test_offer_disabledChannelSlot_advertisesNothing(void)
     MeshBeaconModule::fillOffer(beacon, bcfg);
 
     TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_channel, "a disabled slot must not be advertised");
+}
+
+/**
+ * REGRESSION: the same predicate silenced the offer. A channel running in the clear with no name is
+ * a mesh a receiver can join - the name resolves to the preset's, the key is absent by design.
+ */
+static void test_offer_cleartextUnnamedChannel_isAdvertised(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("", nullptr, 0);
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, bcfg);
+
+    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_channel, "an unnamed cleartext channel is still a channel to offer");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(0, beacon.offer_channel.psk.size, "and it is offered with no key, not skipped");
 }
 
 /**
@@ -3322,6 +3434,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_offerChannelIndexOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_retiredChannel_deletesTargetAndClearsOffer);
+    RUN_TEST(test_adminValidation_cleartextUnnamedPrimaryEdit_keepsBeaconRefs);
+    RUN_TEST(test_adminValidation_channelRename_keepsBeaconRefs);
     RUN_TEST(test_adminValidation_offerInvalidPreset_keepsPresetAndRest);
     RUN_TEST(test_adminValidation_offerUnknownRegion_keepsValidPreset);
     RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt100);
@@ -3373,7 +3487,8 @@ BEACON_TEST_ENTRY void setup()
 
     RUN_TEST(test_broadcaster_noChannelOverride_doesNotSwapPrimary);
     RUN_TEST(test_broadcaster_targetChannelIndex_usesTableSlot);
-    RUN_TEST(test_broadcaster_targetChannelIndex_blankSlotIsSkipped);
+    RUN_TEST(test_broadcaster_targetChannelIndex_blankSecondaryIsSent);
+    RUN_TEST(test_broadcaster_targetChannelIndex_disabledSlotIsSkipped);
     RUN_TEST(test_broadcaster_duplicateTargets_dedupedToOnePacket);
     RUN_TEST(test_broadcaster_distinctTargets_bothSent);
 
@@ -3392,6 +3507,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_offer_pinnedButDerivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedSlot_isAdvertised);
     RUN_TEST(test_offer_disabledChannelSlot_advertisesNothing);
+    RUN_TEST(test_offer_cleartextUnnamedChannel_isAdvertised);
 
     printf("\n=== Radio switch/restore re-entrancy ===\n");
 
