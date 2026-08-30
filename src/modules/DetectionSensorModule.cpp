@@ -8,10 +8,7 @@
 #include <Throttle.h>
 DetectionSensorModule *detectionSensorModule;
 
-// A CHANGE interrupt on the monitor pin (attached in firstTime setup) gives near-immediate reaction
-// to a real transition, so this is now only a safety-net cadence: it re-arms a level trigger
-// (LOGIC_HIGH/LOGIC_LOW) that's still held once minimum_broadcast_secs reopens, and services the
-// state_broadcast_secs heartbeat. Both are configured in whole seconds, so 1s resolution is exact.
+// Safety-net cadence only; the attached CHANGE interrupt handles real transitions immediately.
 #define GPIO_POLLING_INTERVAL 1000
 #define DELAYED_INTERVAL 1000
 
