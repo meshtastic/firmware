@@ -1166,9 +1166,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 
 #if !MESHTASTIC_EXCLUDE_BEACON
-        // A LoRa change applies live - no reboot - so nothing else would re-check the beacon config
-        // against the region and preset it now inherits. A target left holding an unrunnable
-        // combination would go quiet at the TX gate with nothing telling the operator why.
+        // Applies live, no reboot, so nothing else re-checks the beacon against the radio it now
+        // inherits.
         if (moduleConfig.has_mesh_beacon &&
             (validatedLora.region != oldLoraConfig.region || validatedLora.modem_preset != oldLoraConfig.modem_preset ||
              validatedLora.use_preset != oldLoraConfig.use_preset)) {
@@ -1402,9 +1401,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     return true;
 }
 
-// A channel edit changes what the beacon can transmit on: a slot turned off takes its targets and
-// the offer quiet with it, and turning it back on brings them back. The references are deliberately
-// kept - sendBeacon() skips what it cannot resolve, so a reversible operator action stays reversible.
+// A channel edit changes what the beacon can transmit on, so re-check it against the table as it
+// now stands.
 static void recheckBeaconAfterChannelEdit(ChannelIndex index)
 {
 #if !MESHTASTIC_EXCLUDE_BEACON
@@ -1412,10 +1410,8 @@ static void recheckBeaconAfterChannelEdit(ChannelIndex index)
         return;
     auto &beacon = moduleConfig.mesh_beacon;
 
-    // A retired channel takes its beacon entries with it, rather than leaving them pointed at the
-    // slot. Provisioning an unrelated channel there later would otherwise revive a beacon nobody
-    // asked for - a target is deleted outright, since clearing only its index would silently move
-    // it onto the primary.
+    // Deleted, not left pointed at the slot: an unrelated channel provisioned there later would
+    // otherwise inherit the beacon. Clearing only the index would redirect it onto the primary.
     const meshtastic_Channel &slot = channels.getByIndex(index);
     const bool retired =
         slot.role == meshtastic_Channel_Role_DISABLED || (slot.settings.name[0] == '\0' && slot.settings.psk.size == 0);
