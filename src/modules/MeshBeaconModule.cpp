@@ -313,8 +313,30 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
     }
 }
 
+// The one thing that makes an offer impossible rather than merely unusual: a pinned slot the region
+// it is advertised for does not hold. Everything else - a preset this node cannot run, a region it
+// is not on - describes a mesh elsewhere, which is what an offer is for.
+bool MeshBeaconModule::offerIsPlaceable(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+{
+    if (!bcfg.has_broadcast_offer_frequency_slot)
+        return true;
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.use_preset = true;
+    if (bcfg.has_broadcast_offer_preset)
+        probe.modem_preset = bcfg.broadcast_offer_preset;
+    if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        probe.region = bcfg.broadcast_offer_region;
+    return bcfg.broadcast_offer_frequency_slot <= RadioInterface::frequencySlotCount(probe);
+}
+
 void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
+    // Withheld whole, not advertised on a substitute slot: a receiver that joins the derived slot
+    // is on a different mesh from the one the operator described. It stands again on a region move.
+    if (!offerIsPlaceable(bcfg)) {
+        LOG_DEBUG("Beacon: offer_frequency_slot %u not in the offered region, no offer", bcfg.broadcast_offer_frequency_slot);
+        return;
+    }
     if (const meshtastic_ChannelSettings *offerCh = offerChannelSettings(bcfg)) {
         beacon.has_offer_channel = true;
         beacon.offer_channel = *offerCh;
@@ -355,8 +377,8 @@ uint32_t MeshBeaconModule::offerFrequencySlot(const meshtastic_ModuleConfig_Mesh
     probe.channel_num = 0;
     if (derivedOut)
         *derivedOut = RadioInterface::resolveFrequencySlot(probe, name);
-    // Resolved, not verbatim: a pin outside the region falls back to the derived slot rather than
-    // advertising one no receiver can tune.
+    // Verbatim: offerIsPlaceable() has already established the pin exists in this region, so the
+    // only thing resolveFrequencySlot() does here is derive a slot when there is no pin.
     probe.channel_num = bcfg.has_broadcast_offer_frequency_slot ? bcfg.broadcast_offer_frequency_slot : 0;
     return RadioInterface::resolveFrequencySlot(probe, name);
 }
@@ -577,8 +599,10 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const auto &bcfg = moduleConfig.mesh_beacon;
 
     const bool hasText = bcfg.broadcast_message[0] != '\0';
-    const bool hasRadioContent = bcfg.has_broadcast_offer_preset || offerChannelSettings(bcfg) != nullptr ||
-                                 (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    // An offer that cannot be placed is not content: the text still goes out, the invitation does not.
+    const bool hasRadioContent = (bcfg.has_broadcast_offer_preset || offerChannelSettings(bcfg) != nullptr ||
+                                  (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)) &&
+                                 offerIsPlaceable(bcfg);
 
     if (!hasText && !hasRadioContent) {
         LOG_DEBUG("Beacon: empty msg, no offer, skip");

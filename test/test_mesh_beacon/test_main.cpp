@@ -1976,10 +1976,12 @@ static void test_sidecar_staleEntry_freesItsSlotForTheNextCycle(void)
 }
 
 /**
- * A slot pinned outside the region must not be advertised verbatim - a userPrefs build installs the
- * offer without passing through admin validation, so fillOffer() has to resolve it itself.
+ * A pinned offer slot the offered region does not hold makes the whole invitation impossible: no
+ * channel, no preset, no slot. Advertising the derived slot instead would invite receivers onto a
+ * different mesh from the one the operator described, and they could not tell. fillOffer() decides
+ * this itself - a userPrefs build installs the offer without passing through admin validation.
  */
-static void test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim(void)
+static void test_offer_unplaceablePin_advertisesNothing(void)
 {
     resetConfig();
     static const uint8_t psk[16] = {0xEE, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -1996,9 +1998,92 @@ static void test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim(void)
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     MeshBeaconModule::fillOffer(beacon, moduleConfig.mesh_beacon);
 
-    // Unset is fine (the derived slot stands); what must never happen is the pin going out verbatim.
-    TEST_ASSERT_TRUE_MESSAGE(beacon.offer_frequency_slot <= RadioInterface::frequencySlotCount(config.lora),
-                             "an advertised slot must exist in the advertised region");
+    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_frequency_slot, "a slot that is not there must not be advertised");
+    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_channel,
+                              "and the rest of the offer goes with it - a channel on an untunable frequency is no offer");
+}
+
+/**
+ * The other half: the pin the write-time check no longer deletes is advertised verbatim as soon as
+ * the node is on a region that holds it.
+ */
+static void test_offer_pinPlaceableAfterRegionMove_isAdvertised(void)
+{
+    resetConfig(); // EU_868, which holds a single 250kHz slot
+    static const uint8_t psk[16] = {0xEE, 0x02, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", psk, sizeof(psk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel_index = true;
+    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = 48; // valid in US, not in EU_868
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, bcfg);
+    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_channel, "unplaceable here, so nothing is offered yet");
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, bcfg);
+
+    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_channel, "the same config offers its channel once the region holds the slot");
+    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_frequency_slot, "and the pin is worth the airtime");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(48, beacon.offer_frequency_slot, "advertised verbatim, not resolved to a derived slot");
+}
+
+/**
+ * An unplaceable offer must not take the broadcast message with it: the announcement still stands,
+ * only the invitation is withheld.
+ */
+static void test_broadcaster_unplaceableOffer_sendsTextOnly(void)
+{
+    resetConfig();
+    static const uint8_t psk[16] = {0xEE, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", psk, sizeof(psk));
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "hi", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = 48; // valid in US, not on this EU_868 node
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "the text still goes out");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_PortNum_TEXT_MESSAGE_APP, mockRouter->sentPackets[0].decoded.portnum,
+                              "with no offer to carry, it is a plain text beacon");
+}
+
+/**
+ * And with nothing but the unplaceable offer, there is nothing to say at all.
+ */
+static void test_broadcaster_unplaceableOfferNoText_sendsNothing(void)
+{
+    resetConfig();
+    static const uint8_t psk[16] = {0xEE, 0x04, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", psk, sizeof(psk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = 48; // valid in US, not on this EU_868 node
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
+                                     "an offer that cannot be placed is not content to beacon");
 }
 
 /**
@@ -3638,7 +3723,10 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sidecar_fourLegacySplitTargets_allFit);
     RUN_TEST(test_sidecar_entryQueuedPastItsInterval_dropsThePacket);
     RUN_TEST(test_sidecar_staleEntry_freesItsSlotForTheNextCycle);
-    RUN_TEST(test_offer_pinnedOutOfRangeSlot_isNotAdvertisedVerbatim);
+    RUN_TEST(test_offer_unplaceablePin_advertisesNothing);
+    RUN_TEST(test_offer_pinPlaceableAfterRegionMove_isAdvertised);
+    RUN_TEST(test_broadcaster_unplaceableOffer_sendsTextOnly);
+    RUN_TEST(test_broadcaster_unplaceableOfferNoText_sendsNothing);
     RUN_TEST(test_broadcaster_offerOnDisabledSlot_isStillSent);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedButDerivableSlot_isNotAdvertised);
