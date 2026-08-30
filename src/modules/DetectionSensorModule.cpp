@@ -211,6 +211,10 @@ bool DetectionSensorModule::hasDetectionEvent()
 
 bool DetectionSensorModule::configureMonitorPin()
 {
+    // Disabled for the whole rebind: otherwise an old-pin interrupt that's already in flight when
+    // this starts could latch a genuine verdict via updatePendingVerdict() right before the reset
+    // below discards it.
+    noInterrupts();
     if (configuredMonitorPin > 0)
         detachInterrupt(configuredMonitorPin);
     configuredMonitorPin = moduleConfig.detection_sensor.monitor_pin;
@@ -220,8 +224,10 @@ bool DetectionSensorModule::configureMonitorPin()
     pendingDetected = false;
     pendingState = false;
     pendingDetectedFirst = false;
-    if (configuredMonitorPin == 0)
+    if (configuredMonitorPin == 0) {
+        interrupts();
         return false;
+    }
     pinMode(configuredMonitorPin, configuredUsePullup ? INPUT_PULLUP : INPUT);
     // Evaluate the trigger right here in the ISR (safe: just a digitalRead and bool bookkeeping, no
     // allocation/logging/sending) so a transition is captured the instant it happens, then wake the
@@ -235,6 +241,7 @@ bool DetectionSensorModule::configureMonitorPin()
             runASAP = true;
         },
         CHANGE);
+    interrupts();
     return true;
 }
 
