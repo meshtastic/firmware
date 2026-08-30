@@ -1,4 +1,5 @@
 .pio
+.pio-core/
 pio
 .pio-docker
 pio.tar
@@ -74,4 +75,7 @@ bin/_generated/
 build/wasm/
 build/wasm-obj/
 build/wasm-*.log
+
+# Local firmware build logs.
+build-*.log
 .emsdk/
