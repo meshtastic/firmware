@@ -739,7 +739,7 @@ static AnalogBatteryLevel analogLevel;
  * Channel 0 measures battery voltage through a 1:2 resistive divider.
  * USB / Charging status is managed via an AW35615 USB-C CC controller.
  */
-class ADS1115BatteryLevel : public HasBatteryLevel
+class ADS1115BatteryLevel : public AnalogBatteryLevel
 {
   public:
     bool init()
@@ -766,7 +766,6 @@ class ADS1115BatteryLevel : public HasBatteryLevel
         return true;
     }
 
-    virtual int getBatteryPercent() override { return -1; }
     virtual bool isBatteryConnect() override { return true; }
     virtual uint16_t getBattVoltage() override
     {
