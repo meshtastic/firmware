@@ -389,7 +389,12 @@ bool RadioInterface::configuredUsesDefaultSlot()
 
 const RegionInfo *RadioInterface::configuredRegion()
 {
+#ifdef REGULATORY_LORA_REGIONCODE
+    // The same override initRegion() applies: a regulatory build pins the region whatever is configured.
+    return getRegion(REGULATORY_LORA_REGIONCODE);
+#else
     return getRegion(configuredLoraConfig().region);
+#endif
 }
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
