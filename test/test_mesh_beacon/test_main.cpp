@@ -2355,6 +2355,166 @@ static void test_broadcaster_targetPinnedSlotAfterRegionMove_armsThatSlot(void)
 }
 
 /**
+ * An unset frequency_slot asks for the TARGET region's answer to "what is slot 0". For a region
+ * with an override slot that is the override, not the number the node happens to sit on at home:
+ * a slot index only means a frequency within one region and bandwidth.
+ */
+static void test_broadcaster_unsetSlot_takesTheTargetRegionOverrideSlot(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xD1, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.channel_num = 3; // an explicit home pin, meaningful only in US at this bandwidth
+    initRegion();
+
+    // EU_N_868 answers slot 0 with its override slot, 1.
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.region = meshtastic_Config_LoRaConfig_RegionCode_EU_N_868;
+    probe.use_preset = true;
+    probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    probe.channel_num = 0; // ask what the region derives, not what the node is pinned to
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::frequencySlotCount(probe) >= config.lora.channel_num,
+                             "the home slot must FIT the target region, or the old code would have dropped it anyway");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, RadioInterface::resolveFrequencySlot(probe, "Home"),
+                                     "EU_N_868 must answer slot 0 with its override slot");
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true; // content to send
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].region = probe.region;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = probe.modem_preset;
+    // deliberately no frequency_slot
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "expected one beacon");
+    const MeshBeaconModule_TargetRadioSettings *armed = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[0]);
+    TEST_ASSERT_NOT_NULL_MESSAGE(armed, "a different region and preset must arm a switch");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, armed->lora.channel_num,
+                                     "an unset slot must take the target region's override slot, not the home slot");
+}
+
+/**
+ * The same rule on a region that answers slot 0 with a channel-name hash: the hash is taken over
+ * the TARGET's bandwidth, so a preset change re-derives rather than carrying the home number.
+ */
+static void test_broadcaster_unsetSlot_rederivesForTheTargetBandwidth(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xD2, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.use_preset = true;
+    probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO; // 500kHz, half the slots
+    probe.channel_num = 0; // ask what the region derives, not what the node is pinned to
+    const uint32_t expected = RadioInterface::resolveFrequencySlot(probe, "Home");
+    // Pin home to anything the target band does NOT derive, so the two answers are distinguishable.
+    config.lora.channel_num = (expected == 1) ? 2 : 1;
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::frequencySlotCount(probe) >= config.lora.channel_num,
+                             "the home slot must FIT the target band, or the old code would have re-derived anyway");
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(config.lora.channel_num, expected,
+                                  "the derived slot must differ from the home slot, or the test proves nothing");
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = probe.modem_preset;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "expected one beacon");
+    const MeshBeaconModule_TargetRadioSettings *armed = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[0]);
+    TEST_ASSERT_NOT_NULL_MESSAGE(armed, "a different preset must arm a switch");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, armed->lora.channel_num,
+                                     "an unset slot must be derived for the target's own bandwidth");
+}
+
+/**
+ * An explicit pin still outranks the region's override slot - that is what a pin is for. The
+ * operator named a frequency in the region they named, and we send it.
+ */
+static void test_broadcaster_pinnedSlot_outranksTheRegionOverrideSlot(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xD3, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.region = meshtastic_Config_LoRaConfig_RegionCode_EU_N_868;
+    probe.use_preset = true;
+    probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    const uint32_t pinned = 3;
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::frequencySlotCount(probe) >= pinned, "the pin must exist in the target region");
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].region = probe.region;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = probe.modem_preset;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].frequency_slot = pinned;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "expected one beacon");
+    const MeshBeaconModule_TargetRadioSettings *armed = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[0]);
+    TEST_ASSERT_NOT_NULL_MESSAGE(armed, "a different region must arm a switch");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(pinned, armed->lora.channel_num, "an explicit pin outranks the region's override slot");
+}
+
+/**
+ * The other side of the rule: a target that overrides nothing is the same radio, so the node's own
+ * pinned slot still means the same frequency and is inherited. Re-deriving here would beacon on a
+ * different frequency from the node itself.
+ */
+static void test_broadcaster_bareTarget_stillInheritsAPinnedHomeSlot(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xD4, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.channel_num = 3;
+    initRegion();
+
+    meshtastic_Config_LoRaConfig derived = config.lora;
+    derived.channel_num = 0;
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(config.lora.channel_num, RadioInterface::resolveFrequencySlot(derived, "Home"),
+                                  "the home pin must differ from the derived slot, or the test proves nothing");
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1; // overrides nothing
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "expected one beacon");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                              "a target on the node's own radio must arm no switch - it inherits the pinned home slot");
+}
+
+/**
  * A preset-only target derives its slot for THAT preset's bandwidth. Carrying the home slot number
  * over is a silent drop: a wider preset halves the count, so the number can fall outside the band.
  */
@@ -3758,6 +3918,10 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_targetPinnedSlot_armsThatSlot);
     RUN_TEST(test_broadcaster_targetPinnedSlotOutsideResolvedRegion_isSkipped);
     RUN_TEST(test_broadcaster_targetPinnedSlotAfterRegionMove_armsThatSlot);
+    RUN_TEST(test_broadcaster_unsetSlot_takesTheTargetRegionOverrideSlot);
+    RUN_TEST(test_broadcaster_unsetSlot_rederivesForTheTargetBandwidth);
+    RUN_TEST(test_broadcaster_pinnedSlot_outranksTheRegionOverrideSlot);
+    RUN_TEST(test_broadcaster_bareTarget_stillInheritsAPinnedHomeSlot);
     RUN_TEST(test_broadcaster_presetOnlyTargetOnNarrowerBand_isNotDropped);
     RUN_TEST(test_broadcaster_presetTargetOnCustomModemNode_switchesUsePreset);
     RUN_TEST(test_broadcaster_targetPinnedHomeSlot_armsNoSwitch);
