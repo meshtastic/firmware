@@ -30,6 +30,9 @@
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include "modules/NeighborInfoModule.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
@@ -817,6 +820,13 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 
     // Update the global myRegion
     initRegion();
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+    // A userPrefs build writes broadcast targets and the offer straight into moduleConfig, so this
+    // is the only point that catches a combination no radio can key up on. Channels are live above.
+    if (moduleConfig.has_mesh_beacon)
+        MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
+#endif
 }
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
