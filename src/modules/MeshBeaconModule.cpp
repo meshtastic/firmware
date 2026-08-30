@@ -664,8 +664,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
     };
 
     // The only place a target's slot is worked out, so a pin and a derivation see the same region,
-    // preset and bandwidth. An inherited home slot the target's band cannot hold falls back to the
-    // hash; a pin that does not fit is skipped before it reaches here.
+    // preset and bandwidth. A home slot is only inherited when nothing that derives it was
+    // overridden; a pin that does not fit the region is skipped before it reaches here.
     // Takes the resolved region, not the requested one: an EU sibling swap changes the band, and
     // with it the slot count the hash divides by.
     const auto targetProbe = [](const EffTarget &tgt, meshtastic_Config_LoRaConfig_RegionCode region, uint32_t seedSlot) {
@@ -755,18 +755,21 @@ void MeshBeaconBroadcastModule::sendBeacon()
             }
         }
 
-        // A pin wins; a target on its own channel derives from that name; one on the primary
-        // inherits the home slot, re-derived when the target's band is too small to hold it.
+        // A pin wins. Otherwise the slot is derived, and channel_num is a value derived from the
+        // region, the bandwidth and the name being hashed: override any of those and the node's own
+        // slot no longer names the same frequency, so it must not be carried across. Seeding 0 is
+        // what an unset slot asks for - the target region's own answer, be that its override slot,
+        // its preset hash or the hash of this target's channel name.
         const bool pinned = bt && bt->has_frequency_slot && bt->frequency_slot > 0;
+        const bool inheritsRadio = resolvedRegion == config.lora.region && tgt.usePreset == config.lora.use_preset &&
+                                   tgt.preset == config.lora.modem_preset && bc.index == channels.getPrimaryIndex();
         if (pinned && bt->frequency_slot > RadioInterface::frequencySlotCount(targetProbe(tgt, resolvedRegion, 0))) {
             // Skipped rather than derived, as for a channel or a preset: the operator named a
             // frequency, and beaconing on a different one is worse than not beaconing at all.
             LOG_DEBUG("Beacon: target %d frequency_slot %u not in the resolved region, skip", ti, bt->frequency_slot);
             continue;
         }
-        const uint32_t seedSlot = pinned                                     ? bt->frequency_slot
-                                  : (bc.index != channels.getPrimaryIndex()) ? 0
-                                                                             : config.lora.channel_num;
+        const uint32_t seedSlot = pinned ? bt->frequency_slot : inheritsRadio ? config.lora.channel_num : 0;
         tgt.slot = targetSlot(tgt, resolvedRegion, seedSlot);
 
         // Skip a target whose effective radio config duplicates one already sent this cycle.
