@@ -55,6 +55,10 @@ class Channels
      */
     const char *getName(size_t chIndex);
 
+    // getName() against an explicit preset: a blank name resolves to the preset's display name, so
+    // the answer depends on which preset is asked about. Status checks must ask the configured one.
+    const char *getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
+
     /**
      * Return a globally unique channel ID usable with MQTT.
      */

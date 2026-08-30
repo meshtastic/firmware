@@ -258,6 +258,19 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
+    // The radio as configured, which is not always the radio as it is running. Status gates - may
+    // a module run, transmit, how often - ask these; only radio programming reads the live values.
+    static const meshtastic_Config_LoRaConfig &configuredLoraConfig();
+
+    // Settings-time twin of uses_default_frequency_slot.
+    static bool configuredUsesDefaultSlot();
+
+    // The region this node is configured for, not the one the radio may be borrowing.
+    static const RegionInfo *configuredRegion();
+
+    // Freeze config.lora and its slot verdict. Settings path and init() only.
+    static void captureConfiguredRadio();
+
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
@@ -334,6 +347,8 @@ class RadioInterface
     int reloadConfig(void *unused)
     {
         reconfigure();
+        // Settings time: only a committed config reaches here, so this is what the node IS.
+        captureConfiguredRadio();
         return 0;
     }
 };

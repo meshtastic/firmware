@@ -1,5 +1,6 @@
 #include "Default.h"
 
+#include "RadioInterface.h"
 #include "meshUtils.h"
 
 // Convert seconds to ms, clamping at INT32_MAX (~24.86 days)
@@ -65,11 +66,13 @@ uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t d
 {
     uint32_t baseMs = getConfiguredOrDefaultMsScaled(configured, defaultValue, numOnlineNodes);
 
-    if (!myRegion || !myRegion->profile)
+    // The configured region: how often a node may talk follows its settings, so a radio moved away
+    // for one transmission must not retune every other module's interval while it is gone.
+    const RegionInfo *region = RadioInterface::configuredRegion();
+    if (!region || !region->profile)
         return baseMs;
 
-    int8_t throttle =
-        (type == TrafficType::POSITION) ? myRegion->profile->positionThrottle : myRegion->profile->telemetryThrottle;
+    int8_t throttle = (type == TrafficType::POSITION) ? region->profile->positionThrottle : region->profile->telemetryThrottle;
 
     // throttle <= 0 means unset; 1 is the neutral multiplier - skip the multiply for performance
     if (throttle <= 1)

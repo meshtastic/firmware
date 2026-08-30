@@ -401,7 +401,7 @@ bool Channels::anyMqttEnabled()
     return false;
 }
 
-const char *Channels::getName(size_t chIndex)
+const char *Channels::getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset)
 {
     // Convert the short "" representation for Default into a usable string
     const meshtastic_ChannelSettings &channelSettings = getByIndex(chIndex).settings;
@@ -409,8 +409,8 @@ const char *Channels::getName(size_t chIndex)
     if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app effed up and forgot to set channelSettings.name
-        if (config.lora.use_preset) {
-            channelName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+        if (usePreset) {
+            channelName = DisplayFormatters::getModemPresetDisplayName(preset, false, usePreset);
         } else {
             channelName = "Custom";
         }
@@ -419,13 +419,21 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
+const char *Channels::getName(size_t chIndex)
+{
+    // The display name, which follows the live radio - what a user reading a screen expects.
+    return getNameForPreset(chIndex, config.lora.modem_preset, config.lora.use_preset);
+}
+
 bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
     const auto &ch = getByIndex(chIndex);
     if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
-        const char *name = getName(chIndex);
-        const char *presetName =
-            DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+        // The configured preset on both sides: modules gate transmissions on this, so a momentary
+        // radio move must not change it. Under the live preset an explicit "LongFast" name flipped.
+        const meshtastic_Config_LoRaConfig &cfg = RadioInterface::configuredLoraConfig();
+        const char *name = getNameForPreset(chIndex, cfg.modem_preset, cfg.use_preset);
+        const char *presetName = DisplayFormatters::getModemPresetDisplayName(cfg.modem_preset, false, cfg.use_preset);
         // Check if the name is the default derived from the modem preset
         if (strcmp(name, presetName) == 0)
             return true;
@@ -518,7 +526,8 @@ bool Channels::isEventChannel(ChannelIndex chIndex)
 bool Channels::hasDefaultChannel()
 {
     // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
-    if (!config.lora.use_preset || !RadioInterface::uses_default_frequency_slot || config.lora.override_frequency)
+    const meshtastic_Config_LoRaConfig &cfg = RadioInterface::configuredLoraConfig();
+    if (!cfg.use_preset || !RadioInterface::configuredUsesDefaultSlot() || cfg.override_frequency)
         return false;
     // Check if any of the channels are using the default name and PSK
     for (size_t i = 0; i < getNumChannels(); i++) {
