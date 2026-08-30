@@ -456,15 +456,23 @@ static void test_adminValidation_targetChannelIndexInRange_isPreserved(void)
 /**
  * With an explicit region AND preset the bandwidth is fixed, so the slot count cannot move under
  * the pin later: a pin past the last slot is permanently wrong and is cleared on write.
+ *
+ * The node runs US and the target names EU_868, on a slot US holds and EU_868 does not - so only a
+ * check against the pair the TARGET names can reject it. One built from the running config passes.
  */
 static void test_adminValidation_targetFrequencySlotOutOfRangeExplicitPair_isCleared(void)
 {
     resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
 
     meshtastic_Config_LoRaConfig probe = config.lora;
     probe.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     probe.use_preset = true;
     probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    const uint32_t pin = RadioInterface::frequencySlotCount(probe) + 1;
+    TEST_ASSERT_TRUE_MESSAGE(pin <= RadioInterface::frequencySlotCount(config.lora),
+                             "the running region must hold this slot, or the test proves nothing");
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.broadcast_targets_count = 1;
@@ -472,11 +480,12 @@ static void test_adminValidation_targetFrequencySlotOutOfRangeExplicitPair_isCle
     bcfg.broadcast_targets[0].has_preset = true;
     bcfg.broadcast_targets[0].preset = probe.modem_preset;
     bcfg.broadcast_targets[0].has_frequency_slot = true;
-    bcfg.broadcast_targets[0].frequency_slot = RadioInterface::frequencySlotCount(probe) + 1;
+    bcfg.broadcast_targets[0].frequency_slot = pin;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot);
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_frequency_slot,
+                              "the pin is checked against the region and preset the target names, not the running ones");
 }
 
 /**
@@ -543,22 +552,28 @@ static void test_adminValidation_targetFrequencySlotInRange_isPreserved(void)
 static void test_adminValidation_offerFrequencySlotOutOfRangeExplicitPair_isCleared(void)
 {
     resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
 
     meshtastic_Config_LoRaConfig probe = config.lora;
     probe.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     probe.use_preset = true;
     probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    const uint32_t pin = RadioInterface::frequencySlotCount(probe) + 1;
+    TEST_ASSERT_TRUE_MESSAGE(pin <= RadioInterface::frequencySlotCount(config.lora),
+                             "the running region must hold this slot, or the test proves nothing");
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.broadcast_offer_region = probe.region;
     bcfg.has_broadcast_offer_preset = true;
     bcfg.broadcast_offer_preset = probe.modem_preset;
     bcfg.has_broadcast_offer_frequency_slot = true;
-    bcfg.broadcast_offer_frequency_slot = RadioInterface::frequencySlotCount(probe) + 1;
+    bcfg.broadcast_offer_frequency_slot = pin;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot);
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot,
+                              "the pin is checked against the region and preset the offer names, not the running ones");
 }
 
 /**
@@ -2220,7 +2235,8 @@ static void test_offer_disabledChannelSlot_advertisesNothing(void)
 
 /**
  * REGRESSION: the same predicate silenced the offer. A channel running in the clear with no name is
- * a mesh a receiver can join - the name resolves to the preset's, the key is absent by design.
+ * a mesh a receiver can join: the key is absent by design, and the name goes out as stored - blank,
+ * for the receiver to read against the offered preset the way any node resolves its own primary.
  */
 static void test_offer_cleartextUnnamedChannel_isAdvertised(void)
 {
@@ -2236,6 +2252,8 @@ static void test_offer_cleartextUnnamedChannel_isAdvertised(void)
 
     TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_channel, "an unnamed cleartext channel is still a channel to offer");
     TEST_ASSERT_EQUAL_UINT_MESSAGE(0, beacon.offer_channel.psk.size, "and it is offered with no key, not skipped");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("", beacon.offer_channel.name,
+                                     "the settings go out as stored - fillOffer advertises them, it does not rename them");
 }
 
 /**
