@@ -96,34 +96,31 @@ int32_t DetectionSensorModule::runOnce()
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
-    // Sample the pin and evaluate the trigger on every poll so a transition is never missed between
-    // sends; minimum_broadcast_secs only rate-limits how often we're allowed to actually transmit.
-    // wasDetected always advances so edge comparisons stay correct; a verdict produced while still
-    // throttled is latched in pendingSend rather than discarded, so it isn't lost.
+    // Sample and evaluate the trigger every poll so a transition is never missed; minimum_broadcast_secs
+    // only rate-limits sends, not sampling.
     bool isDetected = hasDetectionEvent();
     DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
     wasDetected = isDetected;
     switch (verdict) {
     case DetectionSensorVerdictDetected:
-        pendingSend = true;
-        pendingSendIsState = false;
+        pendingDetected = true;
         break;
     case DetectionSensorVerdictSendState:
-        pendingSend = true;
-        pendingSendIsState = true;
-        pendingIsDetected = isDetected;
+        pendingState = true;
+        pendingStateIsDetected = isDetected;
         break;
     case DetectionSensorVerdictNoop:
         break;
     }
-    if (pendingSend &&
+    if ((pendingDetected || pendingState) &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
-        pendingSend = false;
-        if (pendingSendIsState) {
-            sendCurrentStateMessage(pendingIsDetected);
-        } else {
+        if (pendingDetected) {
+            pendingDetected = false;
             sendDetectionMessage();
+        } else {
+            pendingState = false;
+            sendCurrentStateMessage(pendingStateIsDetected);
         }
         return DELAYED_INTERVAL;
     }
