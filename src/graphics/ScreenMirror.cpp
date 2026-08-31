@@ -45,6 +45,8 @@ void ScreenMirror::freeSnapshotLocked()
 void ScreenMirror::setMirror(bool enabled)
 {
     concurrency::LockGuard g(&lock);
+    if (mirroring == enabled && !(enabled && oneShot))
+        return; // no state change; keeps client disconnects from logging forever
     mirroring = enabled;
     if (enabled) {
         // Force an immediate frame so the client doesn't wait for the next
@@ -75,9 +77,15 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
 
         uint16_t w = display->getWidth();
         uint16_t h = display->getHeight();
-        uint16_t size = w * ((h + 7) / 8);
-        if (size == 0)
+        uint32_t fullSize = (uint32_t)w * ((h + 7) / 8);
+        if (fullSize == 0)
             return;
+        if (fullSize > UINT16_MAX) {
+            LOG_WARN("Screen mirror: %ux%u framebuffer too large to stream", w, h);
+            mirroring = oneShot = false;
+            return;
+        }
+        uint16_t size = (uint16_t)fullSize;
 
         if (snapshot && size != frameSize)
             freeSnapshotLocked(); // display geometry changed; start over
@@ -96,10 +104,14 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
             height = h;
         }
 
-        if (!firstFrame && !oneShot && memcmp(display->buffer, snapshot, frameSize) == 0)
+        // A palette-only change (theme recolor) is frame-worthy even when the
+        // mono bits are identical: the client keys colors off the frame's signature.
+        bool paletteChanged = snapshotPaletteSig != paletteSig;
+        if (!firstFrame && !oneShot && !paletteChanged && memcmp(display->buffer, snapshot, frameSize) == 0)
             return;
 
         memcpy(snapshot, display->buffer, frameSize);
+        snapshotPaletteSig = paletteSig;
         frameId++;
         oneShot = false;
         readyId = frameId;
@@ -203,7 +215,9 @@ bool ScreenMirror::copyChunk(uint32_t &clientFrameId, uint16_t &clientOffset, me
     out.width = width;
     out.height = height;
     out.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
-    out.palette_signature = paletteSig; // 0 on monochrome-only builds
+    // The signature captured WITH this snapshot, not the live one: a drain can
+    // span a display() that already advanced paletteSig for the next frame.
+    out.palette_signature = snapshotPaletteSig;
     out.frame_id = frameId;
     out.offset = clientOffset;
     out.total_size = frameSize;
