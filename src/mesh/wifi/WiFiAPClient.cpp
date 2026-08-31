@@ -31,6 +31,7 @@ static void WiFiEvent(WiFiEvent_t event);
 #elif defined(ARCH_RP2040)
 #include <FreeRTOS.h>
 #include <SimpleMDNS.h>
+#include <atomic>
 #include <task.h>
 #endif
 
@@ -68,23 +69,25 @@ bool isReconnecting = false; // If we are currently reconnecting
 // On the CYW43 under FreeRTOS even WiFi.beginNoBlock() holds the caller for several seconds (up to the WiFi timeout,
 // 15 s); from the main loop that trips the 8 s hardware watchdog. Join from a short-lived task and poll for the link.
 // Pinned to core 0: the CYW43 shim is written for the core-0 LWIP thread and its core assertions are NDEBUG-only.
-static TaskHandle_t wifiJoinTask = nullptr;
+// The claim is load/store only - ARMv6-M has no LDREX, so an exchange() would call libatomic.
+static std::atomic<bool> wifiJoinRunning{false};
 
 static void wifiJoinTaskFn(void *)
 {
     const char *psk = config.network.wifi_psk[0] ? config.network.wifi_psk : NULL;
     WiFi.beginNoBlock(config.network.wifi_ssid, psk);
-    wifiJoinTask = nullptr;
+    wifiJoinRunning.store(false, std::memory_order_release);
     vTaskDelete(NULL);
 }
 
 static bool startWifiJoin()
 {
-    if (wifiJoinTask)
+    if (wifiJoinRunning.load(std::memory_order_acquire))
         return true; // previous join still in progress
-    if (xTaskCreateAffinitySet(wifiJoinTaskFn, "wifijoin", 1536, NULL, uxTaskPriorityGet(NULL), 1u << 0, &wifiJoinTask) !=
-        pdPASS) {
+    wifiJoinRunning.store(true, std::memory_order_relaxed);
+    if (xTaskCreateAffinitySet(wifiJoinTaskFn, "wifijoin", 1536, NULL, uxTaskPriorityGet(NULL), 1u << 0, NULL) != pdPASS) {
         LOG_ERROR("Could not start WiFi join task");
+        wifiJoinRunning.store(false, std::memory_order_relaxed);
         return false;
     }
     return true;
@@ -345,8 +348,8 @@ static int32_t reconnectWiFi()
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
         // Lost the link, or a join that has not come up within 30 s: start the join over once the join task is done.
-        needReconnect =
-            !wifiJoinTask && (APStartupComplete || (!isReconnecting && Throttle::hasElapsed(wifiReconnectStartMillis, 30000)));
+        needReconnect = !wifiJoinRunning.load(std::memory_order_acquire) &&
+                        (APStartupComplete || (!isReconnecting && Throttle::hasElapsed(wifiReconnectStartMillis, 30000)));
 #endif
         return 1000; // check once per second
     } else {
