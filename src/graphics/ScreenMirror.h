@@ -132,6 +132,9 @@ extern ScreenMirror screenMirror;
  * Returns false when MUI is not the active UI.
  */
 bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY);
+
+/** Fills MUI's panel geometry for DeviceMetadata; false when MUI is not active. */
+bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch);
 #endif
 
 } // namespace graphics
