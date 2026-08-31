@@ -297,7 +297,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 #endif
     p.from = 0;                   // We don't let clients assign nodenums to their sent messages
     p.relay_node = NO_RELAY_NODE; // We don't let clients assign relay_node to their sent messages
-    if (!isBroadcast(p.to))
+    if (!isBroadcast(p.to) || !nodeDB->resolveUniqueLastByte(p.next_hop, /*requireDirectNeighbor=*/true))
         p.next_hop = NO_NEXT_HOP_PREFERENCE;
 
     if (p.id == 0)

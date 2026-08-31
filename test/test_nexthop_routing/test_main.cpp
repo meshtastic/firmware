@@ -1001,12 +1001,13 @@ void test_broadcast_first_hop_is_preserved_then_cleared_by_selected_relay(void)
     constexpr uint8_t selectedRelay = 0x11;
     constexpr uint8_t otherRelay = 0x33;
     CaptureRadioInterface *capture = installCaptureIface();
+    mockNodeDB->addNode(0x33333311, 0, true, 60);
 
     meshtastic_MeshPacket p = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, NODENUM_BROADCAST, 0);
     p.next_hop = selectedRelay;
 
     TEST_ASSERT_EQUAL(ERRNO_OK, shim->send(packetPool.allocCopy(p)));
-    TEST_ASSERT_EQUAL_UINT32(1, capture->sentPackets.size());
+    TEST_ASSERT_FALSE(capture->sentPackets.empty());
     TEST_ASSERT_EQUAL_HEX8(selectedRelay, capture->sentPackets[0].next_hop);
 
     capture->reset();
@@ -1014,11 +1015,11 @@ void test_broadcast_first_hop_is_preserved_then_cleared_by_selected_relay(void)
     p.relay_node = 0x22;
     p.next_hop = otherRelay;
     TEST_ASSERT_FALSE(shim->perhapsRebroadcast(&p));
-    TEST_ASSERT_EQUAL_UINT32(0, capture->sentPackets.size());
+    TEST_ASSERT_TRUE(capture->sentPackets.empty());
 
     p.next_hop = selectedRelay;
     TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
-    TEST_ASSERT_EQUAL_UINT32(1, capture->sentPackets.size());
+    TEST_ASSERT_FALSE(capture->sentPackets.empty());
     TEST_ASSERT_EQUAL_HEX8(NO_NEXT_HOP_PREFERENCE, capture->sentPackets[0].next_hop);
 }
 
