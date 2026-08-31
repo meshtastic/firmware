@@ -8,6 +8,7 @@
 #include "NodeDB.h"
 #include "PositionPrecision.h"
 #include "Router.h"
+#include "Throttle.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
 #include "airtime.h"
@@ -1230,8 +1231,10 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         // probation, or promoted) sender on a long-tenured device gets a
         // rate-capped KNOWN_SINCE, so neighbors that first saw the ID can
         // promote it instead of waiting out their timers. One per hour.
+        // lastVouchSentMs == 0 means "never vouched yet" (cold start): allow
+        // the first vouch immediately instead of waiting an hour of uptime.
         if (cfg.probation_window_secs > 0 && uptimeSecs() >= cfg.attestation_min_tenure_secs &&
-            isEstablishedForVouching(mp.from) && (nowMs - lastVouchSentMs) > 3'600'000UL) {
+            isEstablishedForVouching(mp.from) && (lastVouchSentMs == 0 || Throttle::hasElapsed(lastVouchSentMs, 3'600'000UL))) {
             lastVouchSentMs = nowMs;
             sendKnownSinceGossip(mp.from);
         }
