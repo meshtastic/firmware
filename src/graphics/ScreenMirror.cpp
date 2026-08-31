@@ -8,10 +8,25 @@
 #include <OLEDDisplay.h>
 #include <cstring>
 
+#include "TFTColorRegions.h" // self-defines GRAPHICS_TFT_COLORING_ENABLED; API is safe when coloring is compiled out
+#include "TFTPalette.h"
+
 namespace graphics
 {
 
 ScreenMirror screenMirror;
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+namespace
+{
+// Region colors are stored panel-byte-order (big-endian RGB565); the wire
+// carries logical bit layout.
+inline uint16_t swap16(uint16_t v)
+{
+    return (uint16_t)((v >> 8) | (v << 8));
+}
+} // namespace
+#endif
 
 void ScreenMirror::freeSnapshotLocked()
 {
@@ -21,6 +36,13 @@ void ScreenMirror::freeSnapshotLocked()
         snapshot = nullptr;
     }
     frameSize = 0;
+    if (paletteRegions) {
+        memaudit::add("display", -(int32_t)(sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS));
+        free(paletteRegions);
+        paletteRegions = nullptr;
+    }
+    paletteSig = 0;
+    paletteCount = 0;
 }
 
 void ScreenMirror::setMirror(bool enabled)
@@ -83,10 +105,79 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
         memcpy(snapshot, display->buffer, frameSize);
         frameId++;
         oneShot = false;
+        capturePaletteLocked();
         readyId = frameId;
     }
     // Notify outside the lock: observers (PhoneAPI) may re-enter hasChunkFor.
     frameReady.notifyObservers(readyId);
+}
+
+void ScreenMirror::capturePaletteLocked()
+{
+#if GRAPHICS_TFT_COLORING_ENABLED
+    uint32_t sig = getTFTColorFrameSignature();
+    if (sig == paletteSig && paletteRegions)
+        return;
+    if (!paletteRegions) {
+        paletteRegions = (PaletteRegion *)malloc(sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS);
+        if (!paletteRegions)
+            return; // frames still stream; clients render monochrome
+        memaudit::add("display", sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS);
+    }
+    uint8_t count = getTFTColorRegionCount();
+    if (count > MAX_TFT_COLOR_REGIONS)
+        count = MAX_TFT_COLOR_REGIONS;
+    for (uint8_t i = 0; i < count; i++) {
+        const TFTColorRegion &r = colorRegions[i];
+        paletteRegions[i] = {(uint16_t)r.x,      (uint16_t)r.y,       (uint16_t)r.width,
+                             (uint16_t)r.height, swap16(r.onColorBe), swap16(r.offColorBe)};
+    }
+    paletteCount = count;
+    paletteDefaultOn = TFTPalette::White;
+    paletteDefaultOff = getThemeBodyBg();
+    paletteSig = sig;
+#endif
+}
+
+bool ScreenMirror::hasPaletteChunkFor(uint32_t clientPaletteSig, uint8_t clientRegionOffset)
+{
+    concurrency::LockGuard g(&lock);
+    if (!paletteRegions || !snapshot)
+        return false;
+    return clientPaletteSig != paletteSig || clientRegionOffset < paletteCount;
+}
+
+bool ScreenMirror::copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientRegionOffset, meshtastic_DisplayPalette &out)
+{
+    concurrency::LockGuard g(&lock);
+    if (!paletteRegions || !snapshot)
+        return false;
+    if (clientPaletteSig != paletteSig) {
+        clientPaletteSig = paletteSig;
+        clientRegionOffset = 0;
+    } else if (clientRegionOffset >= paletteCount) {
+        return false;
+    }
+
+    out.signature = paletteSig;
+    out.default_on_color = paletteDefaultOn;
+    out.default_off_color = paletteDefaultOff;
+    out.region_offset = clientRegionOffset;
+    out.region_total = paletteCount;
+    uint8_t n = 0;
+    while (n < (sizeof(out.regions) / sizeof(out.regions[0])) && clientRegionOffset + n < paletteCount) {
+        const PaletteRegion &r = paletteRegions[clientRegionOffset + n];
+        out.regions[n].x = r.x;
+        out.regions[n].y = r.y;
+        out.regions[n].width = r.w;
+        out.regions[n].height = r.h;
+        out.regions[n].on_color = r.onColor;
+        out.regions[n].off_color = r.offColor;
+        n++;
+    }
+    out.regions_count = n;
+    clientRegionOffset += n;
+    return true;
 }
 
 bool ScreenMirror::hasChunkFor(uint32_t clientFrameId, uint16_t clientOffset)
@@ -114,6 +205,7 @@ bool ScreenMirror::copyChunk(uint32_t &clientFrameId, uint16_t &clientOffset, me
     out.width = width;
     out.height = height;
     out.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
+    out.palette_signature = paletteSig; // 0 on monochrome-only builds
     out.frame_id = frameId;
     out.offset = clientOffset;
     out.total_size = frameSize;
