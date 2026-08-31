@@ -1,7 +1,12 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 #include "SatellitesRenderer.h"
 #if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK) && !MESHTASTIC_EXCLUDE_GPS
+=======
+#include "SatellitesRenderer.h"
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+>>>>>>> d6bcf23be (t-echo-plus)
 #include "GPS.h"
 #include "graphics/ScreenFonts.h"
 #include <algorithm>
@@ -11,6 +16,10 @@ namespace graphics
 {
 namespace SatellitesRenderer
 {
+<<<<<<< HEAD
+=======
+
+>>>>>>> d6bcf23be (t-echo-plus)
 static const char *systemName(uint8_t s)
 {
     switch (s) {
@@ -49,7 +58,10 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
              (unsigned)gps->getSatellitesUsedBySystem(TINYGPS_GNSS_GLONASS),
              (unsigned)gps->getSatellitesUsedBySystem(TINYGPS_GNSS_BEIDOU));
     display->drawString(x + 2, y + 14, systems);
+<<<<<<< HEAD
 
+=======
+>>>>>>> d6bcf23be (t-echo-plus)
     display->drawString(x + 2, y + 28, "SYS ID EL  AZ  SNR");
     display->drawHorizontalLine(x + 2, y + 44, w - 4);
 
@@ -58,10 +70,15 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
     const TinyGPSTrackedSattelites *visible[TINYGPS_MAX_SATS];
     size_t count = 0;
 
+<<<<<<< HEAD
     // Only render satellites from a recent, checksum-valid GSV sentence.
     // Old GSV rows must not remain frozen on the E-Ink page indefinitely.
     for (size_t i = 0; i < capacity && count < TINYGPS_MAX_SATS; ++i) {
         if (gps->isTrackedSatelliteFresh(sats[i])) {
+=======
+    for (size_t i = 0; i < capacity && count < TINYGPS_MAX_SATS; ++i) {
+        if (sats[i].prn != 0) {
+>>>>>>> d6bcf23be (t-echo-plus)
             visible[count++] = &sats[i];
         }
     }
@@ -85,6 +102,10 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
             snprintf(row, sizeof(row), "%-3s %3u %2u %3u  --", systemName(visible[i]->system), (unsigned)visible[i]->prn,
                      (unsigned)visible[i]->elevation, (unsigned)visible[i]->azimuth);
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> d6bcf23be (t-echo-plus)
         display->drawString(x + 2, yy, row);
         yy += 12;
     }
@@ -93,4 +114,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
 } // namespace SatellitesRenderer
 } // namespace graphics
 #endif
+<<<<<<< HEAD
 >>>>>>> 818176a7a (t-ech-plust-echo-plus)
+=======
+>>>>>>> d6bcf23be (t-echo-plus)
