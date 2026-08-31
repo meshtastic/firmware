@@ -124,6 +124,16 @@ class ScreenMirror
 
 extern ScreenMirror screenMirror;
 
+#if HAS_TFT
+/**
+ * Routes a remote input event straight into device-ui's injection seam.
+ * MUI builds never construct an InputBroker (Modules.cpp skips it when
+ * displaymode is COLOR), so admin input cannot travel the usual path.
+ * Returns false when MUI is not the active UI.
+ */
+bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY);
+#endif
+
 } // namespace graphics
 
 #endif
