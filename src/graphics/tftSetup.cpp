@@ -10,6 +10,10 @@
 #include "graphics/ScreenMirror.h"
 #include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverConfig.h"
+#include "input/InputBroker.h"
+#if defined(MESHTASTIC_MUI_MIRROR)
+#include "input/InputDriver.h"
+#endif
 #include "util/ISpiLock.h"
 
 #ifdef ARCH_PORTDUINO
@@ -313,9 +317,73 @@ class ReentrantSpiLock : public ISpiLock
 
 static ReentrantSpiLock reentrantSpiLock;
 
+#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+// Bridges InputBroker events (remote AdminMessage.send_input_event) into
+// device-ui's virtual input devices. Note the LEFT/RIGHT cross-map: the
+// broker's codes were modeled on LVGL keys but those two are swapped.
+class MuiInputBridge
+{
+  public:
+    void attach()
+    {
+        if (!attached && inputBroker) {
+            inputObserver.observe(inputBroker);
+            attached = true;
+        }
+    }
+
+  private:
+    int onInputEvent(const InputEvent *event)
+    {
+        constexpr uint16_t longPressHoldMs = 600;
+        switch (event->inputEvent) {
+        case INPUT_BROKER_UP:
+            InputDriver::injectKey(LV_KEY_UP);
+            break;
+        case INPUT_BROKER_DOWN:
+            InputDriver::injectKey(LV_KEY_DOWN);
+            break;
+        case INPUT_BROKER_LEFT:
+            InputDriver::injectKey(LV_KEY_LEFT);
+            break;
+        case INPUT_BROKER_RIGHT:
+            InputDriver::injectKey(LV_KEY_RIGHT);
+            break;
+        case INPUT_BROKER_SELECT:
+            if (event->touchX || event->touchY)
+                InputDriver::injectTouch(event->touchX, event->touchY, longPressHoldMs);
+            else
+                InputDriver::injectKey(LV_KEY_ENTER);
+            break;
+        case INPUT_BROKER_USER_PRESS:
+            InputDriver::injectTouch(event->touchX, event->touchY);
+            break;
+        case INPUT_BROKER_BACK:
+        case INPUT_BROKER_CANCEL:
+            InputDriver::injectKey(LV_KEY_ESC);
+            break;
+        default:
+            if (event->kbchar)
+                InputDriver::injectKey(event->kbchar);
+            break;
+        }
+        return 0;
+    }
+
+    bool attached = false;
+    CallbackObserver<MuiInputBridge, const InputEvent *> inputObserver =
+        CallbackObserver<MuiInputBridge, const InputEvent *>(this, &MuiInputBridge::onInputEvent);
+};
+static MuiInputBridge muiInputBridge;
+#endif
+
 void tft_task_handler(void *param = nullptr)
 {
     while (true) {
+#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+        // inputBroker is created in setupModules, after tftSetup: attach lazily.
+        muiInputBridge.attach();
+#endif
         // No lock held here on purpose - device-ui guards its own SPI access.
         deviceScreen->task_handler();
         deviceScreen->sleep();
