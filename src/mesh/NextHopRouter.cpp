@@ -104,7 +104,8 @@ ErrorCode NextHopRouter::sendWithNextHop(meshtastic_MeshPacket *p, bool trackRet
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
-    p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
+    if (!isBroadcast(p->to) || !isFromUs(p) || p->next_hop == NO_NEXT_HOP_PREFERENCE)
+        p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE);
     LOG_TRACE("Set next hop for dest 0x%08x to 0x%x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
