@@ -297,7 +297,11 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         const uint8_t capped = trafficManagementModule->relayHopCap(*p);
                         if (capped < tosend->hop_limit)
                             tosend->hop_limit = capped;
-                        trafficManagementModule->recordRelayed(*p);
+                        // recordRelayed() reads the decoded portnum for its
+                        // reliability exemption, so it only applies to
+                        // decoded packets - never to ciphertext.
+                        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
+                            trafficManagementModule->recordRelayed(*p);
                     }
 #endif
 
