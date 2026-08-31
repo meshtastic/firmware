@@ -191,7 +191,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     uint32_t lastChipRecoveryMs = 0;
 
-    /// Consecutive failed recoveries before giving up on in-place repair and rebooting to re-run init()
+    /// Consecutive recovery attempts that never got RX armed again, before rebooting to re-run init()
     static constexpr uint8_t MAX_CHIP_RECOVERY_FAILURES = 5;
     uint8_t chipRecoveryFailures = 0;
 
