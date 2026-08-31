@@ -513,7 +513,16 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     } else if (moduleConfig.external_notification.use_pwm) {
                         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
                     } else {
-                        setExternalState(2, true);
+#if !MESHTASTIC_EXCLUDE_I2C
+                        // Start here, not in runOnce(): with nag_timeout and output_ms at 0 the nag window is
+                        // already closed by the first tick, but the ringtone should still play once.
+                        if (i2cBuzzer) {
+                            i2cBuzzer->beginRtttl(rtttlConfig.ringtone);
+                        } else
+#endif
+                        {
+                            setExternalState(2, true);
+                        }
                     }
                 }
             }
