@@ -38,6 +38,11 @@
 class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 {
   public:
+    // M4: top-senders count carried in DeviceMetrics.top_senders. Declared in
+    // the public section so it is visible to snapshotTopSenders() below
+    // (a later member is not in scope in a parameter list).
+    static constexpr uint16_t kTopSendersCount = 3;
+
     TrafficManagementModule();
     ~TrafficManagementModule();
 
@@ -100,6 +105,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     {
         return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
     }
+
     // =========================================================================
     // Antispam L1 (M2 greylist + M4 gossiped budgets + M6 relay pricing)
     //
@@ -113,8 +119,22 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// on its relayed copy. No-op (returns hop_limit) when no cap applies.
     uint8_t relayHopCap(const meshtastic_MeshPacket &mp) const;
 
+    /// M4: fill `out` (kTopSendersCount) with the top senders by observed
+    /// rate this budget window, for the device-telemetry piggyback
+    /// (DeviceMetrics.top_senders). Entries are node=0 when unused.
+    void snapshotTopSenders(meshtastic_TopSender (&out)[kTopSendersCount]) const;
+
+    /// M4: ingest one neighbor's gossiped top-senders (from received
+    /// DeviceMetrics.top_senders). Feeds the per-sender median budget table.
+    /// No-op when the budget gossip is disabled.
+    void ingestNeighborTopSenders(NodeNum neighbor, const meshtastic_TopSender *entries, pb_size_t count);
+
     // Test hooks (antispam L1 state introspection).
     int peekProbationStateForTest(NodeNum node);                                // -1 untracked, 0 established, 1 in-probation
+    int peekSenderBudgetForTest(NodeNum sender, uint32_t *medianOut = nullptr); // -1 untracked
+    /// M2: test override for the uptime read used by the attester-tenure check.
+    /// 0xFFFFFFFF = production (reads Time::getUptimeSecs()); otherwise the
+    /// stored value is used, so tests can simulate a long-tenured device.
     inline static uint32_t s_testUptimeSecs = 0xFFFFFFFFu;
     static void setUptimeSecsForTest(uint32_t secs) { s_testUptimeSecs = secs; }
     /// Test-only congestion override: production reads airTime->channelUtilizationPercent().
@@ -409,6 +429,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// probation, or promoted). Used to gate the rate-capped KNOWN_SINCE gossip
     /// so only tenured senders earn a vouch.
     bool isEstablishedForVouching(NodeNum node) const;
+    /// M4: effective per-sender rate threshold = clamp(config max, gossiped
+    /// median when the median exceeds the local floor multiple). The config
+    /// rate_limit_max_packets becomes the local floor; the median is the
+    /// ceiling the TMM enforces when budget_gossip_enabled > 0.
+    uint32_t effectiveRateThreshold(NodeNum sender) const;
+    /// Same as effectiveRateThreshold() but for callers that already hold
+    /// cacheLock (e.g. isRateLimited, which reads the unified cache under it).
+    uint32_t effectiveRateThresholdLocked(NodeNum sender) const;
     /// M6: current channel utilization percent (test-override aware).
     float currentCongestionPct() const;
     /// M2: emit one KNOWN_SINCE attestation gossip for `subject` when we are
@@ -421,6 +449,16 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// and apply the group median when the cell fills. Returns true when a
     /// group budget was applied to `node`.
     bool observeGroupCooccurrence(NodeNum node, uint8_t channel, uint8_t rssiClass);
+    /// M4 group budget: true when `node`'s (channel, rssiClass) cell is flagged
+    /// and carries a group median. Called from isRateLimited().
+    bool isInFlaggedGroup(NodeNum node, uint8_t channel, uint8_t rssiClass) const;
+    /// Same as isInFlaggedGroup for callers that already hold cacheLock.
+    bool isInFlaggedGroupLocked(uint8_t channel, uint8_t rssiClass) const;
+    /// Same as groupBudgetForTest for callers that already hold cacheLock.
+    uint32_t groupBudgetLocked(uint8_t channel, uint8_t rssiClass) const;
+    /// M4 group budget: the current group median for a (channel, rssiClass)
+    /// cell (0 when not flagged). Test hook.
+    uint32_t groupBudgetForTest(uint8_t channel, uint8_t rssiClass);
     /// M2/M4/M6: monotonic uptime in seconds (test-override aware).
     uint32_t uptimeSecs() const;
     /// M4: 4-class RSSI quantization of `mp` (0xFF when no usable reading).
