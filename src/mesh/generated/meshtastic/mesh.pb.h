@@ -672,6 +672,13 @@ typedef enum _meshtastic_LogRecord_Level {
     meshtastic_LogRecord_Level_TRACE = 5
 } meshtastic_LogRecord_Level;
 
+/* Pixel encodings of the framebuffer bytes. */
+typedef enum _meshtastic_DisplayFrame_Format {
+    /* 1 bit per pixel, vertical LSB-first pages (SSD1306/OLEDDisplay layout):
+ byte index = x + (y / 8) * width, bit index = y % 8. */
+    meshtastic_DisplayFrame_Format_MONO_VLSB = 0
+} meshtastic_DisplayFrame_Format;
+
 typedef enum _meshtastic_LockdownStatus_State {
     /* Default; should not be sent. */
     meshtastic_LockdownStatus_State_STATE_UNSPECIFIED = 0,
@@ -1280,6 +1287,28 @@ typedef struct _meshtastic_QueueStatus {
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
 
+typedef PB_BYTES_ARRAY_T(384) meshtastic_DisplayFrame_data_t;
+/* A chunk of the device's display framebuffer, streamed to the local client
+ over BLE/serial/TCP. Frames larger than one chunk are split by byte offset;
+ a chunk with offset + data length == total_size completes the frame. */
+typedef struct _meshtastic_DisplayFrame {
+    /* Display width in pixels. */
+    uint32_t width;
+    /* Display height in pixels. */
+    uint32_t height;
+    /* Pixel encoding of data. */
+    meshtastic_DisplayFrame_Format format;
+    /* Monotonically increasing frame counter, constant across the chunks of
+ one frame so the client can detect interleaving or loss. */
+    uint32_t frame_id;
+    /* Byte offset of this chunk within the full frame buffer. */
+    uint32_t offset;
+    /* Total size in bytes of the full frame buffer. */
+    uint32_t total_size;
+    /* The framebuffer bytes for this chunk. */
+    meshtastic_DisplayFrame_data_t data;
+} meshtastic_DisplayFrame;
+
 /* Lockdown state report from firmware to client (for hardened builds
  with MESHTASTIC_LOCKDOWN). Sent immediately after config_complete_id
  to inform a freshly-connected unauthorized client what it must do,
@@ -1547,6 +1576,10 @@ typedef struct _meshtastic_FromRadio {
      illegal region+preset combination. A region that does not appear in
      any group carries no constraint info and should not be restricted. */
         meshtastic_LoRaRegionPresetMap region_presets;
+        /* One chunk of the device's display framebuffer, sent while display
+     mirroring is active (see AdminMessage.set_display_mirror and
+     AdminMessage.get_display_frame_request). */
+        meshtastic_DisplayFrame display_frame;
     };
 } meshtastic_FromRadio;
 
@@ -1688,6 +1721,10 @@ extern "C" {
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
+#define _meshtastic_DisplayFrame_Format_MIN meshtastic_DisplayFrame_Format_MONO_VLSB
+#define _meshtastic_DisplayFrame_Format_MAX meshtastic_DisplayFrame_Format_MONO_VLSB
+#define _meshtastic_DisplayFrame_Format_ARRAYSIZE ((meshtastic_DisplayFrame_Format)(meshtastic_DisplayFrame_Format_MONO_VLSB+1))
+
 #define _meshtastic_LockdownStatus_State_MIN meshtastic_LockdownStatus_State_STATE_UNSPECIFIED
 #define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_DISABLED
 #define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_DISABLED+1))
@@ -1722,6 +1759,8 @@ extern "C" {
 #define meshtastic_LogRecord_level_ENUMTYPE meshtastic_LogRecord_Level
 
 
+
+#define meshtastic_DisplayFrame_format_ENUMTYPE meshtastic_DisplayFrame_Format
 
 #define meshtastic_LockdownStatus_state_ENUMTYPE meshtastic_LockdownStatus_State
 
@@ -1772,6 +1811,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
+#define meshtastic_DisplayFrame_init_default     {0, 0, _meshtastic_DisplayFrame_Format_MIN, 0, 0, 0, {0, {0}}}
 #define meshtastic_LockdownStatus_init_default   {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_default {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_default}}
 #define meshtastic_KeyVerificationNumberInform_init_default {0, "", 0}
@@ -1811,6 +1851,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
+#define meshtastic_DisplayFrame_init_zero        {0, 0, _meshtastic_DisplayFrame_Format_MIN, 0, 0, 0, {0, {0}}}
 #define meshtastic_LockdownStatus_init_zero      {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_zero  {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_zero}}
 #define meshtastic_KeyVerificationNumberInform_init_zero {0, "", 0}
@@ -1980,6 +2021,13 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_DisplayFrame_width_tag        1
+#define meshtastic_DisplayFrame_height_tag       2
+#define meshtastic_DisplayFrame_format_tag       3
+#define meshtastic_DisplayFrame_frame_id_tag     4
+#define meshtastic_DisplayFrame_offset_tag       5
+#define meshtastic_DisplayFrame_total_size_tag   6
+#define meshtastic_DisplayFrame_data_tag         7
 #define meshtastic_LockdownStatus_state_tag      1
 #define meshtastic_LockdownStatus_lock_reason_tag 2
 #define meshtastic_LockdownStatus_boots_remaining_tag 3
@@ -2054,6 +2102,7 @@ extern "C" {
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
 #define meshtastic_FromRadio_lockdown_status_tag 18
 #define meshtastic_FromRadio_region_presets_tag  19
+#define meshtastic_FromRadio_display_frame_tag   20
 #define meshtastic_Heartbeat_nonce_tag           1
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
@@ -2314,7 +2363,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNotification),  16) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_status,lockdown_status),  18) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_frame,display_frame),  20)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -2333,6 +2383,18 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_preset
 #define meshtastic_FromRadio_payload_variant_deviceuiConfig_MSGTYPE meshtastic_DeviceUIConfig
 #define meshtastic_FromRadio_payload_variant_lockdown_status_MSGTYPE meshtastic_LockdownStatus
 #define meshtastic_FromRadio_payload_variant_region_presets_MSGTYPE meshtastic_LoRaRegionPresetMap
+#define meshtastic_FromRadio_payload_variant_display_frame_MSGTYPE meshtastic_DisplayFrame
+
+#define meshtastic_DisplayFrame_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   width,             1) \
+X(a, STATIC,   SINGULAR, UINT32,   height,            2) \
+X(a, STATIC,   SINGULAR, UENUM,    format,            3) \
+X(a, STATIC,   SINGULAR, UINT32,   frame_id,          4) \
+X(a, STATIC,   SINGULAR, UINT32,   offset,            5) \
+X(a, STATIC,   SINGULAR, UINT32,   total_size,        6) \
+X(a, STATIC,   SINGULAR, BYTES,    data,              7)
+#define meshtastic_DisplayFrame_CALLBACK NULL
+#define meshtastic_DisplayFrame_DEFAULT NULL
 
 #define meshtastic_LockdownStatus_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
@@ -2525,6 +2587,7 @@ extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
+extern const pb_msgdesc_t meshtastic_DisplayFrame_msg;
 extern const pb_msgdesc_t meshtastic_LockdownStatus_msg;
 extern const pb_msgdesc_t meshtastic_ClientNotification_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationNumberInform_msg;
@@ -2566,6 +2629,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
+#define meshtastic_DisplayFrame_fields &meshtastic_DisplayFrame_msg
 #define meshtastic_LockdownStatus_fields &meshtastic_LockdownStatus_msg
 #define meshtastic_ClientNotification_fields &meshtastic_ClientNotification_msg
 #define meshtastic_KeyVerificationNumberInform_fields &meshtastic_KeyVerificationNumberInform_msg
@@ -2598,6 +2662,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
 #define meshtastic_DeviceMetadata_size           56
+#define meshtastic_DisplayFrame_size             419
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
