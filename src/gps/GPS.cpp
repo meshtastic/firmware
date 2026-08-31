@@ -499,7 +499,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
             } else {
                 if (ack == 3 && b == 0x00) { // UBX-ACK-NAK message
                     LOG_DEBUG_GPS("%s", debugmsg.c_str());
-                    LOG_WARN("Got NAK for class %02X msg %02X", class_id, msg_id);
+                    LOG_WARN("Got NAK for class %02X msg %02X", static_cast<int>(class_id), static_cast<int>(msg_id));
                     return GNSS_RESPONSE_NAK; // NAK received
                 }
                 ack = 0; // Reset the acknowledgement counter
@@ -1786,31 +1786,12 @@ GnssModel_t GPS::probe(int serialSpeed)
         return GNSS_MODEL_UNKNOWN;
     }
     case 1: {
-
-<<<<<<< HEAD
         // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A, or CM121
-=======
-        // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
-<<<<<<< HEAD
-        std::vector<ChipInfo> unicore = {
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
-<<<<<<< HEAD
-        std::vector<ChipInfo> unicore = {
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
-=======
-=======
->>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
         std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580},
                                          {"UM600", "UM600", GNSS_MODEL_UC6580},
                                          {"CM121", "CM121", GNSS_MODEL_CM121},
-<<<<<<< HEAD
                                          {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121},
                                          {"LC760CA", "CC1161W", GNSS_MODEL_LC760CA}};
-=======
-                                         {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121}};
->>>>>>> fc487ccf0 (feat: Support Elecrow ThinkNode M9 (#10908))
->>>>>>> 1a4769727 (feat: Support Elecrow ThinkNode M9 (#10908))
->>>>>>> 9f6f6555b (feat: Support Elecrow ThinkNode M9 (#10908))
         PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
         currentDelay = 20;
         currentStep = 2;
