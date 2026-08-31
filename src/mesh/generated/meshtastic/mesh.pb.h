@@ -676,7 +676,11 @@ typedef enum _meshtastic_DisplayFrame_Format {
     meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED = 0,
     /* 1 bit per pixel, vertical LSB-first pages (SSD1306/OLEDDisplay layout):
  byte index = x + (y / 8) * width, bit index = y % 8. */
-    meshtastic_DisplayFrame_Format_MONO_VLSB = 1
+    meshtastic_DisplayFrame_Format_MONO_VLSB = 1,
+    /* 16 bits per pixel, RGB565 in little-endian byte order, rows tightly
+ packed. Used with the partial-update rect fields: data covers only
+ the rectangle. Streamed by LVGL-based color UIs. */
+    meshtastic_DisplayFrame_Format_RGB565 = 2
 } meshtastic_DisplayFrame_Format;
 
 typedef enum _meshtastic_LockdownStatus_State {
@@ -1323,12 +1327,12 @@ typedef struct _meshtastic_DisplayFrame {
     uint32_t total_size;
     /* The framebuffer bytes for this chunk. */
     meshtastic_DisplayFrame_data_t data;
-    /* Optional partial-update rectangle, reserved for richer formats (e.g.
- dirty-rect RGB565 streaming from LVGL-based UIs). When rect_width > 0,
- data carries only the rectangle's pixels and offset/total_size describe
- the rectangle's own buffer; width/height above always remain the full
- display dimensions. Firmware currently sends only full frames (all four
- fields unset). */
+    /* Optional partial-update rectangle (dirty-rect streaming from LVGL-based
+ color UIs, format RGB565). When rect_width > 0, data carries only the
+ rectangle's pixels and offset/total_size describe the rectangle's own
+ buffer; width/height above always remain the full display dimensions,
+ and each rectangle is an independently completed unit under its own
+ frame_id. MONO_VLSB frames never set these fields. */
     uint16_t rect_x;
     /* See rect_x. */
     uint16_t rect_y;
@@ -1826,8 +1830,8 @@ extern "C" {
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
 #define _meshtastic_DisplayFrame_Format_MIN meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED
-#define _meshtastic_DisplayFrame_Format_MAX meshtastic_DisplayFrame_Format_MONO_VLSB
-#define _meshtastic_DisplayFrame_Format_ARRAYSIZE ((meshtastic_DisplayFrame_Format)(meshtastic_DisplayFrame_Format_MONO_VLSB+1))
+#define _meshtastic_DisplayFrame_Format_MAX meshtastic_DisplayFrame_Format_RGB565
+#define _meshtastic_DisplayFrame_Format_ARRAYSIZE ((meshtastic_DisplayFrame_Format)(meshtastic_DisplayFrame_Format_RGB565+1))
 
 #define _meshtastic_LockdownStatus_State_MIN meshtastic_LockdownStatus_State_STATE_UNSPECIFIED
 #define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_DISABLED
