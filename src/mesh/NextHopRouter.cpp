@@ -247,10 +247,11 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 #endif
 
 #if HAS_TRAFFIC_MANAGEMENT
-    // Antispam L1 (M6): stop relaying a sender whose local relay budget is
-    // exhausted (or whose NO_RELAY was gossiped). The packet still flows to
-    // our own client - only propagation stops.
-    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && trafficManagementModule &&
+    // Check if traffic management wants to stop relaying a sender whose local
+    // relay budget is exhausted (or whose NO_RELAY was gossiped). Only relayed
+    // traffic counts: a packet addressed to us (or from us) must still reach
+    // our own client and its ACK/NAK path, so it is never "consumed" here.
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && trafficManagementModule && !isToUs(p) && !isFromUs(p) &&
         !trafficManagementModule->shouldRelay(*p)) {
         LOG_DEBUG("Antispam: not relaying 0x%08x (relay budget / no-relay)", getFrom(p));
         return true; // consumed: deliver locally, do not propagate
