@@ -714,7 +714,7 @@ typedef enum _meshtastic_DisplayInfo_PanelClass {
     meshtastic_DisplayInfo_PanelClass_OLED = 1,
     /* Monochrome LCD (ST7567 family). */
     meshtastic_DisplayInfo_PanelClass_LCD = 2,
-    /* Color TFT (currently rendering the 1bpp base UI). */
+    /* Color TFT. */
     meshtastic_DisplayInfo_PanelClass_TFT = 3,
     /* E-ink panel: refresh is slow and full-screen; clients should prefer
  one-shot frame requests over continuous mirroring. */
@@ -1300,9 +1300,10 @@ typedef PB_BYTES_ARRAY_T(384) meshtastic_DisplayFrame_data_t;
 /* A chunk of the device's display framebuffer, streamed to the local client
  over BLE/serial/TCP. Frames larger than one chunk are split by byte offset;
  a chunk with offset + data length == total_size completes the frame.
- Chunks of one frame arrive contiguously and in offset order (FromRadio is
- a reliable ordered stream), so clients may reassemble into a single buffer
- without reordering. A frame whose streaming has begun is always drained to
+ Chunks of one frame arrive contiguously (no other display_frame between
+ them; display_palette messages may interleave) and in offset order
+ (FromRadio is a reliable ordered stream), so clients may reassemble into
+ a single buffer without reordering. A frame whose streaming has begun is always drained to
  completion, even if mirroring is disabled mid-frame. */
 typedef struct _meshtastic_DisplayFrame {
     /* Display width in pixels. */
@@ -1364,9 +1365,11 @@ typedef struct _meshtastic_DisplayPalette_ColorRegion {
  render the mirror in the panel's true colors at 1bpp bandwidth.
  Sent as FromRadio.display_palette, split by region index when the table
  exceeds one message; re-sent only when the region layout or theme changes
- (the signature changes with it). Within a chunk regions are ordered by
- their table index; a later region overrides earlier ones where they
- overlap. All colors are RGB565 in logical bit layout (RRRRRGGGGGGBBBBB). */
+ (the signature changes with it). Regions are ordered by table index; a
+ region with a higher table index overrides lower-indexed ones where they
+ overlap, regardless of chunk boundaries. A client holding partial chunks
+ of a signature that no longer matches incoming chunks should discard
+ them. All colors are RGB565 in logical bit layout (RRRRRGGGGGGBBBBB). */
 typedef struct _meshtastic_DisplayPalette {
     /* Identity of this palette; DisplayFrame.palette_signature references it.
  Changes whenever the region table or theme changes. */

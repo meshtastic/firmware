@@ -1367,7 +1367,10 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
             deviceMetadata.display.width = dispdev->getWidth();
             deviceMetadata.display.height = dispdev->getHeight();
             deviceMetadata.display.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
-#if defined(USE_EINK)
+#if defined(ARCH_PORTDUINO)
+            // The native panel is selected at runtime; UNSPECIFIED is honest until derived from portduino_config.
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED;
+#elif defined(USE_EINK)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
 #elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_HUB75;
@@ -1379,7 +1382,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #else
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_OLED;
 #endif
-#ifdef HAS_TOUCHSCREEN
+#if HAS_TOUCHSCREEN
             deviceMetadata.display.has_touch = true;
 #endif
         }

@@ -1804,7 +1804,7 @@ void TFTDisplay::display(bool fromBlank)
     haveLastDefaults = true;
     lastDefaultOnColor = defaultOnColor;
     lastDefaultOffColor = defaultOffColor;
-#if HAS_SCREEN_MIRROR
+#if HAS_SCREEN_MIRROR && GRAPHICS_TFT_COLORING_ENABLED
     graphics::screenMirror.capturePalette(colorFrameSignature, defaultOnColor, defaultOffColor, graphics::colorRegions,
                                           graphics::getTFTColorRegionCount());
 #endif
