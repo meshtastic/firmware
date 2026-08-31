@@ -2339,10 +2339,9 @@ bool GPS::hasLock()
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
         // Use fix type 2D/3D (better) if available
         if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
-            return true;
-#else
-        return true;
+          
 #endif
+        return true;
     }
 
     return false;
