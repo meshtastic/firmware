@@ -2572,6 +2572,10 @@ void TrafficManagementModule::initAntispamCache()
 
 void TrafficManagementModule::maintainAntispamLocked()
 {
+    // The table can be absent if both the PSRAM and heap allocations failed at
+    // init; every other accessor guards this, and the sweep is no exception.
+    if (!antispam)
+        return;
     const uint8_t nowRateTick = currentRateTick();
     for (uint16_t i = 0; i < antispamCacheSize(); i++) {
         AntispamEntry &e = antispam[i];
