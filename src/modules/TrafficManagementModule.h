@@ -100,6 +100,25 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     {
         return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
     }
+    // =========================================================================
+    // Antispam L1 (M2 greylist + M4 gossiped budgets + M6 relay pricing)
+    //
+    // Design doc: meshtastic-decentralized-antispam.md (this branch). All of it
+    // is off-by-default behind config knobs except the probation *accounting*
+    // (recording first-seen state), which is harmless and may default on.
+    // =========================================================================
+
+    /// M2 + M6: effective hop_limit cap for a re-broadcast of `mp`. Returns
+    /// min(hop_limit, probation cap, congestion cap). Consulted by the router
+    /// on its relayed copy. No-op (returns hop_limit) when no cap applies.
+    uint8_t relayHopCap(const meshtastic_MeshPacket &mp) const;
+
+    // Test hooks (antispam L1 state introspection).
+    int peekProbationStateForTest(NodeNum node);                                // -1 untracked, 0 established, 1 in-probation
+    inline static uint32_t s_testUptimeSecs = 0xFFFFFFFFu;
+    static void setUptimeSecsForTest(uint32_t secs) { s_testUptimeSecs = secs; }
+    /// Test-only congestion override: production reads airTime->channelUtilizationPercent().
+    /// Set to >= 0 to drive the M6 congestion hop cap deterministically in tests.
 
     // Injectable monotonic clock (ms): tests advance s_testNowMs instead of sleeping across
     // ticks (mirrors HopScalingModule); production reads millis().
@@ -297,7 +316,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads (flat array; PSRAM on hardware, heap in tests)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
 
-    meshtastic_TrafficManagementStats stats;
+    mutable meshtastic_TrafficManagementStats
+        stats; // mutable: updated from const methods (stats counters don't affect observable const state)
 
     // Set during alterReceived() when the packet's hops should be exhausted; checked by
     // perhapsRebroadcast() for the matching packet key. Reset at start of handleReceived().
@@ -313,6 +333,128 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static constexpr uint8_t kNodeInfoReconcileSweeps = 60; // sweeps between reconciliations (60 x 60 s = 1 h)
     bool nodeInfoSeeded = false;
     uint8_t sweepsSinceNodeInfoReconcile = 0;
+
+    // =========================================================================
+    // Antispam L1 per-node state (M2 probation, M4 budgets, M6 relay pricing)
+    // =========================================================================
+    // A second flat per-node table, deliberately NOT packed into the 10-byte
+    // UnifiedCacheEntry: the design doc's "10-byte entry has room" is true only
+    // of bit flags, and the windowed relayed-for counter + first-seen tick +
+    // gossiped budget need real fields. The unified cache already pins its slots
+    // against passive eviction (next_hop / special-role entries survive the
+    // sweep), so tracking a node's traffic here implies its unified entry lives;
+    // antispam entries self-expire via the 5-min budget window.
+
+    struct __attribute__((packed)) AntispamEntry {
+        NodeNum node;
+        // M2: 0 = no first-seen record, otherwise the 5-min budget-window tick
+        // (kRateTimeTickMs) the node was first observed. In-probation while
+        // (nowTick - firstSeenTick) < probation ticks; promoted when a
+        // KNOWN_SINCE attestation from a tenured attester is accepted.
+        uint8_t firstSeenTick;
+        // M6: packets re-broadcast by us for `node` in the current budget
+        // window (6-bit, saturates at 63 like rate_count).
+        uint8_t relayedCount;
+        // M4/M6: the 5-min window tick under which relayedCount and the
+        // budget samples were accumulated. Rollover (sweep) resets them.
+        uint8_t windowTick;
+        // M2: accepted attestation -> probation window shortened. Sticky for
+        // the probation window's lifetime; cleared by the sweep with the entry.
+        uint8_t promoted : 1;
+        // M6: NO_RELAY in force for `node` (local exhaustion, never re-gossiped;
+        // or gossiped by a neighbor). Cleared at the next window rollover.
+        uint8_t noRelay : 1;
+        // M6: true when noRelay was set locally (budget exhausted here) -
+        // that is the only case where WE gossip it.
+        uint8_t noRelayLocal : 1;
+        // M4: gossiped median budget observations for a SENDER we track:
+        // up to 3 neighbor-reported window counts (packets_this_window).
+        // The median (middle of the sorted samples) is the gossiped budget;
+        // 2+ samples are required before it applies (a single liar is
+        // absorbed, a lone report is not trusted).
+        uint8_t budgetSampleCount;
+        uint8_t budgetSamples[3];
+        // M4: which neighbor (NodeNum, 0 = unused slot) contributed each
+        // budget sample, so a re-report from the same neighbor this window
+        // refreshes in place instead of double-counting.
+        NodeNum budgetSampleMark[3];
+        // M4 group budget (F4.3): RSSI class + channel of first observation,
+        // for fresh-ID co-occurrence grouping. rssiClass 0xFF = unknown.
+        uint8_t rssiClass;
+        uint8_t channel;
+    };
+    static_assert(sizeof(AntispamEntry) == 26, "AntispamEntry should be 26 bytes");
+
+    static constexpr uint16_t antispamCacheSize()
+    {
+        return TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 ? std::min(TRAFFIC_MANAGEMENT_CACHE_SIZE, 256) : 0;
+    }
+
+    mutable AntispamEntry *antispam =
+        nullptr; // mutable: const query paths (inProbation, effectiveRateThresholdLocked, ...) only read or slot-fill it
+    bool antispamFromPsram = false;
+
+    /// M2: probation window in 5-min ticks (>=1 while enabled), 0 when disabled.
+    uint8_t probationWindowTicks() const;
+    /// M2: true when `node` is currently in probation (accounting on, config
+    /// probation_window_secs > 0, first-seen within the window, not promoted).
+    /// Caller must hold cacheLock when `entry` is supplied; else locks.
+    bool inProbation(NodeNum node) const;
+    /// M2: stamp first-seen for `node` if not yet tracked (probation start),
+    /// and record its observation context (channel, RSSI class) for the F4.3
+    /// group budget. Called from handleReceived() for non-local, non-own
+    /// traffic. Returns true when the node was freshly tracked (first sight).
+    bool noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass);
+    /// M2 vouch: true when `node` is locally established (tracked and out of
+    /// probation, or promoted). Used to gate the rate-capped KNOWN_SINCE gossip
+    /// so only tenured senders earn a vouch.
+    bool isEstablishedForVouching(NodeNum node) const;
+    /// M6: current channel utilization percent (test-override aware).
+    float currentCongestionPct() const;
+    /// M2: emit one KNOWN_SINCE attestation gossip for `subject` when we are
+    /// tenured enough to vouch. Returns false when not sent.
+    bool sendKnownSinceGossip(NodeNum subject);
+    /// M2: handle a received ID_ATTESTATION_APP payload (decode + apply
+    /// promotion / NO_RELAY). Returns true when the payload was consumed.
+    bool handleIdAttestation(const meshtastic_MeshPacket &mp);
+    /// M4 group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
+    /// and apply the group median when the cell fills. Returns true when a
+    /// group budget was applied to `node`.
+    bool observeGroupCooccurrence(NodeNum node, uint8_t channel, uint8_t rssiClass);
+    /// M2/M4/M6: monotonic uptime in seconds (test-override aware).
+    uint32_t uptimeSecs() const;
+    /// M4: 4-class RSSI quantization of `mp` (0xFF when no usable reading).
+    /// 0 = < -110 dBm, 1 = -110..-100, 2 = -100..-90, 3 = >= -90.
+    uint8_t rssiClassOf(const meshtastic_MeshPacket &mp);
+    /// Find or create the antispam entry for `node` (oldest-first eviction
+    /// when full, like findOrCreateEntry). nullptr when the table is
+    /// compiled out or full with no eviction target. Caller must hold cacheLock.
+    AntispamEntry *findAntispamEntry(NodeNum node, bool *isNew) const;
+    /// M2/M4/M6: allocate the antispam table alongside the unified cache.
+    /// Called from the constructor (single-threaded); no-op when the unified
+    /// cache is compiled out.
+    void initAntispamCache();
+    /// M2/M4/M6: per-sweep maintenance of the antispam table (window rollover,
+    /// probation expiry, group-cell decay). Caller must hold cacheLock.
+    void maintainAntispamLocked();
+
+    // M4 group co-occurrence table (channel x rssiClass x 5-min window).
+    static constexpr uint16_t kGroupObsEntries = 16;
+    struct GroupObsCell {
+        uint8_t channel;
+        uint8_t rssiClass;
+        uint8_t windowTick; // 5-min tick, modular
+        uint8_t freshCount;
+        bool flagged;
+    };
+    GroupObsCell groupObs[kGroupObsEntries] = {};
+    /// M4 group median per cell (kept alongside; 0 = not computed).
+    uint32_t groupMedian[kGroupObsEntries] = {};
+
+    // M2: vouching eligibility. An attester must have been up at least
+    // attestation_min_tenure_secs to carry weight; tracked via uptime (not
+    // per-node state) so a reboot restarts the vouching floor.
+    uint32_t lastVouchSentMs = 0; // per-subject vouch cadence guard (single value; cheap)
 
     // =========================================================================
     // Cache Operations
@@ -403,6 +545,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     void logAction(const char *action, const meshtastic_MeshPacket *p, const char *reason) const;
     /// Increment a stats counter under cacheLock.
     void incrementStat(uint32_t *field);
+    /// Increment a stats counter without taking cacheLock (caller holds it).
+    void incrementStatLocked(uint32_t *field) const;
 };
 
 static_assert(TRAFFIC_MANAGEMENT_CACHE_SIZE <= UINT16_MAX, "cacheSize() returns uint16_t");

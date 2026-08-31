@@ -1282,6 +1282,15 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+    // Antispam L1 (M2): probation accounting ships on at the 5-minute window.
+    // It only records first-seen state; the probation-aware behaviors (hop cap,
+    // promotion) engage through the same config, so 0 also turns the window off.
+    mc.traffic_management.probation_window_secs = default_traffic_mgmt_probation_window_secs;
+    mc.traffic_management.attestation_min_tenure_secs = default_traffic_mgmt_attestation_min_tenure_secs;
+    mc.traffic_management.probation_max_hop_limit = default_traffic_mgmt_probation_max_hop_limit;
+    // M4/M6 knobs (budget gossip, group budget, relay budget, congestion hop
+    // cap) ship disabled (0) and stay 0 here: they resolve to their
+    // default_traffic_mgmt_* macros at use, and the TMM treats 0 as off.
 #endif
 }
 
