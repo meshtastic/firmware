@@ -325,6 +325,26 @@ namespace graphics
 // Maps a remote input event onto device-ui's virtual LVGL devices. Note the
 // LEFT/RIGHT cross-map: the broker's codes were modeled on LVGL keys but
 // those two are swapped.
+// Reports MUI's logical panel geometry for DeviceMetadata.display. The BaseUI
+// `screen` object does not exist on MUI builds, so the dimensions come from
+// LVGL itself (already rotated to the logical orientation).
+bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch)
+{
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
+        return false;
+    lv_display_t *disp = lv_display_get_default();
+    if (!disp)
+        return false;
+    width = (uint16_t)lv_display_get_horizontal_resolution(disp);
+    height = (uint16_t)lv_display_get_vertical_resolution(disp);
+#if HAS_TOUCHSCREEN
+    hasTouch = true;
+#else
+    hasTouch = false;
+#endif
+    return width > 0 && height > 0;
+}
+
 bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY)
 {
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
