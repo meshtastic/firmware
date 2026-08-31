@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "ScreenMirror.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "configuration.h"
@@ -182,6 +183,15 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 }
 #endif
 
+// Give ScreenMirror a look at the committed framebuffer (no-op unless armed).
+static inline void screenMirrorCapture()
+{
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+    if (screen)
+        screenMirror.onRendered(screen->getDisplayDevice());
+#endif
+}
+
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
 #ifdef MESHTASTIC_LOCKDOWN
@@ -209,6 +219,8 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
             NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
         display->display();
+        // The mirror sees the LOCKED frame, matching the panel's redaction.
+        screenMirrorCapture();
         return;
     }
 #endif
@@ -216,6 +228,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     prepareFrameColorRegions();
 #endif
     ui->update();
+    screenMirrorCapture();
 }
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
 
