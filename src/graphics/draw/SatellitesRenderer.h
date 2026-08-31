@@ -1,5 +1,5 @@
 #pragma once
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK) && !MESHTASTIC_EXCLUDE_GPS
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 namespace graphics::SatellitesRenderer

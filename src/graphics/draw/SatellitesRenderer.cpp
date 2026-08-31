@@ -1,5 +1,5 @@
 #include "SatellitesRenderer.h"
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK) && !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #include "graphics/ScreenFonts.h"
 #include <algorithm>
