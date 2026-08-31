@@ -680,13 +680,20 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSendInputEvent(r->send_input_event);
         break;
     }
-#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#if HAS_SCREEN_MIRROR
+    // Both verbs are documented local-connection-only: frames ride FromRadio,
+    // which never crosses the mesh, so honoring a remote arm request would
+    // stream the screen to whatever local client happens to be attached.
     case meshtastic_AdminMessage_get_display_frame_request_tag: {
+        if (mp.from != 0)
+            break;
         LOG_INFO("Client requests display frame");
         graphics::screenMirror.requestFrame();
         break;
     }
     case meshtastic_AdminMessage_set_display_mirror_tag: {
+        if (mp.from != 0)
+            break;
         LOG_INFO("Client sets display mirror: %d", r->set_display_mirror);
         graphics::screenMirror.setMirror(r->set_display_mirror);
         break;

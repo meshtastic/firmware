@@ -632,6 +632,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// Display mirroring to the client (FromRadio.display_frame) rides the screen
+// and can be excluded independently with MESHTASTIC_EXCLUDE_SCREEN_MIRROR.
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#define HAS_SCREEN_MIRROR 1
+#else
+#define HAS_SCREEN_MIRROR 0
+#endif
+
 #ifndef USE_ETHERNET_DEFAULT
 #define USE_ETHERNET_DEFAULT 0
 #endif

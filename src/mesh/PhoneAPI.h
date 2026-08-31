@@ -89,6 +89,24 @@ class PhoneAPI
     // file transfer packets destined for phone. Push it to the queue then free it.
     meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
 
+#if HAS_SCREEN_MIRROR
+    // Per-connection drain cursor into ScreenMirror's current frame, so
+    // coexisting clients (BLE + serial + TCP) each receive complete frames.
+    uint32_t mirrorFrameId = 0;
+    uint16_t mirrorOffset = 0;
+
+    // Screen pixels carry operator content; under access control only an
+    // authorized client may receive them (same rule as mesh packets).
+    bool screenMirrorAuthorized()
+    {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+        return getAdminAuthorized();
+#else
+        return true;
+#endif
+    }
+#endif
+
     // Keep QueueStatus packet just as packetForPhone
     meshtastic_QueueStatus *queueStatusPacketForPhone = NULL;
 

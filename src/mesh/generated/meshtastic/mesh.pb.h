@@ -672,9 +672,11 @@ typedef enum _meshtastic_LogRecord_Level {
 
 /* Pixel encodings of the framebuffer bytes. */
 typedef enum _meshtastic_DisplayFrame_Format {
+    /* Default; should not be sent. */
+    meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED = 0,
     /* 1 bit per pixel, vertical LSB-first pages (SSD1306/OLEDDisplay layout):
  byte index = x + (y / 8) * width, bit index = y % 8. */
-    meshtastic_DisplayFrame_Format_MONO_VLSB = 0
+    meshtastic_DisplayFrame_Format_MONO_VLSB = 1
 } meshtastic_DisplayFrame_Format;
 
 typedef enum _meshtastic_LockdownStatus_State {
@@ -1279,16 +1281,22 @@ typedef struct _meshtastic_QueueStatus {
 typedef PB_BYTES_ARRAY_T(384) meshtastic_DisplayFrame_data_t;
 /* A chunk of the device's display framebuffer, streamed to the local client
  over BLE/serial/TCP. Frames larger than one chunk are split by byte offset;
- a chunk with offset + data length == total_size completes the frame. */
+ a chunk with offset + data length == total_size completes the frame.
+ Chunks of one frame arrive contiguously and in offset order (FromRadio is
+ a reliable ordered stream), so clients may reassemble into a single buffer
+ without reordering. A frame whose streaming has begun is always drained to
+ completion, even if mirroring is disabled mid-frame. */
 typedef struct _meshtastic_DisplayFrame {
     /* Display width in pixels. */
-    uint32_t width;
+    uint16_t width;
     /* Display height in pixels. */
-    uint32_t height;
+    uint16_t height;
     /* Pixel encoding of data. */
     meshtastic_DisplayFrame_Format format;
-    /* Monotonically increasing frame counter, constant across the chunks of
- one frame so the client can detect interleaving or loss. */
+    /* Frame counter, constant across the chunks of one frame so the client
+ can detect interleaving or loss. Increments per captured frame, wraps
+ at uint32 range, and restarts from 1 on device reboot - treat any
+ change as "a new frame", not as an ordering guarantee. */
     uint32_t frame_id;
     /* Byte offset of this chunk within the full frame buffer. */
     uint32_t offset;
@@ -1306,15 +1314,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        — storage already unlocked, client must auth
-   "token_missing"     — no boot token on flash
-   "token_expired"     — boot token wall-clock TTL elapsed
-   "token_boots_zero"  — boot token boot-count TTL exhausted
-   "token_hmac_fail"   — token tampered or wrong device
-   "token_dek_fail"    — token DEK decrypt failed
-   "token_wrong_size"  — token file corrupted
-   "token_bad_magic"   — token file corrupted
-   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
+   "needs_auth"        - storage already unlocked, client must auth
+   "token_missing"     - no boot token on flash
+   "token_expired"     - boot token wall-clock TTL elapsed
+   "token_boots_zero"  - boot token boot-count TTL exhausted
+   "token_hmac_fail"   - token tampered or wrong device
+   "token_dek_fail"    - token DEK decrypt failed
+   "token_wrong_size"  - token file corrupted
+   "token_bad_magic"   - token file corrupted
+   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];
@@ -1710,7 +1718,7 @@ extern "C" {
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
-#define _meshtastic_DisplayFrame_Format_MIN meshtastic_DisplayFrame_Format_MONO_VLSB
+#define _meshtastic_DisplayFrame_Format_MIN meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED
 #define _meshtastic_DisplayFrame_Format_MAX meshtastic_DisplayFrame_Format_MONO_VLSB
 #define _meshtastic_DisplayFrame_Format_ARRAYSIZE ((meshtastic_DisplayFrame_Format)(meshtastic_DisplayFrame_Format_MONO_VLSB+1))
 
@@ -2649,7 +2657,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
 #define meshtastic_DeviceMetadata_size           56
-#define meshtastic_DisplayFrame_size             419
+#define meshtastic_DisplayFrame_size             415
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
