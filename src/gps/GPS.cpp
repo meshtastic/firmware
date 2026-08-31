@@ -1787,12 +1787,30 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
     case 1: {
 
+<<<<<<< HEAD
         // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A, or CM121
+=======
+        // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
+<<<<<<< HEAD
+        std::vector<ChipInfo> unicore = {
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
+<<<<<<< HEAD
+        std::vector<ChipInfo> unicore = {
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
+=======
+=======
+>>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
         std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580},
                                          {"UM600", "UM600", GNSS_MODEL_UC6580},
                                          {"CM121", "CM121", GNSS_MODEL_CM121},
+<<<<<<< HEAD
                                          {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121},
                                          {"LC760CA", "CC1161W", GNSS_MODEL_LC760CA}};
+=======
+                                         {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121}};
+>>>>>>> fc487ccf0 (feat: Support Elecrow ThinkNode M9 (#10908))
+>>>>>>> 1a4769727 (feat: Support Elecrow ThinkNode M9 (#10908))
+>>>>>>> 9f6f6555b (feat: Support Elecrow ThinkNode M9 (#10908))
         PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
         currentDelay = 20;
         currentStep = 2;
@@ -2141,11 +2159,21 @@ static int32_t toDegInt(RawDegrees d)
 bool GPS::lookForTime()
 {
     // Primary Meshtastic path: time + date from the existing RMC/GGA parser.
+<<<<<<< HEAD
+=======
+    // Primary Meshtastic path: time + date from the existing RMC/GGA parser.
+>>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
     auto ti = reader.time;
     auto d = reader.date;
 
     if (ti.isValid() && d.isValid()) {
         struct tm t = {};
+<<<<<<< HEAD
+=======
+
+    if (ti.isValid() && d.isValid()) {
+        struct tm t = {};
+>>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
         t.tm_sec = ti.second() + round(ti.age() / 1000);
         t.tm_min = ti.minute();
         t.tm_hour = ti.hour();
@@ -2191,7 +2219,9 @@ bool GPS::lookForTime()
 bool GPS::lookForLocation()
 {
     // By default, TinyGPS++ does not parse GPGSA lines, which give us
+    // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
+    // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
     fixQual = reader.fixQuality();
 
@@ -2211,6 +2241,12 @@ bool GPS::lookForLocation()
     fixType = reader.gsaFixType();
     if (fixType == 0)
         fixType = atoi(gsafixtype.value());
+<<<<<<< HEAD
+=======
+    fixType = reader.gsaFixType();
+    if (fixType == 0)
+        fixType = atoi(gsafixtype.value());
+>>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
 #endif
 
     // check if GPS has an acceptable lock
@@ -2325,8 +2361,13 @@ bool GPS::lookForLocation()
     if (satsInView > 0)
         p.sats_in_view = satsInView;
     else if (reader.satellites.isUpdated())
+<<<<<<< HEAD
         // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
         const uint16_t satsInView = reader.satellitesInView();
+=======
+    // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
+    const uint16_t satsInView = reader.satellitesInView();
+>>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
     if (satsInView > 0)
         p.sats_in_view = satsInView;
     else if (reader.satellites.isUpdated())
@@ -2350,10 +2391,25 @@ bool GPS::lookForLocation()
 
 bool GPS::hasLock()
 {
+<<<<<<< HEAD
     if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
         // Use fix type 2D/3D (better) if available
         if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
+=======
+
+    if (fixQual >= 1 && fixQual <= 5) {
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+<<<<<<< HEAD
+        // Use GPGSA fix type 2D/3D (better) if available
+        // Use GPGSA fix type 2D/3D (better) if available
+        if (fixType == 3 || fixType == 0) // zero means "no data received"
+=======
+        // Use fix type 2D/3D (better) if available
+        if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
+>>>>>>> 54b6b957f (t-echo-plus)
+#endif
+>>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
             return true;
 #endif
     }
