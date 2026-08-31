@@ -2411,6 +2411,12 @@ bool Screen::isOverlayBannerShowing()
     return NotificationRenderer::isOverlayBannerShowing();
 }
 
+bool Screen::isTextMessageFrameShown()
+{
+    return screenOn && showingNormalScreen && framesetInfo.positions.textMessage != 255 && ui &&
+           ui->getUiState()->currentFrame == framesetInfo.positions.textMessage;
+}
+
 bool Screen::isGamesFrameShown()
 {
     return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;

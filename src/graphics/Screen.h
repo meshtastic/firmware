@@ -277,6 +277,9 @@ class Screen : public concurrency::OSThread
 
     bool isOverlayBannerShowing();
 
+    // True when the powered-on normal UI is currently displaying the text-message frame.
+    bool isTextMessageFrameShown();
+
     // True if the always-present games frame is the one currently on screen. Lets the games module
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
