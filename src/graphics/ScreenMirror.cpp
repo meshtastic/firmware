@@ -40,6 +40,17 @@ void ScreenMirror::freeSnapshotLocked()
     }
     paletteSig = 0;
     paletteCount = 0;
+#if HAS_TFT
+    if (muiPool) {
+        memaudit::add("display", -(int32_t)MUI_POOL_BYTES);
+        free(muiPool);
+        muiPool = nullptr;
+    }
+    muiHead = muiCount = 0;
+    muiPoolUsed = 0;
+    muiRectSendOffset = 0;
+    muiNeedResync = false;
+#endif
 }
 
 void ScreenMirror::setMirror(bool enabled)
@@ -52,6 +63,10 @@ void ScreenMirror::setMirror(bool enabled)
         // Force an immediate frame so the client doesn't wait for the next
         // on-screen change.
         oneShot = true;
+#if HAS_TFT
+        if (muiRefresh)
+            muiRefresh(); // MUI delivers "a frame" as a full-repaint rect burst
+#endif
     } else {
         oneShot = false;
         freeSnapshotLocked();
@@ -63,6 +78,10 @@ void ScreenMirror::requestFrame()
 {
     concurrency::LockGuard g(&lock);
     oneShot = true;
+#if HAS_TFT
+    if (muiRefresh)
+        muiRefresh();
+#endif
 }
 
 void ScreenMirror::onRendered(OLEDDisplay *display)
@@ -190,15 +209,107 @@ bool ScreenMirror::copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientR
     return true;
 }
 
+#if HAS_TFT
+void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels)
+{
+    uint32_t readyId = 0;
+    {
+        concurrency::LockGuard g(&lock);
+        if (!mirroring && !oneShot)
+            return;
+        if (x < 0 || y < 0 || w == 0 || h == 0)
+            return;
+        // LVGL reports rects in logical coordinates; the panel extent is the
+        // running maximum, exact from the first full repaint onward.
+        if ((uint16_t)(x + w) > muiPanelW)
+            muiPanelW = x + w;
+        if ((uint16_t)(y + h) > muiPanelH)
+            muiPanelH = y + h;
+
+        uint32_t bytes = (uint32_t)w * h * 2;
+        if (!muiPool) {
+            muiPool = (uint8_t *)malloc(MUI_POOL_BYTES);
+            if (!muiPool) {
+                mirroring = oneShot = false;
+                return;
+            }
+            memaudit::add("display", MUI_POOL_BYTES);
+        }
+        if (muiCount >= MUI_MAX_RECTS || bytes > MUI_POOL_BYTES || muiPoolUsed + bytes > MUI_POOL_BYTES) {
+            // Queue full: drop this rect and repaint everything once drained.
+            muiNeedResync = true;
+            return;
+        }
+        memcpy(muiPool + muiPoolUsed, pixels, bytes);
+        MuiRect &r = muiRects[(muiHead + muiCount) % MUI_MAX_RECTS];
+        r = {(uint16_t)x, (uint16_t)y, w, h, bytes, muiPoolUsed, ++frameId};
+        muiPoolUsed += bytes;
+        muiCount++;
+        readyId = frameId;
+    }
+    frameReady.notifyObservers(readyId);
+}
+
+// Fills one chunk of the oldest queued rect; pops it when fully drained.
+bool ScreenMirror::copyMuiChunkLocked(meshtastic_DisplayFrame &out)
+{
+    MuiRect &r = muiRects[muiHead];
+    uint32_t len = r.bytes - muiRectSendOffset;
+    if (len > sizeof(out.data.bytes))
+        len = sizeof(out.data.bytes);
+
+    out.width = muiPanelW;
+    out.height = muiPanelH;
+    out.format = meshtastic_DisplayFrame_Format_RGB565;
+    out.palette_signature = 0;
+    out.frame_id = r.id;
+    out.rect_x = r.x;
+    out.rect_y = r.y;
+    out.rect_width = r.w;
+    out.rect_height = r.h;
+    out.offset = muiRectSendOffset;
+    out.total_size = r.bytes;
+    out.data.size = len;
+    memcpy(out.data.bytes, muiPool + r.poolOffset + muiRectSendOffset, len);
+    muiRectSendOffset += len;
+
+    if (muiRectSendOffset >= r.bytes) {
+        muiHead = (muiHead + 1) % MUI_MAX_RECTS;
+        muiCount--;
+        muiRectSendOffset = 0;
+        if (muiCount == 0) {
+            muiPoolUsed = 0;
+            if (!mirroring)
+                oneShot = false; // one-shot fully delivered
+            if (muiNeedResync && mirroring && muiRefresh) {
+                muiNeedResync = false;
+                muiRefresh();
+            }
+        }
+    }
+    return true;
+}
+#endif
+
 bool ScreenMirror::hasChunkFor(uint32_t clientFrameId, uint16_t clientOffset)
 {
     concurrency::LockGuard g(&lock);
+#if HAS_TFT
+    if (muiCount)
+        return true;
+#endif
     return snapshot && (clientFrameId != frameId || clientOffset < frameSize);
 }
 
 bool ScreenMirror::copyChunk(uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out)
 {
     concurrency::LockGuard g(&lock);
+#if HAS_TFT
+    // MUI rects drain ahead of (and on MUI builds, instead of) mono snapshots.
+    // Spike scope: the rect queue has a single consumer, not per-client cursors.
+    if (muiCount)
+        return copyMuiChunkLocked(out);
+#endif
     if (!snapshot)
         return false;
     if (clientFrameId != frameId) {
