@@ -297,8 +297,9 @@ static int32_t reconnectWiFi()
 #endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
 
-        // Start the non-blocking wait for 5 seconds
-        wifiReconnectStartMillis = millis();
+        // Start the non-blocking wait for 5 seconds. 0 is this field's "not armed", so never store it as a time.
+        uint32_t startedAt = millis();
+        wifiReconnectStartMillis = startedAt == 0 ? 1 : startedAt;
         wifiReconnectPending = true;
         // Do not attempt to connect yet, wait for the next invocation
         return 5000; // Schedule next check soon
@@ -348,8 +349,10 @@ static int32_t reconnectWiFi()
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
         // Lost the link, or a join that has not come up within 30 s: start the join over once the join task is done.
+        // 0 means not armed, and Throttle::hasElapsed() leaves that test to the caller.
         needReconnect = !wifiJoinRunning.load(std::memory_order_acquire) &&
-                        (APStartupComplete || (!isReconnecting && Throttle::hasElapsed(wifiReconnectStartMillis, 30000)));
+                        (APStartupComplete || (!isReconnecting && wifiReconnectStartMillis != 0 &&
+                                               Throttle::hasElapsed(wifiReconnectStartMillis, 30000)));
 #endif
         return 1000; // check once per second
     } else {
