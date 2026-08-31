@@ -351,18 +351,21 @@ bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, u
         return false;
 
     constexpr uint16_t longPressHoldMs = 600;
+    // Mirrors the trackball driver's semantics (EncoderInputDriver, type 3):
+    // vertical is encoder rotation, which is what actually moves focus in a
+    // group; horizontal becomes the slider keys, deliberately inverted there.
     switch (eventCode) {
     case INPUT_BROKER_UP:
-        InputDriver::injectKey(LV_KEY_UP);
+        InputDriver::injectEncoder(-1);
         break;
     case INPUT_BROKER_DOWN:
-        InputDriver::injectKey(LV_KEY_DOWN);
+        InputDriver::injectEncoder(1);
         break;
     case INPUT_BROKER_LEFT:
-        InputDriver::injectKey(LV_KEY_LEFT);
+        InputDriver::injectKey(LV_KEY_DOWN);
         break;
     case INPUT_BROKER_RIGHT:
-        InputDriver::injectKey(LV_KEY_RIGHT);
+        InputDriver::injectKey(LV_KEY_UP);
         break;
     case INPUT_BROKER_SELECT:
         if (touchX || touchY)
