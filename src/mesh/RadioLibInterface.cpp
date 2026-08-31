@@ -726,6 +726,20 @@ void RadioLibInterface::resetAGC()
     // Base implementation: no-op. Override in chip-specific subclasses.
 }
 
+bool RadioLibInterface::maybeRecoverChipStateLoss()
+{
+    // One attempt per window: the transient resets this recovers from need a single re-init, and a
+    // chip that stays dead must not stall the TX/RX paths with a begin() attempt on every call
+    if (lastChipRecoveryMs && Throttle::isWithinTimespanMs(lastChipRecoveryMs, 30 * 1000UL))
+        return false;
+    lastChipRecoveryMs = millis();
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    LOG_ERROR("Radio chip state lost mid-operation, re-init");
+    bool recovered = recoverChipStateLoss();
+    LOG_INFO("Radio re-init %s", recovered ? "succeeded" : "failed");
+    return recovered;
+}
+
 void RadioLibInterface::checkRxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
