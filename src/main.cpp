@@ -44,6 +44,7 @@
 #endif
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -1359,8 +1360,21 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.has_xeddsa = true;
 #endif
 
+#if HAS_TFT && HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+    // MUI owns the panel and leaves `screen` null, so ask LVGL instead.
+    uint16_t muiW = 0, muiH = 0;
+    bool muiTouch = false;
+    if (graphics::muiDisplayInfo(muiW, muiH, muiTouch)) {
+        deviceMetadata.has_display = true;
+        deviceMetadata.display.width = muiW;
+        deviceMetadata.display.height = muiH;
+        deviceMetadata.display.format = meshtastic_DisplayFrame_Format_RGB565;
+        deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+        deviceMetadata.display.has_touch = muiTouch;
+    } else
+#endif
 #if HAS_SCREEN
-    if (screen) {
+        if (screen) {
         OLEDDisplay *dispdev = screen->getDisplayDevice();
         if (dispdev && dispdev->getWidth() > 0) {
             deviceMetadata.has_display = true;
