@@ -3,14 +3,12 @@
 #if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK) && !MESHTASTIC_EXCLUDE_GPS
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-namespace graphics::SatellitesRenderer
+    namespace graphics::SatellitesRenderer
 {
-void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    void drawFrame(OLEDDisplay * display, OLEDDisplayUiState * state, int16_t x, int16_t y);
 }
 #endif
 #pragma once
-=======
->>>>>>> d6bcf23be (t-echo-plus)
 #if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
