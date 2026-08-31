@@ -179,7 +179,9 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 template <typename T> bool LR20x0Interface<T>::reconfigure()
 {
-    bool success = RadioLibInterface::reconfigure();
+    // Propagated to the return value below, separately from the chip-programming outcome, so a
+    // base-class failure isn't masked as success.
+    const bool reconfigureSuccess = RadioLibInterface::reconfigure();
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
         limitPower(LR2021_MAX_POWER_HF);
@@ -199,72 +201,73 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
             return false;
 
         startReceive();
-        return true;
+        return reconfigureSuccess;
     }
 
     // Same-band reconfigure (previous incremental path)
+    bool standbySuccess = true;
     int16_t standbyErr = trySetStandby();
     if (standbyErr != RADIOLIB_ERR_NONE)
-        success = false;
+        standbySuccess = false;
 
     if (standbyErr == RADIOLIB_ERR_NONE) {
         int err = lora.setFrequency(freq);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setFrequency %.3f MHz %s%d", freq, radioLibErr, err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            success = false;
+            standbySuccess = false;
         }
 
         err = lora.setSpreadingFactor(sf);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setSpreadingFactor(%u) %s%d", sf, radioLibErr, err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            success = false;
+            standbySuccess = false;
         }
 
         err = lora.setBandwidth(bw);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setBandwidth(%.1f) %s%d", bw, radioLibErr, err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            success = false;
+            standbySuccess = false;
         }
 
         err = lora.setCodingRate(cr, cr != 7);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setCodingRate(%u) %s%d", cr, radioLibErr, err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            success = false;
+            standbySuccess = false;
         }
 
         err = lora.setSyncWord(syncWord);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setSyncWord %s%d", radioLibErr, err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            success = false;
+            standbySuccess = false;
         }
 
         err = lora.setPreambleLength(preambleLength);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setPreambleLength(%u) %s%d", preambleLength, radioLibErr, err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            success = false;
+            standbySuccess = false;
         }
 
         err = lora.setOutputPower(power);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            success = false;
+            standbySuccess = false;
         }
 
+        // Warn-only, as in LR11x0: a rejected gain mode is cosmetic and not a lost-state signature, so
+        // it must not drag reconfigure() into a full chip reset.
         err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-        if (err != RADIOLIB_ERR_NONE) {
+        if (err != RADIOLIB_ERR_NONE)
             LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
-            success = false;
-        }
     }
 
-    if (!success) {
+    if (!standbySuccess) {
         // A chip that fails standby or rejects parameter programming (typically WRONG_MODEM, -20) has
         // lost its runtime configuration to a chip-internal reset or brownout. Recover in place with the
         // same full begin() the band-hop path uses - it hardware-resets the chip. Crashing here instead
@@ -279,7 +282,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
     startReceive();
     lr20x0LastFreqMHz = freq;
-    return true;
+    return reconfigureSuccess;
 }
 
 // The chip-side re-init the band-hop and recovery paths share: front-end switch GPIOs for the target
@@ -434,8 +437,9 @@ template <typename T> void LR20x0Interface<T>::startReceive()
     }
 
     if (err != RADIOLIB_ERR_NONE) {
-        // No assert: leave RX off rather than reboot; the next startReceive() retries, throttled
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
         LOG_ERROR("LR20x0 RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
         return;
     }
 

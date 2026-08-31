@@ -185,6 +185,8 @@ template <typename T> bool LR11x0Interface<T>::init()
         if (lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true) == RADIOLIB_ERR_NONE) {
             LOG_INFO("LR1110 firmware recovery OK, re-init radio");
             res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+            if (res == RADIOLIB_ERR_NONE)
+                resolvedTcxoVoltage = tcxoVoltage;
         }
 #endif
         if (res != RADIOLIB_ERR_NONE)
@@ -222,6 +224,7 @@ template <typename T> bool LR11x0Interface<T>::init()
             LOG_ERROR("LR11x0 re-init after firmware update failed %s%d", radioLibErr, res);
             return false;
         }
+        resolvedTcxoVoltage = tcxoVoltage;
 
         if (lora.getVersionInfo(&version) == RADIOLIB_ERR_NONE) {
             transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
@@ -470,8 +473,9 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     }
 
     if (err != RADIOLIB_ERR_NONE) {
-        // No assert: leave RX off rather than reboot; the next startReceive() retries, throttled
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
         LOG_ERROR("LR11x0 RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
         return;
     }
 
