@@ -294,8 +294,6 @@ template <typename T> void SX128xInterface<T>::startReceive()
     sleep();
 #else
 
-    setStandby();
-
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_rxen_pin.pin, HIGH);

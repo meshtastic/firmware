@@ -284,10 +284,8 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         err = programModemParams();
 
     if (err != RADIOLIB_ERR_NONE) {
-        // A chip that fails standby or rejects parameter programming (typically WRONG_MODEM, -20) has
-        // lost its runtime configuration - packet type included - to a chip-internal reset or brownout.
-        // Recover in place: begin() hardware-resets the chip and restores the LoRa packet type. Crashing
-        // here instead would reboot before MeshService persists the config change that triggered us.
+        // Chip likely lost its state (reset/brownout); recover in place rather than crash - see
+        // RadioLibInterface::recoverChipStateLoss().
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("SX126x rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {

@@ -180,17 +180,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void resetAGC();
 
-    /**
-     * Chip-specific recovery of a chip that lost its runtime state to a reset or brownout
-     * (POR default modem is FSK/GFSK on every supported chip, so guarded commands return
-     * WRONG_MODEM and standby can time out). Returns true when the chip was reprogrammed.
-     */
+    /** Chip-specific recovery of a chip that lost its state to a reset/brownout. Returns true if reprogrammed. */
     virtual bool recoverChipStateLoss() { return false; }
 
-    /**
-     * Throttled recoverChipStateLoss() for the RX/TX hot paths (startReceive, isChannelActive),
-     * so a chip that stays dead cannot stall them with back-to-back begin() attempts.
-     */
+    /** Throttled recoverChipStateLoss(), so a dead chip can't stall the RX/TX hot paths with repeated begin(). */
     bool maybeRecoverChipStateLoss();
 
     uint32_t lastChipRecoveryMs = 0;
