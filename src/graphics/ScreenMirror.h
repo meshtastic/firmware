@@ -12,6 +12,8 @@ class OLEDDisplay;
 namespace graphics
 {
 
+struct TFTColorRegion;
+
 /**
  * Streams 1bpp framebuffer snapshots to local clients as
  * FromRadio.display_frame chunks. Armed via AdminMessage
@@ -42,6 +44,12 @@ class ScreenMirror
     /// the client was mid-drain restarts it at offset 0 of the new frame.
     bool copyChunk(uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out);
 
+    /// Called by the color display drivers at paint time, before they clear
+    /// the per-frame region table: stores the palette the frame was painted
+    /// with. Colors arrive panel-byte-order (big-endian RGB565).
+    void capturePalette(uint32_t signature, uint16_t defaultOnBe, uint16_t defaultOffBe, const TFTColorRegion *regions,
+                        uint8_t count);
+
     /// True while the client cursor lacks regions of the current color palette.
     bool hasPaletteChunkFor(uint32_t clientPaletteSig, uint8_t clientRegionOffset);
 
@@ -51,7 +59,6 @@ class ScreenMirror
 
   private:
     void freeSnapshotLocked();
-    void capturePaletteLocked();
 
     concurrency::Lock lock;
     bool mirroring = false;
