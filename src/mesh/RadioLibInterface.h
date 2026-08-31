@@ -180,6 +180,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void resetAGC();
 
+    /** Periodic radio upkeep: re-arms RX if a failed startReceive() left it off, otherwise resets AGC. */
+    void periodicRadioMaintenance();
+
     /** Chip-specific recovery of a chip that lost its state to a reset/brownout. Returns true if reprogrammed. */
     virtual bool recoverChipStateLoss() { return false; }
 
@@ -187,6 +190,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool maybeRecoverChipStateLoss();
 
     uint32_t lastChipRecoveryMs = 0;
+
+    /// Consecutive failed recoveries before giving up on in-place repair and rebooting to re-run init()
+    static constexpr uint8_t MAX_CHIP_RECOVERY_FAILURES = 5;
+    uint8_t chipRecoveryFailures = 0;
+
+    /// Set by a driver's startReceive() when it gives up and leaves RX off; cleared once RX is armed again.
+    bool rxOffline = false;
 
     /**
      * Debugging counts

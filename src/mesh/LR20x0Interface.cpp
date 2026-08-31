@@ -260,11 +260,11 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
             standbySuccess = false;
         }
 
+        // Warn-only, as in LR11x0: a rejected gain mode is cosmetic and not a lost-state signature, so
+        // it must not drag reconfigure() into a full chip reset.
         err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-        if (err != RADIOLIB_ERR_NONE) {
+        if (err != RADIOLIB_ERR_NONE)
             LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
-            standbySuccess = false;
-        }
     }
 
     if (!standbySuccess) {
@@ -437,8 +437,9 @@ template <typename T> void LR20x0Interface<T>::startReceive()
     }
 
     if (err != RADIOLIB_ERR_NONE) {
-        // No assert: leave RX off rather than reboot; the next startReceive() retries, throttled
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
         LOG_ERROR("LR20x0 RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
         return;
     }
 

@@ -62,7 +62,7 @@ template <typename T> bool SX128xInterface<T>::init()
 
     RadioLibInterface::init();
 
-    if (!reinitChip())
+    if (!reinitChip(/*fromInit=*/true))
         return false;
 
     startReceive(); // start receiving
@@ -72,7 +72,7 @@ template <typename T> bool SX128xInterface<T>::init()
 
 // begin() and the chip-side setup that a reset chip loses. Shared by init() and by reconfigure()'s
 // recovery of a chip that lost its state.
-template <typename T> bool SX128xInterface<T>::reinitChip()
+template <typename T> bool SX128xInterface<T>::reinitChip(bool fromInit)
 {
     // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
     // config value, and the recovery path reaches begin() without passing through the params clamp
@@ -87,6 +87,12 @@ template <typename T> bool SX128xInterface<T>::reinitChip()
         return false;
 
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
+        // Boot-time only: rebooting out of a runtime recovery would reintroduce exactly the crash this
+        // recovery path exists to avoid, and would do it while a config save is still pending.
+        if (!fromInit) {
+            LOG_ERROR("SX128x rejected the frequency during recovery; leaving region alone");
+            return false;
+        }
         LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
@@ -322,8 +328,9 @@ template <typename T> void SX128xInterface<T>::startReceive()
     }
 
     if (err != RADIOLIB_ERR_NONE) {
-        // No assert: leave RX off rather than reboot; the next startReceive() retries, throttled
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
         LOG_ERROR("SX128X RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
         return;
     }
 

@@ -473,8 +473,9 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     }
 
     if (err != RADIOLIB_ERR_NONE) {
-        // No assert: leave RX off rather than reboot; the next startReceive() retries, throttled
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
         LOG_ERROR("LR11x0 RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
         return;
     }
 
