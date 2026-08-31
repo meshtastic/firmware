@@ -103,8 +103,10 @@ class ScreenMirror
         uint32_t poolOffset;
         uint32_t id;
     };
-    static constexpr uint8_t MUI_MAX_RECTS = 32;
-    static constexpr uint32_t MUI_POOL_BYTES = 96 * 1024;
+    static constexpr uint8_t MUI_MAX_RECTS = 64;
+    // Must hold one full repaint (320x240 RGB565 = 150 KB) plus concurrent
+    // incremental rects, or arming can never deliver a complete first frame.
+    static constexpr uint32_t MUI_POOL_BYTES = 192 * 1024;
     MuiRect muiRects[MUI_MAX_RECTS];
     uint8_t muiHead = 0;
     uint8_t muiCount = 0;
