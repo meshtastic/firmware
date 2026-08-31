@@ -334,8 +334,10 @@ void tftSetup(void)
     deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
-#if HAS_SCREEN_MIRROR
+#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
     // Stream MUI's dirty rects to local clients (see graphics::ScreenMirror).
+    // Gated on MESHTASTIC_MUI_MIRROR until the device-ui flush observer merges
+    // (jamesarich/device-ui screen-mirror-poc); the vendored pin lacks it.
     graphics::screenMirror.setMuiRefresh([]() { DisplayDriver::requestFullRefresh(); });
     DisplayDriver::setFlushObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px) {
         graphics::screenMirror.onMuiRect(x, y, w, h, px);
