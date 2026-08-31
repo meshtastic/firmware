@@ -504,11 +504,18 @@ typedef struct _meshtastic_AdminMessage {
         uint32_t toggle_muted_node;
         /* Request a single frame of the device's display framebuffer.
      The frame is delivered to the local client as FromRadio.display_frame
-     chunks (see DisplayFrame in mesh.proto). */
+     chunks (see DisplayFrame in mesh.proto) - there is no AdminMessage
+     response. Local connection only: a node receiving this over the mesh,
+     or a build without a display, ignores it. During active mirroring it
+     forces one frame on the next redraw even if the screen is unchanged. */
         bool get_display_frame_request;
-        /* Enable or disable continuous mirroring of the device display.
+        /* Enable (true) or disable (false) continuous mirroring of the device
+     display - unlike most bool verbs in this oneof, false is meaningful.
      While enabled, the device sends a DisplayFrame after each screen
-     redraw that changed the framebuffer, as FromRadio.display_frame chunks. */
+     redraw that changed the framebuffer, as FromRadio.display_frame
+     chunks; the first frame arrives immediately and acts as the
+     acknowledgement. Local connection only (see get_display_frame_request)
+     and not persisted across reboot. */
         bool set_display_mirror;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
