@@ -52,6 +52,15 @@ enum class TrafficType { POSITION, TELEMETRY };
 // Unlike before, lost-and-found is NOT exempt from the relayed precision clamp.
 #define default_traffic_mgmt_lost_and_found_position_min_interval_secs (15 * 60) // 15 minutes
 
+// Antispam L1 (M2/M4/M6). The probation machinery ships on: first-seen
+// accounting (F2.1), the 2-hop relay cap for probation IDs (F2.3), and
+// tenured-node vouching. The M4/M6 budget knobs ship disabled (0) and engage
+// only when an operator sets them. See the TrafficManagementConfig proto
+// comments for per-knob semantics.
+#define default_traffic_mgmt_probation_window_secs (5 * 60)             // 5 minutes of probation for first-seen IDs
+#define default_traffic_mgmt_attestation_min_tenure_secs (24 * 60 * 60) // 24 h: attesters must be this old
+#define default_traffic_mgmt_probation_max_hop_limit 2                  // probation broadcasts relay at <=2 hops (normal: 3)
+
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
 #define default_hop_scaling_max_target_nodes 80          // generous extension ceiling (2 × min)
