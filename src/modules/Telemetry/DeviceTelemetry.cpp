@@ -62,7 +62,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 #endif
         nodeDB->updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
 #if HAS_TRAFFIC_MANAGEMENT
-        // Antispam L1 (M4): ingest the neighbor's top-sender rate observations
+        // Top-sender rate budget: ingest the neighbor's top-sender rate observations
         // as budget samples (median-of-neighbors feeds the local rate budget).
         // No-op when budget gossip is off.
         if (trafficManagementModule)
@@ -128,7 +128,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     }
     t.variant.device_metrics.uptime_seconds = Time::getUptimeSecs();
 #if HAS_TRAFFIC_MANAGEMENT
-    // Antispam L1 (M4): advertise our top-3 senders (observed rate + RSSI
+    // Top-sender rate budget: advertise our top-3 senders (observed rate + RSSI
     // class) on the periodic device-telemetry broadcast so neighbors can
     // compute a median budget for each sender.
     if (trafficManagementModule) {

@@ -38,7 +38,7 @@
 class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 {
   public:
-    // M4: top-senders count carried in DeviceMetrics.top_senders. Declared in
+    // Top-senders count carried in DeviceMetrics.top_senders (gossiped top-sender rate budget). Declared in
     // the public section so it is visible to snapshotTopSenders() below
     // (a later member is not in scope in a parameter list).
     static constexpr uint16_t kTopSendersCount = 3;
@@ -107,51 +107,51 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     }
 
     // =========================================================================
-    // Antispam L1 (M2 greylist + M4 gossiped budgets + M6 relay pricing)
+    // Antispam: probation greylist + gossiped rate budgets + relay pricing
     //
-    // Design doc: meshtastic-decentralized-antispam.md (this branch). All of it
+    // Decentralized antispam mechanism (this branch). All of it
     // is off-by-default behind config knobs except the probation *accounting*
     // (recording first-seen state), which is harmless and may default on.
     // =========================================================================
 
-    /// M6: true when the relayer must NOT re-broadcast a packet from the
+    /// Relay pricing: true when the relayer must NOT re-broadcast a packet from the
     /// sender of `mp` this window (local relay budget exhausted, or a gossiped
     /// NO_RELAY bit is in force). Local delivery is unaffected; only the
     /// re-broadcast is suppressed. Consulted by the router's perhapsRebroadcast.
     bool shouldRelay(const meshtastic_MeshPacket &mp) const;
 
-    /// M2 + M6: effective hop_limit cap for a re-broadcast of `mp`. Returns
+    /// Probation + relay pricing: effective hop_limit cap for a re-broadcast of `mp`. Returns
     /// min(hop_limit, probation cap, congestion cap). Consulted by the router
     /// on its relayed copy. No-op (returns hop_limit) when no cap applies.
     uint8_t relayHopCap(const meshtastic_MeshPacket &mp) const;
 
-    /// M6: record that this node re-broadcast `mp` (per-sender relay-budget
+    /// Relay pricing: record that this node re-broadcast `mp` (per-sender relay-budget
     /// accounting). The first exhaustion in a window gossips a NO_RELAY bit.
     /// No-op when the relay budget is disabled.
     void recordRelayed(const meshtastic_MeshPacket &mp);
 
-    /// M4: fill `out` (kTopSendersCount) with the top senders by observed
+    /// Top-sender rate budget: fill `out` (kTopSendersCount) with the top senders by observed
     /// rate this budget window, for the device-telemetry piggyback
     /// (DeviceMetrics.top_senders). Entries are node=0 when unused.
     void snapshotTopSenders(meshtastic_TopSender (&out)[kTopSendersCount]) const;
 
-    /// M4: ingest one neighbor's gossiped top-senders (from received
+    /// Top-sender rate budget: ingest one neighbor's gossiped top-senders (from received
     /// DeviceMetrics.top_senders). Feeds the per-sender median budget table.
     /// No-op when the budget gossip is disabled.
     void ingestNeighborTopSenders(NodeNum neighbor, const meshtastic_TopSender *entries, pb_size_t count);
 
-    // Test hooks (antispam L1 state introspection).
+    // Test hooks (antispam state introspection).
     int peekProbationStateForTest(NodeNum node);                                // -1 untracked, 0 established, 1 in-probation
     uint32_t peekRelayedCountForTest(NodeNum node);                             // windowed relayed-for count
     bool peekNoRelayForTest(NodeNum node);                                      // gossiped/local NO_RELAY in force
     int peekSenderBudgetForTest(NodeNum sender, uint32_t *medianOut = nullptr); // -1 untracked
-    /// M2: test override for the uptime read used by the attester-tenure check.
+    /// Probation: test override for the uptime read used by the attester-tenure check.
     /// 0xFFFFFFFF = production (reads Time::getUptimeSecs()); otherwise the
     /// stored value is used, so tests can simulate a long-tenured device.
     inline static uint32_t s_testUptimeSecs = 0xFFFFFFFFu;
     static void setUptimeSecsForTest(uint32_t secs) { s_testUptimeSecs = secs; }
     /// Test-only congestion override: production reads airTime->channelUtilizationPercent().
-    /// Set to >= 0 to drive the M6 congestion hop cap deterministically in tests.
+    /// Set to >= 0 to drive the congestion hop cap deterministically in tests.
     inline static int s_testCongestionPct = -1;
 
     // Injectable monotonic clock (ms): tests advance s_testNowMs instead of sleeping across
@@ -369,7 +369,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     uint8_t sweepsSinceNodeInfoReconcile = 0;
 
     // =========================================================================
-    // Antispam L1 per-node state (M2 probation, M4 budgets, M6 relay pricing)
+    // Antispam per-node state (probation, gossiped budgets, relay pricing)
     // =========================================================================
     // A second flat per-node table, deliberately NOT packed into the 10-byte
     // UnifiedCacheEntry: the design doc's "10-byte entry has room" is true only
@@ -381,38 +381,38 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     struct __attribute__((packed)) AntispamEntry {
         NodeNum node;
-        // M2: 0 = no first-seen record, otherwise the 5-min budget-window tick
+        // Probation: 0 = no first-seen record, otherwise the 5-min budget-window tick
         // (kRateTimeTickMs) the node was first observed. In-probation while
         // (nowTick - firstSeenTick) < probation ticks; promoted when a
         // KNOWN_SINCE attestation from a tenured attester is accepted.
         uint8_t firstSeenTick;
-        // M6: packets re-broadcast by us for `node` in the current budget
+        // Relay pricing: packets re-broadcast by us for `node` in the current budget
         // window (6-bit, saturates at 63 like rate_count).
         uint8_t relayedCount;
-        // M4/M6: the 5-min window tick under which relayedCount and the
+        // The 5-min window tick under which relayedCount and the
         // budget samples were accumulated. Rollover (sweep) resets them.
         uint8_t windowTick;
-        // M2: accepted attestation -> probation window shortened. Sticky for
+        // Probation: accepted attestation -> probation window shortened. Sticky for
         // the probation window's lifetime; cleared by the sweep with the entry.
         uint8_t promoted : 1;
-        // M6: NO_RELAY in force for `node` (local exhaustion, never re-gossiped;
+        // NO_RELAY in force for `node` (local exhaustion, never re-gossiped;
         // or gossiped by a neighbor). Cleared at the next window rollover.
         uint8_t noRelay : 1;
-        // M6: true when noRelay was set locally (budget exhausted here) -
+        // True when noRelay was set locally (budget exhausted here) -
         // that is the only case where WE gossip it.
         uint8_t noRelayLocal : 1;
-        // M4: gossiped median budget observations for a SENDER we track:
+        // Gossiped median budget observations for a SENDER we track:
         // up to 3 neighbor-reported window counts (packets_this_window).
         // The median (middle of the sorted samples) is the gossiped budget;
         // 2+ samples are required before it applies (a single liar is
         // absorbed, a lone report is not trusted).
         uint8_t budgetSampleCount;
         uint8_t budgetSamples[3];
-        // M4: which neighbor (NodeNum, 0 = unused slot) contributed each
+        // Which neighbor (NodeNum, 0 = unused slot) contributed each
         // budget sample, so a re-report from the same neighbor this window
         // refreshes in place instead of double-counting.
         NodeNum budgetSampleMark[3];
-        // M4 group budget (F4.3): RSSI class + channel of first observation,
+        // Group budget: RSSI class + channel of first observation,
         // for fresh-ID co-occurrence grouping. rssiClass 0xFF = unknown.
         uint8_t rssiClass;
         uint8_t channel;
@@ -428,22 +428,22 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         nullptr; // mutable: const query paths (inProbation, effectiveRateThresholdLocked, ...) only read or slot-fill it
     bool antispamFromPsram = false;
 
-    /// M2: probation window in 5-min ticks (>=1 while enabled), 0 when disabled.
+    /// Probation window in 5-min ticks (>=1 while enabled), 0 when disabled.
     uint8_t probationWindowTicks() const;
-    /// M2: true when `node` is currently in probation (accounting on, config
+    /// True when `node` is currently in probation (accounting on, config
     /// probation_window_secs > 0, first-seen within the window, not promoted).
     /// Caller must hold cacheLock when `entry` is supplied; else locks.
     bool inProbation(NodeNum node) const;
-    /// M2: stamp first-seen for `node` if not yet tracked (probation start),
-    /// and record its observation context (channel, RSSI class) for the F4.3
-    /// group budget. Called from handleReceived() for non-local, non-own
+    /// Stamp first-seen for `node` if not yet tracked (probation start),
+    /// and record its observation context (channel, RSSI class) for the group
+    /// budget. Called from handleReceived() for non-local, non-own
     /// traffic. Returns true when the node was freshly tracked (first sight).
     bool noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass);
-    /// M2 vouch: true when `node` is locally established (tracked and out of
+    /// Probation promotion vouch: true when `node` is locally established (tracked and out of
     /// probation, or promoted). Used to gate the rate-capped KNOWN_SINCE gossip
     /// so only tenured senders earn a vouch.
     bool isEstablishedForVouching(NodeNum node) const;
-    /// M4: effective per-sender rate threshold = clamp(config max, gossiped
+    /// Effective per-sender rate threshold = clamp(config max, gossiped
     /// median when the median exceeds the local floor multiple). The config
     /// rate_limit_max_packets becomes the local floor; the median is the
     /// ceiling the TMM enforces when budget_gossip_enabled > 0.
@@ -451,34 +451,34 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Same as effectiveRateThreshold() but for callers that already hold
     /// cacheLock (e.g. isRateLimited, which reads the unified cache under it).
     uint32_t effectiveRateThresholdLocked(NodeNum sender) const;
-    /// M6: current channel utilization percent (test-override aware).
+    /// Current channel utilization percent (test-override aware).
     float currentCongestionPct() const;
-    /// M6: emit one NO_RELAY gossip packet for `subject` (best-effort, no
+    /// Emit one NO_RELAY gossip packet for `subject` (best-effort, no
     /// allocation failure path). Returns false when the send couldn't happen.
     bool sendNoRelayGossip(NodeNum subject);
-    /// M2: emit one KNOWN_SINCE attestation gossip for `subject` when we are
+    /// Emit one KNOWN_SINCE attestation gossip for `subject` when we are
     /// tenured enough to vouch. Returns false when not sent.
     bool sendKnownSinceGossip(NodeNum subject);
-    /// M2: handle a received ID_ATTESTATION_APP payload (decode + apply
+    /// Handle a received ID_ATTESTATION_APP payload (decode + apply
     /// promotion / NO_RELAY). Returns true when the payload was consumed.
     bool handleIdAttestation(const meshtastic_MeshPacket &mp);
-    /// M4 group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
+    /// Group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
     /// and apply the group median when the cell fills. Returns true when a
     /// group budget was applied to `node`.
     bool observeGroupCooccurrence(NodeNum node, uint8_t channel, uint8_t rssiClass);
-    /// M4 group budget: true when `node`'s (channel, rssiClass) cell is flagged
+    /// Group budget: true when `node`'s (channel, rssiClass) cell is flagged
     /// and carries a group median. Called from isRateLimited().
     bool isInFlaggedGroup(NodeNum node, uint8_t channel, uint8_t rssiClass) const;
     /// Same as isInFlaggedGroup for callers that already hold cacheLock.
     bool isInFlaggedGroupLocked(uint8_t channel, uint8_t rssiClass) const;
     /// Same as groupBudgetForTest for callers that already hold cacheLock.
     uint32_t groupBudgetLocked(uint8_t channel, uint8_t rssiClass) const;
-    /// M4 group budget: the current group median for a (channel, rssiClass)
+    /// Group budget: the current group median for a (channel, rssiClass)
     /// cell (0 when not flagged). Test hook.
     uint32_t groupBudgetForTest(uint8_t channel, uint8_t rssiClass);
-    /// M2/M4/M6: monotonic uptime in seconds (test-override aware).
+    /// Monotonic uptime in seconds (test-override aware).
     uint32_t uptimeSecs() const;
-    /// M4: 4-class RSSI quantization of `mp` (0xFF when no usable reading).
+    /// 4-class RSSI quantization of `mp` (0xFF when no usable reading).
     /// 0 = < -110 dBm, 1 = -110..-100, 2 = -100..-90, 3 = >= -90.
     uint8_t rssiClassOf(const meshtastic_MeshPacket &mp);
     /// Read-only lookup for `node`'s antispam entry: returns it or nullptr.
@@ -489,15 +489,15 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// when full, like findOrCreateEntry). nullptr when the table is
     /// compiled out or full with no eviction target. Caller must hold cacheLock.
     AntispamEntry *findOrCreateAntispamEntry(NodeNum node, bool *isNew) const;
-    /// M2/M4/M6: allocate the antispam table alongside the unified cache.
+    /// Allocate the antispam table alongside the unified cache.
     /// Called from the constructor (single-threaded); no-op when the unified
     /// cache is compiled out.
     void initAntispamCache();
-    /// M2/M4/M6: per-sweep maintenance of the antispam table (window rollover,
+    /// Per-sweep maintenance of the antispam table (window rollover,
     /// probation expiry, group-cell decay). Caller must hold cacheLock.
     void maintainAntispamLocked();
 
-    // M4 group co-occurrence table (channel x rssiClass x 5-min window).
+    // Group co-occurrence table (channel x rssiClass x 5-min window).
     static constexpr uint16_t kGroupObsEntries = 16;
     struct GroupObsCell {
         uint8_t channel;
@@ -507,10 +507,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         bool flagged;
     };
     GroupObsCell groupObs[kGroupObsEntries] = {};
-    /// M4 group median per cell (kept alongside; 0 = not computed).
+    /// Group median per cell (kept alongside; 0 = not computed).
     uint32_t groupMedian[kGroupObsEntries] = {};
 
-    // M2: vouching eligibility. An attester must have been up at least
+    // Vouching eligibility. An attester must have been up at least
     // attestation_min_tenure_secs to carry weight; tracked via uptime (not
     // per-node state) so a reboot restarts the vouching floor.
     uint32_t lastVouchSentMs = 0; // per-subject vouch cadence guard (single value; cheap)

@@ -1207,12 +1207,12 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         }
 
         // ---------------------------------------------------------------------
-        // Antispam L1 (M2 greylist + M6 relay pricing)
+        // Antispam: probation greylist + relay pricing
         // ---------------------------------------------------------------------
         // Stamped after the rate limiter so an attestation flood pays the same
         // per-sender cost as any other traffic.
         if (noteFirstSeen(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp))) {
-            // F4.3: this ID is fresh on this device - observe its
+            // Group budget: this ID is fresh on this device - observe its
             // (channel, RSSI class) co-occurrence. A cell that fills to
             // group_budget_enabled fresh IDs is flagged, and every member
             // gets a split budget.
@@ -1227,7 +1227,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             }
         }
 
-        // M2 vouch: traffic from a locally established (tracked, out of
+        // Probation promotion vouch: traffic from a locally established (tracked, out of
         // probation, or promoted) sender on a long-tenured device gets a
         // rate-capped KNOWN_SINCE, so neighbors that first saw the ID can
         // promote it instead of waiting out their timers. One per hour.
@@ -1392,7 +1392,7 @@ int32_t TrafficManagementModule::runOnce()
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
                  static_cast<unsigned long>(TrafficManagementModule::clockMs() - sweepStartMs));
 
-    // Antispam L1: budget-sample rollover, probation-expiry reclamation, and
+    // Antispam: budget-sample rollover, probation-expiry reclamation, and
     // group co-occurrence cell expiry. Runs under cacheLock (held above).
     maintainAntispamLocked();
 
@@ -1757,7 +1757,7 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
         entry->setRateCount(static_cast<uint8_t>(currentCount + 1));
 
     // Threshold capped at 60 so a saturated reading (63) always exceeds it.
-    // F4.2: when budget gossip is on, the gossiped neighborhood median
+    // Median-of-neighbors: when budget gossip is on, the gossiped neighborhood median
     // (effectiveRateThresholdLocked; we hold cacheLock) replaces the raw
     // config value; config stays the floor the median can never drop below.
     uint32_t threshold = moduleConfig.traffic_management.budget_gossip_enabled
@@ -1842,14 +1842,14 @@ void TrafficManagementModule::logAction(const char *action, const meshtastic_Mes
 }
 
 // =============================================================================
-// Antispam L1 (M2 greylist + M4 gossiped budgets + M6 relay pricing)
+// Antispam: probation greylist + gossiped rate budgets + relay pricing
 //
-// Design doc: meshtastic-decentralized-antispam.md. State lives in a second
+// Decentralized antispam mechanism. State lives in a second
 // flat per-node table (AntispamEntry) allocated alongside the unified cache;
 // it is intentionally NOT packed into the 10-byte UnifiedCacheEntry because
 // the windowed relayed-for counter and the 3-sample budget median need real
 // fields, not bits. Every knob is config-gated and off by default except
-// probation accounting (F2.1), which only records state.
+// probation accounting, which only records state.
 // =============================================================================
 
 // Read-only lookup: returns the entry for `node` or nullptr. Never allocates
@@ -1994,7 +1994,7 @@ bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8
         return false; // already tracked
     entry->firstSeenTick = currentRateTick();
     entry->windowTick = currentRateTick();
-    // F4.3: remember the observation context of a fresh ID so its
+    // Group budget: remember the observation context of a fresh ID so its
     // (channel, RSSI class) can be matched against the group co-occurrence
     // cells. Only stamped on first sight - re-observations must not move a
     // tracked sender into a new group cell.
@@ -2062,7 +2062,7 @@ uint32_t TrafficManagementModule::effectiveRateThresholdLocked(NodeNum sender) c
         if (n >= 2)
             median = samples[1]; // middle of the sorted set
 
-        // F4.3: a sender observed in a flagged (channel, rssiClass) group
+        // Group budget: a sender observed in a flagged (channel, rssiClass) group
         // gets the group's split budget instead of the full local one.
         if (isInFlaggedGroupLocked(entry->channel, entry->rssiClass)) {
             const uint32_t groupBudget = groupBudgetLocked(entry->channel, entry->rssiClass);
@@ -2252,7 +2252,7 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
     uint8_t cap = mp.hop_limit;
     bool senderInProbation = false;
 
-    // M2: probation cap.
+    // Probation cap.
     const uint8_t probationCap = cfg.probation_max_hop_limit;
     if (cfg.probation_window_secs > 0) {
         concurrency::LockGuard guard(&cacheLock);
@@ -2267,7 +2267,7 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
             }
         }
     }
-    // M6: congestion cap (F6.3) - only for L0 (probation) broadcast senders,
+    // Congestion hop cap: only for broadcast senders currently in probation,
     // and only while the probation machinery is active.
     if (senderInProbation && cfg.congestion_hop_cap_pct > 0) {
         const float util = currentCongestionPct();
@@ -2292,7 +2292,8 @@ void TrafficManagementModule::recordRelayed(const meshtastic_MeshPacket &mp)
     const NodeNum from = getFrom(&mp);
     if (from == 0 || from == nodeDB->getNodeNum())
         return;
-    // Reliability machinery is exempt (F6.1 failure mode (a)).
+    // Reliability machinery is exempt from the relay budget: want_ack/routing/admin traffic
+    // must never be starved by a spammer.
     if (mp.want_ack || mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP || mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP)
         return;
 
@@ -2352,7 +2353,7 @@ bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)
     const auto &cfg = moduleConfig.traffic_management;
     if (!service || cfg.probation_window_secs == 0)
         return false;
-    // Vouch only from a long-tenured device (F5.5 analogue for L1).
+    // Vouch only from a long-tenured device (tenure gate).
     if (uptimeSecs() < cfg.attestation_min_tenure_secs)
         return false;
 
@@ -2540,7 +2541,7 @@ uint32_t TrafficManagementModule::groupBudgetForTest(uint8_t channel, uint8_t rs
 }
 
 // =============================================================================
-// Antispam L1: cache lifecycle
+// Antispam: cache lifecycle
 // =============================================================================
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
@@ -2567,7 +2568,7 @@ void TrafficManagementModule::initAntispamCache()
 #endif
 
 // =============================================================================
-// Antispam L1: maintenance sweep (called from runOnce under cacheLock)
+// Antispam: maintenance sweep (called from runOnce under cacheLock)
 // =============================================================================
 
 void TrafficManagementModule::maintainAntispamLocked()
