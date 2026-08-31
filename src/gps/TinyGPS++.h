@@ -357,7 +357,6 @@ class TinyGPSPlus
 
     uint16_t gsaPDOP() const
     {
-<<<<<<< HEAD
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
             if (gsaInfo[s].valid && gsaInfo[s].pdop > best)
@@ -379,26 +378,6 @@ class TinyGPSPlus
             if (gsaInfo[s].valid && gsaInfo[s].vdop > best)
                 best = gsaInfo[s].vdop;
         return best;
-=======
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-            if (gsaInfo[s].valid && gsaInfo[s].pdop)
-                return gsaInfo[s].pdop;
-        return 0;
-    }
-    uint16_t gsaHDOP() const
-    {
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-            if (gsaInfo[s].valid && gsaInfo[s].hdop)
-                return gsaInfo[s].hdop;
-        return 0;
-    }
-    uint16_t gsaVDOP() const
-    {
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-            if (gsaInfo[s].valid && gsaInfo[s].vdop)
-                return gsaInfo[s].vdop;
-        return 0;
->>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
     }
 
     uint16_t satellitesInView() const
