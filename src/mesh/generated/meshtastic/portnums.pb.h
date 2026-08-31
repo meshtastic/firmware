@@ -165,6 +165,13 @@ typedef enum _meshtastic_PortNum {
 
  ENCODING: binary (ota-common transport frames) */
     meshtastic_PortNum_LORA_OTA_APP = 79,
+    /* ID attestation / greylist gossip (antispam L1, M2/M6).
+ Carries an IdAttestation payload: a long-tenured node vouching that it
+ has known an ID since a given epoch window (promotion out of probation),
+ or a gossiped NO_RELAY bit after a relayer's per-sender budget is
+ exhausted. Unsigned in L1; XEdDSA signing arrives with L2 identity.
+ ENCODING: nanopb (meshtastic_IdAttestation) */
+    meshtastic_PortNum_ID_ATTESTATION_APP = 80,
     /* GroupAlarm integration
  Used for transporting GroupAlarm-related messages between Meshtastic nodes
  and companion applications/services. */
