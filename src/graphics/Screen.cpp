@@ -183,9 +183,12 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 #endif
 
 // Give ScreenMirror a look at the committed framebuffer (no-op unless armed).
+// Deliberately scoped to updateUiFrame commits: the few direct display()
+// paths it bypasses (EInk re-commits, boot logo) immediately follow or
+// precede a mirrored frame.
 static inline void screenMirrorCapture()
 {
-#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#if HAS_SCREEN_MIRROR
     if (screen)
         screenMirror.onRendered(screen->getDisplayDevice());
 #endif
