@@ -90,10 +90,13 @@ class PhoneAPI
     meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
 
 #if HAS_SCREEN_MIRROR
-    // Per-connection drain cursor into ScreenMirror's current frame, so
-    // coexisting clients (BLE + serial + TCP) each receive complete frames.
+    // Per-connection drain cursors into ScreenMirror's current frame and
+    // color palette, so coexisting clients (BLE + serial + TCP) each receive
+    // complete frames and palettes.
     uint32_t mirrorFrameId = 0;
     uint16_t mirrorOffset = 0;
+    uint32_t mirrorPaletteSig = 0;
+    uint8_t mirrorPaletteOffset = 0;
 
     // Screen pixels carry operator content; under access control only an
     // authorized client may receive them (same rule as mesh packets).

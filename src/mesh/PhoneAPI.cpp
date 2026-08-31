@@ -389,6 +389,8 @@ void PhoneAPI::close()
         graphics::screenMirror.setMirror(false);
         mirrorFrameId = 0;
         mirrorOffset = 0;
+        mirrorPaletteSig = 0;
+        mirrorPaletteOffset = 0;
 #endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
@@ -1108,6 +1110,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.packet = replayPkt;
             }
 #if HAS_SCREEN_MIRROR
+        } else if (screenMirrorAuthorized() && graphics::screenMirror.copyPaletteChunk(mirrorPaletteSig, mirrorPaletteOffset,
+                                                                                       fromRadioScratch.display_palette)) {
+            // Palette before frames so the client can colorize the first frame it renders.
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
         } else if (screenMirrorAuthorized() &&
                    graphics::screenMirror.copyChunk(mirrorFrameId, mirrorOffset, fromRadioScratch.display_frame)) {
             // Lowest priority: mesh traffic and notifications outrank pixels.
@@ -1743,7 +1749,8 @@ bool PhoneAPI::available()
             return true;
 
 #if HAS_SCREEN_MIRROR
-        return screenMirrorAuthorized() && graphics::screenMirror.hasChunkFor(mirrorFrameId, mirrorOffset);
+        return screenMirrorAuthorized() && (graphics::screenMirror.hasPaletteChunkFor(mirrorPaletteSig, mirrorPaletteOffset) ||
+                                            graphics::screenMirror.hasChunkFor(mirrorFrameId, mirrorOffset));
 #else
         return false;
 #endif
