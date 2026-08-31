@@ -481,10 +481,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// M4: 4-class RSSI quantization of `mp` (0xFF when no usable reading).
     /// 0 = < -110 dBm, 1 = -110..-100, 2 = -100..-90, 3 = >= -90.
     uint8_t rssiClassOf(const meshtastic_MeshPacket &mp);
+    /// Read-only lookup for `node`'s antispam entry: returns it or nullptr.
+    /// Never allocates and never evicts. nullptr when the table is compiled
+    /// out. Caller must hold cacheLock.
+    AntispamEntry *findAntispamEntry(NodeNum node) const;
     /// Find or create the antispam entry for `node` (oldest-first eviction
     /// when full, like findOrCreateEntry). nullptr when the table is
     /// compiled out or full with no eviction target. Caller must hold cacheLock.
-    AntispamEntry *findAntispamEntry(NodeNum node, bool *isNew) const;
+    AntispamEntry *findOrCreateAntispamEntry(NodeNum node, bool *isNew) const;
     /// M2/M4/M6: allocate the antispam table alongside the unified cache.
     /// Called from the constructor (single-threaded); no-op when the unified
     /// cache is compiled out.
