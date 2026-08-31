@@ -67,6 +67,7 @@ bool isReconnecting = false; // If we are currently reconnecting
 #ifdef ARCH_RP2040
 // On the CYW43 under FreeRTOS even WiFi.beginNoBlock() holds the caller for several seconds (up to the WiFi timeout,
 // 15 s); from the main loop that trips the 8 s hardware watchdog. Join from a short-lived task and poll for the link.
+// Pinned to core 0: the CYW43 shim is written for the core-0 LWIP thread and its core assertions are NDEBUG-only.
 static TaskHandle_t wifiJoinTask = nullptr;
 
 static void wifiJoinTaskFn(void *)
@@ -81,7 +82,8 @@ static bool startWifiJoin()
 {
     if (wifiJoinTask)
         return true; // previous join still in progress
-    if (xTaskCreate(wifiJoinTaskFn, "wifijoin", 1536, NULL, uxTaskPriorityGet(NULL), &wifiJoinTask) != pdPASS) {
+    if (xTaskCreateAffinitySet(wifiJoinTaskFn, "wifijoin", 1536, NULL, uxTaskPriorityGet(NULL), 1u << 0, &wifiJoinTask) !=
+        pdPASS) {
         LOG_ERROR("Could not start WiFi join task");
         return false;
     }
