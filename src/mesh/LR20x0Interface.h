@@ -73,5 +73,12 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+  private:
+    /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */
+    bool fullBegin(float freq);
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
 };
 #endif
