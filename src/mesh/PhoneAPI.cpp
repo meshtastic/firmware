@@ -1115,7 +1115,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Palette before frames so the client can colorize the first frame it renders.
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
         } else if (screenMirrorAuthorized() &&
-                   graphics::screenMirror.copyChunk(mirrorFrameId, mirrorOffset, fromRadioScratch.display_frame)) {
+                   graphics::screenMirror.copyChunk(this, mirrorFrameId, mirrorOffset, fromRadioScratch.display_frame)) {
             // Lowest priority: mesh traffic and notifications outrank pixels.
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
 #endif
@@ -1750,7 +1750,7 @@ bool PhoneAPI::available()
 
 #if HAS_SCREEN_MIRROR
         return screenMirrorAuthorized() && (graphics::screenMirror.hasPaletteChunkFor(mirrorPaletteSig, mirrorPaletteOffset) ||
-                                            graphics::screenMirror.hasChunkFor(mirrorFrameId, mirrorOffset));
+                                            graphics::screenMirror.hasChunkFor(this, mirrorFrameId, mirrorOffset));
 #else
         return false;
 #endif

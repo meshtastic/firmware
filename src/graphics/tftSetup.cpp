@@ -12,7 +12,6 @@
 #include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverConfig.h"
 #include "input/InputBroker.h"
-#include "mesh/Throttle.h"
 #if defined(MESHTASTIC_MUI_MIRROR)
 #include "input/InputDriver.h"
 #endif
@@ -410,6 +409,11 @@ void tftSetup(void)
     I2CKeyboardScanner::setSecondaryBus(i2cProxy);
 #endif
 #ifndef ARCH_PORTDUINO
+#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+    // Must precede DeviceScreen::init: device-ui only builds its virtual input
+    // devices (and the default focus group they need) when injection is asked for.
+    InputDriver::enableInjection();
+#endif
     deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
@@ -417,7 +421,12 @@ void tftSetup(void)
     // Stream MUI's dirty rects to local clients (see graphics::ScreenMirror).
     // Gated on MESHTASTIC_MUI_MIRROR until the device-ui flush observer merges
     // (jamesarich/device-ui screen-mirror-poc); the vendored pin lacks it.
-    graphics::screenMirror.setMuiRefresh([]() { DisplayDriver::requestFullRefresh(); });
+    {
+        lv_display_t *disp = lv_display_get_default();
+        graphics::screenMirror.setMuiSource([]() { DisplayDriver::requestFullRefresh(); },
+                                            disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
+                                            disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0);
+    }
     DisplayDriver::setFlushObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px) {
         graphics::screenMirror.onMuiRect(x, y, w, h, px);
     });
