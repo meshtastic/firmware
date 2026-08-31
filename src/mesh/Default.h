@@ -61,8 +61,11 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_traffic_mgmt_attestation_min_tenure_secs (24 * 60 * 60) // 24 h: attesters must be this old
 #define default_traffic_mgmt_probation_max_hop_limit 2                  // probation broadcasts relay at <=2 hops (normal: 3)
 // M4/M6 knobs ship disabled (0); the gossiped budget / relay-budget /
+// congestion-cap machinery engages only when an operator sets them.
 #define default_traffic_mgmt_budget_gossip_enabled 0
 #define default_traffic_mgmt_group_budget_enabled 0
+#define default_traffic_mgmt_relay_budget_max_packets 0
+#define default_traffic_mgmt_congestion_hop_cap_pct 0
 
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count

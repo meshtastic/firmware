@@ -1979,6 +1979,13 @@ uint8_t TrafficManagementModule::rssiClassOf(const meshtastic_MeshPacket &mp)
     return 0;
 }
 
+float TrafficManagementModule::currentCongestionPct() const
+{
+    if (s_testCongestionPct >= 0)
+        return static_cast<float>(s_testCongestionPct);
+    return airTime ? airTime->channelUtilizationPercent() : 0.0f;
+}
+
 uint32_t TrafficManagementModule::effectiveRateThreshold(NodeNum sender) const
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2108,6 +2115,20 @@ int TrafficManagementModule::peekProbationStateForTest(NodeNum node)
     return ageTicks < windowTicks ? 1 : 0;
 }
 
+uint32_t TrafficManagementModule::peekRelayedCountForTest(NodeNum node)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    const AntispamEntry *entry = findAntispamEntry(node, nullptr);
+    return entry ? entry->relayedCount : 0;
+}
+
+bool TrafficManagementModule::peekNoRelayForTest(NodeNum node)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    const AntispamEntry *entry = findAntispamEntry(node, nullptr);
+    return entry && entry->noRelay;
+}
+
 void TrafficManagementModule::snapshotTopSenders(meshtastic_TopSender (&out)[kTopSendersCount]) const
 {
     for (int i = 0; i < kTopSendersCount; i++)
@@ -2159,6 +2180,24 @@ void TrafficManagementModule::snapshotTopSenders(meshtastic_TopSender (&out)[kTo
 #endif
 }
 
+bool TrafficManagementModule::shouldRelay(const meshtastic_MeshPacket &mp) const
+{
+    const auto &cfg = moduleConfig.traffic_management;
+    if (cfg.relay_budget_max_packets == 0)
+        return true; // relay budget disabled -> unlimited relaying
+    const NodeNum from = getFrom(&mp);
+    if (from == 0 || from == nodeDB->getNodeNum())
+        return true; // unknown or local sender: normal policy
+
+    concurrency::LockGuard guard(&cacheLock);
+    const AntispamEntry *entry = findAntispamEntry(from, nullptr);
+    if (entry && entry->noRelay) {
+        incrementStatLocked(&stats.no_relay_skips);
+        return false;
+    }
+    return true;
+}
+
 uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) const
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2200,6 +2239,66 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
     if (changed)
         incrementStatLocked(&stats.relay_hop_caps_applied);
     return cap;
+}
+
+void TrafficManagementModule::recordRelayed(const meshtastic_MeshPacket &mp)
+{
+    const auto &cfg = moduleConfig.traffic_management;
+    if (cfg.relay_budget_max_packets == 0)
+        return;
+    const NodeNum from = getFrom(&mp);
+    if (from == 0 || from == nodeDB->getNodeNum())
+        return;
+    // Reliability machinery is exempt (F6.1 failure mode (a)).
+    if (mp.want_ack || mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP || mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP)
+        return;
+
+    bool exhausted = false;
+    {
+        concurrency::LockGuard guard(&cacheLock);
+        AntispamEntry *entry = findAntispamEntry(from, nullptr);
+        if (!entry)
+            return;
+        if (entry->noRelay)
+            return; // already exhausted this window
+
+        if (entry->relayedCount < 0x3F)
+            entry->relayedCount++;
+        exhausted = entry->relayedCount >= cfg.relay_budget_max_packets;
+        if (exhausted) {
+            entry->noRelay = true;
+            entry->noRelayLocal = true;
+            TM_LOG_INFO("Antispam: relay budget exhausted for 0x%08x (>=%u), stopping relay this window", from,
+                        (unsigned)cfg.relay_budget_max_packets);
+        }
+    } // lock released before sending (sendToMesh may take other locks)
+    if (exhausted)
+        sendNoRelayGossip(from);
+}
+
+bool TrafficManagementModule::sendNoRelayGossip(NodeNum subject)
+{
+    if (!service)
+        return false;
+    meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
+    att.kind = meshtastic_IdAttestation_Kind_NO_RELAY;
+    att.subject = subject;
+
+    meshtastic_MeshPacket *p = router ? router->allocForSending() : nullptr;
+    if (!p)
+        return false;
+    p->to = NODENUM_BROADCAST;
+    p->decoded.portnum = meshtastic_PortNum_ID_ATTESTATION_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_IdAttestation_msg, &att);
+    p->decoded.want_response = false;
+    p->hop_limit = 1; // one hop: this is local-neighborhood gossip
+    p->hop_start = 1;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    p->want_ack = false;
+    incrementStat(&stats.no_relay_gossips_sent);
+    service->sendToMesh(p); // sendToMesh takes ownership of p
+    return true;
 }
 
 bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)

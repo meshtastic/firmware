@@ -246,6 +246,17 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     }
 #endif
 
+#if HAS_TRAFFIC_MANAGEMENT
+    // Antispam L1 (M6): stop relaying a sender whose local relay budget is
+    // exhausted (or whose NO_RELAY was gossiped). The packet still flows to
+    // our own client - only propagation stops.
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && trafficManagementModule &&
+        !trafficManagementModule->shouldRelay(*p)) {
+        LOG_DEBUG("Antispam: not relaying 0x%08x (relay budget / no-relay)", getFrom(p));
+        return true; // consumed: deliver locally, do not propagate
+    }
+#endif
+
     if (p->to == NODENUM_BROADCAST_NO_LORA)
         return false;
 
@@ -276,6 +287,17 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     }
 #if USERPREFS_EVENT_MODE
                     capEventRelayHops(tosend);
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+                    // Antispam L1 (M2/M6): clamp the relayed copy's hop budget
+                    // (probation cap, congestion cap) and charge this relay to
+                    // the sender's local budget (gossips NO_RELAY on exhaustion).
+                    if (trafficManagementModule) {
+                        const uint8_t capped = trafficManagementModule->relayHopCap(*p);
+                        if (capped < tosend->hop_limit)
+                            tosend->hop_limit = capped;
+                        trafficManagementModule->recordRelayed(*p);
+                    }
 #endif
 
                     ErrorCode res =

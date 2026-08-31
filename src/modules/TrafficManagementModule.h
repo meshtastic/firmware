@@ -114,10 +114,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // (recording first-seen state), which is harmless and may default on.
     // =========================================================================
 
+    /// M6: true when the relayer must NOT re-broadcast a packet from the
+    /// sender of `mp` this window (local relay budget exhausted, or a gossiped
+    /// NO_RELAY bit is in force). Local delivery is unaffected; only the
+    /// re-broadcast is suppressed. Consulted by the router's perhapsRebroadcast.
+    bool shouldRelay(const meshtastic_MeshPacket &mp) const;
+
     /// M2 + M6: effective hop_limit cap for a re-broadcast of `mp`. Returns
     /// min(hop_limit, probation cap, congestion cap). Consulted by the router
     /// on its relayed copy. No-op (returns hop_limit) when no cap applies.
     uint8_t relayHopCap(const meshtastic_MeshPacket &mp) const;
+
+    /// M6: record that this node re-broadcast `mp` (per-sender relay-budget
+    /// accounting). The first exhaustion in a window gossips a NO_RELAY bit.
+    /// No-op when the relay budget is disabled.
+    void recordRelayed(const meshtastic_MeshPacket &mp);
 
     /// M4: fill `out` (kTopSendersCount) with the top senders by observed
     /// rate this budget window, for the device-telemetry piggyback
@@ -131,6 +142,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // Test hooks (antispam L1 state introspection).
     int peekProbationStateForTest(NodeNum node);                                // -1 untracked, 0 established, 1 in-probation
+    uint32_t peekRelayedCountForTest(NodeNum node);                             // windowed relayed-for count
+    bool peekNoRelayForTest(NodeNum node);                                      // gossiped/local NO_RELAY in force
     int peekSenderBudgetForTest(NodeNum sender, uint32_t *medianOut = nullptr); // -1 untracked
     /// M2: test override for the uptime read used by the attester-tenure check.
     /// 0xFFFFFFFF = production (reads Time::getUptimeSecs()); otherwise the
@@ -139,6 +152,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static void setUptimeSecsForTest(uint32_t secs) { s_testUptimeSecs = secs; }
     /// Test-only congestion override: production reads airTime->channelUtilizationPercent().
     /// Set to >= 0 to drive the M6 congestion hop cap deterministically in tests.
+    inline static int s_testCongestionPct = -1;
 
     // Injectable monotonic clock (ms): tests advance s_testNowMs instead of sleeping across
     // ticks (mirrors HopScalingModule); production reads millis().
@@ -439,6 +453,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     uint32_t effectiveRateThresholdLocked(NodeNum sender) const;
     /// M6: current channel utilization percent (test-override aware).
     float currentCongestionPct() const;
+    /// M6: emit one NO_RELAY gossip packet for `subject` (best-effort, no
+    /// allocation failure path). Returns false when the send couldn't happen.
+    bool sendNoRelayGossip(NodeNum subject);
     /// M2: emit one KNOWN_SINCE attestation gossip for `subject` when we are
     /// tenured enough to vouch. Returns false when not sent.
     bool sendKnownSinceGossip(NodeNum subject);
