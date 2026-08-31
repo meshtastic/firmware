@@ -762,11 +762,9 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         } else {
             LOG_WARN("[AW35615] not found at 0x22");
         }
-        getBattVoltage(); // initial read cached_mv
         return true;
     }
 
-    virtual bool isBatteryConnect() override { return true; }
     virtual uint16_t getBattVoltage() override
     {
         if (!initialized)
@@ -802,7 +800,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
     {
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isVbusPresent() && cached_mv >= 4200;
+            return _aw35615.isVbusPresent();
         }
         // Fallback to base GPIO/board checks (or false) if CC chip is absent
         return false;
@@ -815,7 +813,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isSinkAttached() && cached_mv >= 4200;
+            return _aw35615.isSinkAttached();
         }
         return isVbusIn();
     }

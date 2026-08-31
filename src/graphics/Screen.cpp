@@ -44,6 +44,10 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "TimeFormatters.h"
 #include "draw/ClockRenderer.h"
 #include "draw/DebugRenderer.h"
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#include "draw/FavoritesMapRenderer.h"
+#include "draw/SatellitesRenderer.h"
+#endif
 #include "draw/MenuHandler.h"
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
@@ -116,10 +120,16 @@ namespace graphics
 #define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
-#if BASEUI_HAS_GAMES
-#define NUM_EXTRA_FRAMES 4 // text message, debug frame, and the always-present games frame
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#define T_ECHO_PLUS_EXTRA_FRAMES 2 // Satellites + Favorites Map
 #else
-#define NUM_EXTRA_FRAMES 3 // text message and debug frame
+#define T_ECHO_PLUS_EXTRA_FRAMES 0
+#endif
+
+#if BASEUI_HAS_GAMES
+#define NUM_EXTRA_FRAMES (4 + T_ECHO_PLUS_EXTRA_FRAMES)
+#else
+#define NUM_EXTRA_FRAMES (3 + T_ECHO_PLUS_EXTRA_FRAMES)
 #endif
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
@@ -681,13 +691,12 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
         if (on) {
             LOG_INFO("Turn on screen");
             powerMon->setState(meshtastic_PowerMon_State_Screen_On);
-#if defined(T_WATCH_S3) || defined(T_WATCH_ULTRA)
-            if (PMU) // cleared when both AXP init attempts failed
-                PMU->enablePowerOutput(XPOWERS_ALDO2);
+#ifdef T_WATCH_S3
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
 
 // some screens seem to need a kick in the pants to turn back on
-#if defined(MUZI_BASE) || defined(M5STACK_CARDPUTER_ADV) || defined(TFT_RESET_AFTER_SLEEP)
+#if defined(MUZI_BASE) || defined(M5STACK_CARDPUTER_ADV)
             dispdev->init();
             dispdev->setBrightness(brightness);
             dispdev->flipScreenVertically();
@@ -706,8 +715,14 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
-#if HAS_BACKLIGHT
+#if HAS_PWM_BACKLIGHT
             graphics::backlightOn();
+#elif defined(PIN_EINK_EN)
+            if (uiconfig.screen_brightness == 1)
+                digitalWrite(PIN_EINK_EN, HIGH);
+#elif defined(PCA_PIN_EINK_EN)
+            if (uiconfig.screen_brightness > 0)
+                io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
 #endif
 
 #if defined(ST7789_CS) &&                                                                                                        \
@@ -766,8 +781,12 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             drawLockdownLockScreen(dispdev);
 #endif
 
-#if HAS_BACKLIGHT
+#if HAS_PWM_BACKLIGHT
             graphics::backlightOff();
+#elif defined(PIN_EINK_EN)
+            digitalWrite(PIN_EINK_EN, LOW);
+#elif defined(PCA_PIN_EINK_EN)
+            io.digitalWrite(PCA_PIN_EINK_EN, LOW);
 #endif
 
             dispdev->displayOff();
@@ -810,7 +829,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 #endif
 
-#if defined(T_WATCH_S3) // on T_WATCH_ULTRA, powering down this pin seems to goober the i2c bus.
+#ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
 #endif
             enabled = false;
@@ -824,11 +843,6 @@ void Screen::setup()
 
     // Enable display rendering
     useDisplay = true;
-
-#if HAS_BACKLIGHT
-    // Settles uiconfig.screen_brightness for GPIO backlights, so read it only after this
-    graphics::backlightInit();
-#endif
 
     // Load saved brightness from UI config
     // For OLED displays (SSD1306), default brightness is 255 if not set
@@ -1372,7 +1386,6 @@ void Screen::setFrames(FrameFocus focus)
         return;
     }
 
-    const FramesetInfo previousFramesetInfo = framesetInfo;
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
@@ -1485,7 +1498,22 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_compass);
         PUSH_FRAME_TITLE("GPS");
     }
+
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+    fsi.positions.satellites = numframes;
+    normalFrames[numframes++] = graphics::SatellitesRenderer::drawFrame;
+    indicatorIcons.push_back(icon_compass);
+    PUSH_FRAME_TITLE("Satellites");
 #endif
+#endif
+
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+    fsi.positions.favoritesMap = numframes;
+    normalFrames[numframes++] = graphics::FavoritesMapRenderer::drawFrame;
+    indicatorIcons.push_back(icon_distance);
+    PUSH_FRAME_TITLE("Favorites Map");
+#endif
+
     if (RadioLibInterface::instance && !hiddenFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
@@ -1625,15 +1653,8 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        if (previousFramesetInfo.positions.waypoint == 255 && fsi.positions.waypoint != 255) {
-            const uint8_t target = originalPosition >= fsi.positions.waypoint ? originalPosition + 1 : originalPosition;
-            ui->switchToFrame(target);
-        } else if (previousFramesetInfo.positions.waypoint != 255 && fsi.positions.waypoint == 255) {
-            const uint8_t target = originalPosition > previousFramesetInfo.positions.waypoint
-                                       ? originalPosition - 1
-                                       : std::min<uint8_t>(originalPosition, fsi.frameCount - 1);
-            ui->switchToFrame(target);
-        } else if (previousFrameCount > fsi.frameCount) {
+        //  No more adjustment - force stay on same index
+        if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
             ui->switchToFrame(originalPosition + 1);
@@ -2117,21 +2138,6 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
     return 0;
 }
 
-// Only the environmental telemetry frame answers SELECT with a menu. A module frame that has none
-// must not claim the press, or every frame matched after it in the dispatch chain is unreachable.
-static bool moduleFrameHasMenu(size_t frame)
-{
-#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-    // moduleFrames bounds the module-frame region, before favorites are appended; its leading slots
-    // are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
-    const MeshModule *module = frame < moduleFrames.size() ? moduleFrames.at(frame) : nullptr;
-    return module != nullptr && environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(module);
-#else
-    (void)frame;
-    return false;
-#endif
-}
-
 int Screen::handleInputEvent(const InputEvent *event)
 {
     LOG_INPUT("Screen Input event %u! kb %u", event->inputEvent, event->kbchar);
@@ -2214,6 +2220,23 @@ int Screen::handleInputEvent(const InputEvent *event)
             return 0;
         }
     }
+
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+    // Favorites Map: use UP/DOWN for zoom while this frame has focus.
+    if (framesetInfo.positions.favoritesMap != 255 && ui->getUiState()->currentFrame == framesetInfo.positions.favoritesMap) {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            graphics::FavoritesMapRenderer::zoomIn();
+            setFastFramerate();
+            return 0;
+        }
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            graphics::FavoritesMapRenderer::zoomOut();
+            setFastFramerate();
+            return 0;
+        }
+    }
+#endif
+
 #if defined(OLED_COMPACT_UI)
     // UP/DOWN on the compact position screen toggles compass vs coordinates+elevation
     if (graphics::isCompactPanel(dispdev) && ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
@@ -2359,8 +2382,16 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
-                } else if (moduleFrameHasMenu(this->ui->getUiState()->currentFrame)) {
-                    menuHandler::environmentTelemetryMenu();
+                    // moduleFrames.size() bounds the module-frame region, before favorites are appended; its leading
+                    // slots are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
+                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
+                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+                    const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
+                    if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
+                        menuHandler::environmentTelemetryMenu();
+                    }
+#endif
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
@@ -2375,9 +2406,6 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::nodeListMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
-                } else if (framesetInfo.positions.waypoint != 255 &&
-                           this->ui->getUiState()->currentFrame == framesetInfo.positions.waypoint) {
-                    menuHandler::waypointBaseMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showFrame(FrameDirection::PREVIOUS);

@@ -287,9 +287,6 @@ class Screen : public concurrency::OSThread
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
     char ourId[5];
 
-    // if we have a step counter, this stores the number of steps.
-    uint32_t steps = 0;
-
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
     // Not thread safe - must be called before any other methods are called.
@@ -732,6 +729,10 @@ class Screen : public concurrency::OSThread
             uint8_t deviceFocused = 255;
             uint8_t system = 255;
             uint8_t gps = 255;
+#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+            uint8_t satellites = 255;
+            uint8_t favoritesMap = 255;
+#endif
             uint8_t home = 255;
             uint8_t games = 255;
             uint8_t textMessage = 255;
