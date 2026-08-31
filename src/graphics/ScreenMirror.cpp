@@ -49,15 +49,16 @@ void ScreenMirror::freeSnapshotLocked()
     muiHead = muiCount = 0;
     muiPoolUsed = 0;
     muiRectSendOffset = 0;
-    muiNeedResync = false;
+    muiOwner = nullptr;
 #endif
 }
 
 void ScreenMirror::setMirror(bool enabled)
 {
     concurrency::LockGuard g(&lock);
-    if (mirroring == enabled && !(enabled && oneShot))
-        return; // no state change; keeps client disconnects from logging forever
+    // Cleanup must stay unconditional: a one-shot request leaves mirroring
+    // false, so an early return would strand the pool and the snapshot.
+    const bool changed = mirroring != enabled || oneShot;
     mirroring = enabled;
     if (enabled) {
         // Force an immediate frame so the client doesn't wait for the next
@@ -70,8 +71,10 @@ void ScreenMirror::setMirror(bool enabled)
     } else {
         oneShot = false;
         freeSnapshotLocked();
+        muiOwner = nullptr;
     }
-    LOG_INFO("Screen mirror %s", enabled ? "enabled" : "disabled");
+    if (changed)
+        LOG_INFO("Screen mirror %s", enabled ? "enabled" : "disabled");
 }
 
 void ScreenMirror::requestFrame()
@@ -217,31 +220,39 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
         concurrency::LockGuard g(&lock);
         if (!mirroring && !oneShot)
             return;
-        if (x < 0 || y < 0 || w == 0 || h == 0)
+        // Panel size comes from LVGL at registration, so frames always carry the
+        // full display dimensions the wire contract promises.
+        if (x < 0 || y < 0 || w == 0 || h == 0 || muiPanelW == 0)
             return;
-        // LVGL reports rects in logical coordinates; the panel extent is the
-        // running maximum, exact from the first full repaint onward.
-        if ((uint16_t)(x + w) > muiPanelW)
-            muiPanelW = x + w;
-        if ((uint16_t)(y + h) > muiPanelH)
-            muiPanelH = y + h;
 
         uint32_t bytes = (uint32_t)w * h * 2;
         if (!muiPool) {
+            bool psram = false;
 #ifdef ESP32
             muiPool = (uint8_t *)ps_malloc(MUI_POOL_BYTES); // PSRAM first; this is a big buffer
+            psram = muiPool != nullptr;
 #endif
             if (!muiPool)
                 muiPool = (uint8_t *)malloc(MUI_POOL_BYTES);
             if (!muiPool) {
+                LOG_ERROR("Screen mirror: no memory for the %u byte rect pool", (unsigned)MUI_POOL_BYTES);
                 mirroring = oneShot = false;
                 return;
             }
-            memaudit::add("display", MUI_POOL_BYTES);
+            if (!psram)
+                memaudit::add("display", MUI_POOL_BYTES); // PSRAM is not the constrained budget
         }
-        if (muiCount >= MUI_MAX_RECTS || bytes > MUI_POOL_BYTES || muiPoolUsed + bytes > MUI_POOL_BYTES) {
-            // Queue full: drop this rect and repaint everything once drained.
-            muiNeedResync = true;
+        if (bytes > MUI_POOL_BYTES)
+            return; // a rect larger than the whole pool can never be sent
+        if (muiCount >= MUI_MAX_RECTS || muiPoolUsed + bytes > MUI_POOL_BYTES) {
+            // The consumer is behind. Drop the backlog rather than the newest
+            // pixels and repaint once: stale history has no value, and dropping
+            // only the incoming rect wedges the pool until the queue empties.
+            muiHead = muiCount = 0;
+            muiPoolUsed = 0;
+            muiRectSendOffset = 0;
+            if (muiRefresh)
+                muiRefresh();
             return;
         }
         memcpy(muiPool + muiPoolUsed, pixels, bytes);
@@ -249,9 +260,13 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
         r = {(uint16_t)x, (uint16_t)y, w, h, bytes, muiPoolUsed, ++frameId};
         muiPoolUsed += bytes;
         muiCount++;
-        readyId = frameId;
+        // Only the empty->non-empty transition needs a wakeup; available()
+        // keeps the client draining, and a notify per flush is a storm.
+        if (muiCount == 1)
+            readyId = frameId;
     }
-    frameReady.notifyObservers(readyId);
+    if (readyId)
+        frameReady.notifyObservers(readyId);
 }
 
 // Fills one chunk of the oldest queued rect; pops it when fully drained.
@@ -285,34 +300,37 @@ bool ScreenMirror::copyMuiChunkLocked(meshtastic_DisplayFrame &out)
             muiPoolUsed = 0;
             if (!mirroring)
                 oneShot = false; // one-shot fully delivered
-            if (muiNeedResync && mirroring && muiRefresh) {
-                muiNeedResync = false;
-                muiRefresh();
-            }
         }
     }
     return true;
 }
 #endif
 
-bool ScreenMirror::hasChunkFor(uint32_t clientFrameId, uint16_t clientOffset)
+bool ScreenMirror::hasChunkFor(const void *client, uint32_t clientFrameId, uint16_t clientOffset)
 {
     concurrency::LockGuard g(&lock);
 #if HAS_TFT
-    if (muiCount)
+    // One shared rect cursor means one consumer; another connection simply
+    // sees no rects rather than stealing half of each frame.
+    if (muiCount && (muiOwner == nullptr || muiOwner == client))
         return true;
 #endif
     return snapshot && (clientFrameId != frameId || clientOffset < frameSize);
 }
 
-bool ScreenMirror::copyChunk(uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out)
+bool ScreenMirror::copyChunk(const void *client, uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out)
 {
     concurrency::LockGuard g(&lock);
 #if HAS_TFT
     // MUI rects drain ahead of (and on MUI builds, instead of) mono snapshots.
     // Spike scope: the rect queue has a single consumer, not per-client cursors.
-    if (muiCount)
+    if (muiCount) {
+        if (muiOwner == nullptr)
+            muiOwner = client; // first drainer claims the stream
+        if (muiOwner != client)
+            return false;
         return copyMuiChunkLocked(out);
+    }
 #endif
     if (!snapshot)
         return false;
