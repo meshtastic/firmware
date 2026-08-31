@@ -21,6 +21,7 @@
 #include "TestUtil.h"
 #include "graphics/draw/MenuHandler.h"
 #include "mesh/Channels.h"
+#include "mesh/Router.h" // router global: allocErrorResponse() allocates the reply through it
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include <ErriezCRC32.h> // crc32Buffer(), for the my_node_num == crc32(public_key) invariant
@@ -1000,6 +1001,10 @@ static meshtastic_DeviceState savedDeviceState;
 static meshtastic_User savedOwner;
 static meshtastic_LocalConfig savedConfig;
 static meshtastic_ChannelFile savedChannelFile;
+// Only the ham dispatcher test installs a router (allocErrorResponse() allocates through it).
+// Saved/torn down for every test so a failed assertion's longjmp cannot leave one dangling.
+static Router *savedRouter;
+static Router *hamMockRouter;
 
 // Called from setUp/tearDown for every test, not opted into by a handful. A shared NodeDB plus
 // unrestored config/owner/devicestate/channelFile means each test inherits whatever its
@@ -1008,6 +1013,7 @@ static void replaceAdminRadioGlobals()
 {
     savedNodeDB = nodeDB;
     savedNodeInfoModule = nodeInfoModule;
+    savedRouter = router;
     savedDeviceState = devicestate;
     savedOwner = owner;
     savedConfig = config;
@@ -1020,6 +1026,9 @@ static void restoreAdminRadioGlobals()
 {
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
+    router = savedRouter;
+    delete hamMockRouter;
+    hamMockRouter = nullptr;
     delete replacementNodeDB;
     replacementNodeDB = nullptr;
     devicestate = savedDeviceState;
@@ -1082,6 +1091,210 @@ static void test_handleSetOwner_persistsLicensedChannelSanitation()
     channelFile = reloaded;
     assertLicensedChannelsSanitized();
     TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "sanitized reload must not trigger another persistence write");
+}
+
+// -----------------------------------------------------------------------
+// handleSetHamMode() name assembly: the ham long_name rides behind the call
+// sign with the "//" separator hams already use on the air.
+// -----------------------------------------------------------------------
+
+// Licensing a node touches channels, the NodeDB and the owner struct; an UNSET region keeps the
+// keygen/identity-migration path out of these name-only assertions.
+static void primeHamModeTest()
+{
+    owner = meshtastic_User_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    channels.initDefaults();
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1); // reloadOwner(false) only checks presence
+    testAdmin->deferSaves();
+}
+
+static void test_handleSetHamMode_appendsLongNameToCallSign()
+{
+    primeHamModeTest();
+
+    meshtastic_HamParameters p = meshtastic_HamParameters_init_zero;
+    strncpy(p.call_sign, "KD2ABC", sizeof(p.call_sign) - 1);
+    strncpy(p.short_name, "ABC", sizeof(p.short_name) - 1);
+    strncpy(p.long_name, "Attic Heltec", sizeof(p.long_name) - 1);
+    TEST_ASSERT_TRUE(testAdmin->handleSetHamMode(p));
+
+    TEST_ASSERT_EQUAL_STRING("KD2ABC//Attic Heltec", owner.long_name);
+    TEST_ASSERT_EQUAL_STRING("ABC", owner.short_name);
+    TEST_ASSERT_TRUE(owner.is_licensed);
+}
+
+// The widest pair the proto can carry (7 + 2 + 14) still has to arrive whole, or the operator
+// silently loses the tail of the name they typed.
+static void test_handleSetHamMode_widestPairSurvivesTheLongNameCap()
+{
+    primeHamModeTest();
+
+    meshtastic_HamParameters p = meshtastic_HamParameters_init_zero;
+    strncpy(p.call_sign, "KD2ABCD", sizeof(p.call_sign) - 1);
+    strncpy(p.long_name, "Attic Heltec 3", sizeof(p.long_name) - 1);
+    TEST_ASSERT_TRUE(testAdmin->handleSetHamMode(p));
+
+    TEST_ASSERT_EQUAL_STRING("KD2ABCD//Attic Heltec 3", owner.long_name);
+    TEST_ASSERT_LESS_OR_EQUAL(MAX_LONG_NAME_BYTES, strlen(owner.long_name));
+}
+
+static void test_handleSetHamMode_omittedLongNameKeepsCallSignAlone()
+{
+    primeHamModeTest();
+
+    meshtastic_HamParameters p = meshtastic_HamParameters_init_zero;
+    strncpy(p.call_sign, "KD2ABC", sizeof(p.call_sign) - 1);
+    testAdmin->handleSetHamMode(p);
+
+    TEST_ASSERT_EQUAL_STRING("KD2ABC", owner.long_name);
+    TEST_ASSERT_TRUE(owner.is_licensed);
+}
+
+// long_name is optional both ways a client can leave it empty: a whitespace-only one is dropped
+// (no dangling "//" on the air) instead of costing the operator the whole licensing request.
+static void test_handleSetHamMode_blankLongNameIsIgnoredNotRejected()
+{
+    primeHamModeTest();
+
+    meshtastic_HamParameters p = meshtastic_HamParameters_init_zero;
+    strncpy(p.call_sign, "KD2ABC", sizeof(p.call_sign) - 1);
+    strncpy(p.long_name, "   ", sizeof(p.long_name) - 1);
+    testAdmin->handleSetHamMode(p);
+
+    TEST_ASSERT_EQUAL_STRING("KD2ABC", owner.long_name);
+    TEST_ASSERT_TRUE(owner.is_licensed);
+}
+
+// The call sign is required, unlike the two optional name fields: an empty one would license a
+// node that never identifies itself, and once a long_name is set it would compose to a dangling
+// "//Attic Heltec".
+static void test_handleSetHamMode_blankCallSignIsRejected()
+{
+    primeHamModeTest();
+
+    meshtastic_HamParameters missing = meshtastic_HamParameters_init_zero;
+    strncpy(missing.long_name, "Attic Heltec", sizeof(missing.long_name) - 1);
+    TEST_ASSERT_FALSE(testAdmin->handleSetHamMode(missing));
+
+    TEST_ASSERT_EQUAL_STRING("", owner.long_name);
+    TEST_ASSERT_FALSE(owner.is_licensed);
+
+    primeHamModeTest();
+
+    meshtastic_HamParameters whitespace = meshtastic_HamParameters_init_zero;
+    strncpy(whitespace.call_sign, "   ", sizeof(whitespace.call_sign) - 1);
+    TEST_ASSERT_FALSE(testAdmin->handleSetHamMode(whitespace));
+
+    TEST_ASSERT_EQUAL_STRING("", owner.long_name);
+    TEST_ASSERT_FALSE(owner.is_licensed);
+}
+
+// short_name is optional too, so a blank one keeps whatever the node was already called instead of
+// blanking it - licensing the node must not cost the operator their existing short name.
+static void test_handleSetHamMode_blankShortNameKeepsTheExistingOne()
+{
+    for (const char *blank : {"", "  "}) {
+        primeHamModeTest();
+        strncpy(owner.short_name, "OLD", sizeof(owner.short_name) - 1);
+
+        meshtastic_HamParameters p = meshtastic_HamParameters_init_zero;
+        strncpy(p.call_sign, "KD2ABC", sizeof(p.call_sign) - 1);
+        strncpy(p.short_name, blank, sizeof(p.short_name) - 1);
+        TEST_ASSERT_TRUE(testAdmin->handleSetHamMode(p));
+
+        TEST_ASSERT_EQUAL_STRING("OLD", owner.short_name);
+        TEST_ASSERT_EQUAL_STRING("KD2ABC", owner.long_name);
+        TEST_ASSERT_TRUE(owner.is_licensed);
+    }
+}
+
+// A rejection has to reach the client, not just the log: allocErrorResponse() builds the reply
+// through the router, so this is the one ham test that needs one.
+class HamModeMockRouter : public Router
+{
+  public:
+    ~HamModeMockRouter()
+    {
+        delete cryptLock; // the Router ctor asserts this is clear, so a later suite can construct one
+        cryptLock = nullptr;
+    }
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+};
+
+// Pull the Routing error out of the ack/nak a handler queued in myReply.
+static bool decodeRoutingError(meshtastic_MeshPacket *reply, meshtastic_Routing_Error &out)
+{
+    if (!reply || reply->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return false;
+    if (reply->decoded.portnum != meshtastic_PortNum_ROUTING_APP)
+        return false;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    if (!pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_Routing_msg, &routing))
+        return false;
+    if (routing.which_variant != meshtastic_Routing_error_reason_tag)
+        return false;
+    out = routing.error_reason;
+    return true;
+}
+
+// Handler-level rejection is invisible to a want_response client on its own: with no reply queued,
+// handleReceivedProtobuf() falls through to its generic "ACK" and answers Routing_Error_NONE, so the
+// app reports ham mode as enabled on a node that changed nothing. The dispatcher has to say
+// BAD_REQUEST before that fallback runs.
+static void test_handleSetHamMode_blankCallSignRepliesBadRequest()
+{
+    primeHamModeTest();
+    hamMockRouter = new HamModeMockRouter();
+    router = hamMockRouter;
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_ham_mode_tag;
+    strncpy(m.set_ham_mode.long_name, "Attic Heltec", sizeof(m.set_ham_mode.long_name) - 1);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0; // local client, so the passkey gate is bypassed and the switch body runs
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = true;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE_MESSAGE(decodeRoutingError(testAdmin->reply(), err), "a rejected request must queue an error reply");
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, err);
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    testAdmin->drainReply();
+}
+
+// The other half of the pair: an accepted request still answers Routing_Error_NONE. Asserting both
+// sides is the point - NONE is what the rejection path used to borrow, so a test that only checked
+// the reject case could pass against a handler that answered NONE to everything.
+static void test_handleSetHamMode_acceptedRequestAcksSuccess()
+{
+    primeHamModeTest();
+    hamMockRouter = new HamModeMockRouter();
+    router = hamMockRouter;
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_ham_mode_tag;
+    strncpy(m.set_ham_mode.call_sign, "KD2ABC", sizeof(m.set_ham_mode.call_sign) - 1);
+    strncpy(m.set_ham_mode.long_name, "Attic Heltec", sizeof(m.set_ham_mode.long_name) - 1);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = true;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_BAD_REQUEST;
+    TEST_ASSERT_TRUE_MESSAGE(decodeRoutingError(testAdmin->reply(), err), "want_response must be answered");
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, err);
+    TEST_ASSERT_EQUAL_STRING("KD2ABC//Attic Heltec", owner.long_name);
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    testAdmin->drainReply();
 }
 
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
@@ -1965,6 +2178,91 @@ static void test_toggleNodeMuted_currentlyRewritesEverySegment()
     for (const char *f : segmentFiles)
         TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(f), f);
 }
+
+// -----------------------------------------------------------------------
+// BaseUI region chooser preset default (graphics::menuHandler::presetForRegionSelection)
+// -----------------------------------------------------------------------
+//
+// Out-of-box US setup starts on LongTurbo. Each guard below is load-bearing: widening the rule past
+// "first region ever chosen, US, no preset on record" re-presets nodes that already have an opinion.
+
+// `region` is the region still in place when the user highlights `selected`.
+static meshtastic_Config_LoRaConfig loraAt(meshtastic_Config_LoRaConfig_RegionCode region,
+                                           meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset = true)
+{
+    meshtastic_Config_LoRaConfig lora = meshtastic_Config_LoRaConfig_init_default;
+    lora.region = region;
+    lora.modem_preset = preset;
+    lora.use_preset = usePreset;
+    return lora;
+}
+
+#ifndef USERPREFS_LORACONFIG_MODEM_PRESET
+static void test_presetForRegionSelection_firstUsSelectionDefaultsToLongTurbo()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+
+    // Unusable unless US offers it: applyLoraRegion()'s reconciliation would throw it straight back.
+    TEST_ASSERT_TRUE_MESSAGE(getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)
+                                 ->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO),
+                             "US no longer supports LongTurbo");
+}
+#else
+// A pinned preset owns the decision outright.
+static void test_presetForRegionSelection_pinnedUserprefWins()
+{
+    const meshtastic_Config_LoRaConfig_ModemPreset pinned = USERPREFS_LORACONFIG_MODEM_PRESET;
+    const meshtastic_Config_LoRaConfig lora = loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, pinned);
+
+    TEST_ASSERT_EQUAL(pinned, graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
+#endif
+
+// US on a node that already has a region is a region change, not first-time setup.
+static void test_presetForRegionSelection_laterUsSelectionKeepsCurrentPreset()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
+
+// The default is US-only; no other region's first selection is touched.
+static void test_presetForRegionSelection_firstNonUsSelectionKeepsCurrentPreset()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    for (auto region : {meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_RegionCode_ANZ,
+                        meshtastic_Config_LoRaConfig_RegionCode_JP})
+        TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                          graphics::menuHandler::presetForRegionSelection(lora, region));
+}
+
+// A preset off the install default is a preference on record (phone app, admin, preset menu).
+static void test_presetForRegionSelection_respectsAPresetAlreadyChosen()
+{
+    const meshtastic_Config_LoRaConfig lora =
+        loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
+
+// use_preset false means raw bandwidth/SF/CR: rewriting modem_preset only misleads the preset menu.
+static void test_presetForRegionSelection_ignoresNodesOnRawModemSettings()
+{
+    const meshtastic_Config_LoRaConfig lora = loraAt(meshtastic_Config_LoRaConfig_RegionCode_UNSET,
+                                                     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, /*usePreset=*/false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      graphics::menuHandler::presetForRegionSelection(lora, meshtastic_Config_LoRaConfig_RegionCode_US));
+}
 #endif // HAS_SCREEN
 
 // -----------------------------------------------------------------------
@@ -2001,6 +2299,14 @@ void setup()
 
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
+    RUN_TEST(test_handleSetHamMode_appendsLongNameToCallSign);
+    RUN_TEST(test_handleSetHamMode_widestPairSurvivesTheLongNameCap);
+    RUN_TEST(test_handleSetHamMode_omittedLongNameKeepsCallSignAlone);
+    RUN_TEST(test_handleSetHamMode_blankLongNameIsIgnoredNotRejected);
+    RUN_TEST(test_handleSetHamMode_blankShortNameKeepsTheExistingOne);
+    RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
+    RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
+    RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
@@ -2121,6 +2427,17 @@ void setup()
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
     RUN_TEST(test_toggleNodeMuted_unknownNodeDoesNothing);
     RUN_TEST(test_toggleNodeMuted_currentlyRewritesEverySegment);
+
+    // BaseUI region chooser preset default
+#ifndef USERPREFS_LORACONFIG_MODEM_PRESET
+    RUN_TEST(test_presetForRegionSelection_firstUsSelectionDefaultsToLongTurbo);
+#else
+    RUN_TEST(test_presetForRegionSelection_pinnedUserprefWins);
+#endif
+    RUN_TEST(test_presetForRegionSelection_laterUsSelectionKeepsCurrentPreset);
+    RUN_TEST(test_presetForRegionSelection_firstNonUsSelectionKeepsCurrentPreset);
+    RUN_TEST(test_presetForRegionSelection_respectsAPresetAlreadyChosen);
+    RUN_TEST(test_presetForRegionSelection_ignoresNodesOnRawModemSettings);
 #endif
 
     exit(UNITY_END());

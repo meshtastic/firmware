@@ -95,7 +95,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleSetChannel();
 
   public:
-    void handleSetHamMode(const meshtastic_HamParameters &req);
+    /// Applies licensed-operator settings. False if the request was rejected and nothing changed,
+    /// so the caller can answer a want_response client with an error instead of an implicit success.
+    bool handleSetHamMode(const meshtastic_HamParameters &req);
 
     /// Note an admin request leaving this node for a remote, so that remote's response is
     /// accepted. Called from the client-to-mesh path (MeshService::handleToRadio).

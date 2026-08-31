@@ -20,6 +20,9 @@
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
 #include "error.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -839,6 +842,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #if HAS_SCREEN
     messageStore.clearAllMessages();
 #endif
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.clearAllWaypoints();
+#endif
 
 #if WARM_NODE_COUNT > 0
     // On nRF52840 the warm tier lives in raw flash outside /prefs, so rmDir
@@ -1004,6 +1010,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.ignore_mqtt = false;
 #endif
+#ifdef USERPREFS_CONFIG_LORA_CONFIG_OK_TO_MQTT
+    config.lora.config_ok_to_mqtt = USERPREFS_CONFIG_LORA_CONFIG_OK_TO_MQTT;
+#endif
 
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
@@ -1036,6 +1045,16 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
     config.security.admin_key_count = numAdminKeys;
+
+#ifdef USERPREFS_CONFIG_SECURITY_IS_MANAGED
+    // is_managed is the supported way for a vendor to lock configuration, but without an admin key
+    // it locks the vendor out too and only a factory reset recovers it.
+    if (USERPREFS_CONFIG_SECURITY_IS_MANAGED && numAdminKeys == 0) {
+        LOG_WARN("USERPREFS is_managed needs an admin key, ignored");
+    } else {
+        config.security.is_managed = USERPREFS_CONFIG_SECURITY_IS_MANAGED;
+    }
+#endif
 
     // Left at COMPATIBLE when signature checking is compiled out, so we never report a policy
     // nothing enforces (mirrors the set-config guard in AdminModule).
@@ -1088,7 +1107,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
      defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
-     defined(ELECROW_ThinkNode_M9) || defined(T_WATCH_ULTRA)) &&                                                                 \
+     defined(ELECROW_ThinkNode_M9) || defined(SEEED_WIO_TRACKER_L2) || defined(T_WATCH_ULTRA)) &&                                \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1198,6 +1217,23 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     installRoleDefaults(config.device.role);
 #endif
 
+#ifdef USERPREFS_CONFIG_DEVICE_REBROADCAST_MODE
+    config.device.rebroadcast_mode = USERPREFS_CONFIG_DEVICE_REBROADCAST_MODE;
+    // Same restriction AdminModule enforces on a set-config; apply it here so a vendor build can't
+    // ship a combination the device would silently refuse later.
+    if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
+        LOG_WARN("Rebroadcast mode can't be NONE for a router role, use ALL");
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    }
+#endif
+#ifdef USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS
+    // Clamped to the same window AdminModule enforces on a set-config
+    config.device.node_info_broadcast_secs = clamp((uint32_t)USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS,
+                                                   (uint32_t)min_node_info_broadcast_secs, (uint32_t)MAX_INTERVAL);
+#endif
+
     initConfigIntervals();
     variantDefaultConfig();
     variantDefaultModuleConfig();
@@ -1282,7 +1318,7 @@ void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc)
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
-    memset(&moduleConfig, 0, sizeof(meshtastic_ModuleConfig));
+    memset(&moduleConfig, 0, sizeof(meshtastic_LocalModuleConfig));
 
     moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_mqtt = true;
@@ -1478,30 +1514,14 @@ void NodeDB::installDefaultModuleConfig()
     memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
     moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
 #endif
-#ifdef USERPREFS_MESH_BEACON_ON_PRESET
-    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
-    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_REGION
-    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
-            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
-    moduleConfig.mesh_beacon.broadcast_on_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1] = '\0';
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
-    static_assert(sizeof(beaconOnPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes),
-                  "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
-    memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
-    moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    moduleConfig.mesh_beacon.broadcast_on_channel.channel_num = USERPREFS_MESH_BEACON_ON_CHANNEL_NUM;
+// The USERPREFS_MESH_BEACON_ON_* keys were removed with the broadcast_on_* config fields. Fail the
+// build rather than silently dropping a preconfigured beacon channel: define the equivalent
+// USERPREFS_MESH_BEACON_TARGET_0_{PRESET,REGION,CHANNEL_INDEX} keys instead. CHANNEL_INDEX names a
+// slot in the device's channel table, so the channel must also be provisioned on the node.
+#if defined(USERPREFS_MESH_BEACON_ON_PRESET) || defined(USERPREFS_MESH_BEACON_ON_REGION) ||                                      \
+    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_ON_CHANNEL_PSK) ||                           \
+    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NUM)
+#error "USERPREFS_MESH_BEACON_ON_* removed; use USERPREFS_MESH_BEACON_TARGET_0_* (channel must be in the channel table)"
 #endif
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
     BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);
@@ -3256,6 +3276,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+        moduleConfig.has_traffic_management = true;
         moduleConfig.has_tak = true;
 #if !MESHTASTIC_EXCLUDE_BEACON
         moduleConfig.has_mesh_beacon = true;

@@ -920,9 +920,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!getAdminAuthorized()) {
                 // Unauthenticated: emit an empty MeshBeaconConfig (zero-init from
-                // the top-of-loop memset). The embedded ChannelSettings
-                // (broadcast_offer_channel / broadcast_on_channel) carry PSKs that
-                // must not be visible to an unauth client.
+                // the top-of-loop memset). The embedded broadcast_offer_channel
+                // ChannelSettings carries a PSK that must not be visible to an
+                // unauth client.
             } else
 #endif
             {

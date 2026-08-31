@@ -353,6 +353,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #define NCP5623_ADDR 0x38
 #define LP5562_ADDR 0x30
+#define LP5814_ADDR 0x2C
+
+// -----------------------------------------------------------------------------
+// Audio Codec
+// -----------------------------------------------------------------------------
+#if not __has_include("Codecs/es8311/ES8311.h")
+#define ES8311_ADDR 0x18 // same address as MCP9808_ADDR / STK8BXX_ADDR / LIS3DH_ADDR
+#endif
+#define ES7243E_ADDR 0x14
 
 // -----------------------------------------------------------------------------
 // Security
@@ -367,10 +376,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
-#define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A // same address as CST226SE
+#define FT6336U_ADDR 0x48 // same address as ADS1115
+#define CST328_ADDR 0x1A  // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
 #define CST226SE_ADDR_ALT 0x5A
+#define GT911_ADDR 0x5D // same address as SFA30_ADDR / LPS22HB_ADDR_ALT
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)

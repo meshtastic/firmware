@@ -1372,6 +1372,7 @@ void Screen::setFrames(FrameFocus focus)
         return;
     }
 
+    const FramesetInfo previousFramesetInfo = framesetInfo;
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
@@ -1624,8 +1625,15 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        //  No more adjustment - force stay on same index
-        if (previousFrameCount > fsi.frameCount) {
+        if (previousFramesetInfo.positions.waypoint == 255 && fsi.positions.waypoint != 255) {
+            const uint8_t target = originalPosition >= fsi.positions.waypoint ? originalPosition + 1 : originalPosition;
+            ui->switchToFrame(target);
+        } else if (previousFramesetInfo.positions.waypoint != 255 && fsi.positions.waypoint == 255) {
+            const uint8_t target = originalPosition > previousFramesetInfo.positions.waypoint
+                                       ? originalPosition - 1
+                                       : std::min<uint8_t>(originalPosition, fsi.frameCount - 1);
+            ui->switchToFrame(target);
+        } else if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
             ui->switchToFrame(originalPosition + 1);
@@ -2109,6 +2117,21 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
     return 0;
 }
 
+// Only the environmental telemetry frame answers SELECT with a menu. A module frame that has none
+// must not claim the press, or every frame matched after it in the dispatch chain is unreachable.
+static bool moduleFrameHasMenu(size_t frame)
+{
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // moduleFrames bounds the module-frame region, before favorites are appended; its leading slots
+    // are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
+    const MeshModule *module = frame < moduleFrames.size() ? moduleFrames.at(frame) : nullptr;
+    return module != nullptr && environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(module);
+#else
+    (void)frame;
+    return false;
+#endif
+}
+
 int Screen::handleInputEvent(const InputEvent *event)
 {
     LOG_INPUT("Screen Input event %u! kb %u", event->inputEvent, event->kbchar);
@@ -2336,16 +2359,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
-                    // moduleFrames.size() bounds the module-frame region, before favorites are appended; its leading
-                    // slots are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
-                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
-                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
-#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-                    const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
-                    if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
-                        menuHandler::environmentTelemetryMenu();
-                    }
-#endif
+                } else if (moduleFrameHasMenu(this->ui->getUiState()->currentFrame)) {
+                    menuHandler::environmentTelemetryMenu();
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
@@ -2360,6 +2375,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::nodeListMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
+                } else if (framesetInfo.positions.waypoint != 255 &&
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.waypoint) {
+                    menuHandler::waypointBaseMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showFrame(FrameDirection::PREVIOUS);
