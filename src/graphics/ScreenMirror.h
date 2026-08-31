@@ -57,6 +57,17 @@ class ScreenMirror
     /// when the client holds the full current palette (or coloring is off).
     bool copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientRegionOffset, meshtastic_DisplayPalette &out);
 
+#if HAS_TFT
+    /// MUI path: queues one LVGL dirty rect (native little-endian RGB565).
+    /// Called on the LVGL thread via the device-ui flush observer; copies and returns.
+    void onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels);
+
+    /// Registers device-ui's thread-safe full-repaint request, used to
+    /// synchronize a newly armed client and to recover from queue overflow.
+    using FullRefreshFn = void (*)();
+    void setMuiRefresh(FullRefreshFn fn) { muiRefresh = fn; }
+#endif
+
   private:
     void freeSnapshotLocked();
 
@@ -82,6 +93,31 @@ class ScreenMirror
     PaletteRegion *paletteRegions = nullptr;
     uint16_t paletteDefaultOn = 0;
     uint16_t paletteDefaultOff = 0;
+
+#if HAS_TFT
+    // MUI dirty-rect queue: FIFO rect headers over a linear pixel pool,
+    // compacted whenever it drains. Spike scope: single consumer.
+    struct MuiRect {
+        uint16_t x, y, w, h;
+        uint32_t bytes;
+        uint32_t poolOffset;
+        uint32_t id;
+    };
+    static constexpr uint8_t MUI_MAX_RECTS = 32;
+    static constexpr uint32_t MUI_POOL_BYTES = 96 * 1024;
+    MuiRect muiRects[MUI_MAX_RECTS];
+    uint8_t muiHead = 0;
+    uint8_t muiCount = 0;
+    uint8_t *muiPool = nullptr;
+    uint32_t muiPoolUsed = 0;
+    uint32_t muiRectSendOffset = 0;
+    bool muiNeedResync = false;
+    uint16_t muiPanelW = 0;
+    uint16_t muiPanelH = 0;
+    FullRefreshFn muiRefresh = nullptr;
+
+    bool copyMuiChunkLocked(meshtastic_DisplayFrame &out);
+#endif
 };
 
 extern ScreenMirror screenMirror;
