@@ -24,6 +24,7 @@
 #include "TypeConversions.h"
 #include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
 #include "xmodem.h"
@@ -274,6 +275,9 @@ void PhoneAPI::handleStartConfig()
 #ifdef FSCom
         observe(&xModem.packetReady);
 #endif
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+        observe(&graphics::screenMirror.frameReady);
+#endif
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         // New physical connection: clear this PhoneAPI's auth slot so the new
         // client must present a passphrase or PKC admin signature before
@@ -377,6 +381,9 @@ void PhoneAPI::close()
         unobserve(&service->fromNumChanged);
 #ifdef FSCom
         unobserve(&xModem.packetReady);
+#endif
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+        unobserve(&graphics::screenMirror.frameReady);
 #endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
@@ -1052,6 +1059,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
                 xmodemPacketForPhone = meshtastic_XModem_init_zero;
             }
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+        } else if (graphics::screenMirror.getChunkForPhone(fromRadioScratch.display_frame)) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
+#endif
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         } else if (hasPendingLockdownStatus()) {
             concurrency::LockGuard guard(&g_authSlotsMutex);
@@ -1720,6 +1731,11 @@ bool PhoneAPI::available()
             xModem.resetForPhone();
             return true;
         }
+#endif
+
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+        if (graphics::screenMirror.hasChunkForPhone())
+            return true;
 #endif
 
 #ifdef ARCH_ESP32
