@@ -8,25 +8,22 @@
 #include <OLEDDisplay.h>
 #include <cstring>
 
-#include "TFTColorRegions.h" // self-defines GRAPHICS_TFT_COLORING_ENABLED; API is safe when coloring is compiled out
-#include "TFTPalette.h"
+#include "TFTColorRegions.h"
 
 namespace graphics
 {
 
 ScreenMirror screenMirror;
 
-#if GRAPHICS_TFT_COLORING_ENABLED
 namespace
 {
-// Region colors are stored panel-byte-order (big-endian RGB565); the wire
+// Region colors arrive panel-byte-order (big-endian RGB565); the wire
 // carries logical bit layout.
 inline uint16_t swap16(uint16_t v)
 {
     return (uint16_t)((v >> 8) | (v << 8));
 }
 } // namespace
-#endif
 
 void ScreenMirror::freeSnapshotLocked()
 {
@@ -105,18 +102,21 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
         memcpy(snapshot, display->buffer, frameSize);
         frameId++;
         oneShot = false;
-        capturePaletteLocked();
         readyId = frameId;
     }
     // Notify outside the lock: observers (PhoneAPI) may re-enter hasChunkFor.
     frameReady.notifyObservers(readyId);
 }
 
-void ScreenMirror::capturePaletteLocked()
+void ScreenMirror::capturePalette(uint32_t signature, uint16_t defaultOnBe, uint16_t defaultOffBe, const TFTColorRegion *regions,
+                                  uint8_t count)
 {
-#if GRAPHICS_TFT_COLORING_ENABLED
-    uint32_t sig = getTFTColorFrameSignature();
-    if (sig == paletteSig && paletteRegions)
+    concurrency::LockGuard g(&lock);
+    // Cheap when nothing changed and when the mirror is idle: paint-time
+    // callers hit this every frame, but clients only exist while mirroring.
+    if (!mirroring && !oneShot && !snapshot)
+        return;
+    if (signature == paletteSig && paletteRegions)
         return;
     if (!paletteRegions) {
         paletteRegions = (PaletteRegion *)malloc(sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS);
@@ -124,19 +124,17 @@ void ScreenMirror::capturePaletteLocked()
             return; // frames still stream; clients render monochrome
         memaudit::add("display", sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS);
     }
-    uint8_t count = getTFTColorRegionCount();
     if (count > MAX_TFT_COLOR_REGIONS)
         count = MAX_TFT_COLOR_REGIONS;
     for (uint8_t i = 0; i < count; i++) {
-        const TFTColorRegion &r = colorRegions[i];
+        const TFTColorRegion &r = regions[i];
         paletteRegions[i] = {(uint16_t)r.x,      (uint16_t)r.y,       (uint16_t)r.width,
                              (uint16_t)r.height, swap16(r.onColorBe), swap16(r.offColorBe)};
     }
     paletteCount = count;
-    paletteDefaultOn = TFTPalette::White;
-    paletteDefaultOff = getThemeBodyBg();
-    paletteSig = sig;
-#endif
+    paletteDefaultOn = swap16(defaultOnBe);
+    paletteDefaultOff = swap16(defaultOffBe);
+    paletteSig = signature;
 }
 
 bool ScreenMirror::hasPaletteChunkFor(uint32_t clientPaletteSig, uint8_t clientRegionOffset)
