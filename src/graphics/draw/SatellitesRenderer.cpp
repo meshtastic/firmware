@@ -49,11 +49,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
              (unsigned)gps->getSatellitesUsedBySystem(TINYGPS_GNSS_BEIDOU));
     display->drawString(x + 2, y + 14, systems);
     display->drawString(x + 2, y + 28, "SYS ID EL  AZ  SNR");
-<<<<<<< HEAD
     display->drawHorizontalLine(x + 2, y + 44, w - 4);
-=======
-    display->drawHorizontalLine(x + 2, y + 43, w - 4);
->>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
 
     const auto *sats = gps->getTrackedSatellites();
     const size_t capacity = gps->getTrackedSatelliteCapacity();
@@ -74,11 +70,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
         return a->prn < b->prn;
     });
 
-<<<<<<< HEAD
     int16_t yy = y + 46;
-=======
-    int16_t yy = y + 58;
->>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
     const int16_t bottom = y + h - 12;
     for (size_t i = 0; i < count && yy + 13 <= bottom; ++i) {
         char row[40];

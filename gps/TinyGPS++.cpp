@@ -136,9 +136,8 @@ bool TinyGPSPlus::encode(char c)
 int TinyGPSPlus::GGA(char *buf)
 {
   char *end = buf;
-  const uint8_t fixQuality = this->fixQ;
 
-  if (fixQuality == 0) {
+  if (fixQ == 0) {
     end += sprintf(end, "$_GGA,,,,,,,,,,,,,,");
   } else {
     end += sprintf(end,
@@ -149,7 +148,7 @@ int TinyGPSPlus::GGA(char *buf)
                    location.rawLat().negative ? 'S' : 'N',
                    location.rawLng().deg,
                    (location.lng() - location.rawLng().deg) * 60,
-                   location.rawLng().negative ? 'W' : 'E', fixQuality,
+                   location.rawLng().negative ? 'W' : 'E', fixQuality(),
                    satellites.value(), hdop.hdop(), altitude.meters(),
                    geoidHeight.meters());
   }

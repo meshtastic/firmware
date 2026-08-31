@@ -357,6 +357,7 @@ class TinyGPSPlus
 
     uint16_t gsaPDOP() const
     {
+<<<<<<< HEAD
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
             if (gsaInfo[s].valid && gsaInfo[s].pdop > best)
@@ -378,6 +379,7 @@ class TinyGPSPlus
             if (gsaInfo[s].valid && gsaInfo[s].vdop > best)
                 best = gsaInfo[s].vdop;
         return best;
+=======
     }
 
     uint16_t satellitesInView() const
@@ -428,18 +430,26 @@ class TinyGPSPlus
     // Returns number of bytes written, excluding the 0 terminator.
     int GGA(char *buf);
 
+#ifndef TINYGPS_OPTION_NO_STATISTICS
+    uint32_t charsProcessed() const { return encodedCharCount; }
+    uint32_t sentencesWithFix() const { return sentencesWithFixCount; }
+    uint32_t failedChecksum() const { return failedChecksumCount; }
+    uint32_t passedChecksum() const { return passedChecksumCount; }
+#endif
+
+    uint8_t fixQuality() const { return fixQ; }
+    uint8_t sentenceType() const { return curSentenceType; }
+
+  private:
+    bool sentenceHasFix() const { return (flags & FLAG_SENTENCE_HAS_FIX) != 0; }
     void setSentenceHasFix(bool const i_value)
     {
         if (i_value) {
             flags |= FLAG_SENTENCE_HAS_FIX;
         } else {
-            flags &= ~FLAG_SENTENCE_HAS_FIX;
+            flags &= ~FLAG_IS_CHECKSUM_TERM;
         }
     }
-    uint8_t sentenceType() const { return curSentenceType; }
-
-  private:
-    bool sentenceHasFix() const { return (flags & FLAG_SENTENCE_HAS_FIX) != 0; }
     enum { FLAG_DEFAULT = 0, FLAG_IS_CHECKSUM_TERM = (1 << 0), FLAG_SENTENCE_HAS_FIX = (1 << 1) };
 
     // parsing state variables
