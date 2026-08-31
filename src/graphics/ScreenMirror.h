@@ -69,7 +69,10 @@ class ScreenMirror
     uint16_t width = 0;
     uint16_t height = 0;
     uint32_t frameId = 0;
-    // Color-region palette captured with the frame (TFT/HUB75 builds only).
+    // Signature of the palette the current snapshot was painted with; frames
+    // carry this, not the live paletteSig, so mid-drain captures stay coherent.
+    uint32_t snapshotPaletteSig = 0;
+    // Color-region palette captured at paint time (TFT/HUB75 builds only).
     uint32_t paletteSig = 0;
     uint8_t paletteCount = 0;
     struct PaletteRegion {
