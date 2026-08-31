@@ -10,6 +10,7 @@
 #include "SPILock.h"
 #include "UptimeClock.h"
 #include "gps/RTC.h"
+#include "graphics/ScreenMirror.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
@@ -689,6 +690,18 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSendInputEvent(r->send_input_event);
         break;
     }
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+    case meshtastic_AdminMessage_get_display_frame_request_tag: {
+        LOG_INFO("Client requests display frame");
+        graphics::screenMirror.requestFrame();
+        break;
+    }
+    case meshtastic_AdminMessage_set_display_mirror_tag: {
+        LOG_INFO("Client sets display mirror: %d", r->set_display_mirror);
+        graphics::screenMirror.setMirror(r->set_display_mirror);
+        break;
+    }
+#endif
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
@@ -2182,7 +2195,8 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_display_frame_request_tag)
         return true;
     else
         return false;
