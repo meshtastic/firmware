@@ -86,6 +86,9 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** Reset and re-begin() a chip that lost its runtime configuration (reset/brownout) */
     bool reinitChip();
 
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
     float resolvedTcxoVoltage = 0;
 };

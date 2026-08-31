@@ -332,6 +332,14 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
 
 template <typename T> bool LR11x0Interface<T>::reinitChip()
 {
+    // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
+    // config value, and the recovery path reaches begin() without passing through the params clamp
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+        limitPower(LR1120_MAX_POWER);
+    } else {
+        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
+    }
+
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
@@ -360,12 +368,14 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
 
-    // set mode to standby
-    setStandby();
+    // set mode to standby - a chip that lost its state to a reset/brownout can time out here (-707),
+    // so don't let setStandby()'s assert fire before the recovery below gets a chance
+    int16_t err = trySetStandby();
+    if (err == RADIOLIB_ERR_NONE)
+        err = programModemParams();
 
-    int16_t err = programModemParams();
     if (err != RADIOLIB_ERR_NONE) {
-        // A chip that answers standby() but rejects parameter programming (typically WRONG_MODEM, -20) has
+        // A chip that fails standby or rejects parameter programming (typically WRONG_MODEM, -20) has
         // lost its runtime configuration - packet type included - to a chip-internal reset or brownout.
         // Recover in place: begin() hardware-resets the chip and restores the LoRa packet type. Crashing
         // here instead would reboot before MeshService persists the config change that triggered us.
@@ -388,23 +398,28 @@ template <typename T> void LR11x0Interface<T>::clearRadioIsr()
     lora.clearIrqAction();
 }
 
-template <typename T> void LR11x0Interface<T>::setStandby()
+template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
-    int err = lora.standby();
+    int16_t err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE) {
         LOG_DEBUG("LR11x0 standby failed, err %d", err);
     }
-
-    assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> void LR11x0Interface<T>::setStandby()
+{
+    int16_t err = trySetStandby();
+    assert(err == RADIOLIB_ERR_NONE);
 }
 
 /**
