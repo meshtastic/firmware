@@ -1,9 +1,10 @@
 #include "ScreenMirror.h"
 
-#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#if HAS_SCREEN_MIRROR
 
 #include "DebugConfiguration.h"
 #include "concurrency/LockGuard.h"
+#include "memory/MemAudit.h"
 #include <OLEDDisplay.h>
 #include <cstring>
 
@@ -12,14 +13,28 @@ namespace graphics
 
 ScreenMirror screenMirror;
 
+void ScreenMirror::freeSnapshotLocked()
+{
+    if (snapshot) {
+        memaudit::add("display", -(int32_t)frameSize);
+        free(snapshot);
+        snapshot = nullptr;
+    }
+    frameSize = 0;
+}
+
 void ScreenMirror::setMirror(bool enabled)
 {
     concurrency::LockGuard g(&lock);
     mirroring = enabled;
-    // Force an immediate frame on enable so the client doesn't wait for the
-    // next on-screen change.
-    if (enabled)
+    if (enabled) {
+        // Force an immediate frame so the client doesn't wait for the next
+        // on-screen change.
         oneShot = true;
+    } else {
+        oneShot = false;
+        freeSnapshotLocked();
+    }
     LOG_INFO("Screen mirror %s", enabled ? "enabled" : "disabled");
 }
 
@@ -39,59 +54,60 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
         if (!display || !display->buffer)
             return;
 
-        // Don't overwrite a frame the client is still draining; the next
-        // render picks up the latest contents.
-        if (snapshot && sendOffset < frameSize)
-            return;
-
         uint16_t w = display->getWidth();
         uint16_t h = display->getHeight();
         uint16_t size = w * ((h + 7) / 8);
         if (size == 0)
             return;
 
-        if (!snapshot) {
+        if (snapshot && size != frameSize)
+            freeSnapshotLocked(); // display geometry changed; start over
+
+        bool firstFrame = !snapshot;
+        if (firstFrame) {
             snapshot = (uint8_t *)malloc(size);
             if (!snapshot) {
                 LOG_ERROR("Screen mirror: no memory for %u byte snapshot", size);
                 mirroring = oneShot = false;
                 return;
             }
+            memaudit::add("display", size);
             frameSize = size;
-            sendOffset = size; // drained; nothing captured yet
             width = w;
             height = h;
-            // Invalidate the change-detect baseline so the first frame always sends
-            memset(snapshot, 0xA5, size);
         }
 
-        bool changed = memcmp(display->buffer, snapshot, frameSize) != 0;
-        if (!changed && !oneShot)
+        if (!firstFrame && !oneShot && memcmp(display->buffer, snapshot, frameSize) == 0)
             return;
 
         memcpy(snapshot, display->buffer, frameSize);
-        sendOffset = 0;
         frameId++;
         oneShot = false;
         readyId = frameId;
     }
-    // Notify outside the lock: observers (PhoneAPI) may re-enter hasChunkForPhone.
+    // Notify outside the lock: observers (PhoneAPI) may re-enter hasChunkFor.
     frameReady.notifyObservers(readyId);
 }
 
-bool ScreenMirror::hasChunkForPhone()
+bool ScreenMirror::hasChunkFor(uint32_t clientFrameId, uint16_t clientOffset)
 {
     concurrency::LockGuard g(&lock);
-    return snapshot && sendOffset < frameSize;
+    return snapshot && (clientFrameId != frameId || clientOffset < frameSize);
 }
 
-bool ScreenMirror::getChunkForPhone(meshtastic_DisplayFrame &out)
+bool ScreenMirror::copyChunk(uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out)
 {
     concurrency::LockGuard g(&lock);
-    if (!snapshot || sendOffset >= frameSize)
+    if (!snapshot)
+        return false;
+    if (clientFrameId != frameId) {
+        clientFrameId = frameId;
+        clientOffset = 0;
+    }
+    if (clientOffset >= frameSize)
         return false;
 
-    uint16_t len = frameSize - sendOffset;
+    uint16_t len = frameSize - clientOffset;
     if (len > sizeof(out.data.bytes))
         len = sizeof(out.data.bytes);
 
@@ -99,11 +115,11 @@ bool ScreenMirror::getChunkForPhone(meshtastic_DisplayFrame &out)
     out.height = height;
     out.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
     out.frame_id = frameId;
-    out.offset = sendOffset;
+    out.offset = clientOffset;
     out.total_size = frameSize;
     out.data.size = len;
-    memcpy(out.data.bytes, snapshot + sendOffset, len);
-    sendOffset += len;
+    memcpy(out.data.bytes, snapshot + clientOffset, len);
+    clientOffset += len;
     return true;
 }
 
