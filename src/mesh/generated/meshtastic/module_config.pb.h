@@ -268,6 +268,55 @@ typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
  is dropped. A non-zero value implicitly enables unknown-packet filtering;
  0 disables it. */
     uint32_t unknown_packet_threshold;
+    /* Antispam L1 (M2 greylist): probation window in seconds for a node ID
+ observed for the first time on this device. While in probation the ID's
+ broadcasts are still relayed, but at a reduced hop cap
+ (probation_max_hop_limit) and the lower rate budget (the probation
+ multiplier of rate_limit_max_packets). 0 disables probation entirely
+ (ids are treated as established from first sight). Shipped default:
+ 300 (5 min) on all targets where the unified cache is compiled in. */
+    uint32_t probation_window_secs;
+    /* Antispam L1 (M2 greylist): minimum seconds a known-since attestation
+ must claim for its attester before this device accepts it for shortening
+ a probation window. Attestations from a younger attester (or with no
+ clock, i.e. attester_tenure_secs == 0) are ignored. Shipped default:
+ 86400 (24 h). */
+    uint32_t attestation_min_tenure_secs;
+    /* Antispam L1 (M2 greylist): hop_limit applied to broadcasts from a
+ node that is in probation (see probation_window_secs). 0 disables the
+ hop cap (probation IDs relay at the normal hop limit). Only applies
+ when probation_window_secs > 0. Shipped default: 2 (normal is 3). */
+    uint32_t probation_max_hop_limit;
+    /* Antispam L1 (M4 gossiped rate budgets): when the neighborhood median
+ of observed per-sender packet rates (from DeviceMetrics.top_senders)
+ exceeds the local rate_limit_max_packets, the local per-sender budget
+ is clamped to the median instead. 0 disables the median (local
+ rate_limit_max_packets stays authoritative) - the shipped default. */
+    uint32_t budget_gossip_enabled;
+    /* Antispam L1 (M4 group budget, F4.3): when at least this many *fresh*
+ (in probation) node IDs are observed on the same channel within the
+ same 5-minute RSSI-class window, they are treated as a group sharing
+ one budget: a single rate_limit_max_packets is split across the group,
+ so each member gets max(1, rate_limit_max_packets / group_size) per
+ window. Catches a spammer rotating IDs in one place. The value is the
+ minimum number of co-occurring fresh IDs (N) that triggers grouping;
+ 0 disables group budgets - the shipped default. Only consulted when
+ budget_gossip_enabled > 0. */
+    uint32_t group_budget_enabled;
+    /* Antispam L1 (M6 relay pricing): per-sender relay budget in packets per
+ rate window. When the local relayer has re-broadcast this many of a
+ sender's packets this window, it stops relaying for that sender (still
+ delivers them locally) and gossips the NO_RELAY bit via
+ ID_ATTESTATION_APP. 0 disables the relay budget (unlimited relaying) -
+ the shipped default. Only non-ack, non-admin, non-routing traffic
+ counts. */
+    uint32_t relay_budget_max_packets;
+    /* Antispam L1 (M6 congestion hop cap): channel-utilization percentage
+ (last 60 s, all traffic types) at which the local relayer caps the
+ hop budget of probation (L0) broadcast senders at 1 hop. 0 disables
+ the cap - the shipped default. Only consulted for non-local senders
+ in probation. */
+    uint32_t congestion_hop_cap_pct;
 } meshtastic_ModuleConfig_TrafficManagementConfig;
 
 /* Serial Config */
@@ -652,7 +701,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
@@ -673,7 +722,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
@@ -729,6 +778,13 @@ extern "C" {
 #define meshtastic_ModuleConfig_TrafficManagementConfig_rate_limit_window_secs_tag 8
 #define meshtastic_ModuleConfig_TrafficManagementConfig_rate_limit_max_packets_tag 9
 #define meshtastic_ModuleConfig_TrafficManagementConfig_unknown_packet_threshold_tag 11
+#define meshtastic_ModuleConfig_TrafficManagementConfig_probation_window_secs_tag 15
+#define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_min_tenure_secs_tag 16
+#define meshtastic_ModuleConfig_TrafficManagementConfig_probation_max_hop_limit_tag 17
+#define meshtastic_ModuleConfig_TrafficManagementConfig_budget_gossip_enabled_tag 18
+#define meshtastic_ModuleConfig_TrafficManagementConfig_group_budget_enabled_tag 19
+#define meshtastic_ModuleConfig_TrafficManagementConfig_relay_budget_max_packets_tag 20
+#define meshtastic_ModuleConfig_TrafficManagementConfig_congestion_hop_cap_pct_tag 21
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -943,7 +999,14 @@ X(a, STATIC,   SINGULAR, UINT32,   position_min_interval_secs,   4) \
 X(a, STATIC,   SINGULAR, UINT32,   nodeinfo_direct_response_max_hops,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   rate_limit_window_secs,   8) \
 X(a, STATIC,   SINGULAR, UINT32,   rate_limit_max_packets,   9) \
-X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_threshold,  11)
+X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_threshold,  11) \
+X(a, STATIC,   SINGULAR, UINT32,   probation_window_secs,  15) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_min_tenure_secs,  16) \
+X(a, STATIC,   SINGULAR, UINT32,   probation_max_hop_limit,  17) \
+X(a, STATIC,   SINGULAR, UINT32,   budget_gossip_enabled,  18) \
+X(a, STATIC,   SINGULAR, UINT32,   group_budget_enabled,  19) \
+X(a, STATIC,   SINGULAR, UINT32,   relay_budget_max_packets,  20) \
+X(a, STATIC,   SINGULAR, UINT32,   congestion_hop_cap_pct,  21)
 #define meshtastic_ModuleConfig_TrafficManagementConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TrafficManagementConfig_DEFAULT NULL
 
@@ -1142,7 +1205,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
-#define meshtastic_ModuleConfig_TrafficManagementConfig_size 30
+#define meshtastic_ModuleConfig_TrafficManagementConfig_size 78
 #define meshtastic_ModuleConfig_size             244
 #define meshtastic_RemoteHardwarePin_size        21
 

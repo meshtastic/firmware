@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_NodeInfoLite_Legacy, meshtastic_NodeInfoLite_Legacy, AUTO)
+PB_BIND(meshtastic_NodeInfoLite_Legacy, meshtastic_NodeInfoLite_Legacy, 2)
 
 
 PB_BIND(meshtastic_NodeDatabase_Legacy, meshtastic_NodeDatabase_Legacy, AUTO)
