@@ -7,6 +7,8 @@
 #include "comms/PacketClient.h"
 #include "comms/PacketServer.h"
 #include "graphics/DeviceScreen.h"
+#include "graphics/ScreenMirror.h"
+#include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverConfig.h"
 #include "util/ISpiLock.h"
 
@@ -332,6 +334,13 @@ void tftSetup(void)
     deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
+#if HAS_SCREEN_MIRROR
+    // Stream MUI's dirty rects to local clients (see graphics::ScreenMirror).
+    graphics::screenMirror.setMuiRefresh([]() { DisplayDriver::requestFullRefresh(); });
+    DisplayDriver::setFlushObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px) {
+        graphics::screenMirror.onMuiRect(x, y, w, h, px);
+    });
+#endif
 #else
     if (portduino_config.displayPanel != no_screen) {
         DisplayDriverConfig displayConfig;
