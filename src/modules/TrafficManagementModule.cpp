@@ -2583,7 +2583,7 @@ void TrafficManagementModule::maintainAntispamLocked()
             continue;
         // Window rollover: reset the windowed counters and any gossiped
         // NO_RELAY bit (it was scoped to one budget window).
-        if (e.windowTick != 0 && static_cast<uint8_t>(nowRateTick - e.windowTick) & 0x0F >= 1) {
+        if (e.windowTick != 0 && (static_cast<uint8_t>(nowRateTick - e.windowTick) & 0x0F) >= 1) {
             e.windowTick = nowRateTick;
             e.relayedCount = 0;
             e.noRelay = false;
@@ -2605,7 +2605,7 @@ void TrafficManagementModule::maintainAntispamLocked()
     }
     // Group co-occurrence cells: clear any whose window tick has rolled.
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
-        if (groupObs[i].windowTick != 0 && static_cast<uint8_t>(nowRateTick - groupObs[i].windowTick) & 0x0F >= 1) {
+        if (groupObs[i].windowTick != 0 && (static_cast<uint8_t>(nowRateTick - groupObs[i].windowTick) & 0x0F) >= 1) {
             memset(&groupObs[i], 0, sizeof(GroupObsCell));
             groupMedian[i] = 0;
         }
