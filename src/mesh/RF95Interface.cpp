@@ -228,19 +228,22 @@ bool RF95Interface::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora->setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("RF95 setSyncWord %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
 
     err = lora->setCurrentLimit(currentLimit);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("RF95 setCurrentLimit %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
 
     err = lora->setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("RF95 setPreambleLength %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
 
     err = lora->setFrequency(getFreq());
     if (err != RADIOLIB_ERR_NONE)
@@ -275,9 +278,10 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 void RF95Interface::setStandby()
 {
     int err = lora->standby();
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("RF95 standby %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
+    }
 
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
@@ -299,9 +303,10 @@ void RF95Interface::startReceive()
     setTransmitEnable(false);
     setStandby();
     int err = lora->startReceive();
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("RF95 startReceive %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
+    }
 
     isReceiving = true;
 
@@ -324,7 +329,8 @@ bool RF95Interface::isChannelActive()
     }
     if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("RF95 isChannelActive %s%d", radioLibErr, result);
-    assert(result != RADIOLIB_ERR_WRONG_MODEM);
+    if (result == RADIOLIB_ERR_WRONG_MODEM)
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
     // LOG_DEBUG("Channel is free");
     return false;
