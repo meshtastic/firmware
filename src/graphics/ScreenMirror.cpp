@@ -228,7 +228,11 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
 
         uint32_t bytes = (uint32_t)w * h * 2;
         if (!muiPool) {
-            muiPool = (uint8_t *)malloc(MUI_POOL_BYTES);
+#ifdef ESP32
+            muiPool = (uint8_t *)ps_malloc(MUI_POOL_BYTES); // PSRAM first; this is a big buffer
+#endif
+            if (!muiPool)
+                muiPool = (uint8_t *)malloc(MUI_POOL_BYTES);
             if (!muiPool) {
                 mirroring = oneShot = false;
                 return;
