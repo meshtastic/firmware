@@ -36,13 +36,14 @@ class ScreenMirror
     /// when armed and the contents changed since the last captured frame.
     void onRendered(OLEDDisplay *display);
 
-    /// True while the client cursor has undelivered bytes of the current frame.
-    bool hasChunkFor(uint32_t clientFrameId, uint16_t clientOffset);
+    /// True while this client has undelivered bytes of the current frame.
+    /// `client` identifies the connection (its PhoneAPI instance).
+    bool hasChunkFor(const void *client, uint32_t clientFrameId, uint16_t clientOffset);
 
     /// Fills the next chunk for a client cursor, advancing it; false when the
     /// client is fully caught up (or no frame exists). A frame captured while
     /// the client was mid-drain restarts it at offset 0 of the new frame.
-    bool copyChunk(uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out);
+    bool copyChunk(const void *client, uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out);
 
     /// Called by the color display drivers at paint time, before they clear
     /// the per-frame region table: stores the palette the frame was painted
@@ -62,10 +63,16 @@ class ScreenMirror
     /// Called on the LVGL thread via the device-ui flush observer; copies and returns.
     void onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels);
 
-    /// Registers device-ui's thread-safe full-repaint request, used to
-    /// synchronize a newly armed client and to recover from queue overflow.
+    /// Registers device-ui's thread-safe full-repaint request plus the panel
+    /// size, so streamed frames carry the full display dimensions from the
+    /// first rect rather than growing into them.
     using FullRefreshFn = void (*)();
-    void setMuiRefresh(FullRefreshFn fn) { muiRefresh = fn; }
+    void setMuiSource(FullRefreshFn fn, uint16_t panelWidth, uint16_t panelHeight)
+    {
+        muiRefresh = fn;
+        muiPanelW = panelWidth;
+        muiPanelH = panelHeight;
+    }
 #endif
 
   private:
@@ -113,10 +120,10 @@ class ScreenMirror
     uint8_t *muiPool = nullptr;
     uint32_t muiPoolUsed = 0;
     uint32_t muiRectSendOffset = 0;
-    bool muiNeedResync = false;
     uint16_t muiPanelW = 0;
     uint16_t muiPanelH = 0;
     FullRefreshFn muiRefresh = nullptr;
+    const void *muiOwner = nullptr; // connection currently draining rects
 
     bool copyMuiChunkLocked(meshtastic_DisplayFrame &out);
 #endif
