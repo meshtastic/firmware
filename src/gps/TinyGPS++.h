@@ -349,7 +349,8 @@ class TinyGPSPlus
     uint8_t gsaFixType() const
     {
         uint8_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && gsaInfo[s].fixType > best)
                 best = gsaInfo[s].fixType;
         }
@@ -359,8 +360,10 @@ class TinyGPSPlus
     uint16_t gsaPDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
-            if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 && (best == 0 || gsaInfo[s].pdop < best)) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
+            if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 && (best == 0 || gsaInfo[s].pdop < best))
+            {
                 best = gsaInfo[s].pdop;
             }
         }
@@ -370,8 +373,10 @@ class TinyGPSPlus
     uint16_t gsaHDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
-            if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 && (best == 0 || gsaInfo[s].hdop < best)) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
+            if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 && (best == 0 || gsaInfo[s].hdop < best))
+            {
                 best = gsaInfo[s].hdop;
             }
         }
@@ -380,8 +385,10 @@ class TinyGPSPlus
     uint16_t gsaVDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
-            if (gsaInfo[s].valid && gsaInfo[s].vdop > 0 && (best == 0 || gsaInfo[s].vdop < best)) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
+            if (gsaInfo[s].valid && gsaInfo[s].vdop > 0 && (best == 0 || gsaInfo[s].vdop < best))
+            {
                 best = gsaInfo[s].vdop;
             }
         }
@@ -436,7 +443,12 @@ class TinyGPSPlus
     // Returns number of bytes written, excluding the 0 terminator.
     int GGA(char *buf);
 
-    enum { FLAG_DEFAULT = 0, FLAG_IS_CHECKSUM_TERM = (1 << 0), FLAG_SENTENCE_HAS_FIX = (1 << 1) };
+    enum
+    {
+        FLAG_DEFAULT = 0,
+        FLAG_IS_CHECKSUM_TERM = (1 << 0),
+        FLAG_SENTENCE_HAS_FIX = (1 << 1)
+    };
 
     void setSentenceHasFix(bool const i_value)
     {
