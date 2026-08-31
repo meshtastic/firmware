@@ -2152,8 +2152,8 @@ bool GPS::lookForTime()
 <<<<<<< HEAD
 =======
 
-    if (ti.isValid() && d.isValid()) {
-        struct tm t = {};
+        if (ti.isValid() && d.isValid()) {
+            struct tm t = {};
 >>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
         t.tm_sec = ti.second() + round(ti.age() / 1000);
         t.tm_min = ti.minute();
@@ -2282,10 +2282,10 @@ bool GPS::lookForLocation()
     p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
     p.PDOP = gsaPdop ? gsaPdop : reader.gsaPDOP();
 #else
-    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
-    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-    p.HDOP = reader.hdop.value();
-    p.PDOP = reader.gsaPDOP();
+        // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+        // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+        p.HDOP = reader.hdop.value();
+        p.PDOP = reader.gsaPDOP();
 #endif
 
     // Discard incomplete or erroneous readings
@@ -2346,8 +2346,8 @@ bool GPS::lookForLocation()
         // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
         const uint16_t satsInView = reader.satellitesInView();
 =======
-    // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
-    const uint16_t satsInView = reader.satellitesInView();
+            // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
+            const uint16_t satsInView = reader.satellitesInView();
 >>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
     if (satsInView > 0)
         p.sats_in_view = satsInView;
@@ -2379,19 +2379,18 @@ bool GPS::hasLock()
         if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 =======
 
-    if (fixQual >= 1 && fixQual <= 5) {
+        if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-<<<<<<< HEAD
-        // Use GPGSA fix type 2D/3D (better) if available
-        // Use GPGSA fix type 2D/3D (better) if available
-        if (fixType == 3 || fixType == 0) // zero means "no data received"
+            <<<<<<< HEAD
+                // Use GPGSA fix type 2D/3D (better) if available
+                // Use GPGSA fix type 2D/3D (better) if available
+                if (fixType == 3 || fixType == 0) // zero means "no data received"
 =======
-        // Use fix type 2D/3D (better) if available
-        if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
+            // Use fix type 2D/3D (better) if available
+            if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 >>>>>>> 54b6b957f (t-echo-plus)
 #endif
->>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908))
-            return true;
+            >>>>>>> b20727418 (feat: Support Elecrow ThinkNode M9 (#10908)) return true;
 #endif
     }
 
