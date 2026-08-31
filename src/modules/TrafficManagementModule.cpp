@@ -2407,8 +2407,11 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
     case meshtastic_IdAttestation_Kind_KNOWN_SINCE: {
         if (cfg.probation_window_secs == 0)
             break;
-        // Tenure floor: the attester must be old enough, or its claim is worth nothing.
-        if (att.attester_tenure_secs != 0 && att.attester_tenure_secs < cfg.attestation_min_tenure_secs)
+        // Tenure floor: the attester must be old enough, or its claim is worth
+        // nothing. tenure == 0 means "no clock" (see the proto), so it counts
+        // as untenured - accepting it would let a fresh attester promote
+        // probation out of existence.
+        if (att.attester_tenure_secs < cfg.attestation_min_tenure_secs)
             break;
         if (entry->promoted)
             break;
