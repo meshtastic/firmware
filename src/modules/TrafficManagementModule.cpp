@@ -299,7 +299,7 @@ void TrafficManagementModule::purgeNode(NodeNum node)
         memset(entry, 0, sizeof(UnifiedCacheEntry));
         purged = true;
     }
-    AntispamEntry *a = findAntispamEntry(node, nullptr);
+    AntispamEntry *a = findAntispamEntry(node);
     if (a) {
         memset(a, 0, sizeof(AntispamEntry));
         purged = true;
@@ -1852,15 +1852,44 @@ void TrafficManagementModule::logAction(const char *action, const meshtastic_Mes
 // probation accounting (F2.1), which only records state.
 // =============================================================================
 
-TrafficManagementModule::AntispamEntry *TrafficManagementModule::findAntispamEntry(NodeNum node, bool *isNew) const
+// Read-only lookup: returns the entry for `node` or nullptr. Never allocates
+// and never evicts - a miss costs nothing, which is what read-only callers
+// (probation checks, budget reads, snapshots) rely on.
+TrafficManagementModule::AntispamEntry *TrafficManagementModule::findAntispamEntry(NodeNum node) const
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
     (void)node;
-    (void)isNew;
     return nullptr;
 #else
     if (!antispam || node == 0)
         return nullptr;
+
+    const uint16_t size = antispamCacheSize();
+    for (uint16_t i = 0; i < size; i++) {
+        if (antispam[i].node == node)
+            return &antispam[i];
+    }
+    return nullptr;
+#endif
+}
+
+// Find or create the entry for `node`, evicting the tracked-longest victim
+// when the table is full. firstSeenTick is a 4-bit wrap value, so victims are
+// ordered by elapsed ticks, (now - firstSeen) mod 16 - a raw < on the ticks
+// misorders entries across the wrap boundary.
+TrafficManagementModule::AntispamEntry *TrafficManagementModule::findOrCreateAntispamEntry(NodeNum node, bool *isNew) const
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
+    (void)node;
+    if (isNew)
+        *isNew = false;
+    return nullptr;
+#else
+    if (!antispam || node == 0) {
+        if (isNew)
+            *isNew = false;
+        return nullptr;
+    }
 
     const uint16_t size = antispamCacheSize();
     for (uint16_t i = 0; i < size; i++) {
@@ -1876,18 +1905,25 @@ TrafficManagementModule::AntispamEntry *TrafficManagementModule::findAntispamEnt
     // zeroed slot). Linear scan is fine - the table is small (<=256) and this
     // runs once per new node.
     AntispamEntry *victim = nullptr;
+    uint8_t victimElapsed = 0;
     for (uint16_t i = 0; i < size; i++) {
         if (antispam[i].node == 0) {
-            victim = &antispam[i];
+            victim = &antispam[i]; // a zeroed slot always beats any live entry
             break;
         }
-        if (!victim || antispam[i].firstSeenTick < victim->firstSeenTick)
+        const uint8_t elapsed = static_cast<uint8_t>(currentRateTick() - antispam[i].firstSeenTick);
+        if (!victim || elapsed > victimElapsed) {
             victim = &antispam[i];
+            victimElapsed = elapsed;
+        }
     }
     if (!victim)
         return nullptr;
     memset(victim, 0, sizeof(AntispamEntry));
     victim->node = node;
+    // Stamp the entry immediately so it starts out as a maximal-age candidate
+    // and cannot be picked as its own replacement by the next eviction.
+    victim->firstSeenTick = currentRateTick();
     return victim;
 #endif
 }
@@ -1917,7 +1953,7 @@ bool TrafficManagementModule::inProbation(NodeNum node) const
         return false;
 
     concurrency::LockGuard guard(&cacheLock);
-    const AntispamEntry *entry = findAntispamEntry(node, nullptr);
+    const AntispamEntry *entry = findAntispamEntry(node);
     if (!entry || entry->firstSeenTick == 0 || entry->promoted)
         return false;
     const uint8_t ageTicks = static_cast<uint8_t>(currentRateTick() - entry->firstSeenTick) & 0x0F;
@@ -1929,7 +1965,7 @@ bool TrafficManagementModule::isEstablishedForVouching(NodeNum node) const
     if (node == 0 || moduleConfig.traffic_management.probation_window_secs == 0)
         return false;
     concurrency::LockGuard guard(&cacheLock);
-    const AntispamEntry *entry = findAntispamEntry(node, nullptr);
+    const AntispamEntry *entry = findAntispamEntry(node);
     if (!entry || entry->firstSeenTick == 0)
         return false;
     if (entry->promoted)
@@ -1950,9 +1986,12 @@ bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8
         return false; // No antispam accounting active at all.
 
     concurrency::LockGuard guard(&cacheLock);
-    AntispamEntry *entry = findAntispamEntry(node, nullptr);
-    if (!entry || entry->firstSeenTick != 0)
-        return false; // already tracked (or table full with no eviction target)
+    bool isNew = false;
+    AntispamEntry *entry = findOrCreateAntispamEntry(node, &isNew);
+    if (!entry)
+        return false; // table full with no eviction target
+    if (!isNew && entry->firstSeenTick != 0)
+        return false; // already tracked
     entry->firstSeenTick = currentRateTick();
     entry->windowTick = currentRateTick();
     // F4.3: remember the observation context of a fresh ID so its
@@ -2007,7 +2046,7 @@ uint32_t TrafficManagementModule::effectiveRateThresholdLocked(NodeNum sender) c
     uint32_t median = 0;
     int tracked = -1;
     {
-        const AntispamEntry *entry = findAntispamEntry(sender, nullptr);
+        const AntispamEntry *entry = findAntispamEntry(sender);
         if (!entry)
             return threshold;
         tracked = 0;
@@ -2053,7 +2092,8 @@ void TrafficManagementModule::ingestNeighborTopSenders(NodeNum neighbor, const m
         const meshtastic_TopSender &s = entries[i];
         if (s.node == 0 || s.node == neighbor)
             continue; // 0 = unused slot; self-reports don't inform a median
-        AntispamEntry *entry = findAntispamEntry(s.node, nullptr);
+        bool isNew = false;
+        AntispamEntry *entry = findOrCreateAntispamEntry(s.node, &isNew);
         if (!entry)
             continue;
         // One sample per (neighbor, subject, window): if this neighbor
@@ -2084,7 +2124,7 @@ int TrafficManagementModule::peekSenderBudgetForTest(NodeNum sender, uint32_t *m
     uint32_t median = 0;
     {
         concurrency::LockGuard guard(&cacheLock);
-        const AntispamEntry *entry = findAntispamEntry(sender, nullptr);
+        const AntispamEntry *entry = findAntispamEntry(sender);
         if (!entry)
             return -1;
         uint8_t samples[3];
@@ -2107,7 +2147,7 @@ int TrafficManagementModule::peekProbationStateForTest(NodeNum node)
 {
     const uint8_t windowTicks = probationWindowTicks();
     concurrency::LockGuard guard(&cacheLock);
-    const AntispamEntry *entry = findAntispamEntry(node, nullptr);
+    const AntispamEntry *entry = findAntispamEntry(node);
     if (!entry || entry->firstSeenTick == 0)
         return -1;
     if (windowTicks == 0)
@@ -2121,14 +2161,14 @@ int TrafficManagementModule::peekProbationStateForTest(NodeNum node)
 uint32_t TrafficManagementModule::peekRelayedCountForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
-    const AntispamEntry *entry = findAntispamEntry(node, nullptr);
+    const AntispamEntry *entry = findAntispamEntry(node);
     return entry ? entry->relayedCount : 0;
 }
 
 bool TrafficManagementModule::peekNoRelayForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
-    const AntispamEntry *entry = findAntispamEntry(node, nullptr);
+    const AntispamEntry *entry = findAntispamEntry(node);
     return entry && entry->noRelay;
 }
 
@@ -2171,7 +2211,7 @@ void TrafficManagementModule::snapshotTopSenders(meshtastic_TopSender (&out)[kTo
             cands[k] = cands[k - 1];
         cands[slot].node = e.node;
         cands[slot].count = cnt;
-        const AntispamEntry *a = findAntispamEntry(e.node, nullptr);
+        const AntispamEntry *a = findAntispamEntry(e.node);
         cands[slot].rssiClass = a ? a->rssiClass : 0xFF;
     }
 
@@ -2193,7 +2233,7 @@ bool TrafficManagementModule::shouldRelay(const meshtastic_MeshPacket &mp) const
         return true; // unknown or local sender: normal policy
 
     concurrency::LockGuard guard(&cacheLock);
-    const AntispamEntry *entry = findAntispamEntry(from, nullptr);
+    const AntispamEntry *entry = findAntispamEntry(from);
     if (entry && entry->noRelay) {
         incrementStatLocked(&stats.no_relay_skips);
         return false;
@@ -2216,7 +2256,7 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
     const uint8_t probationCap = cfg.probation_max_hop_limit;
     if (cfg.probation_window_secs > 0) {
         concurrency::LockGuard guard(&cacheLock);
-        const AntispamEntry *entry = findAntispamEntry(from, nullptr);
+        const AntispamEntry *entry = findAntispamEntry(from);
         const uint8_t windowTicks = probationWindowTicks();
         if (entry && entry->firstSeenTick != 0 && !entry->promoted &&
             (static_cast<uint8_t>(currentRateTick() - entry->firstSeenTick) & 0x0F) < windowTicks) {
@@ -2259,7 +2299,10 @@ void TrafficManagementModule::recordRelayed(const meshtastic_MeshPacket &mp)
     bool exhausted = false;
     {
         concurrency::LockGuard guard(&cacheLock);
-        AntispamEntry *entry = findAntispamEntry(from, nullptr);
+        // Look up the sender's entry without allocating a new one: charging a
+        // relay is a write to an existing entry, not a fresh observation, so a
+        // miss (untracked sender) must not evict a tracked one.
+        AntispamEntry *entry = findAntispamEntry(from);
         if (!entry)
             return;
         if (entry->noRelay)
@@ -2356,7 +2399,7 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
         return true;
 
     concurrency::LockGuard guard(&cacheLock);
-    AntispamEntry *entry = findAntispamEntry(att.subject, nullptr);
+    AntispamEntry *entry = findAntispamEntry(att.subject);
     if (!entry)
         return true;
 
