@@ -1865,6 +1865,15 @@ void Screen::applyHiddenFramesMask(uint32_t mask)
     hiddenFrames.chirpy = getBit(mask, FVBIT_CHIRPY);
 }
 
+bool Screen::isShowingModuleFrame(const MeshModule *m) const
+{
+    if (!m || !showingNormalScreen)
+        return false;
+    // moduleFrames is index-aligned with the frame list, which is what drawModuleFrame relies on.
+    const uint8_t frame = ui->getUiState()->currentFrame;
+    return frame < moduleFrames.size() && moduleFrames.at(frame) == m;
+}
+
 void Screen::loadFrameVisibility()
 {
 #ifdef FSCom

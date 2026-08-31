@@ -79,6 +79,7 @@ class Screen
     void setModalModule(const MeshModule *) {}
     void clearModalModule(const MeshModule *) {}
     bool hasModalModule() const { return false; }
+    bool isShowingModuleFrame(const MeshModule *) const { return false; }
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
@@ -356,6 +357,11 @@ class Screen : public concurrency::OSThread
             modalModule = nullptr;
     }
     bool hasModalModule() const { return modalModule != nullptr; }
+
+    // True while this module's own frame is the one on screen. A module that handles keys
+    // needs this: input observers run before Screen's, so acting unconditionally would take
+    // the key away from whatever frame the user is actually looking at.
+    bool isShowingModuleFrame(const MeshModule *m) const;
 
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);
     void showOverlayBanner(BannerOverlayOptions);
