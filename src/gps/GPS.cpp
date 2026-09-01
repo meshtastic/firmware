@@ -2123,6 +2123,33 @@ bool GPS::lookForLocation()
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
     fixQual = reader.fixQuality();
+    const uint8_t parsedFixType = reader.gsaFixType();
+
+    // Satellite visibility is status information, not proof of a valid
+    // position fix. Update it before any of the early returns below so the
+    // Base UI can show satellites while the receiver is still acquiring or
+    // while another validation check rejects the current position solution.
+    // Prefer the true GSV satellites-in-view count and fall back to GGA.
+    const uint16_t satsInView = reader.satellitesInView();
+    uint16_t reportedSats = 0;
+    bool haveSatelliteCount = false;
+
+    if (satsInView > 0) {
+        reportedSats = satsInView;
+        haveSatelliteCount = true;
+    } else if (reader.satellites.isValid()) {
+        reportedSats = reader.satellites.value();
+        haveSatelliteCount = true;
+    }
+
+    if (haveSatelliteCount && p.sats_in_view != reportedSats) {
+        p.sats_in_view = reportedSats;
+        // Publish the status change even if lookForLocation() returns false
+        // later. PositionModule ignores the position while hasValidLocation
+        // is false, but GPSStatus/Base UI still receives the satellite count.
+        shouldPublish = true;
+        LOG_DEBUG_GPS("Satellite status updated: view=%u", p.sats_in_view);
+    }
 
     const uint8_t parsedFixType = reader.gsaFixType();
 
