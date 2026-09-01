@@ -358,9 +358,8 @@ class Screen : public concurrency::OSThread
     }
     bool hasModalModule() const { return modalModule != nullptr; }
 
-    // True while this module's own frame is the one on screen. A module that handles keys
-    // needs this: input observers run before Screen's, so acting unconditionally would take
-    // the key away from whatever frame the user is actually looking at.
+    // True while this module's own frame is on screen. Modules observe input before Screen does,
+    // so one handling keys needs this or it takes them from the frame the user is looking at.
     bool isShowingModuleFrame(const MeshModule *m) const;
 
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);

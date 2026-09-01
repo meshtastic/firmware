@@ -1869,8 +1869,12 @@ bool Screen::isShowingModuleFrame(const MeshModule *m) const
 {
     if (!m || !showingNormalScreen)
         return false;
-    // moduleFrames is index-aligned with the frame list, which is what drawModuleFrame relies on.
-    const uint8_t frame = ui->getUiState()->currentFrame;
+    // Same effective frame drawModuleFrame() picks: mid-transition the incoming frame is the one
+    // being rendered, so comparing currentFrame would report false while the module is on screen.
+    const OLEDDisplayUiState *state = ui->getUiState();
+    uint8_t frame = state->currentFrame;
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == TransitionRelationship_INCOMING)
+        frame = state->transitionFrameTarget;
     return frame < moduleFrames.size() && moduleFrames.at(frame) == m;
 }
 
