@@ -84,7 +84,7 @@
 // Fan control
 #define FAN_CTRL_PIN 41
 // Meshtastic standard fan control pin macro
-#define RF95_FAN_EN FAN_CTRL_PIN
+#define RADIO_FAN_EN FAN_CTRL_PIN
 
 // PA Ramp Time - T-Beam 1W requires >800us stabilization (default is 200us)
 // Value 0x05 = RADIOLIB_SX126X_PA_RAMP_800U

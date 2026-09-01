@@ -274,6 +274,8 @@ bool pauseBluetoothLogging = false;
 
 bool pmu_found;
 
+uint8_t pa_fan_percentage = 50;
+
 #if !MESHTASTIC_EXCLUDE_I2C
 // Array map of sensor types with i2c address and wire as we'll find in the i2c scan
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
@@ -1188,16 +1190,36 @@ void setup()
     mqttInit();
 #endif
 
-#ifdef RF95_FAN_EN
-    // Ability to disable FAN if PIN has been set with RF95_FAN_EN.
+#ifdef RADIO_FAN_EN
+    // Ability to disable FAN if PIN has been set with RADIO_FAN_EN.
     // Make sure LoRa has been started before disabling FAN.
-    if (config.lora.pa_fan_disabled)
-        digitalWrite(RF95_FAN_EN, LOW ^ 0);
+#ifdef RADIO_FAN_PWM
+#if defined(ARCH_ESP32)
+    // PWM channel 1 at 25 kHz, 8-bit; duty from pa_fan_percentage unless disabled by config
+    if (ledcSetup(1, 25000, 8)) {
+        ledcAttachPin(RADIO_FAN_EN, 1);
+        LOG_INFO("PWM init C1 P%d\n", RADIO_FAN_EN);
+        ledcWrite(1, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+    } else {
+        // PWM unavailable: drive the pin as plain GPIO so the PA is never left uncooled
+        LOG_WARN("PWM init fail P%d, using on/off fan\n", RADIO_FAN_EN);
+        pinMode(RADIO_FAN_EN, OUTPUT);
+        digitalWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? LOW : HIGH);
+    }
+#elif defined(ARCH_NRF52)
+    pinMode(RADIO_FAN_EN, OUTPUT);
+    analogWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+#endif
+#else
+    // Set up as ON/OFF switch of fan; default on unless disabled by config.
+    pinMode(RADIO_FAN_EN, OUTPUT);
+    digitalWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? (LOW ^ 0) : (HIGH ^ 0));
+#endif
 #endif
 
 #ifndef ARCH_PORTDUINO
 
-        // Initialize Wifi
+    // Initialize Wifi
 #if HAS_WIFI
     initWifi();
 #endif
