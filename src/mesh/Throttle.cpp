@@ -11,11 +11,11 @@
 bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, void (*throttleFunc)(void), void (*onDefer)(void))
 {
     if (*lastExecutionMs == 0) {
-        *lastExecutionMs = Time::getMillis();
+        *lastExecutionMs = Time::safeMillis();
         throttleFunc();
         return true;
     }
-    uint32_t now = Time::getMillis();
+    uint32_t now = Time::safeMillis();
 
     if ((now - *lastExecutionMs) >= minumumIntervalMs) {
         throttleFunc();
