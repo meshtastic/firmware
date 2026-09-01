@@ -4,6 +4,7 @@
 
 // Core includes
 #include "Channels.h"
+#include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
@@ -1159,21 +1160,9 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         char truncatedLongName[64];
         graphics::UIRenderer::truncateStringWithEmotes(display, longName, truncatedLongName, sizeof(truncatedLongName),
                                                        availWidth);
-        const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
 
         char banner[256];
-        bool isAlert = false;
-
-        // Check if alert detection is enabled via external notification module
-        if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
-            moduleConfig.external_notification.alert_bell_buzzer) {
-            for (size_t i = 0; i < packet.decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
-                }
-            }
-        }
+        const bool isAlert = MeshService::isAlertPayload(packet);
 
         if (isAlert) {
             if (truncatedLongName[0])

@@ -5,6 +5,7 @@
 #include <unity.h>
 
 #include "mesh/Channels.h"
+#include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include <cstdio>
 #include <cstring>
@@ -62,7 +63,7 @@ void test_broadcast_on_unmuted_channel_is_not_muted()
     TEST_ASSERT_FALSE(isMutedForPacket(makePacket(kPeer, NODENUM_BROADCAST, 0)));
 }
 
-void test_broadcast_on_muted_channel_is_muted()
+void test_broadcast_on_muted_channel()
 {
     setSlot(0, meshtastic_Channel_Role_PRIMARY, true);
     TEST_ASSERT_TRUE(isMutedForPacket(makePacket(kPeer, NODENUM_BROADCAST, 0)));
@@ -100,7 +101,7 @@ void test_channel_zero_resolves_to_primary_slot()
 // DM addressed to us: the sender decides
 // ---------------------------------------------------------------------------
 
-void test_dm_to_us_from_muted_sender_is_muted()
+void test_dm_to_us_from_muted_sender()
 {
     setNodeMuted(kPeer, true);
     TEST_ASSERT_TRUE(isMutedForPacket(makePacket(kPeer, kLocalNode, 0)));
@@ -127,7 +128,7 @@ void test_dm_to_us_from_unknown_sender_is_not_muted()
 }
 
 // Not addressed to us: overheard traffic falls back to the channel, sender mute is irrelevant.
-void test_dm_to_third_party_uses_channel_mute()
+void test_dm_to_third_party_uses_channel()
 {
     setSlot(0, meshtastic_Channel_Role_PRIMARY, true);
     setNodeMuted(kPeer, false);
@@ -136,6 +137,49 @@ void test_dm_to_third_party_uses_channel_mute()
     setSlot(0, meshtastic_Channel_Role_PRIMARY, false);
     setNodeMuted(kPeer, true);
     TEST_ASSERT_FALSE(isMutedForPacket(makePacket(kPeer, kThirdParty, 0)));
+}
+
+// ---------------------------------------------------------------------------
+// Alert payloads, which break through a mute
+// ---------------------------------------------------------------------------
+
+// ASCII BEL, the in-band alert marker. Numeric so no control byte sits in the source.
+static const uint8_t kAsciiBell = 7;
+
+static meshtastic_MeshPacket withText(meshtastic_MeshPacket p, const char *text, bool bell)
+{
+    p.decoded.payload.size = (pb_size_t)strlen(text);
+    memcpy(p.decoded.payload.bytes, text, p.decoded.payload.size);
+    if (bell)
+        p.decoded.payload.bytes[p.decoded.payload.size++] = kAsciiBell;
+    return p;
+}
+
+void test_bell_is_an_alert_when_a_bell_output_is_on()
+{
+    moduleConfig.external_notification.alert_bell = true;
+    TEST_ASSERT_TRUE(MeshService::isAlertPayload(withText(makePacket(kPeer, NODENUM_BROADCAST, 0), "wake up", true)));
+}
+
+void test_bell_is_not_an_alert_when_every_bell_output_is_off()
+{
+    TEST_ASSERT_FALSE(MeshService::isAlertPayload(withText(makePacket(kPeer, NODENUM_BROADCAST, 0), "wake up", true)));
+}
+
+void test_plain_text_is_never_an_alert()
+{
+    moduleConfig.external_notification.alert_bell = true;
+    TEST_ASSERT_FALSE(MeshService::isAlertPayload(withText(makePacket(kPeer, NODENUM_BROADCAST, 0), "wake up", false)));
+}
+
+// The wake gate is "not muted, or an alert": a bell must survive a muted channel.
+void test_alert_survives_a_muted_channel()
+{
+    moduleConfig.external_notification.alert_bell = true;
+    setSlot(0, meshtastic_Channel_Role_PRIMARY, true);
+    const meshtastic_MeshPacket p = withText(makePacket(kPeer, NODENUM_BROADCAST, 0), "wake up", true);
+    TEST_ASSERT_TRUE(isMutedForPacket(p));
+    TEST_ASSERT_TRUE(!isMutedForPacket(p) || MeshService::isAlertPayload(p));
 }
 
 // ---------------------------------------------------------------------------
@@ -171,17 +215,23 @@ void setup()
 
     printf("\n=== Broadcast: channel mute ===\n");
     RUN_TEST(test_broadcast_on_unmuted_channel_is_not_muted);
-    RUN_TEST(test_broadcast_on_muted_channel_is_muted);
+    RUN_TEST(test_broadcast_on_muted_channel);
     RUN_TEST(test_channel_without_module_settings_is_not_muted);
     RUN_TEST(test_broadcast_reads_its_own_channel);
     RUN_TEST(test_channel_zero_resolves_to_primary_slot);
 
     printf("\n=== Direct message: sender mute ===\n");
-    RUN_TEST(test_dm_to_us_from_muted_sender_is_muted);
+    RUN_TEST(test_dm_to_us_from_muted_sender);
     RUN_TEST(test_dm_to_us_from_unmuted_sender_is_not_muted);
     RUN_TEST(test_dm_to_us_ignores_channel_mute);
     RUN_TEST(test_dm_to_us_from_unknown_sender_is_not_muted);
-    RUN_TEST(test_dm_to_third_party_uses_channel_mute);
+    RUN_TEST(test_dm_to_third_party_uses_channel);
+
+    printf("\n=== Alerts break through mute ===\n");
+    RUN_TEST(test_bell_is_an_alert_when_a_bell_output_is_on);
+    RUN_TEST(test_bell_is_not_an_alert_when_every_bell_output_is_off);
+    RUN_TEST(test_plain_text_is_never_an_alert);
+    RUN_TEST(test_alert_survives_a_muted_channel);
 
     exit(UNITY_END());
 }
