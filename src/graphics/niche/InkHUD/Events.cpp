@@ -4,6 +4,7 @@
 
 #include "MessageStore.h"
 #include "PowerFSM.h"
+#include "UptimeClock.h"
 #include "WaypointStore.h"
 #include "buzz.h"
 #include "gps/RTC.h"
@@ -401,7 +402,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
         // Only arm suppression if the long-press actually opened menu foreground.
         SystemApplet *menu = inkhud->getSystemApplet("Menu");
         if (touchEnabledBuild && menu && menu->isForeground()) {
-            suppressTouchTapUntilMs = millis() + TOUCH_MENU_OPEN_TAP_SUPPRESS_MS;
+            suppressTouchTapUntilMs = Time::timerEndsAtMillis(TOUCH_MENU_OPEN_TAP_SUPPRESS_MS);
         }
     } else
         onButtonShort();

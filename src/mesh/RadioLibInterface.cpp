@@ -530,7 +530,7 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     // Look for non-late packets only, so we don't do this twice!
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
-        p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
+        p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeightedWorst(p->rx_snr));
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
             LOG_TRACE("Move queued packet to late rebroadcast window %ums from now", (uint32_t)(p->tx_after - millis()));
