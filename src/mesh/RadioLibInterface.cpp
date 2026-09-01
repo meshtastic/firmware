@@ -707,6 +707,10 @@ void RadioLibInterface::handleReceiveInterrupt()
 void RadioLibInterface::startReceive()
 {
     isReceiving = true;
+    // Drivers only reach here once the chip actually accepted the RX start, so the radio is alive again.
+    // This is the sole place the recovery ladder is cleared - nothing short of an armed RX counts as fixed.
+    rxOffline = false;
+    chipRecoveryFailures = 0;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -724,6 +728,49 @@ void RadioLibInterface::pollMissedIrqs()
 void RadioLibInterface::resetAGC()
 {
     // Base implementation: no-op. Override in chip-specific subclasses.
+}
+
+void RadioLibInterface::periodicRadioMaintenance()
+{
+    // Every startReceive() call site is event-driven (RX/TX ISR, the CAD-busy branch, reconfigure), and a
+    // radio left with RX off can no longer raise an RX interrupt - on a node with nothing to transmit
+    // nothing would ever re-arm it. This periodic tick is that retry; maybeRecoverChipStateLoss() throttles.
+    if (rxOffline) {
+        LOG_WARN("Radio RX offline, retrying");
+        if (maybeRecoverChipStateLoss())
+            startReceive();
+        return; // a chip just re-inited (or still dead) has no use for an AGC reset this tick
+    }
+
+    resetAGC();
+}
+
+bool RadioLibInterface::maybeRecoverChipStateLoss()
+{
+    // One attempt per window: the transient resets this recovers from need a single re-init, and a
+    // chip that stays dead must not stall the TX/RX paths with a begin() attempt on every call
+    if (lastChipRecoveryMs && Throttle::isWithinTimespanMs(lastChipRecoveryMs, 30 * 1000UL)) {
+        LOG_DEBUG("Radio recovery suppressed, %us since the last attempt", (millis() - lastChipRecoveryMs) / 1000);
+        return false;
+    }
+
+    // The ladder counts re-arms, not re-inits: only RadioLibInterface::startReceive() clears the count, and
+    // only once the chip really accepted RX. Judging the previous attempt here - a throttle window later,
+    // after its retry - is what stops a begin() that succeeded while leaving RX dead from crediting itself.
+    if (chipRecoveryFailures >= MAX_CHIP_RECOVERY_FAILURES && rebootAtMsec == 0) {
+        // Attempts are a throttle window apart, so this is minutes of a provably deaf chip. begin() alone
+        // clearly isn't reviving it; reboot to re-run init(), which redoes the power-on sequence it skips.
+        LOG_ERROR("Radio still deaf after %u re-inits, rebooting", chipRecoveryFailures);
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    }
+    chipRecoveryFailures++;
+
+    lastChipRecoveryMs = millis();
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    LOG_ERROR("Radio chip state lost mid-operation, re-init");
+    bool recovered = recoverChipStateLoss();
+    LOG_INFO("Radio re-init %s", recovered ? "succeeded" : "failed");
+    return recovered;
 }
 
 void RadioLibInterface::checkRxDoneIrqFlag()

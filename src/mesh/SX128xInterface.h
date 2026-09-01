@@ -80,8 +80,13 @@ template <class T> class SX128xInterface : public RadioLibInterface
     int16_t programModemParams();
 
     /** begin() and chip-side setup, shared by init() and by reconfigure()'s recovery of a chip that lost its state */
-    bool reinitChip();
+    /** @param fromInit true only for the boot-time call, which may adjust region and reboot on a
+     *  2.4GHz-only part; a runtime recovery must never reboot the node. */
+    bool reinitChip(bool fromInit = false);
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
+
+    /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
+    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 };

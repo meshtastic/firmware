@@ -1481,11 +1481,11 @@ void loop()
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
-        // Periodic AGC reset - warm sleep + recalibrate to prevent stuck AGC gain
+        // Periodic radio upkeep - re-arms RX if it was left off, else AGC reset (stuck-gain prevention)
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
-            RadioLibInterface::instance->resetAGC();
+            RadioLibInterface::instance->periodicRadioMaintenance();
         }
     }
 
