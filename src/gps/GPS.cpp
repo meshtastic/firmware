@@ -1572,7 +1572,12 @@ int32_t GPS::runOnce()
             LOG_WARN("Can't publish valid location: no GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
+                // Losing a position fix must not erase independent receiver
+                // status. Keep the latest satellite count so GPSStatus/Base
+                // UI can still show satellites that are currently visible.
+                const uint32_t lastSatsInView = p.sats_in_view;
                 p = meshtastic_Position_init_default;
+                p.sats_in_view = lastSatsInView;
                 hasValidLocation = false;
                 shouldPublish = true;
                 LOG_DEBUG_GPS("hasValidLocation FALLING EDGE");
@@ -2158,13 +2163,8 @@ bool GPS::lookForLocation()
         return false;
 
 #if GPS_DEBUG
-    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-              gsafixtype.age(),
-#else
-              0,
-#endif
-              reader.date.age(), reader.time.age());
+    LOG_DEBUG("AGE: LOC=%d DATE=%d TIME=%d FIXTYPE=%u", reader.location.age(), reader.date.age(), reader.time.age(),
+              parsedFixType);
 #endif // GPS_DEBUG
 
     // TinyGPSPlus exposes checksum failures via the public API, not a direct
@@ -2175,14 +2175,11 @@ bool GPS::lookForLocation()
     if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
         return false;
 
-    // check if a complete GPS solution set is available for reading
-    //   tinyGPSDatum::age() also includes isValid() test
-    // FIXME
-    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-          (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
-#endif
-          (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
+    // Check that the position, time and date belong to a fresh solution.
+    // GSA freshness is no longer tied to the legacy TinyGPSCustom field;
+    // the native GSA parser is used directly.
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) && (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
+          (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
         LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
@@ -2202,17 +2199,18 @@ bool GPS::lookForLocation()
 
     p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
 
-    // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // Dilution of precision is reported in 10^2 units.
+    // Prefer the native GSA values and fall back to GGA HDOP when GSA
+    // has not produced a value yet.
     const uint16_t gsaHdop = reader.gsaHDOP();
     const uint16_t gsaPdop = reader.gsaPDOP();
     p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
     p.PDOP = gsaPdop ? gsaPdop : TinyGPSPlus::parseDecimal(gsapdop.value());
 #else
-    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
-    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-    p.HDOP = reader.hdop.value();
-    p.PDOP = 1.41 * reader.hdop.value();
+// FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+// correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+p.HDOP = reader.hdop.value();
+p.PDOP = 1.41 * reader.hdop.value();
 #endif
 
     // Discard incomplete or erroneous readings
@@ -2229,9 +2227,7 @@ bool GPS::lookForLocation()
     p.altitude = reader.altitude.meters();
 
     p.fix_quality = fixQual;
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    p.fix_type = fixType;
-#endif
+    p.fix_type = parsedFixType;
 
     LOG_DEBUG_GPS("GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
                   reader.gsaSatellitesUsedTotal(), reader.satellitesTracked(), reader.satellitesInView(),
@@ -2240,8 +2236,8 @@ bool GPS::lookForLocation()
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
                   reader.gsaFixType(), reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 =======
-                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
-                  parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
+              reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
+              parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 >>>>>>> 0a7ef0972 (t-echo-plus)
 
     if (reader.hasValidGLL()) {
