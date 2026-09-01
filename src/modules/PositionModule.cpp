@@ -282,7 +282,8 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER && lastSentReply &&
         Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
         LOG_DEBUG("Skip Position reply: sent one <3min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule
