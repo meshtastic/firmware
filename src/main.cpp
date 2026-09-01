@@ -1360,7 +1360,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.has_xeddsa = true;
 #endif
 
-#if HAS_TFT && HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+#if HAS_MUI_MIRROR
     // MUI owns the panel and leaves `screen` null, so ask LVGL instead.
     uint16_t muiW = 0, muiH = 0;
     bool muiTouch = false;

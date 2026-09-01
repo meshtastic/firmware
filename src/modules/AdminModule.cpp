@@ -2204,7 +2204,7 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
     // Wake the device if asleep
     powerFSM.trigger(EVENT_INPUT);
 
-#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+#if HAS_MUI_MIRROR
     // MUI builds never construct an InputBroker (Modules.cpp skips it when
     // displaymode is COLOR), so remote input reaches the LVGL UI directly.
     if (graphics::muiInjectInputEvent(inputEvent.event_code, inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y))
