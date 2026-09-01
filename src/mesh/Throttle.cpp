@@ -10,12 +10,17 @@
 /// @return true if the function was executed, false if it was deferred
 bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, void (*throttleFunc)(void), void (*onDefer)(void))
 {
+    // TODO(elapsed-stamp): *lastExecutionMs is a 0=sentinel ("never run") stamp read elsewhere in this
+    // file via `now - lastExecutionMs`. safeMillis()'s 0->1 dodge might help, but `now` read at the same 
+    // instant would underflow the subtraction to ~UINT32_MAX, making the last interval look ~49.7 days old, 
+    // and executing again, instead of landing near 0.
+    // Future fix is to implement a stamp-oriented helper that correctly handles the 0-sentinel case.
     if (*lastExecutionMs == 0) {
-        *lastExecutionMs = Time::safeMillis();
+        *lastExecutionMs = Time::getMillis();
         throttleFunc();
         return true;
     }
-    uint32_t now = Time::safeMillis();
+    uint32_t now = Time::getMillis();
 
     if ((now - *lastExecutionMs) >= minumumIntervalMs) {
         throttleFunc();

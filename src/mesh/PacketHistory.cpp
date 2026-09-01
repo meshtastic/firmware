@@ -92,6 +92,11 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         r.relayed_by[0] = p->relay_node;
     }
 
+    // TODO(elapsed-stamp): rxTimeMsec is a 0=sentinel ("empty" slot) stamp read elsewhere in this
+    // file via `now - rxTimeMsec` for packet age. safeMillis()'s 0->1 dodge is reflecting the previous pattern, but
+    // `now` read at the same instant would underflow the subtraction to ~UINT32_MAX, making a
+    // fresh packet look ~49.7 days old, instead of landing near 0.
+    // Future fix is to implement a stamp-oriented helper that correctly handles the 0-sentinel case.
     r.rxTimeMsec = Time::safeMillis();
 
 #if VERBOSE_PACKET_HISTORY

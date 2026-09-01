@@ -169,7 +169,7 @@ bool SGM41562::refresh()
     uint32_t now = millis();
     if (lastRefreshMs_ != 0 && Throttle::isWithinTimespanMs(lastRefreshMs_, 250))
         return true; // cached
-    lastRefreshMs_ = Time::skipZero(now);
+    lastRefreshMs_ = Time::skipZero(now); // dodge the 0-sentinel case
 
     uint8_t status, fault;
     if (!readReg(REG_SYSTEM_STATUS, status))

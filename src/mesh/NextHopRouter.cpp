@@ -443,8 +443,8 @@ PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint
 int32_t NextHopRouter::doRetransmissions()
 {
     // Same clock Throttle reads, so setNextTx() deadlines and this test can't diverge under an
-    // injected test clock.
-    uint32_t now = Time::getMillis();
+    // injected test clock. Zero has special meaning, so safeMillis avoids it.
+    uint32_t now = Time::safeMillis();
     int32_t d = INT32_MAX;
 
     // FIXME, we should use a better datastructure rather than walking through this map.
@@ -617,7 +617,7 @@ void NextHopRouter::noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now
         h->lastNextHop = nextHop;
         h->consecutiveFailures = 0;
     }
-    h->learnedAtMsec = Time::skipZero(now);
+    h->learnedAtMsec = now;
 }
 
 void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
@@ -626,7 +626,7 @@ void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
     if (!h)
         return; // only routes we actually learned have health to refresh
     h->consecutiveFailures = 0;
-    h->learnedAtMsec = Time::skipZero(now);
+    h->learnedAtMsec = now;
 }
 
 void NextHopRouter::noteRouteFailure(NodeNum dest)

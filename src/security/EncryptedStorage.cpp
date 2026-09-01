@@ -1274,6 +1274,9 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
         writeBackoff(reservedAttempts, 0, now);
     }
     auto onFailure = [reservedAttempts]() {
+        // TODO(elapsed-stamp): s_lastFailMillis is a 0=sentinel stamp read via `millis() -
+        // s_lastFailMillis` above for the backoff window. safeMillis()'s 0->1 dodge is the old pattern
+        // but this needs either a proper stamp-oriented helper or a review of whether the sentinel is required.
         s_lastFailMillis = Time::safeMillis();
         s_backoffSecondsRemaining = backoffDelay(reservedAttempts);
         LOG_WARN("EncryptedStorage: Wrong passphrase (attempt %u, next in ~%us)", (unsigned)reservedAttempts,
