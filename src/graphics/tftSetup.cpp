@@ -12,7 +12,7 @@
 #include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverConfig.h"
 #include "input/InputBroker.h"
-#if defined(MESHTASTIC_MUI_MIRROR)
+#if HAS_MUI_MIRROR
 #include "input/InputDriver.h"
 #endif
 #include "util/ISpiLock.h"
@@ -318,12 +318,9 @@ class ReentrantSpiLock : public ISpiLock
 
 static ReentrantSpiLock reentrantSpiLock;
 
-#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+#if HAS_MUI_MIRROR
 namespace graphics
 {
-// Maps a remote input event onto device-ui's virtual LVGL devices. Note the
-// LEFT/RIGHT cross-map: the broker's codes were modeled on LVGL keys but
-// those two are swapped.
 // Reports MUI's logical panel geometry for DeviceMetadata.display. The BaseUI
 // `screen` object does not exist on MUI builds, so the dimensions come from
 // LVGL itself (already rotated to the logical orientation).
@@ -344,6 +341,9 @@ bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch)
     return width > 0 && height > 0;
 }
 
+// Maps a remote input event onto device-ui's virtual LVGL devices. Note the
+// LEFT/RIGHT cross-map: the broker's codes were modeled on LVGL keys but
+// those two are swapped.
 bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY)
 {
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
@@ -409,7 +409,7 @@ void tftSetup(void)
     I2CKeyboardScanner::setSecondaryBus(i2cProxy);
 #endif
 #ifndef ARCH_PORTDUINO
-#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+#if HAS_MUI_MIRROR
     // Must precede DeviceScreen::init: device-ui only builds its virtual input
     // devices (and the default focus group they need) when injection is asked for.
     InputDriver::enableInjection();
@@ -417,7 +417,7 @@ void tftSetup(void)
     deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
-#if HAS_SCREEN_MIRROR && defined(MESHTASTIC_MUI_MIRROR)
+#if HAS_MUI_MIRROR
     // Stream MUI's dirty rects to local clients (see graphics::ScreenMirror).
     // Gated on MESHTASTIC_MUI_MIRROR until the device-ui flush observer merges
     // (jamesarich/device-ui screen-mirror-poc); the vendored pin lacks it.

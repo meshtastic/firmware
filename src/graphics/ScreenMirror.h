@@ -58,7 +58,7 @@ class ScreenMirror
     /// when the client holds the full current palette (or coloring is off).
     bool copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientRegionOffset, meshtastic_DisplayPalette &out);
 
-#if HAS_TFT
+#if HAS_MUI_MIRROR
     /// MUI path: queues one LVGL dirty rect (native little-endian RGB565).
     /// Called on the LVGL thread via the device-ui flush observer; copies and returns.
     void onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels);
@@ -101,7 +101,7 @@ class ScreenMirror
     uint16_t paletteDefaultOn = 0;
     uint16_t paletteDefaultOff = 0;
 
-#if HAS_TFT
+#if HAS_MUI_MIRROR
     // MUI dirty-rect queue: FIFO rect headers over a linear pixel pool,
     // compacted whenever it drains. Spike scope: single consumer.
     struct MuiRect {
@@ -131,7 +131,7 @@ class ScreenMirror
 
 extern ScreenMirror screenMirror;
 
-#if HAS_TFT
+#if HAS_MUI_MIRROR
 /**
  * Routes a remote input event straight into device-ui's injection seam.
  * MUI builds never construct an InputBroker (Modules.cpp skips it when
