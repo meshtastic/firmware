@@ -350,6 +350,7 @@ class TinyGPSPlus
     {
         uint8_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && gsaInfo[s].fixType > best)
                 best = gsaInfo[s].fixType;
         return best;
@@ -359,6 +360,7 @@ class TinyGPSPlus
     {
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 &&
                 (best = 0 || gsaInfo[s].pdop < best ))
                 {
@@ -371,6 +373,7 @@ class TinyGPSPlus
     {
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 &&
                 (best = 0 || gsaInfo[s].hdop < best ))
                 {
