@@ -973,6 +973,11 @@ void NimbleBluetooth::setup()
     bleServer->setCallbacks(&serverCallbacks);
     setupService();
     startAdvertising();
+
+#if HAS_BLE_MESH
+    if (bleMeshHandler)
+        bleMeshHandler->onBluetoothReady();
+#endif
 }
 
 void NimbleBluetooth::setupService()

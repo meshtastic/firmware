@@ -45,6 +45,11 @@
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#if HAS_BLE_MESH && defined(ARCH_ESP32)
+#include "platform/esp32/ESP32BLEMesh.h"
+#elif HAS_BLE_MESH && defined(ARCH_NRF52)
+#include "platform/nrf52/NRF52BLEMesh.h"
+#endif
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
@@ -1085,11 +1090,16 @@ void setup()
 #endif
 
 #if HAS_BLE_MESH
-    // No start() here: the NimBLE host comes up asynchronously and ble_hs_synced() is false this
-    // early. The handler's own runOnce retries until the host is ready, so ordering against BLE
-    // init in main() does not have to be exact.
+    // start() only arms the handler; the platform waits for onBluetoothReady() before touching GAP,
+    // because the BLE stack comes up asynchronously well after this point.
     LOG_DEBUG("Start BLE mesh transport thread");
-    bleMeshHandler = new BleMeshHandler();
+#if defined(ARCH_ESP32)
+    bleMeshHandler = new ESP32BLEMesh();
+#elif defined(ARCH_NRF52)
+    bleMeshHandler = new NRF52BLEMesh();
+#endif
+    if (bleMeshHandler && (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST))
+        bleMeshHandler->start();
 #endif
 
     service = new MeshService();

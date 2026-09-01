@@ -23,7 +23,7 @@ static int lastBatteryLevel = -1; // last value written to BAS, to skip redundan
 #ifndef BLE_DFU_SECURE
 static BLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
+static BLEDfuSecure bledfusecure; // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -155,6 +155,11 @@ void startAdv(void)
     Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
+
+#if HAS_BLE_MESH
+    if (bleMeshHandler)
+        bleMeshHandler->onBluetoothReady();
+#endif
 }
 // Just ack that the caller is allowed to read
 static void authorizeRead(uint16_t conn_hdl)
@@ -281,7 +286,14 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
+#if HAS_BLE_MESH
+    // BLE mesh scans, and scanning needs a central link. Bluefruit.begin() defaults to (1, 0), so
+    // sd_ble_gap_scan_start fails outright without this. Costs SoftDevice RAM, hence the gate.
+    Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
+    if (!Bluefruit.begin(1, 1)) {
+#else
     if (!Bluefruit.begin()) {
+#endif
         // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
         // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
         // current Bluefruit config. Without this check the node would silently run without BLE.
