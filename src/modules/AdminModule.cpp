@@ -1211,6 +1211,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             nodeDB->generateCryptoKeyPair();
         } else if (config.security.public_key.size == 0) {
             nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+            // If the restored private key derived a known pre-2.8 low-entropy public key,
+            // generateCryptoKeyPair rejected it and minted a fresh keypair. Tell the user why their
+            // save did not stick (and that their node number changed with the new key) now, at set
+            // time — not after the next reboot's generic warning. Scoped to this call so a stale
+            // flag from a boot-time regeneration doesn't fire on unrelated security sets.
+            if (nodeDB->keyIsLowEntropy) {
+                sendWarning(LOW_ENTROPY_RESTORE_WARNING);
+            }
         }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
