@@ -62,6 +62,20 @@ template <typename T> bool SX128xInterface<T>::init()
 
     RadioLibInterface::init();
 
+    if (!reinitChip())
+        return false;
+
+    startReceive(); // start receiving
+
+    return true;
+}
+
+// begin() and the chip-side setup that a reset chip loses. Shared by init() and by reconfigure()'s
+// recovery of a chip that lost its state.
+template <typename T> bool SX128xInterface<T>::reinitChip()
+{
+    // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
+    // config value, and the recovery path reaches begin() without passing through the params clamp
     limitPower(SX128X_MAX_POWER);
 
     preambleLength = 12; // 12 is the default for this chip, 32 does not RX at all
@@ -104,52 +118,84 @@ template <typename T> bool SX128xInterface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
-    if (res == RADIOLIB_ERR_NONE)
-        startReceive(); // start receiving
-
+    if (res != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128x re-init failed %s%d", radioLibErr, res);
     return res == RADIOLIB_ERR_NONE;
+}
+
+template <typename T> int16_t SX128xInterface<T>::programModemParams()
+{
+    // configure publicly accessible settings
+    int16_t err = lora.setSpreadingFactor(sf);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setSpreadingFactor(%u) %s%d", sf, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setBandwidth(bw);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setBandwidth(%.1f) %s%d", bw, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setCodingRate(%u) %s%d", cr, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setPreambleLength(%u) %s%d", preambleLength, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setFrequency(getFreq());
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setFrequency(%.3f) %s%d", getFreq(), radioLibErr, err);
+        return err;
+    }
+
+    limitPower(SX128X_MAX_POWER);
+
+    err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setOutputPower(%d) %s%d", power, radioLibErr, err);
+        return err;
+    }
+
+    return RADIOLIB_ERR_NONE;
 }
 
 template <typename T> bool SX128xInterface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
 
-    // set mode to standby
-    setStandby();
+    // set mode to standby - a chip that lost its state to a reset/brownout can time out here,
+    // so don't let setStandby()'s assert fire before the recovery below gets a chance
+    int16_t err = trySetStandby();
+    if (err == RADIOLIB_ERR_NONE)
+        err = programModemParams();
 
-    // configure publicly accessible settings
-    int err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
+        // A chip that fails standby or rejects parameter programming (typically WRONG_MODEM, -20) has
+        // lost its runtime configuration - packet type included - to a chip-internal reset or brownout.
+        // Recover in place: begin() hardware-resets the chip and restores the LoRa packet type. Crashing
+        // here instead would reboot before MeshService persists the config change that triggered us.
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
-
-    err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128X setPreambleLength %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
-
-    err = lora.setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    limitPower(SX128X_MAX_POWER);
-
-    err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128X setOutputPower %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        LOG_ERROR("SX128x rejected modem params, chip state lost? Full re-init");
+        if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("SX128x unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            return false;
+        }
+        LOG_INFO("SX128x recovered after re-init");
+    }
 
     startReceive(); // restart receiving
 
@@ -166,15 +212,14 @@ template <typename T> bool SX128xInterface<T>::wideLora()
     return true;
 }
 
-template <typename T> void SX128xInterface<T>::setStandby()
+template <typename T> int16_t SX128xInterface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
-    int err = lora.standby();
+    int16_t err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
@@ -195,6 +240,13 @@ template <typename T> void SX128xInterface<T>::setStandby()
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> void SX128xInterface<T>::setStandby()
+{
+    int16_t err = trySetStandby();
+    assert(err == RADIOLIB_ERR_NONE);
 }
 
 /**

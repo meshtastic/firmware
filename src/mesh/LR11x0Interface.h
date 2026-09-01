@@ -78,5 +78,18 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+  private:
+    /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
+    int16_t programModemParams();
+
+    /** Reset and re-begin() a chip that lost its runtime configuration (reset/brownout) */
+    bool reinitChip();
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
+    /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
+    float resolvedTcxoVoltage = 0;
 };
 #endif
