@@ -34,13 +34,14 @@ class Throttle
     /// "passed" - the split that has to survive, because which way "inactive" falls is the caller's
     /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the four
     /// meanings they give the sentinel today:
-    ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec, GPS.cpp fixHoldEnds, and the rest of
-    ///                 UptimeClock.h's timerEndsAtMillis() callers already dodge the sentinel;
-    ///                 AdminModule.cpp enterDfuAtMsec still remaps a 0 result to 1 by hand. A
-    ///                 dedicated type would end the risk of a new call site forgetting to.
+    ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec, GPS.cpp fixHoldEnds and the other
+    ///                 timerEndsAtMillis() callers dodge it; AdminModule.cpp enterDfuAtMsec remaps
+    ///                 a 0 result to 1 by hand, and RadioLibInterface.cpp tx_after and
+    ///                 activeReceiveStart still arm from bare millis() and can land on it.
     ///   0 = forever - NotificationRenderer.cpp alertBannerUntil. Every read spells its own `> 0`
     ///                 guard, so this third state wants naming rather than repeating.
-    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up; also dodges the sentinel now.
+    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up. A computed renewal now dodges 0,
+    ///                 so only a deliberate write still means "due now".
     ///   UINT32_MAX  - ExternalNotificationModule.cpp nagCycleCutoff, whose armed() also lives in a
     ///                 second variable (isNagging) and whose arm site can land on the sentinel.
     static bool deadlinePassed(uint32_t deadlineMs);
