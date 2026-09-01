@@ -286,9 +286,13 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-#if HAS_BLE_MESH
-    // BLE mesh scans, and scanning needs a central link. Bluefruit.begin() defaults to (1, 0), so
-    // sd_ble_gap_scan_start fails outright without this. Costs SoftDevice RAM, hence the gate.
+#if HAS_BLE_MESH && defined(BLE_MESH_NRF52_CENTRAL)
+    // BLE mesh scans, and scanning needs a central link: Bluefruit.begin() defaults to (1, 0), so
+    // sd_ble_gap_scan_start fails outright without one. But asking for it raises the SoftDevice's
+    // RAM requirement above what the linker ORIGIN below reserves, and sd_ble_enable() then rejects
+    // the RAM base - see the failure path just below. So this is gated behind its own flag until
+    // nrf52840_s140_v*.ld is re-based; enabling it without that change gets you a node with no
+    // Bluetooth at all.
     Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
     if (!Bluefruit.begin(1, 1)) {
 #else
