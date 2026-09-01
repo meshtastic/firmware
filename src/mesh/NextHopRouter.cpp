@@ -617,7 +617,7 @@ void NextHopRouter::noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now
         h->lastNextHop = nextHop;
         h->consecutiveFailures = 0;
     }
-    h->learnedAtMsec = now ? now : 1;
+    h->learnedAtMsec = Time::skipZero(now);
 }
 
 void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
@@ -626,7 +626,7 @@ void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
     if (!h)
         return; // only routes we actually learned have health to refresh
     h->consecutiveFailures = 0;
-    h->learnedAtMsec = now ? now : 1;
+    h->learnedAtMsec = Time::skipZero(now);
 }
 
 void NextHopRouter::noteRouteFailure(NodeNum dest)

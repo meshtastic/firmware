@@ -8,6 +8,7 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #include "Throttle.h"
+#include "UptimeClock.h"
 
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
@@ -91,9 +92,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         r.relayed_by[0] = p->relay_node;
     }
 
-    r.rxTimeMsec = millis(); //
-    if (r.rxTimeMsec == 0)   // =0 every 49.7 days? 0 is special
-        r.rxTimeMsec = 1;
+    r.rxTimeMsec = Time::safeMillis();
 
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG(
