@@ -880,14 +880,6 @@ void setup()
 
     router = new ReliableRouter();
 
-    // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true &&
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
-                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
-        LOG_DEBUG("Tracker/Sensor: Skip start melody");
-    else
-        playStartMelody();
-
 #if HAS_SCREEN
         // fixed screen override?
         // The geometry picks below are skipped on variants that pin the panel size with
@@ -1175,6 +1167,14 @@ void setup()
     auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+
+    // Play only after board-specific peripherals such as external audio codecs are initialized.
+    if (config.power.is_power_saving == true &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
+        LOG_DEBUG("Tracker/Sensor: Skip start melody");
+    else
+        playStartMelody();
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();

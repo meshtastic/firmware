@@ -66,39 +66,31 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
     static std::unordered_map<int, std::string> freqToNote = {
         {NOTE_C3, "c4"},   {NOTE_CS3, "c#4"}, {NOTE_D3, "d4"},   {NOTE_DS3, "d#4"}, {NOTE_E3, "e4"},   {NOTE_F3, "f4"},
         {NOTE_FS3, "f#4"}, {NOTE_G3, "g4"},   {NOTE_GS3, "g#4"}, {NOTE_A3, "a4"},   {NOTE_AS3, "a#4"}, {NOTE_B3, "b4"},
-        {NOTE_C4, "c5"},   {NOTE_E4, "e5"},   {NOTE_G4, "g5"},   {NOTE_A4, "a5"},   {NOTE_C5, "c6"},   {NOTE_E5, "e6"},
-        {NOTE_G5, "g6"},   {NOTE_F5, "f6"},   {NOTE_G6, "g7"},   {NOTE_E7, "e8"}};
+        {NOTE_CS4, "c#5"}, {NOTE_C4, "c5"},   {NOTE_E4, "e5"},   {NOTE_G4, "g5"},   {NOTE_A4, "a5"},   {NOTE_B4, "b5"},
+        {NOTE_C5, "c6"},   {NOTE_E5, "e6"},   {NOTE_G5, "g6"},   {NOTE_F5, "f6"},   {NOTE_G6, "g7"},   {NOTE_E7, "e8"}};
 
     char rtttl[128] = "tone:d=32,o=4,b=200:"; // default duration and octave
     for (int i = 0; i < size; i++) {
         const auto &td = tone_durations[i];
-        std::string note = "b4";
+        std::string note = "p";
         if (freqToNote.find(td.frequency_khz) != freqToNote.end()) {
             note = freqToNote[td.frequency_khz];
         }
-        int dur = 32; // default duration
-        if (td.duration_ms >= 1000)
+        // b=200 makes the whole note 1200ms; pick the nearest 1200ms/duration_ms note length
+        int dur = (1200 + td.duration_ms / 2) / td.duration_ms;
+        if (dur < 1)
             dur = 1;
-        else if (td.duration_ms >= 500)
-            dur = 2;
-        else if (td.duration_ms >= 250)
-            dur = 4;
-        else if (td.duration_ms >= 125)
-            dur = 8;
-        else if (td.duration_ms >= 62)
-            dur = 16;
-        else
-            dur = 32;
 
-        char noteStr[64];
-        snprintf(noteStr, sizeof(noteStr), "%s,%d", note.c_str(), dur);
+        // RTTTL notes must be comma-separated: the parser reads digits until a
+        // non-digit, so without the comma the next note's duration merges into
+        // this note's octave.
+        char noteStr[16];
+        snprintf(noteStr, sizeof(noteStr), "%d%s,", dur, note.c_str());
         strncat(rtttl, noteStr, sizeof(rtttl) - strlen(rtttl) - 1);
-
-        audioThread->beginRttl(rtttl, strlen(rtttl));
-        while (audioThread->isPlaying()) {
-            delay(10);
-        }
-        return;
+    }
+    audioThread->beginRttl(rtttl, strlen(rtttl));
+    while (audioThread->isPlaying()) {
+        delay(10);
     }
 }
 #endif
