@@ -12,8 +12,12 @@
 # defines nothing and registers nothing. Sources under the directory are compiled by the default
 # recursive build_src_filter, so dropping a module in needs no platformio.ini edit.
 import os
+import re
 
 Import("env")
+
+# The directory name becomes a C++ call, so it has to be a usable identifier.
+identifier = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 optionalDir = os.path.join(env["PROJECT_DIR"], "src", "modules", "optional")
 
@@ -23,7 +27,9 @@ if os.path.isdir(optionalDir):
         entryDir = os.path.join(optionalDir, entry)
         if not os.path.isdir(entryDir):
             continue
-        if os.path.isfile(os.path.join(entryDir, entry + ".h")):
+        if not identifier.match(entry):
+            print(f"optional-modules: skipping {entry}/, setup{entry}() is not a valid identifier")
+        elif os.path.isfile(os.path.join(entryDir, entry + ".h")):
             names.append(entry)
         else:
             print(f"optional-modules: skipping {entry}/, no {entry}.h")
