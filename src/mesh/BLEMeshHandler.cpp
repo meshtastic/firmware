@@ -121,7 +121,7 @@ int32_t BLEMeshHandler::runOnce()
 
 void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rssi)
 {
-    if (!isRunning || !router || !nodeDB || !data)
+    if (!isRunning || !nodeDB || !data)
         return;
 
     meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
@@ -165,7 +165,12 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
         return;
 
     LOG_DEBUG("BLE mesh RX from=0x%08x to=0x%08x id=0x%08x rssi=%d len=%u", mp.from, mp.to, mp.id, rssi, (unsigned)len);
-    router->enqueueReceivedMessage(p.release());
+    enqueueReceived(p.release());
+}
+
+void BLEMeshHandler::enqueueReceived(meshtastic_MeshPacket *p)
+{
+    router->enqueueReceivedMessage(p);
 }
 
 #endif // HAS_BLE_MESH

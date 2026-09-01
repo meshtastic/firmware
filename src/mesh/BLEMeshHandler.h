@@ -96,6 +96,10 @@ class BLEMeshHandler : private concurrency::OSThread
     /// Decode a received advertisement payload and enqueue it into the router.
     void deliverToRouter(const uint8_t *data, size_t len, int8_t rssi);
 
+    /// Hand an accepted packet on. Virtual only so the native tests can observe what survives the
+    /// ingress guards without standing up a live Router; production always takes the default.
+    virtual void enqueueReceived(meshtastic_MeshPacket *p);
+
     /// Build the complete AD payload (flags + manufacturer data) for `mp`. Returns 0 on refusal.
     uint8_t buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t *out, size_t outCap);
 
