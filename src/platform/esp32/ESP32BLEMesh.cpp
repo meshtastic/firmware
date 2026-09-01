@@ -12,7 +12,7 @@
 #include "host/ble_hs_adv.h"
 #include "nimble/hci_common.h"
 
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
 static_assert(BLE_MESH_ADV_TOTAL_MAX <= BLE_HCI_MAX_EXT_ADV_DATA_LEN,
               "advertisement budget must fit NimBLE's unfragmented ext-adv data limit");
 #endif
@@ -61,7 +61,7 @@ void ESP32BLEMesh::stop()
     LOG_INFO("BLE mesh stopped");
 }
 
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
 bool ESP32BLEMesh::configureAdvInstance()
 {
     if (advInstanceConfigured)
@@ -103,7 +103,7 @@ bool ESP32BLEMesh::configureAdvInstance()
 
 bool ESP32BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
 {
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
     if (!configureAdvInstance())
         return false;
 
@@ -158,7 +158,7 @@ bool ESP32BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
 
 bool ESP32BLEMesh::platformAdvertisingActive()
 {
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
     return ble_gap_ext_adv_active(BLE_MESH_ADV_INSTANCE) != 0;
 #else
     return ble_gap_adv_active() != 0;
@@ -167,7 +167,7 @@ bool ESP32BLEMesh::platformAdvertisingActive()
 
 void ESP32BLEMesh::platformEndAdvertising()
 {
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
     // Stop but do NOT remove: the instance stays configured for the next frame.
     ble_gap_ext_adv_stop(BLE_MESH_ADV_INSTANCE);
 #else
@@ -187,7 +187,7 @@ void ESP32BLEMesh::startScanning()
     return;
 #endif
 
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
     struct ble_gap_ext_disc_params uncodedParams = {};
     uncodedParams.itvl = BLE_MESH_SCAN_INTERVAL;
     uncodedParams.window = BLE_MESH_SCAN_WINDOW;
@@ -236,7 +236,7 @@ int ESP32BLEMesh::onGapEvent(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_DISC:
         self->handleAdvertisement(&event->disc);
         break;
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
     case BLE_GAP_EVENT_EXT_DISC:
         self->handleExtendedAdvertisement(&event->ext_disc);
         break;
@@ -262,7 +262,7 @@ void ESP32BLEMesh::handleAdvertisement(const struct ble_gap_disc_desc *desc)
     handleAdvertisementData(desc->addr, desc->rssi, desc->data, desc->length_data);
 }
 
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
 void ESP32BLEMesh::handleExtendedAdvertisement(const struct ble_gap_ext_disc_desc *desc)
 {
     if (!isRunning || !desc)

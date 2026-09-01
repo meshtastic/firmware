@@ -57,7 +57,7 @@ class ESP32BLEMesh : public BLEMeshHandler
     void stopScanning();
     static int onGapEvent(struct ble_gap_event *event, void *arg);
     void handleAdvertisement(const struct ble_gap_disc_desc *desc);
-#if MYNEWT_VAL(BLE_EXT_ADV)
+#if BLE_MESH_USE_EXT_ADV
     void handleExtendedAdvertisement(const struct ble_gap_ext_disc_desc *desc);
     bool configureAdvInstance();
     bool advInstanceConfigured = false;

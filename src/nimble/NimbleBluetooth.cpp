@@ -27,6 +27,7 @@
 
 #include "host/ble_gap.h"
 #include "host/ble_hs.h"
+#include "host/ble_hs_adv.h"
 #include "host/ble_store.h"
 #ifdef ARCH_ESP32
 #include <nvs.h>
@@ -796,6 +797,156 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
     }
 };
 
+#if BLE_MESH_USE_EXT_ADV
+
+namespace
+{
+/*
+    Reaching BLEServer::handleGATTServerEvent, which the Arduino wrapper declares private.
+
+    This is the standard explicit-instantiation access idiom, not a cast: [temp.explicit]/12 exempts
+    the template-arguments of an explicit instantiation from access checking, so `&BLEServer::
+    handleGATTServerEvent` is a legal argument here even though the name is private. What it does
+    cost us is a hard dependency on that member's exact signature - if the wrapper ever changes it,
+    this fails to compile, which is the failure mode we want rather than a silent mismatch.
+
+    Why bother at all: ble_gap_ext_adv_configure() takes the GAP event callback, and NimBLE then
+    stores it on every connection made through that instance (ble_gap.c: conn->bhc_cb =
+    ble_gap_slave[instance].cb). So the callback we register here is the one that receives CONNECT,
+    DISCONNECT, SUBSCRIBE, MTU and pairing for the phone link. Registering anything other than the
+    wrapper's own handler would silently break the server's subscribed-peer list, and with it every
+    fromNum notification - the mechanism the phone depends on to learn there is data waiting.
+*/
+struct BLEServerGapCb {
+    using type = int (*)(struct ble_gap_event *, void *);
+    friend type get(BLEServerGapCb);
+};
+
+template <typename Tag, typename Tag::type M> struct Rob {
+    friend typename Tag::type get(Tag) { return M; }
+};
+
+template struct Rob<BLEServerGapCb, &BLEServer::handleGATTServerEvent>;
+
+/// Instance 0 is the phone's connectable advertisement; the BLE mesh transport owns instance 1.
+constexpr uint8_t PHONE_ADV_INSTANCE = 0;
+
+int phoneAdvGapEvent(struct ble_gap_event *event, void *arg)
+{
+    const int rc = get(BLEServerGapCb{})(event, arg);
+
+    // One edge the wrapper cannot handle for us any more: on a *failed* connect its handler calls
+    // BLEDevice::startAdvertising(), which routes to the legacy API and now returns ENOTSUP. Left
+    // alone, instance 0 stays down and the node becomes invisible to phones after one bad connect.
+    // The disconnect path is already covered by pendingStartAdvertising in runOnce.
+    if (event->type == BLE_GAP_EVENT_CONNECT && event->connect.status != 0 && nimbleBluetooth) {
+        LOG_DEBUG("BLE connect failed (status=%d), re-arming advertising", event->connect.status);
+        nimbleBluetooth->startAdvertising();
+    }
+    return rc;
+}
+} // namespace
+
+/*
+    Advertise the PhoneAPI through the extended-advertising API.
+
+    Not a feature - a requirement. IDF's NimBLE guards the legacy advertising block with
+    "#if NIMBLE_BLE_ADVERTISE && !MYNEWT_VAL(BLE_EXT_ADV)", so with CONFIG_BT_NIMBLE_EXT_ADV=y every
+    ble_gap_adv_* call returns BLE_HS_ENOTSUP (8). The Arduino BLE wrapper's NimBLE path calls
+    exactly those and has no extended equivalent (its BLEMultiAdvertising is Bluedroid-only), so the
+    phone advertisement simply stops working the moment the BLE mesh transport enables ext-adv.
+
+    legacy_pdu = 1 keeps this an ordinary ADV_IND on air, identical to what the wrapper produced:
+    phones without BLE 5 still discover the node exactly as before. The flag is host-global, so
+    there is no way to leave this instance on the legacy API while the mesh uses the extended one.
+*/
+void NimbleBluetooth::startAdvertising()
+{
+    ble_gap_ext_adv_stop(PHONE_ADV_INSTANCE);
+
+    struct ble_gap_ext_adv_params params = {};
+    params.connectable = 1;
+    params.scannable = 1;
+    params.legacy_pdu = 1; // IND == legacy_pdu + connectable + scannable
+    params.own_addr_type = BLE_OWN_ADDR_PUBLIC;
+    params.itvl_min = 0x20; // 20ms
+    params.itvl_max = 0x40; // 40ms
+    params.primary_phy = BLE_HCI_LE_PHY_1M;
+    params.secondary_phy = BLE_HCI_LE_PHY_1M;
+    params.tx_power = 127;
+    params.sid = 0;
+
+    int8_t selectedTxPower = 0;
+    int rc = ble_gap_ext_adv_configure(PHONE_ADV_INSTANCE, &params, &selectedTxPower, phoneAdvGapEvent,
+                                       (void *)BLEDevice::getServer());
+    if (rc != 0) {
+        LOG_ERROR("BLE ext adv configure failed: rc=%d", rc);
+        return;
+    }
+
+    // Advertisement: flags, the mesh service UUID, and the preferred connection interval that the
+    // wrapper used to add via setMinPreferred/setMaxPreferred - it is what keeps iPhones from
+    // negotiating an interval that makes the link unusable.
+    ble_uuid128_t meshSvc = {};
+    meshSvc.u.type = BLE_UUID_TYPE_128;
+    memcpy(meshSvc.value, MESH_SERVICE_UUID_16, sizeof(meshSvc.value));
+
+    static const uint8_t slaveItvlRange[4] = {0x06, 0x00, 0x12, 0x00};
+
+    struct ble_hs_adv_fields fields = {};
+    fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
+    fields.uuids128 = &meshSvc;
+    fields.num_uuids128 = 1;
+    fields.uuids128_is_complete = 1;
+    fields.slave_itvl_range = slaveItvlRange;
+
+    struct os_mbuf *advData = os_msys_get_pkthdr(BLE_HS_ADV_MAX_SZ, 0);
+    if (!advData) {
+        LOG_ERROR("BLE ext adv: no mbuf for advertisement");
+        return;
+    }
+    rc = ble_hs_adv_set_fields_mbuf(&fields, advData);
+    if (rc != 0) {
+        os_mbuf_free_chain(advData);
+        LOG_ERROR("BLE ext adv set fields failed: rc=%d", rc);
+        return;
+    }
+    // Takes ownership on success, frees on failure - do not touch advData after this either way.
+    rc = ble_gap_ext_adv_set_data(PHONE_ADV_INSTANCE, advData);
+    if (rc != 0) {
+        LOG_ERROR("BLE ext adv set data failed: rc=%d", rc);
+        return;
+    }
+
+    // Scan response carries the name, exactly as the wrapper did - it does not fit alongside a
+    // 128-bit UUID in 31 bytes.
+    const char *name = getDeviceName();
+    struct ble_hs_adv_fields rspFields = {};
+    rspFields.name = (const uint8_t *)name;
+    rspFields.name_len = (uint8_t)strlen(name);
+    rspFields.name_is_complete = 1;
+
+    struct os_mbuf *rspData = os_msys_get_pkthdr(BLE_HS_ADV_MAX_SZ, 0);
+    if (rspData) {
+        if (ble_hs_adv_set_fields_mbuf(&rspFields, rspData) == 0) {
+            if (ble_gap_ext_adv_rsp_set_data(PHONE_ADV_INSTANCE, rspData) != 0)
+                LOG_WARN("BLE ext adv scan response rejected; node will advertise without a name");
+        } else {
+            os_mbuf_free_chain(rspData);
+        }
+    }
+
+    // duration 0, max_events 0: advertise until something stops us, as the legacy start(0) did.
+    rc = ble_gap_ext_adv_start(PHONE_ADV_INSTANCE, 0, 0);
+    if (rc != 0) {
+        LOG_ERROR("BLE ext adv start failed: rc=%d", rc);
+    } else {
+        LOG_INFO("BLE advertising started (extended API, legacy ADV_IND)");
+    }
+}
+
+#else
+
 void NimbleBluetooth::startAdvertising()
 {
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -819,6 +970,8 @@ void NimbleBluetooth::startAdvertising()
         LOG_DEBUG("BLE Advertising started");
     }
 }
+
+#endif // BLE_MESH_USE_EXT_ADV
 
 void NimbleBluetooth::shutdown()
 {
