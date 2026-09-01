@@ -650,7 +650,7 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7,
     /* Arrived via Unicast UDP */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8,
-    /* Arrived via a connectionless BLE extended advertisement */
+    /* Arrived via a connectionless BLE 5 extended advertisement */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV = 9
 } meshtastic_MeshPacket_TransportMechanism;
 
