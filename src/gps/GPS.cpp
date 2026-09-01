@@ -81,21 +81,6 @@ static struct uBloxGnssModelInfo {
 
 namespace
 {
-inline void resetTrackedSatelliteActivity(TinyGPSPlus &gps)
-{
-#if defined(TINYGPSPLUS_HAS_RESET_TRACKED_SATELLITE_ACTIVITY)
-    gps.resetTrackedSatelliteActivity();
-#elif defined(TINYGPSPLUS_HAS_RESET_SATELLITE_ACTIVITY)
-    gps.resetSatelliteActivity();
-#elif defined(TINYGPSPLUS_HAS_RESET)
-    gps.reset();
-#else
-    // Older TinyGPSPlus builds do not expose a tracked-satellite reset helper,
-    // so keep this compatibility shim as a no-op instead of calling a missing API.
-    (void)gps;
-#endif
-}
-
 // Versioned on-disk record for persisted GPS probe results.
 constexpr uint32_t GPS_PROBE_CACHE_MAGIC = 0x47504348UL; // "GPCH"
 constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
@@ -461,7 +446,9 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     uint32_t startTime = millis();
     const char frame_errors[] = "More than 100 frame errors";
     int sCounter = 0;
-    std::string debugmsg;
+#if GPS_DEBUG
+    std::string debugmsg = "";
+#endif
 
     for (int j = 2; j < 6; j++) {
         buf[8] += buf[j];
@@ -498,7 +485,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
             } else {
                 if (ack == 3 && b == 0x00) { // UBX-ACK-NAK message
                     LOG_DEBUG_GPS("%s", debugmsg.c_str());
-                    LOG_WARN("Got NAK for class %02X msg %02X", static_cast<int>(class_id), static_cast<int>(msg_id));
+                    LOG_WARN("Got NAK for class %02X msg %02X", class_id, msg_id);
                     return GNSS_RESPONSE_NAK; // NAK received
                 }
                 ack = 0; // Reset the acknowledgement counter
@@ -717,7 +704,6 @@ bool GPS::verifyCachedProbePresence()
         _serial_gps->write("$PCAS06,0*1B\r\n");
         present = (getACK("$GPTXT,01,01,02,SW=", 700) == GNSS_RESPONSE_OK);
         _serial_gps->write("$PCAS01,5*19\r\n");
-        _serial_gps->write("$PCAS01,5*19\r\n");
         break;
     case GNSS_MODEL_MTK_L76B:
         cachedProbeModelName = "L76B";
@@ -756,11 +742,6 @@ bool GPS::verifyCachedProbePresence()
         cachedProbeModelName = "CM121";
         _serial_gps->write("$PDTINFO\r\n");
         present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
-        break;
-    case GNSS_MODEL_LC760CA:
-        cachedProbeModelName = "LC760CA";
-        _serial_gps->write("$PDTINFO\r\n");
-        present = (getACK("CC1161W", 900) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_UBLOX6:
     case GNSS_MODEL_UBLOX7:
@@ -1135,7 +1116,7 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module config saved");
             }
-        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_CM121, GNSS_MODEL_LC760CA)) {
+        } else if (gnssModel == GNSS_MODEL_CM121) {
             // only ask for RMC and GGA
             // enable GGA
             _serial_gps->write("$CFGMSG,0,0,1,1*1B\r\n");
@@ -1301,8 +1282,8 @@ void GPS::setPowerPMU(bool on)
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
             // t-beam-s3-core GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
-        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA || HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
-            // t-watch-ultra / t-watch-s3-plus GNSS power channel
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+            // t-watch-s3-plus GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_BLDO1) : PMU->disablePowerOutput(XPOWERS_BLDO1);
         }
     } else if (model == XPOWERS_AXP192) {
@@ -1581,43 +1562,17 @@ int32_t GPS::runOnce()
             }
         }
 
-        bool tooLong = false;
-#if (defined(TTGO_T_ECHO_PLUS) || defined(TTGO_T_ECHO))
-        if (gnssModel == GNSS_MODEL_MTK) {
-            constexpr uint32_t noTrackedTimeoutMs = 30UL * 60UL * 1000UL;
-
-#if defined(TINYGPSPLUS_HAS_TRACKED_SATELLITES_LAST_UPDATE)
-            const uint32_t now = Time::getMillis();
-            const uint32_t lastTracked = reader.trackedSatellitesLastUpdate();
-            const uint32_t noTrackedForMs = lastTracked != 0 ? (now - lastTracked) : scheduling.elapsedSearchMs();
-
-            // A missing fix alone is no longer a reason to stop the L76K search.
-            // The timer is reset by every checksum-valid GSV sentence that
-            // contains at least one tracked satellite with C/N0/SNR.
-            tooLong = noTrackedForMs >= noTrackedTimeoutMs;
-#else
-            // Older TinyGPSPlus builds do not provide tracked-satellites timing.
-            // Fall back to the generic search timeout so the receiver still exits
-            // stale searches without requiring the missing API.
-            tooLong = scheduling.searchedTooLong();
-#endif
-        } else {
-            tooLong = scheduling.searchedTooLong();
-        }
-#else
-        tooLong = scheduling.searchedTooLong();
-#endif
-
+        bool tooLong = scheduling.searchedTooLong();
         if (tooLong && !gotLoc) {
-#if (defined(TTGO_T_ECHO_PLUS) || defined(TTGO_T_ECHO))
-            if (gnssModel == GNSS_MODEL_MTK)
-                LOG_WARN("L76K: no tracked satellites for 30 minutes; ending GPS search");
-            else
-#endif
-                LOG_WARN("Can't publish valid location: no GPS lock in time");
+            LOG_WARN("Can't publish valid location: no GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
+                // Losing a position fix must not erase independent receiver
+                // status. Keep the latest satellite count so GPSStatus/Base
+                // UI can still show satellites that are currently visible.
+                const uint32_t lastSatsInView = p.sats_in_view;
                 p = meshtastic_Position_init_default;
+                p.sats_in_view = lastSatsInView;
                 hasValidLocation = false;
                 shouldPublish = true;
                 LOG_DEBUG_GPS("hasValidLocation FALLING EDGE");
@@ -1679,28 +1634,6 @@ int GPS::prepareDeepSleep(void *unused)
 static const char *PROBE_MESSAGE = "Trying %s (%s)...";
 static const char *DETECTED_MESSAGE = "%s detected";
 
-namespace
-{
-
-// TinyGPSPlus exposes satellite statistics under different names across versions
-// (e.g. satellitesStats() vs. satellites). Guard access so older/newer library
-// builds compile regardless of which API is available.
-inline uint32_t getTrackedSatelliteCount(const TinyGPSPlus &gps)
-{
-#if defined(TINYGPSPLUS_HAS_SATELLITES_STATS)
-    return gps.satellitesStats();
-#elif defined(TINYGPSPLUS_HAS_TRACKED_SATELLITES)
-    return gps.trackedSatellites();
-#else
-    // Older TinyGPSPlus builds expose the tracked satellite count via a
-    // non-const member accessor, so remove the const qualifier before reading it.
-    // TinyGPSInteger::value() is non-const in older TinyGPSPlus releases.
-    return const_cast<TinyGPSInteger &>(gps.satellites).value();
-#endif
-}
-
-} // namespace
-
 #define PROBE_SIMPLE(CHIP, TOWRITE, RESPONSE, DRIVER, TIMEOUT, ...)                                                              \
     do {                                                                                                                         \
         LOG_DEBUG(PROBE_MESSAGE, TOWRITE, CHIP);                                                                                 \
@@ -1760,7 +1693,6 @@ GnssModel_t GPS::probe(int serialSpeed)
             {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
             {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
             {"UC6580", "UC6580", GNSS_MODEL_UC6580},
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580},
             // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
             /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
         GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
@@ -1785,12 +1717,10 @@ GnssModel_t GPS::probe(int serialSpeed)
         return GNSS_MODEL_UNKNOWN;
     }
     case 1: {
-        // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A, or CM121
-        std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580},
-                                         {"UM600", "UM600", GNSS_MODEL_UC6580},
-                                         {"CM121", "CM121", GNSS_MODEL_CM121},
-                                         {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121},
-                                         {"LC760CA", "CC1161W", GNSS_MODEL_LC760CA}};
+
+        // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
+        std::vector<ChipInfo> unicore = {
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
         PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
         currentDelay = 20;
         currentStep = 2;
@@ -2152,9 +2082,10 @@ bool GPS::lookForTime()
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
 
-        if (t.tm_mon > -1 && isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-            LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
-                      t.tm_min, t.tm_sec, ti.age());
+        if (t.tm_mon > -1 && isPlausibleNmeaTime(t) &&
+            perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d",
+                      d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, ti.age());
             return true;
         }
     }
@@ -2170,9 +2101,11 @@ bool GPS::lookForTime()
         t.tm_year = reader.zdaInfo.year - 1900;
         t.tm_isdst = false;
 
-        if (isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d", reader.zdaInfo.year, reader.zdaInfo.month,
-                      reader.zdaInfo.day, t.tm_hour, t.tm_min, t.tm_sec);
+        if (isPlausibleNmeaTime(t) &&
+            perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d",
+                      reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day,
+                      t.tm_hour, t.tm_min, t.tm_sec);
             return true;
         }
     }
@@ -2188,19 +2121,47 @@ bool GPS::lookForTime()
  */
 bool GPS::lookForLocation()
 {
-    // Some TinyGPSPlus builds expose fix quality via ggaFixQuality(). Older
-    // compatibility defines are not reliable across all library revisions, so
-    // avoid calling a missing ggaQuality() accessor entirely.
-#if defined(TINYGPSPLUS_HAS_GGA_FIX_QUALITY)
-    fixQual = reader.ggaFixQuality() ? reader.ggaFixQuality() : 0;
-#else
-    fixQual = 0;
-#endif
+    // GGA provides fix quality. The native TinyGPS++ GSA parser provides
+    // the 2D/3D fix type and multi-GNSS DOP values.
+    fixQual = reader.fixQuality();
+    const uint8_t parsedFixType = reader.gsaFixType();
 
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    fixType = reader.gsaFixType();
-    if (fixType == 0)
-        fixType = atoi(gsafixtype.value());
+    // Satellite visibility is status information, not proof of a valid
+    // position fix. Update it before any of the early returns below so the
+    // Base UI can show satellites while the receiver is still acquiring or
+    // while another validation check rejects the current position solution.
+    // Prefer the true GSV satellites-in-view count and fall back to GGA.
+    const uint16_t satsInView = reader.satellitesInView();
+    uint16_t reportedSats = 0;
+    bool haveSatelliteCount = false;
+
+    if (satsInView > 0) {
+        reportedSats = satsInView;
+        haveSatelliteCount = true;
+    } else if (reader.satellites.isValid()) {
+        reportedSats = reader.satellites.value();
+        haveSatelliteCount = true;
+    }
+
+    if (haveSatelliteCount && p.sats_in_view != reportedSats) {
+        p.sats_in_view = reportedSats;
+        // Publish the status change even if lookForLocation() returns false
+        // later. PositionModule ignores the position while hasValidLocation
+        // is false, but GPSStatus/Base UI still receives the satellite count.
+        shouldPublish = true;
+        LOG_DEBUG_GPS("Satellite status updated: view=%u", p.sats_in_view);
+    }
+
+#ifndef TINYGPS_OPTION_NO_STATISTICS
+    if (reader.failedChecksum() > lastChecksumFailCount) {
+// In a GPS_DEBUG build we want to log all of these. In production, we only care if there are many of them.
+#if !GPS_DEBUG
+        if (reader.failedChecksum() > 4)
+#endif
+            LOG_WARN("%u new GPS checksum failures, total %u", reader.failedChecksum() - lastChecksumFailCount,
+                     reader.failedChecksum());
+        lastChecksumFailCount = reader.failedChecksum();
+    }
 #endif
 
     // check if GPS has an acceptable lock
@@ -2208,27 +2169,19 @@ bool GPS::lookForLocation()
         return false;
 
 #if GPS_DEBUG
-    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-              gsafixtype.age(),
-#else
-              0,
-#endif
-              reader.date.age(), reader.time.age());
+    LOG_DEBUG("AGE: LOC=%d DATE=%d TIME=%d FIXTYPE=%u", reader.location.age(), reader.date.age(), reader.time.age(),
+              parsedFixType);
 #endif // GPS_DEBUG
 
     // Is this a new point or are we re-reading the previous one?
     if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
         return false;
 
-    // check if a complete GPS solution set is available for reading
-    //   tinyGPSDatum::age() also includes isValid() test
-    // FIXME
-    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-          (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
-#endif
-          (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
+    // Check that the position, time and date belong to a fresh solution.
+    // GSA freshness is no longer tied to the legacy TinyGPSCustom field;
+    // the native GSA parser is used directly.
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) && (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
+          (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
         LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
@@ -2248,22 +2201,17 @@ bool GPS::lookForLocation()
 
     p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
 
-    // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // Dilution of precision is reported in 10^2 units.
+    // Prefer the native GSA values and fall back to GGA HDOP when GSA
+    // has not produced a value yet.
     const uint16_t gsaHdop = reader.gsaHDOP();
     const uint16_t gsaPdop = reader.gsaPDOP();
     p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
-    p.PDOP = gsaPdop ? gsaPdop : reader.gsaPDOP();
-#else
-        // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
-        // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-        p.HDOP = reader.hdop.value();
-        p.PDOP = reader.gsaPDOP();
-#endif
+    p.PDOP = gsaPdop ? gsaPdop : static_cast<uint16_t>(1.41f * p.HDOP);
 
-    // Discard incomplete or erroneous readings
+    // Validate the HDOP value actually selected above.
     if (p.HDOP == 0) {
-        LOG_WARN("BOGUS HDOP REJECTED: no valid GSA/GGA HDOP");
+        LOG_WARN("BOGUS HDOP REJECTED: %u", p.HDOP);
         return false;
     }
 
@@ -2275,15 +2223,14 @@ bool GPS::lookForLocation()
     p.altitude = reader.altitude.meters();
 
     p.fix_quality = fixQual;
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    p.fix_type = fixType;
-#endif
+    p.fix_type = parsedFixType;
 
     LOG_DEBUG_GPS("GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
                   reader.gsaSatellitesUsedTotal(), reader.satellitesTracked(), reader.satellitesInView(),
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_GPS), reader.gsaSatellitesUsed(TINYGPS_GNSS_GLONASS),
-                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
-                  reader.gsaFixType(), reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
+                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU),
+                  reader.satellites.isValid() ? reader.satellites.value() : 0,
+                  parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 
     if (reader.hasValidGLL()) {
         LOG_DEBUG_GPS("GLL lat=%.7f lon=%.7f status=%c mode=%c", reader.gllLocation.lat(), reader.gllLocation.lng(),
@@ -2295,7 +2242,14 @@ bool GPS::lookForLocation()
     }
 
     if (reader.antInfo.valid) {
-        LOG_DEBUG_GPS("L76K antenna status=%u", reader.antInfo.status);
+        const char *antenna = "UNKNOWN";
+        if (reader.antInfo.status == TINYGPS_ANT_OK)
+            antenna = "OK";
+        else if (reader.antInfo.status == TINYGPS_ANT_OPEN)
+            antenna = "OPEN";
+        else if (reader.antInfo.status == TINYGPS_ANT_SHORT)
+            antenna = "SHORT";
+        LOG_DEBUG_GPS("L76K antenna=%s", antenna);
     }
 
     // positional timestamp
@@ -2308,14 +2262,6 @@ bool GPS::lookForLocation()
     t.tm_year = reader.date.year() - 1900;
     t.tm_isdst = false;
     p.timestamp = gm_mktime(&t);
-
-    // Nice to have, if available
-    // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
-    const uint16_t satsInView = reader.satellitesInView();
-    if (satsInView > 0)
-        p.sats_in_view = satsInView;
-    else if (reader.satellites.isUpdated())
-        p.sats_in_view = reader.satellites.value();
 
     if (reader.course.isUpdated() && reader.course.isValid()) {
         if (reader.course.value() < 36000) { // sanity check
@@ -2335,13 +2281,13 @@ bool GPS::lookForLocation()
 
 bool GPS::hasLock()
 {
+    // GGA fix quality must indicate a valid solution.
     if (fixQual >= 1 && fixQual <= 5) {
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-        // Use fix type 2D/3D (better) if available
-        if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
-          
-#endif
-        return true;
+        // Native GSA fix type: 1=no fix, 2=2D, 3=3D.
+        // Zero means no GSA fix type has been received yet, so trust GGA.
+        const uint8_t parsedFixType = reader.gsaFixType();
+        if (parsedFixType == 3 || parsedFixType == 2 || parsedFixType == 0)
+            return true;
     }
 
     return false;
@@ -2388,7 +2334,6 @@ bool GPS::whileActive()
 #endif
     return isValid;
 }
-
 void GPS::enable()
 {
     // Clear the old scheduling info (reset the lock-time prediction)
