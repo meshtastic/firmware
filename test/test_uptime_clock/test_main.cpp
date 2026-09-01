@@ -93,7 +93,7 @@ void test_safeMillis_dodges_the_wrap_tick()
 void test_safeMillis_matches_getMillis_off_the_wrap_tick()
 {
     Time::setTestMillis(123456);
-    TEST_ASSERT_EQUAL_UINT32(Time::getMillis(), Time::safeMillis());
+    TEST_ASSERT_EQUAL_UINT32(123456u, Time::safeMillis());
 }
 
 void test_timerEndsAtMillis_is_an_ordinary_sum_away_from_the_wrap()
