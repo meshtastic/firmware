@@ -1388,8 +1388,11 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
 #elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_HUB75;
-#elif defined(USE_TFTDISPLAY) || defined(HAS_SPI_TFT) || defined(USE_ST7789) || defined(USE_ST7796) ||                           \
-    defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER)
+// USE_TFTDISPLAY is value-tested, not defined()-tested: configuration.h
+// defaults it to 0, so it is always defined and every screen build would
+// otherwise report itself as a TFT.
+#elif USE_TFTDISPLAY || defined(HAS_SPI_TFT) || defined(USE_ST7789) || defined(USE_ST7796) || defined(ILI9341_DRIVER) ||         \
+    defined(ILI9342_DRIVER)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
 #elif defined(USE_ST7567)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_LCD;
