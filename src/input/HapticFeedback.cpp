@@ -54,7 +54,7 @@ void HapticFeedback::cancelDelayedPulse()
 
 void HapticFeedback::scheduleNext()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     uint32_t next = 0;
     if (pulseOffAt != 0)
         next = pulseOffAt;
@@ -68,7 +68,7 @@ void HapticFeedback::scheduleNext()
 
 int32_t HapticFeedback::runOnce()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     if (pulseOffAt != 0 && (int32_t)(now - pulseOffAt) >= 0) {
         motorWrite(false);

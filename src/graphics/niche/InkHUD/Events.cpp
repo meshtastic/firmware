@@ -366,7 +366,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
     // A long-press used to open the menu can be followed by a synthetic/queued tap at release.
     // Ignore that brief follow-up window so touch-opened menus do not auto-select an item.
     if (touchEnabledBuild && !longPress && suppressTouchTapUntilMs != 0) {
-        if ((int32_t)(millis() - suppressTouchTapUntilMs) < 0) {
+        if ((int32_t)(Time::getMillis() - suppressTouchTapUntilMs) < 0) {
             noteInkHUDUserInteraction();
             return;
         }

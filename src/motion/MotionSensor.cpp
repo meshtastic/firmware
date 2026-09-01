@@ -289,7 +289,7 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     const bool compactLayout = (height <= 80);
     const int16_t margin = 4;
 
-    const uint32_t now = millis();
+    const uint32_t now = Time::getMillis();
     const uint32_t endCalibrationAt = screen->getEndCalibration();
     uint32_t timeRemaining = 0;
     // Signed delta, as in finishCalibrationIfExpired(): this needs the remaining magnitude, not
