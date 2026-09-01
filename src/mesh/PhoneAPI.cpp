@@ -22,6 +22,7 @@
 #include "Router.h"
 #include "SPILock.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
@@ -2080,7 +2081,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         revokeAllAuth();
         queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "", 0, 0, 0);
         zeroPassphrase();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         return true;
     }
 

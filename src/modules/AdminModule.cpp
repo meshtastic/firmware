@@ -8,6 +8,7 @@
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
@@ -427,13 +428,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
-        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        rebootAtMsec = (s < 0) ? 0 : Time::timerEndsAtMillis(s * 1000);
         break;
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
         LOG_INFO("Shutdown in %d seconds", s);
-        shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        shutdownAtMsec = (s < 0) ? 0 : Time::timerEndsAtMillis(s * 1000);
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
@@ -1873,7 +1874,7 @@ void AdminModule::reboot(int32_t seconds)
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
         screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    rebootAtMsec = (seconds < 0) ? 0 : Time::timerEndsAtMillis(seconds * 1000);
 }
 
 // Without this, a commit that never arrives leaves the transaction open forever and every later

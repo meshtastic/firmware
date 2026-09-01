@@ -9,6 +9,7 @@
 #include "MessageStore.h"
 #include "Power.h"
 #include "Router.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "gps/RTC.h"
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
@@ -349,7 +350,7 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
     service->reloadConfig(changes);
 
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
 }
 
 static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
@@ -366,7 +367,7 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
 }
 
 static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
@@ -383,7 +384,7 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
 }
 
 static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
@@ -393,7 +394,7 @@ static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = f
 
     if (reboot) {
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
     }
 }
 
@@ -572,7 +573,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
-        shutdownAtMsec = millis();
+        shutdownAtMsec = Time::safeMillis();
         // Menu is then sent to background via onShutdown
         break;
 
@@ -675,7 +676,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         config.bluetooth.enabled = true;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + 2000;
+        rebootAtMsec = Time::timerEndsAtMillis(2000);
         break;
 
         // Power / Network (ESP32-only)
@@ -684,7 +685,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         config.power.is_power_saving = !config.power.is_power_saving;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case TOGGLE_WIFI:
@@ -697,7 +698,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 #endif
     // ADC Calibration
@@ -775,7 +776,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case TOGGLE_BLUETOOTH_PAIR_MODE:
@@ -1123,13 +1124,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case RESET_NODEDB_ALL:
         InkHUD::getInstance()->notifyApplyingChanges();
         nodeDB->resetNodes();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case RESET_NODEDB_KEEP_FAVORITES:
         InkHUD::getInstance()->notifyApplyingChanges();
         nodeDB->resetNodes(1);
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case WIPE_MESSAGES_ALL:

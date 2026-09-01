@@ -2,6 +2,7 @@
 
 #if defined(ARCH_PORTDUINO) && defined(_WIN32)
 
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "main.h"
 
@@ -65,7 +66,7 @@ static DWORD WINAPI controlHandler(DWORD control, DWORD, LPVOID, LPVOID)
         reportStatus(SERVICE_STOP_PENDING, PENDING_WAIT_HINT_MS);
         // Teardown belongs on the main thread: powerCommandsCheck() saves and exits, and the
         // atexit hook reports SERVICE_STOPPED on the way out.
-        shutdownAtMsec = millis();
+        shutdownAtMsec = Time::safeMillis();
         return NO_ERROR;
     case SERVICE_CONTROL_INTERROGATE:
         return NO_ERROR;

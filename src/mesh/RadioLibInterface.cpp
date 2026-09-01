@@ -109,7 +109,7 @@ bool RadioLibInterface::canSendImmediately()
             LOG_ERROR("Hardware Failure! busyTx >60s");
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
             // reboot in 5 seconds when this condition occurs.
-            rebootAtMsec = lastTxStart + 65000;
+            rebootAtMsec = Time::skipZero(lastTxStart + 65000);
         }
         if (busyRx) {
             LOG_WARN("Can not send yet, busyRx");
@@ -761,7 +761,7 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
         // Attempts are a throttle window apart, so this is minutes of a provably deaf chip. begin() alone
         // clearly isn't reviving it; reboot to re-run init(), which redoes the power-on sequence it skips.
         LOG_ERROR("Radio still deaf after %u re-inits, rebooting", chipRecoveryFailures);
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
     }
     chipRecoveryFailures++;
 
