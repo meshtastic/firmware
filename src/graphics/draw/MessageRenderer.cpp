@@ -1132,7 +1132,8 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 {
     if (packet.from != 0) {
         hasUnreadMessage = true;
-        const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
+        const bool suppressBanner =
+            (cannedMessageModule && cannedMessageModule->isFreeTextActive()) || (screen && screen->isTextMessageFrameShown());
         // Don't let the pop-up clobber a menu/picker the user is interacting with; the wake below
         // still happens so a message can light the screen back up.
         const bool menuShowing = NotificationRenderer::isMenuShowing();
