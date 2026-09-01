@@ -3,6 +3,7 @@
 #include "MessageRenderer.h"
 
 // Core includes
+#include "Channels.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
@@ -1138,13 +1139,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         // still happens so a message can light the screen back up.
         const bool menuShowing = NotificationRenderer::isMenuShowing();
 
-        // Determine if message belongs to a muted channel
-        bool isChannelMuted = false;
-        if (sm.type == MessageType::BROADCAST) {
-            const meshtastic_Channel channel = channels.getByIndex(packet.channel ? packet.channel : channels.getPrimaryIndex());
-            if (channel.settings.has_module_settings && channel.settings.module_settings.is_muted)
-                isChannelMuted = true;
-        }
+        const bool isMuted = isMutedForPacket(packet);
 
         // Banner logic
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
@@ -1186,8 +1181,8 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             else
                 strcpy(banner, "Alert Received");
         } else {
-            // Skip muted channels unless it's an alert
-            if (isChannelMuted)
+            // Skip muted channels/senders unless it's an alert
+            if (isMuted)
                 return;
 
             if (truncatedLongName[0]) {
