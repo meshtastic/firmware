@@ -11,6 +11,10 @@
 #include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include "sleep.h"
+#ifdef ARCH_ESP32
+#include <Preferences.h>
+#include <nvs.h>
+#endif
 #include <BLE2904.h>
 #include <BLEAdvertising.h>
 #include <BLEDevice.h>
@@ -901,8 +905,50 @@ int NimbleBluetooth::getRssi()
     return 0;
 }
 
+#ifdef ARCH_ESP32
+// From thebentern's ble-mesh-working branch, which carried it for units whose stored bond blobs
+// crash NimBLE during populate_db_from_nvs. Reinstated here because the spike saw NimBLE fail to
+// become active at all on some boots after flipping between builds with different BLE configs -
+// the same symptom, and the bond store is the state those builds share.
+static void clearCorruptBondStoreOnce()
+{
+#ifdef BLE_MESH_CLEAR_BONDS_ALWAYS
+    const bool force = true;
+#else
+    const bool force = false;
+#endif
+    Preferences prefs;
+    if (!prefs.begin("meshtastic", false))
+        return;
+
+    if (!force && prefs.getBool("nimbleBondClr", false)) {
+        prefs.end();
+        return;
+    }
+
+    nvs_handle_t nimbleHandle;
+    esp_err_t err = nvs_open("nimble_bond", NVS_READWRITE, &nimbleHandle);
+    if (err == ESP_OK) {
+        err = nvs_erase_all(nimbleHandle);
+        if (err == ESP_OK)
+            err = nvs_commit(nimbleHandle);
+        nvs_close(nimbleHandle);
+        if (err == ESP_OK)
+            LOG_WARN("Cleared NimBLE bond database from NVS (one-time recovery)");
+        else
+            LOG_WARN("Failed clearing NimBLE bond database, err=%d", err);
+    }
+
+    prefs.putBool("nimbleBondClr", true);
+    prefs.end();
+}
+#endif
+
 void NimbleBluetooth::setup()
 {
+#ifdef ARCH_ESP32
+    clearCorruptBondStoreOnce();
+#endif
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
 

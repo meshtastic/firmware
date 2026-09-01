@@ -180,6 +180,13 @@ void ESP32BLEMesh::startScanning()
     if (!platformReady())
         return;
 
+#ifdef BLE_MESH_TX_ONLY
+    // Broadcast-only node: never scan. Also the isolation switch for the ESP32 fault - if the
+    // build is stable with this set and boot-loops without it, the fault is in the scan start.
+    LOG_INFO("BLE mesh: TX-only build, not scanning");
+    return;
+#endif
+
 #if MYNEWT_VAL(BLE_EXT_ADV)
     struct ble_gap_ext_disc_params uncodedParams = {};
     uncodedParams.itvl = BLE_MESH_SCAN_INTERVAL;
