@@ -40,7 +40,7 @@ void ScreenMirror::freeSnapshotLocked()
     }
     paletteSig = 0;
     paletteCount = 0;
-#if HAS_TFT
+#if HAS_MUI_MIRROR
     if (muiPool) {
         memaudit::add("display", -(int32_t)MUI_POOL_BYTES);
         free(muiPool);
@@ -64,14 +64,13 @@ void ScreenMirror::setMirror(bool enabled)
         // Force an immediate frame so the client doesn't wait for the next
         // on-screen change.
         oneShot = true;
-#if HAS_TFT
+#if HAS_MUI_MIRROR
         if (muiRefresh)
             muiRefresh(); // MUI delivers "a frame" as a full-repaint rect burst
 #endif
     } else {
         oneShot = false;
-        freeSnapshotLocked();
-        muiOwner = nullptr;
+        freeSnapshotLocked(); // also releases the MUI pool and rect ownership
     }
     if (changed)
         LOG_INFO("Screen mirror %s", enabled ? "enabled" : "disabled");
@@ -81,7 +80,7 @@ void ScreenMirror::requestFrame()
 {
     concurrency::LockGuard g(&lock);
     oneShot = true;
-#if HAS_TFT
+#if HAS_MUI_MIRROR
     if (muiRefresh)
         muiRefresh();
 #endif
@@ -212,7 +211,7 @@ bool ScreenMirror::copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientR
     return true;
 }
 
-#if HAS_TFT
+#if HAS_MUI_MIRROR
 void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels)
 {
     uint32_t readyId = 0;
@@ -309,7 +308,7 @@ bool ScreenMirror::copyMuiChunkLocked(meshtastic_DisplayFrame &out)
 bool ScreenMirror::hasChunkFor(const void *client, uint32_t clientFrameId, uint16_t clientOffset)
 {
     concurrency::LockGuard g(&lock);
-#if HAS_TFT
+#if HAS_MUI_MIRROR
     // One shared rect cursor means one consumer; another connection simply
     // sees no rects rather than stealing half of each frame.
     if (muiCount && (muiOwner == nullptr || muiOwner == client))
@@ -321,7 +320,7 @@ bool ScreenMirror::hasChunkFor(const void *client, uint32_t clientFrameId, uint1
 bool ScreenMirror::copyChunk(const void *client, uint32_t &clientFrameId, uint16_t &clientOffset, meshtastic_DisplayFrame &out)
 {
     concurrency::LockGuard g(&lock);
-#if HAS_TFT
+#if HAS_MUI_MIRROR
     // MUI rects drain ahead of (and on MUI builds, instead of) mono snapshots.
     // Spike scope: the rect queue has a single consumer, not per-client cursors.
     if (muiCount) {
