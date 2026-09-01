@@ -2099,12 +2099,12 @@ bool GPS::lookForTime()
         if (t.tm_mon > -1 && isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
             LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
                       t.tm_min, t.tm_sec, ti.age());
-            if (t.tm_mon > -1 && isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-                LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
-                          t.tm_min, t.tm_sec, ti.age());
-                return true;
-            }
+        if (t.tm_mon > -1 && isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
+                      t.tm_min, t.tm_sec, ti.age());
+            return true;
         }
+    }
 
         // L76K fallback: ZDA provides an independent full UTC date/time.
         if (reader.hasValidZDA() && reader.zdaTime.isValid()) {
@@ -2117,106 +2117,32 @@ bool GPS::lookForTime()
             t.tm_year = reader.zdaInfo.year - 1900;
             t.tm_isdst = false;
 
-            if (isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-                LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d", reader.zdaInfo.year, reader.zdaInfo.month,
-                          reader.zdaInfo.day, t.tm_hour, t.tm_min, t.tm_sec);
-                if (isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-                    LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d", reader.zdaInfo.year, reader.zdaInfo.month,
-                              reader.zdaInfo.day, t.tm_hour, t.tm_min, t.tm_sec);
-                    return true;
-                }
-            }
+        if (isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d", reader.zdaInfo.year, reader.zdaInfo.month,
+                      reader.zdaInfo.day, t.tm_hour, t.tm_min, t.tm_sec);
+        if (isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d", reader.zdaInfo.year, reader.zdaInfo.month,
+                      reader.zdaInfo.day, t.tm_hour, t.tm_min, t.tm_sec);
+            return true;
+        }
+    }
 
             return false;
         }
 
-        /**
-         * Perform any processing that should be done only while the GPS is awake and looking for a fix.
-         * Override this method to check for new locations
-         *
-         * @return true if we've acquired a new location
-         */
-        bool GPS::lookForLocation()
-        {
+/**
+ * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+ * Override this method to check for new locations
+ *
+ * @return true if we've acquired a new location
+ */
+bool GPS::lookForLocation()
+{
 <<<<<<< HEAD
-            // By default, TinyGPS++ does not parse GPGSA lines, which give us
-            //   the 2D/3D fixType (see NMEAGPS.h)
-            // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
-            fixQual = reader.fixQuality();
-=======
-            // TinyGPS++ already parses the GGA fix-quality field into fixQ.
-            // Use the public getter directly instead of regenerating/parsing a GGA string.
-            fixQual = reader.fixQuality();
-
-            const uint8_t parsedFixType = reader.gsaFixType();
-
-            // Satellite visibility is status information, not proof of a valid
-            // position fix. Update it before any of the early returns below so the
-            // Base UI can show satellites while the receiver is still acquiring or
-            // while another validation check rejects the current position solution.
-            // Prefer the true GSV satellites-in-view count and fall back to GGA.
-            const uint16_t satsInView = reader.satellitesInView();
-            uint16_t reportedSats = 0;
-            bool haveSatelliteCount = false;
-
-            if (satsInView > 0) {
-                reportedSats = satsInView;
-                haveSatelliteCount = true;
-            } else if (reader.satellites.isValid()) {
-                reportedSats = reader.satellites.value();
-                haveSatelliteCount = true;
-            }
-
-            // Keep the 15 s anti-flicker grace period, but count only time during
-            // which the GPS thread is actively sampling. Crucially, a GPS sleep gap
-            // contributes zero time but does NOT erase already accumulated missing
-            // active time. This lets several short wake windows eventually invalidate
-            // an old positive p.sats_in_view while still excluding sleep time.
-            constexpr uint32_t SATELLITE_DATA_TIMEOUT_MS = 15000;
-            constexpr uint32_t SATELLITE_ACTIVE_POLL_MAX_GAP_MS = 2000;
-
-            static uint32_t lastSatellitePollMs = 0;
-            static uint32_t satelliteMissingActiveMs = 0;
-            static bool hadSatelliteData = false;
-
-            const uint32_t satelliteNowMs = Time::getMillis();
-            uint32_t activePollDeltaMs = 0;
-
-            if (lastSatellitePollMs != 0) {
-                const uint32_t pollDeltaMs = (uint32_t)(satelliteNowMs - lastSatellitePollMs);
-                if (pollDeltaMs <= SATELLITE_ACTIVE_POLL_MAX_GAP_MS)
-                    activePollDeltaMs = pollDeltaMs;
-            }
-            lastSatellitePollMs = satelliteNowMs;
-
-            if (havePositiveSatelliteCount) {
-                hadSatelliteData = true;
-                satelliteMissingActiveMs = 0;
-
-                if (p.sats_in_view != reportedSats) {
-                    p.sats_in_view = reportedSats;
-                    statusOnlyDirty = true;
-                    LOG_DEBUG_GPS("Satellite status updated: GSV=%u(age=%u) GGA=%u(age=%u) shown=%u", satsInView, gsvAge, ggaSats,
-                                  ggaSatsAge, p.sats_in_view);
-                }
-            } else if (hadSatelliteData) {
-                if (satelliteMissingActiveMs < SATELLITE_DATA_TIMEOUT_MS) {
-                    satelliteMissingActiveMs += activePollDeltaMs;
-                    if (satelliteMissingActiveMs > SATELLITE_DATA_TIMEOUT_MS)
-                        satelliteMissingActiveMs = SATELLITE_DATA_TIMEOUT_MS;
-                }
-
-                if (satelliteMissingActiveMs >= SATELLITE_DATA_TIMEOUT_MS) {
-                    if (p.sats_in_view != 0) {
-                        p.sats_in_view = 0;
-                        statusOnlyDirty = true;
-                        LOG_DEBUG_GPS("No fresh satellites for %ums active sampling: status now 0 (GSV age=%u GGA age=%u)",
-                                      SATELLITE_DATA_TIMEOUT_MS, gsvAge, ggaSatsAge);
-                    }
-                    hadSatelliteData = false;
-                    satelliteMissingActiveMs = 0;
-                }
-            }
+    // By default, TinyGPS++ does not parse GPGSA lines, which give us
+    //   the 2D/3D fixType (see NMEAGPS.h)
+    // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
+    fixQual = reader.fixQuality();
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
             if (reader.failedChecksumCount > lastChecksumFailCount) {
@@ -2236,9 +2162,62 @@ bool GPS::lookForTime()
                 fixType = atoi(gsafixtype.value());
 #endif
 
-            // check if GPS has an acceptable lock
-            if (!hasLock())
-                return false;
+    =======
+        // GGA provides fix quality, but this TinyGPS++ build does not expose the
+        // parsed fix-quality value directly. Generate the canonical GGA sentence and
+        // parse the fix-quality field from it instead.
+        fixQual = 0;
+    char ggaSentence[128];
+    const int ggaLen = reader.GGA(ggaSentence);
+    (void)ggaLen;
+
+    char *field = strchr(ggaSentence, ',');
+    if (field) {
+        field = strchr(field + 1, ',');
+        for (int i = 0; i < 5 && field; ++i) {
+            field = strchr(field + 1, ',');
+        }
+        if (field) {
+            char *start = field + 1;
+            char *end = strchr(start, ',');
+            if (end)
+                *end = '\0';
+            fixQual = static_cast<uint8_t>(atoi(start));
+        }
+    }
+
+    const uint8_t parsedFixType = reader.gsaFixType();
+
+    // Satellite visibility is status information, not proof of a valid
+    // position fix. Update it before any of the early returns below so the
+    // Base UI can show satellites while the receiver is still acquiring or
+    // while another validation check rejects the current position solution.
+    // Prefer the true GSV satellites-in-view count and fall back to GGA.
+    const uint16_t satsInView = reader.satellitesInView();
+    uint16_t reportedSats = 0;
+    bool haveSatelliteCount = false;
+
+    if (satsInView > 0) {
+        reportedSats = satsInView;
+        haveSatelliteCount = true;
+    } else if (reader.satellites.isValid()) {
+        reportedSats = reader.satellites.value();
+        haveSatelliteCount = true;
+    }
+
+    if (haveSatelliteCount && p.sats_in_view != reportedSats) {
+        p.sats_in_view = reportedSats;
+        // Publish the status change even if lookForLocation() returns false
+        // later. PositionModule ignores the position while hasValidLocation
+        // is false, but GPSStatus/Base UI still receives the satellite count.
+        shouldPublish = true;
+        LOG_DEBUG_GPS("Satellite status updated: view=%u", p.sats_in_view);
+    }
+
+>>>>>>> 0a7ef0972 (t-echo-plus)
+    // check if GPS has an acceptable lock
+    if (!hasLock())
+        return false;
 
 #if GPS_DEBUG
             LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
@@ -2256,6 +2235,10 @@ bool GPS::lookForTime()
 #endif
                       reader.date.age(), reader.time.age());
 #endif // GPS_DEBUG
+
+    // TinyGPSPlus exposes checksum failures via the public API, not a direct
+    // member access from this translation unit. Avoid invalid access to a
+    // private member and skip the legacy bad-checksum branch entirely.
 
             // Is this a new point or are we re-reading the previous one?
             if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
@@ -2344,22 +2327,25 @@ bool GPS::lookForTime()
                     p.fix_type = fixType;
 #endif
 
-                    LOG_DEBUG_GPS(
-                        "GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
-                        reader.gsaSatellitesUsedTotal(), reader.satellitesTracked(), reader.satellitesInView(),
-                        reader.gsaSatellitesUsed(TINYGPS_GNSS_GPS), reader.gsaSatellitesUsed(TINYGPS_GNSS_GLONASS),
-                        reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU),
-                        reader.satellites.isValid() ? reader.satellites.value() : 0, parsedFixType, reader.gsaPDOP(),
-                        reader.gsaHDOP(), reader.gsaVDOP());
+    LOG_DEBUG_GPS("GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
+                  reader.gsaSatellitesUsedTotal(), reader.satellitesTracked(), reader.satellitesInView(),
+                  reader.gsaSatellitesUsed(TINYGPS_GNSS_GPS), reader.gsaSatellitesUsed(TINYGPS_GNSS_GLONASS),
+<<<<<<< HEAD
+                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
+                  reader.gsaFixType(), reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
+=======
+                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
+                  parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
+>>>>>>> 0a7ef0972 (t-echo-plus)
 
-                    if (reader.hasValidGLL()) {
-                        LOG_DEBUG_GPS("GLL lat=%.7f lon=%.7f status=%c mode=%c", reader.gllLocation.lat(),
-                                      reader.gllLocation.lng(), reader.gllInfo.status, reader.gllInfo.mode);
-                    }
+    if (reader.hasValidGLL()) {
+        LOG_DEBUG_GPS("GLL lat=%.7f lon=%.7f status=%c mode=%c", reader.gllLocation.lat(), reader.gllLocation.lng(),
+                      reader.gllInfo.status, reader.gllInfo.mode);
+    }
 
-                    if (reader.hasValidZDA()) {
-                        LOG_DEBUG_GPS("ZDA date=%04u-%02u-%02u", reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day);
-                    }
+    if (reader.hasValidZDA()) {
+        LOG_DEBUG_GPS("ZDA date=%04u-%02u-%02u", reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day);
+    }
 
                     if (reader.antInfo.valid) {
                         const char *antenna = "UNKNOWN";
@@ -2421,8 +2407,8 @@ bool GPS::lookForTime()
                     // Using GPGGA fix quality indicator
                     if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-                        // Use GPGSA fix type 2D/3D (better) if available
-                        if (fixType == 3 || fixtype == 2 || fixType == 0) // zero means "no data received"
+        // Use GPGSA fix type 2D/3D (better) if available
+        if (fixType == 3 || fixtype == 2 || fixType == 0) // zero means "no data received"
 #endif
                             return true;
                     }
