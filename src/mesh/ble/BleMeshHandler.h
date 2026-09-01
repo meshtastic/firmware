@@ -17,17 +17,22 @@
 #define BLE_MESH_PROTO_VERSION 1
 #define BLE_MESH_AD_OVERHEAD 5 // len + type + 2-byte company id + version
 
-// One AUX_ADV_IND carries 254 bytes of AD data. Chaining past that is possible (ESP32 allows up to
-// 1650) but the receive side pays for it: ble_gap_ext_disc_desc.length_data is a uint8_t, so a
-// chained advertisement arrives as several reports flagged INCOMPLETE and has to be reassembled per
-// advertiser. Not worth it here - deliberately capped at one PDU, and frames that do not fit are
-// dropped loudly rather than silently truncated.
+// A single unfragmented advertising payload is capped at BLE_HCI_MAX_EXT_ADV_DATA_LEN (251), not
+// the 254 an AUX_ADV_IND could theoretically hold: the HCI LE Set Extended Advertising Data command
+// spends four of its 255 parameter bytes on handle, operation, fragment preference and length. The
+// static_assert in the .cpp pins this to NimBLE's own constant so it cannot drift.
 //
-// That cap costs the top of the payload range: a 254-byte budget minus 5 bytes of AD wrapper minus
-// the 16-byte PacketHeader leaves 233 bytes of ciphertext, against a DATA_PAYLOAD_LEN of 237. So
-// the largest ~4 bytes' worth of packets cannot ride BLE. They still go out over LoRa - this
-// transport is an additional copy path, never the only one.
-#define BLE_MESH_SINGLE_PDU_BUDGET 254
+// Chaining past one PDU is possible (ESP32 allows up to 1650) but the receive side pays for it:
+// ble_gap_ext_disc_desc.length_data is a uint8_t, so a chained advertisement arrives as several
+// reports flagged INCOMPLETE and has to be reassembled per advertiser. Not worth it here -
+// deliberately capped at one PDU, and frames that do not fit are dropped loudly rather than
+// silently truncated.
+//
+// That cap costs the top of the payload range: 251 minus 5 bytes of AD wrapper minus the 16-byte
+// PacketHeader leaves 230 bytes of ciphertext, against a DATA_PAYLOAD_LEN of 237. So the largest
+// handful of packets cannot ride BLE. They still go out over LoRa - this transport is an additional
+// copy path, never the only one.
+#define BLE_MESH_SINGLE_PDU_BUDGET 251
 #define BLE_MESH_MAX_ADV_DATA BLE_MESH_SINGLE_PDU_BUDGET
 #define BLE_MESH_MAX_FRAME_LEN (BLE_MESH_SINGLE_PDU_BUDGET - BLE_MESH_AD_OVERHEAD)
 
@@ -44,16 +49,16 @@
  * ingress hands decoded frames to Router::enqueueReceivedMessage, egress is a copy taken in
  * Router::send. It is never the only path to the mesh - Router::send still asserts a LoRa iface.
  *
- * Connectionless, not GATT, on purpose. FloodingRouter suppresses a rebroadcast when it overhears
- * another node relaying the same packet; that cancellation only works on a medium where every
- * neighbour hears every transmission. GATT is point-to-point, so a connection-oriented BLE
- * transport would defeat flood suppression and fan out one copy per peer. Advertisements restore
- * the overhear property LoRa has.
+ * Connectionless, not GATT, on purpose. GATT is point-to-point: reaching N peers costs N writes and
+ * no peer overhears another, where one advertisement reaches every neighbour at once - the same
+ * one-to-many shape LoRa has. Note this does not yet buy dupe suppression: FloodingRouter's
+ * perhapsCancelDupe is gated on TRANSPORT_LORA and Router::cancelSending reaches only iface's TX
+ * queue, not the ring below. Advertising keeps that possible later; it is not active today.
  *
  * Frames go out in LoRa wire format (PacketHeader + ciphertext), not as an encoded MeshPacket the
- * way UDP does it. Two reasons: it is ~40% smaller, which matters against a 254-byte advertising
- * budget where UDP has a 1500-byte MTU; and a BLE-heard frame is then byte-identical to a
- * LoRa-heard one, so a future BLE<->LoRa bridge is a memcpy rather than a translation.
+ * way UDP does it. Two reasons: it is smaller, which matters against a 251-byte advertising budget
+ * where UDP has a 1500-byte MTU; and a BLE-heard frame is then byte-identical to a LoRa-heard one,
+ * so a future BLE<->LoRa bridge is a memcpy rather than a translation.
  */
 class BleMeshHandler : private concurrency::OSThread
 {

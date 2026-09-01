@@ -12,6 +12,9 @@
 #include "nimble/hci_common.h" // BLE_HCI_ADV_DATA_STATUS_COMPLETE
 #include "os/os_mbuf.h"
 
+static_assert(BLE_MESH_SINGLE_PDU_BUDGET == BLE_HCI_MAX_EXT_ADV_DATA_LEN,
+              "single-PDU budget must track NimBLE's unfragmented ext-adv data limit");
+
 BleMeshHandler *bleMeshHandler = nullptr;
 
 /// NimBLE hands us both advertising-instance completions and scan reports through the same
