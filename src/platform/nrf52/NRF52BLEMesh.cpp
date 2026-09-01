@@ -37,20 +37,23 @@ void NRF52BLEMesh::start()
     instance = this;
     memset(peers, 0, sizeof(peers));
     peerCount = 0;
-    bluetoothReady = false;
     isRunning = true;
     LOG_INFO("BLE mesh started (waiting for Bluetooth ready)");
 }
 
+bool NRF52BLEMesh::platformReady()
+{
+    return nrf52BluetoothReady;
+}
+
 void NRF52BLEMesh::onBluetoothReady()
 {
-    if (!isRunning || bluetoothReady)
+    if (!isRunning)
         return;
 
-    bluetoothReady = true;
     Bluefruit.setEventCallback(onBleEvent);
     startScanning();
-    LOG_DEBUG("BLE mesh Bluetooth ready");
+    LOG_INFO("BLE mesh Bluetooth ready, scanning");
 }
 
 void NRF52BLEMesh::stop()
@@ -158,7 +161,7 @@ void NRF52BLEMesh::platformEndAdvertising()
 
 void NRF52BLEMesh::startScanning()
 {
-    if (!bluetoothReady)
+    if (!nrf52BluetoothReady)
         return;
 
     bleMeshScanReportData.len = sizeof(bleMeshScanBuffer);

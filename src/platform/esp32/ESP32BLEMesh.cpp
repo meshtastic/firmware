@@ -5,8 +5,10 @@
 #include "ESP32BLEMesh.h"
 #include "main.h"
 #include "mesh/Router.h"
+#include "nimble/NimbleBluetooth.h"
 
 #include "host/ble_gap.h"
+#include "host/ble_hs.h"
 #include "host/ble_hs_adv.h"
 #include "nimble/hci_common.h"
 
@@ -24,19 +26,28 @@ void ESP32BLEMesh::start()
 
     memset(peers, 0, sizeof(peers));
     peerCount = 0;
-    bluetoothReady = false;
     isRunning = true;
     LOG_INFO("BLE mesh started (waiting for Bluetooth ready)");
 }
 
+bool ESP32BLEMesh::platformReady()
+{
+    // Poll rather than wait for a callback, so this does not depend on whether NimbleBluetooth or
+    // this handler was constructed first.
+    //
+    // isActive(), not ble_hs_synced(): the host syncs well before NimbleBluetooth::setup() has
+    // registered its service and started advertising, and starting a scan in that window races the
+    // stack's own GAP configuration. Wait for the PhoneAPI side to be fully up.
+    return nimbleBluetooth && nimbleBluetooth->isActive();
+}
+
 void ESP32BLEMesh::onBluetoothReady()
 {
-    if (!isRunning || bluetoothReady)
+    if (!isRunning)
         return;
 
-    bluetoothReady = true;
     startScanning();
-    LOG_DEBUG("BLE mesh Bluetooth ready");
+    LOG_INFO("BLE mesh Bluetooth ready, scanning");
 }
 
 void ESP32BLEMesh::stop()
@@ -166,7 +177,7 @@ void ESP32BLEMesh::platformEndAdvertising()
 
 void ESP32BLEMesh::startScanning()
 {
-    if (!bluetoothReady)
+    if (!platformReady())
         return;
 
 #if MYNEWT_VAL(BLE_EXT_ADV)
@@ -202,7 +213,7 @@ void ESP32BLEMesh::startScanning()
 
 void ESP32BLEMesh::stopScanning()
 {
-    if (!bluetoothReady)
+    if (!platformReady())
         return;
 
     ble_gap_disc_cancel();

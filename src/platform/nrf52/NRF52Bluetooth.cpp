@@ -157,8 +157,9 @@ void startAdv(void)
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 
 #if HAS_BLE_MESH
-    if (bleMeshHandler)
-        bleMeshHandler->onBluetoothReady();
+    // A flag rather than a call into bleMeshHandler: setup() can run before main() constructs the
+    // handler, so a direct call is a race that silently does nothing. The handler polls this.
+    nrf52BluetoothReady = true;
 #endif
 }
 // Just ack that the caller is allowed to read

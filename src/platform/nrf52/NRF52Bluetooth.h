@@ -23,3 +23,9 @@ class NRF52Bluetooth : BluetoothApi
     static bool onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request);
     static void disconnect();
 };
+
+#if HAS_BLE_MESH
+// True once NRF52Bluetooth::setup() has brought the SoftDevice up. Polled by NRF52BLEMesh rather
+// than pushed to it, because setup() may run before the handler exists.
+extern bool nrf52BluetoothReady;
+#endif

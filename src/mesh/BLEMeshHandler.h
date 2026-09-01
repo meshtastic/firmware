@@ -86,7 +86,9 @@ class BLEMeshHandler : private concurrency::OSThread
     virtual bool platformAdvertisingActive() = 0;
     /// Tear the burst down and hand the radio back to scanning / phone advertising.
     virtual void platformEndAdvertising() = 0;
-    /// True once the stack is up and it is safe to touch the GAP API.
+    /// True once the stack is up and it is safe to touch the GAP API. Must query the BLE stack
+    /// itself, NOT a flag set by onBluetoothReady() - the whole point is that this works no matter
+    /// which of the two was constructed first.
     virtual bool platformReady() = 0;
 
     int32_t runOnce() override;
@@ -112,6 +114,13 @@ class BLEMeshHandler : private concurrency::OSThread
     size_t txTail = 0;
     size_t txCount = 0;
     bool advertising = false;
+
+    // The BLE stack is brought up by setBluetoothEnable(), which on ESP32 runs *before* main()
+    // constructs this handler - so a one-shot "bluetooth is ready" callback into the handler is a
+    // race, and lost the coin flip about half the time: the handler sat in "waiting for Bluetooth
+    // ready" forever while the stack was already up. runOnce() polls platformReady() instead and
+    // calls onBluetoothReady() itself, exactly once, whenever readiness actually arrives.
+    bool readyHandled = false;
 };
 
 extern BLEMeshHandler *bleMeshHandler;

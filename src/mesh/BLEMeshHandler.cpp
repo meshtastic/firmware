@@ -95,6 +95,11 @@ int32_t BLEMeshHandler::runOnce()
     if (!isRunning || !platformReady())
         return 500;
 
+    if (!readyHandled) {
+        readyHandled = true;
+        onBluetoothReady();
+    }
+
     if (advertising) {
         if (platformAdvertisingActive())
             return 10;

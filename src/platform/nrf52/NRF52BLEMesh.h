@@ -38,7 +38,7 @@ class NRF52BLEMesh : public BLEMeshHandler
     bool platformBeginAdvertising(const uint8_t *adv, size_t len) override;
     bool platformAdvertisingActive() override;
     void platformEndAdvertising() override;
-    bool platformReady() override { return bluetoothReady; }
+    bool platformReady() override;
 
   private:
     void startScanning();
@@ -53,7 +53,6 @@ class NRF52BLEMesh : public BLEMeshHandler
     };
     BLEMeshPeer peers[BLE_MESH_MAX_PEERS];
     uint8_t peerCount = 0;
-    bool bluetoothReady = false;
 
     // The SoftDevice advertising set this handler owns. Allocated once by passing
     // BLE_GAP_ADV_SET_HANDLE_NOT_SET, so mesh advertising gets its own set rather than reusing
