@@ -353,6 +353,7 @@ class TinyGPSPlus
         {
             if (gsaInfo[s].valid && gsaInfo[s].fixType > best)
                 best = gsaInfo[s].fixType;
+        }
         return best;
     }
 
@@ -361,37 +362,36 @@ class TinyGPSPlus
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
         {
-            if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 &&
-                (best = 0 || gsaInfo[s].pdop < best ))
-                {
-                    best = gsaInfo[s].pdop;
-                }
-            }  
+            if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 && (best == 0 || gsaInfo[s].pdop < best))
+            {
+                best = gsaInfo[s].pdop;
+            }
+        }
         return best;
     }
+
     uint16_t gsaHDOP() const
     {
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
         {
-            if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 &&
-                (best = 0 || gsaInfo[s].hdop < best ))
-                {
-                    best = gsaInfo[s].hdop;
-                }
-            }  
+            if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 && (best == 0 || gsaInfo[s].hdop < best))
+            {
+                best = gsaInfo[s].hdop;
+            }
+        }
         return best;
     }
     uint16_t gsaVDOP() const
     {
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-            if (gsaInfo[s].valid && gsaInfo[s].vdop > 0 &&
-                (best = 0 || gsaInfo[s].vdop < best ))
-                {
-                    best = gsaInfo[s].vdop;
-                }
-            }  
+        {
+            if (gsaInfo[s].valid && gsaInfo[s].vdop > 0 && (best == 0 || gsaInfo[s].vdop < best))
+            {
+                best = gsaInfo[s].vdop;
+            }
+        }
         return best;
     }
 
@@ -443,6 +443,13 @@ class TinyGPSPlus
     // Returns number of bytes written, excluding the 0 terminator.
     int GGA(char *buf);
 
+    enum
+    {
+        FLAG_DEFAULT = 0,
+        FLAG_IS_CHECKSUM_TERM = (1 << 0),
+        FLAG_SENTENCE_HAS_FIX = (1 << 1)
+    };
+
     void setSentenceHasFix(bool const i_value)
     {
         if (i_value) {
@@ -455,7 +462,6 @@ class TinyGPSPlus
 
   private:
     bool sentenceHasFix() const { return (flags & FLAG_SENTENCE_HAS_FIX) != 0; }
-    enum { FLAG_DEFAULT = 0, FLAG_IS_CHECKSUM_TERM = (1 << 0), FLAG_SENTENCE_HAS_FIX = (1 << 1) };
 
     // parsing state variables
     uint8_t parity = 0;
