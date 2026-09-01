@@ -1083,6 +1083,15 @@ void setup()
     }
 #endif
 #endif
+
+#if HAS_BLE_MESH
+    // No start() here: the NimBLE host comes up asynchronously and ble_hs_synced() is false this
+    // early. The handler's own runOnce retries until the host is ready, so ordering against BLE
+    // init in main() does not have to be exact.
+    LOG_DEBUG("Start BLE mesh transport thread");
+    bleMeshHandler = new BleMeshHandler();
+#endif
+
     service = new MeshService();
     service->init();
 

@@ -602,6 +602,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+#if HAS_BLE_MESH
+    if (bleMeshHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST) {
+        bleMeshHandler->onSend(p);
+    }
+#endif
+
     // Only already-encrypted frames (relayed, phone-sourced) reach here oversized; perhapsEncode()
     // bounds everything it encodes. No NAK: p->channel is a wire hash by now, not an index.
     if (p->encrypted.size > MAX_RADIO_PAYLOAD_LEN) {

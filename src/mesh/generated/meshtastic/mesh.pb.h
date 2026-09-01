@@ -649,7 +649,9 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     /* Arrived via API connection */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7,
     /* Arrived via Unicast UDP */
-    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8,
+    /* Arrived via a connectionless BLE extended advertisement */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV = 9
 } meshtastic_MeshPacket_TransportMechanism;
 
 /* Log levels, chosen to match python logging conventions. */
@@ -1670,8 +1672,8 @@ extern "C" {
 #define _meshtastic_MeshPacket_Delayed_ARRAYSIZE ((meshtastic_MeshPacket_Delayed)(meshtastic_MeshPacket_Delayed_DELAYED_DIRECT+1))
 
 #define _meshtastic_MeshPacket_TransportMechanism_MIN meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL
-#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP
-#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP+1))
+#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV
+#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV+1))
 
 #define _meshtastic_LogRecord_Level_MIN meshtastic_LogRecord_Level_UNSET
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
