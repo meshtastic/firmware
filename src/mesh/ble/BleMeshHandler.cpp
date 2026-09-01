@@ -175,13 +175,15 @@ bool BleMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     if (!isRunning || !mp)
         return false;
 
-    if (mp->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV) {
-        // Same guard UdpMulticastHandler keeps: a frame that arrived on this transport must not be
-        // re-emitted onto it. Rebroadcast onto BLE is the router's decision, taken on the packet it
-        // enqueued, not a reflection here.
-        LOG_ERROR("Attempt to send BLE-sourced packet over BLE");
-        return false;
-    }
+    // Deliberately NOT the guard UdpMulticastHandler carries here. A packet that arrived over BLE
+    // and comes back through Router::send is a rebroadcast - NextHopRouter::perhapsRebroadcast
+    // allocCopy()s the received packet, and nothing on the TX path rewrites transport_mechanism
+    // (RadioInterface stamps TRANSPORT_LORA in deliverToReceiver, which is RX-only). Refusing it
+    // would cap the BLE mesh at a single hop. Loop protection is the same as LoRa's: PacketHistory
+    // drops a packet seen recently, hop_limit decrements per relay, and onScanReport ignores frames
+    // whose sender is us.
+    if (mp->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV)
+        LOG_DEBUG("BLE mesh: re-advertising relayed packet 0x%08x", mp->id);
 
     AdvSlot slot;
     slot.len = encodeAdvPayload(mp, slot.data.data(), slot.data.size());
