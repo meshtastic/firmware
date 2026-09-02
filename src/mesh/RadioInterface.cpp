@@ -1248,22 +1248,15 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             // Only announce when applying: validation is a question, not an event.
             if (clamp) {
                 announceError();
-                if (usesCustomChannelName) { // clamp to channel name hash
-                    loraConfig.channel_num =
-                        channelNameHashSlot + 1;          // channel_num is 1-based, but hash slot is 0-based, so add 1
-                } else if (newRegion->overrideSlot > 0) { // clamp to explicit override slot
-                    loraConfig.channel_num = newRegion->overrideSlot; // use the explicit override slot defined for this region
-                    defaultSlot = true;
-                } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH && loraConfig.use_preset) {
-                    // clamp to preset name hash
-                    loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
-                    defaultSlot = true;
-                } else if (loraConfig.use_preset) {                  // clamp to preset slot
-                    loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
-                    defaultSlot = true;
-                } else { // if not using preset, and no custom channel name, just clamp to default anyway
-                    defaultSlot = true;
-                };
+                // The pin is what failed, so the repair is the region's own rule, which leaves the
+                // node on the default slot. Hash slots are 0-based, channel_num is 1-based.
+                if (newRegion->overrideSlot > 0)
+                    loraConfig.channel_num = newRegion->overrideSlot;
+                else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH)
+                    loraConfig.channel_num = presetNameHashSlot + 1;
+                else
+                    loraConfig.channel_num = channelNameHashSlot + 1;
+                defaultSlot = true;
             } else {
                 return false;
             }
@@ -1293,6 +1286,10 @@ uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &
     return round((region->freqEnd - region->freqStart + region->profile->spacing) / freqSlotWidth);
 }
 
+// The frequency slot rule, in one place. An in-range channel_num is the operator's pin and always
+// wins; with none, the region says how to derive it: overrideSlot -1 hashes the preset name, 0
+// hashes the channel name (custom or default - a blank name resolves to the preset name), >0 is
+// that slot. A custom channel name does not pick the rule, it is only what rule 0 hashes.
 uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
 {
     const RegionInfo *region = getRegion(loraConfig.region);

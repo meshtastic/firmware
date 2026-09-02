@@ -178,6 +178,124 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+// ---------------------------------------------------------------------------
+// Repairing an out-of-range frequency slot. The pin is the thing that failed, so the repair is the
+// region's own rule: overrideSlot -1 hashes the preset name, 0 the channel name, >0 is that slot.
+// ---------------------------------------------------------------------------
+
+/** A region that names its own slot keeps it, whatever the channel happens to be called. */
+static void test_clampSlot_regionSlotOutranksACustomName()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM; // overrideSlot 137
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    cfg.channel_num = 999;
+
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(137, cfg.channel_num, "the region's slot, not the hash of the name");
+    TEST_ASSERT_TRUE_MESSAGE(verdict.usesDefaultFrequencySlot, "the region's own rule leaves it on the default slot");
+    TEST_ASSERT_TRUE(verdict.usesCustomChannelName);
+}
+
+/** A channel-hash region hashes the name it was handed. */
+static void test_clampSlot_channelHashRegionUsesTheGivenName()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    cfg.channel_num = 999;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    derive.channel_num = 0; // no pin in the way, so this is the derived answer
+    const uint32_t expected = RadioInterface::resolveFrequencySlot(derive, "NYMesh");
+
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "the repair must agree with resolveFrequencySlot()");
+    TEST_ASSERT_TRUE(verdict.usesDefaultFrequencySlot);
+}
+
+/** An uncustomised name takes the same path: there is no separate preset-hash case for it. */
+static void test_clampSlot_defaultNamedChannelTakesTheSamePath()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    cfg.channel_num = 999;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    derive.channel_num = 0;
+    const uint32_t expected = RadioInterface::resolveFrequencySlot(derive, "LongFast");
+
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "LongFast", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "the preset's own name is just a channel name here");
+    TEST_ASSERT_FALSE(verdict.usesCustomChannelName);
+    TEST_ASSERT_TRUE(verdict.usesDefaultFrequencySlot);
+}
+
+/** Radio config only - a beacon target or offer never reaches this, both always run a preset.
+ *  The pin used to survive the clamp here, leaving the node on a slot the region does not hold. */
+static void test_clampSlot_customModemSettingsStillGetRepaired()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = false; // so the preset display name, and this channel's name, is "Custom"
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.bandwidth = 250;
+    cfg.spread_factor = 11;
+    cfg.coding_rate = 5;
+    cfg.channel_num = 999;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    derive.channel_num = 0;
+    const uint32_t expected = RadioInterface::resolveFrequencySlot(derive, "Custom");
+
+    RadioInterface::clampConfigLora(cfg, "Custom", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "an invalid pin must not survive the clamp");
+    TEST_ASSERT_TRUE_MESSAGE(cfg.channel_num >= 1 && cfg.channel_num <= RadioInterface::frequencySlotCount(cfg),
+                             "and what replaces it must be a slot the region holds");
+}
+
+/** Validation answers the question without repairing anything. */
+static void test_validateSlot_outOfRangePinIsRejected()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    cfg.channel_num = 999;
+
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg, "NYMesh"), "999 is past the top of US");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(999, cfg.channel_num, "validation must not repair what it rejects");
+
+    cfg.channel_num = 1;
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, "NYMesh"));
+}
+
+/** A pin the region does hold is the operator's choice, and is left alone. */
+static void test_clampSlot_inRangePinIsKept()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(derive, "NYMesh");
+    cfg.channel_num = (derived == 1) ? 2 : 1; // anything but the slot the name would have picked
+
+    const uint32_t pinned = cfg.channel_num;
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(pinned, cfg.channel_num, "a valid pin is not the clamp's business");
+    TEST_ASSERT_FALSE_MESSAGE(verdict.usesDefaultFrequencySlot, "a deliberate pin is not the default slot");
+}
+
 // -----------------------------------------------------------------------
 // applyModemConfig() coding rate tests (via reconfigure)
 // -----------------------------------------------------------------------
@@ -658,6 +776,12 @@ void setup()
     RUN_TEST(test_validateConfigLora_rejectsInvalidPresetForRegion);
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_clampSlot_regionSlotOutranksACustomName);
+    RUN_TEST(test_clampSlot_channelHashRegionUsesTheGivenName);
+    RUN_TEST(test_clampSlot_defaultNamedChannelTakesTheSamePath);
+    RUN_TEST(test_clampSlot_customModemSettingsStillGetRepaired);
+    RUN_TEST(test_validateSlot_outOfRangePinIsRejected);
+    RUN_TEST(test_clampSlot_inRangePinIsKept);
     RUN_TEST(test_applyModemConfig_freshFlashCodingRateNotZero);
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
