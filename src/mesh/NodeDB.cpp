@@ -4446,11 +4446,8 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 
         // Generate public key from the provided private key
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-            // A restored/legacy private key can derive a known low-entropy public key (the pre-2.8
-            // weak-keygen set). The entry check above ran against the *stored* public key, which is
-            // empty on a bare key restore, so it can't catch this — re-check the key we just derived.
-            // If it's compromised, don't hand it back: mint a fresh secure keypair and keep the
-            // keyIsLowEntropy flag set so the user is told why their saved key did not stick.
+            // The check above ran against the stored public key, empty on a bare restore, so re-check
+            // the derived one: a known low-entropy key is replaced rather than handed back.
             if (checkLowEntropyPublicKey(config.security.public_key)) {
                 keyIsLowEntropy = true;
                 LOG_WARN("Provided private key derives a known low-entropy public key; generating a new keypair");
