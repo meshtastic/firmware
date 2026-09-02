@@ -33,6 +33,10 @@
     "HAS_LSE is set but STM32WL_LSE_DRIVE is not defined - set it in the variant's variant.h to one of RCC_LSEDRIVE_LOW/MEDIUMLOW/MEDIUMHIGH/HIGH"
 #endif
 
+#if HAS_LSE && !defined(HAS_CPU_SHUTDOWN)
+#define HAS_CPU_SHUTDOWN 1
+#endif
+
 //
 // set HW_VENDOR
 //

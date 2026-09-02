@@ -1302,7 +1302,11 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     meshtastic_DeviceMetadata deviceMetadata = meshtastic_DeviceMetadata_init_default;
     strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
+#if defined(ARCH_STM32WL) && HAS_CPU_SHUTDOWN
+    deviceMetadata.canShutdown = stm32wlRtcAvailable();
+#else
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
+#endif
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
