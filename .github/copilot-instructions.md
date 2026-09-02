@@ -632,7 +632,7 @@ The project uses GitHub Actions extensively for CI/CD. Key workflows are in `.gi
   - Includes native tests and hardware-in-the-loop testing
 
 - **`test_native.yml`** - Native platform unit tests
-  - Runs `pio test -e native`
+  - Runs the `test/test_*` suites under `[env:coverage]`, sharded across a matrix. `bin/test-shards.py` derives the matrix from the tree - it groups suites into named areas, splits an area too big for one runner and packs the ones too small to fill one - so adding a suite needs no CI change. The `generate-reports` job collects every shard's JUnit report, checks the union against the canonical `test/test_*` set, and states the verdict; `Native PlatformIO Tests` is the single required check over the fan-out.
 
 ### Release Workflows
 
@@ -719,7 +719,7 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 
 **A signal name from the runner is not a crash.** `exit(UNITY_END())` returns the failure count, and PlatformIO's native runner renders a non-zero exit code as a POSIX signal - 4 failures prints `Program received signal SIGILL`, 5 prints `SIGTRAP`, and the suite is reported `[ERRORED]` instead of `[FAILED]`. Check the exit code against the failure count before theorising about memory bugs; confirm any real crash under a debugger.
 
-**Suite order is randomisable.** `./bin/run-tests.sh --shuffle` runs suites in a seeded random order; `--seed <n>` replays one. The seed defaults to the commit SHA (deterministic per commit, varied across commits), is printed at the start and on the `RESULT:` line, and the full order is printed on failure. CI shuffles its area order the same way, seeded from `GITHUB_SHA`. A single green seed is not evidence of order independence.
+**Suite order is randomisable.** `./bin/run-tests.sh --shuffle` runs suites in a seeded random order; `--seed <n>` replays one. The seed defaults to the commit SHA (deterministic per commit, varied across commits), is printed at the start and on the `RESULT:` line, and the full order is printed on failure. CI seeds from `GITHUB_SHA` the same way, but its shards run in parallel, so there the seed varies which suites _share_ a shard rather than the order they run in; `pull_request` keeps the declared arrangement so a contributor's PR never goes red for a pairing they did not choose. A single green seed is not evidence of order independence.
 
 **`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
 
