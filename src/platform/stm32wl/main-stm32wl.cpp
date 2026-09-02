@@ -140,6 +140,17 @@ void stm32wlSetup()
     __HAL_RCC_LSEDRIVE_CONFIG(STM32WL_LSE_DRIVE);
     __HAL_RCC_LSE_CONFIG(RCC_LSE_ON);
 
+    // Changing LPART1 kernel clock to HSI16 to support multiple baud rate, required for GNSS/GPS modules.
+    // Turn ON HSI16 oscillator and wait for it to stabilize
+    __HAL_RCC_HSI_ENABLE();
+    // If HSI16 fails (critical hardware fault), node will be in infinte loop here intentionally.
+    // This makes debugger diagnosis obvious rather than cascading to a GPS autobaud lockup.
+    while (!__HAL_RCC_GET_FLAG(RCC_FLAG_HSIRDY)) {
+        delay(1);
+    }
+    // Route LPUART1 kernel clock to the active HSI16 (16 MHz), now LPUART1 is ready to be used.
+    __HAL_RCC_LPUART1_CONFIG(RCC_LPUART1CLKSOURCE_HSI);
+
     uint32_t start = millis();
     bool lseReady = false;
     while (Throttle::isWithinTimespanMs(start, STM32WL_LSE_TIMEOUT_MS)) {
