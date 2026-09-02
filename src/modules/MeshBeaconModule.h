@@ -204,6 +204,9 @@ class MeshBeaconListenerModule : public ProtobufModule<meshtastic_MeshBeacon>, p
         meshtastic_ChannelSettings channel;
         meshtastic_Config_LoRaConfig_RegionCode region;
         meshtastic_Config_LoRaConfig_ModemPreset preset;
+        // Present only when the sender could not expect us to derive it; unset means derive.
+        bool has_frequency_slot;
+        uint32_t frequency_slot;
         uint32_t received_at;
     };
 
