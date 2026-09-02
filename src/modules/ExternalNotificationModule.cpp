@@ -14,6 +14,7 @@
  * @date [Insert Date]
  */
 #include "ExternalNotificationModule.h"
+#include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
@@ -421,15 +422,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
-            meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
-
-            // If we receive a broadcast message, apply channel mute setting
-            // If we receive a direct message and the receipent is us, apply DM mute setting
-            // Else we just handle it as not muted.
             const bool isDmToUs = !isBroadcast(mp.to) && isToUs(&mp);
-            bool is_muted = isDmToUs ? nodeInfoLiteIsMuted(sender)
-                                     : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
+            const bool is_muted = isMutedForPacket(mp);
 
             const bool buzzerModeIsDirectOnly =
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);

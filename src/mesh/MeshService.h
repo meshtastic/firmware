@@ -101,6 +101,10 @@ class MeshService
                p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
 
+    /// True if the sender flagged this text as an alert: an ASCII BEL in the payload while at least
+    /// one alert_bell_* output is enabled. Alerts deliberately break through a mute.
+    static bool isAlertPayload(const meshtastic_MeshPacket &p);
+
     /// Returns false when a decoded NodeInfo/Waypoint payload fails nested protobuf decode (invalid
     /// UTF-8 under PB_VALIDATE_UTF8, etc.); other portnums pass through. Callers gate on the variant.
     static bool phonePayloadIsDecodable(const meshtastic_Data &decoded);

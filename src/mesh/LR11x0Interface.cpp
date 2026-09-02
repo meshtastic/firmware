@@ -185,6 +185,8 @@ template <typename T> bool LR11x0Interface<T>::init()
         if (lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true) == RADIOLIB_ERR_NONE) {
             LOG_INFO("LR1110 firmware recovery OK, re-init radio");
             res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+            if (res == RADIOLIB_ERR_NONE)
+                resolvedTcxoVoltage = tcxoVoltage;
         }
 #endif
         if (res != RADIOLIB_ERR_NONE)
@@ -222,6 +224,7 @@ template <typename T> bool LR11x0Interface<T>::init()
             LOG_ERROR("LR11x0 re-init after firmware update failed %s%d", radioLibErr, res);
             return false;
         }
+        resolvedTcxoVoltage = tcxoVoltage;
 
         if (lora.getVersionInfo(&version) == RADIOLIB_ERR_NONE) {
             transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
@@ -450,16 +453,31 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     sleep();
 #else
 
-    setStandby();
+    int16_t err = trySetStandby();
 
-    lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
+    if (err == RADIOLIB_ERR_NONE) {
+        lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
 
-    // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
-    int err =
-        lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
-    if (err)
+        // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
+        err =
+            lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    }
+
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("StartReceive error: %d", err);
-    assert(err == RADIOLIB_ERR_NONE);
+        if (maybeRecoverChipStateLoss()) {
+            lora.setPreambleLength(preambleLength);
+            err = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS,
+                                    RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+        }
+    }
+
+    if (err != RADIOLIB_ERR_NONE) {
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
+        LOG_ERROR("LR11x0 RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
+        return;
+    }
 
     RadioLibInterface::startReceive();
 
@@ -480,16 +498,18 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
                                        .timeout = 0,
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
-    int16_t result;
+    int16_t result = trySetStandby();
+    if (result == RADIOLIB_ERR_NONE) {
+        result = lora.scanChannel(cfg);
+        if (result == RADIOLIB_LORA_DETECTED)
+            return true;
+        if (result != RADIOLIB_ERR_WRONG_MODEM)
+            return false;
+    }
 
-    setStandby();
-    result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
-        return true;
-
-    assert(result != RADIOLIB_ERR_WRONG_MODEM);
-
-    return false;
+    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
+    maybeRecoverChipStateLoss();
+    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
@@ -537,7 +557,7 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 {
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_DEBUG("LR11x0 entering sleep mode");
-    setStandby(); // Stop any pending operations
+    (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
     lora.setTCXO(0);
