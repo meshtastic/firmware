@@ -928,8 +928,8 @@ bool MeshBeaconListenerModule::wantPacket(const meshtastic_MeshPacket *p)
 
 bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_MeshBeacon *b)
 {
-    const bool hasOfferContent =
-        b && (b->has_offer_channel || b->offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET || b->has_offer_preset);
+    const bool hasOfferContent = b && (b->has_offer_channel || b->offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET ||
+                                       b->has_offer_preset || b->has_offer_frequency_slot);
     const pb_size_t msgLen = b ? (pb_size_t)strnlen(b->message, sizeof(b->message) - 1) : 0;
     const bool hasText = msgLen > 0;
     if (!b || (!hasText && !hasOfferContent))
@@ -953,6 +953,9 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
             lastReceivedOffer.channel = b->offer_channel;
         lastReceivedOffer.region = b->offer_region;
         lastReceivedOffer.preset = b->offer_preset;
+        // Cached, not derived: a sender only sends this when the offer's own fields do not give it.
+        lastReceivedOffer.has_frequency_slot = b->has_offer_frequency_slot;
+        lastReceivedOffer.frequency_slot = b->offer_frequency_slot;
         lastReceivedOffer.received_at =
             getValidTime(RTCQualityFromNet); // 0 if no RTC fix yet - consumers must not treat 0 as valid
         LOG_INFO("Beacon: stored offer from 0x%08x (preset=%d)", mp.from, b->offer_preset);

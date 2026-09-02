@@ -1252,6 +1252,62 @@ static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
 }
 
 /**
+ * Verify a pinned offer_frequency_slot survives into the offer cache.
+ * Important because a sender only spends the airtime when the slot cannot be derived, so dropping
+ * it here leaves a client deriving the wrong frequency for the mesh it was invited to.
+ */
+static void test_listener_offerWithFrequencySlot_cachesSlot(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
+
+    MeshBeaconListenerModuleTestShim listener;
+    MeshBeaconListenerModule::lastReceivedOffer = {};
+
+    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
+    b.has_offer_preset = true;
+    b.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
+    b.offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    b.has_offer_frequency_slot = true;
+    b.offer_frequency_slot = 48;
+
+    meshtastic_MeshPacket mp = makeBeaconPacket(b);
+    listener.handleReceivedProtobuf(mp, &b);
+
+    TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.has_frequency_slot,
+                             "a pinned slot must be recorded as pinned");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(48, MeshBeaconListenerModule::lastReceivedOffer.frequency_slot,
+                                     "and kept verbatim, not re-derived");
+}
+
+/**
+ * Verify a beacon whose only offer field is the frequency slot is still treated as an offer.
+ * Important because this node never sends one, so only a foreign sender produces it - and dropping
+ * it would discard the one field it chose to spend airtime on.
+ */
+static void test_listener_offerWithOnlyFrequencySlot_isCached(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
+
+    MeshBeaconListenerModuleTestShim listener;
+    MeshBeaconListenerModule::lastReceivedOffer = {};
+
+    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
+    b.has_offer_frequency_slot = true;
+    b.offer_frequency_slot = 12;
+
+    meshtastic_MeshPacket mp = makeBeaconPacket(b);
+    listener.handleReceivedProtobuf(mp, &b);
+
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "a slot alone is offer content");
+    TEST_ASSERT_EQUAL_UINT32(12, MeshBeaconListenerModule::lastReceivedOffer.frequency_slot);
+}
+
+/**
  * Verify a beacon with neither message text nor offer fields is silently discarded.
  * Important to avoid spurious cache updates and wasted inbox copies from empty-payload packets.
  */
@@ -3868,6 +3924,8 @@ BEACON_TEST_ENTRY void setup()
 
     RUN_TEST(test_listener_receiveWithOffer_cachesOffer);
     RUN_TEST(test_listener_receiveWithChannelOffer_setsHasChannel);
+    RUN_TEST(test_listener_offerWithFrequencySlot_cachesSlot);
+    RUN_TEST(test_listener_offerWithOnlyFrequencySlot_isCached);
     RUN_TEST(test_listener_emptyMessageWithoutOffer_isDropped);
     RUN_TEST(test_listener_offerOnly_isCached);
     RUN_TEST(test_listener_nullBeacon_isDropped);
