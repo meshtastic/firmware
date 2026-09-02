@@ -1,0 +1,52 @@
+name: Post Firmware Size Status
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  statuses: write
+  actions: read
+
+jobs:
+  post-size-status:
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.repository == 'meshtastic/firmware'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download size report
+        id: download
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: size-report
+          path: ./
+
+      # Informational only - this always reports "success" with a description of the delta.
+      # Pass/fail enforcement is the separate size-budget-gate CI job, which already produces
+      # its own native check; duplicating that here would just be a second, conflicting signal
+      # for the same underlying budget check.
+      - name: Set size status
+        if: steps.download.outcome == 'success'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            const description = fs.readFileSync('./size-status.txt', 'utf8').trim();
+            const run = context.payload.workflow_run;
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: run.head_sha,
+              state: 'success',
+              context: 'firmware-size',
+              description: description.slice(0, 140),
+              target_url: run.html_url,
+            });
