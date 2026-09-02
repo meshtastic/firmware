@@ -4455,7 +4455,11 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
             }
             keygenSuccess = true;
         } else {
+            // Derivation left sizes claiming a 32-byte pair the caller never got. Clear both so an
+            // unusable identity is not persisted and the next keygen mints a fresh one.
             LOG_ERROR("Can't generate public key from private key");
+            config.security.public_key.size = 0;
+            config.security.private_key.size = 0;
             return false;
         }
     }

@@ -21,7 +21,8 @@
 #include "TestUtil.h"
 #include "graphics/draw/MenuHandler.h"
 #include "mesh/Channels.h"
-#include "mesh/Router.h" // router global: allocErrorResponse() allocates the reply through it
+#include "mesh/CryptoEngine.h" // crypto global: the tests swap in a stub engine to drive key derivation
+#include "mesh/Router.h"       // router global: allocErrorResponse() allocates the reply through it
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include <ErriezCRC32.h> // crc32Buffer(), for the my_node_num == crc32(public_key) invariant
@@ -1703,6 +1704,121 @@ static void test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged()
     TEST_ASSERT_EQUAL_UINT(0, config.security.admin_key[0].size);
 }
 
+// Only CryptoEngine knows what public key a private key derives to, and no low-entropy private key
+// is published - so stand in for the engine to make a restore derive a blacklisted key on demand.
+// hash() is left real: the blacklist lookup runs through it.
+static const uint8_t COMPROMISED_PUBLIC_KEY[32] = {0xac, 0xaf, 0x8c, 0x1c, 0x3c, 0x1c, 0x37, 0xac, 0x4f, 0x03, 0xa1,
+                                                   0xe9, 0xfc, 0x37, 0x23, 0x29, 0xc8, 0xa3, 0x5d, 0x7f, 0x05, 0x26,
+                                                   0xeb, 0x00, 0xbd, 0x26, 0xb8, 0x2e, 0xb1, 0x94, 0x7d, 0x24};
+
+class RestoreDerivingCryptoEngine : public CryptoEngine
+{
+  public:
+    bool regenerateSucceeds = true;
+    bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey) override
+    {
+        if (!regenerateSucceeds)
+            return false;
+        memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
+        return true;
+    }
+    void generateKeyPair(uint8_t *pubKey, uint8_t *privKey) override
+    {
+        memset(pubKey, 0x5E, 32);
+        memset(privKey, 0x5F, 32);
+    }
+};
+
+static CryptoEngine *savedCrypto;
+static RestoreDerivingCryptoEngine *restoreCrypto;
+
+// Arms a bare private-key restore: region set so keygen runs, private key present, public key absent.
+static meshtastic_Config makeBareKeyRestoreConfig()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+    return c;
+}
+
+static bool capturedWarningsContain(const char *needle)
+{
+    for (const std::string &w : capturedWarnings)
+        if (w.find(needle) != std::string::npos)
+            return true;
+    return false;
+}
+
+// A restored private key deriving a blacklisted public key is rejected and rotated at set time, and
+// the client is told why - not left to discover it after the next reboot.
+static void test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates()
+{
+    savedCrypto = crypto;
+    restoreCrypto = new RestoreDerivingCryptoEngine();
+    crypto = restoreCrypto;
+
+    const meshtastic_Config c = makeBareKeyRestoreConfig();
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_TRUE(nodeDB->keyIsLowEntropy);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+
+    crypto = savedCrypto;
+    delete restoreCrypto;
+    restoreCrypto = nullptr;
+}
+
+// keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
+// an unset region without clearing it. The restore warning must stay gated on this keygen running.
+static void test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+    nodeDB->keyIsLowEntropy = true;
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// A private key that derives nothing usable must not leave sizes claiming a 32-byte pair behind:
+// that state gets persisted, and every later keygen re-derives from the same dead key.
+static void test_handleSetConfig_security_failedDerivationClearsKeySizes()
+{
+    savedCrypto = crypto;
+    restoreCrypto = new RestoreDerivingCryptoEngine();
+    restoreCrypto->regenerateSucceeds = false;
+    crypto = restoreCrypto;
+
+    const meshtastic_Config c = makeBareKeyRestoreConfig();
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+
+    crypto = savedCrypto;
+    delete restoreCrypto;
+    restoreCrypto = nullptr;
+}
+
 static void test_regionInfo_supportsPreset()
 {
     const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
@@ -2397,6 +2513,9 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_acceptsSuppliedKeypair);
     RUN_TEST(test_handleSetConfig_security_rotationPreservesAdminKeys);
     RUN_TEST(test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged);
+    RUN_TEST(test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates);
+    RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
+    RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
     RUN_TEST(test_checkConfigRegion_allowsProspectiveLicensedOwner);
