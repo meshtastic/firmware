@@ -77,11 +77,14 @@ class CryptoEngine
     std::unique_ptr<BlockCipher> aes = nullptr;
 
     static constexpr size_t AEAD_TAG_SIZE = 12;
+    // Sender and destination IDs are authenticated as associated data: the nonce already binds
+    // `from` and the packet id, and the hop fields are left out because relays rewrite them.
+    static constexpr size_t AEAD_AAD_SIZE = 2 * sizeof(uint32_t);
 
-    bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *plaintext,
-                          uint8_t *ciphertextWithTag);
+    bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                          const uint8_t *plaintext, uint8_t *ciphertextWithTag);
 
-    bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t totalBytes,
+    bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t totalBytes,
                           const uint8_t *ciphertextWithTag, uint8_t *plaintext);
 
     /**
