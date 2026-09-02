@@ -22,6 +22,10 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
 #ifdef LED_LORA
     loraRxObserver.observe(&RadioInterface::loraRxPacketObservable);
 #endif
+#ifdef GPIO_HEARTBEAT
+    pinMode(GPIO_HEARTBEAT, OUTPUT);
+    digitalWrite(GPIO_HEARTBEAT, GPIO_HEARTBEAT_state);
+#endif
 #ifdef NEOPIXEL_STATUS_POWER_PIN
     powerPixel.begin();
     powerPixel.clear();
@@ -111,6 +115,16 @@ int StatusLEDModule::handleLoRaRx(uint32_t)
 int32_t StatusLEDModule::runOnce()
 {
     my_interval = 1000;
+
+#ifdef GPIO_HEARTBEAT
+    // External-watchdog liveness pin (see StatusLEDModule.h): gated on nothing, so it stops only
+    // when the firmware does. 10 s leaves margin for a 30 s watchdog that retriggers on one edge.
+    if (Throttle::hasElapsed(GPIO_HEARTBEAT_starttime, GPIO_HEARTBEAT_TOGGLE_MS)) {
+        GPIO_HEARTBEAT_state = !GPIO_HEARTBEAT_state;
+        digitalWrite(GPIO_HEARTBEAT, GPIO_HEARTBEAT_state);
+        GPIO_HEARTBEAT_starttime = millis();
+    }
+#endif
 
     if (power_state == charging) {
 #ifndef POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING

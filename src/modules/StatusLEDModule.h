@@ -13,6 +13,13 @@
 #include "input/InputBroker.h"
 #endif
 
+// GPIO_HEARTBEAT (optional): liveness pin for an external watchdog, toggled every 10 s. Not an LED -
+// no power-state gating, no LED_STATE_ON polarity, no led_heartbeat_disabled. A watchdog a config
+// flag can switch off is not a watchdog; boards wanting a blinking indicator want LED_HEARTBEAT.
+#if defined(GPIO_HEARTBEAT) && defined(LED_HEARTBEAT) && (GPIO_HEARTBEAT == LED_HEARTBEAT)
+#error "GPIO_HEARTBEAT and LED_HEARTBEAT would drive the same pin - pick one"
+#endif
+
 // WS2812/NeoPixel status-LED support. A variant may define
 //   NEOPIXEL_STATUS_POWER_PIN   (required to enable the power/charge pixel)
 //   NEOPIXEL_STATUS_POWER_COLOR (optional, default red 0xFF0000)
@@ -84,6 +91,11 @@ class StatusLEDModule : private concurrency::OSThread
     uint32_t lastUserbuttonTime = 0;
     uint32_t POWER_LED_starttime = 0;
     bool doing_fast_blink = false;
+#ifdef GPIO_HEARTBEAT
+    static constexpr uint32_t GPIO_HEARTBEAT_TOGGLE_MS = 10000;
+    bool GPIO_HEARTBEAT_state = false;
+    uint32_t GPIO_HEARTBEAT_starttime = 0;
+#endif
 #ifdef LED_LORA
     static constexpr uint32_t LORA_RX_LED_FLASH_MS = 100;
     bool LORA_LED_state = LED_STATE_OFF;
