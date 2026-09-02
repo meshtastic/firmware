@@ -32,6 +32,11 @@ extern "C" {
 #define LED_HEARTBEAT (24)     // Force strictly heartbeat on Pin 24
 #define LED_STATE_ON 0         // Active LOW
 
+#define HAS_HARDWARE_WATCHDOG
+#define HARDWARE_WATCHDOG_DONE (24)
+#define HARDWARE_WATCHDOG_TIMEOUT_MS (25 * 1000) // our hardware one expires in 30s so we feed it each 25s for safety
+#define HARDWARE_WATCHDOG_WAKE -1
+
 // Testing USB detection
 //#define NRF_APM
 
