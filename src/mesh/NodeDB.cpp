@@ -647,6 +647,27 @@ NodeDB::NodeDB()
             setLocalPosition(TypeConversions::ConvertToPosition(fixedPos));
             LOG_INFO("Restored fixed position to localPosition: lat=%d lon=%d", fixedPos.latitude_i, fixedPos.longitude_i);
         }
+#if defined(USERPREFS_FIXED_GPS) && defined(USERPREFS_FIXED_GPS_LAT) && defined(USERPREFS_FIXED_GPS_LON)
+        else if (!configDecodeFailed) {
+            // Nothing stored (first boot, factory reset, lost nodes.proto): seed the compiled-in coordinates. Persist explicitly:
+            // nodePositions is invisible to the CRC compare below; without a keypair (region UNSET) this just re-seeds next boot.
+            meshtastic_Position fixedGPS = meshtastic_Position_init_default;
+            fixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
+            fixedGPS.has_latitude_i = true;
+            fixedGPS.longitude_i = (int32_t)(USERPREFS_FIXED_GPS_LON * 1e7);
+            fixedGPS.has_longitude_i = true;
+#ifdef USERPREFS_FIXED_GPS_ALT
+            fixedGPS.altitude = USERPREFS_FIXED_GPS_ALT;
+            fixedGPS.has_altitude = true;
+#endif
+            fixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+            updatePosition(getNodeNum(), fixedGPS, RX_SRC_LOCAL);
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+            saveWhat |= SEGMENT_CONFIG | SEGMENT_NODEDATABASE;
+#endif
+            LOG_INFO("Seeded build-time fixed position: lat=%d lon=%d", fixedGPS.latitude_i, fixedGPS.longitude_i);
+        }
+#endif
     }
 
     // Ensure that the neighbor info update interval is coerced to the minimum
@@ -681,35 +702,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-#ifdef USERPREFS_FIXED_GPS
-    if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
-        meshtastic_Position fixedGPS = meshtastic_Position_init_default;
-#ifdef USERPREFS_FIXED_GPS_LAT
-        fixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
-        fixedGPS.has_latitude_i = true;
-#endif
-#ifdef USERPREFS_FIXED_GPS_LON
-        fixedGPS.longitude_i = (int32_t)(USERPREFS_FIXED_GPS_LON * 1e7);
-        fixedGPS.has_longitude_i = true;
-#endif
-#ifdef USERPREFS_FIXED_GPS_ALT
-        fixedGPS.altitude = USERPREFS_FIXED_GPS_ALT;
-        fixedGPS.has_altitude = true;
-#endif
-#if defined(USERPREFS_FIXED_GPS_LAT) && defined(USERPREFS_FIXED_GPS_LON)
-        fixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
-        config.has_position = true;
-#if !MESHTASTIC_EXCLUDE_POSITIONDB
-        {
-            concurrency::LockGuard guard(&satelliteMutex);
-            nodePositions[info->num] = TypeConversions::ConvertToPositionLite(fixedGPS);
-        }
-#endif
-        nodeDB->setLocalPosition(fixedGPS);
-        config.position.fixed_position = true;
-#endif
-    }
-#endif
     sortMeshDB();
     saveToDisk(saveWhat);
     bootInitializationInProgress = false;
@@ -1087,6 +1079,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
 #else
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+#endif
+
+#if defined(USERPREFS_FIXED_GPS) && defined(USERPREFS_FIXED_GPS_LAT) && defined(USERPREFS_FIXED_GPS_LON)
+    // Build-time fixed position defaults on; the NodeDB ctor seeds the coordinates once our NodeNum is final.
+    config.position.fixed_position = true;
 #endif
 
 #ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED

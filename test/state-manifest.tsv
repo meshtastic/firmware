@@ -51,6 +51,7 @@ test_admin_session_repro	writes=config.proto,module.proto,device.proto,channels.
 test_event_channel_phone_api	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
 test_event_channel_router	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto errors=200	subclasses NodeDB for the event-channel fixtures; the base constructor persists a default set when the prefs directory is empty
 test_firmware_edition	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	persists an event firmware_edition in devicestate, then reboots a NodeDB to prove a vanilla build resets it
+test_fixed_gps_userprefs	state=per-suite writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	boots a NodeDB on empty prefs, then reboots it across test cases to prove a build-time fixed position round-trips through config.proto + nodes.proto and yields to a later app set/remove
 test_fuzz_decode	errors=20000..250000	fuzzes protobuf decode; every rejection logs. A collapse to near zero means the corpus stopped reaching the decoder
 test_fuzz_packets	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs errors=5000..60000	drives decode of fuzzed packets through the real NodeDB and message store
 test_hop_scaling	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB to hold the hop-distance fixtures
