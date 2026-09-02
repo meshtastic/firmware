@@ -35,6 +35,8 @@
 
 #if HAS_LSE && !defined(HAS_CPU_SHUTDOWN)
 #define HAS_CPU_SHUTDOWN 1
+#elif HAS_CPU_SHUTDOWN && !HAS_LSE
+#error "STM32WL: HAS_CPU_SHUTDOWN requires HAS_LSE (RTC wake path)"
 #endif
 
 //
