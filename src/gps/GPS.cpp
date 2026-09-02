@@ -1370,7 +1370,7 @@ void GPS::setConnected()
 // We want a GPS lock. Wake the hardware
 void GPS::up()
 {
-#if defined(TTGO_T_ECHO_PLUS)
+#if defined(TTGO_T_ECHO_PLUS_inkHud2)
     if (gnssModel == GNSS_MODEL_MTK || gnssModel == GNSS_MODEL_UNKNOWN) {
         // TODO: implement satellite activity reset for MTK models
     }
@@ -1614,9 +1614,9 @@ int32_t GPS::runOnce()
 #endif
 
             if (tooLong && !gotLoc) {
-#if (defined(TTGO_T_ECHO_PLUS) || defined(TTGO_T_ECHO))
+#if defined(TTGO_T_ECHO_PLUS_inkHud2)
                 if (gnssModel == GNSS_MODEL_MTK)
-                    LOG_WARN("L76K: no tracked satellites for 30 minutes; ending GPS search");
+                    LOG_WARN("L76K: no tracked satellites for 15 minutes; ending GPS search");
                 else
 #endif
                     LOG_WARN("Can't publish valid location: no GPS lock in time");
@@ -2423,15 +2423,14 @@ int32_t GPS::runOnce()
             {
                 if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-        <<<<<<< HEAD
-            // Use GPGSA fix type 2D/3D (better) if available
-            if (fixType == 3 || fixtype == 2 || fixType == 0) // zero means "no data received"
+        // Use GPGSA fix type 2D/3D (better) if available
+        if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 #endif
-            =======
-            // Use fix type 2D/3D (better) if available
-            if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
+            == == == =
+                         // Use fix type 2D/3D (better) if available
+                if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 >>>>>>> d6bcf23be (t-echo-plus)
-            return true;
+                return true;
 #endif
                 }
 
