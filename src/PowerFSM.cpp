@@ -105,7 +105,7 @@ extern Power *power;
 static void shutdownEnter()
 {
     LOG_POWERFSM("State: SHUTDOWN");
-    shutdownAtMsec = Time::safeMillis();
+    shutdownAtMsec = Time::skipZero(Time::getMillis());
 }
 
 #include "error.h"

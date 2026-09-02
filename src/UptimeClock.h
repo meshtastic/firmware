@@ -51,14 +51,8 @@ constexpr uint32_t skipZero(uint32_t ms)
     return ms ? ms : 1;
 }
 
-/// getMillis() that never returns 0, for a stamp whose 0 means "unset".
-inline uint32_t safeMillis()
-{
-    return skipZero(getMillis());
-}
-
 /// Start a countdown to delayMs from now, never 0. The sum is what has to dodge 0 - a non-zero
-/// read plus a delay lands there once per wrap - so this is not safeMillis() + delayMs.
+/// read plus a delay lands there once per wrap - so this is not skipZero(getMillis()) + delayMs.
 inline uint32_t timerEndsAtMillis(uint32_t delayMs)
 {
     return skipZero(getMillis() + delayMs);

@@ -126,7 +126,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return true;
     // Power control
     case INPUT_BROKER_SHUTDOWN:
-        shutdownAtMsec = Time::safeMillis();
+        shutdownAtMsec = Time::skipZero(Time::getMillis());
         return true;
     // factory reset
     case INPUT_BROKER_FACTORY_RST:

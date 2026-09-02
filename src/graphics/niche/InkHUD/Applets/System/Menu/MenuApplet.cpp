@@ -573,7 +573,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
-        shutdownAtMsec = Time::safeMillis();
+        shutdownAtMsec = Time::skipZero(Time::getMillis());
         // Menu is then sent to background via onShutdown
         break;
 

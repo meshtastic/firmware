@@ -94,7 +94,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     // TODO(elapsed-stamp): 0 means "empty slot" here and insert() drops a record stamped 0, so the
     // dodge is important; a same-instant `now - rxTimeMsec` read still underflows to a huge age.
-    r.rxTimeMsec = Time::safeMillis();
+    r.rxTimeMsec = Time::skipZero(Time::getMillis());
 
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG(

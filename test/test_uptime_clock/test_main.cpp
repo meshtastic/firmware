@@ -1,9 +1,9 @@
 // Unit tests for src/UptimeClock.{h,cpp} - the monotonic uptime seam.
 // Covers: test-clock injection, stepping the injected clock, the real-clock fallback, the
 // single-writer wrap carry (readers derive, serviceMonotonic() publishes), and the 0-sentinel dodge
-// helpers (skipZero/safeMillis/timerEndsAtMillis). getMillis() itself is a plain 32-bit read with no
-// wrap handling of its own beyond those helpers - deadline/throttle wrap arithmetic built on top of
-// it is tested in test_throttle/.
+// helpers (skipZero/timerEndsAtMillis). getMillis() itself is a plain 32-bit read with no wrap
+// handling of its own beyond those helpers - deadline/throttle wrap arithmetic built on top of it
+// is tested in test_throttle/.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
@@ -71,7 +71,7 @@ void test_advanceTestMillis_wraps_like_millis()
     TEST_ASSERT_EQUAL_UINT32(0x00000100u, Time::getMillis());
 }
 
-// --- skipZero() / safeMillis() / timerEndsAtMillis(): dodging the wrap tick that lands on 0 ---
+// --- skipZero() / timerEndsAtMillis(): dodging the wrap tick that lands on 0 ---
 
 void test_skipZero_maps_zero_to_one()
 {
@@ -82,18 +82,6 @@ void test_skipZero_leaves_nonzero_values_alone()
 {
     TEST_ASSERT_EQUAL_UINT32(5u, Time::skipZero(5));
     TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, Time::skipZero(0xFFFFFFFFu));
-}
-
-void test_safeMillis_dodges_the_wrap_tick()
-{
-    Time::setTestMillis(0);
-    TEST_ASSERT_EQUAL_UINT32(1u, Time::safeMillis());
-}
-
-void test_safeMillis_matches_getMillis_off_the_wrap_tick()
-{
-    Time::setTestMillis(123456);
-    TEST_ASSERT_EQUAL_UINT32(123456u, Time::safeMillis());
 }
 
 void test_timerEndsAtMillis_is_an_ordinary_sum_away_from_the_wrap()
@@ -385,8 +373,6 @@ void setup()
     RUN_TEST(test_advanceTestMillis_wraps_like_millis);
     RUN_TEST(test_skipZero_maps_zero_to_one);
     RUN_TEST(test_skipZero_leaves_nonzero_values_alone);
-    RUN_TEST(test_safeMillis_dodges_the_wrap_tick);
-    RUN_TEST(test_safeMillis_matches_getMillis_off_the_wrap_tick);
     RUN_TEST(test_timerEndsAtMillis_is_an_ordinary_sum_away_from_the_wrap);
     RUN_TEST(test_timerEndsAtMillis_dodges_a_sum_that_wraps_to_zero);
     RUN_TEST(test_timerEndsAtMillis_dodges_the_wrap_tick_itself);

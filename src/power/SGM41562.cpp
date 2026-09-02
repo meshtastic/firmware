@@ -166,7 +166,7 @@ bool SGM41562::hasExtendedRegisterMap() const
 
 bool SGM41562::refresh()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     if (lastRefreshMs_ != 0 && Throttle::isWithinTimespanMs(lastRefreshMs_, 250))
         return true;                      // cached
     lastRefreshMs_ = Time::skipZero(now); // dodge the 0-sentinel case
