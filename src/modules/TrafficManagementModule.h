@@ -447,6 +447,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// probation_window_secs > 0, first-seen within the window, not promoted).
     /// Caller must hold cacheLock when `entry` is supplied; else locks.
     bool inProbation(NodeNum node) const;
+    /// True when `entry`'s first-seen age (mod 16 rate ticks) is still inside
+    /// the probation window of `windowTicks`. Caller must hold cacheLock.
+    /// Shared by inProbation() and the probation budget penalty in isRateLimited().
+    static bool antispamAgeInWindowLocked(const AntispamEntry *entry, uint8_t nowTick, uint8_t windowTicks);
     /// Stamp first-seen for `node` if not yet tracked (probation start),
     /// and record its observation context (channel, RSSI class) for the group
     /// budget. Called from handleReceived() for non-local, non-own

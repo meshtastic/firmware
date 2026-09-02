@@ -1796,12 +1796,29 @@ bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
 
     const uint8_t count = entry->getRateCount();
     bool limited = count > threshold;
+
+    // Probation penalty: an unpromoted sender whose first-seen window is
+    // still in force gets the lower rate budget (half of the effective
+    // threshold, floor of 1). The drop is charged separately so operators
+    // can tell probation budgeting from plain rate limiting in telemetry.
+    if (!limited && moduleConfig.traffic_management.probation_window_secs > 0) {
+        const AntispamEntry *asEntry = findAntispamEntry(from);
+        if (asEntry && asEntry->firstSeenTick != 0 && !asEntry->promoted &&
+            antispamAgeInWindowLocked(asEntry, nowRateTick, probationWindowTicks())) {
+            const uint32_t probationBudget = std::max<uint32_t>(1, threshold / 2);
+            if (count > probationBudget) {
+                limited = true;
+                incrementStatLocked(&stats.probation_budget_drops);
+            }
+        }
+    }
+
     if (limited || count == threshold) {
         TM_LOG_DEBUG("Rate limit 0x%08x: count=%u threshold=%u -> %s", from, count, threshold, limited ? "DROP" : "at-limit");
     }
     return limited;
-#endif
 }
+#endif
 
 bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, uint32_t nowMs)
 {
@@ -1984,7 +2001,18 @@ bool TrafficManagementModule::inProbation(NodeNum node) const
     const AntispamEntry *entry = findAntispamEntry(node);
     if (!entry || entry->firstSeenTick == 0 || entry->promoted)
         return false;
-    const uint8_t ageTicks = static_cast<uint8_t>(currentRateTick() - entry->firstSeenTick) & 0x0F;
+    return antispamAgeInWindowLocked(entry, currentRateTick(), windowTicks);
+}
+
+// True when `entry`'s first-seen age (mod 16 rate ticks) is still inside the
+// probation window of `windowTicks`. Shared by inProbation() (locked) and
+// isRateLimited()'s probation budget penalty (already locked). A firstSeenTick
+// of 0 means "never stamped" and is treated as not in probation.
+bool TrafficManagementModule::antispamAgeInWindowLocked(const AntispamEntry *entry, uint8_t nowTick, uint8_t windowTicks)
+{
+    if (!entry || entry->firstSeenTick == 0)
+        return false;
+    const uint8_t ageTicks = static_cast<uint8_t>(nowTick - entry->firstSeenTick) & 0x0F;
     return ageTicks < windowTicks;
 }
 
