@@ -145,6 +145,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     uint32_t peekRelayedCountForTest(NodeNum node);                             // windowed relayed-for count
     bool peekNoRelayForTest(NodeNum node);                                      // gossiped/local NO_RELAY in force
     int peekSenderBudgetForTest(NodeNum sender, uint32_t *medianOut = nullptr); // -1 untracked
+    /// Test introspection: vouch count this window for an (attester, subject) pair (0 when none).
+    uint8_t peekVouchCountForTest(NodeNum attester, NodeNum subject);
+    /// Test introspection: number of distinct subjects `attester` has vouched for this window (0 when none).
+    uint8_t peekVouchSubjectsForTest(NodeNum attester);
     /// Probation: test override for the uptime read used by the attester-tenure check.
     /// 0xFFFFFFFF = production (reads Time::getUptimeSecs()); otherwise the
     /// stored value is used, so tests can simulate a long-tenured device.
@@ -471,6 +475,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Handle a received ID_ATTESTATION_APP payload (decode + apply
     /// promotion / NO_RELAY). Returns true when the payload was consumed.
     bool handleIdAttestation(const meshtastic_MeshPacket &mp);
+    /// Vouch accounting (caller holds cacheLock): record one processed vouch
+    /// by `attester` for `subject` in the current window.
+    void stampVouchObservationLocked(NodeNum attester, NodeNum subject);
+    /// Vouch accounting (caller holds cacheLock): true when a vouch by
+    /// `attester` for `subject` is within the per-subject and per-window
+    /// distinct-subject caps for the current window.
+    bool vouchWithinCapsLocked(NodeNum attester, NodeNum subject) const;
     /// Group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
     /// and apply the group median when the cell fills. Returns true when a
     /// group budget was applied to `node`.
@@ -523,6 +534,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // attestation_min_tenure_secs to carry weight; tracked via uptime (not
     // per-node state) so a reboot restarts the vouching floor.
     uint32_t lastVouchSentMs = 0; // per-subject vouch cadence guard (single value; cheap)
+
+    // Vouch accounting, per (attester, subject) pair, keyed on the 5-min
+    // budget window tick: count of vouches accepted/issued for the pair
+    // this window, and the distinct subjects each attester has vouched.
+    // LRU over the fixed table; the table is window-scoped (entries of a
+    // rolled window are stale and reclaimable). Attestation traffic is
+    // low-rate, so full scans are fine.
+    static constexpr uint16_t kVouchObsEntries = 16;
+    struct VouchObsCell {
+        NodeNum attester;
+        NodeNum subject;
+        uint8_t count;      // vouches for this pair this window (0 = unused)
+        uint8_t windowTick; // 5-min tick the count accumulated under
+    };
+    VouchObsCell vouchObs[kVouchObsEntries] = {};
 
     // =========================================================================
     // Cache Operations

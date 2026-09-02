@@ -329,6 +329,7 @@ void TrafficManagementModule::purgeAll()
         memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
     if (antispam)
         memset(antispam, 0, static_cast<size_t>(antispamCacheSize()) * sizeof(AntispamEntry));
+    memset(vouchObs, 0, sizeof(vouchObs));
 #endif
     // nodeInfoPayload stays nullptr on builds without the NodeInfo cache; no guard needed.
     if (nodeInfoPayload)
@@ -1063,6 +1064,7 @@ void TrafficManagementModule::flushCache()
     memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
     if (antispam)
         memset(antispam, 0, static_cast<size_t>(antispamCacheSize()) * sizeof(AntispamEntry));
+    memset(vouchObs, 0, sizeof(vouchObs));
 #endif
 }
 
@@ -1230,13 +1232,29 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         // Probation promotion vouch: traffic from a locally established (tracked, out of
         // probation, or promoted) sender on a long-tenured device gets a
         // rate-capped KNOWN_SINCE, so neighbors that first saw the ID can
-        // promote it instead of waiting out their timers. One per hour.
+        // promote it instead of waiting out their timers. One per hour
+        // per device (lastVouchSentMs), one per subject per window
+        // (vouch_max_per_subject_per_window), and a bounded number of
+        // distinct subjects per attester per window
+        // (vouch_max_subjects_per_window) - both enforced here under
+        // cacheLock via the same windowed table the receive side uses.
         // lastVouchSentMs == 0 means "never vouched yet" (cold start): allow
         // the first vouch immediately instead of waiting an hour of uptime.
         if (cfg.probation_window_secs > 0 && uptimeSecs() >= cfg.attestation_min_tenure_secs &&
             isEstablishedForVouching(mp.from) && (lastVouchSentMs == 0 || Throttle::hasElapsed(lastVouchSentMs, 3'600'000UL))) {
-            lastVouchSentMs = nowMs;
-            sendKnownSinceGossip(mp.from);
+            // Caps check + stamp under cacheLock; the gossip send happens
+            // after release (it reads nodeDB and takes the router's locks).
+            bool vouchWithinCaps = false;
+            {
+                concurrency::LockGuard guard(&cacheLock);
+                if (vouchWithinCapsLocked(nodeDB->getNodeNum(), mp.from)) {
+                    stampVouchObservationLocked(nodeDB->getNodeNum(), mp.from);
+                    lastVouchSentMs = nowMs;
+                    vouchWithinCaps = true;
+                }
+            }
+            if (vouchWithinCaps)
+                sendKnownSinceGossip(mp.from);
         }
     }
 
@@ -2182,6 +2200,103 @@ bool TrafficManagementModule::peekNoRelayForTest(NodeNum node)
     return entry && entry->noRelay;
 }
 
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+// Vouch accounting. The fixed vouchObs table is window-scoped: an entry's
+// windowTick only matches the current rate tick while its window is live,
+// and the maintenance sweep zeroes rolled-over entries (maintainAntispamLocked).
+// A full scan is fine - attestation traffic is low-rate.
+
+void TrafficManagementModule::stampVouchObservationLocked(NodeNum attester, NodeNum subject)
+{
+    const uint8_t nowTick = currentRateTick();
+    // Find the pair's cell; otherwise take a free slot, else the least-used
+    // live cell (attestation traffic is low-rate; a 16-slot LRU is ample).
+    VouchObsCell *cell = nullptr;
+    VouchObsCell *freeSlot = nullptr;
+    VouchObsCell *leastUsed = nullptr;
+    for (uint16_t i = 0; i < kVouchObsEntries; i++) {
+        if (vouchObs[i].attester == attester && vouchObs[i].subject == subject) {
+            cell = &vouchObs[i];
+            break;
+        }
+        if (vouchObs[i].attester == 0) {
+            if (!freeSlot)
+                freeSlot = &vouchObs[i];
+            continue;
+        }
+        if (!leastUsed || vouchObs[i].count < leastUsed->count)
+            leastUsed = &vouchObs[i];
+    }
+    if (!cell)
+        cell = freeSlot ? freeSlot : leastUsed;
+    if (!cell)
+        return;
+    if (cell->windowTick != nowTick) {
+        cell->attester = attester;
+        cell->subject = subject;
+        cell->windowTick = nowTick;
+        cell->count = 0;
+    }
+    if (cell->count < 0xFF)
+        cell->count++;
+}
+
+// True when the (attester, subject) vouch is within both caps:
+// per-subject (this pair's count this window < vouch_max_per_subject_per_window)
+// and per-attester distinct-subject (this window's distinct subject count
+// for the attester < vouch_max_subjects_per_window, counting the target
+// subject once). 0 on either knob disables that check.
+bool TrafficManagementModule::vouchWithinCapsLocked(NodeNum attester, NodeNum subject) const
+{
+    const auto &cfg = moduleConfig.traffic_management;
+    const uint8_t nowTick = currentRateTick();
+
+    uint8_t pairCount = 0;
+    uint8_t distinctSubjects = 0;
+    bool targetSeen = false;
+    for (uint16_t i = 0; i < kVouchObsEntries; i++) {
+        const VouchObsCell &c = vouchObs[i];
+        if (c.windowTick != nowTick)
+            continue; // stale window; sweep will reclaim it
+        if (c.attester != attester)
+            continue;
+        if (c.subject == subject) {
+            pairCount = c.count;
+            targetSeen = true;
+        } else {
+            distinctSubjects++;
+        }
+    }
+    if (cfg.vouch_max_per_subject_per_window > 0 && pairCount >= cfg.vouch_max_per_subject_per_window)
+        return false;
+    if (cfg.vouch_max_subjects_per_window > 0 && distinctSubjects + (targetSeen ? 0 : 1) > cfg.vouch_max_subjects_per_window)
+        return false;
+    return true;
+}
+
+uint8_t TrafficManagementModule::peekVouchCountForTest(NodeNum attester, NodeNum subject)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    const uint8_t nowTick = currentRateTick();
+    for (uint16_t i = 0; i < kVouchObsEntries; i++) {
+        if (vouchObs[i].attester == attester && vouchObs[i].subject == subject && vouchObs[i].windowTick == nowTick)
+            return vouchObs[i].count;
+    }
+    return 0;
+}
+
+uint8_t TrafficManagementModule::peekVouchSubjectsForTest(NodeNum attester)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    const uint8_t nowTick = currentRateTick();
+    uint8_t n = 0;
+    for (uint16_t i = 0; i < kVouchObsEntries; i++)
+        if (vouchObs[i].attester == attester && vouchObs[i].windowTick == nowTick && vouchObs[i].subject != 0)
+            n++;
+    return n;
+}
+#endif
+
 void TrafficManagementModule::snapshotTopSenders(meshtastic_TopSender (&out)[kTopSendersCount]) const
 {
     for (int i = 0; i < kTopSendersCount; i++)
@@ -2417,6 +2532,14 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
     if (!entry)
         return true;
 
+    // Vouch accounting: stamp the (attester, subject) pair once the vouch
+    // passes the tenure gates, so the per-subject / per-window caps price
+    // every processed vouch, not just the ones that promote.
+    const auto recordVouch = [&](NodeNum att, NodeNum subj) {
+        if (cfg.vouch_max_per_subject_per_window > 0 || cfg.vouch_max_subjects_per_window > 0)
+            stampVouchObservationLocked(att, subj);
+    };
+
     switch (att.kind) {
     case meshtastic_IdAttestation_Kind_KNOWN_SINCE: {
         if (cfg.probation_window_secs == 0)
@@ -2427,8 +2550,38 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
         // probation out of existence.
         if (att.attester_tenure_secs < cfg.attestation_min_tenure_secs)
             break;
-        if (entry->promoted)
+        // Observed floor: the self-reported tenure above is a claim, not an
+        // observation - a fresh radio can set it to any value. The attester
+        // must also have been observed by THIS device for at least
+        // attestation_min_observed_secs (first-seen tracking, independent of
+        // the attester's clock); that observation is the binding check. 0
+        // disables it (pre-observed-floor firmware behavior).
+        if (cfg.attestation_min_observed_secs > 0) {
+            const AntispamEntry *attesterEntry = findAntispamEntry(attester);
+            const bool sufficientlyObserved =
+                attesterEntry != nullptr && attesterEntry->firstSeenTick != 0 &&
+                (static_cast<uint8_t>(currentRateTick() - attesterEntry->firstSeenTick) & 0x0F) >=
+                    static_cast<uint8_t>(std::min<uint32_t>(15, cfg.attestation_min_observed_secs / (kRateTimeTickMs / 1000)));
+            if (!sufficientlyObserved)
+                break;
+        }
+        // Vouch caps: one attester may vouch for a given subject at most
+        // vouch_max_per_subject_per_window times per window, and for at most
+        // vouch_max_subjects_per_window distinct subjects per window. 0
+        // disables each check. The check runs against the pre-stamp count;
+        // the stamp below lands whether or not the cap admitted the vouch,
+        // so a vouch that cleared the trust gates costs the attester quota
+        // even when it ends up rejected. Checked before the promoted gate:
+        // a vouch for an already-promoted subject still costs quota, so the
+        // caps price repeat gossips rather than just first-time promotions.
+        if (!vouchWithinCapsLocked(attester, att.subject)) {
+            TM_LOG_DEBUG("Antispam: KNOWN_SINCE from 0x%08x for 0x%08x over vouch caps", attester, att.subject);
+            recordVouch(attester, att.subject);
             break;
+        }
+        recordVouch(attester, att.subject);
+        if (entry->promoted)
+            break; // already promoted: the vouch cost quota, but there is nothing left to do
         if (entry->firstSeenTick == 0)
             break; // we have no local probation to shorten
         entry->promoted = true;
@@ -2672,6 +2825,13 @@ void TrafficManagementModule::maintainAntispamLocked()
         if (groupObs[i].windowTick != 0 && (static_cast<uint8_t>(nowRateTick - groupObs[i].windowTick) & 0x0F) >= 1) {
             memset(&groupObs[i], 0, sizeof(GroupObsCell));
             groupMedian[i] = 0;
+        }
+    }
+    // Vouch accounting: clear any cell whose window tick has rolled (the
+    // per-attester / per-subject caps are window-scoped).
+    for (uint16_t i = 0; i < kVouchObsEntries; i++) {
+        if (vouchObs[i].windowTick != 0 && (static_cast<uint8_t>(nowRateTick - vouchObs[i].windowTick) & 0x0F) >= 1) {
+            memset(&vouchObs[i], 0, sizeof(VouchObsCell));
         }
     }
 }

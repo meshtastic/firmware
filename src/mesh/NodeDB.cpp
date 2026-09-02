@@ -1292,15 +1292,15 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     // cap) ship disabled (0) and stay 0 here: they resolve to their
     // default_traffic_mgmt_* macros at use, and the TMM treats 0 as off.
     // NO_RELAY hardening ships on at its defaults: it only prices the
-
     // gossiped no-relay mechanism above.
-
     mc.traffic_management.no_relay_requires_local_exhaustion = default_traffic_mgmt_no_relay_requires_local_exhaustion;
-
     mc.traffic_management.no_relay_max_subjects_per_window = default_traffic_mgmt_no_relay_max_subjects_per_window;
-
     mc.traffic_management.no_relay_ttl_secs = default_traffic_mgmt_no_relay_ttl_secs;
-
+    // The vouch caps and the observed-tenure floor ship on at their
+    // defaults: they only bound the promotion mechanism.
+    mc.traffic_management.attestation_min_observed_secs = default_traffic_mgmt_attestation_min_observed_secs;
+    mc.traffic_management.vouch_max_per_subject_per_window = default_traffic_mgmt_vouch_max_per_subject_per_window;
+    mc.traffic_management.vouch_max_subjects_per_window = default_traffic_mgmt_vouch_max_subjects_per_window;
 #endif
 }
 

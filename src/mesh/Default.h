@@ -67,14 +67,15 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_traffic_mgmt_relay_budget_max_packets 0
 #define default_traffic_mgmt_congestion_hop_cap_pct 0
 // NO_RELAY gossip hardening: claims need a local basis, are capped per
-
 // reporter per window, and re-assert only after their TTL.
-
 #define default_traffic_mgmt_no_relay_requires_local_exhaustion 1
-
 #define default_traffic_mgmt_no_relay_max_subjects_per_window 3
-
 #define default_traffic_mgmt_no_relay_ttl_secs 120
+// Vouching: the attester must have been observed locally for a day, and
+// vouching is capped per subject and per attester per window.
+#define default_traffic_mgmt_attestation_min_observed_secs (24 * 60 * 60) // 24 h of local observation
+#define default_traffic_mgmt_vouch_max_per_subject_per_window 1
+#define default_traffic_mgmt_vouch_max_subjects_per_window 3
 
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
