@@ -1729,12 +1729,22 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
     (void)nowMs;
     return false;
 #else
+    concurrency::LockGuard guard(&cacheLock);
+    return isRateLimitedLocked(from, nowMs);
+#endif
+}
+
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+// Core rate-limit decision; caller must hold cacheLock. The public
+// isRateLimited() wraps it in the lock; handleIdAttestation calls it while
+// already holding the lock (the binary semaphore is not recursive).
+bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
+{
     const uint32_t windowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
     if (windowMs == 0 || moduleConfig.traffic_management.rate_limit_max_packets == 0)
         return false;
 
     bool isNew = false;
-    concurrency::LockGuard guard(&cacheLock);
     UnifiedCacheEntry *entry = findOrCreateEntry(from, &isNew);
     if (!entry)
         return false;
@@ -2315,6 +2325,8 @@ void TrafficManagementModule::recordRelayed(const meshtastic_MeshPacket &mp)
         if (exhausted) {
             entry->noRelay = true;
             entry->noRelayLocal = true;
+            entry->noRelayClaimer = 0; // local exhaustion, not a gossiped claim
+            entry->noRelayClaimMs = 0;
             TM_LOG_INFO("Antispam: relay budget exhausted for 0x%08x (>=%u), stopping relay this window", from,
                         (unsigned)cfg.relay_budget_max_packets);
         }
@@ -2390,6 +2402,7 @@ bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)
 bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &mp)
 {
     const auto &cfg = moduleConfig.traffic_management;
+    const uint32_t nowMs = TrafficManagementModule::clockMs();
     meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
     if (mp.decoded.payload.size == 0 ||
         !pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_IdAttestation_msg, &att))
@@ -2427,11 +2440,59 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
     case meshtastic_IdAttestation_Kind_NO_RELAY: {
         if (cfg.relay_budget_max_packets == 0)
             break;
-        if (entry->noRelay)
+        // Tenure floor (mirrors the KNOWN_SINCE case above): a brand-new
+        // attester cannot declare "don't relay the gateway."
+        if (att.attester_tenure_secs < cfg.attestation_min_tenure_secs)
             break;
+        if (entry->noRelay) {
+            // Already in force: a repeat gossiped claim may refresh the
+            // stamp only after the re-assert TTL has passed (the cap below
+            // counts only claims inside the TTL, so this is a no-op for the
+            // quota). A locally exhausted sender is never gossiped for, so
+            // this only ever runs on the gossiped path.
+            if (entry->noRelayClaimer != 0 && entry->noRelayClaimer == attester && cfg.no_relay_ttl_secs > 0 &&
+                Throttle::deadlinePassedAt(nowMs, entry->noRelayClaimMs + secsToMs(cfg.no_relay_ttl_secs))) {
+                entry->noRelayClaimMs = nowMs;
+            }
+            break;
+        }
+        // Local-exhaustion gate: honor a gossiped NO_RELAY only if this
+        // device has itself seen the subject over-relay this window (its
+        // relay budget is exhausted here, or it is rate-limited here). A
+        // free-floating claim from a neighbor that ran out for a reason we
+        // can't verify does not stop our relay. Default on; 0 accepts the
+        // bit on its own word.
+        if (cfg.no_relay_requires_local_exhaustion > 0) {
+            const bool localExhausted = entry->noRelayLocal || entry->relayedCount >= cfg.relay_budget_max_packets ||
+                                        isRateLimitedLocked(att.subject, nowMs);
+            if (!localExhausted)
+                break;
+        }
+        // Per-attester cap: at most no_relay_max_subjects_per_window
+        // distinct senders per window from one attester, counting only
+        // claims inside the re-assert TTL (0 disables the cap).
+        if (cfg.no_relay_max_subjects_per_window > 0) {
+            uint8_t claimerSubjects = 0;
+            for (uint16_t i = 0; i < antispamCacheSize(); i++) {
+                const AntispamEntry &cand = antispam[i];
+                if (cand.noRelay && cand.noRelayClaimer == attester) {
+                    // TTL in the module clock's timebase (virtual in tests):
+                    // a claim outside its TTL no longer counts against the cap.
+                    const bool insideTtl =
+                        cfg.no_relay_ttl_secs == 0 ||
+                        !Throttle::deadlinePassedAt(nowMs, cand.noRelayClaimMs + secsToMs(cfg.no_relay_ttl_secs));
+                    if (insideTtl && cand.node != att.subject)
+                        claimerSubjects++;
+                }
+            }
+            if (claimerSubjects >= cfg.no_relay_max_subjects_per_window)
+                break;
+        }
         entry->noRelay = true;
         entry->noRelayLocal = false; // gossiped, not local -> we never re-gossip it
-        TM_LOG_INFO("Antispam: NO_RELAY for 0x%08x gossiped by 0x%08x", att.subject, attester);
+        entry->noRelayClaimer = attester;
+        entry->noRelayClaimMs = nowMs;
+        TM_LOG_INFO("Antispam: NO_RELAY for 0x%08x gossiped by 0x%08x (observed)", att.subject, attester);
         break;
     }
     default:
@@ -2589,6 +2650,8 @@ void TrafficManagementModule::maintainAntispamLocked()
             e.relayedCount = 0;
             e.noRelay = false;
             e.noRelayLocal = false;
+            e.noRelayClaimer = 0;
+            e.noRelayClaimMs = 0;
             e.budgetSampleCount = 0;
             for (uint8_t k = 0; k < 3; k++) {
                 e.budgetSamples[k] = 0;

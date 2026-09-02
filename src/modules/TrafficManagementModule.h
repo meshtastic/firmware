@@ -416,8 +416,17 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // for fresh-ID co-occurrence grouping. rssiClass 0xFF = unknown.
         uint8_t rssiClass;
         uint8_t channel;
+        // Relay pricing: monotonic-clock stamp (ms) at which the in-force
+        // gossiped NO_RELAY for this sender was accepted, and the attester
+        // that declared it (0 = local exhaustion). A gossiped claim for the
+        // same (sender, attester) pair cannot be re-accepted until the
+        // re-assert TTL passes; the cap on distinct claimers' subjects
+        // counts only claims whose TTL has not passed. Cleared with the
+        // NO_RELAY bit at the next window rollover.
+        NodeNum noRelayClaimer;
+        uint32_t noRelayClaimMs;
     };
-    static_assert(sizeof(AntispamEntry) == 26, "AntispamEntry should be 26 bytes");
+    static_assert(sizeof(AntispamEntry) == 34, "AntispamEntry should be 34 bytes");
 
     static constexpr uint16_t antispamCacheSize()
     {
@@ -597,6 +606,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const;
     /// True when `from` exceeded the configured packet budget for the current rate window.
     bool isRateLimited(NodeNum from, uint32_t nowMs);
+    /// Same decision as isRateLimited but for callers that already hold cacheLock
+    /// (the binary semaphore is not recursive; a second lock would deadlock).
+    bool isRateLimitedLocked(NodeNum from, uint32_t nowMs);
     /// True when `p`'s sender exceeded the undecodable-packet threshold for the current window.
     bool shouldDropUnknown(const meshtastic_MeshPacket *p, uint32_t nowMs);
 

@@ -1291,6 +1291,16 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     // Budget knobs (budget gossip, group budget, relay budget, congestion hop
     // cap) ship disabled (0) and stay 0 here: they resolve to their
     // default_traffic_mgmt_* macros at use, and the TMM treats 0 as off.
+    // NO_RELAY hardening ships on at its defaults: it only prices the
+
+    // gossiped no-relay mechanism above.
+
+    mc.traffic_management.no_relay_requires_local_exhaustion = default_traffic_mgmt_no_relay_requires_local_exhaustion;
+
+    mc.traffic_management.no_relay_max_subjects_per_window = default_traffic_mgmt_no_relay_max_subjects_per_window;
+
+    mc.traffic_management.no_relay_ttl_secs = default_traffic_mgmt_no_relay_ttl_secs;
+
 #endif
 }
 

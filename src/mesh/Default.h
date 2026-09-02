@@ -66,6 +66,15 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_traffic_mgmt_group_budget_enabled 0
 #define default_traffic_mgmt_relay_budget_max_packets 0
 #define default_traffic_mgmt_congestion_hop_cap_pct 0
+// NO_RELAY gossip hardening: claims need a local basis, are capped per
+
+// reporter per window, and re-assert only after their TTL.
+
+#define default_traffic_mgmt_no_relay_requires_local_exhaustion 1
+
+#define default_traffic_mgmt_no_relay_max_subjects_per_window 3
+
+#define default_traffic_mgmt_no_relay_ttl_secs 120
 
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
