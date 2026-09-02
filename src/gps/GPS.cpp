@@ -1567,9 +1567,36 @@ int32_t GPS::runOnce()
             }
         }
 
+<<<<<<< HEAD
         bool tooLong = scheduling.searchedTooLong();
         if (tooLong && !gotLoc) {
             LOG_WARN("Can't publish valid location: no GPS lock in time");
+=======
+        bool tooLong = false;
+#if defined(TTGO_T_ECHO_PLUS)
+        if (gnssModel == GNSS_MODEL_MTK) {
+            constexpr uint32_t noTrackedTimeoutMs = 15UL * 60UL * 1000UL;
+            const uint32_t noTrackedForMs = scheduling.elapsedSearchMs();
+
+            // A missing fix alone is no longer a reason to stop the L76K search.
+            // The timer is reset by every checksum-valid GSV sentence that
+            // contains at least one tracked satellite with C/N0/SNR.
+            tooLong = noTrackedForMs >= noTrackedTimeoutMs;
+        } else {
+            tooLong = scheduling.searchedTooLong();
+        }
+#else
+        tooLong = scheduling.searchedTooLong();
+#endif
+
+        if (tooLong && !gotLoc) {
+#if defined(TTGO_T_ECHO_PLUS)
+            if (gnssModel == GNSS_MODEL_MTK)
+                LOG_WARN("L76K: no tracked satellites for 15 minutes; ending GPS search");
+            else
+#endif
+                LOG_WARN("Can't publish valid location: no GPS lock in time");
+>>>>>>> 0b74a29ad (t-echo-plus)
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
                 p = meshtastic_Position_init_default;
