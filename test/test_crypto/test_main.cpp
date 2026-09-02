@@ -451,7 +451,7 @@ static CryptoKey makePsk(const std::string &hex)
 
 void test_AES_CCM_AEAD(void)
 {
-    // Test 1: Smoke test — encryption changes the payload and produces a tag
+    // Test 1: Smoke test - encryption changes the payload and produces a tag
     // (the known-answer coverage lives in test_AES_CCM_rfc3610)
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
@@ -503,7 +503,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_EQUAL_MEMORY(msg, decrypted, msgLen);
     }
 
-    // Test 3: Tampered ciphertext — flip a bit, verify rejection
+    // Test 3: Tampered ciphertext - flip a bit, verify rejection
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -523,7 +523,7 @@ void test_AES_CCM_AEAD(void)
             crypto->decryptPacketCCM(psk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
-    // Test 4: Tampered auth tag — modify tag, verify rejection
+    // Test 4: Tampered auth tag - modify tag, verify rejection
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -545,7 +545,7 @@ void test_AES_CCM_AEAD(void)
             crypto->decryptPacketCCM(psk, fromNode, packetId, 16 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
-    // Test 5: Packet too small for AEAD — totalBytes <= AEAD_TAG_SIZE
+    // Test 5: Packet too small for AEAD - totalBytes <= AEAD_TAG_SIZE
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -558,7 +558,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x5678, 0, dummy, out));
     }
 
-    // Test 6: Wrong PSK — decrypt with different key, verify rejection
+    // Test 6: Wrong PSK - decrypt with different key, verify rejection
     {
         CryptoKey pskA = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
         CryptoKey pskB = makePsk("00112233445566778899aabbccddeeff");
@@ -625,7 +625,7 @@ void test_AES_CCM_AEAD(void)
         }
     }
 
-    // Test 9: Deterministic — same inputs produce same output
+    // Test 9: Deterministic - same inputs produce same output
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -642,7 +642,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_EQUAL_MEMORY(ct1, ct2, 5 + CryptoEngine::AEAD_TAG_SIZE);
     }
 
-    // Test 10: Wrong nonce input — the nonce derives from both fromNode and packetId,
+    // Test 10: Wrong nonce input - the nonce derives from both fromNode and packetId,
     // so each one on its own must be enough to make the tag check fail
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
@@ -673,7 +673,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 6);
     }
 
-    // Test 11: Empty PSK — must return false, not crash
+    // Test 11: Empty PSK - must return false, not crash
     {
         CryptoKey emptyPsk;
         memset(&emptyPsk, 0, sizeof(emptyPsk));

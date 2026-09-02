@@ -1041,7 +1041,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 size_t decryptedSize = rawSize;
 
                 if (channels.isAEADEnabled(chIndex)) {
-                    // AEAD decryption — no CTR fallback
+                    // AEAD decryption - no CTR fallback
                     if (rawSize <= MESHTASTIC_AEAD_OVERHEAD) {
                         LOG_ERROR("Packet too small for AEAD (size=%d)", rawSize);
                         continue;
@@ -1049,7 +1049,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                     CryptoKey k = channels.getKey(chIndex);
                     if (!crypto->decryptPacketCCM(k, p->from, p->id, rawSize, p->encrypted.bytes, bytes)) {
                         LOG_WARN("AEAD authentication failed for ch %d", chIndex);
-                        continue; // reject — no fallback to CTR
+                        continue; // reject - no fallback to CTR
                     }
                     decryptedSize = rawSize - MESHTASTIC_AEAD_OVERHEAD;
                 } else {

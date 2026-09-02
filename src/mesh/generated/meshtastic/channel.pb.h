@@ -100,7 +100,7 @@ typedef struct _meshtastic_ChannelSettings {
     /* Enable authenticated encryption (AES-CCM) for this channel.
  When true, messages include a 12-byte authentication tag that prevents
  forgery and bit-flipping attacks. All nodes on the channel must have
- this enabled — unauthenticated (AES-CTR) packets are rejected.
+ this enabled - unauthenticated (AES-CTR) packets are rejected.
  Experimental. Default: false (standard AES-CTR encryption). */
     bool use_aead;
 } meshtastic_ChannelSettings;
