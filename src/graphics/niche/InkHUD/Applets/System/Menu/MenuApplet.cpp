@@ -2,6 +2,7 @@
 
 #include "./MenuApplet.h"
 
+#include "Default.h"
 #include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MeshRadio.h"
@@ -42,8 +43,13 @@ struct UInt32Option {
 };
 
 static constexpr DisplayTimeoutOption DISPLAY_TIMEOUT_OPTIONS[] = {
-    {0, "Forever"},      {30, "30 secs"},     {60, "1 min"},     {5 * 60, "5 min"},
-    {15 * 60, "15 min"}, {30 * 60, "30 min"}, {60 * 60, "1 hr"},
+    {DECAF_ZERO_TIMEOUT_SECS, "Forever"},
+    {30, "30 secs"},
+    {60, "1 min"},
+    {5 * 60, "5 min"},
+    {15 * 60, "15 min"},
+    {30 * 60, "30 min"},
+    {60 * 60, "1 hr"},
 };
 
 static constexpr UInt32Option POSITION_BROADCAST_OPTIONS[] = {
@@ -77,6 +83,14 @@ static constexpr PositionPrecisionOption POSITION_PRECISION_OPTIONS[] = {
     {16, "350 m", "0.2 mi"},    {15, "700 m", "0.5 mi"}, {14, "1.5 km", "0.9 mi"}, {13, "2.9 km", "1.8 mi"},
     {12, "5.8 km", "3.6 mi"},   {11, "12 km", "7.3 mi"}, {10, "23 km", "15 mi"},
 };
+
+// E-Ink read a stored 0 as "keep the screen on" long before the timeout sentinel existed, and
+// nothing migrates those saved configs. Normalise it so such a device still lands on the Forever
+// row rather than reading as "Custom" with nothing selected.
+static uint32_t normaliseDisplayTimeout(uint32_t seconds)
+{
+    return seconds == 0 ? (uint32_t)DECAF_ZERO_TIMEOUT_SECS : seconds;
+}
 
 static const char *getDisplayTimeoutLabel(uint32_t timeoutSeconds)
 {
@@ -1523,7 +1537,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::NODE_CONFIG_DISPLAY,
                                  &config.display.use_12h_clock));
 
-        nodeConfigLabels.emplace_back("Screen Timeout: " + std::string(getDisplayTimeoutLabel(config.display.screen_on_secs)));
+        nodeConfigLabels.emplace_back(
+            "Screen Timeout: " + std::string(getDisplayTimeoutLabel(normaliseDisplayTimeout(config.display.screen_on_secs))));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_DISPLAY_TIMEOUT));
 
         const char *unitsLabel =
@@ -2325,7 +2340,8 @@ void InkHUD::MenuApplet::populateDisplayTimeoutPage()
 {
     constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
     for (uint8_t i = 0; i < optionCount; i++) {
-        displayTimeoutSelected[i] = (config.display.screen_on_secs == DISPLAY_TIMEOUT_OPTIONS[i].seconds);
+        displayTimeoutSelected[i] =
+            (normaliseDisplayTimeout(config.display.screen_on_secs) == DISPLAY_TIMEOUT_OPTIONS[i].seconds);
         nodeConfigLabels.emplace_back(DISPLAY_TIMEOUT_OPTIONS[i].label);
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_DISPLAY_TIMEOUT, MenuPage::NODE_CONFIG_DISPLAY,
                                  &displayTimeoutSelected[i]));

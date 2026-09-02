@@ -75,6 +75,19 @@ static uint32_t getBluetoothWaitMs()
     return Default::getTimeoutMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
 }
 
+// A zero display timeout means "keep the screen on". As an ON -> DARK transition period it would
+// do the opposite and fire immediately, so the caller leaves those transitions unregistered.
+bool screenStaysOn(uint32_t screenOnSecs)
+{
+#ifdef USE_EINK
+    // E-Ink read a literal 0 as "suppress the screensaver" before the sentinel existed, and nothing
+    // migrates saved configs, so that spelling keeps working alongside the sentinel.
+    if (screenOnSecs == 0)
+        return true;
+#endif
+    return Default::getTimeoutMs(screenOnSecs, default_screen_on_secs) == 0;
+}
+
 // A zero display timeout means "go dark immediately", which as a DARK self-transition period
 // would re-enter DARK on every FSM tick, so fall back to the default period.
 uint32_t getDarkRecheckMs()
@@ -426,11 +439,7 @@ void PowerFSM_setup()
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
-#ifdef USE_EINK
-    // Allow E-Ink devices to suppress the screensaver, if screen timeout set to 0
-    if (config.display.screen_on_secs > 0)
-#endif
-    {
+    if (!screenStaysOn(config.display.screen_on_secs)) {
         powerFSM.add_timed_transition(&stateON, &stateDARK, displayTimeoutMs, NULL, "Screen-on timeout");
         powerFSM.add_timed_transition(&statePOWER, &stateDARK, displayTimeoutMs, NULL, "Screen-on timeout");
     }

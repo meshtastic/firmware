@@ -54,6 +54,10 @@ extern Fsm powerFSM;
 extern State stateON, statePOWER, stateSERIAL, stateDARK;
 
 void PowerFSM_setup();
+/// True when the configured screen timeout asks for the screen to stay on, so the ON -> DARK
+/// transitions must not be registered at all.
+bool screenStaysOn(uint32_t screenOnSecs);
+
 /// Period of the DARK self-transition that re-checks for config drift. Never zero.
 uint32_t getDarkRecheckMs();
 #endif
