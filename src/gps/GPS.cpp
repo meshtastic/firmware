@@ -2123,6 +2123,12 @@ bool GPS::lookForLocation()
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
     fixQual = reader.fixQuality();
+=======
+    // TinyGPS++ already parses the GGA fix-quality field into fixQ.
+    // Use the public getter directly instead of regenerating/parsing a GGA string.
+    fixQual = reader.fixQuality();
+
+>>>>>>> 64bde1298 (t-echo-plus)
     const uint8_t parsedFixType = reader.gsaFixType();
 
     // Satellite visibility is status information, not proof of a valid
@@ -2236,10 +2242,10 @@ bool GPS::lookForLocation()
     p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
     p.PDOP = gsaPdop ? gsaPdop : TinyGPSPlus::parseDecimal(gsapdop.value());
 #else
-    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
-    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-    p.HDOP = reader.hdop.value();
-    p.PDOP = 1.41 * reader.hdop.value();
+// FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+// correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+p.HDOP = reader.hdop.value();
+p.PDOP = 1.41 * reader.hdop.value();
 #endif
 
     // Discard incomplete or erroneous readings
@@ -2267,8 +2273,8 @@ bool GPS::lookForLocation()
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
                   reader.gsaFixType(), reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 =======
-                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
-                  parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
+              reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
+              parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 >>>>>>> 0a7ef0972 (t-echo-plus)
 
     if (reader.hasValidGLL()) {

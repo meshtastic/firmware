@@ -443,6 +443,11 @@ class TinyGPSPlus
     // Returns number of bytes written, excluding the 0 terminator.
     int GGA(char *buf);
 
+    // Return the GGA fix-quality value parsed by TinyGPS++.
+    // 0 = invalid/no fix, 1 = GPS fix, 2 = DGPS, 3 = PPS,
+    // 4 = RTK fixed, 5 = RTK float, etc.
+    uint8_t fixQuality() const { return fixQ; }
+
     enum
     {
         FLAG_DEFAULT = 0,
