@@ -1720,11 +1720,15 @@ class RestoreDerivingCryptoEngine : public CryptoEngine
 {
   public:
     bool regenerateSucceeds = true;
+    bool derivesLowEntropy = true;
     bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey) override
     {
         if (!regenerateSucceeds)
             return false;
-        memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
+        if (derivesLowEntropy)
+            memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
+        else
+            memset(pubKey, 0x7C, 32);
         return true;
     }
     void generateKeyPair(uint8_t *pubKey, uint8_t *privKey) override
@@ -1819,6 +1823,35 @@ static void test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected
     TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
     TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
     TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// A blacklisted public key whose private key derives a clean one is only re-derived - the user's key
+// does stick, so the "a new secure key was generated" warning would be a lie here.
+static void test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn()
+{
+    installRestoreCrypto()->derivesLowEntropy = false;
+
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+    c.payload_variant.security.public_key.size = 32;
+    memcpy(c.payload_variant.security.public_key.bytes, COMPROMISED_PUBLIC_KEY, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    // The supplied private key survives, and the blacklisted public key is replaced by its derivation.
+    uint8_t expectedPriv[32];
+    memset(expectedPriv, 0x11, 32);
+    TEST_ASSERT_EQUAL_MEMORY(expectedPriv, config.security.private_key.bytes, 32);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
 }
 
 // keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
@@ -2552,6 +2585,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged);
     RUN_TEST(test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates);
     RUN_TEST(test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected);
+    RUN_TEST(test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
