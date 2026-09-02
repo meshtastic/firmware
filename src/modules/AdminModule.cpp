@@ -1207,9 +1207,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
+        // A supplied public key that is itself blacklisted is re-derived too, so a restore carrying a whole
+        // low-entropy pair cannot skip the check just by populating both fields.
         if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
-        } else if (config.security.public_key.size == 0) {
+        } else if (config.security.public_key.size == 0 || nodeDB->checkLowEntropyPublicKey(config.security.public_key)) {
             // A rejected pre-2.8 low-entropy key was swapped for a fresh one: say so at set time, not
             // after the next reboot. Gated on this call succeeding so a stale flag can't fire.
             const bool keygenSucceeded = nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);

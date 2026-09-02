@@ -1023,8 +1023,13 @@ static void replaceAdminRadioGlobals()
     nodeDB = replacementNodeDB;
 }
 
+// Defined with the crypto stub below; tearDown must undo an install even when a failed assertion
+// longjmped out of the test body before it could.
+static void dropRestoreCryptoStub();
+
 static void restoreAdminRadioGlobals()
 {
+    dropRestoreCryptoStub();
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
     router = savedRouter;
@@ -1732,6 +1737,25 @@ class RestoreDerivingCryptoEngine : public CryptoEngine
 static CryptoEngine *savedCrypto;
 static RestoreDerivingCryptoEngine *restoreCrypto;
 
+// Installed here and torn down in restoreAdminRadioGlobals(), not at the end of the test body: a failed
+// TEST_ASSERT longjmps straight out, which would leave later tests running against a freed stub.
+static RestoreDerivingCryptoEngine *installRestoreCrypto()
+{
+    savedCrypto = crypto;
+    restoreCrypto = new RestoreDerivingCryptoEngine();
+    crypto = restoreCrypto;
+    return restoreCrypto;
+}
+
+static void dropRestoreCryptoStub()
+{
+    if (!restoreCrypto)
+        return;
+    crypto = savedCrypto;
+    delete restoreCrypto;
+    restoreCrypto = nullptr;
+}
+
 // Arms a bare private-key restore: region set so keygen runs, private key present, public key absent.
 static meshtastic_Config makeBareKeyRestoreConfig()
 {
@@ -1758,9 +1782,7 @@ static bool capturedWarningsContain(const char *needle)
 // the client is told why - not left to discover it after the next reboot.
 static void test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates()
 {
-    savedCrypto = crypto;
-    restoreCrypto = new RestoreDerivingCryptoEngine();
-    crypto = restoreCrypto;
+    installRestoreCrypto();
 
     const meshtastic_Config c = makeBareKeyRestoreConfig();
     testAdmin->deferSaves();
@@ -1771,10 +1793,32 @@ static void test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates()
     TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
     TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
     TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
 
-    crypto = savedCrypto;
-    delete restoreCrypto;
-    restoreCrypto = nullptr;
+// A restore carrying a whole blacklisted pair must not skip validation just because it populated the
+// public key too - that path reaches neither keygen branch, so the weak identity used to be kept.
+static void test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected()
+{
+    installRestoreCrypto();
+
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+    c.payload_variant.security.public_key.size = 32;
+    memcpy(c.payload_variant.security.public_key.bytes, COMPROMISED_PUBLIC_KEY, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
 }
 
 // keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
@@ -1801,10 +1845,7 @@ static void test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn()
 // that state gets persisted, and every later keygen re-derives from the same dead key.
 static void test_handleSetConfig_security_failedDerivationClearsKeySizes()
 {
-    savedCrypto = crypto;
-    restoreCrypto = new RestoreDerivingCryptoEngine();
-    restoreCrypto->regenerateSucceeds = false;
-    crypto = restoreCrypto;
+    installRestoreCrypto()->regenerateSucceeds = false;
 
     const meshtastic_Config c = makeBareKeyRestoreConfig();
     testAdmin->deferSaves();
@@ -1813,10 +1854,6 @@ static void test_handleSetConfig_security_failedDerivationClearsKeySizes()
     TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
     TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
     TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
-
-    crypto = savedCrypto;
-    delete restoreCrypto;
-    restoreCrypto = nullptr;
 }
 
 static void test_regionInfo_supportsPreset()
@@ -2514,6 +2551,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_rotationPreservesAdminKeys);
     RUN_TEST(test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged);
     RUN_TEST(test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates);
+    RUN_TEST(test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
