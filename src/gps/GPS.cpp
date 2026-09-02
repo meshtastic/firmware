@@ -1434,7 +1434,7 @@ void GPS::setConnected()
 // We want a GPS lock. Wake the hardware
 void GPS::up()
 {
-#if defined(TTGO_T_ECHO_PLUS)
+#if defined(TTGO_T_ECHO_PLUS_inkHud2)
     if (gnssModel == GNSS_MODEL_MTK || gnssModel == GNSS_MODEL_UNKNOWN) {
         // TODO: implement satellite activity reset for MTK models
     }
