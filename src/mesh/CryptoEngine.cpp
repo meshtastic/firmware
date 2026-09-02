@@ -373,7 +373,15 @@ bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_pu
 
 #endif
 
-bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t numBytes,
+// AAD layout: [fromNode (4)] [toNode (4)], in the same native byte order initNonce uses.
+static void initAad(uint32_t fromNode, uint32_t toNode, uint8_t *aad)
+{
+    // memcpy to avoid breaking strict-aliasing, as initNonce does
+    memcpy(aad, &fromNode, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint32_t), &toNode, sizeof(uint32_t));
+}
+
+bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
                                     const uint8_t *plaintext, uint8_t *ciphertextWithTag)
 {
     // length is int8_t and the aes_ccm_* key length is size_t, so the -1 "invalid key"
@@ -383,13 +391,15 @@ bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uin
         return false;
     }
     initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
     // Output layout: [ciphertext (numBytes)] [auth_tag (AEAD_TAG_SIZE bytes)]
-    return aes_ccm_ae(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, plaintext, numBytes, nullptr, 0, ciphertextWithTag,
+    return aes_ccm_ae(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, plaintext, numBytes, aad, sizeof(aad), ciphertextWithTag,
                       ciphertextWithTag + numBytes) == 0;
 }
 
-bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t totalBytes,
-                                    const uint8_t *ciphertextWithTag, uint8_t *plaintext)
+bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId,
+                                    size_t totalBytes, const uint8_t *ciphertextWithTag, uint8_t *plaintext)
 {
     if (psk.length <= 0) {
         LOG_ERROR("AEAD decryption requires a valid, non-empty PSK");
@@ -398,9 +408,12 @@ bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uin
     if (totalBytes <= AEAD_TAG_SIZE)
         return false;
     initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
     size_t crypt_len = totalBytes - AEAD_TAG_SIZE;
     const uint8_t *auth = ciphertextWithTag + crypt_len;
-    return aes_ccm_ad(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, nullptr, 0, auth, plaintext);
+    return aes_ccm_ad(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, aad, sizeof(aad), auth,
+                      plaintext);
 }
 
 concurrency::Lock *cryptLock;

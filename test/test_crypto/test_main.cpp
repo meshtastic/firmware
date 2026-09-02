@@ -457,6 +457,7 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
         uint32_t fromNode = 0x12345678;
+        uint32_t toNode = 0x0000AAAA;
         uint64_t packetId = 0xAABBCCDD;
 
         uint8_t plaintext[10];
@@ -465,7 +466,7 @@ void test_AES_CCM_AEAD(void)
         uint8_t ciphertextWithTag[10 + CryptoEngine::AEAD_TAG_SIZE];
         memset(ciphertextWithTag, 0, sizeof(ciphertextWithTag));
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 10, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 10, plaintext, ciphertextWithTag));
 
         // Ciphertext should differ from plaintext
         TEST_ASSERT_FALSE(memcmp(plaintext, ciphertextWithTag, 10) == 0);
@@ -486,6 +487,7 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
 
         uint32_t fromNode = 0xDEADBEEF;
+        uint32_t toNode = 0xFFFFFFFF;
         uint64_t packetId = 0x0102030405060708;
 
         const char *msg = "Hello Meshtastic AEAD!";
@@ -493,12 +495,13 @@ void test_AES_CCM_AEAD(void)
 
         uint8_t ciphertextWithTag[64];
         memset(ciphertextWithTag, 0, sizeof(ciphertextWithTag));
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, msgLen, (const uint8_t *)msg, ciphertextWithTag));
+        TEST_ASSERT_TRUE(
+            crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, msgLen, (const uint8_t *)msg, ciphertextWithTag));
 
         uint8_t decrypted[64];
         memset(decrypted, 0, sizeof(decrypted));
         size_t totalBytes = msgLen + CryptoEngine::AEAD_TAG_SIZE;
-        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNode, packetId, totalBytes, ciphertextWithTag, decrypted));
+        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNode, toNode, packetId, totalBytes, ciphertextWithTag, decrypted));
 
         TEST_ASSERT_EQUAL_MEMORY(msg, decrypted, msgLen);
     }
@@ -508,19 +511,20 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
         uint32_t fromNode = 0xABCD1234;
+        uint32_t toNode = 0x00000001;
         uint64_t packetId = 0x11223344;
 
         uint8_t plaintext[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
         uint8_t ciphertextWithTag[8 + CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 8, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 8, plaintext, ciphertextWithTag));
 
         // Flip a bit in the ciphertext portion
         ciphertextWithTag[3] ^= 0x01;
 
         uint8_t decrypted[8];
-        TEST_ASSERT_FALSE(
-            crypto->decryptPacketCCM(psk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNode, toNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
     }
 
     // Test 4: Tampered auth tag - modify tag, verify rejection
@@ -528,6 +532,7 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
         uint32_t fromNode = 0xABCD1234;
+        uint32_t toNode = 0x87654321;
         uint64_t packetId = 0x55667788;
 
         uint8_t plaintext[16] = {0};
@@ -535,14 +540,14 @@ void test_AES_CCM_AEAD(void)
             plaintext[i] = (uint8_t)i;
 
         uint8_t ciphertextWithTag[16 + CryptoEngine::AEAD_TAG_SIZE];
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 16, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 16, plaintext, ciphertextWithTag));
 
         // Corrupt the auth tag (last byte)
         ciphertextWithTag[16 + CryptoEngine::AEAD_TAG_SIZE - 1] ^= 0xFF;
 
         uint8_t decrypted[16];
-        TEST_ASSERT_FALSE(
-            crypto->decryptPacketCCM(psk, fromNode, packetId, 16 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNode, toNode, packetId, 16 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
     }
 
     // Test 5: Packet too small for AEAD - totalBytes <= AEAD_TAG_SIZE
@@ -554,8 +559,8 @@ void test_AES_CCM_AEAD(void)
         // instead of corrupting the stack on its way out.
         uint8_t out[CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x5678, CryptoEngine::AEAD_TAG_SIZE, dummy, out));
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x5678, 0, dummy, out));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x4321, 0x5678, CryptoEngine::AEAD_TAG_SIZE, dummy, out));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x4321, 0x5678, 0, dummy, out));
     }
 
     // Test 6: Wrong PSK - decrypt with different key, verify rejection
@@ -564,17 +569,18 @@ void test_AES_CCM_AEAD(void)
         CryptoKey pskB = makePsk("00112233445566778899aabbccddeeff");
 
         uint32_t fromNode = 0x99887766;
+        uint32_t toNode = 0x13579BDF;
         uint64_t packetId = 0xDEADFACE;
 
         uint8_t plaintext[12] = "Hello World";
         uint8_t ciphertextWithTag[12 + CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(pskA, fromNode, packetId, 12, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(pskA, fromNode, toNode, packetId, 12, plaintext, ciphertextWithTag));
 
         // Attempt decryption with wrong key
         uint8_t decrypted[12];
-        TEST_ASSERT_FALSE(
-            crypto->decryptPacketCCM(pskB, fromNode, packetId, 12 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(pskB, fromNode, toNode, packetId, 12 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
     }
 
     // Test 7: Round-trip with AES-128 PSK (16-byte key, true AES-128-CCM)
@@ -582,16 +588,17 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
         uint32_t fromNode = 0x42424242;
+        uint32_t toNode = 0x2468ACE0;
         uint64_t packetId = 0xBEEF1234;
 
         uint8_t plaintext[20] = "AES128 round trip!";
         uint8_t ciphertextWithTag[20 + CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 20, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 20, plaintext, ciphertextWithTag));
 
         uint8_t decrypted[20];
-        TEST_ASSERT_TRUE(
-            crypto->decryptPacketCCM(psk, fromNode, packetId, 20 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNode, toNode, packetId, 20 + CryptoEngine::AEAD_TAG_SIZE,
+                                                  ciphertextWithTag, decrypted));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 20);
     }
 
@@ -600,6 +607,7 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
 
         uint32_t fromNode = 0x01020304;
+        uint32_t toNode = 0x0BADCAFE;
         uint64_t packetId = 0x0A0B0C0D0E0F1011;
 
         uint8_t plaintext[32];
@@ -607,12 +615,12 @@ void test_AES_CCM_AEAD(void)
             plaintext[i] = (uint8_t)(i * 7 + 3);
 
         uint8_t ciphertextWithTag[32 + CryptoEngine::AEAD_TAG_SIZE];
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 32, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 32, plaintext, ciphertextWithTag));
 
         // Valid decrypt
         uint8_t decrypted[32];
-        TEST_ASSERT_TRUE(
-            crypto->decryptPacketCCM(psk, fromNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNode, toNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE,
+                                                  ciphertextWithTag, decrypted));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 32);
 
         // Flip a bit in every byte in turn, tag included, and verify each one is rejected
@@ -621,7 +629,7 @@ void test_AES_CCM_AEAD(void)
             memcpy(tampered, ciphertextWithTag, sizeof(tampered));
             tampered[i] ^= 0x80;
             TEST_ASSERT_FALSE(
-                crypto->decryptPacketCCM(psk, fromNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE, tampered, decrypted));
+                crypto->decryptPacketCCM(psk, fromNode, toNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE, tampered, decrypted));
         }
     }
 
@@ -630,14 +638,15 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
         uint32_t fromNode = 0xCAFEBABE;
+        uint32_t toNode = 0x5A5A5A5A;
         uint64_t packetId = 0xFEEDFACE;
 
         uint8_t plaintext[5] = {0xDE, 0xAD, 0xBE, 0xEF, 0x42};
         uint8_t ct1[5 + CryptoEngine::AEAD_TAG_SIZE];
         uint8_t ct2[5 + CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 5, plaintext, ct1));
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 5, plaintext, ct2));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 5, plaintext, ct1));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 5, plaintext, ct2));
 
         TEST_ASSERT_EQUAL_MEMORY(ct1, ct2, 5 + CryptoEngine::AEAD_TAG_SIZE);
     }
@@ -649,27 +658,28 @@ void test_AES_CCM_AEAD(void)
 
         uint32_t fromNodeA = 0x11111111;
         uint32_t fromNodeB = 0x22222222;
+        uint32_t toNode = 0x77777777;
         uint64_t packetIdA = 0xAAAABBBB;
         uint64_t packetIdB = 0xCCCCDDDD;
 
         uint8_t plaintext[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
         uint8_t ciphertextWithTag[6 + CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNodeA, packetIdA, 6, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNodeA, toNode, packetIdA, 6, plaintext, ciphertextWithTag));
 
         uint8_t decrypted[6];
         // Wrong fromNode, right packetId
-        TEST_ASSERT_FALSE(
-            crypto->decryptPacketCCM(psk, fromNodeB, packetIdA, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNodeB, toNode, packetIdA, 6 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
         // Right fromNode, wrong packetId
-        TEST_ASSERT_FALSE(
-            crypto->decryptPacketCCM(psk, fromNodeA, packetIdB, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNodeA, toNode, packetIdB, 6 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
         // Both wrong
-        TEST_ASSERT_FALSE(
-            crypto->decryptPacketCCM(psk, fromNodeB, packetIdB, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNodeB, toNode, packetIdB, 6 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
         // Both right still succeeds, so the assertions above are not passing for free
-        TEST_ASSERT_TRUE(
-            crypto->decryptPacketCCM(psk, fromNodeA, packetIdA, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNodeA, toNode, packetIdA, 6 + CryptoEngine::AEAD_TAG_SIZE,
+                                                  ciphertextWithTag, decrypted));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 6);
     }
 
@@ -680,6 +690,7 @@ void test_AES_CCM_AEAD(void)
         emptyPsk.length = 0;
 
         uint32_t fromNode = 0xDEADBEEF;
+        uint32_t toNode = 0x0000BEEF;
         uint64_t packetId = 0x12345678;
 
         uint8_t plaintext[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
@@ -687,12 +698,12 @@ void test_AES_CCM_AEAD(void)
         uint8_t decrypted[8];
 
         // Encrypt with empty PSK must fail gracefully
-        TEST_ASSERT_FALSE(crypto->encryptPacketCCM(emptyPsk, fromNode, packetId, 8, plaintext, ciphertextWithTag));
+        TEST_ASSERT_FALSE(crypto->encryptPacketCCM(emptyPsk, fromNode, toNode, packetId, 8, plaintext, ciphertextWithTag));
 
         // Decrypt with empty PSK must fail gracefully
         // (use dummy ciphertext since encrypt failed)
         memset(ciphertextWithTag, 0xAA, sizeof(ciphertextWithTag));
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(emptyPsk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(emptyPsk, fromNode, toNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
                                                    ciphertextWithTag, decrypted));
 
         // CryptoKey uses -1 as its "invalid key - do not use" sentinel, and it would widen
@@ -701,8 +712,8 @@ void test_AES_CCM_AEAD(void)
         memset(&invalidPsk, 0, sizeof(invalidPsk));
         invalidPsk.length = -1;
 
-        TEST_ASSERT_FALSE(crypto->encryptPacketCCM(invalidPsk, fromNode, packetId, 8, plaintext, ciphertextWithTag));
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(invalidPsk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
+        TEST_ASSERT_FALSE(crypto->encryptPacketCCM(invalidPsk, fromNode, toNode, packetId, 8, plaintext, ciphertextWithTag));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(invalidPsk, fromNode, toNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
                                                    ciphertextWithTag, decrypted));
     }
 
@@ -718,28 +729,69 @@ void test_AES_CCM_AEAD(void)
         psk256.length = 32; // same first 16 bytes, but treated as AES-256
 
         uint32_t fromNode = 0x55AA55AA;
+        uint32_t toNode = 0x33333333;
         uint64_t packetId = 0x1234ABCD;
 
         uint8_t plaintext[8] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80};
         uint8_t ct128[8 + CryptoEngine::AEAD_TAG_SIZE];
         uint8_t ct256[8 + CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk128, fromNode, packetId, 8, plaintext, ct128));
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk256, fromNode, packetId, 8, plaintext, ct256));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk128, fromNode, toNode, packetId, 8, plaintext, ct128));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk256, fromNode, toNode, packetId, 8, plaintext, ct256));
 
         // AES-128 and AES-256 with the same key material must produce different output
         TEST_ASSERT_FALSE(memcmp(ct128, ct256, 8 + CryptoEngine::AEAD_TAG_SIZE) == 0);
 
         // Both must still round-trip correctly
         uint8_t dec128[8], dec256[8];
-        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk128, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct128, dec128));
+        TEST_ASSERT_TRUE(
+            crypto->decryptPacketCCM(psk128, fromNode, toNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct128, dec128));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, dec128, 8);
-        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk256, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct256, dec256));
+        TEST_ASSERT_TRUE(
+            crypto->decryptPacketCCM(psk256, fromNode, toNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct256, dec256));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, dec256, 8);
 
         // Cross-key decryption must fail
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk256, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct128, dec128));
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk128, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct256, dec256));
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(psk256, fromNode, toNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct128, dec128));
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(psk128, fromNode, toNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct256, dec256));
+    }
+
+    // Test 13: Rewritten destination - `to` is authenticated as associated data, so changing
+    // it in flight must fail the tag check even though the nonce is unaffected
+    {
+        CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
+
+        uint32_t fromNode = 0x0A0B0C0D;
+        uint32_t toNode = 0x00000042;
+        uint32_t otherNode = 0x00000043;
+        uint32_t broadcast = 0xFFFFFFFF;
+        uint64_t packetId = 0x99887766;
+
+        uint8_t plaintext[9] = {'t', 'o', '-', 'i', 's', '-', 'a', 'a', 'd'};
+        uint8_t ciphertextWithTag[9 + CryptoEngine::AEAD_TAG_SIZE];
+        uint8_t decrypted[9];
+
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, toNode, packetId, 9, plaintext, ciphertextWithTag));
+
+        // Redirecting the packet to another node must be rejected
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNode, otherNode, packetId, 9 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
+
+        // Promoting a unicast to a broadcast must be rejected too
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNode, broadcast, packetId, 9 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
+
+        // The unmodified destination still round-trips, so the rejections above are not vacuous
+        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNode, toNode, packetId, 9 + CryptoEngine::AEAD_TAG_SIZE,
+                                                  ciphertextWithTag, decrypted));
+        TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 9);
+
+        // A different destination must also change the tag, not just be rejected on decrypt
+        uint8_t otherCiphertextWithTag[9 + CryptoEngine::AEAD_TAG_SIZE];
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, otherNode, packetId, 9, plaintext, otherCiphertextWithTag));
+        TEST_ASSERT_FALSE(memcmp(ciphertextWithTag + 9, otherCiphertextWithTag + 9, CryptoEngine::AEAD_TAG_SIZE) == 0);
     }
 }
 

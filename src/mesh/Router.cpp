@@ -1047,7 +1047,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                         continue;
                     }
                     CryptoKey k = channels.getKey(chIndex);
-                    if (!crypto->decryptPacketCCM(k, p->from, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                    if (!crypto->decryptPacketCCM(k, p->from, p->to, p->id, rawSize, p->encrypted.bytes, bytes)) {
                         LOG_WARN("AEAD authentication failed for ch %d", chIndex);
                         continue; // reject - no fallback to CTR
                     }
@@ -1332,7 +1332,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                     return meshtastic_Routing_Error_NO_CHANNEL;
 
                 CryptoKey k = channels.getKey(chIndex);
-                if (!crypto->encryptPacketCCM(k, getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes)) {
+                if (!crypto->encryptPacketCCM(k, getFrom(p), p->to, p->id, numbytes, bytes, p->encrypted.bytes)) {
                     LOG_ERROR("AEAD encryption failed for ch %d", chIndex);
                     return meshtastic_Routing_Error_BAD_REQUEST;
                 }
@@ -1364,7 +1364,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_NO_CHANNEL;
 
             CryptoKey k = channels.getKey(chIndex);
-            if (!crypto->encryptPacketCCM(k, getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes)) {
+            if (!crypto->encryptPacketCCM(k, getFrom(p), p->to, p->id, numbytes, bytes, p->encrypted.bytes)) {
                 LOG_ERROR("AEAD encryption failed for ch %d", chIndex);
                 return meshtastic_Routing_Error_BAD_REQUEST;
             }
