@@ -28,10 +28,8 @@ env:
   # Only pushes to the default branch (develop) populate the caches; PR / merge_group runs
   # restore it but never save, so they stop filling up the repo's Actions cache storage.
   SAVE_CACHE: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
-  # Deliberately without --directory: the caller adds it, because the shards capture out of
-  # .pio/build/<env>/src and there is more than one env. Keeping the include/exclude filters in one
-  # place is the part that matters - a shard that captured a different set of files would quietly
-  # skew the merged report.
+  # No --directory: callers add it, since shards capture from .pio/build/<env>/src. Keeping the
+  # include/exclude filters shared is what stops a shard capturing a different file set.
   LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --base-directory "${PWD}"
 
 jobs:
@@ -262,14 +260,8 @@ jobs:
           overwrite: true
           path: ./coverage_*.info
 
-  # Derive the test matrix from the tree instead of restating it here. bin/test-shards.py walks
-  # test/, groups the suites into named areas, splits an area too big for one runner and packs the
-  # ones too small to deserve their own, and emits a row per shard. Nothing about the shape of the
-  # matrix is maintained in this file, so adding a suite needs no CI change - it lands in an area
-  # (or in "misc") and the matrix grows to fit.
-  #
-  # Cheap job, deliberately: a checkout and a python run. It sits on the critical path of every
-  # shard, so it installs nothing.
+  # bin/test-shards.py derives the matrix from test/, so adding a suite needs no CI change.
+  # Cheap by design: a checkout and a python run, sitting on every shard critical path.
   discover:
     name: Native Test Shards
     # ubuntu-latest, not the slim image: this needs a python3 to run bin/test-shards.py, and it is
@@ -297,17 +289,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Which suites share a shard. Fixing it forever means a co-location problem is never
-          # observed; randomising it on a contributor's PR would turn their run red for a pairing
-          # they did not choose, which is how a randomisation gets reverted instead of the coupling
-          # fixed. So: pull_request keeps the declared arrangement, everywhere else is shuffled from
-          # the commit SHA - deterministic per commit, replayable, attributable. An explicit seed
-          # overrides both, which is how you replay a specific failing arrangement anywhere.
-          #
-          # Co-location, not order: PlatformIO picks the order within a shard itself
-          # (list_test_names() walks test/ with os.walk() and filters only *select*, it does not
-          # order), so controlling that still needs one invocation per suite - what
-          # bin/run-tests.sh --shuffle does locally.
+          # pull_request keeps the declared arrangement so a PR never reds for a pairing its author did not
+          # choose; elsewhere the SHA seeds it. Varies co-location, not order within a shard.
           if [ -n "${SUITE_ORDER_SEED:-}" ]; then
             seed="$SUITE_ORDER_SEED"
             echo "shard arrangement: shuffled with explicitly supplied seed $seed"
@@ -325,11 +308,8 @@ jobs:
           # the same walk this matrix was built from rather than a second one.
           suites=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort | tr '\n' ' ')
 
-          # $GITHUB_OUTPUT is a `key=value` file, so a value containing a newline writes a second
-          # entry - which is how a step's output becomes a way to set outputs the step never meant
-          # to. Both values here are single-line by construction (json.dumps emits one line, tr
-          # folds the suite list onto one); assert it rather than assume it, because the assumption
-          # is the whole reason the injection would go unnoticed.
+          # A newline in a value writes a second entry, setting outputs this step never declared. Both feed
+          # control flow, so assert single-line rather than assume it.
           for value in "$matrix" "$suites"; do
             if [ "$value" != "${value%%$'\n'*}" ]; then
               echo "::error title=Multi-line step output::bin/test-shards.py or the suite walk produced a value spanning lines. Refusing to write it to \$GITHUB_OUTPUT - a newline there sets outputs this step did not declare."
@@ -344,43 +324,38 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "suites=$suites" >> "$GITHUB_OUTPUT"
 
-  # One shard per matrix row. Each builds only what its own suites need and reports only on them;
-  # the collector below turns the pile of per-shard reports into one verdict.
-  #
-  # There is no build-then-run split any more. It used to compile src plus all ~75 test programs up
-  # front and then run the areas, but PlatformIO links every native test program to the same
-  # $BUILD_DIR/$PROGNAME path, so the run had to relink each suite anyway - the warm-up bought a
-  # shared src build and paid for ~75 throwaway links to get it. A shard gets the same shared src
-  # build for free by simply running its suites in one invocation, and ccache carries the src
-  # objects between shards and between runs.
+  # No build-then-run split: PlatformIO relinks each suite regardless, so the warm build bought a
+  # shared src build and ~75 throwaway links. ccache carries src objects between shards instead.
   platformio-tests:
     name: Suites (${{ matrix.shard }})
     needs: discover
     runs-on: ubuntu-24.04-arm
+    # Measured cold-cache shards run 5-12 minutes. Without this a hung suite, or a runner that
+    # stops reporting, holds a runner until GitHub's 6-hour default - times twelve shards.
+    timeout-minutes: 30
     permissions:
       contents: read
-    # Every shard runs to completion. A cancelled sibling would leave the collector unable to tell
-    # "this suite failed" from "this suite never ran", and the second failure is the one worth
-    # knowing about.
+    # fail-fast off: a cancelled sibling stops the collector telling "failed" from "never ran".
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
+      # No submodules: src/mesh/generated is tracked and meshtestic is the hardware harness, so neither
+      # is reachable from .
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          submodules: recursive
+          persist-credentials: false
 
-      - name: Setup native build
+      - name: Setup native test build
         id: base
-        uses: ./.github/actions/setup-native
+        uses: ./.github/actions/setup-native-test
 
       - name: Get release version string
         run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      # Disable (comment-out) BUILD_EPOCH. It causes a full rebuild between tests, resets the
-      # coverage information each time, and would put a new timestamp in every translation unit -
-      # which is also what would stop ccache from ever hitting.
+      # Disable (comment-out) BUILD_EPOCH. It forces a full rebuild between tests, resets coverage each
+      # time, and would put a fresh timestamp in every TU, which is also what would defeat ccache.
       - name: Disable BUILD_EPOCH
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
@@ -393,36 +368,14 @@ jobs:
           restore-keys: |
             pio-coverage-tests-
 
-      # Every shard compiles the same ~450 src translation units before it reaches its own suites.
-      # Unshared, that is the cost of fanning out: it would be paid once per shard, every run.
-      # ccache reduces it to a hash lookup. /usr/lib/ccache holds gcc/g++/cc/c++ symlinks to
-      # ccache, so putting it first on PATH is the whole wiring - PlatformIO invokes the compilers
-      # by name.
-      #
-      # time_macros: the coverage build has no __DATE__/__TIME__ that matters (BUILD_EPOCH is
-      # commented out above), and without the sloppiness ccache refuses to cache any TU that
-      # mentions them at all.
-      - name: Set up ccache
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get install -y ccache
-          echo "/usr/lib/ccache" >> "$GITHUB_PATH"
-          {
-            echo "CCACHE_DIR=$HOME/.ccache"
-            echo "CCACHE_COMPRESS=1"
-            echo "CCACHE_MAXSIZE=400M"
-            echo "CCACHE_SLOPPINESS=time_macros"
-          } >> "$GITHUB_ENV"
-
+      # Every shard compiles the same ~450 src TUs; unshared, that is the cost of fanning out.
       - name: Restore ccache
         id: ccache-restore
         uses: actions/cache/restore@v6
         with:
           path: ~/.ccache
-          # One shared lineage for every shard and every env: the src objects are what dominates,
-          # and they are identical across shards. run_id only makes each save a fresh entry; the
-          # prefix restore-key is what actually selects the most recent one.
+          # One lineage for all shards: src objects dominate and are identical. run_id only makes each save
+          # a fresh entry; the prefix restore-key selects the newest.
           key: ccache-native-tests-${{ github.run_id }}
           restore-keys: |
             ccache-native-tests-
@@ -438,15 +391,15 @@ jobs:
           SUITES: ${{ matrix.suites }}
         run: |
           set -uo pipefail
+          # read -ra, not an unquoted expansion: word-splits without letting a token glob against
+          # the workspace. bin/test-shards.py holds every name to ^test_[A-Za-z0-9_]+$ as well.
+          read -ra suites <<<"$SUITES"
           filters=()
-          for suite in $SUITES; do filters+=(-f "$suite"); done
-          echo "shard $SHARD: ${#filters[@]} suite(s) under [env:$PIO_ENV] -> $SUITES"
+          for suite in "${suites[@]}"; do filters+=(-f "$suite"); done
+          echo "shard $SHARD: ${#suites[@]} suite(s) under [env:$PIO_ENV] -> $SUITES"
 
-          # Capture platformio's real exit status (not grep's) via a log file, then show the log
-          # with the noisy per-variant SKIPPED rows filtered out. Suites outside this shard are
-          # reported SKIPPED by design (PlatformIO lists every suite in the env and marks the
-          # unselected ones finished), so those rows are noise here. The attribution check below is
-          # what catches a suite that was selected and did not run.
+          # Log to a file for platformio real exit status, then drop the per-variant SKIPPED rows: suites
+          # outside this shard are reported SKIPPED by design.
           rc=0
           platformio test -e "$PIO_ENV" -v "${filters[@]}" \
             --junit-output-path "testreport-$SHARD.xml" > shard.log 2>&1 || rc=$?
@@ -469,9 +422,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           sudo apt-get install -y lcov
-          # One tracefile per shard, named after it: the collector merges them with
-          # --add-tracefile, and lcov sums hit counts, so the union is what a single-runner walk
-          # would have produced. --test-name keeps each shard identifiable in the merged report.
+          # One tracefile per shard; the collector sums them with --add-tracefile into the union.
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --directory ".pio/build/$PIO_ENV/src" \
             --test-name "$SHARD" --output-file "coverage_tests_$SHARD.info"
           sed -i -e "s#${PWD}#.#" "coverage_tests_$SHARD.info" # Make paths relative.
@@ -483,9 +434,8 @@ jobs:
         run: ccache --show-stats || true
 
       - name: Save ccache
-        # Exactly one shard saves - see the cache_writer note in bin/test-shards.py. Its cache
-        # holds the src objects every other shard needs; letting all of them save would race for
-        # the key and store the same objects a dozen times over.
+        # Exactly one shard saves (cache_writer): every shard needs the same src objects, and letting all
+        # of them save would race for the key.
         if: always() && env.SAVE_CACHE == 'true' && matrix.cache_writer
         uses: actions/cache/save@v6
         with:
@@ -505,10 +455,8 @@ jobs:
         with:
           name: platformio-test-report-${{ matrix.shard }}-${{ steps.version.outputs.long }}
           overwrite: true
-          # The exact file this shard was told to write, not ./testreport-*.xml. A test suite runs
-          # arbitrary code with the workspace writable; under a glob it could drop a second
-          # testreport-*.xml of its own invention, and the collector merges whatever arrives into
-          # the report its whole-run gate then reads.
+          # Named, not globbed: a test suite can write to the workspace, and the collector merges whatever
+          # arrives into the report its gate reads.
           path: ./testreport-${{ matrix.shard }}.xml
 
       - name: Save coverage information
@@ -521,15 +469,8 @@ jobs:
           # merged into the published coverage report.
           path: ./coverage_tests_${{ matrix.shard }}.info
 
-  # Guards the attribution check the shards rely on: runs two suites the broken way
-  # (--without-building, so PlatformIO does not relink and both execute the same leftover binary)
-  # and requires the checker to catch it. Fails if the checker regressed, or if the reproduction
-  # stops reproducing - in which case the reason both harnesses stopped passing that flag no longer
-  # holds.
-  #
-  # Its own job rather than a step on a shard: it relinks $BUILD_DIR/$PROGNAME on purpose, so it
-  # must not share a build directory with anything whose binary matters, and as a step it would sit
-  # on one shard's critical path for no reason.
+  # Reproduces the false green on purpose (--without-building) and requires the checker to catch it.
+  # Its own job because it relinks $BUILD_DIR/$PROGNAME, which no shard build dir can survive.
   attribution-canary:
     name: Attribution Canary
     runs-on: ubuntu-24.04-arm
@@ -538,10 +479,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          submodules: recursive
+          persist-credentials: false
 
-      - name: Setup native build
-        uses: ./.github/actions/setup-native
+      - name: Setup native test build
+        uses: ./.github/actions/setup-native-test
 
       - name: Disable BUILD_EPOCH
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
@@ -553,19 +494,6 @@ jobs:
           key: pio-coverage-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
           restore-keys: |
             pio-coverage-tests-
-
-      - name: Set up ccache
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get install -y ccache
-          echo "/usr/lib/ccache" >> "$GITHUB_PATH"
-          {
-            echo "CCACHE_DIR=$HOME/.ccache"
-            echo "CCACHE_COMPRESS=1"
-            echo "CCACHE_MAXSIZE=400M"
-            echo "CCACHE_SLOPPINESS=time_macros"
-          } >> "$GITHUB_ENV"
 
       - name: Restore ccache
         uses: actions/cache/restore@v6
@@ -579,10 +507,8 @@ jobs:
         timeout-minutes: 15
         run: ./bin/test-attribution-canary.sh -e coverage
 
-  # Load-bearing name: upstream branch protection matches this check by name, and the matrix rows
-  # are named per shard so none of them can carry it. It exists to be that single required check
-  # over the fan-out, and it says nothing the collector does not - the collector is where a failure
-  # is explained.
+  # Load-bearing name: branch protection matches it, and matrix rows are named per shard so none of
+  # them can carry it.
   platformio-tests-gate:
     name: Native PlatformIO Tests
     needs: platformio-tests
@@ -597,10 +523,8 @@ jobs:
           echo "shard matrix: $RESULT"
           [ "$RESULT" = "success" ]
 
-  # The collector. Nothing above it judges the run as a whole: a shard only knows about its own
-  # suites, and a shard that never started reports nothing at all. This is the process that reads
-  # every shard's report together, checks the union against the canonical suite set, and states the
-  # verdict.
+  # The collector. A shard knows only its own suites and one that never started reports nothing, so
+  # only here can the union be checked against the canonical set.
   generate-reports:
     name: Generate Test Reports
     runs-on: ubuntu-latest
@@ -629,9 +553,8 @@ jobs:
           merge-multiple: true
 
       - name: Merge the shard reports into testreport.xml
-        # Preserve the single-file JUnit contract that downstream consumers rely on
-        # (pr_tests.yml's summary and the Test Report below both read testreport.xml). The split is
-        # only how the run is executed; the report stays consolidated.
+        # Preserve the single-file JUnit contract downstream consumers rely on (pr_tests.yml summary, and
+        # the Test Report below). The split is only how the run executes; the report stays consolidated.
         if: always() # run even when a shard failed, so the report captures the failures
         shell: bash
         run: |
@@ -653,18 +576,15 @@ jobs:
           PY
 
       - name: Verdict - every suite ran, and ran its own tests
-        # The gate the shards cannot provide. Each shard checks the suites it was handed; only here
-        # is the union compared against the canonical test_* set, which is what catches a shard that
-        # failed to start, was cancelled, or was dropped from the matrix by a bad edit. The expected
-        # set is the one bin/test-shards.py built the matrix from, so the two cannot disagree.
+        # Only here is the union compared against the canonical test_* set, which is what catches a shard
+        # that failed to start or was cancelled.
         if: always() # a suite going missing is the finding; do not hide it behind an earlier failure
         env:
           SUITES: ${{ needs.discover.outputs.suites }}
         run: |
           set -euo pipefail
-          # An empty expected set makes this check pass over anything, including an empty report -
-          # and it is empty exactly when `discover` failed, which is one of the situations this
-          # gate exists to catch. It has to fail loudly instead of reporting OK on nothing.
+          # --expect "" passes over anything, and it is empty exactly when discover failed, which is one of
+          # the situations this gate exists to catch.
           if [ -z "${SUITES// /}" ]; then
             echo "::error title=No expected suite set::the discover job produced no suite list, so the whole-run attribution gate has nothing to check against. Treating that as a failure - a gate with an empty expectation passes vacuously."
             exit 1
@@ -729,9 +649,7 @@ jobs:
           path: code-coverage-report
 
       - name: Final verdict
-        # Last step, and the one that decides. Everything above reports; this states the result of
-        # the run as a whole, so a red is explained in one place instead of being reconstructed from
-        # a dozen shard logs.
+        # States the run result in one place, rather than leaving it reconstructed from a dozen shard logs.
         if: always()
         env:
           SHARDS: ${{ needs.platformio-tests.result }}

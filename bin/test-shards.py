@@ -1,27 +1,16 @@
 #!/usr/bin/env python3
 """Emit the native-test CI matrix: one shard per matrix row, derived from test/.
 
-The native suites used to run on a single runner, one area after another, for the better part of an
-hour. This splits that walk into independent shards that run in parallel and are judged together
-afterwards by the collector job in .github/workflows/test_native.yml.
-
-Sharding is safe because isolation is per suite, not per run: every suite executes under its own
-scratch $HOME (bin/pio-test-isolate.sh, registered as test_testing_command in
-variants/native/portduino/platformio.ini), so no suite can observe another one's leftovers whether
-they share a runner or not.
+Shards are safe to run in parallel because isolation is per suite, not per run: every suite gets
+its own scratch $HOME via bin/pio-test-isolate.sh.
 
 Two kinds of row come out:
 
-  * general - a slice of the test_* tree, run under [env:coverage]. Suites are placed into named
-    areas by the rules below (first match wins; unmatched falls to "misc", so a brand-new suite
-    always runs even before anyone places it). An area larger than --max-suites is split into
-    numbered shards; areas smaller than that are packed together until a shard is full. Both
-    directions matter: an unsplit area of 41 suites is the hour-long run this replaces, and a shard
-    holding one two-suite area spends more time booting a runner than testing.
+  * general - a slice of the test_* tree under [env:coverage]. AREA_RULES place each suite, first
+    match wins, unmatched to "misc". Areas over --max-suites split, smaller ones pack together.
 
-  * fixed-env - one row per env in SPECIAL_ENVS. Those envs compile a fixed set of suites with
-    different build flags and carry their own test_filter in platformio.ini; that filter is read
-    from the ini rather than restated here, so it cannot drift from the env it describes.
+  * fixed-env - one row per SPECIAL_ENVS entry, whose suite list is read from its test_filter in
+    platformio.ini rather than restated here.
 
 Usage:
   bin/test-shards.py                       # matrix JSON on stdout
@@ -62,8 +51,8 @@ FALLBACK_AREA = "misc"
 NATIVE_INI = REPO / "variants" / "native" / "portduino" / "platformio.ini"
 SPECIAL_ENVS = ["coverage-event-policy", "coverage-channel-table"]
 
-# Suite names reach a shell as `-f <name>` in the workflow. Constrain them at the one place the
-# list is produced, so a directory named something creative cannot become shell text.
+# Suite names reach a shell as `-f <name>`. Constrained here, the one place the list is produced,
+# so a creatively named directory cannot become shell text.
 SUITE_RE = re.compile(r"^test_[A-Za-z0-9_]+$")
 
 
@@ -81,14 +70,10 @@ def discover_suites():
 
 
 def shuffle(seed, items):
-    """Reorder through bin/lib/shuffle.sh, the one implementation of the seeded shuffle.
+    """Reorder via bin/lib/shuffle.sh, the one implementation of the seeded shuffle.
 
-    Shelling out rather than reimplementing: two copies of a Fisher-Yates cannot be relied on to
-    stay byte-identical, and the way they would announce their drift is a replay that quietly
-    reproduces a different arrangement than the one that failed.
-
-    The repo path arrives as $1 rather than interpolated into the shell text: a checkout directory
-    is not this script's to trust, and a quote or a $ in it would otherwise be shell source.
+    Two copies of a Fisher-Yates would drift, and announce it as a replay reproducing a different
+    arrangement. The repo path goes in as $1 so a checkout directory never becomes shell source.
     """
     script = 'source "$1"; shift; shuffle_suites "$@"'
     out = subprocess.run(
@@ -113,8 +98,7 @@ def areas_of(suites):
 def split(members, cap):
     """Split into the fewest chunks of at most `cap`, sized as evenly as the count allows.
 
-    Even sizing matters more than the cap itself: a matrix's wall clock is its slowest shard, so 11
-    suites at cap 10 becomes 6+5, not 10+1.
+    Wall clock is the slowest shard, so 11 suites at cap 10 becomes 6+5, not 10+1.
     """
     chunks = -(-len(members) // cap)  # ceil
     base, extra = divmod(len(members), chunks)
@@ -129,15 +113,19 @@ def split(members, cap):
 def pack(areas, cap):
     """Pack whole areas into the fewest shards of at most `cap`, keeping the loads even.
 
-    Longest-processing-time-first: take the areas biggest to smallest and drop each into the
-    emptiest shard. It is the classic greedy for this and lands within 4/3 of optimal, which is far
-    inside the noise of how long a suite actually takes. Plain first-fit would pass the cap check
-    and still leave one shard holding a single area.
+    Longest-processing-time-first: within 4/3 of optimal, and unlike first-fit it will not leave
+    one shard holding a single two-suite area.
     """
-    bins = [[] for _ in range(-(-sum(len(m) for m in areas.values()) // cap))]
-    for area in sorted(areas, key=lambda a: len(areas[a]), reverse=True):
-        smallest = min(bins, key=lambda b: sum(len(areas[a]) for a in b))
-        smallest.append(area)
+    load = lambda b: sum(len(areas[a]) for a in b)  # noqa: E731
+    ranked = sorted(areas, key=lambda a: len(areas[a]), reverse=True)
+    # ceil(total / cap) is a lower bound, not a guarantee - whole areas do not divide, so three
+    # areas of 6 at cap 10 would put 12 in one of two bins. Grow the count until every bin fits.
+    for count in range(-(-sum(len(m) for m in areas.values()) // cap), len(areas) + 1):
+        bins = [[] for _ in range(count)]
+        for area in ranked:
+            min(bins, key=load).append(area)
+        if all(load(b) <= cap for b in bins):
+            break
     # Report each shard's areas in declared order, so a name reads the same way the rules do.
     order = list(areas)
     return [sorted(b, key=order.index) for b in bins if b]
@@ -174,7 +162,16 @@ def fixed_env_filter(env):
             f"matrix was written; either restore it or drop {env} from SPECIAL_ENVS - silently "
             f"emitting an empty filter would run every suite under the wrong build flags."
         )
-    return parser.get(section, "test_filter").split()
+    # test_filter accepts globs, and these tokens reach the same unquoted word-split and the same
+    # attribution gate as discovered names. Hold them to SUITE_RE too, at the producer.
+    names = parser.get(section, "test_filter").split()
+    bad = [n for n in names if not SUITE_RE.match(n)]
+    if bad:
+        sys.exit(
+            f"test-shards: [{section}] test_filter names something that is not a literal suite: "
+            f"{' '.join(bad)}. The matrix and the attribution gate both need exact names."
+        )
+    return names
 
 
 def main():
@@ -214,12 +211,8 @@ def main():
     if args.seed:
         areas = {area: shuffle(args.seed, members) for area, members in areas.items()}
 
-    # Shard size is a preference; shard count is a budget. The matrix decides how many runners a
-    # single push claims, and the tree it is derived from is whatever the branch under test
-    # contains - a branch that adds a few hundred test_* directories, by accident or otherwise,
-    # would otherwise size the fan-out itself. So --max-suites gives way when the two disagree: the
-    # shards get bigger and the run gets slower, but the number of runners stays bounded by
-    # something this repo chose rather than by the contents of a diff.
+    # Shard size is a preference, shard count is a budget: without this a branch could size the
+    # fan-out by adding directories. --max-suites gives way so the runner count stays bounded.
     cap = args.max_suites
     while True:
         rows, placed = build(areas, cap)
@@ -233,8 +226,7 @@ def main():
             file=sys.stderr,
         )
 
-    # The whole point of the fallback area is that nothing can fall out of the matrix. Prove it here
-    # rather than discovering an unrun suite from a coverage graph months later.
+    # Prove nothing fell out, rather than discovering an unrun suite from a coverage graph later.
     if sorted(placed) != suites:
         missing = sorted(set(suites) - set(placed))
         sys.exit(f"test-shards: {len(missing)} suite(s) reached no shard: {' '.join(missing)}")
@@ -248,9 +240,8 @@ def main():
             }
         )
 
-    # Exactly one shard writes the shared compiler cache. Every shard compiles the same src/ tree
-    # before it reaches its own suites, so one populated cache serves all of them; letting each
-    # shard save would race for the same key and store the same objects a dozen times over.
+    # Exactly one shard writes the shared compiler cache: all of them compile the same src/ tree,
+    # and letting each save would race for the key and store the same objects a dozen times.
     for row in rows:
         row["cache_writer"] = False
     rows[0]["cache_writer"] = True
