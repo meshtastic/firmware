@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <meshUtils.h>
+#include <type_traits>
 #define ONE_DAY 24 * 60 * 60
 #define ONE_MINUTE_MS 60 * 1000
 #define THIRTY_SECONDS_MS 30 * 1000
@@ -20,7 +21,9 @@
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
 // Floor for our own position broadcasts when stationary (unchanged beyond the broadcast
 // precision) or fixed_position: identical positions get deduped by traffic management anyway.
-#define default_position_stationary_broadcast_secs (12 * 60 * 60)
+// Held one hour above default_traffic_mgmt_position_min_interval_secs so this refresh clears
+// the receivers' dedup window instead of being dropped as a duplicate.
+#define default_position_stationary_broadcast_secs (6 * 60 * 60)
 #define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
@@ -38,9 +41,11 @@
 enum class TrafficType { POSITION, TELEMETRY };
 
 // Traffic management defaults
-#define default_traffic_mgmt_position_precision_bits 19                // ~90m grid cells (±45m)
-#define default_traffic_mgmt_position_min_interval_secs (11 * 60 * 60) // 11 hours between identical positions
-// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 11h default).
+#define default_traffic_mgmt_position_precision_bits 19 // ~90m grid cells (±45m)
+// Kept below default_position_stationary_broadcast_secs so a stationary node's periodic refresh
+// is not deduped away by its neighbours.
+#define default_traffic_mgmt_position_min_interval_secs (5 * 60 * 60) // 5 hours between identical positions
+// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 5h default).
 #define default_traffic_mgmt_tracker_position_min_interval_secs (60 * 60) // 1 hour
 // Role cap: lost-and-found origins may refresh a duplicate position this often, so a lost
 // device updates frequently without flooding. (Quantised to the dedup tick: ~2 ticks.)
@@ -75,7 +80,20 @@ enum class TrafficType { POSITION, TELEMETRY };
 
 class Default
 {
+#if USERPREFS_EVENT_MODE && defined(USERPREFS_EVENT_MODE_HOP_LIMIT)
+    static constexpr auto eventModeHopLimitSetting = USERPREFS_EVENT_MODE_HOP_LIMIT;
+#else
+    static constexpr auto eventModeHopLimitSetting = HOP_RELIABLE;
+#endif
+    using EventModeHopLimitType = typename std::remove_cv<decltype(eventModeHopLimitSetting)>::type;
+    static_assert(std::is_integral<EventModeHopLimitType>::value && !std::is_same<EventModeHopLimitType, bool>::value &&
+                      eventModeHopLimitSetting >= 0 && eventModeHopLimitSetting <= HOP_MAX,
+                  "USERPREFS_EVENT_MODE_HOP_LIMIT must be an integer between 0 and 7");
+
   public:
+    static constexpr uint8_t eventModeHopLimit = static_cast<uint8_t>(eventModeHopLimitSetting);
+    static constexpr uint8_t eventModeRelayHopLimit = eventModeHopLimit > 0 ? eventModeHopLimit - 1 : 0;
+
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);

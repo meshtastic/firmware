@@ -4,8 +4,9 @@
 
 #include "MessageStore.h"
 #include "PowerFSM.h"
-#include "RTC.h"
+#include "WaypointStore.h"
 #include "buzz.h"
+#include "gps/RTC.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
@@ -468,6 +469,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
 
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
+    waypointStore.saveToFlash();
 
     // LogoApplet::onShutdown attempted to heal the display by drawing a "shutting down" screen twice,
     // then prepared a final powered-off screen for us, which shows device shortname.
@@ -516,6 +518,7 @@ int InkHUD::Events::beforeReboot(void *unused)
     } else {
         NicheGraphics::clearFlashData();
         messageStore.clearAllMessages(); // also wipe the shared message store
+        waypointStore.clearAllWaypoints();
     }
 
     // Note: no forceUpdate call here
@@ -534,13 +537,19 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     if (getFrom(packet) == nodeDB->getNodeNum())
         return 0;
 
+    if (!messageStore.shouldStorePacket(*packet))
+        return 0;
+
     bool isBroadcastMsg = isBroadcast(packet->to);
     inkhud->persistence->latestMessage.wasBroadcast = isBroadcastMsg;
 
     if (!isBroadcastMsg) {
         // DMs never pass through ThreadedMessageApplet, so add them to the global store here
         // so they survive reboots. Derive the latestMessage cache entry from the stored result.
-        inkhud->persistence->latestMessage.dm = messageStore.addFromPacket(*packet);
+        const StoredMessage *stored = messageStore.tryAddFromPacket(*packet);
+        if (!stored)
+            return 0;
+        inkhud->persistence->latestMessage.dm = *stored;
     } else {
         // Broadcasts are added to the global store by ThreadedMessageApplet::handleReceived().
         // Here we only update the latestMessage cache used by AllMessageApplet / NotificationApplet.

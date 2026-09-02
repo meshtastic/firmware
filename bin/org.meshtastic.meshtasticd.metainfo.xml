@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>org.meshtastic.meshtasticd</id>
 
-  <name>Meshtastic</name>
+  <name>MeshtasticD</name>
   <summary>Decentralized mesh communication</summary>
 
   <metadata_license>CC-BY-4.0</metadata_license>
@@ -13,6 +13,9 @@
   </developer>
 
   <description>
+    <p>
+      MeshtasticD is an app that allows you to use your Linux computer as a Meshtastic node (using a CH341 USB LoRa radio).
+    </p>
     <p>
       Meshtastic is an open source project for creating off-grid, affordable, and resilient communication with LoRa mesh networks.
     </p>
@@ -87,6 +90,18 @@
   </screenshots>
 
   <releases>
+    <release version="2.8.1" date="2026-09-01">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.8.1</url>
+    </release>
+    <release version="2.8.0" date="2026-06-24">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.8.0</url>
+    </release>
+    <release version="2.7.26" date="2026-06-10">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.26</url>
+    </release>
+    <release version="2.7.25" date="2026-05-23">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.25</url>
+    </release>
     <release version="2.7.24" date="2026-05-08">
       <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.24</url>
     </release>

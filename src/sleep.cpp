@@ -31,9 +31,9 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 #include "Throttle.h"
 
-#ifdef USE_XL9555
-#include "ExtensionIOXL9555.hpp"
-extern ExtensionIOXL9555 io;
+#ifdef USE_PCA95X5
+#include PCA95X5_INC
+extern PCA95X5_CLS io;
 #endif
 
 #ifdef HAS_PPM
@@ -190,20 +190,23 @@ void initDeepSleep()
 #endif
 }
 
-bool doPreflightSleep()
+bool doPreflightSleep(bool deepSleep)
 {
-    if (preflightSleep.notifyObservers(NULL) != 0)
+    // Observers only get a void*: non-NULL means the hardware (radio) is about to be powered
+    // down (deep sleep / shutdown), NULL means a light sleep where the radio keeps running
+    static const bool deepSleepFlag = true;
+    if (preflightSleep.notifyObservers(deepSleep ? (void *)&deepSleepFlag : NULL) != 0)
         return false; // vetoed
     else
         return true;
 }
 
 /// Tell devices we are going to sleep and wait for them to handle things
-static void waitEnterSleep(bool skipPreflight = false)
+static void waitEnterSleep(bool skipPreflight, bool deepSleep)
 {
     if (!skipPreflight) {
         uint32_t now = millis();
-        while (!doPreflightSleep()) {
+        while (!doPreflightSleep(deepSleep)) {
             delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
             if (!Throttle::isWithinTimespanMs(now,
@@ -230,7 +233,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
-    waitEnterSleep(skipPreflight);
+    waitEnterSleep(skipPreflight, true);
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
     // Full shutdown of bluetooth hardware
@@ -266,18 +269,24 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(SDCARD_CS, LOW);
 #endif
 
-#ifdef TRACKER_T1000_E
+#if defined(TRACKER_T1000_E) || defined(MESH_TRACKER_X1)
 #ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
     digitalWrite(GPS_SLEEP_INT, LOW);
     digitalWrite(GPS_RTC_INT, LOW);
+#ifdef GPS_RESETB_OUT
     pinMode(GPS_RESETB_OUT, OUTPUT);
     digitalWrite(GPS_RESETB_OUT, LOW);
+#endif
 #endif
 
 #ifdef BUZZER_EN_PIN
     digitalWrite(BUZZER_EN_PIN, LOW);
+#endif
+
+#ifdef PIN_DRV_EN
+    digitalWrite(PIN_DRV_EN, LOW);
 #endif
 
 #ifdef PIN_3V3_EN
@@ -361,7 +370,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
                 // t-beam v1.2 radio power channel
                 PMU->disablePowerOutput(XPOWERS_ALDO2); // lora radio power channel
             } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
-                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3 || HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA) {
                 PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
             }
         } else if (model == XPOWERS_AXP192) {
@@ -398,13 +407,13 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 {
     // LOG_DEBUG("Enter light sleep");
 
-    // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not entering
-    // LightSleep.
-#if defined(SENSECAP_INDICATOR)
+    // LORA_DIO1 is an extended IO pin (on an I/O expander). Setting it as a wake-up pin will cause problems,
+    // such as the device not entering light sleep. Boards opt in with LORA_DIO1_EXTENDED_IO in their variant.
+#if defined(LORA_DIO1_EXTENDED_IO)
     return ESP_SLEEP_WAKEUP_TIMER;
 #endif
 
-    waitEnterSleep(false);
+    waitEnterSleep(false, false);
     notifyLightSleep.notifyObservers(NULL); // Button interrupts are detached here
 
     uint64_t sleepUsec = sleepMsec * 1000LL;
@@ -444,8 +453,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef KB_INT
+#if KB_INT_WAKE_ON_HIGH
+    gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_HIGH_LEVEL);
+#else
     gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_LOW_LEVEL);
-#endif
+#endif // KB_INT_WAKE_ON_HIGH
+#endif // KB_INT
 #ifdef BOARD_PCA9535_INT
     // Side-key interrupt line from PCA9535 expander (active low).
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
@@ -580,7 +593,9 @@ bool shouldLoraWake(uint32_t msecToWake)
 
 void enableLoraInterrupt()
 {
-#if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+#if defined(LORA_DIO1_EXTENDED_IO)
+    // DIO1 is a virtual pin on an I/O expander - it cannot be a GPIO wakeup source
+#elif SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     esp_err_t res;
     res = gpio_pulldown_en((gpio_num_t)LORA_DIO1);
     if (res != ESP_OK) {
@@ -600,18 +615,18 @@ void enableLoraInterrupt()
     loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
-    LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
+    LOG_INFO("Wake on LORA_DIO1 (GPIO%02d) gpio interrupt", LORA_DIO1);
     gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
 
 #elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {
-        LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
+        LOG_INFO("Wake on LORA_DIO1 (GPIO%02d) gpio interrupt", LORA_DIO1);
         gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
     }
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO) {
-        LOG_INFO("setup RF95_IRQ (GPIO%02d) with wakeup by gpio interrupt", RF95_IRQ);
+        LOG_INFO("Wake on RF95_IRQ (GPIO%02d) gpio interrupt", RF95_IRQ);
         gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
     }
 #endif

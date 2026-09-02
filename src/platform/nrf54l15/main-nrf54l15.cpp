@@ -12,16 +12,17 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
+#include <cstring>
 #include <stdio.h>
 
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerMon.h"
 #include "Router.h"
 #include "error.h"
 #include "main.h"
 #include "mesh/MeshService.h"
 #include "meshUtils.h"
-#include "power.h"
 #include <power/PowerHAL.h>
 
 // ── Watchdog ──────────────────────────────────────────────────────────────
@@ -95,6 +96,17 @@ void getMacAddr(uint8_t *dmac)
     dmac[4] = 0x00;
     dmac[5] = 0x01;
 #endif
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+    // nRF54L15: DEVICEID under the FICR->INFO sub-struct. Read unconditionally so a future build
+    // lacking NRF_FICR fails loudly rather than silently sharing getMacAddr()'s placeholder MAC.
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(deviceId, &device_id_start, sizeof(device_id_start));
+    memcpy(deviceId + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    return true;
 }
 
 // ── Bluetooth ─────────────────────────────────────────────────────────────────

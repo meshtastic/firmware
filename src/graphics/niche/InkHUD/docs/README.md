@@ -268,6 +268,13 @@ Tiles are 256×256 pixels, 1-bit (column-major bit packing), compressed per tile
 
 When the menu is opened from a map applet, zoom controls appear automatically. Zoom In and Zoom Out step through the available tile zoom levels. Reset Zoom returns to the default auto-fit behavior, where the map scales to show all visible nodes.
 
+##### Position Menu
+
+InkHUD's `Node Config -> Position` page now exposes the common position controls directly in the menu applet, using the same compact selector pattern as other InkHUD config pages.
+
+- Device GPS controls: GPS enable/disable, GPS polling interval
+- Position packet controls: broadcast interval, smart position toggle, smart minimum interval, smart minimum distance
+
 #### System Applets
 
 So far, we have been talking about "user applets". We also recognize a separate category of "system applets". These handle things like the menu, and the boot screen. These often need special handling, and need to be implemented manually.
@@ -489,8 +496,10 @@ We keep this separate latest-message cache for this purpose, because:
 
 Broadcasts and DMs take different paths into `messageStore`:
 
-- **Broadcasts** - `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
-- **DMs** - `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
+- **Broadcasts** - `ThreadedMessageApplet::handleReceived()` calls `messageStore.tryAddFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
+- **DMs** - `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.tryAddFromPacket()` directly and stores the result in `latestMessage.dm`.
+
+`tryAddFromPacket()` returns `nullptr` when the packet is filtered out (see `shouldStorePacket()`), so both paths must null-check before use.
 
 #### Saving / Loading
 

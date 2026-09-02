@@ -27,6 +27,8 @@
 #include "target_specific.h"
 #include <Preferences.h>
 #include <driver/rtc_io.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 
@@ -52,8 +54,25 @@ static bool isNetworkConfiguredToDisableBluetooth()
 #endif
 }
 
+static bool isPaxcounterActiveForBoot()
+{
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
+    return moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled && !config.bluetooth.enabled &&
+           !config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
 static bool shouldReleaseBluetoothMemory()
 {
+    // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
+    // ESP32 BLE controller memory for scanning.
+    if (isPaxcounterActiveForBoot()) {
+        LOG_DEBUG("Skip BT memory release: Paxcounter active");
+        return false;
+    }
+
     // On ESP32 targets WiFi and BLE share radio resources. When WiFi is configured for this boot,
     // BLE will not be started, so its reserved memory can be returned to the heap until reboot.
     if (isNetworkConfiguredToDisableBluetooth()) {
@@ -77,7 +96,7 @@ void setBluetoothEnable(bool enable)
     if (enable && bluetoothMemoryReleased) {
         if (!shouldReleaseBluetoothMemory() && !bluetoothMemoryReleaseWarned) {
             bluetoothMemoryReleaseWarned = true;
-            LOG_WARN("Bluetooth memory has been released; reboot to re-enable Bluetooth");
+            LOG_WARN("BT memory released; reboot to re-enable");
         }
         return;
     }
@@ -141,6 +160,26 @@ void getMacAddr(uint8_t *dmac)
 #endif
 }
 
+bool getDeviceId(uint8_t *deviceId)
+{
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) ||            \
+    defined(CONFIG_IDF_TARGET_ESP32C6)
+    // ESP32 factory burns a 128-bit unique id in efuse for S2+ and C3+ series (used for HMACs
+    // in the esp-rainmaker AIOT platform); a good stable hardware anchor for us too.
+    uint32_t unique_id[4];
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
+    if (err != ESP_OK) {
+        LOG_WARN("Failed to read unique id from efuse");
+        return false;
+    }
+    memcpy(deviceId, unique_id, sizeof(unique_id));
+    return true;
+#else
+    // Classic ESP32 has no OPTIONAL_UNIQUE_ID efuse: fall back to the factory-burned MAC.
+    return getMacAddrDeviceId(deviceId);
+#endif
+}
+
 #if HAS_32768HZ
 #define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
 
@@ -166,7 +205,7 @@ void enableSlowCLK()
         LOG_DEBUG("32k XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switch RTC Source to 32.768kHz succeeded, using 32k XTAL");
+        LOG_DEBUG("RTC source now 32k XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
@@ -246,14 +285,14 @@ void esp32Setup()
     };
     res = esp_task_wdt_init(&wdt_config);
     if (res == ESP_ERR_INVALID_STATE) {
-        LOG_WARN("Task watchdog already initialized, reconfiguring existing instance");
+        LOG_WARN("Task watchdog already init, reconfiguring");
         res = esp_task_wdt_reconfigure(&wdt_config);
     }
     assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     if (res == ESP_ERR_INVALID_STATE) {
-        LOG_WARN("Task watchdog already initialized, reusing existing instance");
+        LOG_WARN("Task watchdog already init, reusing");
         res = ESP_OK;
     }
     assert(res == ESP_OK);

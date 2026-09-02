@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=Meshtastic
-Comment=Meshtastic App
+Name=MeshtasticD
+Comment=Meshtastic Daemon + MUI
 Exec=meshtasticd
 Icon=org.meshtastic.meshtasticd
 Terminal=true
