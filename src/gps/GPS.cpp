@@ -1435,8 +1435,9 @@ void GPS::setConnected()
 void GPS::up()
 {
 #if defined(TTGO_T_ECHO_PLUS)
-    if (gnssModel == GNSS_MODEL_MTK || gnssModel == GNSS_MODEL_UNKNOWN)
-        reader.resetTrackedSatelliteActivity();
+    if (gnssModel == GNSS_MODEL_MTK || gnssModel == GNSS_MODEL_UNKNOWN) {
+        // TODO: implement satellite activity reset for MTK models
+    }
 #endif
     scheduling.informSearching();
     setPowerState(GPS_ACTIVE);
@@ -2247,10 +2248,15 @@ bool GPS::lookForLocation()
         fixType = atoi(gsafixtype.value());
 #endif
 
-    =======
-        // GGA provides fix quality, but this TinyGPS++ build does not expose the
-        // parsed fix-quality value directly. Generate the canonical GGA sentence and
-        // parse the fix-quality field from it instead.
+    == == == =
+                 // GGA provides fix quality, but this TinyGPS++ build does not expose the
+                 // parsed fix-quality value directly. Generate the canonical GGA sentence and
+                 // parse the fix-quality field from it instead.
+        fixQual = 0;
+    == == == =
+                 // GGA provides fix quality, but this TinyGPS++ build does not expose the
+                 // parsed fix-quality value directly. Generate the canonical GGA sentence and
+                 // parse the fix-quality field from it instead.
         fixQual = 0;
     char ggaSentence[128];
     const int ggaLen = reader.GGA(ggaSentence);
@@ -2385,6 +2391,7 @@ bool GPS::lookForLocation()
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_GPS), reader.gsaSatellitesUsed(TINYGPS_GNSS_GLONASS),
 <<<<<<< HEAD
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
+                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
                   reader.gsaFixType(), reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 =======
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
@@ -2393,10 +2400,12 @@ bool GPS::lookForLocation()
 
     if (reader.hasValidGLL()) {
         LOG_DEBUG_GPS("GLL lat=%.7f lon=%.7f status=%c mode=%c", reader.gllLocation.lat(), reader.gllLocation.lng(),
+        LOG_DEBUG_GPS("GLL lat=%.7f lon=%.7f status=%c mode=%c", reader.gllLocation.lat(), reader.gllLocation.lng(),
                       reader.gllInfo.status, reader.gllInfo.mode);
     }
 
     if (reader.hasValidZDA()) {
+        LOG_DEBUG_GPS("ZDA date=%04u-%02u-%02u", reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day);
         LOG_DEBUG_GPS("ZDA date=%04u-%02u-%02u", reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day);
     }
 
@@ -2424,7 +2433,6 @@ bool GPS::lookForLocation()
 
     // Nice to have, if available
     // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
-    const uint16_t satsInView = reader.satellitesInView();
     if (satsInView > 0)
         p.sats_in_view = satsInView;
     else if (reader.satellites.isUpdated())
@@ -2452,7 +2460,7 @@ bool GPS::hasLock()
     if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
         // Use GPGSA fix type 2D/3D (better) if available
-        if (fixType == 3 || fixtype == 2 || fixType == 0) // zero means "no data received"
+        if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 #endif
             return true;
     }
