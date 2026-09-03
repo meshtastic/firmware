@@ -368,6 +368,16 @@ typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
  airtime and the risk that a fresh node oscillates back into
  probation when vouch cadence is sparser than the lease. */
     uint32_t attestation_promotion_ttl_secs;
+    /* Trust ladder: minimum seconds of local OBSERVED age an attester must
+ have for its vouch to use the signed fast path - a verified signature
+ replaces the self-reported tenure claim, and the vouch then grants an
+ L2 (neighbor-attested) upgrade instead of the L1 (TOFU-signed) one.
+ The same floor is the ladder's decay window: an L2 upgrade lapses back
+ to L1 once the subject stops sending verified signatures for this
+ long. 0 falls back to the attestation_min_observed_secs observed-tenure
+ floor for both (matching old firmware configs) - not the shipped
+ default. */
+    uint32_t attestation_l2_min_tenure_secs;
 } meshtastic_ModuleConfig_TrafficManagementConfig;
 
 /* Serial Config */
@@ -752,7 +762,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
@@ -773,7 +783,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
@@ -844,6 +854,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_TrafficManagementConfig_vouch_max_subjects_per_window_tag 27
 #define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_min_distinct_attesters_tag 28
 #define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_promotion_ttl_secs_tag 29
+#define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_l2_min_tenure_secs_tag 30
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -1073,7 +1084,8 @@ X(a, STATIC,   SINGULAR, UINT32,   attestation_min_observed_secs,  25) \
 X(a, STATIC,   SINGULAR, UINT32,   vouch_max_per_subject_per_window,  26) \
 X(a, STATIC,   SINGULAR, UINT32,   vouch_max_subjects_per_window,  27) \
 X(a, STATIC,   SINGULAR, UINT32,   attestation_min_distinct_attesters,  28) \
-X(a, STATIC,   SINGULAR, UINT32,   attestation_promotion_ttl_secs,  29)
+X(a, STATIC,   SINGULAR, UINT32,   attestation_promotion_ttl_secs,  29) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_l2_min_tenure_secs,  30)
 #define meshtastic_ModuleConfig_TrafficManagementConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TrafficManagementConfig_DEFAULT NULL
 
@@ -1272,7 +1284,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
-#define meshtastic_ModuleConfig_TrafficManagementConfig_size 134
+#define meshtastic_ModuleConfig_TrafficManagementConfig_size 141
 #define meshtastic_ModuleConfig_size             244
 #define meshtastic_RemoteHardwarePin_size        21
 
