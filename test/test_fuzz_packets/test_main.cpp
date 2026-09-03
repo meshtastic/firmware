@@ -429,7 +429,9 @@ static NodeNum fuzzNodeNum()
 // Randomize a ChannelSettings name + PSK (shared by the set_channel case and fuzzBeacon). Name is
 // random-length but NUL-terminated (nanopb terminates decoded strings, so un-terminated isn't
 // wire-reachable); PSK is 0..32 bytes including empty.
-static void fuzzChannelSettings(meshtastic_ChannelSettings &s)
+// ChannelSettings and ChannelIdentity carry the same name and psk fields at the same capacities,
+// so one template fuzzes either.
+template <typename T> static void fuzzChannelSettings(T &s)
 {
     size_t nameLen = rngRange(sizeof(s.name));
     for (size_t i = 0; i < sizeof(s.name); i++)
