@@ -594,7 +594,7 @@ class NodeDB
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     bool generateBlacklistCheckedKeyPair();
-    bool replaceDerivedKeyPairIfBlacklisted();
+    bool derivePublicKeyFromPrivate();
 #endif
 
     /// Consolidate crypto key generation logic used across multiple modules

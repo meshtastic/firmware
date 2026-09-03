@@ -4431,10 +4431,17 @@ bool NodeDB::generateBlacklistCheckedKeyPair()
     return false;
 }
 
-// A key derived from a stored private key can still be a known pre-2.8 weak one, and the entry check
-// cannot see it when the stored public key is absent: replace the pair rather than adopt it.
-bool NodeDB::replaceDerivedKeyPairIfBlacklisted()
+// Derive the public key from the stored private key and vet it. The entry check cannot see a weak key
+// when the stored public key is absent, and a failed derivation must not leave sizes claiming a pair.
+bool NodeDB::derivePublicKeyFromPrivate()
 {
+    config.security.public_key.size = 32;
+    if (!crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+        LOG_ERROR("Can't generate public key from private key");
+        config.security.public_key.size = 0;
+        config.security.private_key.size = 0;
+        return false;
+    }
     if (!checkLowEntropyPublicKey(config.security.public_key))
         return true;
     keyIsLowEntropy = true;
@@ -4468,31 +4475,17 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         LOG_INFO("Using provided private key for PKI");
         memcpy(config.security.private_key.bytes, privateKey, 32);
         config.security.private_key.size = 32;
-        config.security.public_key.size = 32;
 
-        // Generate public key from the provided private key
-        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-            if (!replaceDerivedKeyPairIfBlacklisted())
-                return false;
-            keygenSuccess = true;
-        } else {
-            // Derivation left sizes claiming a 32-byte pair the caller never got. Clear both so an
-            // unusable identity is not persisted and the next keygen mints a fresh one.
-            LOG_ERROR("Can't generate public key from private key");
-            config.security.public_key.size = 0;
-            config.security.private_key.size = 0;
+        if (!derivePublicKeyFromPrivate())
             return false;
-        }
+        keygenSuccess = true;
     }
     // Try to regenerate public key from existing private key if it's valid and not low entropy
     else if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
-        config.security.public_key.size = 32;
         LOG_DEBUG("Regenerate PKI public key from private key");
-        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-            if (!replaceDerivedKeyPairIfBlacklisted())
-                return false;
-            keygenSuccess = true;
-        }
+        if (!derivePublicKeyFromPrivate())
+            return false;
+        keygenSuccess = true;
     } else {
         // Generate a new key pair
         LOG_INFO("Generate new PKI keys");
