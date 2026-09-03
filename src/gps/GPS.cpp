@@ -2155,12 +2155,7 @@ bool GPS::lookForLocation()
     // Use the public getter directly instead of regenerating/parsing a GGA string.
     fixQual = reader.fixQuality();
 
-<<<<<<< HEAD
->>>>>>> 64bde1298 (t-echo-plus)
     const uint8_t parsedFixType = reader.gsaFixType();
-=======
-    const uint8_t parsedFixType = fixType = reader.gsaFixType();
->>>>>>> caf47dd93 (t-echo-plus)
 
     // Satellite visibility is status information, not proof of a valid
     // position fix. Update it before any of the early returns below so the
@@ -2273,10 +2268,10 @@ bool GPS::lookForLocation()
     p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
     p.PDOP = gsaPdop ? gsaPdop : TinyGPSPlus::parseDecimal(gsapdop.value());
 #else
-// FIXME! naive PDOP emulation (assumes VDOP==HDOP)
-// correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-p.HDOP = reader.hdop.value();
-p.PDOP = 1.41 * reader.hdop.value();
+    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+    p.HDOP = reader.hdop.value();
+    p.PDOP = 1.41 * reader.hdop.value();
 #endif
 
     // Discard incomplete or erroneous readings
@@ -2294,7 +2289,7 @@ p.PDOP = 1.41 * reader.hdop.value();
 
     p.fix_quality = fixQual;
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    p.fix_type = fixType;
+    p.fix_type = parsedFixType;
 #endif
 
     LOG_DEBUG_GPS("GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
@@ -2304,8 +2299,8 @@ p.PDOP = 1.41 * reader.hdop.value();
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
                   reader.gsaFixType(), reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 =======
-              reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
-              parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
+                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
+                  parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 >>>>>>> 0a7ef0972 (t-echo-plus)
 
     if (reader.hasValidGLL()) {
@@ -2367,7 +2362,8 @@ bool GPS::hasLock()
     // Using GPGGA fix quality indicator
     if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-        // Use GPGSA fix type 2D/3D (better) if available
+        // Use the GSA fix type parsed directly by TinyGPS++.
+        const uint8_t fixType = reader.gsaFixType();
         if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 #endif
             return true;
