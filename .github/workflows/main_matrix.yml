@@ -35,8 +35,8 @@ on:
       #- "**.yml"
 
   schedule:
-    # Nightly develop build, published to meshtastic.github.io firmware-nightly/ and to the
-    # meshtastic-firmware-nightly R2 bucket (no GitHub release).
+    # Nightly develop build, published to the meshtastic-firmware-nightly R2
+    # bucket (no GitHub release).
     # Scheduled runs execute on the default branch (develop). 07:00 UTC avoids the 00:00 tests
     # and 02:00 daily_packaging crons.
     - cron: 0 7 * * * # Nightly develop build/publish (default branch is develop)
@@ -45,7 +45,7 @@ on:
     inputs:
       # trunk-ignore(checkov/CKV_GHA_7): intentional manual-test switch for the nightly publish path
       nightly:
-        description: "Nightly mode: build + publish develop to github.io firmware-nightly/ and R2 (skips creating a GitHub release)"
+        description: "Nightly mode: build + publish develop to the nightly R2 bucket (skips creating a GitHub release)"
         type: boolean
         default: false
 
@@ -728,10 +728,9 @@ jobs:
             --metadata "commit=${{ github.sha }},run=${{ github.run_id }},version=${VERSION}" \
             --cache-control 'public, max-age=86400, s-maxage=2592000'
 
-  # Nightly publish: refresh the single, stable firmware-nightly/ folder on
-  # meshtastic.github.io, and the root of the meshtastic-firmware-nightly R2
-  # bucket, with the current develop build. Runs on the cron schedule (or a manual
-  # nightly=true dispatch) and never creates a GitHub release. The folder's
+  # Nightly publish: refresh the root of the meshtastic-firmware-nightly R2
+  # bucket with the current develop build. Runs on the cron schedule (or a manual
+  # nightly=true dispatch) and never creates a GitHub release. The bucket's
   # release_notes.md is maintained by hand and deliberately left untouched.
   publish-nightly:
     runs-on: ubuntu-24.04
@@ -764,35 +763,15 @@ jobs:
             '{version: $ver, id: ("v" + $ver), title: ("Meshtastic Firmware " + $ver + " Nightly"), commit: $sha}' \
             > ./stage/index.json
 
-      - name: Preserve manually-maintained release notes
-        # firmware-nightly/release_notes.md is edited by hand. Carry the current
-        # copy into ./stage so the keep_files:false publish (which refreshes the
-        # folder and clears stale nightly binaries) does not drop it. Seed a
-        # placeholder on the first run (404); fail closed on any other error so a
-        # transient fetch failure never clobbers the notes.
-        run: |
-          set -euo pipefail
-          url=https://raw.githubusercontent.com/meshtastic/meshtastic.github.io/master/firmware-nightly/release_notes.md
-          code=$(curl -sSL -o ./stage/release_notes.md -w '%{http_code}' --retry 5 --retry-all-errors "$url" || echo 000)
-          if [ "$code" = "200" ]; then
-            echo "Preserved existing release_notes.md"
-          elif [ "$code" = "404" ]; then
-            echo "No existing release_notes.md; seeding placeholder"
-            printf '# Nightly (develop)\n\nAutomated nightly build from the `develop` branch. Edit these notes by hand.\n' > ./stage/release_notes.md
-          else
-            echo "Unexpected HTTP $code fetching release_notes.md; refusing to publish to avoid clobbering manual notes"
-            exit 1
-          fi
-
       # For diagnostics
       - name: Display structure of files to publish
         run: ls -lR ./stage
 
       - name: Verify the staged nightly is not empty
-        # Both publishes below refresh their destination in place (keep_files:false
-        # for github.io, --delete for the R2 sync), so an empty ./stage would clear
-        # the live nightly rather than replace it. A failed or pattern-mismatched
-        # artifact download is the way that happens, so fail closed here instead.
+        # The publish below refreshes the bucket in place (the R2 sync runs with
+        # --delete), so an empty ./stage would clear the live nightly rather than
+        # replace it. A failed or pattern-mismatched artifact download is the way
+        # that happens, so fail closed here instead.
         run: |
           set -euo pipefail
           images=$(find ./stage -type f \
@@ -803,28 +782,11 @@ jobs:
             exit 1
           fi
 
-      - name: Publish nightly to meshtastic.github.io
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          deploy_key: ${{ secrets.DIST_PAGES_DEPLOY_KEY }}
-          external_repository: meshtastic/meshtastic.github.io
-          publish_branch: master
-          publish_dir: ./stage
-          # keep_files:false is scoped to destination_dir, so this refreshes only
-          # firmware-nightly/ (clearing stale nightly binaries) while sibling
-          # release folders stay untouched; release_notes.md is carried in above.
-          destination_dir: firmware-nightly
-          keep_files: false
-          user_name: github-actions[bot]
-          user_email: github-actions[bot]@users.noreply.github.com
-          commit_message: Nightly ${{ needs.version.outputs.long }}
-          enable_jekyll: true
-
-      # Mirror the same staged directory to Cloudflare R2. --delete at the bucket
-      # root is the counterpart of keep_files:false above - it clears stale nightly
-      # binaries - and is in scope for the whole bucket because this bucket holds
-      # nothing but the nightly build. release_notes.md is carried into ./stage by
-      # the step above, so the sync preserves it here too.
+      # Mirror the staged directory to Cloudflare R2. --delete at the bucket root
+      # clears stale nightly binaries, and is in scope for the whole bucket because
+      # this bucket holds nothing but the nightly build. release_notes.md lives only
+      # in the bucket and is never staged, so it is excluded from the sync to keep
+      # --delete from removing it.
       - name: Publish nightly to Cloudflare R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -841,10 +803,12 @@ jobs:
           set -euo pipefail
           aws --version
           # Cache for 1 hour in browser, 1 day on CDN.
+          # Preserve the release_notes.md (manually maintained)
           aws s3 sync ./stage "s3://${r2_bucket}/" \
             --endpoint-url "$R2_ENDPOINT" \
             --no-progress \
             --delete \
+            --exclude 'release_notes.md' \
             --exclude 'index.json' \
             --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
             --cache-control 'public, max-age=3600, s-maxage=86400'
