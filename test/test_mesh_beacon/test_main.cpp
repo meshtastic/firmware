@@ -4395,6 +4395,73 @@ static void test_sidecar_rearmSameId_movesTheIdRatherThanDuplicatingIt(void)
     MeshBeaconModule::clearTargetRadioSettingsById(p.id);
     TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&p), "a single release frees the id completely");
 }
+
+/**
+ * A preset-only target whose preset belongs to a sibling region. The swap must survive to key-up:
+ * re-reading the node's own region there would undo it and leave a preset that region cannot run,
+ * which beaconTxConfigInvalid() then drops.
+ */
+static void test_broadcaster_presetOnlyTargetSwappingRegion_isNotDropped(void)
+{
+    resetConfig(); // EU_868 / LONG_FAST; EU_868 does not carry NARROW_SLOW, EU_N_868 does
+    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    auto &bcfg = moduleConfig.mesh_beacon;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    strncpy(bcfg.broadcast_message, "narrowslow", sizeof(bcfg.broadcast_message) - 1);
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    // region deliberately left UNSET - the preset is what forces the sibling
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "expected the target to be sent");
+    const auto *s = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[0]);
+    TEST_ASSERT_NOT_NULL_MESSAGE(s, "a preset change must arm a radio switch");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868, s->lora.region,
+                              "the sibling region the preset forced is the one this beacon keys up on");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&mockRouter->sentPackets[0]),
+                              "an unset target region must not re-read the node's own region over a swap - the hook drops it");
+}
+
+/**
+ * An offer that is nothing but a pinned slot is still an offer: the listener caches one, so the
+ * broadcaster has to send one, or the two halves disagree about what offer content is.
+ */
+static void test_broadcaster_offerWithOnlyFrequencySlot_isSent(void)
+{
+    resetConfig();
+    // EU_868 holds a single slot at LONG_FAST, so there is no second slot to pin; US has 104.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+
+    // Pin a slot derivation would not produce, or the offer omits it as redundant.
+    uint32_t derived = 0;
+    MeshBeaconModule::offerFrequencySlot(moduleConfig.mesh_beacon, &derived);
+    const uint32_t slots = RadioInterface::frequencySlotCount(config.lora);
+    TEST_ASSERT_GREATER_THAN_UINT32_MESSAGE(1, slots, "need a region with room for a non-derived pin");
+    const uint32_t pin = (derived == 1) ? 2 : 1;
+
+    moduleConfig.has_mesh_beacon = true;
+    auto &bcfg = moduleConfig.mesh_beacon;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = pin;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "a slot-only offer is content, not silence");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_MESH_BEACON_APP, mockRouter->sentPackets[0].decoded.portnum);
+    meshtastic_MeshBeacon decoded;
+    TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
+    TEST_ASSERT_TRUE_MESSAGE(decoded.has_offer_frequency_slot, "and it carries the slot it was configured with");
+    TEST_ASSERT_EQUAL_UINT32(pin, decoded.offer_frequency_slot);
+}
 } // namespace
 
 // ===========================================================================
@@ -4632,6 +4699,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_byValueTargetWithoutChannel_retunesThePrimary);
     RUN_TEST(test_broadcaster_byValueTargetChannelMissing_withholdsTarget);
     RUN_TEST(test_sidecar_rearmSameId_movesTheIdRatherThanDuplicatingIt);
+    RUN_TEST(test_broadcaster_presetOnlyTargetSwappingRegion_isNotDropped);
+    RUN_TEST(test_broadcaster_offerWithOnlyFrequencySlot_isSent);
 
     exit(UNITY_END());
 }

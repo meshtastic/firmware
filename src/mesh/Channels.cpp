@@ -429,26 +429,57 @@ static void resolveIdentityName(const char *name, char *out, size_t outLen)
     out[outLen - 1] = '\0';
 }
 
-// Identity is the name and the PSK only; role is the caller's business.
-static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantName, const uint8_t *psk, uint8_t pskLen)
+// A stored PSK expanded as getKey() expands it, so the spellings that resolve to one key - the
+// 1-byte shorthands, and a short key the firmware pads - compare equal instead of duplicating a
+// slot. Pure: no secondary inheritance and no role check, since a disabled slot must stay matchable.
+static uint8_t canonicalPsk(const uint8_t *psk, uint8_t pskLen, uint8_t *out)
 {
-    if (!ch.has_settings || ch.settings.psk.size != pskLen || memcmp(ch.settings.psk.bytes, psk, pskLen) != 0)
+    memset(out, 0, sizeof(meshtastic_ChannelSettings::psk.bytes));
+    if (pskLen == 0)
+        return 0;
+    if (pskLen == 1) {
+        if (psk[0] == 0)
+            return 0; // encryption off, same as an absent key
+        memcpy(out, defaultpsk, sizeof(defaultpsk));
+        out[sizeof(defaultpsk) - 1] += psk[0] - 1; // index 1 is defaultpsk itself
+        return sizeof(defaultpsk);
+    }
+    memcpy(out, psk, pskLen);
+    if (pskLen < 16)
+        return 16;
+    if (pskLen < 32 && pskLen != 16)
+        return 32;
+    return pskLen;
+}
+
+// Identity is the name and the PSK only; role is the caller's business. The name compares
+// case-sensitively because generateHash() xors the raw bytes, so two spellings differing only in
+// case are different channels on the air and must not be collapsed onto one slot.
+static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantName, const uint8_t *wantKey, uint8_t wantKeyLen)
+{
+    if (!ch.has_settings)
+        return false;
+    uint8_t haveKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t haveKeyLen = canonicalPsk(ch.settings.psk.bytes, (uint8_t)ch.settings.psk.size, haveKey);
+    if (haveKeyLen != wantKeyLen || memcmp(haveKey, wantKey, haveKeyLen) != 0)
         return false;
     char have[sizeof(ch.settings.name)];
     resolveIdentityName(ch.settings.name, have, sizeof(have));
-    return strcasecmp(have, wantName) == 0;
+    return strcmp(have, wantName) == 0;
 }
 
 int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen)
 {
     char want[sizeof(meshtastic_ChannelSettings::name)];
     resolveIdentityName(name, want, sizeof(want));
+    uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t wantKeyLen = canonicalPsk(psk, pskLen, wantKey);
 
     for (ChannelIndex i = 0; i < getNumChannels(); i++) {
         const meshtastic_Channel &ch = channelFile.channels[i];
         if (ch.role == meshtastic_Channel_Role_DISABLED)
             continue;
-        if (slotMatchesIdentity(ch, want, psk, pskLen))
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen))
             return i;
     }
     return -1;
@@ -466,6 +497,9 @@ int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t p
     char want[sizeof(meshtastic_ChannelSettings::name)];
     resolveIdentityName(name, want, sizeof(want));
 
+    uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t wantKeyLen = canonicalPsk(psk, pskLen, wantKey);
+
     // A DISABLED slot holds the settings of a deleted channel, so claiming one destroys nothing
     // live. Prefer one that already held this identity, so re-adding a channel keeps its old index.
     int16_t slot = -1;
@@ -475,7 +509,7 @@ int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t p
             continue;
         if (slot < 0)
             slot = i;
-        if (slotMatchesIdentity(ch, want, psk, pskLen)) {
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen)) {
             slot = i;
             break;
         }

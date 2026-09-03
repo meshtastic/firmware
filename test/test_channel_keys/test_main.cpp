@@ -475,6 +475,40 @@ void test_upsert_prefers_the_disabled_slot_that_held_this_identity()
     TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
 }
 
+// One key, two spellings. getKey() expands a 1-byte shorthand and zero-pads a short key, so a
+// table storing one form and an offer naming the other are the same channel - matching on raw
+// bytes would place a second slot holding a duplicate of a channel already there.
+void test_upsert_pskSpellingsOfOneKeyShareASlot()
+{
+    static const uint8_t shorthand[1] = {0x01};
+    seedTableWithPrimary("Home", shorthand, sizeof(shorthand));
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, channels.findByIdentity("Home", defaultpsk, sizeof(defaultpsk)),
+                                    "the expanded key must resolve to the slot holding its shorthand");
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, channels.upsertIdentity("Home", defaultpsk, sizeof(defaultpsk)),
+                                    "and the upsert reuses that slot rather than claiming a second");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role, "no duplicate was placed");
+
+    static const uint8_t shortKey[10] = {0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9};
+    uint8_t padded[16] = {0};
+    memcpy(padded, shortKey, sizeof(shortKey));
+    seedTableWithPrimary("Padded", shortKey, sizeof(shortKey));
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, channels.findByIdentity("Padded", padded, sizeof(padded)),
+                                    "a short key and its zero-padded form are one key to getKey(), so one identity here");
+}
+
+// generateHash() xors the raw name bytes, so two spellings differing only in case hash differently
+// and are different channels on the air. Collapsing them would beacon on a hash nobody computes.
+void test_identity_nameCaseIsSignificant()
+{
+    static const uint8_t psk[16] = {0xC1, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                    0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+    seedTableWithPrimary("NarrowSlow", psk, sizeof(psk));
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1, channels.findByIdentity("narrowslow", psk, sizeof(psk)),
+                                    "a case-only difference is a different channel, not a match");
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(1, channels.upsertIdentity("narrowslow", psk, sizeof(psk)),
+                                    "so it is placed in its own slot");
+}
+
 // =====================================================================================
 // Group 5: decryptForHash() bounds - regression pin for #11046 (cfecef537). Pre-fix the
 // bound was `>`, so chIndex == getNumChannels() read one past hashes[] on the hot decode
@@ -697,6 +731,8 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_upsert_returns_minus_one_when_every_slot_is_live);
     RUN_TEST(test_identity_blank_name_matches_the_preset_name);
     RUN_TEST(test_upsert_prefers_the_disabled_slot_that_held_this_identity);
+    RUN_TEST(test_upsert_pskSpellingsOfOneKeyShareASlot);
+    RUN_TEST(test_identity_nameCaseIsSignificant);
 
     printf("\n=== decryptForHash bounds (#11046) ===\n");
     RUN_TEST(test_decryptforhash_rejects_out_of_range_index);

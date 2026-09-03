@@ -695,7 +695,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
     meshtastic_ChannelSettings offerCh;
     const bool hasOfferChannel = offerChannelSettings(bcfg, offerCh);
     // An offer that cannot be placed is not content: the text still goes out, the invitation does not.
-    const bool hasRadioContent = (bcfg.has_broadcast_offer_preset || hasOfferChannel ||
+    // A pinned slot counts, matching what the listener treats as offer content - otherwise the two
+    // halves disagree and a slot-only offer is cached by receivers that never get sent one.
+    const bool hasRadioContent = (bcfg.has_broadcast_offer_preset || hasOfferChannel || bcfg.has_broadcast_offer_frequency_slot ||
                                   (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)) &&
                                  offerIsPlaceable(bcfg);
 
@@ -933,8 +935,11 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 s.lora.channel_num = tgt.slot;
                 s.lora.region = resolvedRegion;
                 // Re-read at key-up: the resolved value alone would pin this beacon to the region
-                // the node has since left.
-                s.regionInherited = (tgt.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+                // the node has since left. Only when the region is genuinely the running one -
+                // a preset-driven sibling swap resolved away from it, and re-reading would undo
+                // the swap and leave a preset the node's own region cannot run.
+                s.regionInherited =
+                    (tgt.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) && (resolvedRegion == config.lora.region);
                 s.legacyHopOverride = legacySplit;
                 strncpy(s.channelName, tgt.channelName, sizeof(s.channelName) - 1);
                 sharedEntry = setTargetRadioSettings(p, s, sharedEntry);
