@@ -20,9 +20,8 @@ bool MeshBeaconModule::originalUsePreset;
 // One entry per broadcast target - the proto holds 4 - each covering the legacy split pair.
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[4];
 
-// Role_DISABLED is the zero value, so an unprovisioned slot reads as disabled. Neither a blank name
-// nor an empty PSK says anything: the name falls back to the preset's, and Channels::getKey() reads
-// an empty PSK as either the primary's key or deliberate cleartext. Same test the firmware uses.
+// Role_DISABLED is the zero value, so an unprovisioned slot reads as disabled. A blank name or an
+// empty PSK disqualifies nothing: both have meanings (the preset name; the primary's key, or clear).
 static bool channelSlotUsable(const meshtastic_Channel &slot)
 {
     return slot.has_settings && slot.role != meshtastic_Channel_Role_DISABLED;
@@ -218,8 +217,6 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     return !RadioInterface::validateConfigLora(lora, s->channelName);
 }
 
-// Reject only what can never become valid, leaving the rest as the operator wrote it; sendBeacon()
-// resolves the rest. Also runs at boot, since a userPrefs config never passes through admin.
 // Already present means nothing to write; absent means claim a disabled slot. wrote records
 // whether the table actually changed, so the caller knows to save SEGMENT_CHANNELS.
 static bool placeChannelIdentity(const meshtastic_ChannelIdentity &id, bool &wrote)
@@ -237,15 +234,13 @@ static bool placeChannelIdentity(const meshtastic_ChannelIdentity &id, bool &wro
 bool MeshBeaconModule::upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     bool wrote = false;
-    // Best effort for the offer: advertising a mesh and being on it are separate things, and the
-    // advertisement needs no table entry - the name and PSK go out verbatim. A full table means the
-    // node cannot also join, which is worth a log line and nothing more.
+    // Best effort for the offer: the advertisement needs no table entry, name and PSK go out
+    // verbatim. A full table only means the node cannot also join - worth a log line, nothing more.
     if (bcfg.has_broadcast_offer_channel && !placeChannelIdentity(bcfg.broadcast_offer_channel, wrote))
         LOG_INFO("Beacon: channel table full, advertising the offered channel without joining it");
 
-    // The target is different: the TX path needs that channel's key to encrypt, so an entry that
-    // cannot be placed cannot be transmitted. Withheld whole rather than re-pointed at the primary,
-    // which would beacon on a channel nobody named.
+    // The target is different: the TX path needs that channel's key to encrypt. Withheld whole
+    // rather than re-pointed at the primary, which would beacon on a channel nobody named.
     if (bcfg.has_broadcast_on_channel && !placeChannelIdentity(bcfg.broadcast_on_channel, wrote)) {
         LOG_WARN("Beacon: channel table full, the target channel cannot be placed - target withheld");
         bcfg.has_broadcast_on_channel = false;
@@ -283,9 +278,8 @@ bool MeshBeaconModule::fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconC
 
 void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
-    // The by-value target and the indexed list are two ways to name a destination, so only one may
-    // survive a write. The list wins: an index cannot mutate the channel table and a by-value entry
-    // can, so an ambiguous message must not get channel writes out of the firmware.
+    // Two ways to name one destination, so only one may survive. The list wins: an index cannot
+    // mutate the channel table and a by-value entry can, so an ambiguous write gets no writes.
     if (hasExplicitTarget(bcfg) && bcfg.broadcast_targets_count > 0) {
         LOG_WARN("Beacon: both an explicit target and %u indexed targets, keeping the indexed ones",
                  bcfg.broadcast_targets_count);
@@ -314,9 +308,8 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
         LOG_WARN("Beacon: broadcast_offer_preset %d is not a preset any region offers, clearing", bcfg.broadcast_offer_preset);
         bcfg.has_broadcast_offer_preset = false;
     }
-    // Bounds-checked only with both a region and a preset: that pair fixes the bandwidth, so the
-    // slot count cannot move under the pin later. Otherwise only 0, which the proto reserves as
-    // unset - checking against the running region would delete a pin on the next region change.
+    // Bounds-checked only with an explicit region and preset: that pair fixes the bandwidth, so the
+    // slot count cannot move later. Against the running region a pin would die on the next move.
     if (bcfg.has_broadcast_offer_frequency_slot) {
         if (bcfg.broadcast_offer_frequency_slot == 0) {
             LOG_WARN("Beacon: broadcast_offer_frequency_slot 0 means unset, clearing");
@@ -411,8 +404,7 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
 }
 
 // The one thing that makes an offer impossible rather than merely unusual: a pinned slot the region
-// it is advertised for does not hold. Everything else - a preset this node cannot run, a region it
-// is not on - describes a mesh elsewhere, which is what an offer is for.
+// it is advertised for does not hold. A preset or region this node lacks is just a mesh elsewhere.
 bool MeshBeaconModule::offerIsPlaceable(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     if (!bcfg.has_broadcast_offer_frequency_slot)
@@ -767,10 +759,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     };
 
     // The only place a target's slot is worked out, so a pin and a derivation see the same region,
-    // preset and bandwidth. A home slot is only inherited when nothing that derives it was
-    // overridden; a pin that does not fit the region is skipped before it reaches here.
-    // Takes the resolved region, not the requested one: an EU sibling swap changes the band, and
-    // with it the slot count the hash divides by.
+    // preset and bandwidth. Resolved region, not requested: an EU sibling swap changes the band.
     const auto targetProbe = [](const EffTarget &tgt, meshtastic_Config_LoRaConfig_RegionCode region, uint32_t seedSlot) {
         meshtastic_Config_LoRaConfig probe = config.lora;
         probe.use_preset = tgt.usePreset;
@@ -798,10 +787,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const uint16_t homeSlot =
         (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
 
-    // The explicit by-value target is one entry, mutually exclusive with broadcast_targets - see
-    // sanitiseConfig. Synthesised into the same shape so the loop below stays the only place a
-    // target is resolved. A named channel the table no longer holds withholds the target rather
-    // than re-pointing it at the primary.
+    // The by-value target, synthesised into a BroadcastTarget so the loop below stays the only
+    // place a target is resolved. Mutually exclusive with broadcast_targets - see sanitiseConfig.
     meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget explicitTgt =
         meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero;
     const bool hasExplicit = hasExplicitTarget(bcfg);
@@ -888,11 +875,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
             }
         }
 
-        // A pin wins. Otherwise the slot is derived, and channel_num is a value derived from the
-        // region, the bandwidth and the name being hashed: override any of those and the node's own
-        // slot no longer names the same frequency, so it must not be carried across. Seeding 0 is
-        // what an unset slot asks for - the target region's own answer, be that its override slot,
-        // its preset hash or the hash of this target's channel name.
+        // A pin wins. Otherwise channel_num derives from the region, the bandwidth and the hashed
+        // name, so overriding any of those means the node's own slot no longer names the same
+        // frequency and must not be carried across. Seeding 0 asks for the target region's answer.
         const bool pinned = bt && bt->has_frequency_slot && bt->frequency_slot > 0;
         const bool inheritsRadio = resolvedRegion == config.lora.region && tgt.usePreset == config.lora.use_preset &&
                                    tgt.preset == config.lora.modem_preset && bc.index == channels.getPrimaryIndex();
@@ -929,8 +914,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             LOG_DEBUG("Beacon: target %d already runs the offered mesh, omit offer", ti);
 
         // Only RF parameters can require a switch now; the channel is named on the packet instead.
-        // Against the resolved region, not the requested one: a target that named a sibling the
-        // preset moved it off is already on the node's region, and switching to it is a no-op.
+        // Resolved region, not requested: a sibling the preset moved off is already the node's own.
         const bool radioDiffers = (tgt.preset != config.lora.modem_preset) || (tgt.usePreset != config.lora.use_preset) ||
                                   (tgt.slot != homeSlot) || (resolvedRegion != config.lora.region);
         // Both halves of a legacy split are this one target, so the second joins the first's entry.
