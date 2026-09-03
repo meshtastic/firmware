@@ -419,6 +419,82 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
+// Blank means the running preset's display name, matching what getName() resolves a slot to, so an
+// offer naming "LongFast" finds a table entry that stores the name blank.
+static void resolveIdentityName(const char *name, char *out, size_t outLen)
+{
+    const char *src =
+        *name ? name : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    strncpy(out, src, outLen - 1);
+    out[outLen - 1] = '\0';
+}
+
+// Identity is the name and the PSK only; role is the caller's business.
+static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantName, const uint8_t *psk, uint8_t pskLen)
+{
+    if (!ch.has_settings || ch.settings.psk.size != pskLen || memcmp(ch.settings.psk.bytes, psk, pskLen) != 0)
+        return false;
+    char have[sizeof(ch.settings.name)];
+    resolveIdentityName(ch.settings.name, have, sizeof(have));
+    return strcasecmp(have, wantName) == 0;
+}
+
+int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen)
+{
+    char want[sizeof(meshtastic_ChannelSettings::name)];
+    resolveIdentityName(name, want, sizeof(want));
+
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channelFile.channels[i];
+        if (ch.role == meshtastic_Channel_Role_DISABLED)
+            continue;
+        if (slotMatchesIdentity(ch, want, psk, pskLen))
+            return i;
+    }
+    return -1;
+}
+
+int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen)
+{
+    if (pskLen > sizeof(meshtastic_ChannelSettings::psk.bytes))
+        return -1;
+
+    const int16_t live = findByIdentity(name, psk, pskLen);
+    if (live >= 0)
+        return live; // already in the table, write nothing
+
+    char want[sizeof(meshtastic_ChannelSettings::name)];
+    resolveIdentityName(name, want, sizeof(want));
+
+    // A DISABLED slot holds the settings of a deleted channel, so claiming one destroys nothing
+    // live. Prefer one that already held this identity, so re-adding a channel keeps its old index.
+    int16_t slot = -1;
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channelFile.channels[i];
+        if (i == getPrimaryIndex() || ch.role != meshtastic_Channel_Role_DISABLED)
+            continue;
+        if (slot < 0)
+            slot = i;
+        if (slotMatchesIdentity(ch, want, psk, pskLen)) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0)
+        return -1; // every slot is live; the caller withholds rather than evicting one
+
+    meshtastic_Channel c = meshtastic_Channel_init_zero;
+    c.index = slot;
+    c.role = meshtastic_Channel_Role_SECONDARY;
+    c.has_settings = true;
+    strncpy(c.settings.name, name, sizeof(c.settings.name) - 1);
+    c.settings.psk.size = pskLen;
+    memcpy(c.settings.psk.bytes, psk, pskLen);
+    setChannel(c);
+    onConfigChanged();
+    return slot;
+}
+
 bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
     const auto &ch = getByIndex(chIndex);

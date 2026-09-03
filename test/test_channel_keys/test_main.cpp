@@ -3,6 +3,7 @@
 
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "DisplayFormatters.h"
 #include "MeshTypes.h" // Include BEFORE TestUtil.h (provides NodeNum, isBroadcast, etc.)
 #include "NodeDB.h"
 #include "Router.h"
@@ -358,6 +359,128 @@ void test_setchannel_demotes_old_primary()
 // path for every received packet.
 // =====================================================================================
 
+// ---------------------------------------------------------------------------
+// Group 4b: findByIdentity / upsertIdentity - naming a channel by value
+// ---------------------------------------------------------------------------
+
+// One PRIMARY at slot 0 and every other slot DISABLED, which is what a stock table looks like.
+static void seedTableWithPrimary(const char *name, const uint8_t *psk, uint8_t pskLen)
+{
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = MAX_NUM_CHANNELS;
+    meshtastic_Channel &ch = channelFile.channels[0];
+    ch.index = 0;
+    ch.role = meshtastic_Channel_Role_PRIMARY;
+    ch.has_settings = true;
+    strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
+    ch.settings.psk.size = pskLen;
+    memcpy(ch.settings.psk.bytes, psk, pskLen);
+    channels.onConfigChanged();
+}
+
+void test_upsert_existing_channel_reuses_slot_without_writing()
+{
+    static const uint8_t psk[1] = {0x01};
+    seedTableWithPrimary("mymesh", psk, sizeof(psk));
+
+    TEST_ASSERT_EQUAL_INT16(0, channels.findByIdentity("mymesh", psk, sizeof(psk)));
+    TEST_ASSERT_EQUAL_INT16(0, channels.upsertIdentity("mymesh", psk, sizeof(psk)));
+    // Still the primary: a match must not demote or rewrite the slot it found.
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, channels.getByIndex(0).role);
+    for (ChannelIndex i = 1; i < channels.getNumChannels(); i++)
+        TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(i).role);
+}
+
+void test_upsert_places_new_channel_in_lowest_disabled_slot()
+{
+    static const uint8_t primaryPsk[1] = {0x01};
+    static const uint8_t offered[32] = {0xAB};
+    seedTableWithPrimary("mymesh", primaryPsk, sizeof(primaryPsk));
+
+    const int16_t placed = channels.upsertIdentity("offered", offered, sizeof(offered));
+    TEST_ASSERT_EQUAL_INT16(1, placed);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(1).role);
+    TEST_ASSERT_EQUAL_STRING("offered", channels.getByIndex(1).settings.name);
+    TEST_ASSERT_EQUAL_UINT16(sizeof(offered), channels.getByIndex(1).settings.psk.size);
+    // The primary is untouched - placement never evicts.
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, channels.getByIndex(0).role);
+    TEST_ASSERT_EQUAL_STRING("mymesh", channels.getByIndex(0).settings.name);
+    // Idempotent: a second upsert finds what the first placed.
+    TEST_ASSERT_EQUAL_INT16(1, channels.upsertIdentity("offered", offered, sizeof(offered)));
+}
+
+void test_upsert_same_name_different_psk_does_not_overwrite()
+{
+    static const uint8_t oldPsk[1] = {0x01};
+    static const uint8_t newPsk[32] = {0xCD};
+    seedTableWithPrimary("mymesh", oldPsk, sizeof(oldPsk));
+
+    // A rekey, or a different mesh reusing a common name. Either way the live channel survives.
+    const int16_t placed = channels.upsertIdentity("mymesh", newPsk, sizeof(newPsk));
+    TEST_ASSERT_TRUE_MESSAGE(placed > 0, "rekey must land in a new slot, not over the live one");
+    TEST_ASSERT_EQUAL_UINT16(sizeof(oldPsk), channels.getByIndex(0).settings.psk.size);
+    TEST_ASSERT_EQUAL_UINT8(0x01, channels.getByIndex(0).settings.psk.bytes[0]);
+}
+
+void test_upsert_returns_minus_one_when_every_slot_is_live()
+{
+    static const uint8_t psk[1] = {0x01};
+    static const uint8_t wanted[32] = {0xEE};
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = MAX_NUM_CHANNELS;
+    for (ChannelIndex i = 0; i < MAX_NUM_CHANNELS; i++) {
+        meshtastic_Channel &ch = channelFile.channels[i];
+        ch.index = i;
+        ch.role = i == 0 ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
+        ch.has_settings = true;
+        snprintf(ch.settings.name, sizeof(ch.settings.name), "ch%u", (unsigned)i);
+        ch.settings.psk.size = sizeof(psk);
+        memcpy(ch.settings.psk.bytes, psk, sizeof(psk));
+    }
+    channels.onConfigChanged();
+
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1, channels.upsertIdentity("wanted", wanted, sizeof(wanted)),
+                                    "a full table must withhold, never evict");
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, channels.getByIndex(0).role);
+    for (ChannelIndex i = 1; i < MAX_NUM_CHANNELS; i++)
+        TEST_ASSERT_EQUAL(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(i).role);
+}
+
+void test_identity_blank_name_matches_the_preset_name()
+{
+    static const uint8_t psk[1] = {0x01};
+    seedTableWithPrimary("", psk, sizeof(psk)); // stored blank, as a stock default channel is
+
+    const char *presetName =
+        DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    // Naming it explicitly must find the slot that stores it blank, or an upsert would duplicate it.
+    TEST_ASSERT_EQUAL_INT16(0, channels.findByIdentity(presetName, psk, sizeof(psk)));
+    TEST_ASSERT_EQUAL_INT16(0, channels.findByIdentity("", psk, sizeof(psk)));
+    TEST_ASSERT_EQUAL_INT16(0, channels.upsertIdentity(presetName, psk, sizeof(psk)));
+}
+
+void test_upsert_prefers_the_disabled_slot_that_held_this_identity()
+{
+    static const uint8_t primaryPsk[1] = {0x01};
+    static const uint8_t retired[32] = {0x77};
+    seedTableWithPrimary("mymesh", primaryPsk, sizeof(primaryPsk));
+
+    // Slot 3 holds this identity but is DISABLED - a channel that was deleted from that slot.
+    meshtastic_Channel &old = channelFile.channels[3];
+    old.index = 3;
+    old.role = meshtastic_Channel_Role_DISABLED;
+    old.has_settings = true;
+    strncpy(old.settings.name, "comeback", sizeof(old.settings.name) - 1);
+    old.settings.psk.size = sizeof(retired);
+    memcpy(old.settings.psk.bytes, retired, sizeof(retired));
+    channels.onConfigChanged();
+
+    // Slot 1 is the lowest free one, but 3 already holds this identity, so re-adding keeps its index.
+    TEST_ASSERT_EQUAL_INT16(3, channels.upsertIdentity("comeback", retired, sizeof(retired)));
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(3).role);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
+}
+
 void test_decryptforhash_rejects_out_of_range_index()
 {
     const ChannelIndex n = channels.getNumChannels();
@@ -566,6 +689,14 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_onconfigchanged_promotes_demoted_primary_slot_keeping_key);
     RUN_TEST(test_onconfigchanged_restores_default_when_all_disabled);
     RUN_TEST(test_setchannel_demotes_old_primary);
+
+    printf("\n=== findByIdentity / upsertIdentity ===\n");
+    RUN_TEST(test_upsert_existing_channel_reuses_slot_without_writing);
+    RUN_TEST(test_upsert_places_new_channel_in_lowest_disabled_slot);
+    RUN_TEST(test_upsert_same_name_different_psk_does_not_overwrite);
+    RUN_TEST(test_upsert_returns_minus_one_when_every_slot_is_live);
+    RUN_TEST(test_identity_blank_name_matches_the_preset_name);
+    RUN_TEST(test_upsert_prefers_the_disabled_slot_that_held_this_identity);
 
     printf("\n=== decryptForHash bounds (#11046) ===\n");
     RUN_TEST(test_decryptforhash_rejects_out_of_range_index);
