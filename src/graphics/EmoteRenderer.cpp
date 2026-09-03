@@ -12,7 +12,7 @@ namespace EmoteRenderer
 
 static inline int getStringWidth(OLEDDisplay *display, const char *text, size_t len)
 {
-#if defined(OLED_UA) || defined(OLED_RU)
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CJK)
     return display->getStringWidth(text, len, true);
 #else
     // OLEDDisplay::getStringWidth (utf8=false) indexes the font jump table by (c - firstChar) with a

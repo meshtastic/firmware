@@ -63,9 +63,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/RTC.h"
 #if defined(GAT562)
 #include "graphics/GAT562Arcade.h"
-#if defined(OLED_CJK)
-#include "gat562_utf8_10x10.h"
 #endif
+
+#if defined(OLED_CJK)
+// The glyph table is picked by the variant so that boards can trade coverage for
+// flash: OLED_CJK_CUSTOM names the header, OLED_CJK_SIZE has to match the cell
+// size it was generated at.
+#ifndef OLED_CJK_SIZE
+#define OLED_CJK_SIZE 10
+#endif
+#ifndef OLED_CJK_CUSTOM
+#error "OLED_CJK requires OLED_CJK_CUSTOM to name the glyph table header"
+#endif
+#include OLED_CJK_CUSTOM
 #endif
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -864,8 +874,18 @@ void Screen::setup()
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
 
-#if defined(GAT562) && defined(OLED_CJK)
+#if defined(OLED_CJK)
+#if OLED_CJK_SIZE == 10
     dispdev->setUtf8Font(&utf8_10x10_font);
+#elif OLED_CJK_SIZE == 12
+    dispdev->setUtf8Font(&utf8_12x12_font);
+#elif OLED_CJK_SIZE == 16
+    dispdev->setUtf8Font(&utf8_16x16_font);
+#elif OLED_CJK_SIZE == 24
+    dispdev->setUtf8Font(&utf8_24x24_font);
+#else
+#error "OLED_CJK_SIZE must be 10, 12, 16 or 24"
+#endif
 #endif
 
     ui->setTimePerTransition(0);           // Disable animation delays
