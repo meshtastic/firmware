@@ -57,9 +57,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Needed to diff against the base branch for newly added variants.
+          # Nothing in this job runs git after the checkout, so there is no reason to
+          # leave the token in .git/config while it executes scripts from the branch.
+          persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: 3.x
           cache: pip
@@ -102,6 +104,11 @@ jobs:
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "all=$TARGETS" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
+
+      # Static config check, like the board_level validation above: no toolchain, and
+      # it covers every ESP32 env, not just the subset this event builds.
+      - name: Check ESP32 flash geometry
+        run: python3 bin/check_partition_sizes.py --fetch-board-manifests "$RUNNER_TEMP/esp32-boards"
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
 
