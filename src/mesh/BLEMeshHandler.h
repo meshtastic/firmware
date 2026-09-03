@@ -2,6 +2,7 @@
 
 #if HAS_BLE_MESH
 
+#include "MeshTransportBase.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
@@ -59,7 +60,7 @@
  * synchronously stalls the router - and therefore LoRa timing and the whole main loop - for the
  * length of every burst.
  */
-class BLEMeshHandler : private concurrency::OSThread
+class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 {
   public:
     BLEMeshHandler() : concurrency::OSThread("BLEMesh") {}
@@ -69,8 +70,14 @@ class BLEMeshHandler : private concurrency::OSThread
     virtual void stop() = 0;
     virtual void onBluetoothReady() {}
 
+    // Registry gate: this transport carries outgoing packets only while BLE mesh is enabled.
+    bool isEnabled() const override
+    {
+        return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
+    }
+
     /// Called from Router::send(). Encodes and queues; never transmits inline.
-    bool onSend(const meshtastic_MeshPacket *mp);
+    bool onSend(const meshtastic_MeshPacket *mp) override;
 
   protected:
     /// One queued outbound frame, already built into a complete AD payload.

@@ -3,6 +3,7 @@
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MeshTransportBase.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
 #include "UptimeClock.h"
@@ -596,17 +597,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         packetPool.release(p_decoded);
     }
 
-#if HAS_UDP_MULTICAST
-    if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
-    }
-#endif
-
-#if HAS_BLE_MESH
-    if (bleMeshHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST) {
-        bleMeshHandler->onSend(p);
-    }
-#endif
+    // Fan the encrypted packet out to the non-LoRa broadcast transports (UDP multicast, BLE mesh)
+    // through the registry, so a new transport plugs in without editing this funnel. Each transport
+    // applies its own enabled_protocols gate in isEnabled(); an unconstructed one never registers, so
+    // this replaces the old per-tap null checks. MQTT is deliberately NOT here: its tap fires above,
+    // inside the decoded-tag block before p_decoded is released, and needs the decoded copy plus the
+    // channel index - a pre-encryption hook point the registry does not yet model.
+    MeshTransportBase::callTransports(p);
 
     // Only already-encrypted frames (relayed, phone-sourced) reach here oversized; perhapsEncode()
     // bounds everything it encodes. No NAK: p->channel is a wire hash by now, not an index.

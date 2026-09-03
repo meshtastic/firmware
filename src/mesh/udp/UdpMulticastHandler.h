@@ -2,6 +2,8 @@
 #if HAS_UDP_MULTICAST
 #include "configuration.h"
 #include "main.h"
+#include "mesh/MeshTransportBase.h"
+#include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 
 #if HAS_ETHERNET && defined(ARCH_NRF52)
@@ -18,10 +20,16 @@
 
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
 
-class UdpMulticastHandler final
+class UdpMulticastHandler final : public MeshTransportBase
 {
   public:
     UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(239, 0, 0, 69); }
+
+    // Registry gate: this transport carries outgoing packets only while UDP multicast is enabled.
+    bool isEnabled() const override
+    {
+        return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
+    }
 
     void start()
     {
@@ -102,7 +110,7 @@ class UdpMulticastHandler final
         }
     }
 
-    bool onSend(const meshtastic_MeshPacket *mp)
+    bool onSend(const meshtastic_MeshPacket *mp) override
     {
         if (!isRunning || !mp || !udp) {
             return false;
