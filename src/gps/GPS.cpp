@@ -2322,9 +2322,7 @@ bool GPS::lookForTime()
                     p.fix_quality = fixQual;
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
                     p.fix_type = fixType;
-#endif
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-                    p.fix_type = fixType;
+                    p.fix_type = parsedFixType;
 #endif
 
                     LOG_DEBUG_GPS(
@@ -2413,7 +2411,8 @@ bool GPS::lookForTime()
                     // Using GPGGA fix quality indicator
                     if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-        // Use GPGSA fix type 2D/3D (better) if available
+        // Use the GSA fix type parsed directly by TinyGPS++.
+        const uint8_t fixType = reader.gsaFixType();
         if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 #endif
             return true;
