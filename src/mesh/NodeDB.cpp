@@ -4418,17 +4418,20 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-// A freshly minted keypair must not itself land on the blacklist. Retry a bounded number of times,
-// then say so: if the entropy source keeps producing known-weak keys there is nothing better to mint.
-void NodeDB::generateBlacklistCheckedKeyPair()
+// A freshly minted keypair must not itself land on the blacklist. Retry a bounded number of times, and
+// if every attempt is compromised fail with no key rather than persist a known-weak identity.
+bool NodeDB::generateBlacklistCheckedKeyPair()
 {
     for (uint8_t attempt = 0; attempt < 3; attempt++) {
         crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
         if (!checkLowEntropyPublicKey(config.security.public_key))
-            return;
+            return true;
         LOG_WARN("Generated keypair is a known low-entropy key; retrying");
     }
     LOG_ERROR("PKI keygen keeps producing known low-entropy keys; entropy source is broken");
+    config.security.public_key.size = 0;
+    config.security.private_key.size = 0;
+    return false;
 }
 #endif
 
@@ -4466,7 +4469,8 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
             if (checkLowEntropyPublicKey(config.security.public_key)) {
                 keyIsLowEntropy = true;
                 LOG_WARN("Provided private key derives a known low-entropy public key; generating a new keypair");
-                generateBlacklistCheckedKeyPair();
+                if (!generateBlacklistCheckedKeyPair())
+                    return false;
             }
             keygenSuccess = true;
         } else {
@@ -4490,7 +4494,8 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         LOG_INFO("Generate new PKI keys");
         config.security.public_key.size = 32;
         config.security.private_key.size = 32;
-        generateBlacklistCheckedKeyPair();
+        if (!generateBlacklistCheckedKeyPair())
+            return false;
         keygenSuccess = true;
     }
 

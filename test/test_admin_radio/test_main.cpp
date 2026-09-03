@@ -1866,16 +1866,34 @@ static void test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn()
 // retried rather than persisted.
 static void test_handleSetConfig_security_blacklistedReplacementIsRetried()
 {
+    const uint8_t blacklistedMints = 1;
     RestoreDerivingCryptoEngine *stub = installRestoreCrypto();
-    stub->lowEntropyMints = 1;
+    stub->lowEntropyMints = blacklistedMints;
 
     const meshtastic_Config c = makeBareKeyRestoreConfig();
     testAdmin->deferSaves();
     testAdmin->handleSetConfig(c, false);
 
-    TEST_ASSERT_EQUAL_UINT(2, stub->generateKeyPairCalls);
+    // One mint per blacklisted result, plus the clean one that ends the retry loop.
+    TEST_ASSERT_EQUAL_UINT(blacklistedMints + 1, stub->generateKeyPairCalls);
     TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
     TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// When every attempt stays blacklisted, keygen fails and leaves no identity behind - persisting a
+// known-weak key would defeat the rejection this whole path exists for.
+static void test_handleSetConfig_security_exhaustedRetriesLeavesNoKey()
+{
+    RestoreDerivingCryptoEngine *stub = installRestoreCrypto();
+    stub->lowEntropyMints = UINT8_MAX; // never yields a clean key
+
+    const meshtastic_Config c = makeBareKeyRestoreConfig();
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
 }
 
 // keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
@@ -2611,6 +2629,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected);
     RUN_TEST(test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_blacklistedReplacementIsRetried);
+    RUN_TEST(test_handleSetConfig_security_exhaustedRetriesLeavesNoKey);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
