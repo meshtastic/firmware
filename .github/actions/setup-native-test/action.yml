@@ -1,0 +1,52 @@
+name: Setup native test build
+description: >-
+  Minimal toolchain for the native test suites. Separate from setup-native, which is shared with
+  the firmware matrix and is not the place to trim things only the test path can spare.
+
+runs:
+  using: composite
+  steps:
+    # No checkout: the caller must already have one to reference this action at all.
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.x
+        cache: pip
+        cache-dependency-path: |
+          .github/actions/**
+          **.ini
+
+    - name: Install build and test dependencies
+      shell: bash
+      # C libraries are the full setup-native list: they are real link deps of the portduino HAL,
+      # the web server and the config parser. cppcheck is check_tool for `pio check`, not `pio test`.
+      run: |
+        set -euo pipefail
+        sudo apt-get -y update --fix-missing
+        sudo apt-get install -y ccache lcov \
+          libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev openssl libssl-dev \
+          libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev libuv1-dev libcurl4-gnutls-dev
+
+    - name: Install PlatformIO
+      shell: bash
+      # No adafruit-nrfutil (nRF52 DFU), poetry, or meshtastic (the client, needed only by the
+      # simulator job), and no `pio upgrade` right after installing the current release.
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        pip install -U --no-build-isolation --no-cache-dir "setuptools<72"
+        pip install -U platformio --no-build-isolation
+
+    - name: Configure ccache
+      shell: bash
+      # /usr/lib/ccache holds compiler-named symlinks, so PATH is the whole wiring. time_macros:
+      # ccache otherwise refuses any TU mentioning __DATE__/__TIME__, which BUILD_EPOCH disables.
+      run: |
+        set -euo pipefail
+        echo "/usr/lib/ccache" >> "$GITHUB_PATH"
+        {
+          echo "CCACHE_DIR=$HOME/.ccache"
+          echo "CCACHE_COMPRESS=1"
+          echo "CCACHE_MAXSIZE=400M"
+          echo "CCACHE_SLOPPINESS=time_macros"
+        } >> "$GITHUB_ENV"

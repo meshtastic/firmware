@@ -160,6 +160,10 @@ extern Channels channels;
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                      0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
 
+/// True if the user muted the source of this packet: the sender for a DM addressed to us,
+/// otherwise the channel it arrived on.
+bool isMutedForPacket(const meshtastic_MeshPacket &mp);
+
 /// True if a getKey()-resolved key offers no privacy: length 0 (off) or the public defaultpsk family. Pure; for tests.
 bool cryptoKeyIsPublic(const CryptoKey &key);
 

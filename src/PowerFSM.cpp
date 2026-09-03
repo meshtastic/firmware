@@ -58,23 +58,6 @@ static bool isPowered()
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
-static bool isBluetoothEnabledForPowerFSM()
-{
-#if HAS_BLUETOOTH && !MESHTASTIC_EXCLUDE_BLUETOOTH
-    return config.bluetooth.enabled;
-#else
-    return false;
-#endif
-}
-
-static uint32_t getBluetoothWaitMs()
-{
-    if (!isBluetoothEnabledForPowerFSM())
-        return 0;
-
-    return Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
-}
-
 #if defined(T5_S3_EPAPER_PRO)
 static void t5BacklightOffForSleep()
 {
@@ -212,6 +195,17 @@ static void lsExit()
     t5BacklightWakeFromSleep();
 }
 
+/// Skip the BLE re-enable while a reboot/shutdown is armed: AdminModule tears BLE down before
+/// scheduling the restart, and a state transition in that window would otherwise bring it back up.
+static void setBluetoothEnableUnlessRestarting()
+{
+    if (rebootAtMsec || shutdownAtMsec) {
+        LOG_POWERFSM("Skip BLE enable, restart pending");
+        return;
+    }
+    setBluetoothEnable(true);
+}
+
 static void nbEnter()
 {
     LOG_POWERFSM("State: nbEnter");
@@ -228,7 +222,7 @@ static void nbEnter()
 static void darkEnter()
 {
     LOG_POWERFSM("State: darkEnter");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
     if (screen)
         screen->setOn(false);
     // Screen timeout enters DARK; ensure backlight also turns off.
@@ -252,7 +246,7 @@ static void serialExit()
 {
     LOG_POWERFSM("State: serialExit");
     // Turn bluetooth back on when we leave serial stream API
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void powerEnter()
@@ -265,7 +259,7 @@ static void powerEnter()
     } else {
         if (screen)
             screen->setOn(true);
-        setBluetoothEnable(true);
+        setBluetoothEnableUnlessRestarting();
         // within enter() the function getState() returns the state we came from
     }
 }
@@ -283,7 +277,7 @@ static void powerIdle()
 static void powerExit()
 {
     LOG_POWERFSM("State: powerExit");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onEnter()
@@ -291,7 +285,7 @@ static void onEnter()
     LOG_POWERFSM("State: onEnter");
     if (screen)
         screen->setOn(true);
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onIdle()
@@ -448,7 +442,10 @@ void PowerFSM_setup()
 
         // If ESP32 and using power-saving, timer mover from DARK to light-sleep
         // Also serves purpose of the old DARK to DARK transition(?) See https://github.com/meshtastic/firmware/issues/3517
-        powerFSM.add_timed_transition(&stateDARK, &stateLS, getBluetoothWaitMs(), NULL, "Bluetooth timeout");
+        powerFSM.add_timed_transition(
+            &stateDARK, &stateLS,
+            Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
+            "Bluetooth timeout");
     } else {
         // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
         powerFSM.add_timed_transition(&stateDARK, &stateDARK,

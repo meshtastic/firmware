@@ -25,9 +25,43 @@ uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 
 #if defined(CO5300_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for AMOLED driver chip
+
+// Panel_CO5300's init table sends Sleep Out and Display On with zero delay. The CO5300 needs up
+// to 120 ms after Sleep Out, or Display On is occasionally ignored and the panel stays dark.
+class Panel_CO5300_Delayed : public lgfx::Panel_CO5300
+{
+  protected:
+    const uint8_t *getInitCommands(uint8_t listno) const override
+    {
+        // clang-format off
+        static constexpr uint8_t list0[] = {
+            0xFE, 1, 0x00,                   // page 0
+            0xC4, 1, 0x80,
+            0x3A, 1, 0x55,                   // 16 bit/pixel
+            0x35, 1, 0x00,                   // TE on
+            0x53, 1, 0x20,
+            0x63, 1, 0xFF,
+            0x2A, 4, 0x00, 0x16, 0x01, 0xAF, // column 22..431
+            0x2B, 4, 0x00, 0x00, 0x01, 0xF5, // row 0..501
+            0x11, 0x80, 120,                 // sleep out, then the settle time the datasheet requires
+            0x51, 1, 0x01,                   // brightness dark
+            0x29, 0x80, 20,                  // display on
+            0x51, 1, 0x80,                   // brightness
+            0xff, 0xff
+        };
+        // clang-format on
+        switch (listno) {
+        case 0:
+            return list0;
+        default:
+            return nullptr;
+        }
+    }
+};
+
 class LGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_CO5300 _panel_instance;
+    Panel_CO5300_Delayed _panel_instance;
     lgfx::Bus_SPI _bus_instance;
 
   public:
@@ -791,6 +825,183 @@ class LGFX : public lgfx::LGFX_Device
 #endif
 
         setPanel(&_panel_instance); // Sets the panel to use.
+    }
+};
+
+static LGFX *tft = nullptr;
+
+#elif defined(SEEED_WIO_TRACKER_L2) // Inline LGFX: NV3031B panel + SPI3 + GT911 touch + LP5814 backlight
+
+#include <LovyanGFX.hpp>
+
+// LP5814 4-channel LED driver (backlight), I2C 0x2C
+class Wio_Tracker_Light : public lgfx::v1::ILight
+{
+    static constexpr uint8_t REG_DEVICE_CONFIG0 = 0x00;
+    static constexpr uint8_t REG_MAX_CURRENT = 0x01;
+    static constexpr uint8_t REG_ENABLE_CONTROL = 0x02;
+    static constexpr uint8_t REG_DIM_MODE = 0x04;
+    static constexpr uint8_t REG_ENGINE_MODE = 0x05;
+    static constexpr uint8_t REG_UPDATE = 0x0F;
+    static constexpr uint8_t REG_LED0_DC = 0x14;
+    static constexpr uint8_t REG_LED0_PWM = 0x18;
+
+  public:
+    struct config_t {
+        uint8_t brightness = 153;
+    }; // 60%
+
+    const config_t &config(void) const { return _cfg; }
+    void config(const config_t &cfg) { _cfg = cfg; }
+
+    bool init(uint8_t brightness) override
+    {
+        Wire.beginTransmission(0x2c);
+        if (Wire.endTransmission() != 0) {
+            LOG_ERROR("LP5814 not found at 0x2c");
+            return false;
+        }
+        bool result = true;
+        result &= writeReg(REG_DEVICE_CONFIG0, 0x01); // chip enable
+        result &= writeReg(REG_MAX_CURRENT, 0x01);    // 51 mA max current
+        result &= writeReg(REG_ENABLE_CONTROL, 0x00); // disable outputs while configuring
+        result &= writeReg(REG_DIM_MODE, 0x4E);       // dim mode config
+        result &= writeReg(REG_ENGINE_MODE, 0xF0);    // engine mode config
+        // Set DC current for all 4 channels (registers 0x14..0x17)
+        for (uint8_t i = 0; i < 4; i++) {
+            result &= writeReg(REG_LED0_DC + i, 200);
+        }
+        result &= writeReg(REG_ENABLE_CONTROL, 0x0F); // enable all 4 channels
+        result &= writeReg(REG_UPDATE, 0x55);         // latch parameters (LP5814 requires 0x55)
+        delay(5);                                     // LP5814 engine startup settling time
+
+        setBrightness(brightness);
+        return result;
+    }
+
+    void setBrightness(uint8_t brightness) override
+    {
+        // Write PWM to all 4 channels (registers 0x18..0x1B).
+        for (uint8_t i = 0; i < 4; i++) {
+            writeReg(REG_LED0_PWM + i, brightness);
+        }
+        _cfg.brightness = brightness;
+    }
+
+    uint8_t getBrightness(void) const { return _cfg.brightness; }
+    virtual ~Wio_Tracker_Light(void) = default;
+
+  private:
+    bool writeReg(uint8_t reg, uint8_t value)
+    {
+        Wire.beginTransmission(0x2c);
+        Wire.write(reg);
+        Wire.write(value);
+        uint8_t error = Wire.endTransmission();
+        if (error != 0) {
+            LOG_ERROR("LP5814 write reg 0x%02x failed: %d", reg, error);
+            return false;
+        }
+        return true;
+    }
+    config_t _cfg;
+};
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_NV3031B _panel_instance;
+    lgfx::Bus_SPI _bus_instance;
+    lgfx::Touch_GT911 _touch_instance;
+    Wio_Tracker_Light _light_instance;
+
+  public:
+    const uint32_t screenWidth = 320;
+    const uint32_t screenHeight = 240;
+
+    bool hasButton(void) { return true; }
+
+    bool init_impl(bool use_reset, bool use_clear) override
+    {
+        _light_instance.init(_light_instance.config().brightness);
+        bool result = LGFX_Device::init_impl(use_reset, use_clear);
+        // GT911 probe leaves I2C BUSY flag stuck; reset peripheral for LP5814 setBrightness
+        Wire.end();
+        Wire.begin(47, 48);
+        Wire.setClock(100000);
+        return result;
+    }
+
+    lgfx::ILight *light(void) const { return (lgfx::ILight *)&_light_instance; }
+
+    LGFX(void)
+    {
+        // Bus: SPI3 quad pins (mode 3, 75 MHz write / 16 MHz read)
+        {
+            auto cfg = _bus_instance.config();
+            cfg.spi_host = SPI3_HOST;
+            cfg.spi_mode = 3;
+            cfg.freq_write = 75000000;
+            cfg.freq_read = 16000000;
+            cfg.pin_sclk = 42;
+            cfg.pin_io0 = 41;
+            cfg.pin_io1 = 40;
+            cfg.pin_io2 = 39;
+            cfg.pin_io3 = 38;
+            _bus_instance.config(cfg);
+            _panel_instance.setBus(&_bus_instance);
+        }
+        // Panel: NV3031B (CS=46)
+        {
+            auto cfg = _panel_instance.config();
+            cfg.pin_cs = 46;
+            cfg.pin_rst = -1;
+            cfg.pin_busy = -1;
+            cfg.panel_width = screenHeight; // NV3031B native: 240 wide × 320 tall
+            cfg.panel_height = screenWidth;
+            cfg.memory_width = screenHeight;
+            cfg.memory_height = screenWidth;
+            cfg.offset_x = 0;
+            cfg.offset_y = 0;
+            cfg.offset_rotation = 1; // Landscape with setRotation(0); matches MUI
+            cfg.invert = true;       // NV3031B requires invert, otherwise screen shows green grid
+            cfg.rgb_order = true;
+            cfg.dlen_16bit = false;
+            cfg.bus_shared = false;
+            _panel_instance.config(cfg);
+        }
+        // Touch: GT911 (I2C 0x5D on SDA=47 SCL=48)
+        {
+            auto cfg = _touch_instance.config();
+            cfg.pin_cs = -1;
+            cfg.x_min = 0;
+            cfg.x_max = screenHeight - 1;
+            cfg.y_min = 0;
+            cfg.y_max = screenWidth - 1;
+            cfg.pin_int = -1;
+            cfg.offset_rotation = 2;
+            cfg.i2c_port = 0;
+            cfg.i2c_addr = 0x5D;
+            cfg.pin_sda = 47;
+            cfg.pin_scl = 48;
+            cfg.bus_shared = false;
+            cfg.freq = 100000;
+            _touch_instance.config(cfg);
+            _panel_instance.setTouch(&_touch_instance);
+        }
+        _panel_instance.setLight(&_light_instance);
+        setPanel(&_panel_instance);
+    }
+
+    void sleep(void)
+    {
+        _panel->setSleep(true);
+        _light_instance.setBrightness(0);
+    }
+
+    void wakeup(void)
+    {
+        _panel->setSleep(false);
+        _light_instance.setBrightness(_light_instance.config().brightness);
     }
 };
 
@@ -1840,7 +2051,8 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
-#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER) || defined(T_WATCH_ULTRA)
+#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER) || defined(T_WATCH_ULTRA) ||                        \
+    defined(SEEED_WIO_TRACKER_L2)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label

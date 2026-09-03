@@ -4,6 +4,7 @@
 
 #include "MessageStore.h"
 #include "PowerFSM.h"
+#include "WaypointStore.h"
 #include "buzz.h"
 #include "gps/RTC.h"
 #include "modules/ExternalNotificationModule.h"
@@ -468,6 +469,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
 
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
+    waypointStore.saveToFlash();
 
     // LogoApplet::onShutdown attempted to heal the display by drawing a "shutting down" screen twice,
     // then prepared a final powered-off screen for us, which shows device shortname.
@@ -516,6 +518,7 @@ int InkHUD::Events::beforeReboot(void *unused)
     } else {
         NicheGraphics::clearFlashData();
         messageStore.clearAllMessages(); // also wipe the shared message store
+        waypointStore.clearAllWaypoints();
     }
 
     // Note: no forceUpdate call here
