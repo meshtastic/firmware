@@ -149,6 +149,23 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     uint8_t peekVouchCountForTest(NodeNum attester, NodeNum subject);
     /// Test introspection: number of distinct subjects `attester` has vouched for this window (0 when none).
     uint8_t peekVouchSubjectsForTest(NodeNum attester);
+    /// Test introspection: number of distinct attesters whose vouches cleared the trust gates for
+    /// `subject` in the current window (the promotion quorum count).
+    uint8_t peekAttestQuorumForTest(NodeNum subject);
+    /// Test introspection: the observed context of `subject` as packed
+    /// (rssiClass << 8) | channel (-1 = untracked). Lets tests arrange
+    /// co-location (matching pair) or not (any mismatch) deterministically.
+    int16_t peekRssiChannelForTest(NodeNum node);
+    /// Test introspection: the 5-min tick the promotion for `node` was
+    /// accepted (0 when no window-scoped promotion TTL is armed, i.e. the
+    /// bit is permanent or the node is not promoted).
+    uint8_t peekPromotedWindowTickForTest(NodeNum node);
+    /// Test introspection: the promoted bit for `node` (false when untracked).
+    bool peekPromotedForTest(NodeNum node);
+    /// Test introspection: whether the in-force NO_RELAY for `node` was set
+    /// by local exhaustion (true) or gossiped in (false; also false when no
+    /// NO_RELAY is in force).
+    bool peekNoRelayLocalForTest(NodeNum node);
     /// Probation: test override for the uptime read used by the attester-tenure check.
     /// 0xFFFFFFFF = production (reads Time::getUptimeSecs()); otherwise the
     /// stored value is used, so tests can simulate a long-tenured device.
@@ -313,7 +330,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         uint8_t decodedBitfield;
 
         // 1-bit flags, packed into one byte (2 spare bits; add future booleans here rather
-        // than new bytes - the array is 2000 entries).
+        // than new bytes - the array is 2000 entries). Per-node observed RSSI class + channel
+        // live in the antispam table (AntispamEntry.rssiClass/channel, refreshed on every
+        // observation) - this entry's sourceChannel is the last-heard NodeInfo channel only.
 
         // The source packet carried a decoded bitfield (so decodedBitfield is meaningful).
         uint8_t hasDecodedBitfield : 1;
@@ -416,8 +435,11 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // budget sample, so a re-report from the same neighbor this window
         // refreshes in place instead of double-counting.
         NodeNum budgetSampleMark[3];
-        // Group budget: RSSI class + channel of first observation,
-        // for fresh-ID co-occurrence grouping. rssiClass 0xFF = unknown.
+        // Observed context of the node's most recent packet: RSSI class + channel,
+        // refreshed on every observation (last-seen, not first-sight). Feeds the group
+        // budget membership check, the top-senders telemetry, and the co-location
+        // discount on vouching. rssiClass 0xFF = no usable reading on the last packet
+        // (quality is target-dependent: some radios report no/absent RSSI).
         uint8_t rssiClass;
         uint8_t channel;
         // Relay pricing: monotonic-clock stamp (ms) at which the in-force
@@ -429,8 +451,15 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // NO_RELAY bit at the next window rollover.
         NodeNum noRelayClaimer;
         uint32_t noRelayClaimMs;
+        // Promotion decay: the 5-min tick the promotion was accepted (0 = no
+        // window-scoped TTL armed, the promoted bit is permanent until
+        // eviction). The sweep clears the bit once the promotion has been
+        // held for attestation_promotion_ttl_secs worth of ticks without a
+        // renewal vouch; a passing vouch for an already-promoted subject
+        // refreshes the stamp.
+        uint8_t promotedWindowTick;
     };
-    static_assert(sizeof(AntispamEntry) == 34, "AntispamEntry should be 34 bytes");
+    static_assert(sizeof(AntispamEntry) == 35, "AntispamEntry should be 35 bytes");
 
     static constexpr uint16_t antispamCacheSize()
     {
@@ -486,6 +515,17 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// `attester` for `subject` is within the per-subject and per-window
     /// distinct-subject caps for the current window.
     bool vouchWithinCapsLocked(NodeNum attester, NodeNum subject) const;
+    /// Promotion quorum (caller holds cacheLock): record one gate-passing
+    /// vouch by `attester` for `subject` in the current window (at most one
+    /// credit per pair per window; repeats refresh in place).
+    void stampAttestQuorumLocked(NodeNum attester, NodeNum subject);
+    /// Promotion quorum (caller holds cacheLock): number of distinct attesters
+    /// whose vouches cleared the trust gates for `subject` in the current
+    /// window.
+    uint8_t attestQuorumCountLocked(NodeNum subject) const;
+    /// The distinct-attester promotion threshold (the config knob as uint32;
+    /// 0 = single-attester promotion). Caller holds cacheLock.
+    uint32_t attestationMinDistinctAttestersLocked() const;
     /// Group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
     /// and apply the group median when the cell fills. Returns true when a
     /// group budget was applied to `node`.
@@ -553,6 +593,23 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         uint8_t windowTick; // 5-min tick the count accumulated under
     };
     VouchObsCell vouchObs[kVouchObsEntries] = {};
+
+    // Promotion quorum, per (subject, attester) pair, same window-scoped shape
+    // as the vouch table above. Counts the DISTINCT attesters whose vouches
+    // cleared every trust gate (tenure, observed tenure, caps) for a subject
+    // in the current window - the threshold for attestation_min_distinct_
+    // attesters. Rejected-by-gate vouches do not count: a gate failure is
+    // about the attester, and retrying it cannot change the outcome. At most
+    // one quorum credit per attester per window (the pair table), refreshed
+    // in place on repeats. LRU over the fixed table; window-scoped, cleared
+    // on rollover by maintainAntispamLocked.
+    static constexpr uint16_t kAttestQuorumEntries = 16;
+    struct AttestQuorumCell {
+        NodeNum subject;
+        NodeNum attester;
+        uint8_t windowTick; // 5-min tick the credit accumulated under (0 = unused)
+    };
+    AttestQuorumCell attestQuorum[kAttestQuorumEntries] = {};
 
     // =========================================================================
     // Cache Operations

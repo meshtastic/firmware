@@ -1301,6 +1301,11 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.traffic_management.attestation_min_observed_secs = default_traffic_mgmt_attestation_min_observed_secs;
     mc.traffic_management.vouch_max_per_subject_per_window = default_traffic_mgmt_vouch_max_per_subject_per_window;
     mc.traffic_management.vouch_max_subjects_per_window = default_traffic_mgmt_vouch_max_subjects_per_window;
+    // Promotion needs a quorum of distinct non-co-located attesters in the
+    // same window; the promotion itself stays permanent (TTL 0) so the
+    // default does not cost vouch airtime.
+    mc.traffic_management.attestation_min_distinct_attesters = default_traffic_mgmt_attestation_min_distinct_attesters;
+    mc.traffic_management.attestation_promotion_ttl_secs = default_traffic_mgmt_attestation_promotion_ttl_secs;
 #endif
 }
 

@@ -76,6 +76,11 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_traffic_mgmt_attestation_min_observed_secs (24 * 60 * 60) // 24 h of local observation
 #define default_traffic_mgmt_vouch_max_per_subject_per_window 1
 #define default_traffic_mgmt_vouch_max_subjects_per_window 3
+// Promotion: needs 2 distinct non-co-located attesters in the same window;
+// the promotion bit itself is permanent (TTL 0) unless an operator enables
+// the decay lease.
+#define default_traffic_mgmt_attestation_min_distinct_attesters 2
+#define default_traffic_mgmt_attestation_promotion_ttl_secs 0
 
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
