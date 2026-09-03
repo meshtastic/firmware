@@ -104,19 +104,24 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert, bool show_date,
                       bool transparent_background, bool use_title_color_override, uint16_t title_color_override)
 {
-    constexpr int HEADER_OFFSET_Y = 1;
+    constexpr int HEADER_OFFSET_Y = 1 + BASEUI_HEADER_MARGIN;
     y += HEADER_OFFSET_Y;
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    const int xOffset = 4;
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int xOffset = 4 + BASEUI_HEADER_LR_MARGIN;
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1 + BASEUI_HEADER_MARGIN;
     const bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     const bool isBold = config.display.heading_bold;
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
+    // Compact panels: no persistent header, see UIRenderer::drawNavigationBar instead.
+    if (isCompactPanel(display)) {
+        display->setColor(WHITE); // Reset for other UI - normally done at the end of this function
+        return;
+    }
     const int headerHeight = highlightHeight + 2;
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
@@ -245,8 +250,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     }
 #endif
 
-    int batteryX = 1;
-    int batteryY = HEADER_OFFSET_Y + 1;
+    int batteryX = x + 1 + BASEUI_HEADER_LR_MARGIN;
+    int batteryY = HEADER_OFFSET_Y + 1 + BASEUI_HEADER_MARGIN / 2;
 #if !defined(OLED_TINY)
     // === Battery Icons ===
     if (usbPowered && !isCharging) { // This is a basic check to determine USB Powered is flagged but not charging
@@ -537,7 +542,13 @@ const int *getTextPositions(OLEDDisplay *display)
 {
     static int textPositions[7]; // Static array that persists beyond function scope
 
-    if (currentResolution == ScreenResolution::High) {
+    if (isCompactPanel(display)) {
+        // No header on compact panels - pack rows as tight as the font allows.
+        for (int i = 0; i < 7; ++i) {
+            const int bodyLine = (i > 0) ? i - 1 : 0;
+            textPositions[i] = bodyLine * (FONT_HEIGHT_SMALL - 6);
+        }
+    } else if (currentResolution == ScreenResolution::High) {
         textPositions[0] = textZeroLine;
         textPositions[1] = textFirstLine_medium;
         textPositions[2] = textSecondLine_medium;
@@ -562,6 +573,11 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 {
+    if (isCompactPanel(display)) {
+        display->setColor(WHITE); // Reset for other UI - normally done at the end of this function
+        return;
+    }
+
     if (!isAPIConnected(service->api_state))
         return;
 

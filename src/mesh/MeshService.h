@@ -101,6 +101,10 @@ class MeshService
                p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
 
+    /// True if the sender flagged this text as an alert: an ASCII BEL in the payload while at least
+    /// one alert_bell_* output is enabled. Alerts deliberately break through a mute.
+    static bool isAlertPayload(const meshtastic_MeshPacket &p);
+
     /// Returns false when a decoded NodeInfo/Waypoint payload fails nested protobuf decode (invalid
     /// UTF-8 under PB_VALIDATE_UTF8, etc.); other portnums pass through. Callers gate on the variant.
     static bool phonePayloadIsDecodable(const meshtastic_Data &decoded);
@@ -137,8 +141,8 @@ class MeshService
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
 
-    // Rewrite any queued-for-phone packet still carrying a millis() rx_time placeholder into a
-    // real epoch, now that the wall clock is trustworthy.
+    // Rewrite any queued-for-phone packet still carrying an uptime-seconds rx_time placeholder
+    // into a real epoch, now that the wall clock is trustworthy.
     void reconcilePendingRxTimes();
 
     // Release QueueStatus packet to pool
@@ -222,6 +226,9 @@ class MeshService
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
+#ifdef PIO_UNIT_TESTING
+    friend class MeshServicePhoneDeliveryTest;
+#endif
 };
 
 extern MeshService *service;

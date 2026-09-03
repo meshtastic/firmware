@@ -135,7 +135,7 @@ https://github.com/brad112358/easy_E22
 #endif
 
 #define GPS_UBLOX
-// define GPS_DEBUG
+// #define GPS_DEBUG 1
 
 // UART interfaces
 #define PIN_SERIAL1_TX GPS_TX_PIN
@@ -262,7 +262,7 @@ settings.
 | Waveshare    | Core1262-HF      | yes  | Ext       |                                       |
 | Waveshare    | LoRa Node Module | yes  | Int       |                                       |
 | Seeed        | Wio-SX1262       | yes  | Ext       | Cute! DIO2/TXEN are not exposed       |
-| Seeed        | Wio-LR1121       | yes  | Int       | LR1121, needs alternate rfswitch.h    |
+| Seeed        | Wio-LR1121       | yes  | Int       | LR1121, build -D LR1121_MODULE_WIO    |
 | AI-Thinker   | RA-02            | No   | Int       | SX1278 **433mhz band only**           |
 | RF Solutions | RFM95            | No   | Int       | Untested                              |
 | Ebyte        | E80-900M2213S    | Yes  | Int       | LR1121 radio                          |

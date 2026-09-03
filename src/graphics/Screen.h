@@ -5,6 +5,7 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -46,6 +47,8 @@ struct BannerOverlayOptions {
 
 bool shouldWakeOnReceivedMessage();
 
+class MeshModule;
+
 #if !HAS_SCREEN
 #include "Power.h"
 namespace graphics
@@ -73,6 +76,10 @@ class Screen
     void increaseBrightness() {}
     void decreaseBrightness() {}
     void startAlert(const char *) {}
+    void setModalModule(const MeshModule *) {}
+    void clearModalModule(const MeshModule *) {}
+    bool hasModalModule() const { return false; }
+    bool isShowingModuleFrame(const MeshModule *) const { return false; }
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
@@ -108,8 +115,15 @@ class Screen
 #include <AutoOLEDWire.h>
 #endif
 
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+// NicheGraphics-backed BaseUI e-ink stack; supplies the EINK_* compat macros for converted variants.
+// InkHUD builds keep the legacy includes: their TUs carry InkHUD's own NicheGraphics::Drivers classes,
+// which would collide with graphics/eink/ declarations until InkHUD moves onto the shared layer.
+#include "BaseUIEInkDisplay.h"
+#else
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
+#endif
 #include "PointStruct.h"
 #include "Power.h"
 #include "TFTDisplay.h"
@@ -242,6 +256,9 @@ class Screen : public concurrency::OSThread
     void setFrames(FrameFocus focus = FOCUS_DEFAULT);
 
     std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
+#if defined(OLED_COMPACT_UI)
+    std::vector<const char *> frameTitles;       // Per-frame short labels, parallel to indicatorIcons
+#endif
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
@@ -267,6 +284,9 @@ class Screen : public concurrency::OSThread
 
     bool isOverlayBannerShowing();
 
+    // Thread-safe snapshot of whether the text-message frame is currently shown.
+    bool isTextMessageFrameShown() const;
+
     // True if the always-present games frame is the one currently on screen. Lets the games module
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
@@ -276,6 +296,9 @@ class Screen : public concurrency::OSThread
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
     char ourId[5];
+
+    // if we have a step counter, this stores the number of steps.
+    uint32_t steps = 0;
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
@@ -324,6 +347,20 @@ class Screen : public concurrency::OSThread
         cmd.cmd = Cmd::STOP_ALERT_FRAME;
         enqueueCmd(cmd);
     }
+
+    // Holds the screen against the carousel, the new-message banner and a foreign endAlert().
+    // Only the owner can release it, unlike endAlert(), which any caller can fire.
+    void setModalModule(const MeshModule *owner) { modalModule = owner; }
+    void clearModalModule(const MeshModule *owner)
+    {
+        if (modalModule == owner)
+            modalModule = nullptr;
+    }
+    bool hasModalModule() const { return modalModule != nullptr; }
+
+    // True while this module's own frame is on screen. Modules observe input before Screen does,
+    // so one handling keys needs this or it takes them from the frame the user is looking at.
+    bool isShowingModuleFrame(const MeshModule *m) const;
 
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);
     void showOverlayBanner(BannerOverlayOptions);
@@ -667,6 +704,9 @@ class Screen : public concurrency::OSThread
     uint16_t displayHeight = 0;
 
   private:
+    // nullptr for every build with no modal module, which is why the three sites are unchanged.
+    const MeshModule *modalModule = nullptr;
+
     FrameCallback alertFrames[1];
     struct ScreenCmd {
         Cmd cmd;
@@ -788,6 +828,7 @@ class Screen : public concurrency::OSThread
     // Whether we are showing the regular screen (as opposed to booth screen or
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
+    std::atomic<bool> textMessageFrameShown{false};
     /// Track USB power state to only wake screen on actual power state changes
     bool lastPowerUSBState = false;
 

@@ -21,6 +21,13 @@
 #include "PortduinoGlue.h"
 #endif
 
+/// Decode-stream ceiling for a `nodes.proto` written by *other* firmware - a migration allowance,
+/// **not this build's node cap**. That is `MAX_NUM_NODES`, which on portduino is a runtime value
+/// (`portduino_config.MaxNodes`, default 200) rather than a compile-time constant. 250 is the
+/// largest hot cap any shipped firmware has used (ESP32-S3 top flash tier), so a file from any of
+/// them still decodes here; the excess is trimmed after load.
+static constexpr size_t NODEDB_MIGRATION_LOAD_CEILING = 250;
+
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
 // E3B0C442 is the blank hash
 static const uint8_t LOW_ENTROPY_HASHES[][32] = {
@@ -216,6 +223,18 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 #endif
 }
 
+/// Post-decode, the encrypted bitfield makes MISSING_OR_UNKNOWN decidable.
+/// Local packets are exempt; Router::dispatchReceived uses this predicate to set skipHandle.
+inline bool shouldSkipHandleForPostDecodeHop(const meshtastic_MeshPacket &p)
+{
+#if !MESHTASTIC_PREHOP_DROP
+    (void)p;
+    return false;
+#else
+    return !isFromUs(&p) && classifyHopStart(p) != HopStartStatus::VALID;
+#endif
+}
+
 /// Rate-limited debug log when hop_start is invalid/missing and packet is dropped.
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
 
@@ -240,6 +259,14 @@ enum LoadFileResult {
 };
 
 enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
+
+// RAM-only arrival stamp (monotonic uptime secs) for nodes heard before the wall clock was trusted,
+// backfilled into last_heard as an epoch once it is. last_heard persists, so it cannot hold this.
+// Bounded, linear-scan, reuse-oldest, never persisted - dies with the boot, as does its timebase.
+struct NodeHeardAt {
+    NodeNum num = 0;                ///< node this stamp describes; 0 == empty slot
+    uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard
+};
 
 class NodeDB
 {
@@ -300,6 +327,10 @@ class NodeDB
     void updateFrom(const meshtastic_MeshPacket &p);
 
     void addFromContact(const meshtastic_SharedContact);
+
+    /// On the clock-becoming-trusted transition (see RTC.cpp): convert every RAM arrival stamp into
+    /// a real last_heard epoch, never backwards, then empty the table. updateFrom() takes over.
+    void backfillHeardAt();
 
     /** Update position info for this node based on received position data
      */
@@ -518,10 +549,12 @@ class NodeDB
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
         // Decode-stream size ceiling only - no buffer this big is allocated (load
         // streams from the file). Sized for the largest file any prior firmware
-        // could write (250-node ESP32-S3, satellites uncapped) so capacity
-        // downgrades / peer backups still decode; excess is trimmed after load.
+        // could write, so capacity downgrades / peer backups still decode; excess
+        // is trimmed after load. See NODEDB_MIGRATION_LOAD_CEILING above - it is a
+        // migration allowance, not this build's cap.
         // (not constexpr: portduino resolves MAX_NUM_NODES from runtime config)
-        const size_t loadCeiling = ((size_t)MAX_NUM_NODES > 250) ? (size_t)MAX_NUM_NODES : 250;
+        const size_t loadCeiling =
+            ((size_t)MAX_NUM_NODES > NODEDB_MIGRATION_LOAD_CEILING) ? (size_t)MAX_NUM_NODES : NODEDB_MIGRATION_LOAD_CEILING;
         return nodeDatabaseSize + (loadCeiling * meshtastic_NodeInfoLite_size) +
                (loadCeiling * meshtastic_NodePositionEntry_size) + (loadCeiling * meshtastic_NodeTelemetryEntry_size) +
                (loadCeiling * meshtastic_NodeEnvironmentEntry_size) + (loadCeiling * meshtastic_NodeStatusEntry_size);
@@ -562,6 +595,10 @@ class NodeDB
     bool notifyPendingLicensedIdentityMigration();
 
     bool createNewIdentity();
+
+    /// Mint the identity keypair outside the boot path and re-seat my_node_num == crc32(public_key).
+    /// @return true if my_node_num moved; the caller must then also persist SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE.
+    bool ensurePkiIdentity();
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
@@ -628,6 +665,31 @@ class NodeDB
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;           // When last sorted the nodeDB
+
+    /// See NodeHeardAt. Caps how many distinct nodes can be dated once the clock arrives; a node
+    /// pushed out by reuse-oldest just stays "last heard: unknown", the same as before this table.
+    static constexpr size_t kMaxHeardAt = 32;
+    NodeHeardAt heardAt[kMaxHeardAt] = {};
+
+    /// Stamp (or re-stamp) a node's RAM arrival record; used instead of writing a non-epoch into
+    /// last_heard whenever the wall clock is untrusted.
+    void recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptimeSecs);
+
+    /// addFromContact's anti-eviction stamp: a real epoch when the clock is trusted, otherwise a
+    /// RAM arrival stamp that evictionRecency() honours - never a boot-relative last_heard.
+    void stampContactHeardNow(meshtastic_NodeInfoLite *info);
+
+    /// Read the node's RAM arrival stamp. The boolean carries presence because uptime second 0 is valid.
+    bool getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const;
+
+    struct EvictionRecency {
+        uint32_t value;
+        bool heardThisBoot;
+    };
+
+    /// Eviction ranking with current-boot stamps newer than every persisted epoch.
+    EvictionRecency evictionRecency(const meshtastic_NodeInfoLite *n) const;
+    static bool evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent);
 
     /*
      * Internal boolean to track sorting paused

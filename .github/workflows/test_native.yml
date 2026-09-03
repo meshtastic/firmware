@@ -2,24 +2,50 @@ name: Run Tests on Native platform
 
 on:
   workflow_call:
+    inputs:
+      suite_order_seed:
+        description: >-
+          Seed varying which suites share a shard. Empty (the default) means: the fixed declared
+          arrangement on pull_request, so a contributor's PR never turns red because of a pairing
+          they did not choose; commit-SHA-derived elsewhere. Set a number to force that exact
+          arrangement anywhere - that is how you replay a shuffled failure.
+        type: string
+        required: false
+        default: ""
+      max_suites_per_shard:
+        description: >-
+          Largest shard, in suites. Lower splits the matrix further: faster wall clock, more
+          runners. The floor per shard is checkout + toolchain + one src build, so below about 8
+          the fixed cost starts to dominate what is being parallelised.
+        type: number
+        required: false
+        default: 10
   workflow_dispatch:
 
 permissions: {}
 
 env:
-  # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
+  # Only pushes to the default branch (develop) populate the caches; PR / merge_group runs
   # restore it but never save, so they stop filling up the repo's Actions cache storage.
   SAVE_CACHE: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
-  LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
+  # No --directory: callers add it, since shards capture from .pio/build/<env>/src. Keeping the
+  # include/exclude filters shared is what stops a shard capturing a different file set.
+  LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --base-directory "${PWD}"
 
 jobs:
-  # Guard the registered native-suite total. `platformio test` discovers and runs whatever
-  # test_* directories exist, so it never notices when test/native-suite-count drifts from the
-  # actual directory count (a suite added without registering it, or the file left stale). That
-  # reconciliation only lives in bin/run-tests.sh, which CI does not invoke - so mirror the exact
-  # check here and fail the PR on a mismatch, keeping the manual count honest.
-  suite-count-check:
-    name: Native Suite Count
+  # Tripwire against the native suite set shrinking by accident. `platformio test` discovers and
+  # runs whatever test_* directories exist, and bin/run-tests.sh derives its expected count from
+  # the same walk - so a suite directory lost in a bad rebase or an overzealous cleanup just means
+  # fewer suites run, and every remaining check stays green. Compare the test_* directory list
+  # against the PR's merge base and fail when a suite vanished without the PR saying so: a removed
+  # suite's name must appear in the PR title, the PR body, or a commit message in the PR's range.
+  # A deliberate removal satisfies that by stating what it removes; an accidental loss cannot.
+  # Only pull_request runs have a base to compare against (and PRs are where accidents arrive);
+  # every other event skips. No job depends on this one: a skipped job would skip its dependents,
+  # and the expensive jobs should not wait on a full-history clone.
+  suite-shrinkage-check:
+    name: Native Suite Shrinkage
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -27,40 +53,111 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # Full history: the merge base must be computed, not guessed from a possibly stale
+          # event payload, and the acknowledgment scan reads every commit message in the range.
+          fetch-depth: 0
 
-      - name: Reconcile native-suite-count with test/ directories
+      - name: Fail if a test_* suite vanished unacknowledged
+        shell: bash
+        # PR title/body are attacker-controlled text; they reach the script through env: only,
+        # never spliced into the shell source (same rule as the suite-order seed below).
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin "$BASE_REF"
+          base=$(git merge-base FETCH_HEAD HEAD)
+          # Same canonical set every other consumer derives: directories named test_* directly
+          # under test/, read from the git trees so the comparison is exact at both endpoints.
+          list_suites() { git ls-tree -d --name-only "$1" test/ | sed 's#^test/##' | grep '^test_' | sort; }
+          removed=$(comm -23 <(list_suites "$base") <(list_suites HEAD))
+          if [[ -z $removed ]]; then
+            echo "No suite removed: $(list_suites HEAD | wc -l) test_* directories, none lost since merge base ${base:0:8}."
+            exit 0
+          fi
+          messages=$(git log --format=%B "$base..HEAD")
+          fail=0
+          while IFS= read -r suite; do
+            if printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BODY" "$messages" | grep -qF "$suite"; then
+              echo "Removed suite $suite is named in the PR title/body or a commit message - acknowledged."
+            else
+              echo "::error title=Native suite vanished::test/$suite exists on the merge base but is gone from this PR, and nothing in the PR title, body, or commit messages mentions it. If the removal is deliberate, name $suite in the PR description or a commit message; if not, restore the directory - platformio test would silently run without it."
+              fail=1
+            fi
+          done <<<"$removed"
+          exit $fail
+
+  # Reject naive deadline comparisons against the 32-bit uptime clocks. `millis() > deadline` and
+  # `deadline < millis()` invert while the deadline sits on the far side of the 32-bit wrap: the
+  # action fires immediately, or blocks for about the interval it should have waited. The correct
+  # forms are
+  # Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
+  # Throttle::deadlinePassed (an absolute deadline). See .github/copilot-instructions.md.
+  millis-deadline-check:
+    # Name is load-bearing: upstream branch protection matches the check by name. Widen the guard,
+    # not this string.
+    name: Naive millis() Deadline Compare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Reject 32-bit uptime clocks used directly in a deadline comparison
         shell: bash
         run: |
           set -euo pipefail
-          count_file="test/native-suite-count"
-          if [[ ! -f $count_file ]]; then
-            echo "::error title=Missing native-suite-count::$count_file not found - it must record the number of test_* suite directories."
-            exit 1
+          allowlist=".github/millis-deadline-allowlist.txt"
+
+          # Flag millis() or its Time::getMillis() wrapper directly adjacent to a comparison
+          # operator, in either order. The correct idioms subtract first, so they are not matched.
+          #
+          # Line comments are stripped before matching, so prose may name the broken idiom (this
+          # guard's own documentation does). Block comments are not stripped; keep `millis() >` out
+          # of /* */ blocks. mawk-compatible - ubuntu-latest has no gawk.
+          find src -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.ino' \) \
+               ! -path 'src/mesh/generated/*' -print0 |
+            xargs -0 awk '
+              {
+                line = $0
+                sub(/\/\/.*/, "", line)
+                if (line ~ /((millis|getMillis)\(\)[ \t]*[<>]=?)|([<>]=?[ \t]*(millis|getMillis)\(\))/) {
+                  code = line
+                  sub(/^[ \t]+/, "", code); sub(/[ \t]+$/, "", code)
+                  printf "%s\t%s\t%s\n", FILENAME, FNR, code
+                }
+              }' > /tmp/millis-hits.tsv
+
+          # Allowlisted entries are keyed on file + exact source text, deliberately without a line
+          # number, so unrelated edits above them do not invalidate the entry.
+          : > /tmp/millis-allowed.tsv
+          if [[ -f $allowlist ]]; then
+            grep -vE '^[[:space:]]*(#|$)' "$allowlist" > /tmp/millis-allowed.tsv || true
           fi
-          # Same canonical set as bin/run-tests.sh: directories named test_* directly under test/.
-          expected_count=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | wc -l)
-          canonical_count=$(tr -d '[:space:]' <"$count_file")
-          if ! [[ $canonical_count =~ ^[0-9]+$ ]]; then
-            echo "::error title=Invalid native-suite-count::$count_file must contain a single integer, got '$canonical_count'."
-            exit 1
-          fi
-          echo "test/ directories: $expected_count"
-          echo "native-suite-count: $canonical_count"
-          if [[ $expected_count -ne $canonical_count ]]; then
-            if [[ $expected_count -gt $canonical_count ]]; then
-              hint="a suite was added - bump $count_file to $expected_count"
-            else
-              hint="a suite was removed - lower $count_file to $expected_count"
+
+          violations=0
+          while IFS=$'\t' read -r file line code; do
+            [[ -n ${file:-} ]] || continue
+            if grep -qxF "$(printf '%s\t%s' "$file" "$code")" /tmp/millis-allowed.tsv; then
+              continue
             fi
-            echo "::error title=native-suite-count mismatch::test/ has $expected_count suite directories but $count_file says $canonical_count ($hint)."
+            echo "$file:$line: $code"
+            violations=$((violations + 1))
+          done < /tmp/millis-hits.tsv
+
+          if [[ $violations -gt 0 ]]; then
+            echo "::error title=Naive uptime deadline compare::$violations line(s) compare a 32-bit uptime clock directly, which inverts while the deadline is on the far side of the 32-bit wrap - the action fires immediately, or blocks for about the interval it should have waited. Use Throttle::deadlinePassed(deadline) for a stored absolute deadline, or Throttle::hasElapsed(lastEvent, intervalMs) for an interval. If a match genuinely is not a deadline test (an uptime threshold, say), add it to $allowlist with a reason."
             exit 1
           fi
-          echo "native-suite-count matches the $expected_count suite directories."
+          echo "No naive 32-bit uptime deadline comparisons in src/ (allowlist: $(wc -l < /tmp/millis-allowed.tsv) entr(y/ies))."
 
   simulator-tests:
     name: Native Simulator Tests
     runs-on: ubuntu-24.04-arm
-    needs: suite-count-check
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -97,7 +194,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get install -y lcov
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --initial --output-file coverage_base.info
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --directory .pio/build/coverage/src --initial --output-file coverage_base.info
           sed -i -e "s#${PWD}#.#" coverage_base.info # Make paths relative.
 
       - name: Config check tests
@@ -107,6 +204,13 @@ jobs:
         # and a failure here explains a lot of downstream weirdness.
         timeout-minutes: 5
         run: ./bin/test-config-check.sh .pio/build/coverage/meshtasticd
+
+      - name: Shared-state checker self-test
+        # Fixtures that write nothing / exactly what they declare / something undeclared /
+        # a declared write they never make, asserting CLEAN / CLEAN / DIRTY / MISSING. A
+        # checker that has silently stopped matching looks identical to a clean codebase.
+        timeout-minutes: 5
+        run: ./bin/test-state-check.sh
 
       - name: Integration test
         # Cap the whole step: if the simulator ever fails to exit (e.g. the
@@ -140,12 +244,12 @@ jobs:
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
         run: |
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name integration --output-file coverage_integration.info
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --directory .pio/build/coverage/src --test-name integration --output-file coverage_integration.info
           sed -i -e "s#${PWD}#.#" coverage_integration.info # Make paths relative.
 
       - name: Get release version string
         if: always() # run this step even if previous step failed
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
         id: version
 
       - name: Save coverage information
@@ -156,25 +260,102 @@ jobs:
           overwrite: true
           path: ./coverage_*.info
 
-  platformio-tests:
-    name: Native PlatformIO Tests
-    runs-on: ubuntu-24.04-arm
-    needs: suite-count-check
+  # bin/test-shards.py derives the matrix from test/, so adding a suite needs no CI change.
+  # Cheap by design: a checkout and a python run, sitting on every shard critical path.
+  discover:
+    name: Native Test Shards
+    # ubuntu-latest, not the slim image: this needs a python3 to run bin/test-shards.py, and it is
+    # on the critical path of every shard, so it must not have to install one.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.shards.outputs.matrix }}
+      suites: ${{ steps.shards.outputs.suites }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          submodules: recursive
+          persist-credentials: false
 
-      - name: Setup native build
+      - name: Build the shard matrix
+        id: shards
+        shell: bash
+        # Both inputs reach the script through env: rather than ${{ }} inside run:, so nothing from
+        # the event payload is ever spliced into the shell text.
+        env:
+          SUITE_ORDER_SEED: ${{ inputs.suite_order_seed }}
+          MAX_SUITES: ${{ inputs.max_suites_per_shard || 10 }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # pull_request keeps the declared arrangement so a PR never reds for a pairing its author did not
+          # choose; elsewhere the SHA seeds it. Varies co-location, not order within a shard.
+          if [ -n "${SUITE_ORDER_SEED:-}" ]; then
+            seed="$SUITE_ORDER_SEED"
+            echo "shard arrangement: shuffled with explicitly supplied seed $seed"
+          elif [ "${EVENT_NAME:-}" = "pull_request" ]; then
+            seed=""
+            echo "shard arrangement: declared order (pull_request)"
+            echo "  to exercise a different arrangement, re-run this workflow with a suite_order_seed input"
+          else
+            seed=$((16#${GITHUB_SHA:0:8}))
+            echo "shard arrangement: shuffled with seed $seed (from ${GITHUB_SHA:0:8})"
+          fi
+
+          matrix=$(./bin/test-shards.py --max-suites "$MAX_SUITES" --seed "$seed" --summary)
+          # The canonical suite set, passed to the collector so its whole-run gate checks against
+          # the same walk this matrix was built from rather than a second one.
+          suites=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort | tr '\n' ' ')
+
+          # A newline in a value writes a second entry, setting outputs this step never declared. Both feed
+          # control flow, so assert single-line rather than assume it.
+          for value in "$matrix" "$suites"; do
+            if [ "$value" != "${value%%$'\n'*}" ]; then
+              echo "::error title=Multi-line step output::bin/test-shards.py or the suite walk produced a value spanning lines. Refusing to write it to \$GITHUB_OUTPUT - a newline there sets outputs this step did not declare."
+              exit 1
+            fi
+          done
+          [ -n "$matrix" ] && [ -n "$suites" ] || {
+            echo "::error title=Empty shard matrix::the matrix or the suite list came out empty; a downstream gate that expects nothing passes on anything."
+            exit 1
+          }
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+
+  # No build-then-run split: PlatformIO relinks each suite regardless, so the warm build bought a
+  # shared src build and ~75 throwaway links. ccache carries src objects between shards instead.
+  platformio-tests:
+    name: Suites (${{ matrix.shard }})
+    needs: discover
+    runs-on: ubuntu-24.04-arm
+    # Measured cold-cache shards run 5-12 minutes. Without this a hung suite, or a runner that
+    # stops reporting, holds a runner until GitHub's 6-hour default - times twelve shards.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # fail-fast off: a cancelled sibling stops the collector telling "failed" from "never ran".
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      # No submodules: src/mesh/generated is tracked and meshtestic is the hardware harness, so neither
+      # is reachable from .
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup native test build
         id: base
-        uses: ./.github/actions/setup-native
+        uses: ./.github/actions/setup-native-test
 
       - name: Get release version string
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
         id: version
 
-      # Disable (comment-out) BUILD_EPOCH. It causes a full rebuild between tests and resets the
-      # coverage information each time.
+      # Disable (comment-out) BUILD_EPOCH. It forces a full rebuild between tests, resets coverage each
+      # time, and would put a fresh timestamp in every TU, which is also what would defeat ccache.
       - name: Disable BUILD_EPOCH
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
@@ -187,114 +368,163 @@ jobs:
           restore-keys: |
             pio-coverage-tests-
 
-      - name: Build test programs once
-        # One shared build of src + every test program. This is the single source build; gcov then
-        # accumulates coverage counts into this shared .pio/build/coverage/src as the chunks run.
-        run: platformio test -e coverage --without-testing
+      # Every shard compiles the same ~450 src TUs; unshared, that is the cost of fanning out.
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.ccache
+          # One lineage for all shards: src objects dominate and are identical. run_id only makes each save
+          # a fresh entry; the prefix restore-key selects the newest.
+          key: ccache-native-tests-${{ github.run_id }}
+          restore-keys: |
+            ccache-native-tests-
+
+      - name: Run this shard's suites
+        id: run
+        shell: bash
+        # Suite names come from bin/test-shards.py, which refuses any name outside
+        # ^test_[A-Za-z0-9_]+$ - so the word-split below cannot pick up shell metacharacters.
+        env:
+          PIO_ENV: ${{ matrix.env }}
+          SHARD: ${{ matrix.shard }}
+          SUITES: ${{ matrix.suites }}
+        run: |
+          set -uo pipefail
+          # read -ra, not an unquoted expansion: word-splits without letting a token glob against
+          # the workspace. bin/test-shards.py holds every name to ^test_[A-Za-z0-9_]+$ as well.
+          read -ra suites <<<"$SUITES"
+          filters=()
+          for suite in "${suites[@]}"; do filters+=(-f "$suite"); done
+          echo "shard $SHARD: ${#suites[@]} suite(s) under [env:$PIO_ENV] -> $SUITES"
+
+          # Log to a file for platformio real exit status, then drop the per-variant SKIPPED rows: suites
+          # outside this shard are reported SKIPPED by design.
+          rc=0
+          platformio test -e "$PIO_ENV" -v "${filters[@]}" \
+            --junit-output-path "testreport-$SHARD.xml" > shard.log 2>&1 || rc=$?
+          grep -v "[[:space:]]SKIPPED$" shard.log || true
+          exit $rc
+
+      - name: Verify this shard ran its own tests
+        # Not conditional on the run passing: a suite that reported another suite's test cases is a
+        # different, worse finding than a failing assertion, and it must not be hidden behind one.
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+          SUITES: ${{ matrix.suites }}
+        run: ./bin/check-test-attribution.py --label "shard $SHARD" --expect "$SUITES" "testreport-$SHARD.xml"
+
+      - name: Capture coverage information
+        if: always() # run this step even if previous step failed
+        env:
+          PIO_ENV: ${{ matrix.env }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          sudo apt-get install -y lcov
+          # One tracefile per shard; the collector sums them with --add-tracefile into the union.
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --directory ".pio/build/$PIO_ENV/src" \
+            --test-name "$SHARD" --output-file "coverage_tests_$SHARD.info"
+          sed -i -e "s#${PWD}#.#" "coverage_tests_$SHARD.info" # Make paths relative.
+
+      - name: ccache statistics
+        # Printed, not asserted. A cache that has silently stopped hitting shows up here as the
+        # shards getting slower, which is the symptom worth being able to explain.
+        if: always()
+        run: ccache --show-stats || true
+
+      - name: Save ccache
+        # Exactly one shard saves (cache_writer): every shard needs the same src objects, and letting all
+        # of them save would race for the key.
+        if: always() && env.SAVE_CACHE == 'true' && matrix.cache_writer
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.ccache
+          key: ccache-native-tests-${{ github.run_id }}
 
       - name: Save PlatformIO cache
-        if: env.SAVE_CACHE == 'true' && steps.pio-cache.outputs.cache-hit != 'true'
+        if: env.SAVE_CACHE == 'true' && matrix.cache_writer && steps.pio-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.platformio/.cache
           key: pio-coverage-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
 
-      - name: Run tests one area at a time
-        shell: bash
-        run: |
-          set -uo pipefail
-          # One runner, no matrix, no concurrency. Group the test_* suites by area and run each
-          # area sequentially, reusing the single build above (--without-building). Each area gets
-          # its own JUnit report and its own collapsible log, so a failure lands in a small named
-          # section instead of being buried past the log limit. Sequential runs share one build
-          # dir, so gcov coverage accumulates and the single capture in the next step has the union.
-
-          # Ordered area rules "name:ERE"; first match wins. Anything unmatched falls to "misc", so
-          # a newly added suite always runs even before it is placed. Add a suite to an area by
-          # extending that area's regex; add a new area by inserting a rule line.
-          area_rules=(
-            "admin:^test_(admin|pki)_"
-            "crypto:^test_(crypto|packet_signing)$"
-            "routing:^test_(mesh|nexthop|traceroute|hop|traffic|nodedb|warm)_"
-            "position:^test_position_"
-            "fuzz:^test_fuzz_"
-            "packets:^test_(packet|transmit|meshpacket)_"
-            "io:^test_(serial|stream|xmodem|http|mqtt)"
-          )
-
-          mapfile -t suites < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
-          declare -A group
-          for s in "${suites[@]}"; do
-            a="misc"
-            for rule in "${area_rules[@]}"; do
-              if [[ "$s" =~ ${rule#*:} ]]; then a="${rule%%:*}"; break; fi
-            done
-            group[$a]="${group[$a]:-} -f $s"
-          done
-
-          run_order=()
-          for rule in "${area_rules[@]}"; do run_order+=("${rule%%:*}"); done
-          run_order+=("misc")
-
-          fail=0
-          for a in "${run_order[@]}"; do
-            [ -n "${group[$a]:-}" ] || continue
-            echo "::group::area $a (${group[$a]# })"
-            # Capture platformio's real exit status (not grep's) via a log file, then show the log
-            # with the noisy per-variant SKIPPED rows filtered out.
-            if ! platformio test -e coverage --without-building -v ${group[$a]# } \
-                 --junit-output-path "testreport-$a.xml" > "area-$a.log" 2>&1; then
-              fail=1
-              echo "::error::area $a had test failures"
-            fi
-            grep -v "[[:space:]]SKIPPED$" "area-$a.log" || true
-            echo "::endgroup::"
-          done
-          exit $fail
-
-      - name: Merge per-area reports into testreport.xml
-        # Preserve the single-file JUnit contract that downstream consumers rely on
-        # (pr_tests.yml's summary and generate-reports' Test Report both read testreport.xml).
-        # The per-area split is only for readable logs; the report stays consolidated.
-        if: always() # run even when a chunk failed, so the report captures the failures
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import glob, xml.etree.ElementTree as ET
-          out = ET.Element('testsuites')
-          for f in sorted(glob.glob('testreport-*.xml')):
-              try:
-                  root = ET.parse(f).getroot()
-              except ET.ParseError:
-                  continue
-              # PlatformIO writes a <testsuites> root; fold in a bare <testsuite> too, just in case.
-              out.extend(root.findall('testsuite') if root.tag == 'testsuites' else [root])
-          ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
-          PY
-
-      - name: Capture coverage information
-        if: always() # run this step even if previous step failed
-        run: |
-          sudo apt-get install -y lcov
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
-          sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
-
       - name: Save test results
         if: always() # run this step even if previous step failed
         uses: actions/upload-artifact@v7
         with:
-          name: platformio-test-report-${{ steps.version.outputs.long }}
+          name: platformio-test-report-${{ matrix.shard }}-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./testreport.xml
+          # Named, not globbed: a test suite can write to the workspace, and the collector merges whatever
+          # arrives into the report its gate reads.
+          path: ./testreport-${{ matrix.shard }}.xml
 
       - name: Save coverage information
-        uses: actions/upload-artifact@v7
         if: always() # run this step even if previous step failed
+        uses: actions/upload-artifact@v7
         with:
-          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.long }}
+          name: lcov-coverage-info-native-shard-${{ matrix.shard }}-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./coverage_*.info
+          # Named exactly, for the same reason as the report above: everything uploaded here is
+          # merged into the published coverage report.
+          path: ./coverage_tests_${{ matrix.shard }}.info
 
+  # Reproduces the false green on purpose (--without-building) and requires the checker to catch it.
+  # Its own job because it relinks $BUILD_DIR/$PROGNAME, which no shard build dir can survive.
+  attribution-canary:
+    name: Attribution Canary
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup native test build
+        uses: ./.github/actions/setup-native-test
+
+      - name: Disable BUILD_EPOCH
+        run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
+
+      - name: Restore PlatformIO cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-coverage-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
+          restore-keys: |
+            pio-coverage-tests-
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.ccache
+          key: ccache-native-tests-${{ github.run_id }}
+          restore-keys: |
+            ccache-native-tests-
+
+      - name: Attribution canary
+        timeout-minutes: 15
+        run: ./bin/test-attribution-canary.sh -e coverage
+
+  # Load-bearing name: branch protection matches it, and matrix rows are named per shard so none of
+  # them can carry it.
+  platformio-tests-gate:
+    name: Native PlatformIO Tests
+    needs: platformio-tests
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-slim
+    steps:
+      - name: Report the matrix result
+        env:
+          RESULT: ${{ needs.platformio-tests.result }}
+        run: |
+          set -euo pipefail
+          echo "shard matrix: $RESULT"
+          [ "$RESULT" = "success" ]
+
+  # The collector. A shard knows only its own suites and one that never started reports nothing, so
+  # only here can the union be checked against the canonical set.
   generate-reports:
     name: Generate Test Reports
     runs-on: ubuntu-latest
@@ -303,22 +533,73 @@ jobs:
       actions: read
       checks: write
     needs:
+      - discover
       - simulator-tests
       - platformio-tests
+      - attribution-canary
     # Run this job even if the previous jobs failed, but skip if the workflow was cancelled.
     if: ${{ !cancelled() }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Get release version string
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
         id: version
 
-      - name: Download test artifacts
+      - name: Download per-shard test artifacts
         uses: actions/download-artifact@v8
         with:
-          name: platformio-test-report-${{ steps.version.outputs.long }}
+          pattern: platformio-test-report-*-${{ steps.version.outputs.long }}
           merge-multiple: true
+
+      - name: Merge the shard reports into testreport.xml
+        # Preserve the single-file JUnit contract downstream consumers rely on (pr_tests.yml summary, and
+        # the Test Report below). The split is only how the run executes; the report stays consolidated.
+        if: always() # run even when a shard failed, so the report captures the failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          out = ET.Element('testsuites')
+          files = sorted(glob.glob('testreport-*.xml'))
+          for f in files:
+              try:
+                  root = ET.parse(f).getroot()
+              except ET.ParseError:
+                  print(f"WARNING: {f} is not parseable, skipping")
+                  continue
+              # PlatformIO writes a <testsuites> root; fold in a bare <testsuite> too, just in case.
+              out.extend(root.findall('testsuite') if root.tag == 'testsuites' else [root])
+          ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
+          print(f"merged {len(files)} shard report(s) into testreport.xml")
+          PY
+
+      - name: Verdict - every suite ran, and ran its own tests
+        # Only here is the union compared against the canonical test_* set, which is what catches a shard
+        # that failed to start or was cancelled.
+        if: always() # a suite going missing is the finding; do not hide it behind an earlier failure
+        env:
+          SUITES: ${{ needs.discover.outputs.suites }}
+        run: |
+          set -euo pipefail
+          # --expect "" passes over anything, and it is empty exactly when discover failed, which is one of
+          # the situations this gate exists to catch.
+          if [ -z "${SUITES// /}" ]; then
+            echo "::error title=No expected suite set::the discover job produced no suite list, so the whole-run attribution gate has nothing to check against. Treating that as a failure - a gate with an empty expectation passes vacuously."
+            exit 1
+          fi
+          ./bin/check-test-attribution.py --label "all shards" --expect "$SUITES" testreport.xml
+
+      - name: Save merged test results
+        # Same artifact name the single-runner job used to publish, so pr_tests.yml's summary keeps
+        # finding it.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platformio-test-report-${{ steps.version.outputs.long }}
+          overwrite: true
+          path: ./testreport.xml
 
       - name: Drop no-status testsuites from the report
         # PlatformIO emits a self-closing <testsuite tests="0"/> row for every test_* dir
@@ -326,9 +607,11 @@ jobs:
         # They carry no pass/fail/skip status and bury the suites that actually ran. Strip
         # them so the Test Report lists only suites with a real status. Only the copy the
         # reporter renders is trimmed; the uploaded artifact keeps the full XML.
+        if: always()
         run: sed -i -E 's#<testsuite [^>]*tests="0"[^>]*/>##g' testreport.xml
 
       - name: Test Report
+        if: always()
         uses: dorny/test-reporter@v3.0.0
         with:
           name: PlatformIO Tests
@@ -336,6 +619,7 @@ jobs:
           reporter: java-junit
 
       - name: Download coverage artifacts
+        if: always()
         uses: actions/download-artifact@v8
         with:
           pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}
@@ -344,9 +628,10 @@ jobs:
 
       - name: Generate Code Coverage Report
         # Merge every tracefile the jobs produced: coverage_base.info (zeroed baseline),
-        # coverage_integration.info, and one coverage_tests_<chunk>.info per chunk. lcov
-        # sums hit counts across them, so the merged report is the union of all chunks -
+        # coverage_integration.info, and one coverage_tests_<shard>.info per shard. lcov
+        # sums hit counts across them, so the merged report is the union of all shards -
         # identical to running the whole suite in one job.
+        if: always()
         run: |
           sudo apt-get install -y lcov
           args=()
@@ -357,7 +642,54 @@ jobs:
           genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
       - name: Save Code Coverage Report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: code-coverage-report-${{ steps.version.outputs.long }}
           path: code-coverage-report
+
+      - name: Final verdict
+        # States the run result in one place, rather than leaving it reconstructed from a dozen shard logs.
+        if: always()
+        env:
+          SHARDS: ${{ needs.platformio-tests.result }}
+          SIMULATOR: ${{ needs.simulator-tests.result }}
+          CANARY: ${{ needs.attribution-canary.result }}
+        run: |
+          set -uo pipefail
+          {
+            echo "## Native tests"
+            echo ""
+            echo "| Part | Result |"
+            echo "| --- | --- |"
+            echo "| Suite shards | \`$SHARDS\` |"
+            echo "| Simulator | \`$SIMULATOR\` |"
+            echo "| Attribution canary | \`$CANARY\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          cases = fails = skips = 0
+          failed = []
+          for suite in ET.parse('testreport.xml').getroot().iter('testsuite'):
+              n = int(suite.get('tests', '0'))
+              bad = int(suite.get('failures', '0')) + int(suite.get('errors', '0'))
+              cases += n
+              fails += bad
+              skips += int(suite.get('skipped', '0'))
+              if bad:
+                  failed.append(f"{suite.get('name', '?')} ({bad})")
+          print("")
+          print(f"{cases} test case(s), {fails} failed, {skips} skipped.")
+          if failed:
+              print("")
+              print("Failing suites: " + ", ".join(sorted(failed)))
+          PY
+
+          for result in "$SHARDS" "$SIMULATOR" "$CANARY"; do
+            [ "$result" = "success" ] || {
+              echo "::error title=Native tests failed::shards=$SHARDS simulator=$SIMULATOR canary=$CANARY - see the job summary."
+              exit 1
+            }
+          done
+          echo "RESULT: GREEN - every shard, the simulator, and the canary passed."

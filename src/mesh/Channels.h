@@ -5,6 +5,10 @@
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !defined(USERPREFS_CHANNEL_0_PSK)
+#error "USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL requires USERPREFS_CHANNEL_0_PSK"
+#endif
+
 /** A channel number (index into the channel table)
  */
 typedef uint8_t ChannelIndex;
@@ -95,6 +99,9 @@ class Channels
     // matches the current preset's name and PSK byte 1.
     bool isWellKnownChannel(ChannelIndex chIndex);
 
+    // Returns true if this channel's effective key matches USERPREFS_CHANNEL_0_PSK.
+    bool isEventChannel(ChannelIndex chIndex);
+
     // Returns true if we can be reached via a channel with the default settings given a region and modem preset
     bool hasDefaultChannel();
 
@@ -152,6 +159,10 @@ extern Channels channels;
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                      0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
+
+/// True if the user muted the source of this packet: the sender for a DM addressed to us,
+/// otherwise the channel it arrived on.
+bool isMutedForPacket(const meshtastic_MeshPacket &mp);
 
 /// True if a getKey()-resolved key offers no privacy: length 0 (off) or the public defaultpsk family. Pure; for tests.
 bool cryptoKeyIsPublic(const CryptoKey &key);

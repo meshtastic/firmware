@@ -16,6 +16,7 @@
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
@@ -24,6 +25,7 @@
 #include "Power.h"
 #include "SPILock.h"
 #include "Throttle.h"
+#include "WaypointStore.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
@@ -176,9 +178,9 @@ MagnetometerThread *magnetometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
-#ifdef USE_XL9555
-#include "ExtensionIOXL9555.hpp"
-ExtensionIOXL9555 io;
+#ifdef USE_PCA95X5
+#include PCA95X5_INC
+PCA95X5_CLS io;
 #endif
 
 #ifdef USE_MCP23017
@@ -316,11 +318,15 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-void lateInitVariant() __attribute__((weak));
-void lateInitVariant() {}
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. nrf52_lto.py's _VARIANT_OVERRIDES guards this.
+__attribute__((noinline)) void lateInitVariant() __attribute__((weak));
+__attribute__((noinline)) void lateInitVariant() {}
 
-void earlyInitVariant() __attribute__((weak));
-void earlyInitVariant() {}
+// earlyInitVariant() runs before consoleInit(): a LOG_* macro here CRASHES the device,
+// it is not a silent no-op. Defer any logging to lateInitVariant() or later.
+__attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
+__attribute__((noinline)) void earlyInitVariant() {}
 
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
@@ -388,6 +394,11 @@ void setup()
 #ifdef LED_NOTIFICATION
     pinMode(LED_NOTIFICATION, OUTPUT);
     digitalWrite(LED_NOTIFICATION, HIGH ^ LED_STATE_ON);
+#endif
+
+#ifdef LED_LORA
+    pinMode(LED_LORA, OUTPUT);
+    digitalWrite(LED_LORA, HIGH ^ LED_STATE_ON);
 #endif
 
 #ifdef WIFI_LED
@@ -544,9 +555,9 @@ void setup()
     EncryptedStorage::initLocked();
     if (!EncryptedStorage::isUnlocked()) {
         if (!EncryptedStorage::isProvisioned()) {
-            LOG_WARN("Lockdown: Device not provisioned - connect and set a passphrase to unlock storage");
+            LOG_WARN("Lockdown: Device not provisioned - set passphrase to unlock storage");
         } else {
-            LOG_WARN("Lockdown: Device locked - connect and provide passphrase to unlock storage");
+            LOG_WARN("Lockdown: Device locked - provide passphrase to unlock storage");
         }
     }
 #endif
@@ -563,7 +574,7 @@ void setup()
     if (EncryptedStorage::isProvisioned()) {
         enableAPProtect();
     } else {
-        LOG_INFO("APPROTECT deferred: device not yet provisioned");
+        LOG_INFO("APPROTECT deferred: not provisioned");
     }
 #elif defined(MESHTASTIC_ENABLE_APPROTECT)
     // Lockdown without encrypted storage shouldn't be reachable per
@@ -650,7 +661,7 @@ void setup()
     // the bus behind it is scanned right below and its devices are registered
     // once, so the link has to be up by then
     if (!sensecapIndicator->wait_ready(5000))
-        LOG_ERROR("RP2040 co-processor did not answer, its sensors, GPS and SD card are unavailable this session");
+        LOG_ERROR("RP2040 co-processor no reply; sensors, GPS, SD card unavailable this session");
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -693,7 +704,7 @@ void setup()
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
-        LOG_DEBUG("suppress screen wake because this is a headless timer wakeup");
+        LOG_DEBUG("suppress screen wake: headless timer wakeup");
         i2cScanner->setSuppressScreen();
     }
 #endif
@@ -753,9 +764,13 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x84;
             break;
+        case ScanI2C::DeviceType::STC8HKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x12;
+            break;
         default:
             // use this as default since it's also just zero
-            LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);
+            LOG_WARN("kb_info.type unknown(0x%02x), set kb_model=0x00", kb_info.type);
             kb_model = 0x00;
         }
     }
@@ -868,18 +883,10 @@ void setup()
 
     router = new ReliableRouter();
 
-    // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true &&
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
-                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
-        LOG_DEBUG("Tracker/Sensor: Skip start melody");
-    else
-        playStartMelody();
-
 #if HAS_SCREEN
-        // fixed screen override?
-        // The geometry picks below are skipped on variants that pin the panel size with
-        // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
+    // fixed screen override?
+    // The geometry picks below are skipped on variants that pin the panel size with
+    // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
 #ifndef OLED_GEOMETRY_OVERRIDE
@@ -980,7 +987,7 @@ void setup()
     SPI.begin();
 #endif
 #else
-        // ESP32
+    // ESP32
 #if defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -1089,6 +1096,10 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.loadFromFlash();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_I2C
     // Inform modules about I2C devices
     ScanI2CCompleted(i2cScanner.get());
@@ -1163,6 +1174,15 @@ void setup()
     auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
+
+    // Must follow lateInitVariant(): on I2S boards audioThread and the codec are only up by this point.
+    // Skipped for power-saving tracker/sensor roles.
+    if (config.power.is_power_saving == true &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
+        LOG_DEBUG("Tracker/Sensor: Skip start melody");
+    else
+        playStartMelody();
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
@@ -1263,6 +1283,9 @@ void setup()
 uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
+#ifdef ARCH_STM32
+uint32_t enterDfuAtMsec; // If not zero, enter DFU mode at this millis() deadline (see main.h)
+#endif
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 volatile bool lockdownReloadPending;  // see main.h - deferred NodeDB reload after lockdown unlock
@@ -1358,12 +1381,15 @@ void loop()
 {
     runASAP = false;
 
+    // The single writer of the monotonic wrap carry; every other caller only reads it.
+    Time::serviceMonotonic();
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
     if (lockdownDisablePending) {
         lockdownDisablePending = false;
         LOG_INFO("Lockdown: disabling - reverting encrypted storage to plaintext");
         if (nodeDB->disableLockdownToPlaintext()) {
-            LOG_INFO("Lockdown: disabled, rebooting into normal mode");
+            LOG_INFO("Lockdown: disabled, reboot to normal mode");
             PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         } else {
@@ -1371,14 +1397,14 @@ void loop()
             // The DEK file is still present (it's deleted last), so the device
             // stays in lockdown and the operator can retry disable. Surface
             // the failure rather than leaving the client hanging.
-            LOG_ERROR("Lockdown: disable revert failed - device remains in lockdown");
+            LOG_ERROR("Lockdown: disable revert failed - still in lockdown");
             PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "disable_failed", 0, 0, 0);
         }
     }
 
     if (lockdownReloadPending) {
         lockdownReloadPending = false;
-        LOG_INFO("Lockdown: reloading config from disk after unlock");
+        LOG_INFO("Lockdown: reload config after unlock");
         bool reloadOk = nodeDB->reloadFromDisk();
         if (!reloadOk) {
             // Storage decrypt/decode failed during reload. Treat as
@@ -1389,7 +1415,7 @@ void loop()
             // might have), and notify clients. Storage will be locked
             // on next boot anyway; deferring to the user-visible
             // notification path is sufficient for now.
-            LOG_ERROR("Lockdown: reload failed - locking and notifying clients");
+            LOG_ERROR("Lockdown: reload failed - lock and notify clients");
             EncryptedStorage::lockNow();
             PhoneAPI::revokeAllAuth();
         }
@@ -1415,14 +1441,14 @@ void loop()
             //      sessions to grant. Hard lock (token deleted, DEK
             //      zeroed) and reboot. Operator must re-enter passphrase.
             if (EncryptedStorage::getBootsRemaining() == 0) {
-                LOG_WARN("Lockdown: session limit reached and boot budget exhausted, locking and rebooting");
+                LOG_WARN("Lockdown: session limit hit, boot budget exhausted - lock and reboot");
                 EncryptedStorage::lockNow();
                 PhoneAPI::revokeAllAuth();
                 PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
             } else {
                 uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
-                LOG_WARN("Lockdown: session expired, rolled to next budget slot (boots=%u remaining)", newBoots);
+                LOG_WARN("Lockdown: session expired, next budget slot (boots=%u left)", newBoots);
                 PhoneAPI::revokeAllAuth();
                 meshtastic_security::lockScreen();
                 // Signal clients that they need to re-auth on this
@@ -1458,11 +1484,11 @@ void loop()
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
-        // Periodic AGC reset - warm sleep + recalibrate to prevent stuck AGC gain
+        // Periodic radio upkeep - re-arms RX if it was left off, else AGC reset (stuck-gain prevention)
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
-            RadioLibInterface::instance->resetAGC();
+            RadioLibInterface::instance->periodicRadioMaintenance();
         }
     }
 
@@ -1484,17 +1510,16 @@ void loop()
         ch341Hal->checkError();
     }
     if (portduino_status.LoRa_in_error && rebootAtMsec == 0) {
-        LOG_ERROR("LoRa in error detected, attempting to recover");
+        LOG_ERROR("LoRa error detected, recovering");
         router->addInterface(nullptr);
         if (portduino_config.lora_spi_dev == "ch341") {
-            if (ch341Hal != nullptr) {
-                delete ch341Hal;
-                ch341Hal = nullptr;
+            if (ch341Hal) {
+                ch341Hal.reset();
                 sleep(3);
             }
             try {
-                ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                        portduino_config.lora_usb_pid);
+                ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                                      portduino_config.lora_usb_pid);
             } catch (std::exception &e) {
                 std::cerr << e.what() << std::endl;
                 std::cerr << "Could not initialize CH341 device!" << std::endl;
@@ -1524,6 +1549,12 @@ void loop()
 #endif
 #if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.purgeExpired();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT && ENABLE_WAYPOINT_PERSISTENCE
+    waypointStoreAutosaveTick();
 #endif
     long delayMsec = mainController.runOrDelay();
 
