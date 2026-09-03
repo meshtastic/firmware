@@ -976,6 +976,14 @@ void Power::powerCommandsCheck()
         shutdownAtMsec = 0;
         shutdown();
     }
+
+#ifdef ARCH_STM32
+    // Deferred DFU entry; the delay is armed by AdminModule's enter_dfu handler (rationale there).
+    if (enterDfuAtMsec && Throttle::deadlinePassed(enterDfuAtMsec)) {
+        enterDfuAtMsec = 0;
+        enterDfuMode(); // never returns
+    }
+#endif
 }
 
 void Power::reboot()

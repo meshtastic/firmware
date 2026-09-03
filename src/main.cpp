@@ -1283,6 +1283,9 @@ void setup()
 uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
+#ifdef ARCH_STM32
+uint32_t enterDfuAtMsec; // If not zero, enter DFU mode at this millis() deadline (see main.h)
+#endif
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 volatile bool lockdownReloadPending;  // see main.h - deferred NodeDB reload after lockdown unlock
