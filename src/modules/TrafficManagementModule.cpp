@@ -753,6 +753,18 @@ void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key
     if (proven)
         entry->keyManuallyVerified = true;
     // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
+    // Trust ladder L3: a manually verified key is the out-of-band anchor - the
+    // antispam record is raised to L3 (never decayed). findOrCreate only
+    // evicts when the table is full, and a re-commit re-stamps it, so L3
+    // cannot be lost to churn.
+    if (proven) {
+        bool asNew = false;
+        AntispamEntry *asEntry = findOrCreateAntispamEntry(node, &asNew);
+        if (asEntry && asEntry->trustLevel < 3) {
+            asEntry->trustLevel = 3;
+            TM_LOG_INFO("Antispam: 0x%08x raised to out-of-band-verified (manual key commit)", node);
+        }
+    }
 }
 
 bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *keyProven) const
@@ -1215,7 +1227,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         // ---------------------------------------------------------------------
         // Stamped after the rate limiter so an attestation flood pays the same
         // per-sender cost as any other traffic.
-        if (noteFirstSeen(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp))) {
+        if (noteFirstSeen(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp), mp.xeddsa_signed)) {
             // Group budget: this ID is fresh on this device - observe its
             // (channel, RSSI class) co-occurrence. A cell that fills to
             // group_budget_enabled fresh IDs is flagged, and every member
@@ -1799,13 +1811,14 @@ bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
     const uint8_t count = entry->getRateCount();
     bool limited = count > threshold;
 
-    // Probation penalty: an unpromoted sender whose first-seen window is
-    // still in force gets the lower rate budget (half of the effective
-    // threshold, floor of 1). The drop is charged separately so operators
-    // can tell probation budgeting from plain rate limiting in telemetry.
+    // Probation penalty: an unpromoted, L2-less sender whose first-seen
+    // window is still in force gets the lower rate budget (half of the
+    // effective threshold, floor of 1). L2+ (attested) escapes, matching
+    // inProbation(). The drop is charged separately so operators can tell
+    // probation budgeting from plain rate limiting in telemetry.
     if (!limited && moduleConfig.traffic_management.probation_window_secs > 0) {
         const AntispamEntry *asEntry = findAntispamEntry(from);
-        if (asEntry && asEntry->firstSeenTick != 0 && !asEntry->promoted &&
+        if (asEntry && asEntry->firstSeenTick != 0 && !asEntry->promoted && asEntry->trustLevel < 2 &&
             antispamAgeInWindowLocked(asEntry, nowRateTick, probationWindowTicks())) {
             const uint32_t probationBudget = std::max<uint32_t>(1, threshold / 2);
             if (count > probationBudget) {
@@ -2004,7 +2017,11 @@ bool TrafficManagementModule::inProbation(NodeNum node) const
 
     concurrency::LockGuard guard(&cacheLock);
     const AntispamEntry *entry = findAntispamEntry(node);
-    if (!entry || entry->firstSeenTick == 0 || entry->promoted)
+    // L2+ (neighbor-attested / out-of-band-verified) escapes probation: a node
+    // the neighborhood has attested is not anonymous probation material, even
+    // if its unsigned first-seen window is still running and it is not
+    // promoted (a promotion can lapse while the trust record persists).
+    if (!entry || entry->firstSeenTick == 0 || entry->promoted || entry->trustLevel >= 2)
         return false;
     return antispamAgeInWindowLocked(entry, currentRateTick(), windowTicks);
 }
@@ -2037,7 +2054,7 @@ bool TrafficManagementModule::isEstablishedForVouching(NodeNum node) const
     return ageTicks >= windowTicks;
 }
 
-bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass)
+bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass, bool signedObserved)
 {
     if (node == 0)
         return false;
@@ -2059,6 +2076,18 @@ bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8
     entry->channel = channel;
     if (rssiClass != 0xFF)
         entry->rssiClass = rssiClass;
+    // Trust ladder L1: a packet whose signature the Router verified on the way
+    // in marks the node TOFU-signed. The Router clears xeddsa_signed on every
+    // ingress and only sets it after a successful checkXeddsaReceivePolicy, so
+    // the flag here is an observation, not a claim. Never downgrade (L2/L3
+    // survive an unsigned observation - the decay path owns the downgrade).
+    // The stamp refreshes at L1 AND L2: a continuing signer stays fresh, and
+    // only L3 (manual, permanent) is exempt from the decay clock.
+    if (signedObserved && entry->trustLevel < 3) {
+        if (entry->trustLevel == 0)
+            entry->trustLevel = 1;
+        entry->lastSignedTick = currentRateTick();
+    }
     if (!isNew && entry->firstSeenTick != 0)
         return false; // already tracked
     entry->firstSeenTick = currentRateTick();
@@ -2213,7 +2242,7 @@ int TrafficManagementModule::peekProbationStateForTest(NodeNum node)
         return -1;
     if (windowTicks == 0)
         return 0; // accounting off -> never in probation
-    if (entry->promoted)
+    if (entry->promoted || entry->trustLevel >= 2)
         return 0;
     const uint8_t ageTicks = static_cast<uint8_t>(currentRateTick() - entry->firstSeenTick) & 0x0F;
     return ageTicks < windowTicks ? 1 : 0;
@@ -2370,9 +2399,87 @@ uint8_t TrafficManagementModule::attestQuorumCountLocked(NodeNum subject) const
     return n;
 }
 
+uint8_t TrafficManagementModule::l2FloorTicks() const
+{
+    // L2 floor: attestation_l2_min_tenure_secs (0 = fall back to the
+    // attestation_min_observed_secs observed-tenure gate, matching the
+    // unsigned observed-tenure path). Quantised to 5-min ticks; the mod-16
+    // clock caps any tenure at 15 ticks (80 min), so a long-tenured attester
+    // saturates the floor. 0 when neither floor is armed (L2 never upgrades,
+    // nothing decays).
+    const uint32_t tickSecs = kRateTimeTickMs / 1000;
+    uint32_t secs = moduleConfig.traffic_management.attestation_l2_min_tenure_secs;
+    if (secs == 0)
+        secs = moduleConfig.traffic_management.attestation_min_observed_secs;
+    if (secs == 0)
+        return 0;
+    return static_cast<uint8_t>(std::min<uint32_t>(15, (secs + tickSecs - 1) / tickSecs));
+}
+
+uint8_t TrafficManagementModule::trustLevelForTest(NodeNum node)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    const AntispamEntry *entry = findAntispamEntry(node);
+    if (!entry)
+        return 0;
+    // L3 is permanent (manual bit), so it reads directly from the cache.
+    if (entry->trustLevel == 3)
+        return 3;
+    // L2 is only valid while the last-signature stamp is fresh (or the L2
+    // floor is disarmed, in which case nothing decays). Mirrors the sweep so
+    // the test hook agrees with what isRateLimited sees between sweeps. No
+    // "stamp is 0" sentinel: 0 is a legitimate tick on the mod-16 clock, and
+    // an L2 record always has a signature observation by construction.
+    if (entry->trustLevel == 2) {
+        const uint8_t floor = l2FloorTicks();
+        if (floor > 0) {
+            const uint8_t age = static_cast<uint8_t>(currentRateTick() - entry->lastSignedTick) & 0x0F;
+            if (age >= floor)
+                return 1; // decayed to L1 between sweeps
+        }
+        return 2;
+    }
+    return entry->trustLevel; // 0 or 1
+}
+
+void TrafficManagementModule::setLastSignedTickForTest(NodeNum node, uint8_t tick)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    AntispamEntry *entry = findAntispamEntry(node);
+    if (!entry)
+        return;
+    entry->lastSignedTick = tick;
+    if (entry->trustLevel < 1)
+        entry->trustLevel = 1; // a signature observation is at least L1
+}
+
 uint32_t TrafficManagementModule::attestationMinDistinctAttestersLocked() const
 {
     return moduleConfig.traffic_management.attestation_min_distinct_attesters;
+}
+
+bool TrafficManagementModule::l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester) const
+{
+    // Signed fast path: the vouch upgrades the subject to L2 only when the
+    // SUBJECT has been observed signing (trustLevel>=1, lastSignedTick set)
+    // AND the ATTESTER is a verified signer (trustLevel>=1) observed locally
+    // for at least the L2 floor. The floor is the knob quantised to 5-min
+    // ticks; the mod-16 clock caps any tenure at 15 ticks (80 min), so a
+    // long-tenured attester saturates it. A disarmed floor (0 = neither knob
+    // armed) disables the fast path - the mixed-mesh floor where the ladder
+    // stays at the unsigned baseline. Caller holds cacheLock and checks the
+    // subject's level ceiling (< L2 / == L1) before granting.
+    const uint8_t l2Floor = l2FloorTicks();
+    // trustLevel >= 1 already implies a verified-signature observation
+    // (nothing else raises it), so no separate "has stamped" sentinel: the
+    // mod-16 tick makes 0 a legitimate stamp value, and the L2 decay check
+    // owns stamp freshness.
+    if (l2Floor == 0 || !subject || subject->trustLevel < 1)
+        return false;
+    const AntispamEntry *attesterEntry = findAntispamEntry(attester);
+    if (!attesterEntry || attesterEntry->firstSeenTick == 0 || attesterEntry->trustLevel < 1)
+        return false;
+    return (static_cast<uint8_t>(currentRateTick() - attesterEntry->firstSeenTick) & 0x0F) >= l2Floor;
 }
 
 uint8_t TrafficManagementModule::peekAttestQuorumForTest(NodeNum subject)
@@ -2720,9 +2827,17 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
             // Already promoted: the vouch cost quota, but there is nothing left
             // to do - except renew the window-scoped promotion TTL, so a
             // neighborhood that keeps vouching holds the promotion across
-            // windows.
+            // windows. And re-grant L2 when the signed fast path applies again:
+            // a subject whose L2 decayed to L1 (signatures went quiet) is
+            // upgraded back the moment it is observed signing and the
+            // attester is still a tenured verified signer - the sweep decays,
+            // this re-arms, and the neighborhood keeps the record honest.
             if (entry->promotedWindowTick != 0)
                 entry->promotedWindowTick = currentRateTick();
+            if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester)) {
+                entry->trustLevel = 2;
+                TM_LOG_INFO("Antispam: 0x%08x re-raised to neighbor-attested by verified signer 0x%08x", att.subject, attester);
+            }
             break;
         }
         if (entry->firstSeenTick == 0)
@@ -2737,6 +2852,21 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
             }
         }
         entry->promoted = true;
+        // Trust ladder: the unsigned vouch above grants the probation
+        // exemption (promoted). If the SUBJECT has itself been observed
+        // signing (trustLevel>=1, lastSignedTick set) AND the attester is a
+        // verified signer we have observed for at least the L2 floor, this
+        // vouch is worth more than the unsigned baseline - it marks the
+        // subject neighbor-attested (L2). The floor is the attester's observed
+        // age quantised to 5-min ticks (the mod-16 clock caps any tenure at
+        // 15 ticks = 80 min), so a tenure-capped L2 is a *bounded* upgrade: a
+        // fresh attester cannot buy L2 for a fresh subject. When neither the
+        // L2 knob nor the plain tenure knob is armed (old configs) the ladder
+        // stays flat - this is the mixed-mesh floor (Phase 1.1/2 behavior).
+        if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester)) {
+            entry->trustLevel = 2;
+            TM_LOG_INFO("Antispam: 0x%08x raised to neighbor-attested by verified signer 0x%08x", att.subject, attester);
+        }
         if (cfg.attestation_promotion_ttl_secs > 0) {
             // Window-scoped promotion: the bit expires after the TTL without a
             // renewal vouch (sweep); renewals refresh the stamp.
@@ -2975,8 +3105,11 @@ void TrafficManagementModule::maintainAntispamLocked()
         }
         // Probation expiry: an entry whose first-seen window has fully aged
         // out is stale; reclaim the slot (a re-observed node re-stamps it).
+        // Observed signers (trustLevel >= 1) are not anonymous probation
+        // material - they persist so their trust record survives across
+        // windows (only anonymous L0 entries are reclaimed here).
         const uint8_t windowTicks = probationWindowTicks();
-        if (windowTicks > 0 && e.firstSeenTick != 0 && !e.promoted) {
+        if (windowTicks > 0 && e.firstSeenTick != 0 && !e.promoted && e.trustLevel == 0) {
             const uint8_t ageTicks = static_cast<uint8_t>(nowRateTick - e.firstSeenTick) & 0x0F;
             if (ageTicks >= windowTicks)
                 memset(&e, 0, sizeof(AntispamEntry));
@@ -2993,6 +3126,19 @@ void TrafficManagementModule::maintainAntispamLocked()
                 e.promoted = false;
                 e.promotedWindowTick = 0;
                 TM_LOG_INFO("Antispam: promotion for 0x%08x lapsed without renewal", e.node);
+            }
+        }
+        // Trust ladder L2 decay: a neighbor-attested (L2) node whose verified
+        // signatures have stopped for the L2 floor lapses back to L1 (the
+        // TOFU floor), not to L0 - the key is still pinned, only the
+        // neighborhood attestation has gone quiet. L3 (manual) and L0/L1 are
+        // untouched. A disarmed floor (0) means nothing decays, mirroring the
+        // test hook. No "stamp is 0" sentinel: 0 is a legitimate tick.
+        if (e.trustLevel == 2) {
+            const uint8_t l2Floor = l2FloorTicks();
+            if (l2Floor > 0 && (static_cast<uint8_t>(nowRateTick - e.lastSignedTick) & 0x0F) >= l2Floor) {
+                e.trustLevel = 1;
+                TM_LOG_INFO("Antispam: 0x%08x lapsed from neighbor-attested back to TOFU-signed", e.node);
             }
         }
     }

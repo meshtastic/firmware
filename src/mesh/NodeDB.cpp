@@ -1306,6 +1306,12 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     // default does not cost vouch airtime.
     mc.traffic_management.attestation_min_distinct_attesters = default_traffic_mgmt_attestation_min_distinct_attesters;
     mc.traffic_management.attestation_promotion_ttl_secs = default_traffic_mgmt_attestation_promotion_ttl_secs;
+    // The L2 tenure floor ships at 30 days: the mod-16 clock saturates it to
+    // the 15-tick ceiling, so it is effectively "the attester must be as
+    // tenured as the observed-tenure gate allows." 0 would fall back to
+    // attestation_min_observed_secs; operators can disable the ladder by
+    // zeroing both.
+    mc.traffic_management.attestation_l2_min_tenure_secs = default_traffic_mgmt_attestation_l2_min_tenure_secs;
 #endif
 }
 

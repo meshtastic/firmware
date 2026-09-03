@@ -162,6 +162,12 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     uint8_t peekPromotedWindowTickForTest(NodeNum node);
     /// Test introspection: the promoted bit for `node` (false when untracked).
     bool peekPromotedForTest(NodeNum node);
+    /// Trust ladder: current level for `node` (0 when untracked). 1 = a
+    /// verified signature was observed, 2 = a long-tenured signer vouched
+    /// (and the decay window has not lapsed it), 3 = manually verified.
+    uint8_t trustLevelForTest(NodeNum node);
+    /// Test override for the last-verified-signature stamp (0 = clear).
+    void setLastSignedTickForTest(NodeNum node, uint8_t tick);
     /// Test introspection: whether the in-force NO_RELAY for `node` was set
     /// by local exhaustion (true) or gossiped in (false; also false when no
     /// NO_RELAY is in force).
@@ -424,6 +430,15 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // True when noRelay was set locally (budget exhausted here) -
         // that is the only case where WE gossip it.
         uint8_t noRelayLocal : 1;
+        // Trust ladder: 0 = anonymous (probation), 1 = TOFU-signed (a verified
+        // signature was observed), 2 = neighbor-attested (a long-tenured signer
+        // vouched), 3 = out-of-band-verified (manual bit, no decay). L2 lapses
+        // back to L1 when the verified signatures stop (sweep, the L2 floor
+        // window); L3 is permanent.
+        uint8_t trustLevel : 2;
+        // The rate tick of the last verified signature observed from `node`
+        // (0 = none this entry's lifetime). Drives the L2 decay in the sweep.
+        uint8_t lastSignedTick;
         // Gossiped median budget observations for a SENDER we track:
         // up to 3 neighbor-reported window counts (packets_this_window).
         // The median (middle of the sorted samples) is the gossiped budget;
@@ -459,7 +474,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // refreshes the stamp.
         uint8_t promotedWindowTick;
     };
-    static_assert(sizeof(AntispamEntry) == 35, "AntispamEntry should be 35 bytes");
+    static_assert(sizeof(AntispamEntry) == 36, "AntispamEntry should be 36 bytes");
 
     static constexpr uint16_t antispamCacheSize()
     {
@@ -482,9 +497,11 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static bool antispamAgeInWindowLocked(const AntispamEntry *entry, uint8_t nowTick, uint8_t windowTicks);
     /// Stamp first-seen for `node` if not yet tracked (probation start),
     /// and record its observation context (channel, RSSI class) for the group
-    /// budget. Called from handleReceived() for non-local, non-own
-    /// traffic. Returns true when the node was freshly tracked (first sight).
-    bool noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass);
+    /// budget. `signedObserved` is true when the Router verified the packet's
+    /// signature on the way in (mp.xeddsa_signed) - that observation stamps
+    /// the trust ladder to TOFU-signed (L1). Called from handleReceived() for
+    /// non-local, non-own traffic. Returns true when freshly tracked.
+    bool noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass, bool signedObserved);
     /// Probation promotion vouch: true when `node` is locally established (tracked and out of
     /// probation, or promoted). Used to gate the rate-capped KNOWN_SINCE gossip
     /// so only tenured senders earn a vouch.
@@ -526,6 +543,15 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// The distinct-attester promotion threshold (the config knob as uint32;
     /// 0 = single-attester promotion). Caller holds cacheLock.
     uint32_t attestationMinDistinctAttestersLocked() const;
+    /// Trust ladder: the L2 floor in 5-min ticks from attestation_l2_min_
+    /// tenure_secs (falls back to attestation_min_observed_secs at 0). 0 when
+    /// neither floor is armed (L2 never upgrades, nothing decays).
+    uint8_t l2FloorTicks() const;
+    /// Trust ladder: signed fast path - true when `attester` may upgrade the
+    /// (L1) `subject` to L2: both observed signing, and the attester observed
+    /// locally for at least the L2 floor. False when the floor is disarmed.
+    /// Caller holds cacheLock.
+    bool l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester) const;
     /// Group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
     /// and apply the group median when the cell fills. Returns true when a
     /// group budget was applied to `node`.

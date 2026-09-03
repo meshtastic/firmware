@@ -81,6 +81,12 @@ enum class TrafficType { POSITION, TELEMETRY };
 // the decay lease.
 #define default_traffic_mgmt_attestation_min_distinct_attesters 2
 #define default_traffic_mgmt_attestation_promotion_ttl_secs 0
+// Trust ladder: a vouch uses the signed fast path (L2 upgrade) only when the
+// attester has been observed locally for 30 days AND both the attester and the
+// subject have been seen signing. The mod-16 rate clock quantises any tenure
+// to a 15-tick (80 min) ceiling, so the floor saturates; the same floor is
+// the decay window for L2.
+#define default_traffic_mgmt_attestation_l2_min_tenure_secs (30 * 24 * 60 * 60)
 
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
