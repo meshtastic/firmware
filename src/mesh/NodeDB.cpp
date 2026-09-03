@@ -1509,28 +1509,62 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_OFFER_REGION
     moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
 #endif
-#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX;
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_offer_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1] =
+        '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    {
+        static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
+        static_assert(sizeof(beaconOfferPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes),
+                      "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+        memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
+        moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+    }
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT
     moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
     moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
 #endif
-// The offer channel is now a slot in the device's channel table rather than an inline name and
-// PSK, so an integrator provisions the channel and points at it.
-#if defined(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK)
-#error                                                                                                                           \
-    "USERPREFS_MESH_BEACON_OFFER_CHANNEL_{NAME,PSK} removed; provision the channel and use USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX"
+// The single explicit target, named by value. Mutually exclusive with the TARGET_<N>_* keys below;
+// sanitiseConfig clears these if a build defines both.
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_on_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1] = '\0';
 #endif
-// The USERPREFS_MESH_BEACON_ON_* keys were removed with the broadcast_on_* config fields. Fail the
-// build rather than silently dropping a preconfigured beacon channel: define the equivalent
-// USERPREFS_MESH_BEACON_TARGET_0_{PRESET,REGION,CHANNEL_INDEX} keys instead. CHANNEL_INDEX names a
-// slot in the device's channel table, so the channel must also be provisioned on the node.
-#if defined(USERPREFS_MESH_BEACON_ON_PRESET) || defined(USERPREFS_MESH_BEACON_ON_REGION) ||                                      \
-    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_ON_CHANNEL_PSK) ||                           \
-    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NUM)
-#error "USERPREFS_MESH_BEACON_ON_* removed; use USERPREFS_MESH_BEACON_TARGET_0_* (channel must be in the channel table)"
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    {
+        static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
+        static_assert(sizeof(beaconOnPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes),
+                      "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+        memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
+        moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
+    }
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_REGION
+    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
+    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT
+    moduleConfig.mesh_beacon.has_broadcast_on_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_on_frequency_slot = USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT;
+#endif
+// Tag 12 used to be the offer's channel-table index; the offer now carries its own name and PSK.
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX
+#error "USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX removed; use USERPREFS_MESH_BEACON_OFFER_CHANNEL_{NAME,PSK}"
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
+#error "USERPREFS_MESH_BEACON_ON_CHANNEL_NUM removed; use USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT"
 #endif
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
     BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);

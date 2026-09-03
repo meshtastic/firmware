@@ -348,8 +348,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_module_config_tag:
         LOG_DEBUG("Client set module config");
-        if (!handleSetModuleConfig(r->set_module_config)) {
-            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        {
+            // TOO_LARGE where the beacon config could not be read back; BAD_REQUEST otherwise.
+            meshtastic_Routing_Error err = meshtastic_Routing_Error_BAD_REQUEST;
+            if (!handleSetModuleConfig(r->set_module_config, fromOthers, &err))
+                myReply = allocErrorResponse(err, &mp);
         }
         break;
 
@@ -1256,8 +1259,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         flushChannelWarnings();
 } // end of handleSetConfig
 
-bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
+bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool fromOthers, meshtastic_Routing_Error *err)
 {
+    int extraSegments = 0;
     bool shouldReboot = true;
     // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
     // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
@@ -1387,6 +1391,17 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // object is ever passed); the validated copy is assigned into moduleConfig below.
         auto beaconCfg = c.payload_variant.mesh_beacon;
         MeshBeaconModule::sanitiseConfig(beaconCfg);
+        // Refused rather than stored: a config this large is writable over BLE but its read-back
+        // truncates to an empty payload, so a remote administrator could never see what it set.
+        if (fromOthers && !MeshBeaconModule::fitsRemoteAdmin(beaconCfg)) {
+            LOG_WARN("Beacon: config too large to read back over remote admin, rejecting the write");
+            if (err)
+                *err = meshtastic_Routing_Error_TOO_LARGE;
+            return false;
+        }
+        // The by-value channels need to be in the table for the TX path to find their keys.
+        if (MeshBeaconModule::upsertByValueChannels(beaconCfg))
+            extraSegments |= SEGMENT_CHANNELS;
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
@@ -1397,7 +1412,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     }
 #endif
     }
-    saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
+    saveChanges(SEGMENT_MODULECONFIG | extraSegments, shouldReboot);
     return true;
 }
 
@@ -1426,11 +1441,6 @@ static void recheckBeaconAfterChannelEdit(ChannelIndex index)
             beacon.broadcast_targets[kept++] = beacon.broadcast_targets[i];
         }
         beacon.broadcast_targets_count = kept;
-
-        if (beacon.has_broadcast_offer_channel_index && beacon.broadcast_offer_channel_index == index) {
-            LOG_WARN("Beacon: channel %u retired, clearing broadcast_offer_channel_index", index);
-            beacon.has_broadcast_offer_channel_index = false;
-        }
     }
 
     MeshBeaconModule::sanitiseConfig(beacon);
