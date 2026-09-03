@@ -57,6 +57,7 @@ jobs:
       release_tag: ${{ github.event.release.tag_name }}
       package_identifier: |-
         ${{ contains(github.event.release.name, 'Beta') && 'Meshtastic.Meshtasticd' || 'Meshtastic.Meshtasticd.Alpha' }}
+      submit: true
     secrets: inherit
 
   publish-release-notes:

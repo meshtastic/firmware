@@ -15,6 +15,10 @@ on:
       package_identifier:
         required: true
         type: string
+      submit:
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       release_tag:
@@ -26,6 +30,11 @@ on:
         required: false
         default: Meshtastic.Meshtasticd.Alpha
         type: string
+      submit:
+        description: "Open a winget-pkgs pull request instead of only validating"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -59,8 +68,14 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
 
       - name: Generate manifests for the published MSI
+        id: manifests
         shell: pwsh
-        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -PackageIdentifier $env:PKG_ID -Validate
+        run: |
+          # `winget validate` writes to the success stream, so take the trailing
+          # result object rather than the whole pipeline.
+          $result = ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -PackageIdentifier $env:PKG_ID -Validate |
+            Select-Object -Last 1
+          "dir=$($result.ManifestDirectory)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           MSI_PATH: ${{ steps.release.outputs.msi }}
           PKG_VERSION: ${{ steps.release.outputs.version }}
@@ -80,6 +95,24 @@ jobs:
             throw "InstallerUrl $url hashes to $actual, manifest claims $expected"
           }
           "URL and hash agree: $url"
+
+      # wingetcreate forks microsoft/winget-pkgs under the token's account and opens the
+      # PR from there, so WINGET_TOKEN needs a classic PAT with public_repo scope.
+      - name: Submit the manifests to winget-pkgs
+        if: inputs.submit
+        shell: pwsh
+        run: |
+          if (-not $env:WINGET_TOKEN) {
+            Write-Host "::warning::WINGET_TOKEN is not set; skipping the winget-pkgs submission for $env:PKG_ID $env:PKG_VERSION."
+            exit 0
+          }
+          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          ./wingetcreate.exe submit --token $env:WINGET_TOKEN $env:MANIFEST_DIR
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          MANIFEST_DIR: ${{ steps.manifests.outputs.dir }}
+          PKG_ID: ${{ inputs.package_identifier }}
+          PKG_VERSION: ${{ steps.release.outputs.version }}
 
       - name: Upload the manifests as an artifact
         uses: actions/upload-artifact@v7
