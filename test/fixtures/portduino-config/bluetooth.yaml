@@ -1,0 +1,12 @@
+# CLEAN on a build with BLE support (sdbus-c++ present); on a build without it the
+# checker reports the build-time gap as a warning instead. The suite asserts only what
+# holds either way: the section parses, the keys are known, and no error is invented.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Bluetooth:
+  Enabled: true
+  AdapterId: hci0

@@ -35,6 +35,12 @@
 #include <bluetooth/hci.h>
 #endif
 
+#include "LinuxBluetooth.h"
+#ifdef MESHTASTIC_LINUX_BLE
+#include "mesh/NodeDB.h"               // config.bluetooth.enabled
+extern LinuxBluetooth *linuxBluetooth; // defined in main.cpp
+#endif
+
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
 #endif
@@ -78,7 +84,30 @@ char stdoutBuffer[512];
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
-    // not needed
+#ifdef MESHTASTIC_LINUX_BLE
+    // Disable is not gated on the config flags: if BLE is running it must always be
+    // stoppable, even after the device config was switched off underneath it.
+    if (!enable) {
+        if (linuxBluetooth) {
+            // Stop advertising only; a live phone connection survives PowerFSM state
+            // dips.
+            linuxBluetooth->shutdown();
+        }
+        return;
+    }
+    // Opt-in twice: the config.yaml Bluetooth section must enable BLE on this
+    // host, and the regular device config (like every other platform) must have
+    // Bluetooth on.
+    if (!portduino_config.bluetooth_enabled || !config.bluetooth.enabled)
+        return;
+    if (!linuxBluetooth) {
+        LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        linuxBluetooth = new LinuxBluetooth();
+        linuxBluetooth->setup();
+    } else {
+        linuxBluetooth->resumeAdvertising();
+    }
+#endif
 }
 
 void cpuDeepSleep(uint32_t msecs)
@@ -221,9 +250,23 @@ void getMacAddr(uint8_t *dmac)
         return;
     } else {
 #ifdef PORTDUINO_LINUX_HARDWARE
+        // Cache after the first successful read. The adapter address can't change at
+        // runtime, this now gets called from BLE property getters on every bluetoothd
+        // read (not just at startup), and the socket used to leak one fd per call.
+        static uint8_t cachedMac[6];
+        static bool macCached = false;
+        if (macCached) {
+            memcpy(dmac, cachedMac, 6);
+            return;
+        }
         struct hci_dev_info di = {0};
-        di.dev_id = 0;
-        bdaddr_t bdaddr;
+        // Read the adapter configured for BLE (Bluetooth.AdapterId) so the node
+        // identity matches the advertised adapter; a name that doesn't parse as
+        // hci<N> falls back to hci0, preserving the pre-BLE behavior.
+        unsigned adapterIndex = 0;
+        if (sscanf(portduino_config.bluetooth_adapter.c_str(), "hci%u", &adapterIndex) != 1)
+            adapterIndex = 0;
+        di.dev_id = adapterIndex;
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value
@@ -231,8 +274,10 @@ void getMacAddr(uint8_t *dmac)
         }
 
         if (ioctl(btsock, HCIGETDEVINFO, (void *)&di)) {
+            close(btsock);
             return;
         }
+        close(btsock);
 
         dmac[0] = di.bdaddr.b[5];
         dmac[1] = di.bdaddr.b[4];
@@ -240,6 +285,8 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+        memcpy(cachedMac, dmac, 6);
+        macCached = true;
 #elif defined(__APPLE__)
         // No BlueZ on macOS, but we can fall back to the host's primary
         // network interface MAC. `en0` is Wi-Fi on every shipping Mac
@@ -1238,6 +1285,11 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLKey"]).as<std::string>("/etc/meshtasticd/ssl/private_key.pem");
             portduino_config.webserver_ssl_cert_path =
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
+        }
+
+        if (yamlConfig["Bluetooth"]) {
+            portduino_config.bluetooth_enabled = (yamlConfig["Bluetooth"]["Enabled"]).as<bool>(false);
+            portduino_config.bluetooth_adapter = (yamlConfig["Bluetooth"]["AdapterId"]).as<std::string>("hci0");
         }
 
         if (yamlConfig["HostMetrics"]) {

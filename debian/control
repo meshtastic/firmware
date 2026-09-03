@@ -17,6 +17,7 @@ Build-Depends: debhelper-compat (= 13),
                libjsoncpp-dev,
                libgpiod-dev,
                libbluetooth-dev,
+               libsdbus-c++-dev,
                libusb-1.0-0-dev,
                libi2c-dev,
                libuv1-dev,
@@ -39,6 +40,7 @@ Architecture: any
 Depends: adduser,
          ${misc:Depends},
          ${shlibs:Depends}
+Recommends: bluez
 Description: Meshtastic daemon for communicating with Meshtastic devices
  Meshtastic is an off-grid text communication platform that uses inexpensive 
  LoRa radios.
