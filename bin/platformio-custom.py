@@ -255,8 +255,16 @@ def manifest_write(files, env, ram_bytes=None, flash_bytes=None):
         if parsed is not None and parsed != "":
             device_meta[manifest_key] = parsed
 
-    # Determine architecture once; if we can't infer it, skip manifest generation
-    board_arch = device_meta.get("architecture") or infer_architecture(env.BoardConfig())
+    # The board MCU wins over a hand-typed custom_meshtastic_architecture: only the
+    # spellings infer_architecture emits are recognized downstream.
+    declared_arch = device_meta.get("architecture")
+    inferred_arch = infer_architecture(env.BoardConfig())
+    if declared_arch and inferred_arch and declared_arch != inferred_arch:
+        print(
+            f"Overriding declared architecture '{declared_arch}' with '{inferred_arch}' "
+            f"from the board MCU (env={pioenv})"
+        )
+    board_arch = inferred_arch or declared_arch
     if not board_arch:
         print(f"Skipping mtjson write for unknown architecture (env={env.get('PIOENV')})")
         return
