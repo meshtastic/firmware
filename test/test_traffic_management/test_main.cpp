@@ -205,9 +205,12 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
     using TrafficManagementModule::handleReceived;
     using TrafficManagementModule::markKeyXeddsaSignedForTest;
     using TrafficManagementModule::nodeInfoCacheCapacityForTest;
+    using TrafficManagementModule::onNodeKeyCommitted;
     using TrafficManagementModule::peekCachedRole;
     using TrafficManagementModule::peekNodeInfoFlagsForTest;
     using TrafficManagementModule::runOnce;
+    using TrafficManagementModule::setLastSignedTickForTest;
+    using TrafficManagementModule::trustLevelForTest;
 
     bool ignoreRequestFlag() const { return ignoreRequest; }
 };
@@ -3979,6 +3982,207 @@ static void test_tm_promotionQuorum_perReporterCapsApply(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+// (m) Trust ladder, signed fast path: a Router-verified signature stamps the
+// node TOFU-signed (L1); a KNOWN_SINCE vouch from a tenured verified signer
+// upgrades the subject to neighbor-attested (L2) instead of the unsigned
+// baseline; L2 lapses back to L1 in the sweep once the signatures stop; a
+// renewal vouch re-raises it. Unsigned behavior (floor disarmed) is the
+// mixed-mesh baseline: promoted but L0/L1 only.
+static void test_tm_trustLadder_l2FastPathDecayAndRenewal(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000; // fresh 5-min window (tick 1)
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 600; // 2 ticks
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 86'400;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 300;    // 1-tick observed gate
+    moduleConfig.traffic_management.attestation_min_distinct_attesters = 1; // K=1
+    moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 300;   // 1-tick L2 floor
+    moduleConfig.traffic_management.rate_limit_window_secs = 0;
+
+    // Track subject + attester (unsigned). Both land at L0.
+    trackSender(module, kTargetNode);
+    trackSender(module, kRemoteNode);
+    TEST_ASSERT_EQUAL_UINT8(0, module.trustLevelForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(0, module.trustLevelForTest(kRemoteNode));
+
+    // One tick later: both observed 1 tick (clears the observed gate).
+    TrafficManagementModule::s_testNowMs += 300'000;
+
+    // The Router's verified-signature flag is what stamps L1. A signed packet
+    // from the subject marks it TOFU-signed; unsigned traffic never does.
+    meshtastic_MeshPacket signedSubj = makePositionPacket(kTargetNode, 374221234, -1220845678);
+    signedSubj.xeddsa_signed = true;
+    module.handleReceived(signedSubj);
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode));
+    meshtastic_MeshPacket signedAttester = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    signedAttester.xeddsa_signed = true;
+    module.handleReceived(signedAttester);
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode));
+    // Unsigned traffic from the same node does not touch the ladder.
+    module.handleReceived(makePositionPacket(kRemoteNode2, 374221234, -1220845678));
+    TEST_ASSERT_EQUAL_UINT8(0, module.trustLevelForTest(kRemoteNode2));
+
+    // Vouch from the tenured verified signer: promoted AND upgraded to L2.
+    meshtastic_MeshPacket v1 =
+        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    ProcessMessage r1 = module.handleReceived(v1);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r1));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kTargetNode)); // L2+ escapes probation
+
+    // A continuing signer at L2 stays fresh: a new signed packet refreshes
+    // the stamp (level preserved, no downgrade) and the same-tick sweep does
+    // not decay it.
+    TrafficManagementModule::s_testNowMs += 300'000; // tick 3
+    meshtastic_MeshPacket signedSubj2 = makePositionPacket(kTargetNode, 374221234, -1220845678);
+    signedSubj2.id = 0x2001;
+    signedSubj2.xeddsa_signed = true;
+    module.handleReceived(signedSubj2);
+    TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
+    (void)module.runOnce(); // sweep on the same tick as the fresh stamp
+    TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
+
+    // The signatures go quiet: one more tick + sweep lapses L2 back to L1.
+    TrafficManagementModule::s_testNowMs += 300'000; // tick 4
+    (void)module.runOnce();
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode));
+    // ...and a renewal vouch (the subject is observed signing again) re-raises
+    // it to L2 while the neighborhood keeps vouching.
+    meshtastic_MeshPacket signedSubj3 = makePositionPacket(kTargetNode, 374221234, -1220845678);
+    signedSubj3.id = 0x2002;
+    signedSubj3.xeddsa_signed = true;
+    module.handleReceived(signedSubj3);
+    meshtastic_MeshPacket v2 =
+        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    ProcessMessage r2 = module.handleReceived(v2);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
+
+    // Mixed-mesh floor (Phase 1.1/2 behavior): with the L2 floor AND the
+    // observed-tenure fallback both disarmed, the same vouch still promotes
+    // but the ladder never leaves L1.
+    moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    trackSender(module, kRemoteNode4);
+    TrafficManagementModule::s_testNowMs += 300'000;
+    meshtastic_MeshPacket signedSubj4 = makePositionPacket(kRemoteNode4, 374221234, -1220845678);
+    signedSubj4.id = 0x2003;
+    signedSubj4.xeddsa_signed = true;
+    module.handleReceived(signedSubj4);
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode4));
+    meshtastic_MeshPacket v3 =
+        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kRemoteNode4, kRemoteNode, 1'000'000);
+    ProcessMessage r3 = module.handleReceived(v3);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r3));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kRemoteNode4));
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode4)); // promoted, but only L1
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+// (n) Trust ladder, tenure cap: with the L2 floor at the shipped 30 days
+// (saturated to the mod-16 ceiling of 15 ticks), a fresh attester cannot buy
+// L2 for a signing subject; an attester observed for 15 ticks can. The floor
+// is a bounded upgrade, not a free pass for brand-new radios.
+static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000; // tick 1
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 600;
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 86'400;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0; // isolate the L2 floor
+    moduleConfig.traffic_management.attestation_min_distinct_attesters = 1;
+    moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 30 * 86'400; // 15-tick ceiling
+
+    // The attester has been observed for 15 ticks (saturates the floor); the
+    // subject is fresh.
+    trackSender(module, kRemoteNode);                     // attester: first-seen tick 1
+    TrafficManagementModule::s_testNowMs += 15 * 300'000; // tick 16: attester age 15
+    trackSender(module, kTargetNode);                     // subject: first-seen tick 16
+    meshtastic_MeshPacket signedAttester = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    signedAttester.xeddsa_signed = true;
+    module.handleReceived(signedAttester);
+    meshtastic_MeshPacket signedSubj = makePositionPacket(kTargetNode, 374221234, -1220845678);
+    signedSubj.xeddsa_signed = true;
+    module.handleReceived(signedSubj);
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode));
+
+    // Tenured attester vouches: promotion + L2.
+    meshtastic_MeshPacket v1 =
+        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    ProcessMessage r1 = module.handleReceived(v1);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r1));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
+
+    // A FRESH attester (age 0) vouching for a fresh signing subject: the
+    // promotion lands, but the tenure cap holds the subject at L1.
+    trackSender(module, kRemoteNode2); // fresh attester: first-seen tick 16
+    trackSender(module, kRemoteNode4); // fresh subject: first-seen tick 16
+    meshtastic_MeshPacket signedAttester2 = makePositionPacket(kRemoteNode2, 374221234, -1220845678);
+    signedAttester2.id = 0x3001;
+    signedAttester2.xeddsa_signed = true;
+    module.handleReceived(signedAttester2);
+    meshtastic_MeshPacket signedSubj2 = makePositionPacket(kRemoteNode4, 374221234, -1220845678);
+    signedSubj2.id = 0x3002;
+    signedSubj2.xeddsa_signed = true;
+    module.handleReceived(signedSubj2);
+    meshtastic_MeshPacket v2 =
+        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kRemoteNode4, kRemoteNode2, 1'000'000);
+    ProcessMessage r2 = module.handleReceived(v2);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kRemoteNode4));
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode4)); // promoted, tenure-capped at L1
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+// (o) Trust ladder L3: a manually verified key (QR/NFC or pre-seeded
+// admin-key list) raises the antispam record to the out-of-band level -
+// permanent (no decay), escaping probation, and immune to the sweep's
+// probation reclaim (which only clears anonymous L0 entries). An unverified
+// key commit leaves the ladder alone.
+static void test_tm_trustLadder_manualKeyL3Permanent(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 600; // 2-tick window
+
+    uint8_t key[32];
+    memset(key, 0x77, sizeof(key));
+
+    // Unverified commit: knowledge only, no trust change.
+    module.onNodeKeyCommitted(kRemoteNode3, key, /*proven=*/false);
+    TEST_ASSERT_EQUAL_UINT8(0, module.trustLevelForTest(kRemoteNode3));
+
+    // Manual verification: out-of-band anchor.
+    module.onNodeKeyCommitted(kRemoteNode3, key, /*proven=*/true);
+    TEST_ASSERT_EQUAL_UINT8(3, module.trustLevelForTest(kRemoteNode3));
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kRemoteNode3)); // L3 escapes probation
+
+    // L3 is permanent: sweep several ticks later, no decay, no reclaim.
+    TrafficManagementModule::s_testNowMs += 4 * 300'000;
+    (void)module.runOnce();
+    (void)module.runOnce();
+    TEST_ASSERT_EQUAL_UINT8(3, module.trustLevelForTest(kRemoteNode3));
+
+    // A renewed commit (same key) re-stamps without clobbering anything.
+    module.onNodeKeyCommitted(kRemoteNode3, key, /*proven=*/true);
+    TEST_ASSERT_EQUAL_UINT8(3, module.trustLevelForTest(kRemoteNode3));
+
+    // L3 is not downgraded by an unsigned observation of the same node.
+    module.handleReceived(makePositionPacket(kRemoteNode3, 374221234, -1220845678));
+    TEST_ASSERT_EQUAL_UINT8(3, module.trustLevelForTest(kRemoteNode3));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
 } // namespace
 
 void setUp(void)
@@ -4124,6 +4328,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_promotionKAttester_quorumAndCoLocationDiscount);
     RUN_TEST(test_tm_promotionDecay_ttlRenewalAndPermanent);
     RUN_TEST(test_tm_promotionQuorum_perReporterCapsApply);
+    RUN_TEST(test_tm_trustLadder_l2FastPathDecayAndRenewal);
+    RUN_TEST(test_tm_trustLadder_tenureCappedL2Upgrade);
+    RUN_TEST(test_tm_trustLadder_manualKeyL3Permanent);
 
     exit(UNITY_END());
 }
