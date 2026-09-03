@@ -48,6 +48,17 @@ jobs:
         ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
     secrets: inherit
 
+  # Beta is the unsuffixed package, so `winget install Meshtastic.Meshtasticd` tracks the
+  # promoted subset. Alpha keeps its own id and gets every version bump, so a promotion
+  # publishes the same version twice: once here as Alpha, once again as Beta.
+  package-winget:
+    uses: ./.github/workflows/package_winget.yml
+    with:
+      release_tag: ${{ github.event.release.tag_name }}
+      package_identifier: |-
+        ${{ contains(github.event.release.name, 'Beta') && 'Meshtastic.Meshtasticd' || 'Meshtastic.Meshtasticd.Alpha' }}
+    secrets: inherit
+
   publish-release-notes:
     if: github.event.action == 'published'
     runs-on: ubuntu-latest

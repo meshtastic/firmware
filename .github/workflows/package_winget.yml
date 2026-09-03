@@ -1,7 +1,31 @@
 name: Validate winget manifest
 
+# winget has no channel concept, so each release channel is its own PackageIdentifier.
+# Every version bump ships as Alpha; the subset promoted for wider circulation is
+# republished, same version, under the unsuffixed id that winget treats as the default
+# package. Alpha is therefore always equal to or newer than the unsuffixed package.
+# Nightlies are not published here at all - they are plain downloads off firmware-nightly/.
+
 on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      package_identifier:
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to package (blank: the newest release)"
+        required: false
+        type: string
+      package_identifier:
+        description: "winget PackageIdentifier (Meshtastic.Meshtasticd is the beta/default channel)"
+        required: false
+        default: Meshtastic.Meshtasticd.Alpha
+        type: string
 
 permissions:
   contents: read
@@ -15,11 +39,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Resolve the newest release and download its MSI
+      - name: Resolve the release and download its MSI
         id: release
         shell: pwsh
         run: |
-          $tag = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+          $tag = $env:RELEASE_TAG
+          if (-not $tag) { $tag = gh release list --limit 1 --json tagName --jq '.[0].tagName' }
           if (-not $tag) { throw 'No releases found.' }
           New-Item -ItemType Directory -Force -Path release/download | Out-Null
           gh release download $tag --pattern '*.msi' --dir release/download
@@ -31,15 +56,17 @@ jobs:
           "tag=$tag", "version=$($parsed.Groups[1].Value)", "arch=$($parsed.Groups[2].Value)", "msi=$($msis[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
 
       - name: Generate manifests for the published MSI
         shell: pwsh
-        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -Validate
+        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -PackageIdentifier $env:PKG_ID -Validate
         env:
           MSI_PATH: ${{ steps.release.outputs.msi }}
           PKG_VERSION: ${{ steps.release.outputs.version }}
           PKG_ARCH: ${{ steps.release.outputs.arch }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          PKG_ID: ${{ inputs.package_identifier || 'Meshtastic.Meshtasticd.Alpha' }}
 
       - name: Verify the manifest URL resolves to the published asset
         shell: pwsh
@@ -57,6 +84,6 @@ jobs:
       - name: Upload the manifests as an artifact
         uses: actions/upload-artifact@v7
         with:
-          name: winget-manifests-${{ steps.release.outputs.version }}
+          name: winget-manifests-${{ inputs.package_identifier || 'Meshtastic.Meshtasticd.Alpha' }}-${{ steps.release.outputs.version }}
           overwrite: true
           path: release/winget/manifests/
