@@ -109,7 +109,7 @@ const RegionInfo regions[] = {
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
     */
-    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_TURBO), 0),
 
     /*
         EN300220 ETSI V3.2.1 [Table B.1, Item H, p. 21]
