@@ -1872,6 +1872,25 @@ static void test_handleSetConfig_security_blacklistedMintLeavesNoKey()
     TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
 }
 
+// factory_reset_config keeps the private key and clears the public one, so the entry check sees no key
+// and the boot-time derive path used to adopt whatever it produced - including a known-weak key.
+static void test_generateCryptoKeyPair_derivedFromStoredPrivateIsChecked()
+{
+    installRestoreCrypto();
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 0; // as installDefaultConfig(preserveKey = true) leaves it
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_TRUE(nodeDB->keyIsLowEntropy);
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+}
+
 // keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
 // an unset region without clearing it. The restore warning must stay gated on this keygen running.
 static void test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn()
@@ -2605,6 +2624,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected);
     RUN_TEST(test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_blacklistedMintLeavesNoKey);
+    RUN_TEST(test_generateCryptoKeyPair_derivedFromStoredPrivateIsChecked);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);

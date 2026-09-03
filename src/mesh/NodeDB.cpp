@@ -4430,6 +4430,17 @@ bool NodeDB::generateBlacklistCheckedKeyPair()
     config.security.private_key.size = 0;
     return false;
 }
+
+// A key derived from a stored private key can still be a known pre-2.8 weak one, and the entry check
+// cannot see it when the stored public key is absent: replace the pair rather than adopt it.
+bool NodeDB::replaceDerivedKeyPairIfBlacklisted()
+{
+    if (!checkLowEntropyPublicKey(config.security.public_key))
+        return true;
+    keyIsLowEntropy = true;
+    LOG_WARN("Private key derives a known low-entropy public key; generating a new keypair");
+    return generateBlacklistCheckedKeyPair();
+}
 #endif
 
 bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
@@ -4461,14 +4472,8 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 
         // Generate public key from the provided private key
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-            // The check above ran against the stored public key, empty on a bare restore, so re-check
-            // the derived one: a known low-entropy key is replaced rather than handed back.
-            if (checkLowEntropyPublicKey(config.security.public_key)) {
-                keyIsLowEntropy = true;
-                LOG_WARN("Provided private key derives a known low-entropy public key; generating a new keypair");
-                if (!generateBlacklistCheckedKeyPair())
-                    return false;
-            }
+            if (!replaceDerivedKeyPairIfBlacklisted())
+                return false;
             keygenSuccess = true;
         } else {
             // Derivation left sizes claiming a 32-byte pair the caller never got. Clear both so an
@@ -4484,6 +4489,8 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         config.security.public_key.size = 32;
         LOG_DEBUG("Regenerate PKI public key from private key");
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            if (!replaceDerivedKeyPairIfBlacklisted())
+                return false;
             keygenSuccess = true;
         }
     } else {
