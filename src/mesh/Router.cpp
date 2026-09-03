@@ -589,20 +589,25 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
-        // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt && p_decoded) {
-            mqtt->onSend(*p, *p_decoded, chIndex);
+        // Only publish to MQTT if we're the original transmitter of the packet. MQTT is a PreEncode
+        // transport in the registry now, so this fans out through callTransportsPreEncode instead of a
+        // hardcoded mqtt->onSend() - same gating (moduleConfig.mqtt.enabled && isFromUs), same point
+        // (inside the decoded-tag block, before p_decoded is released), same arguments (the now-encrypted
+        // packet, the decoded copy, the channel index). The old `&& mqtt` null check now lives inside the
+        // MQTTTransport adapter's hook.
+        if (moduleConfig.mqtt.enabled && isFromUs(p) && p_decoded) {
+            MeshTransportBase::callTransportsPreEncode(*p, *p_decoded, chIndex);
         }
 #endif
         packetPool.release(p_decoded);
     }
 
     // Fan the encrypted packet out to the non-LoRa broadcast transports (UDP multicast, BLE mesh)
-    // through the registry, so a new transport plugs in without editing this funnel. Each transport
-    // applies its own enabled_protocols gate in isEnabled(); an unconstructed one never registers, so
-    // this replaces the old per-tap null checks. MQTT is deliberately NOT here: its tap fires above,
-    // inside the decoded-tag block before p_decoded is released, and needs the decoded copy plus the
-    // channel index - a pre-encryption hook point the registry does not yet model.
+    // through the registry's PostEncode point, so a new transport plugs in without editing this funnel.
+    // Each transport applies its own enabled_protocols gate in isEnabled(); an unconstructed one never
+    // registers, so this replaces the old per-tap null checks. MQTT is NOT here: it registers at the
+    // registry's PreEncode point above, which fires inside the decoded-tag block because MQTT needs the
+    // decoded copy plus the channel index before p_decoded is released.
     MeshTransportBase::callTransports(p);
 
     // Only already-encrypted frames (relayed, phone-sourced) reach here oversized; perhapsEncode()
