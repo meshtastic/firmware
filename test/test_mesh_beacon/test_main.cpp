@@ -610,24 +610,46 @@ static void test_adminValidation_offerFrequencySlotZero_isCleared(void)
     TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot);
 }
 
-/**
- * An offer channel_index past the channel table must be cleared on write.
- */
-static void test_adminValidation_offerChannelIndexOutOfRange_isCleared(void)
+// The offer used to name a channel by table index. It carries the name and PSK now, so a test that
+// provisions a channel and points the offer at it says the same thing this way.
+static void offerChannelFromSlot(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, uint32_t idx)
 {
-    resetConfig();
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = MAX_NUM_CHANNELS;
-
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index);
+    bcfg.has_broadcast_offer_channel = true;
+    bcfg.broadcast_offer_channel = meshtastic_ChannelIdentity_init_zero;
+    if (idx >= (uint32_t)channels.getNumChannels())
+        return;
+    const auto &cs = channels.getByIndex((ChannelIndex)idx).settings;
+    strncpy(bcfg.broadcast_offer_channel.name, cs.name, sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = cs.psk.size;
+    memcpy(bcfg.broadcast_offer_channel.psk.bytes, cs.psk.bytes, cs.psk.size);
 }
 
 /**
- * Retiring a channel must clear every beacon reference to it - the offer as well as the targets.
+ * A by-value offer carries its own name and PSK, so there is no table index to be out of range and
+ * a write keeps it verbatim.
+ */
+static void test_adminValidation_offerChannelByValue_survivesWrite(void)
+{
+    resetConfig();
+
+    static const uint8_t psk[16] = {0xD1, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                    0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "Elsewhere", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = sizeof(psk);
+    memcpy(bcfg.broadcast_offer_channel.psk.bytes, psk, sizeof(psk));
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_offer_channel);
+    TEST_ASSERT_EQUAL_STRING("Elsewhere", moduleConfig.mesh_beacon.broadcast_offer_channel.name);
+    TEST_ASSERT_EQUAL_UINT16(sizeof(psk), moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(psk, moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, sizeof(psk));
+}
+
+/**
+ * Retiring a channel deletes the targets that name it by index. A by-value offer is untouched.
  * A dangling offer index does not fail loudly; the offer just quietly stops naming a channel.
  */
 static void test_adminValidation_retiredChannel_deletesTargetAndClearsOffer(void)
@@ -641,8 +663,7 @@ static void test_adminValidation_retiredChannel_deletesTargetAndClearsOffer(void
     installTestSecondaryChannel(1, "Side", sidePsk, sizeof(sidePsk));
 
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    offerChannelFromSlot(moduleConfig.mesh_beacon, 1);
     moduleConfig.mesh_beacon.broadcast_targets_count = 1;
     moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
     moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
@@ -657,8 +678,8 @@ static void test_adminValidation_retiredChannel_deletesTargetAndClearsOffer(void
     TEST_ASSERT_EQUAL_MESSAGE(0, moduleConfig.mesh_beacon.broadcast_targets_count,
                               "a target naming the retired channel is deleted, not left pointed at the slot - a later "
                               "channel provisioned there must not inherit a beacon nobody asked for");
-    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index,
-                              "the offer naming the retired channel must be cleared too");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel,
+                             "a by-value offer carries its own name and PSK, so retiring a table slot cannot invalidate it");
     // The module config was edited, so it has to be in the save set or the clear is lost on reboot.
     TEST_ASSERT_TRUE_MESSAGE(testAdmin->savedSegments() & SEGMENT_MODULECONFIG,
                              "deleting a beacon reference must add SEGMENT_MODULECONFIG to the save");
@@ -680,8 +701,7 @@ static void test_adminValidation_cleartextUnnamedPrimaryEdit_keepsBeaconRefs(voi
     const ChannelIndex idx = channels.getPrimaryIndex();
 
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = idx;
+    offerChannelFromSlot(moduleConfig.mesh_beacon, idx);
     moduleConfig.mesh_beacon.broadcast_targets_count = 1;
     moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
     moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = idx;
@@ -694,7 +714,7 @@ static void test_adminValidation_cleartextUnnamedPrimaryEdit_keepsBeaconRefs(voi
 
     TEST_ASSERT_EQUAL_MESSAGE(1, moduleConfig.mesh_beacon.broadcast_targets_count,
                               "a channel with no name and no PSK is still enabled, so its target must survive");
-    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index, "and the offer must still name it");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel, "and the offer must still name it");
 }
 
 /**
@@ -735,8 +755,7 @@ static void test_adminValidation_offerInvalidPreset_keepsPresetAndRest(void)
     bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     bcfg.has_broadcast_offer_preset = true;
     bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = 1;
+    offerChannelFromSlot(bcfg, 1);
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
@@ -745,7 +764,7 @@ static void test_adminValidation_offerInvalidPreset_keepsPresetAndRest(void)
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
                               moduleConfig.mesh_beacon.broadcast_offer_preset,
                               "the offer records what was asked for; fillOffer resolves it at send");
-    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel_index,
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel,
                              "and an unrunnable preset must not take the offer channel with it");
 }
 
@@ -1239,8 +1258,9 @@ static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
     meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
     strncpy(b.message, "Channel offer test", sizeof(b.message) - 1);
     b.has_offer_channel = true;
-    b.offer_channel.channel_num = 5;
     strncpy(b.offer_channel.name, "TestNet", sizeof(b.offer_channel.name) - 1);
+    b.offer_channel.psk.size = 1;
+    b.offer_channel.psk.bytes[0] = 0x01;
 
     meshtastic_MeshPacket mp = makeBeaconPacket(b);
     listener.handleReceivedProtobuf(mp, &b);
@@ -1248,7 +1268,8 @@ static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
     TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.has_channel,
                              "has_channel must be set when offer_channel is present");
-    TEST_ASSERT_EQUAL_UINT32(5, MeshBeaconListenerModule::lastReceivedOffer.channel.channel_num);
+    TEST_ASSERT_EQUAL_STRING("TestNet", MeshBeaconListenerModule::lastReceivedOffer.channel.name);
+    TEST_ASSERT_EQUAL_UINT16(1, MeshBeaconListenerModule::lastReceivedOffer.channel.psk.size);
 }
 
 /**
@@ -2061,8 +2082,7 @@ static void test_offer_unplaceablePin_advertisesNothing(void)
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
 
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
     moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = RadioInterface::frequencySlotCount(config.lora) + 99;
 
@@ -2086,8 +2106,7 @@ static void test_offer_pinPlaceableAfterRegionMove_isAdvertised(void)
     installTestPrimaryChannel("Home", psk, sizeof(psk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(bcfg, channels.getPrimaryIndex());
     bcfg.has_broadcast_offer_frequency_slot = true;
     bcfg.broadcast_offer_frequency_slot = 48; // valid in US, not in EU_868
 
@@ -2119,8 +2138,7 @@ static void test_broadcaster_unplaceableOffer_sendsTextOnly(void)
 
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "hi", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
     moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = 48; // valid in US, not on this EU_868 node
 
@@ -2143,8 +2161,7 @@ static void test_broadcaster_unplaceableOfferNoText_sendsNothing(void)
     installTestPrimaryChannel("Home", psk, sizeof(psk));
 
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
     moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
@@ -2161,7 +2178,7 @@ static void test_broadcaster_unplaceableOfferNoText_sendsNothing(void)
  * An offer whose channel_index names a disabled slot advertises no channel, so it is an
  * announcement - the redundancy gate must not swallow it just because the index was set.
  */
-static void test_broadcaster_offerOnDisabledSlot_isStillSent(void)
+static void test_broadcaster_offerByValue_survivesADisabledSlot(void)
 {
     resetConfig();
     static const uint8_t psk[16] = {0xEF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -2172,8 +2189,7 @@ static void test_broadcaster_offerOnDisabledSlot_isStillSent(void)
     channels.onConfigChanged();
 
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    offerChannelFromSlot(moduleConfig.mesh_beacon, 1);
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = config.lora.modem_preset;
     // The target rides the primary, so only the OFFER names the retired slot - which is the case
@@ -2188,7 +2204,9 @@ static void test_broadcaster_offerOnDisabledSlot_isStillSent(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "an offer with no channel must not be suppressed");
     meshtastic_MeshBeacon decoded;
     TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
-    TEST_ASSERT_FALSE_MESSAGE(decoded.has_offer_channel, "a retired slot must not be advertised");
+    TEST_ASSERT_TRUE_MESSAGE(decoded.has_offer_channel,
+                             "the offer carries its own name and PSK, so a table slot going disabled cannot silence it - "
+                             "there is no retired PSK to leak because the operator stated the one to advertise");
 }
 
 /**
@@ -2203,8 +2221,7 @@ static void test_offer_derivableSlot_isNotAdvertised(void)
     installTestPrimaryChannel("Offer", offerPsk, sizeof(offerPsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(bcfg, channels.getPrimaryIndex());
 
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     MeshBeaconModule::fillOffer(beacon, bcfg);
@@ -2224,8 +2241,7 @@ static void test_offer_pinnedButDerivableSlot_isNotAdvertised(void)
     installTestPrimaryChannel("Offer", offerPsk, sizeof(offerPsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(bcfg, channels.getPrimaryIndex());
     bcfg.has_broadcast_offer_frequency_slot = true;
     bcfg.broadcast_offer_frequency_slot =
         RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
@@ -2252,8 +2268,7 @@ static void test_offer_pinnedSlot_isAdvertised(void)
     const uint32_t pinned = (derived == 1) ? 2 : 1;
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(bcfg, channels.getPrimaryIndex());
     bcfg.has_broadcast_offer_frequency_slot = true;
     bcfg.broadcast_offer_frequency_slot = pinned;
 
@@ -2266,9 +2281,9 @@ static void test_offer_pinnedSlot_isAdvertised(void)
 
 /**
  * A disabled slot keeps the settings of whatever channel was deleted from it, so the offer must
- * advertise nothing rather than hand out a retired name and PSK.
+ * A by-value offer is unaffected: it advertises what the operator wrote, not what a table slot holds.
  */
-static void test_offer_disabledChannelSlot_advertisesNothing(void)
+static void test_offer_byValue_ignoresTheChannelTableRole(void)
 {
     resetConfig();
     static const uint8_t offerPsk[16] = {0xBB, 0x33, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -2280,13 +2295,13 @@ static void test_offer_disabledChannelSlot_advertisesNothing(void)
     channels.setChannel(retired);
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = idx;
+    offerChannelFromSlot(bcfg, idx);
 
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     MeshBeaconModule::fillOffer(beacon, bcfg);
 
-    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_channel, "a disabled slot must not be advertised");
+    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_channel,
+                             "a by-value offer is not read from the channel table, so the slot's role is irrelevant");
 }
 
 /**
@@ -2300,8 +2315,7 @@ static void test_offer_cleartextUnnamedChannel_isAdvertised(void)
     installTestPrimaryChannel("", nullptr, 0);
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_offer_channel_index = true;
-    bcfg.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(bcfg, channels.getPrimaryIndex());
 
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     MeshBeaconModule::fillOffer(beacon, bcfg);
@@ -2779,8 +2793,7 @@ static void test_broadcaster_offerMatchesTarget_offerIsOmitted(void)
 
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "hello", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.broadcast_targets_count = 1;
     moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
     moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
@@ -2813,8 +2826,7 @@ static void test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther(void)
 
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "hello", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.broadcast_targets_count = 2;
     moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
     moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
@@ -2850,8 +2862,7 @@ static void test_broadcaster_offerMatchesTargetNoText_sendsNothing(void)
 
     moduleConfig.has_mesh_beacon = true;
     moduleConfig.mesh_beacon.broadcast_message[0] = '\0';
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.broadcast_targets_count = 1;
     moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
     moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
@@ -2880,8 +2891,7 @@ static void offerRedundancyCase(bool offerExplicit, bool targetExplicit)
 
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "still here", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     if (offerExplicit)
@@ -3229,8 +3239,7 @@ static void test_offer_differentFromHome_advertisesItsOwnSettings(void)
     const uint32_t pinned = (derived == 1) ? 2 : 1; // deliberately not the derivable one
 
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    offerChannelFromSlot(moduleConfig.mesh_beacon, 1);
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
     moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
@@ -3270,8 +3279,7 @@ static void test_offer_sameAsHome_isAdvertisedOntoAnotherMesh(void)
 
     moduleConfig.has_mesh_beacon = true;
     // The offer is everything the node already is: its own channel, preset and region.
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     moduleConfig.mesh_beacon.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
@@ -3312,8 +3320,7 @@ static void test_offer_sameAsABeaconTarget_targetIsStillSent(void)
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "join us", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     // The offer and the single target name the same channel.
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = 1;
+    offerChannelFromSlot(moduleConfig.mesh_beacon, 1);
     moduleConfig.mesh_beacon.broadcast_targets_count = 1;
     moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
     moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
@@ -3345,8 +3352,7 @@ static void test_offer_identicalToItsOwnTarget_offerDroppedTextKept(void)
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "still here", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     // Offer and target are the same channel, preset, region and slot - identical in every field.
-    moduleConfig.mesh_beacon.has_broadcast_offer_channel_index = true;
-    moduleConfig.mesh_beacon.broadcast_offer_channel_index = channels.getPrimaryIndex();
+    offerChannelFromSlot(moduleConfig.mesh_beacon, channels.getPrimaryIndex());
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     moduleConfig.mesh_beacon.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
@@ -3888,7 +3894,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRangeExplicitPair_isCleared);
     RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRangeInheritedRegion_isKept);
     RUN_TEST(test_adminValidation_offerFrequencySlotZero_isCleared);
-    RUN_TEST(test_adminValidation_offerChannelIndexOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_offerChannelByValue_survivesWrite);
     RUN_TEST(test_adminValidation_retiredChannel_deletesTargetAndClearsOffer);
     RUN_TEST(test_adminValidation_cleartextUnnamedPrimaryEdit_keepsBeaconRefs);
     RUN_TEST(test_adminValidation_channelRename_keepsBeaconRefs);
@@ -3963,11 +3969,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_offer_pinPlaceableAfterRegionMove_isAdvertised);
     RUN_TEST(test_broadcaster_unplaceableOffer_sendsTextOnly);
     RUN_TEST(test_broadcaster_unplaceableOfferNoText_sendsNothing);
-    RUN_TEST(test_broadcaster_offerOnDisabledSlot_isStillSent);
+    RUN_TEST(test_broadcaster_offerByValue_survivesADisabledSlot);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedButDerivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedSlot_isAdvertised);
-    RUN_TEST(test_offer_disabledChannelSlot_advertisesNothing);
+    RUN_TEST(test_offer_byValue_ignoresTheChannelTableRole);
     RUN_TEST(test_offer_cleartextUnnamedChannel_isAdvertised);
 
     printf("\n=== Radio switch/restore re-entrancy ===\n");

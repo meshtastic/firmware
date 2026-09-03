@@ -92,14 +92,29 @@ class MeshBeaconModule
     /**
      * Reject only what can never become valid; sendBeacon() resolves the rest against the settings
      * in force. Called on an admin write, at boot, and when a LoRa change moves what can be run.
+     * Also the gatekeeper for the by-value and indexed target paths, which are mutually exclusive.
      */
     static void sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+
+    // False when a remote admin write of this config would not fit one LoRa payload. Such a config
+    // can be written locally over BLE but never read back: the response truncates to an empty
+    // payload and the remote client sees a silent no-op.
+    static bool fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+
+    // True when the config names an explicit by-value target (any of the broadcast_on_* fields).
+    static bool hasExplicitTarget(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+
+    // Place the by-value offer and target channels in the channel table, so the TX path can find
+    // their keys. An entry whose channel will not fit is withheld, never re-pointed at another
+    // channel, and no live channel is ever evicted. Returns true when the table was written.
+    static bool upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     /** Copy every offer field from config onto an outgoing beacon. */
     static void fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
-    /** The channel the offer advertises, or nullptr when no slot is named or it is unusable. */
-    static const meshtastic_ChannelSettings *offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+    // The channel the offer advertises, as ChannelSettings so it can be compared with a table
+    // entry. False when the offer names none.
+    static bool offerChannelSettings(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, meshtastic_ChannelSettings &out);
 
     // The frequency slot the offer describes, and via derivedOut the one a receiver works out for
     // itself. They differ only where the mesh deliberately pins a slot that derivation would miss.
@@ -201,7 +216,7 @@ class MeshBeaconListenerModule : public ProtobufModule<meshtastic_MeshBeacon>, p
         bool valid;
         NodeNum sender;
         bool has_channel;
-        meshtastic_ChannelSettings channel;
+        meshtastic_ChannelIdentity channel;
         meshtastic_Config_LoRaConfig_RegionCode region;
         meshtastic_Config_LoRaConfig_ModemPreset preset;
         // Present only when the sender could not expect us to derive it; unset means derive.
