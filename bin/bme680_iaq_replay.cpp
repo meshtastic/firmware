@@ -1,5 +1,6 @@
 // Replays a captured BME680 CSV trace (gas_ohms,rh[,bsec_iaq]) through
-// BME680IaqEstimator for offline tuning. See docs/bme680_iaq_replay.md.
+// BME680IaqEstimator for offline tuning. Build from the repo root:
+//   c++ -std=c++17 -O2 -I src -o /tmp/iaq_replay bin/bme680_iaq_replay.cpp src/modules/Telemetry/Sensor/BME680IaqEstimator.cpp
 
 #include "modules/Telemetry/Sensor/BME680IaqEstimator.h"
 

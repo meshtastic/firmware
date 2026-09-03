@@ -384,9 +384,9 @@ meshtastic_MeshPacket *Router::allocForSending()
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
 void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
-                        bool ackWantsAck)
+                        bool ackWantsAck, const meshtastic_MeshPacket *relaySource)
 {
-    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck);
+    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck, relaySource);
 }
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
@@ -601,6 +601,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
     }
 #endif
+
+    // Only already-encrypted frames (relayed, phone-sourced) reach here oversized; perhapsEncode()
+    // bounds everything it encodes. No NAK: p->channel is a wire hash by now, not an index.
+    if (p->encrypted.size > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_WARN("Drop 0x%08x: payload %u exceeds radio capacity %u", p->id, (unsigned)p->encrypted.size,
+                 (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        packetPool.release(p);
+        return meshtastic_Routing_Error_TOO_LARGE;
+    }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);

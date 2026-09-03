@@ -72,7 +72,13 @@ extern "C" {
 #ifndef LFS_NO_ASSERT
 #define LFS_ASSERT(test) assert(test)
 #else
-#define LFS_ASSERT(test)
+// assert() hangs forever on STM32WL (see main-stm32wl.cpp); route through a recoverable handler instead.
+extern void lfs_assert(const char *reason);
+#define LFS_ASSERT(test)                                                                                                         \
+    do {                                                                                                                         \
+        if (!(test))                                                                                                             \
+            lfs_assert(#test);                                                                                                   \
+    } while (0)
 #endif
 
 // Builtin functions, these may be replaced by more efficient

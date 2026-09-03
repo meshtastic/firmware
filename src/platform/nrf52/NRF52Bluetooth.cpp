@@ -245,8 +245,12 @@ void NRF52Bluetooth::shutdown()
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
-    disconnect();
+
+    // Clear the auto-restart flag before dropping the link: our DISCONNECTED event is only processed
+    // after this callback returns and would re-start advertising. startAdv()/resumeAdvertising() re-set it.
+    Bluefruit.Advertising.restartOnDisconnect(false);
     Bluefruit.Advertising.stop();
+    disconnect();
 }
 void NRF52Bluetooth::startDisabled()
 {

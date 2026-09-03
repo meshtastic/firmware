@@ -742,6 +742,11 @@ bool GPS::verifyCachedProbePresence()
         _serial_gps->write("$PDTINFO\r\n");
         present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
         break;
+    case GNSS_MODEL_LC760CA:
+        cachedProbeModelName = "LC760CA";
+        _serial_gps->write("$PDTINFO\r\n");
+        present = (getACK("CC1161W", 900) == GNSS_RESPONSE_OK);
+        break;
     case GNSS_MODEL_UBLOX6:
     case GNSS_MODEL_UBLOX7:
     case GNSS_MODEL_UBLOX8:
@@ -1115,7 +1120,7 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module config saved");
             }
-        } else if (gnssModel == GNSS_MODEL_CM121) {
+        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_CM121, GNSS_MODEL_LC760CA)) {
             // only ask for RMC and GGA
             // enable GGA
             _serial_gps->write("$CFGMSG,0,0,1,1*1B\r\n");
@@ -1358,7 +1363,7 @@ void GPS::up()
 // We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
-    if (hasValidLocation)
+    if (scheduling.hasValidFixSinceSearchStarted())
         scheduling.informGotLock();
     else
         scheduling.informSearchFailed();
@@ -1540,6 +1545,7 @@ int32_t GPS::runOnce()
         // 2. Got a lock for the first time, or 3. Got a lock after turning back on
         bool gotLoc = lookForLocation();
         if (gotLoc) {
+            scheduling.informValidFix();
 #if GPS_DEBUG
             if (!hasValidLocation) { // declare that we have location ASAP
                 LOG_DEBUG("hasValidLocation RISING EDGE");
@@ -1562,7 +1568,7 @@ int32_t GPS::runOnce()
         }
 
         bool tooLong = scheduling.searchedTooLong();
-        if (tooLong && !gotLoc) {
+        if (tooLong && !scheduling.hasValidFixSinceSearchStarted()) {
             LOG_WARN("Can't publish valid location: no GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
@@ -1716,7 +1722,8 @@ GnssModel_t GPS::probe(int serialSpeed)
         std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580},
                                          {"UM600", "UM600", GNSS_MODEL_UC6580},
                                          {"CM121", "CM121", GNSS_MODEL_CM121},
-                                         {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121}};
+                                         {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121},
+                                         {"LC760CA", "CC1161W", GNSS_MODEL_LC760CA}};
         PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
         currentDelay = 20;
         currentStep = 2;
