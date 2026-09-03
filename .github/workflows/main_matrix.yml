@@ -721,10 +721,12 @@ jobs:
         run: |
           set -euo pipefail
           aws --version
+          # Cache for 1 day in browser, 1 month on CDN.
           aws s3 sync ./publish "s3://${r2_bucket}/${DEST_PREFIX}${VERSION}/" \
             --endpoint-url "$R2_ENDPOINT" \
             --no-progress \
-            --cache-control 'public, max-age=3600'
+            --metadata "commit=${{ github.sha }},run=${{ github.run_id }},version=${VERSION}" \
+            --cache-control 'public, max-age=86400, s-maxage=2592000'
 
   # Nightly publish: refresh the single, stable firmware-nightly/ folder on
   # meshtastic.github.io, and the root of the meshtastic-firmware-nightly R2
@@ -838,8 +840,17 @@ jobs:
         run: |
           set -euo pipefail
           aws --version
+          # Cache for 1 hour in browser, 1 day on CDN.
           aws s3 sync ./stage "s3://${r2_bucket}/" \
             --endpoint-url "$R2_ENDPOINT" \
             --no-progress \
             --delete \
+            --exclude 'index.json' \
+            --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
+            --cache-control 'public, max-age=3600, s-maxage=86400'
+          # index.json is the pointer to the current nightly, don't cache it so hard (5 minutes).
+          aws s3 cp ./stage/index.json "s3://${r2_bucket}/index.json" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --no-progress \
+            --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
             --cache-control 'public, max-age=300'
