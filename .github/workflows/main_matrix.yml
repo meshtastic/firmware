@@ -487,6 +487,10 @@ jobs:
     permissions: # Needed for 'gh release upload'.
       contents: write
     runs-on: ubuntu-latest
+    # Lifted to the job so the signing step can branch on it: the secrets context is not
+    # available in a step-level `if`.
+    env:
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
     if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -555,6 +559,35 @@ jobs:
           pattern: meshtasticd-msi-*-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./output/msi
+
+      # Signing happens here rather than in the build so it covers release MSIs only:
+      # nightlies never reach this job. It also has to precede the upload below, because
+      # package_winget.yml hashes the published asset, so signing after would leave every
+      # winget manifest pinning a stale SHA256. Skipped with a warning until the secret
+      # exists, which leaves the MSI unsigned rather than failing the release.
+      - name: Sign the MSI
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ needs.Windows.outputs.msi_artifact_id }}
+          wait-for-completion: true
+          # A SignPath Foundation certificate needs a human to approve each release, so
+          # this waits far longer than the 600s default before giving up.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ./output/msi
+
+      - name: Report the MSI signing state
+        run: |
+          if [ -z "${SIGNPATH_API_TOKEN}" ]; then
+            echo "::warning::SIGNPATH_API_TOKEN is not set; publishing an unsigned MSI."
+          else
+            echo "MSI signed by SignPath."
+          fi
 
       - name: Zip Linux sources
         working-directory: output

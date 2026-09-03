@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+    outputs:
+      # SignPath addresses the artifact to sign by id, not by name.
+      msi_artifact_id:
+        description: Artifact id of the MSI, empty unless build_msi is set
+        value: ${{ jobs.build-Windows.outputs.msi_artifact_id }}
 
 permissions:
   contents: read
@@ -20,6 +25,8 @@ permissions:
 jobs:
   build-Windows:
     runs-on: windows-${{ inputs.windows_ver }}
+    outputs:
+      msi_artifact_id: ${{ steps.msi-artifact.outputs.artifact-id }}
     # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
     # restore it but never save, so they stop filling up the repo's Actions cache storage.
     env:
@@ -164,6 +171,7 @@ jobs:
           LONG_VERSION: ${{ steps.version.outputs.long }}
 
       - name: Store the MSI and winget manifests as an artifact
+        id: msi-artifact
         if: inputs.build_msi
         uses: actions/upload-artifact@v7
         with:
