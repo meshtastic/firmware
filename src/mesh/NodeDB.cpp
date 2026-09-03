@@ -4418,17 +4418,14 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-// A freshly minted keypair must not itself land on the blacklist. Retry a bounded number of times, and
-// if every attempt is compromised fail with no key rather than persist a known-weak identity.
+// A freshly minted keypair must not itself land on the blacklist. Fail with no key rather than persist
+// a known-weak identity: only a broken entropy source can land here, and retrying would not fix that.
 bool NodeDB::generateBlacklistCheckedKeyPair()
 {
-    for (uint8_t attempt = 0; attempt < 3; attempt++) {
-        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-        if (!checkLowEntropyPublicKey(config.security.public_key))
-            return true;
-        LOG_WARN("Generated keypair is a known low-entropy key; retrying");
-    }
-    LOG_ERROR("PKI keygen keeps producing known low-entropy keys; entropy source is broken");
+    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+    if (!checkLowEntropyPublicKey(config.security.public_key))
+        return true;
+    LOG_ERROR("PKI keygen produced a known low-entropy key; entropy source is broken");
     config.security.public_key.size = 0;
     config.security.private_key.size = 0;
     return false;

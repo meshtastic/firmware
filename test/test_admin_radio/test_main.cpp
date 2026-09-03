@@ -1730,18 +1730,13 @@ class RestoreDerivingCryptoEngine : public CryptoEngine
             memset(pubKey, 0x7C, 32);
         return true;
     }
-    uint8_t lowEntropyMints = 0; // mint this many blacklisted keys before yielding a clean one
-    uint8_t generateKeyPairCalls = 0;
+    bool mintsLowEntropy = false;
     void generateKeyPair(uint8_t *pubKey, uint8_t *privKey) override
     {
-        generateKeyPairCalls++;
-        if (lowEntropyMints > 0) {
-            lowEntropyMints--;
+        if (mintsLowEntropy)
             memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
-            memset(privKey, 0x6F, 32);
-            return;
-        }
-        memset(pubKey, 0x5E, 32);
+        else
+            memset(pubKey, 0x5E, 32);
         memset(privKey, 0x5F, 32);
     }
 };
@@ -1862,30 +1857,11 @@ static void test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn()
     TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
 }
 
-// The replacement for a rejected key is itself checked: a mint that lands back on the blacklist is
-// retried rather than persisted.
-static void test_handleSetConfig_security_blacklistedReplacementIsRetried()
+// A replacement that is itself blacklisted leaves no identity behind - persisting a known-weak key
+// would defeat the rejection this whole path exists for.
+static void test_handleSetConfig_security_blacklistedMintLeavesNoKey()
 {
-    const uint8_t blacklistedMints = 1;
-    RestoreDerivingCryptoEngine *stub = installRestoreCrypto();
-    stub->lowEntropyMints = blacklistedMints;
-
-    const meshtastic_Config c = makeBareKeyRestoreConfig();
-    testAdmin->deferSaves();
-    testAdmin->handleSetConfig(c, false);
-
-    // One mint per blacklisted result, plus the clean one that ends the retry loop.
-    TEST_ASSERT_EQUAL_UINT(blacklistedMints + 1, stub->generateKeyPairCalls);
-    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
-    TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
-}
-
-// When every attempt stays blacklisted, keygen fails and leaves no identity behind - persisting a
-// known-weak key would defeat the rejection this whole path exists for.
-static void test_handleSetConfig_security_exhaustedRetriesLeavesNoKey()
-{
-    RestoreDerivingCryptoEngine *stub = installRestoreCrypto();
-    stub->lowEntropyMints = UINT8_MAX; // never yields a clean key
+    installRestoreCrypto()->mintsLowEntropy = true;
 
     const meshtastic_Config c = makeBareKeyRestoreConfig();
     testAdmin->deferSaves();
@@ -2628,8 +2604,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates);
     RUN_TEST(test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected);
     RUN_TEST(test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn);
-    RUN_TEST(test_handleSetConfig_security_blacklistedReplacementIsRetried);
-    RUN_TEST(test_handleSetConfig_security_exhaustedRetriesLeavesNoKey);
+    RUN_TEST(test_handleSetConfig_security_blacklistedMintLeavesNoKey);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
