@@ -1321,6 +1321,18 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if MESHTASTIC_EXCLUDE_AUDIO
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
+#if MESHTASTIC_EXCLUDE_MQTT
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_MQTT_CONFIG;
+#endif
+#if MESHTASTIC_EXCLUDE_NEIGHBORINFO
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NEIGHBORINFO_CONFIG;
+#endif
+#if MESHTASTIC_EXCLUDE_STOREFORWARD
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_STOREFORWARD_CONFIG;
+#endif
+#if !HAS_TELEMETRY
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_TELEMETRY_CONFIG;
+#endif
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
 #if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
@@ -1337,7 +1349,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
-#ifndef ARCH_ESP32
+#if !defined(ARCH_ESP32) || MESHTASTIC_EXCLUDE_PAXCOUNTER
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
 #if !defined(HAS_RGB_LED) && !RAK_4631
@@ -1349,14 +1361,12 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
 // Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
-#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
-#if defined(ARCH_NRF52) && !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet gateway currently
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on nRF52
-#elif defined(ARCH_RP2040) && !HAS_WIFI && !HAS_ETHERNET
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on RP2040
+#if !HAS_NETWORKING // covers nRF52 (non-ethernet RAK) and RP2040 without WiFi/ethernet
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG;
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
