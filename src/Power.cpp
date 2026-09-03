@@ -26,6 +26,11 @@
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
 #include "sleep.h"
+
+#if defined(NM_EPD_420_BW)
+static constexpr uint32_t NM_EPD_420_TONE_GRACE_MS = 750;
+#endif
+
 #ifdef ARCH_ESP32
 // #include <driver/adc.h>
 #include <esp_adc/adc_cali.h>
@@ -833,7 +838,13 @@ void Power::powerCommandsCheck()
         reboot();
     }
 
-    if (shutdownAtMsec && millis() > shutdownAtMsec) {
+    if (shutdownAtMsec
+#if defined(NM_EPD_420_BW)
+        && !Throttle::isWithinTimespanMs(shutdownAtMsec, NM_EPD_420_TONE_GRACE_MS)
+#else
+        && millis() > shutdownAtMsec
+#endif
+    ) {
         shutdownAtMsec = 0;
         shutdown();
     }
@@ -900,7 +911,9 @@ void Power::shutdown()
     }
 #endif
 #if !defined(ARCH_STM32WL)
+#if !defined(NM_EPD_420_BW)
     playShutdownMelody();
+#endif
 #endif
     nodeDB->saveToDisk();
 #if HAS_SCREEN
@@ -1063,8 +1076,11 @@ void Power::readPowerStatus()
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
-            if (low_voltage_counter > 10) {
+            if (low_voltage_counter == 11) {
                 LOG_INFO("Low voltage detected, trigger deep sleep");
+#if defined(NM_EPD_420_BW)
+                playNmEpd420Tone(NmEpd420Tone::LowBattery);
+#endif
                 powerFSM.trigger(EVENT_LOW_BATTERY);
             }
         } else {

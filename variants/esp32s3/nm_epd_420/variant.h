@@ -39,11 +39,17 @@
 #define PERIPHERAL_WARMUP_MS 50 // AHT20 needs ~20 ms after power-up before first I²C transaction
 
 // External audio amp shutdown — keep the Class-D PA disabled so we don't draw ~3 mA idle.
-// We define this as an output that is forced LOW in the variant init path of GPIO that
-// the ESP32-S3 boot ROM has already left floating; the codec itself is suspended through
-// I²C by other code paths if/when audio support is added.
 #define PIN_AMP_ENABLE 41
 #define PIN_ES8311_POWER 44
+#if defined(NM_EPD_420_BW)
+#define HAS_I2S
+#define DAC_I2S_MCLK 21
+#define DAC_I2S_BCK 15
+#define DAC_I2S_WS 17
+#define DAC_I2S_DOUT 18
+#define DAC_I2S_DIN 16
+#define AUDIO_AMP_ENABLE(on) digitalWrite(PIN_AMP_ENABLE, (on) ? HIGH : LOW)
+#endif
 
 // Battery monitoring: GPIO43 enables the divider, GPIO3 reads battery voltage.
 #define ADC_CTRL 43

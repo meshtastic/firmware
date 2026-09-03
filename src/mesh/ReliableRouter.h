@@ -2,6 +2,13 @@
 
 #include "NextHopRouter.h"
 
+struct DeliveryResult {
+    PacketId packetId = 0;
+    NodeNum origin = 0;
+    NodeNum destination = 0;
+    meshtastic_Routing_Error error = meshtastic_Routing_Error_NONE;
+};
+
 /**
  * This is a mixin that extends Router with the ability to do (one hop only) reliable message sends.
  */
@@ -33,6 +40,8 @@ class ReliableRouter : public NextHopRouter
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
 
   private:
+    void notifyDeliveryResult(const DeliveryResult &result);
+
     /**
      * Should this packet be ACKed with a want_ack for reliable delivery?
      */

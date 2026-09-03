@@ -136,6 +136,7 @@ int32_t ExternalNotificationModule::runOnce()
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
+#if !defined(NM_EPD_420_BW)
         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
@@ -145,6 +146,7 @@ int32_t ExternalNotificationModule::runOnce()
             // we need fast updates to play the RTTTL
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
+#endif
 #endif
         // now let the PWM buzzer play
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
@@ -262,8 +264,10 @@ void ExternalNotificationModule::stopNow()
     LOG_INFO("Stop RTTTL playback");
     rtttl::stop();
 #ifdef HAS_I2S
+#if !defined(NM_EPD_420_BW)
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
+#endif
 #endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
@@ -460,7 +464,11 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
 #ifdef HAS_I2S
+#if defined(NM_EPD_420_BW)
+                        playNmEpd420Tone(NmEpd420Tone::Receive, isDmToUs);
+#else
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+#endif
 #endif
                     } else if (moduleConfig.external_notification.use_pwm) {
                         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);

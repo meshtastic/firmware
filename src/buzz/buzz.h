@@ -1,5 +1,12 @@
 #pragma once
 
+#include <cstdint>
+
+#if defined(NM_EPD_420_BW)
+enum class NmEpd420Tone : uint8_t { Boot, Shutdown, LowBattery, Receive, DeliverySuccess, DeliveryFailure };
+bool playNmEpd420Tone(NmEpd420Tone tone, bool directMessage = false);
+#endif
+
 void playBeep();
 void playLongBeep();
 void playStartMelody();

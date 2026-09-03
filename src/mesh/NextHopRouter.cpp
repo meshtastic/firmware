@@ -8,6 +8,9 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #include "NodeDB.h"
+#if defined(NM_EPD_420_BW)
+#include "buzz/buzz.h"
+#endif
 
 NextHopRouter::NextHopRouter() {}
 
@@ -374,6 +377,13 @@ int32_t NextHopRouter::doRetransmissions()
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from,
                               p.packet->to, p.packet->id);
+#if defined(NM_EPD_420_BW)
+                    if (p.packet->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                        IS_ONE_OF(p.packet->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP,
+                                  meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) &&
+                        !isBroadcast(p.packet->to))
+                        playNmEpd420Tone(NmEpd420Tone::DeliveryFailure);
+#endif
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived

@@ -12,9 +12,13 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#if defined(NM_EPD_420_BW)
+#include "buzz/buzz.h"
+#endif
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "Throttle.h"
 #include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -111,17 +115,45 @@ static void sdsEnter()
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, false);
 }
 
+#if defined(NM_EPD_420_BW)
+static constexpr uint32_t NM_EPD_420_TONE_GRACE_MS = 750;
+static uint32_t nmEpd420LowBatteryToneStartedMs = 0;
+#endif
+
 static void lowBattSDSEnter()
 {
     LOG_POWERFSM("State: Lower batt SDS");
+#if defined(NM_EPD_420_BW)
+    if (playNmEpd420Tone(NmEpd420Tone::LowBattery)) {
+        nmEpd420LowBatteryToneStartedMs = millis();
+        return;
+    }
+#endif
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
 }
+
+static void lowBattSDSIdle()
+{
+#if defined(NM_EPD_420_BW)
+    if (Throttle::isWithinTimespanMs(nmEpd420LowBatteryToneStartedMs, NM_EPD_420_TONE_GRACE_MS))
+        return;
+#endif
+    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
+}
+
 extern Power *power;
 
 static void shutdownEnter()
 {
     LOG_POWERFSM("State: SHUTDOWN");
+#if defined(NM_EPD_420_BW)
+    const bool shutdownToneQueued = playNmEpd420Tone(NmEpd420Tone::Shutdown);
+#endif
     shutdownAtMsec = millis();
+#if defined(NM_EPD_420_BW)
+    if (!shutdownToneQueued)
+        shutdownAtMsec -= NM_EPD_420_TONE_GRACE_MS;
+#endif
 }
 
 #include "error.h"
@@ -308,7 +340,7 @@ static void bootEnter()
 
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
-State stateLowBattSDS(lowBattSDSEnter, NULL, NULL, "SDS");
+State stateLowBattSDS(lowBattSDSEnter, lowBattSDSIdle, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");

@@ -1,4 +1,7 @@
 #include "AdminModule.h"
+#if defined(NM_EPD_420_BW)
+#include "platform/extra_variants/nm_epd_420/AudioConfig.h"
+#endif
 #include "Channels.h"
 #include "DisplayFormatters.h"
 #include "HardwareRNG.h"
@@ -1210,7 +1213,14 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     case meshtastic_ModuleConfig_audio_tag:
         LOG_INFO("Set module config: Audio");
         moduleConfig.has_audio = true;
+#if defined(NM_EPD_420_BW)
+        {
+            const bool notificationAudioEnabled = c.payload_variant.audio.codec2_enabled;
+            configureNmEpd420NotificationAudio(moduleConfig.audio, notificationAudioEnabled);
+        }
+#else
         moduleConfig.audio = c.payload_variant.audio;
+#endif
         break;
     case meshtastic_ModuleConfig_remote_hardware_tag:
         LOG_INFO("Set module config: Remote Hardware");

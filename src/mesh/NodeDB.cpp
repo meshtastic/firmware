@@ -11,6 +11,9 @@
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
+#if defined(NM_EPD_420_BW)
+#include "platform/extra_variants/nm_epd_420/AudioConfig.h"
+#endif
 #include "PacketHistory.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
@@ -1230,6 +1233,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif // HAS_TFT
 #endif // HAS_I2S
+#if defined(NM_EPD_420_BW)
+    configureNmEpd420NotificationAudio(moduleConfig.audio, true);
+#endif
 
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
@@ -2485,6 +2491,15 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved moduleConfig version %d", moduleConfig.version);
         }
     }
+
+#if defined(NM_EPD_420_BW)
+    const bool audioConfigNeedsMigration = moduleConfig.audio.i2s_ws == 0 && moduleConfig.audio.i2s_sd == 0 &&
+                                           moduleConfig.audio.i2s_din == 0 && moduleConfig.audio.i2s_sck == 0;
+    const bool notificationAudioEnabled = audioConfigNeedsMigration || moduleConfig.audio.codec2_enabled;
+    configureNmEpd420NotificationAudio(moduleConfig.audio, notificationAudioEnabled);
+    if (audioConfigNeedsMigration)
+        saveToDisk(SEGMENT_MODULECONFIG);
+#endif
 
     // Always-on traffic management: a device that has NEVER configured TMM
     // (has_traffic_management false - AdminModule always sets the has_ flag on

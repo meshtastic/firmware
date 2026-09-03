@@ -844,12 +844,22 @@ void setup()
     router = new ReliableRouter();
 
     // only play start melody when role is not tracker or sensor
+#if defined(NM_EPD_420_BW)
+    bool nmEpd420PlayStartTone = true;
+#endif
     if (config.power.is_power_saving == true &&
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
+#if defined(NM_EPD_420_BW)
+    {
+        nmEpd420PlayStartTone = false;
+        LOG_DEBUG("Tracker/Sensor: Skip start melody");
+    }
+#else
         LOG_DEBUG("Tracker/Sensor: Skip start melody");
     else
         playStartMelody();
+#endif
 
 #if HAS_SCREEN
         // fixed screen override?
@@ -1032,6 +1042,10 @@ void setup()
 #ifdef HAS_I2S
     LOG_DEBUG("Start audio thread");
     audioThread = new AudioThread();
+#if defined(NM_EPD_420_BW)
+    if (nmEpd420PlayStartTone)
+        playNmEpd420Tone(NmEpd420Tone::Boot);
+#endif
 #endif
 
 #ifdef HAS_UDP_MULTICAST

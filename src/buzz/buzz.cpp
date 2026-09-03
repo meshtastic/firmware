@@ -99,6 +99,25 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
 }
 #endif
 
+#if defined(NM_EPD_420_BW) && defined(HAS_I2S)
+bool playNmEpd420Tone(NmEpd420Tone tone, bool directMessage)
+{
+    if (!audioThread || !moduleConfig.audio.codec2_enabled)
+        return false;
+
+    const bool systemTone = tone == NmEpd420Tone::Boot || tone == NmEpd420Tone::Shutdown || tone == NmEpd420Tone::LowBattery;
+    const auto mode = config.device.buzzer_mode;
+    if (mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
+        (systemTone && mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY) ||
+        (!systemTone && mode == meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) ||
+        (!systemTone && mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY && !directMessage)) {
+        return false;
+    }
+
+    return audioThread->enqueueNmEpd420Tone(tone);
+}
+#endif
+
 void playTones(const ToneDuration *tone_durations, int size)
 {
     if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||

@@ -7,6 +7,9 @@
 #include "mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
+#if defined(NM_EPD_420_BW)
+#include "buzz/buzz.h"
+#endif
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -16,6 +19,13 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+#if defined(NM_EPD_420_BW)
+    const bool localBroadcastText = isFromUs(p) && isBroadcast(p->to) &&
+                                    p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                                    IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP,
+                                              meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP);
+#endif
+
     if (p->want_ack) {
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
@@ -34,7 +44,24 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    const ErrorCode result = isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+#if defined(NM_EPD_420_BW)
+    if (result == ERRNO_OK && localBroadcastText)
+        playNmEpd420Tone(NmEpd420Tone::DeliverySuccess);
+#endif
+    return result;
+}
+
+void ReliableRouter::notifyDeliveryResult(const DeliveryResult &result)
+{
+#if defined(NM_EPD_420_BW)
+    if (result.error == meshtastic_Routing_Error_NONE)
+        playNmEpd420Tone(NmEpd420Tone::DeliverySuccess);
+    else
+        playNmEpd420Tone(NmEpd420Tone::DeliveryFailure);
+#else
+    (void)result;
+#endif
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
@@ -149,7 +176,23 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         if ((ackId || nakId) &&
             // Implicit ACKs from MQTT should not stop retransmissions
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
-            LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
+            DeliveryResult deliveryResult;
+            bool notifyDelivery = false;
+            const PacketId resultId = ackId ? ackId : nakId;
+            auto *old = findPendingPacket(p->to, resultId);
+            if (old && p->from != 0 && isFromUs(old->packet) &&
+                old->packet->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                IS_ONE_OF(old->packet->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP,
+                          meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) &&
+                !isBroadcast(old->packet->to) && p->from == old->packet->to) {
+                deliveryResult.packetId = old->packet->id;
+                deliveryResult.origin = getFrom(old->packet);
+                deliveryResult.destination = old->packet->to;
+                deliveryResult.error = c ? c->error_reason : meshtastic_Routing_Error_NONE;
+                notifyDelivery = true;
+            }
+
+            LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", resultId);
             if (ackId) {
                 stopRetransmission(p->to, ackId);
                 // M3: an end-to-end ACK proves the directed route to the ACK's sender currently works,
@@ -159,6 +202,8 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             } else {
                 stopRetransmission(p->to, nakId);
             }
+            if (notifyDelivery)
+                notifyDeliveryResult(deliveryResult);
         }
     }
 
