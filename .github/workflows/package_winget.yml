@@ -26,17 +26,18 @@ on:
         required: false
   workflow_dispatch:
     inputs:
+      # trunk-ignore(checkov/CKV_GHA_7): intentional manual switch for repackaging a published release
       release_tag:
         description: "Release tag to package (blank: the newest release)"
         required: false
         type: string
       package_identifier:
-        description: "winget PackageIdentifier (Meshtastic.Meshtasticd is the beta/default channel)"
+        description: winget PackageIdentifier (Meshtastic.Meshtasticd is the beta/default channel)
         required: false
         default: Meshtastic.Meshtasticd.Alpha
         type: string
       submit:
-        description: "Open a winget-pkgs pull request instead of only validating"
+        description: Open a winget-pkgs pull request instead of only validating
         required: false
         default: false
         type: boolean
