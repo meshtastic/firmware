@@ -178,7 +178,7 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    if: "!contains(github.ref_name, 'event/')"
     strategy:
       fail-fast: false
       matrix:
@@ -187,6 +187,9 @@ jobs:
     uses: ./.github/workflows/build_windows_bin.yml
     with:
       windows_ver: ${{ matrix.windows_ver }}
+      # WiX and the MSI cost several minutes, and only the release and nightly publishes
+      # consume one. Push, PR and merge_group runs build just the exe.
+      build_msi: ${{ contains(fromJSON('["workflow_dispatch", "schedule"]'), github.event_name) }}
     # secrets: inherit
 
   package-pio-deps-native-tft:
@@ -493,6 +496,7 @@ jobs:
       - gather-artifacts
       - build-debian-src
       - package-pio-deps-native-tft
+      - Windows
       # - MacOS
     steps:
       - name: Checkout
@@ -543,6 +547,15 @@ jobs:
           merge-multiple: true
           path: ./output/pio-deps-native-tft
 
+      # The winget manifests pin the MSI's SHA256 against its release-asset URL, so
+      # the MSI has to reach the release unchanged or `winget install` fails the hash.
+      - name: Download the Windows MSI
+        uses: actions/download-artifact@v8
+        with:
+          pattern: meshtasticd-msi-*-${{ needs.version.outputs.long }}
+          merge-multiple: true
+          path: ./output/msi
+
       - name: Zip Linux sources
         working-directory: output
         run: |
@@ -574,6 +587,7 @@ jobs:
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{ needs.version.outputs.long }}.json
           gh release upload v${{ needs.version.outputs.long }} ./output/meshtasticd-${{ needs.version.outputs.deb }}-src.zip
           gh release upload v${{ needs.version.outputs.long }} ./output/platformio-deps-native-tft-${{ needs.version.outputs.long }}.zip
+          gh release upload v${{ needs.version.outputs.long }} ./output/msi/*.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -736,7 +750,7 @@ jobs:
   publish-nightly:
     runs-on: ubuntu-24.04
     if: github.repository_owner == 'meshtastic' && (github.event_name == 'schedule' || github.event.inputs.nightly == 'true')
-    needs: [setup, version, gather-artifacts]
+    needs: [setup, version, gather-artifacts, Windows]
     env:
       targets: |-
         esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
@@ -748,6 +762,20 @@ jobs:
           pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./stage
+
+      # The nightly MSI is a plain download off firmware-nightly/; it is deliberately
+      # not submitted to winget, which only carries the alpha and beta channels.
+      - name: Get the Windows MSI
+        uses: actions/download-artifact@v8
+        with:
+          pattern: meshtasticd-msi-*-${{ needs.version.outputs.long }}
+          merge-multiple: true
+          path: ./stage
+
+      - name: Drop the winget manifests from the nightly stage
+        # They ship in the same artifact, but their InstallerUrl points at a release
+        # asset the nightly never publishes. Only the MSI belongs on the page.
+        run: rm -rf ./stage/manifests
 
       - name: Generate Release manifest
         run: |

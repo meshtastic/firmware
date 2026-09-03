@@ -7,6 +7,12 @@ on:
         required: false
         default: "2025"
         type: string
+      # WiX and the MSI add several minutes to a job every CI run pays for, so the
+      # installer is built by Daily Packaging alongside the deb/rpm packages instead.
+      build_msi:
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -143,6 +149,7 @@ jobs:
             .pio/build/native-windows/meshtasticd.exe
 
       - name: Install WiX
+        if: inputs.build_msi
         shell: pwsh
         run: |
           dotnet tool install --global wix --version 5.0.2
@@ -150,12 +157,14 @@ jobs:
           & "$env:USERPROFILE\.dotnet\tools\wix.exe" extension add -g WixToolset.Util.wixext/5.0.2
 
       - name: Build the MSI and winget manifests
+        if: inputs.build_msi
         shell: pwsh
         run: ./bin/build-winget-package.ps1 -ReleaseTag "v$env:LONG_VERSION" -Validate
         env:
           LONG_VERSION: ${{ steps.version.outputs.long }}
 
       - name: Store the MSI and winget manifests as an artifact
+        if: inputs.build_msi
         uses: actions/upload-artifact@v7
         with:
           name: meshtasticd-msi-${{ inputs.windows_ver }}-${{ steps.version.outputs.long }}
