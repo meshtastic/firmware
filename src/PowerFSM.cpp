@@ -58,12 +58,8 @@ static bool isPowered()
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
-/// True when the CDC console runs on the native USB-OTG peripheral (ARDUINO_USB_MODE=0) and the
-/// board is currently running on USB power. Light sleep powers that PHY down, after which the host
-/// can no longer re-enumerate the device and the console is gone until the cable is replugged.
-/// Needs a PMU: without one getHasUSB() cannot tell mains power from a battery wired to the USB
-/// connector, so boards like the Elecrow panels or the SenseCAP Indicator sleep as they did before.
-/// See https://github.com/meshtastic/firmware/issues/4206
+/// Native USB-CDC console on USB power: light sleep kills that PHY and the host cannot re-enumerate.
+/// Needs a PMU, otherwise getHasUSB() cannot tell mains from a battery on the USB connector. #4206
 static bool nativeUsbSerialActive()
 {
 #if defined(ARDUINO_USB_MODE) && (ARDUINO_USB_MODE == 0) && defined(ARDUINO_USB_CDC_ON_BOOT) &&                     \
@@ -161,9 +157,8 @@ static void lsIdle()
 
 #ifdef ARCH_ESP32
 
-    // USB may have been plugged in after boot, so re-check here instead of relying on the snapshot
-    // taken in PowerFSM_setup(). Leaving light sleep costs a wake cycle; losing the console costs a
-    // physical replug.
+    // Re-check here: USB may have been plugged in after PowerFSM_setup() took its snapshot.
+    // A wake cycle is cheaper than losing the console to a physical replug.
     if (nativeUsbSerialActive()) {
         LOG_INFO("Native USB-CDC on USB power: leaving light sleep (keeps serial alive)");
         powerFSM.trigger(EVENT_WAKE_TIMER);
@@ -464,9 +459,8 @@ void PowerFSM_setup()
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 
-    // Already on USB power at boot: skip registering the light-sleep transitions entirely, so a
-    // mains powered node never churns through wake cycles. Cables plugged in later are caught live
-    // by lsIdle(). See nativeUsbSerialActive().
+    // Already on USB power at boot: skip the light-sleep transitions entirely, so a mains powered
+    // node never churns through wake cycles. Cables plugged in later are caught by lsIdle().
     bool nativeUsbSerialAttached = nativeUsbSerialActive();
     if (nativeUsbSerialAttached)
         LOG_INFO("Native USB-CDC on USB power: light sleep disabled (keeps serial alive)");
