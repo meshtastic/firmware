@@ -187,16 +187,32 @@ static void resetConfig()
     // so entries armed by an earlier test would otherwise still occupy the table.
     MeshBeaconModule::clearAllTargetRadioSettings();
 
+    // A stock channel table, as a device boots with: MAX_NUM_CHANNELS slots, slot 0 PRIMARY on the
+    // default key, the rest DISABLED and free for an upsert. channelFile is a global that nothing
+    // else resets, so without this a case inherits whichever table the previous one happened to
+    // leave - and a by-value write then succeeds or fails on test ordering.
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = MAX_NUM_CHANNELS;
+    meshtastic_Channel &primary = channelFile.channels[0];
+    primary.index = 0;
+    primary.has_settings = true;
+    primary.role = meshtastic_Channel_Role_PRIMARY;
+    primary.settings.psk.size = 1;
+    primary.settings.psk.bytes[0] = 1; // the well-known default key
+    channels.onConfigChanged();
+
     initRegion();
 }
 
 // Install a single PRIMARY channel with an explicit name + PSK so the beacon channel-swap path
 // (sendBeaconPacket) has a real primary slot to save/restore and to read the active PSK from.
+// channels_count is MAX_NUM_CHANNELS, as initDefaults() leaves it on a real device: the table is
+// eight slots of which seven are DISABLED, not a one-slot table with nowhere to place a channel.
 static void installTestPrimaryChannel(const char *name, const uint8_t *psk, size_t pskLen)
 {
-    channelFile.channels_count = 1;
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = MAX_NUM_CHANNELS;
     meshtastic_Channel &ch = channelFile.channels[0];
-    ch = meshtastic_Channel_init_zero;
     ch.index = 0;
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
@@ -640,6 +656,9 @@ static void test_adminValidation_offerChannelByValue_survivesWrite(void)
     bcfg.broadcast_offer_channel.psk.size = sizeof(psk);
     memcpy(bcfg.broadcast_offer_channel.psk.bytes, psk, sizeof(psk));
 
+    // The by-value offer is upserted into the channel table; a real SEGMENT_CHANNELS save needs
+    // disk state this fixture does not stand up.
+    testAdmin->deferSaves();
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_offer_channel);
@@ -757,6 +776,7 @@ static void test_adminValidation_offerInvalidPreset_keepsPresetAndRest(void)
     bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
     offerChannelFromSlot(bcfg, 1);
 
+    testAdmin->deferSaves(); // the offer is upserted, so the save would reach the channel table
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_preset,
@@ -3822,23 +3842,6 @@ static void test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome(void)
 // Group 8: the by-value target - the remote-administration shape
 // ===========================================================================
 
-// A stock table: one PRIMARY at slot 0 and seven DISABLED slots, which is what initDefaults()
-// leaves behind. installTestPrimaryChannel() sets channels_count to 1, so an upsert there would
-// find no free slot - a fixture artefact no real device has.
-static void installStockChannelTable(const char *name, const uint8_t *psk, size_t pskLen)
-{
-    memset(&channelFile, 0, sizeof(channelFile));
-    channelFile.channels_count = MAX_NUM_CHANNELS;
-    meshtastic_Channel &ch = channelFile.channels[0];
-    ch.index = 0;
-    ch.has_settings = true;
-    ch.role = meshtastic_Channel_Role_PRIMARY;
-    strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
-    ch.settings.psk.size = (pb_size_t)pskLen;
-    memcpy(ch.settings.psk.bytes, psk, pskLen);
-    channels.onConfigChanged();
-}
-
 // Every slot live, so a placement has nowhere to go without evicting a channel.
 static void fillChannelTable()
 {
@@ -3878,7 +3881,7 @@ static const uint8_t kHomePsk[16] = {0xA1, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0
 static void test_byValue_explicitAndIndexedTargets_keepsIndexed(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
@@ -3912,7 +3915,7 @@ static void test_byValue_explicitAndIndexedTargets_keepsIndexed(void)
 static void test_byValue_explicitTargetAlone_survivesWrite(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
@@ -3939,7 +3942,7 @@ static void test_byValue_explicitTargetAlone_survivesWrite(void)
 static void test_byValue_unknownOnRegion_isCleared(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.broadcast_on_region = (meshtastic_Config_LoRaConfig_RegionCode)255;
@@ -3962,7 +3965,7 @@ static void test_byValue_unknownOnRegion_isCleared(void)
 static void test_byValue_unknownOnPreset_isCleared(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_on_preset = true;
@@ -3980,7 +3983,7 @@ static void test_byValue_unknownOnPreset_isCleared(void)
 static void test_byValue_onPresetThisRegionCannotRun_isKept(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_on_preset = true;
@@ -3999,7 +4002,7 @@ static void test_byValue_onPresetThisRegionCannotRun_isKept(void)
 static void test_byValue_onFrequencySlotZero_isCleared(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_on_frequency_slot = true;
@@ -4018,7 +4021,7 @@ static void test_byValue_onFrequencySlotZero_isCleared(void)
 static void test_byValue_onFrequencySlotOutOfRangeExplicitPair_isCleared(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
@@ -4040,7 +4043,7 @@ static void test_byValue_onFrequencySlotOutOfRangeExplicitPair_isCleared(void)
 static void test_byValue_onFrequencySlotOutOfRangeInheritedRegion_isKept(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_on_frequency_slot = true;
@@ -4061,7 +4064,7 @@ static void test_byValue_onFrequencySlotOutOfRangeInheritedRegion_isKept(void)
 static void test_byValue_targetChannel_isUpsertedIntoTable(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     onChannelByValue(bcfg, "ByValue", kByValuePsk, sizeof(kByValuePsk));
@@ -4083,7 +4086,7 @@ static void test_byValue_targetChannel_isUpsertedIntoTable(void)
 static void test_byValue_offerChannel_isUpsertedIntoTable(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_offer_channel = true;
@@ -4104,7 +4107,7 @@ static void test_byValue_offerChannel_isUpsertedIntoTable(void)
 static void test_byValue_existingChannel_isNotDuplicated(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     onChannelByValue(bcfg, "Home", kHomePsk, sizeof(kHomePsk));
@@ -4119,10 +4122,10 @@ static void test_byValue_existingChannel_isNotDuplicated(void)
 }
 
 /**
- * A full table cannot take the offered channel, but the advertisement needs no table entry - the
- * name and PSK go out verbatim. Being unable to join a mesh does not stop you advertising it.
+ * A channel named by value is in the table or it is not offered. A full table cannot take the
+ * offered channel, so the whole offer goes rather than advertising a mesh this node cannot join.
  */
-static void test_byValue_fullTable_offerIsAdvertisedAnyway(void)
+static void test_byValue_fullTable_offerIsWithheld(void)
 {
     resetConfig();
     fillChannelTable();
@@ -4132,13 +4135,39 @@ static void test_byValue_fullTable_offerIsAdvertisedAnyway(void)
     strncpy(bcfg.broadcast_offer_channel.name, "Offered", sizeof(bcfg.broadcast_offer_channel.name) - 1);
     bcfg.broadcast_offer_channel.psk.size = sizeof(kByValuePsk);
     memcpy(bcfg.broadcast_offer_channel.psk.bytes, kByValuePsk, sizeof(kByValuePsk));
+    bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
 
     testAdmin->deferSaves();
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel,
-                             "the offer stands: it is advertised without being joined");
-    TEST_ASSERT_EQUAL_STRING("Offered", moduleConfig.mesh_beacon.broadcast_offer_channel.name);
+    const auto &out = moduleConfig.mesh_beacon;
+    TEST_ASSERT_FALSE_MESSAGE(out.has_broadcast_offer_channel, "an unplaceable offered channel is not advertised");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_UNSET, out.broadcast_offer_region,
+                              "the rest of the offer goes with it - a region and preset alone invite onto no channel");
+    TEST_ASSERT_FALSE(out.has_broadcast_offer_preset);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(7).role, "no live channel was evicted");
+}
+
+/**
+ * A new identity never lands in the primary slot, even when the table is malformed enough to mark
+ * that slot DISABLED. An identity matching the primary resolves to it rather than being re-placed.
+ */
+static void test_byValue_upsertNeverClaimsThePrimarySlot(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, channels.findByIdentity("Home", kHomePsk, sizeof(kHomePsk)),
+                                    "an identity that is the primary resolves to it");
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, channels.upsertIdentity("Home", kHomePsk, sizeof(kHomePsk)),
+                                    "and the upsert reuses it rather than copying it elsewhere");
+
+    // Malformed: the slot primaryIndex points at is DISABLED. It must still not be claimed.
+    channelFile.channels[0].role = meshtastic_Channel_Role_DISABLED;
+    const int16_t placed = channels.upsertIdentity("ByValue", kByValuePsk, sizeof(kByValuePsk));
+    TEST_ASSERT_GREATER_THAN_INT16_MESSAGE(0, placed, "a new identity never takes the primary index");
 }
 
 /**
@@ -4178,7 +4207,7 @@ static void test_byValue_fullTable_targetIsWithheld(void)
 static void test_byValue_oversizedRemoteWrite_isRejectedTooLarge(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     uint8_t bigPsk[32];
     memset(bigPsk, 0x5A, sizeof(bigPsk));
@@ -4227,7 +4256,7 @@ static void test_byValue_oversizedRemoteWrite_isRejectedTooLarge(void)
 static void test_byValue_oversizedWriteFromLocalClient_isAccepted(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     uint8_t bigPsk[32];
     memset(bigPsk, 0x5A, sizeof(bigPsk));
@@ -4271,7 +4300,7 @@ static void test_byValue_oversizedWriteFromLocalClient_isAccepted(void)
 static void test_byValue_defaultKeyRemoteWrite_isAccepted(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     static const uint8_t defaultKey[1] = {0x01};
 
@@ -4297,7 +4326,7 @@ static void test_byValue_defaultKeyRemoteWrite_isAccepted(void)
 static void test_broadcaster_byValueTarget_sendsOnThatChannel(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
@@ -4324,7 +4353,7 @@ static void test_broadcaster_byValueTarget_sendsOnThatChannel(void)
 static void test_broadcaster_byValueTargetWithoutChannel_retunesThePrimary(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
@@ -4350,7 +4379,7 @@ static void test_broadcaster_byValueTargetWithoutChannel_retunesThePrimary(void)
 static void test_broadcaster_byValueTargetChannelMissing_withholdsTarget(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     moduleConfig.has_mesh_beacon = true;
     auto &bcfg = moduleConfig.mesh_beacon;
@@ -4374,7 +4403,7 @@ static void test_broadcaster_byValueTargetChannelMissing_withholdsTarget(void)
 static void test_sidecar_rearmSameId_movesTheIdRatherThanDuplicatingIt(void)
 {
     resetConfig();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
     p.id = 0x1234;
@@ -4404,7 +4433,7 @@ static void test_sidecar_rearmSameId_movesTheIdRatherThanDuplicatingIt(void)
 static void test_broadcaster_presetOnlyTargetSwappingRegion_isNotDropped(void)
 {
     resetConfig(); // EU_868 / LONG_FAST; EU_868 does not carry NARROW_SLOW, EU_N_868 does
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     moduleConfig.has_mesh_beacon = true;
     auto &bcfg = moduleConfig.mesh_beacon;
@@ -4437,7 +4466,7 @@ static void test_broadcaster_offerWithOnlyFrequencySlot_isSent(void)
     // EU_868 holds a single slot at LONG_FAST, so there is no second slot to pin; US has 104.
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
-    installStockChannelTable("Home", kHomePsk, sizeof(kHomePsk));
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
 
     // Pin a slot derivation would not produce, or the offer omits it as redundant.
     uint32_t derived = 0;
@@ -4690,7 +4719,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_targetChannel_isUpsertedIntoTable);
     RUN_TEST(test_byValue_offerChannel_isUpsertedIntoTable);
     RUN_TEST(test_byValue_existingChannel_isNotDuplicated);
-    RUN_TEST(test_byValue_fullTable_offerIsAdvertisedAnyway);
+    RUN_TEST(test_byValue_fullTable_offerIsWithheld);
+    RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_fullTable_targetIsWithheld);
     RUN_TEST(test_byValue_oversizedRemoteWrite_isRejectedTooLarge);
     RUN_TEST(test_byValue_oversizedWriteFromLocalClient_isAccepted);

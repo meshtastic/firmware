@@ -234,10 +234,15 @@ static bool placeChannelIdentity(const meshtastic_ChannelIdentity &id, bool &wro
 bool MeshBeaconModule::upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     bool wrote = false;
-    // Best effort for the offer: the advertisement needs no table entry, name and PSK go out
-    // verbatim. A full table only means the node cannot also join - worth a log line, nothing more.
-    if (bcfg.has_broadcast_offer_channel && !placeChannelIdentity(bcfg.broadcast_offer_channel, wrote))
-        LOG_INFO("Beacon: channel table full, advertising the offered channel without joining it");
+    // A channel named by value is in the table or it is not offered. Advertising a mesh this node
+    // could not itself join invites others onto a channel it cannot verify it holds the key for.
+    if (bcfg.has_broadcast_offer_channel && !placeChannelIdentity(bcfg.broadcast_offer_channel, wrote)) {
+        LOG_WARN("Beacon: channel table full, the offered channel cannot be placed - offer withheld");
+        bcfg.has_broadcast_offer_channel = false;
+        bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        bcfg.has_broadcast_offer_preset = false;
+        bcfg.has_broadcast_offer_frequency_slot = false;
+    }
 
     // The target is different: the TX path needs that channel's key to encrypt. Withheld whole
     // rather than re-pointed at the primary, which would beacon on a channel nobody named.
