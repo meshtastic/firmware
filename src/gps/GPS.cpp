@@ -2253,11 +2253,6 @@ bool GPS::lookForLocation()
                  // parsed fix-quality value directly. Generate the canonical GGA sentence and
                  // parse the fix-quality field from it instead.
         fixQual = 0;
-    == == == =
-                 // GGA provides fix quality, but this TinyGPS++ build does not expose the
-                 // parsed fix-quality value directly. Generate the canonical GGA sentence and
-                 // parse the fix-quality field from it instead.
-        fixQual = 0;
     char ggaSentence[128];
     const int ggaLen = reader.GGA(ggaSentence);
     (void)ggaLen;
