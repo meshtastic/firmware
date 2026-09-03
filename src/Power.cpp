@@ -23,6 +23,7 @@
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
@@ -39,6 +40,10 @@
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
 #include "input/LinuxJoystick.h"
+#endif
+
+#ifdef HAS_ADS1115
+#include <Adafruit_ADS1X15.h>
 #endif
 
 // Working USB detection for powered/charging states on the RAK platform
@@ -726,6 +731,119 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 static AnalogBatteryLevel analogLevel;
 
+#ifdef HAS_ADS1115
+#include "SPILock.h"
+#include <AW35615.h>
+
+/**
+ * @brief Battery level sensor using an ADS1115 16-bit ADC on I2C.
+ * Channel 0 measures battery voltage through a 1:2 resistive divider.
+ * USB / Charging status is managed via an AW35615 USB-C CC controller.
+ */
+class ADS1115BatteryLevel : public AnalogBatteryLevel
+{
+  public:
+    bool init()
+    {
+        {
+            concurrency::LockGuard guard(spiLock);
+            if (!_ads.begin(ADS1115_ADDR, &Wire)) {
+                LOG_WARN("ADS1115 not found on I2C bus - battery sensor unavailable");
+                return false;
+            }
+            _ads.setGain(GAIN_ONE);                // ±4.096 V FSR matches standard 1:2 voltage-divider
+            _ads.setDataRate(RATE_ADS1115_860SPS); // Maximize conversion speed to keep bus locking minimal
+        }
+
+        initialized = true;
+        LOG_INFO("[ADS1115] battery sensor initialized");
+
+        if (_aw35615.begin(Wire)) {
+            LOG_INFO("[AW35615] USB-C CC controller initialized");
+        } else {
+            LOG_WARN("[AW35615] not found at 0x22");
+        }
+        getBattVoltage(); // initial read cached_mv
+        return true;
+    }
+
+    virtual bool isBatteryConnect() override { return true; }
+    virtual uint16_t getBattVoltage() override
+    {
+        if (!initialized)
+            return 0;
+
+        static constexpr uint32_t MIN_READ_INTERVAL_MS = 30000;
+        if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_ms, MIN_READ_INTERVAL_MS)) {
+            last_read_ms = millis();
+            float sum = 0;
+            {
+                concurrency::LockGuard guard(spiLock);
+                for (uint8_t i = 0; i < SAMPLE_COUNT; i++) {
+                    int16_t raw = _ads.readADC_SingleEnded(0);
+                    sum += _ads.computeVolts(raw);
+                }
+            }
+
+            // Voltage divider scales by 2.0; convert volts to millivolts
+            float v = (sum / (float)SAMPLE_COUNT) * 2.0f * 1000.0f;
+
+            if (!initial_read_done) {
+                cached_mv = static_cast<uint16_t>(v);
+                initial_read_done = true;
+            } else {
+                // Exponential moving average filter (50% smoothing)
+                cached_mv = static_cast<uint16_t>(cached_mv + (v - cached_mv) * 0.5f);
+            }
+        }
+        return cached_mv;
+    }
+
+    virtual bool isVbusIn() override
+    {
+        if (_aw35615.isReady()) {
+            concurrency::LockGuard guard(spiLock);
+            return _aw35615.isVbusPresent() && cached_mv >= 4200;
+        }
+        // Fallback to base GPIO/board checks (or false) if CC chip is absent
+        return false;
+    }
+
+    virtual bool isCharging() override
+    {
+        if (!isBatteryConnect())
+            return false;
+
+        if (_aw35615.isReady()) {
+            concurrency::LockGuard guard(spiLock);
+            return _aw35615.isSinkAttached() && cached_mv >= 4200;
+        }
+        return isVbusIn();
+    }
+
+  private:
+    static constexpr uint8_t SAMPLE_COUNT = 3;
+    Adafruit_ADS1115 _ads;
+    AW35615 _aw35615;
+
+    bool initialized = false;
+    bool initial_read_done = false;
+    uint16_t cached_mv = 0;
+    uint32_t last_read_ms = 0;
+};
+
+static ADS1115BatteryLevel ads1115BattLevel;
+
+bool Power::ads1115Init()
+{
+    if (ads1115BattLevel.init()) {
+        batteryLevel = &ads1115BattLevel;
+        return true;
+    }
+    return false;
+}
+#endif // HAS_ADS1115
+
 Power::Power() : OSThread("Power")
 {
     statusHandler = {};
@@ -822,6 +940,10 @@ bool Power::setup()
         found = true;
     } else if (meshSolarInit()) {
         found = true;
+#ifdef HAS_ADS1115
+    } else if (ads1115Init()) {
+        found = true;
+#endif
     } else if (analogInit()) {
         found = true;
     } else {
@@ -855,6 +977,14 @@ void Power::powerCommandsCheck()
         shutdownAtMsec = 0;
         shutdown();
     }
+
+#ifdef ARCH_STM32
+    // Deferred DFU entry; the delay is armed by AdminModule's enter_dfu handler (rationale there).
+    if (enterDfuAtMsec && Throttle::deadlinePassed(enterDfuAtMsec)) {
+        enterDfuAtMsec = 0;
+        enterDfuMode(); // never returns
+    }
+#endif
 }
 
 void Power::reboot()
@@ -1117,12 +1247,23 @@ void Power::logHeapUsage()
     // The first line has no earlier sample to difference against
     const int32_t delta = lastHeapLogTime ? (int32_t)(heapFree - lastHeapLogFree) : 0;
 
+    // min only ever falls: one step down is a transient alloc, repeated new lows are a leak.
+    // A steady min with a shrinking largest block is fragmentation. Empty where unsupported.
+    char detail[64] = "";
+    const uint32_t minFree = memGet.getMinFreeHeap();
+    const uint32_t maxAlloc = memGet.getMaxAllocHeap();
+    if (minFree || maxAlloc)
+        snprintf(detail, sizeof(detail), ", min %u, largest block %u", minFree, maxAlloc);
+
     const uint32_t psramTotal = memGet.getPsramSize();
     if (psramTotal)
-        LOG_INFO("Heap: %u/%u bytes free (%d since last), PSRAM: %u/%u bytes free", heapFree, heapTotal, delta,
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)%s, PSRAM: %u/%u bytes free", heapFree, heapTotal, delta, detail,
                  memGet.getFreePsram(), psramTotal);
     else
-        LOG_INFO("Heap: %u/%u bytes free (%d since last)", heapFree, heapTotal, delta);
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)%s", heapFree, heapTotal, delta, detail);
+
+    // Which tagged subsystem moved since boot
+    memaudit::logBreakdown("periodic");
 
     lastHeapLogFree = heapFree;
     lastHeapLogTime = millis();

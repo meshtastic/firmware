@@ -35,7 +35,8 @@ on:
       #- "**.yml"
 
   schedule:
-    # Nightly develop build, published to meshtastic.github.io firmware-nightly/ (no GitHub release).
+    # Nightly develop build, published to meshtastic.github.io firmware-nightly/ and to the
+    # meshtastic-firmware-nightly R2 bucket (no GitHub release).
     # Scheduled runs execute on the default branch (develop). 07:00 UTC avoids the 00:00 tests
     # and 02:00 daily_packaging crons.
     - cron: 0 7 * * * # Nightly develop build/publish (default branch is develop)
@@ -44,7 +45,7 @@ on:
     inputs:
       # trunk-ignore(checkov/CKV_GHA_7): intentional manual-test switch for the nightly publish path
       nightly:
-        description: "Nightly mode: build + publish develop to github.io firmware-nightly/ (skips creating a GitHub release)"
+        description: "Nightly mode: build + publish develop to github.io firmware-nightly/ and R2 (skips creating a GitHub release)"
         type: boolean
         default: false
 
@@ -58,7 +59,7 @@ jobs:
         with:
           # Needed to diff against the base branch for newly added variants.
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: 3.x
           cache: pip
@@ -500,7 +501,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: 3.x
 
@@ -599,7 +600,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: 3.x
 
@@ -649,6 +650,7 @@ jobs:
     env:
       targets: |-
         esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
+      r2_bucket: meshtastic-firmware-release
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -656,7 +658,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: 3.x
 
@@ -697,10 +699,40 @@ jobs:
           commit_message: ${{ needs.version.outputs.long }}
           enable_jekyll: true
 
+      # Mirror the same staged directory to Cloudflare R2, under a version prefix
+      # at the bucket root. Additive (no --delete), matching keep_files:true
+      # above: release_channels.yml later publishes an updated release_notes.md
+      # into this same prefix, and a --delete sync on a re-run would remove it.
+      - name: Publish firmware to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          # R2 is single-region; the S3 API still requires a region to be set.
+          AWS_DEFAULT_REGION: auto
+          # Cloudflare's documented aws-cli settings for R2. Left at the AWS
+          # default, CLI >= 2.23 attaches CRC32 request checksums that R2 can
+          # reject, so both of these must stay at when_required.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          # Same event/* prefixing as the github.io publish above.
+          DEST_PREFIX: ${{ contains(github.ref_name, 'event/') && format('{0}/', github.ref_name) || '' }}
+          VERSION: ${{ needs.version.outputs.long }}
+        run: |
+          set -euo pipefail
+          aws --version
+          # Cache for 1 day in browser, 1 month on CDN.
+          aws s3 sync ./publish "s3://${r2_bucket}/${DEST_PREFIX}${VERSION}/" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --no-progress \
+            --metadata "commit=${{ github.sha }},run=${{ github.run_id }},version=${VERSION}" \
+            --cache-control 'public, max-age=86400, s-maxage=2592000'
+
   # Nightly publish: refresh the single, stable firmware-nightly/ folder on
-  # meshtastic.github.io with the current develop build. Runs on the cron schedule
-  # (or a manual nightly=true dispatch) and never creates a GitHub release. The
-  # folder's release_notes.md is maintained by hand and deliberately left untouched.
+  # meshtastic.github.io, and the root of the meshtastic-firmware-nightly R2
+  # bucket, with the current develop build. Runs on the cron schedule (or a manual
+  # nightly=true dispatch) and never creates a GitHub release. The folder's
+  # release_notes.md is maintained by hand and deliberately left untouched.
   publish-nightly:
     runs-on: ubuntu-24.04
     if: github.repository_owner == 'meshtastic' && (github.event_name == 'schedule' || github.event.inputs.nightly == 'true')
@@ -708,6 +740,7 @@ jobs:
     env:
       targets: |-
         esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
+      r2_bucket: meshtastic-firmware-nightly
     steps:
       - name: Get firmware artifacts
         uses: actions/download-artifact@v8
@@ -755,6 +788,21 @@ jobs:
       - name: Display structure of files to publish
         run: ls -lR ./stage
 
+      - name: Verify the staged nightly is not empty
+        # Both publishes below refresh their destination in place (keep_files:false
+        # for github.io, --delete for the R2 sync), so an empty ./stage would clear
+        # the live nightly rather than replace it. A failed or pattern-mismatched
+        # artifact download is the way that happens, so fail closed here instead.
+        run: |
+          set -euo pipefail
+          images=$(find ./stage -type f \
+            \( -name 'firmware-*.bin' -o -name 'firmware-*.uf2' -o -name 'firmware-*.hex' \) | wc -l)
+          echo "Staged firmware images: $images"
+          if [ "$images" -eq 0 ]; then
+            echo "::error::No firmware images in ./stage; refusing to publish an empty nightly."
+            exit 1
+          fi
+
       - name: Publish nightly to meshtastic.github.io
         uses: peaceiris/actions-gh-pages@v4
         with:
@@ -771,3 +819,38 @@ jobs:
           user_email: github-actions[bot]@users.noreply.github.com
           commit_message: Nightly ${{ needs.version.outputs.long }}
           enable_jekyll: true
+
+      # Mirror the same staged directory to Cloudflare R2. --delete at the bucket
+      # root is the counterpart of keep_files:false above - it clears stale nightly
+      # binaries - and is in scope for the whole bucket because this bucket holds
+      # nothing but the nightly build. release_notes.md is carried into ./stage by
+      # the step above, so the sync preserves it here too.
+      - name: Publish nightly to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          # R2 is single-region; the S3 API still requires a region to be set.
+          AWS_DEFAULT_REGION: auto
+          # Cloudflare's documented aws-cli settings for R2. Left at the AWS
+          # default, CLI >= 2.23 attaches CRC32 request checksums that R2 can
+          # reject, so both of these must stay at when_required.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -euo pipefail
+          aws --version
+          # Cache for 1 hour in browser, 1 day on CDN.
+          aws s3 sync ./stage "s3://${r2_bucket}/" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --no-progress \
+            --delete \
+            --exclude 'index.json' \
+            --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
+            --cache-control 'public, max-age=3600, s-maxage=86400'
+          # index.json is the pointer to the current nightly, don't cache it so hard (5 minutes).
+          aws s3 cp ./stage/index.json "s3://${r2_bucket}/index.json" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --no-progress \
+            --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
+            --cache-control 'public, max-age=300'
