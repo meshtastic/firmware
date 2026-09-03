@@ -1212,12 +1212,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
         } else if (config.security.public_key.size == 0 || nodeDB->checkLowEntropyPublicKey(config.security.public_key)) {
-            // A rejected pre-2.8 low-entropy key was swapped for a fresh one: say so at set time, not
-            // after the next reboot. Only when the private key really was replaced - a blacklisted public
-            // key whose private key derives a clean one is re-derived, and that key did stick.
+            // Warn at set time, not after the next reboot, and only when the key really was replaced: a
+            // blacklisted public key whose private key derives a clean one is re-derived, and that stuck.
             uint8_t priorPrivateKey[32];
             memcpy(priorPrivateKey, config.security.private_key.bytes, 32);
-            const bool keygenSucceeded = nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+            const bool keygenSucceeded = nodeDB->generateCryptoKeyPair(priorPrivateKey);
             const bool keyWasReplaced = memcmp(priorPrivateKey, config.security.private_key.bytes, 32) != 0;
             if (keygenSucceeded && keyWasReplaced && nodeDB->keyIsLowEntropy) {
                 sendWarning(LOW_ENTROPY_RESTORE_WARNING);

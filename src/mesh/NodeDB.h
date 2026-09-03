@@ -591,6 +591,9 @@ class NodeDB
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+    void generateBlacklistCheckedKeyPair();
+#endif
 #endif
 
     /// Consolidate crypto key generation logic used across multiple modules

@@ -1709,9 +1709,8 @@ static void test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged()
     TEST_ASSERT_EQUAL_UINT(0, config.security.admin_key[0].size);
 }
 
-// Only CryptoEngine knows what public key a private key derives to, and no low-entropy private key
-// is published - so stand in for the engine to make a restore derive a blacklisted key on demand.
-// hash() is left real: the blacklist lookup runs through it.
+// No low-entropy private key is published, so stand in for the engine to derive a blacklisted public
+// key on demand. hash() is left real: the blacklist lookup runs through it.
 static const uint8_t COMPROMISED_PUBLIC_KEY[32] = {0xac, 0xaf, 0x8c, 0x1c, 0x3c, 0x1c, 0x37, 0xac, 0x4f, 0x03, 0xa1,
                                                    0xe9, 0xfc, 0x37, 0x23, 0x29, 0xc8, 0xa3, 0x5d, 0x7f, 0x05, 0x26,
                                                    0xeb, 0x00, 0xbd, 0x26, 0xb8, 0x2e, 0xb1, 0x94, 0x7d, 0x24};
@@ -1731,8 +1730,17 @@ class RestoreDerivingCryptoEngine : public CryptoEngine
             memset(pubKey, 0x7C, 32);
         return true;
     }
+    uint8_t lowEntropyMints = 0; // mint this many blacklisted keys before yielding a clean one
+    uint8_t generateKeyPairCalls = 0;
     void generateKeyPair(uint8_t *pubKey, uint8_t *privKey) override
     {
+        generateKeyPairCalls++;
+        if (lowEntropyMints > 0) {
+            lowEntropyMints--;
+            memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
+            memset(privKey, 0x6F, 32);
+            return;
+        }
         memset(pubKey, 0x5E, 32);
         memset(privKey, 0x5F, 32);
     }
@@ -1852,6 +1860,22 @@ static void test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn()
     TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
     TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
     TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// The replacement for a rejected key is itself checked: a mint that lands back on the blacklist is
+// retried rather than persisted.
+static void test_handleSetConfig_security_blacklistedReplacementIsRetried()
+{
+    RestoreDerivingCryptoEngine *stub = installRestoreCrypto();
+    stub->lowEntropyMints = 1;
+
+    const meshtastic_Config c = makeBareKeyRestoreConfig();
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(2, stub->generateKeyPairCalls);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
 }
 
 // keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
@@ -2586,6 +2610,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates);
     RUN_TEST(test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected);
     RUN_TEST(test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn);
+    RUN_TEST(test_handleSetConfig_security_blacklistedReplacementIsRetried);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
