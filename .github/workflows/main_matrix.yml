@@ -178,7 +178,10 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: "!contains(github.ref_name, 'event/')"
+    # release-artifacts and publish-nightly both need this job, so a dispatch or schedule
+    # must reach it on any ref. Skipping event/ refs is only about sparing push and PR
+    # runs on those branches the build cost.
+    if: contains(fromJSON('["workflow_dispatch", "schedule"]'), github.event_name) || !contains(github.ref_name, 'event/')
     strategy:
       fail-fast: false
       matrix:
@@ -484,13 +487,14 @@ jobs:
         run: python3 bin/size_report.py ./current-sizes.json --budgets bin/ram_budgets.json --enforce-budgets
 
   release-artifacts:
-    permissions: # Needed for 'gh release upload'.
-      contents: write
+    permissions:
+      contents: write # Needed for 'gh release upload'.
+      actions: read # SignPath pulls the MSI artifact back through the GitHub API.
     runs-on: ubuntu-latest
-    # Lifted to the job so the signing step can branch on it: the secrets context is not
-    # available in a step-level `if`.
+    # Only the flag is lifted to job scope, so the token itself reaches the signing step
+    # and no other: the secrets context is not available in a step-level `if`.
     env:
-      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -566,7 +570,7 @@ jobs:
       # winget manifest pinning a stale SHA256. Skipped with a warning until the secret
       # exists, which leaves the MSI unsigned rather than failing the release.
       - name: Sign the MSI
-        if: env.SIGNPATH_API_TOKEN != ''
+        if: env.SIGNPATH_ENABLED == 'true'
         uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -582,11 +586,20 @@ jobs:
           output-artifact-directory: ./output/msi
 
       - name: Report the MSI signing state
+        # The signed MSI is extracted over the unsigned download, so a name change on
+        # either side would leave both behind and publish whichever the glob hit first.
+        # Fail here instead: package_winget.yml also rejects a release carrying two MSIs.
         run: |
-          if [ -z "${SIGNPATH_API_TOKEN}" ]; then
-            echo "::warning::SIGNPATH_API_TOKEN is not set; publishing an unsigned MSI."
-          else
+          set -euo pipefail
+          count=$(find ./output/msi -maxdepth 1 -name '*.msi' | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly one MSI in ./output/msi, found $count."
+            exit 1
+          fi
+          if [ "${SIGNPATH_ENABLED}" = "true" ]; then
             echo "MSI signed by SignPath."
+          else
+            echo "::warning::SIGNPATH_API_TOKEN is not set; publishing an unsigned MSI."
           fi
 
       - name: Zip Linux sources
