@@ -19,6 +19,11 @@ on:
         required: false
         default: false
         type: boolean
+    secrets:
+      # Named rather than inherited: this job runs a third-party binary, so it gets the
+      # one credential it needs instead of every secret the caller can see.
+      WINGET_TOKEN:
+        required: false
   workflow_dispatch:
     inputs:
       release_tag:
@@ -106,9 +111,19 @@ jobs:
             Write-Host "::warning::WINGET_TOKEN is not set; skipping the winget-pkgs submission for $env:PKG_ID $env:PKG_VERSION."
             exit 0
           }
-          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          # Pinned by version and hash rather than aka.ms/wingetcreate/latest: this binary
+          # is handed WINGET_TOKEN, so a moving redirect would be an unverified dependency
+          # with credentials. Bump both values together.
+          Invoke-WebRequest -OutFile wingetcreate.exe `
+            -Uri "https://github.com/microsoft/winget-create/releases/download/$env:WINGETCREATE_VERSION/wingetcreate.exe"
+          $actual = (Get-FileHash wingetcreate.exe -Algorithm SHA256).Hash
+          if ($actual -ne $env:WINGETCREATE_SHA256) {
+            throw "wingetcreate.exe hashes to $actual, expected $env:WINGETCREATE_SHA256"
+          }
           ./wingetcreate.exe submit --token $env:WINGET_TOKEN $env:MANIFEST_DIR
         env:
+          WINGETCREATE_VERSION: v1.12.13.0
+          WINGETCREATE_SHA256: 24042BD37915805615E6CF969AC57C6439124C3FE85823327F5F3FB24BD9FFEA
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
           MANIFEST_DIR: ${{ steps.manifests.outputs.dir }}
           PKG_ID: ${{ inputs.package_identifier }}

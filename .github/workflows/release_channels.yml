@@ -58,7 +58,8 @@ jobs:
       package_identifier: |-
         ${{ contains(github.event.release.name, 'Beta') && 'Meshtastic.Meshtasticd' || 'Meshtastic.Meshtasticd.Alpha' }}
       submit: true
-    secrets: inherit
+    secrets:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
 
   publish-release-notes:
     if: github.event.action == 'published'

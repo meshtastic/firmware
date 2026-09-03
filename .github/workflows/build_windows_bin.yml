@@ -7,8 +7,8 @@ on:
         required: false
         default: "2025"
         type: string
-      # WiX and the MSI add several minutes to a job every CI run pays for, so the
-      # installer is built by Daily Packaging alongside the deb/rpm packages instead.
+      # WiX and the MSI add several minutes to a job every CI run pays for, and only the
+      # release and nightly publishes consume one, so those runs opt in instead.
       build_msi:
         required: false
         default: false
