@@ -73,4 +73,5 @@ test_stream_api	writes=config.proto,module.proto,device.proto,channels.proto,nod
 test_traceroute_nexthop	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	traceroute route selection reads the node DB
 test_traffic_management	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat errors=3000..12000	constructs a NodeDB for the per-node rate-limit and dedup state; test_tm_fuzz_nodenum_blitz feeds malformed payloads, and each rejection logs (measured 7985)
 test_transmit_history	writes=transmit_history.dat	persistence round-trip: what it asserts is that retransmission state survives a save/load
+test_userprefs_beacon	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	cold-boots one NodeDB so the compile-time USERPREFS_MESH_BEACON_* block runs at all; the constructor persists the default segments it installs
 test_warm_store	writes=warm.dat	persistence round-trip of the warm-tier snapshot, which is the tier's whole contract

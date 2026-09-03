@@ -354,14 +354,8 @@ void test_setchannel_demotes_old_primary()
 }
 
 // =====================================================================================
-// Group 5: decryptForHash() bounds - regression pin for #11046 (cfecef537). Pre-fix the
-// bound was `>`, so chIndex == getNumChannels() read one past hashes[] on the hot decode
-// path for every received packet.
-// =====================================================================================
-
-// ---------------------------------------------------------------------------
 // Group 4b: findByIdentity / upsertIdentity - naming a channel by value
-// ---------------------------------------------------------------------------
+// =====================================================================================
 
 // One PRIMARY at slot 0 and every other slot DISABLED, which is what a stock table looks like.
 static void seedTableWithPrimary(const char *name, const uint8_t *psk, uint8_t pskLen)
@@ -480,6 +474,12 @@ void test_upsert_prefers_the_disabled_slot_that_held_this_identity()
     TEST_ASSERT_EQUAL(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(3).role);
     TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
 }
+
+// =====================================================================================
+// Group 5: decryptForHash() bounds - regression pin for #11046 (cfecef537). Pre-fix the
+// bound was `>`, so chIndex == getNumChannels() read one past hashes[] on the hot decode
+// path for every received packet.
+// =====================================================================================
 
 void test_decryptforhash_rejects_out_of_range_index()
 {
