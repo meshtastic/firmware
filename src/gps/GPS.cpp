@@ -1352,6 +1352,11 @@ void GPS::setConnected()
 // We want a GPS lock. Wake the hardware
 void GPS::up()
 {
+#if defined(TTGO_T_ECHO_PLUS_inkHud2)
+    if (gnssModel == GNSS_MODEL_MTK || gnssModel == GNSS_MODEL_UNKNOWN) {
+        // TODO: implement satellite activity reset for MTK models
+    }
+#endif
     scheduling.informSearching();
     setPowerState(GPS_ACTIVE);
 }
@@ -1562,26 +1567,12 @@ int32_t GPS::runOnce()
             }
         }
 
-        // Satellite/GSV display changes are deliberately status-only. They
-        // must not set shouldPublish, clear fixHoldEnds, call PositionModule,
-        // or alter the official scheduler's success/failure/backoff behavior.
-        if (statusOnlyDirty) {
-            if (!shouldPublish)
-                notifyStatusObservers();
-            statusOnlyDirty = false;
-        }
-
         bool tooLong = scheduling.searchedTooLong();
         if (tooLong && !gotLoc) {
             LOG_WARN("Can't publish valid location: no GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
-                // Losing a position fix must not erase independent receiver
-                // status. Keep the latest satellite count so GPSStatus/Base
-                // UI can still show satellites that are currently visible.
-                const uint32_t lastSatsInView = p.sats_in_view;
                 p = meshtastic_Position_init_default;
-                p.sats_in_view = lastSatsInView;
                 hasValidLocation = false;
                 shouldPublish = true;
                 LOG_DEBUG_GPS("hasValidLocation FALLING EDGE");
@@ -1591,11 +1582,7 @@ int32_t GPS::runOnce()
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
         bool holdExpired = holdJustExpired(fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
-            // At the end of every scheduled GPS update window, also publish
-            // the current satellite status when TinyGPS++ has previously
-            // supplied a positive count. This keeps GPSStatus/Base UI in sync
-            // even if there is no new position fix in this particular window.
-            if ((gotTime && hasValidLocation) || p.sats_in_view > 0) {
+            if (gotTime && hasValidLocation) {
                 shouldPublish = true;
             }
             if (shouldPublish) {
@@ -2143,6 +2130,7 @@ bool GPS::lookForTime()
             // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
             fixQual = reader.fixQuality();
 
+<<<<<<< HEAD
 #ifndef TINYGPS_OPTION_NO_STATISTICS
             if (reader.failedChecksumCount > lastChecksumFailCount) {
 // In a GPS_DEBUG build we want to log all of these. In production, we only care if there are many of them.
@@ -2204,6 +2192,27 @@ bool GPS::lookForTime()
                 haveSatelliteCount = true;
             }
 
+=======
+            const uint8_t parsedFixType = reader.gsaFixType();
+
+            // Satellite visibility is status information, not proof of a valid
+            // position fix. Update it before any of the early returns below so the
+            // Base UI can show satellites while the receiver is still acquiring or
+            // while another validation check rejects the current position solution.
+            // Prefer the true GSV satellites-in-view count and fall back to GGA.
+            const uint16_t satsInView = reader.satellitesInView();
+            uint16_t reportedSats = 0;
+            bool haveSatelliteCount = false;
+
+            if (satsInView > 0) {
+                reportedSats = satsInView;
+                haveSatelliteCount = true;
+            } else if (reader.satellites.isValid()) {
+                reportedSats = reader.satellites.value();
+                haveSatelliteCount = true;
+            }
+
+>>>>>>> e9dcdfe17 (t-ech-plust-echo-plus)
             if (haveSatelliteCount && p.sats_in_view != reportedSats) {
                 p.sats_in_view = reportedSats;
                 // Publish the status change even if lookForLocation() returns false
@@ -2219,6 +2228,7 @@ bool GPS::lookForTime()
                 return false;
 
 #if GPS_DEBUG
+<<<<<<< HEAD
             LOG_DEBUG("AGE: LOC=%d DATE=%d TIME=%d FIXTYPE=%u", reader.location.age(), reader.date.age(), reader.time.age(),
                       parsedFixType);
 #endif // GPS_DEBUG
@@ -2384,11 +2394,151 @@ bool GPS::lookForTime()
         if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
             if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
                 rebootsSeen++;
+=======
+            LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+                      gsafixtype.age(),
+#else
+                      0,
+#endif
+                      reader.date.age(), reader.time.age());
+#endif // GPS_DEBUG
+
+            // TinyGPSPlus exposes checksum failures via the public API, not a direct
+            // member access from this translation unit. Avoid invalid access to a
+            // private member and skip the legacy bad-checksum branch entirely.
+
+            // Is this a new point or are we re-reading the previous one?
+            if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
+                return false;
+
+            // check if a complete GPS solution set is available for reading
+            //   tinyGPSDatum::age() also includes isValid() test
+            // FIXME
+            if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+                  (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
+#endif
+                  (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
+                LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(),
+                         reader.date.age());
+                return false;
             }
-            charsInBuf = 0;
-        } else {
-            charsInBuf++;
+
+            // We know the solution is fresh and valid, so just read the data
+            auto loc = reader.location.value();
+
+            // Bail out EARLY to avoid overwriting previous good data (like #857)
+            if (toDegInt(loc.lat) > 900000000) {
+                LOG_DEBUG_GPS("Bail out EARLY on LAT %i", toDegInt(loc.lat));
+                return false;
+            }
+            if (toDegInt(loc.lng) > 1800000000) {
+                LOG_DEBUG_GPS("Bail out EARLY on LNG %i", toDegInt(loc.lng));
+                return false;
+            }
+
+            p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
+
+            // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+            const uint16_t gsaHdop = reader.gsaHDOP();
+            const uint16_t gsaPdop = reader.gsaPDOP();
+            p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
+            p.PDOP = gsaPdop ? gsaPdop : TinyGPSPlus::parseDecimal(gsapdop.value());
+#else
+            // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+            // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+            p.HDOP = reader.hdop.value();
+            p.PDOP = 1.41 * reader.hdop.value();
+#endif
+
+            // Discard incomplete or erroneous readings
+            if (reader.hdop.value() == 0) {
+                LOG_WARN("BOGUS hdop.value() REJECTED: %d", reader.hdop.value());
+                return false;
+            }
+
+            p.latitude_i = toDegInt(loc.lat);
+            p.longitude_i = toDegInt(loc.lng);
+
+            p.altitude_geoidal_separation = reader.geoidHeight.meters();
+            p.altitude_hae = reader.altitude.meters() + p.altitude_geoidal_separation;
+            p.altitude = reader.altitude.meters();
+
+            p.fix_quality = fixQual;
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+            p.fix_type = fixType;
+#endif
+
+            LOG_DEBUG_GPS("GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
+                          reader.gsaSatellitesUsedTotal(), reader.satellitesTracked(), reader.satellitesInView(),
+                          reader.gsaSatellitesUsed(TINYGPS_GNSS_GPS), reader.gsaSatellitesUsed(TINYGPS_GNSS_GLONASS),
+<<<<<<< HEAD
+                          reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU),
+                          reader.satellites.isValid() ? reader.satellites.value() : 0, reader.gsaFixType(), reader.gsaPDOP(),
+                          reader.gsaHDOP(), reader.gsaVDOP());
+=======
+                          reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU),
+                          reader.satellites.isValid() ? reader.satellites.value() : 0, parsedFixType, reader.gsaPDOP(),
+                          reader.gsaHDOP(), reader.gsaVDOP());
+>>>>>>> 0a7ef0972 (t-echo-plus)
+
+            if (reader.hasValidGLL()) {
+                LOG_DEBUG_GPS("GLL lat=%.7f lon=%.7f status=%c mode=%c", reader.gllLocation.lat(), reader.gllLocation.lng(),
+                              reader.gllInfo.status, reader.gllInfo.mode);
+>>>>>>> e9dcdfe17 (t-ech-plust-echo-plus)
+            }
+
+            if (reader.hasValidZDA()) {
+                LOG_DEBUG_GPS("ZDA date=%04u-%02u-%02u", reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day);
+            }
+
+            if (reader.antInfo.valid) {
+                const char *antenna = "UNKNOWN";
+                if (reader.antInfo.status == TINYGPS_ANT_OK)
+                    antenna = "OK";
+                else if (reader.antInfo.status == TINYGPS_ANT_OPEN)
+                    antenna = "OPEN";
+                else if (reader.antInfo.status == TINYGPS_ANT_SHORT)
+                    antenna = "SHORT";
+                LOG_DEBUG_GPS("L76K antenna=%s", antenna);
+            }
+
+            // positional timestamp
+            struct tm t;
+            t.tm_sec = reader.time.second();
+            t.tm_min = reader.time.minute();
+            t.tm_hour = reader.time.hour();
+            t.tm_mday = reader.date.day();
+            t.tm_mon = reader.date.month() - 1;
+            t.tm_year = reader.date.year() - 1900;
+            t.tm_isdst = false;
+            p.timestamp = gm_mktime(&t);
+
+            // Nice to have, if available
+            // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
+            if (satsInView > 0)
+                p.sats_in_view = satsInView;
+            else if (reader.satellites.isUpdated())
+                p.sats_in_view = reader.satellites.value();
+
+            if (reader.course.isUpdated() && reader.course.isValid()) {
+                if (reader.course.value() < 36000) { // sanity check
+                    p.ground_track = reader.course.value() *
+                                     1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+                } else {
+                    LOG_WARN("BOGUS course.value() REJECTED: %d", reader.course.value());
+                }
+            }
+
+            if (reader.speed.isUpdated() && reader.speed.isValid()) {
+                p.ground_speed = reader.speed.kmph();
+            }
+
+            return true;
         }
+<<<<<<< HEAD
             }
 #if GPS_DEBUG
             if (debugmsg != "") {
@@ -2433,14 +2583,117 @@ bool GPS::lookForTime()
         if (powerState == GPS_ACTIVE) {
             LOG_DEBUG("User power Off GPS");
             digitalWrite(PIN_GPS_EN, LOW);
-        }
+=======
+
+        bool GPS::hasLock()
+        {
+            // Using GPGGA fix quality indicator
+            if (fixQual >= 1 && fixQual <= 5) {
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+                // Use GPGSA fix type 2D/3D (better) if available
+                if (fixType == 3 || fixType == 2 || fixType == 0) // zero means "no data received"
 #endif
+                    return true;
+            }
+
+            return false;
+        }
+
+        bool GPS::whileActive()
+        {
+            unsigned int charsInBuf = 0;
+            bool isValid = false;
+#if GPS_DEBUG
+            std::string debugmsg = "";
+#endif
+            if (powerState != GPS_ACTIVE) {
+                clearBuffer();
+                return false;
+            }
+#ifdef SERIAL_BUFFER_SIZE
+            if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
+                LOG_WARN("GPS Buffer full (%u bytes). Flush to avoid corruption", _serial_gps->available());
+                clearBuffer();
+            }
+#endif
+            // First consume any chars that have piled up at the receiver
+            while (_serial_gps->available() > 0) {
+                int c = _serial_gps->read();
+                UBXscratch[charsInBuf] = c;
+#if GPS_DEBUG
+                debugmsg += vformat("%c", (c >= 32 && c <= 126) ? c : '.');
+#endif
+                isValid |= reader.encode(c);
+                if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
+                    if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
+                        rebootsSeen++;
+                    }
+                    charsInBuf = 0;
+                } else {
+                    charsInBuf++;
+                }
+            }
+#if GPS_DEBUG
+            if (debugmsg != "") {
+                LOG_DEBUG("%s", debugmsg.c_str());
+            }
+#endif
+            return isValid;
+>>>>>>> e9dcdfe17 (t-ech-plust-echo-plus)
+        }
+        void GPS::enable()
+        {
+            // Clear the old scheduling info (reset the lock-time prediction)
+            scheduling.reset();
+
+            enabled = true;
+            setInterval(GPS_THREAD_INTERVAL);
+
+            scheduling.informSearching();
+            setPowerState(GPS_ACTIVE);
+        }
+
+        int32_t GPS::disable()
+        {
+            enabled = false;
+            setInterval(INT32_MAX);
+            setPowerState(GPS_OFF);
+
+            return INT32_MAX;
+        }
+
+        bool GPS::isEnabled()
+        {
+            return enabled;
+        }
+
+        void GPS::toggleGpsMode()
+        {
+            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+                LOG_INFO("User toggled GpsMode. Now DISABLED");
+                playGPSDisableBeep();
+#ifdef GNSS_AIROHA
+                if (powerState == GPS_ACTIVE) {
+                    LOG_DEBUG("User power Off GPS");
+                    digitalWrite(PIN_GPS_EN, LOW);
+                }
+#endif
+<<<<<<< HEAD
         disable();
             } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         LOG_INFO("User toggled GpsMode. Now ENABLED");
         playGPSEnableBeep();
         enable();
+=======
+                disable();
+            } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                LOG_INFO("User toggled GpsMode. Now ENABLED");
+                playGPSEnableBeep();
+                enable();
+>>>>>>> e9dcdfe17 (t-ech-plust-echo-plus)
             }
         }
 #endif // Exclude GPS
