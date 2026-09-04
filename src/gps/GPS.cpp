@@ -1434,11 +1434,6 @@ void GPS::setConnected()
 // We want a GPS lock. Wake the hardware
 void GPS::up()
 {
-#if defined(TTGO_T_ECHO_PLUS_inkHud2)
-    if (gnssModel == GNSS_MODEL_MTK || gnssModel == GNSS_MODEL_UNKNOWN) {
-        // TODO: implement satellite activity reset for MTK models
-    }
-#endif
     scheduling.informSearching();
     setPowerState(GPS_ACTIVE);
 }
@@ -1676,7 +1671,12 @@ int32_t GPS::runOnce()
             LOG_WARN("Can't publish valid location: no GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
+                // Losing a position fix must not erase independent receiver
+                // status. Keep the latest satellite count so GPSStatus/Base
+                // UI can still show satellites that are currently visible.
+                const uint32_t lastSatsInView = p.sats_in_view;
                 p = meshtastic_Position_init_default;
+                p.sats_in_view = lastSatsInView;
                 hasValidLocation = false;
                 shouldPublish = true;
                 LOG_DEBUG_GPS("hasValidLocation FALLING EDGE");
@@ -1686,9 +1686,11 @@ int32_t GPS::runOnce()
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
         bool holdExpired = holdJustExpired(fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
-            // Satellite count changes use the separate status-only path above.
-            // Keep this block identical in purpose to the upstream position/hold path.
-            if (gotTime && hasValidLocation) {
+            // At the end of every scheduled GPS update window, also publish
+            // the current satellite status when TinyGPS++ has previously
+            // supplied a positive count. This keeps GPSStatus/Base UI in sync
+            // even if there is no new position fix in this particular window.
+            if ((gotTime && hasValidLocation) || p.sats_in_view > 0) {
                 shouldPublish = true;
             }
             if (shouldPublish) {
@@ -2306,31 +2308,19 @@ bool GPS::lookForLocation()
         return false;
 
 #if GPS_DEBUG
-    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-              gsafixtype.age(),
-#else
-              0,
-#endif
-              reader.date.age(), reader.time.age());
+    LOG_DEBUG("AGE: LOC=%d DATE=%d TIME=%d FIXTYPE=%u", reader.location.age(), reader.date.age(), reader.time.age(),
+              parsedFixType);
 #endif // GPS_DEBUG
-
-    // TinyGPSPlus exposes checksum failures via the public API, not a direct
-    // member access from this translation unit. Avoid invalid access to a
-    // private member and skip the legacy bad-checksum branch entirely.
 
     // Is this a new point or are we re-reading the previous one?
     if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
         return false;
 
-    // check if a complete GPS solution set is available for reading
-    //   tinyGPSDatum::age() also includes isValid() test
-    // FIXME
-    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-          (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
-#endif
-          (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
+    // Check that the position, time and date belong to a fresh solution.
+    // GSA freshness is no longer tied to the legacy TinyGPSCustom field;
+    // the native GSA parser is used directly.
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) && (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
+          (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
         LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
@@ -2350,22 +2340,17 @@ bool GPS::lookForLocation()
 
     p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
 
-    // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // Dilution of precision is reported in 10^2 units.
+    // Prefer the native GSA values and fall back to GGA HDOP when GSA
+    // has not produced a value yet.
     const uint16_t gsaHdop = reader.gsaHDOP();
     const uint16_t gsaPdop = reader.gsaPDOP();
     p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
-    p.PDOP = gsaPdop ? gsaPdop : TinyGPSPlus::parseDecimal(gsapdop.value());
-#else
-    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
-    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-    p.HDOP = reader.hdop.value();
-    p.PDOP = 1.41 * reader.hdop.value();
-#endif
+    p.PDOP = gsaPdop ? gsaPdop : static_cast<uint16_t>(1.41f * p.HDOP);
 
-    // Discard incomplete or erroneous readings
-    if (reader.hdop.value() == 0) {
-        LOG_WARN("BOGUS hdop.value() REJECTED: %d", reader.hdop.value());
+    // Validate the HDOP value actually selected above.
+    if (p.HDOP == 0) {
+        LOG_WARN("BOGUS HDOP REJECTED: %u", p.HDOP);
         return false;
     }
 
@@ -2426,13 +2411,6 @@ bool GPS::lookForLocation()
     t.tm_isdst = false;
     p.timestamp = gm_mktime(&t);
 
-    // Nice to have, if available
-    // Prefer true GSV satellites-in-view; use GGA only until GSV is available.
-    if (satsInView > 0)
-        p.sats_in_view = satsInView;
-    else if (reader.satellites.isUpdated())
-        p.sats_in_view = reader.satellites.value();
-
     if (reader.course.isUpdated() && reader.course.isValid()) {
         if (reader.course.value() < 36000) { // sanity check
             p.ground_track =
@@ -2451,7 +2429,7 @@ bool GPS::lookForLocation()
 
 bool GPS::hasLock()
 {
-    // Using GPGGA fix quality indicator
+    // GGA fix quality must indicate a valid solution.
     if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
         // Use the GSA fix type parsed directly by TinyGPS++.
