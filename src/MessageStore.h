@@ -126,10 +126,11 @@ class MessageStore
     // Retrieve the C-string text for a stored message
     static const char *getText(const StoredMessage &msg);
 
-    // Allocate text into pool (used by sender-side code)
+    // Allocate text into pool (used by sender-side code). Evicts any live record the bytes still back.
     static uint16_t storeText(const char *src, size_t len);
 
   private:
+    uint16_t allocText(const char *src, size_t len);
     bool pruneHiddenMessages();
     std::deque<StoredMessage> liveMessages; // Single in-RAM message buffer (also used for persistence)
     std::string filename;                   // Flash filename for persistence

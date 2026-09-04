@@ -40,8 +40,8 @@ static inline void resetMessagePool()
     memset(g_messagePool, 0, MESSAGE_TEXT_POOL_SIZE);
 }
 
-// Allocate text in pool and return offset
-// If not enough space remains, wrap around (ring buffer style)
+// Raw pool write. Callers go through MessageStore::allocText(), which first drops any live record
+// whose text sits in the bytes about to be reused.
 static inline uint16_t storeTextInPool(const char *src, size_t len)
 {
     // Pool allocation can fail at boot; getTextFromPool() already maps offset 0 to "" in that case
@@ -52,7 +52,7 @@ static inline uint16_t storeTextInPool(const char *src, size_t len)
         len = MAX_MESSAGE_SIZE - 1;
 
     // Wrap pool if out of space
-    if (g_poolWritePos + len + 1 >= MESSAGE_TEXT_POOL_SIZE) {
+    if (g_poolWritePos + len + 1 > MESSAGE_TEXT_POOL_SIZE) {
         g_poolWritePos = 0;
     }
 
@@ -61,6 +61,23 @@ static inline uint16_t storeTextInPool(const char *src, size_t len)
     g_messagePool[g_poolWritePos + len] = '\0';
     g_poolWritePos += (len + 1);
     return offset;
+}
+
+template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessage> &deque, Predicate pred)
+{
+    for (auto it = deque.begin(); it != deque.end();) {
+        if (pred(*it)) {
+            it = deque.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Pool bytes [begin, end) are about to be rewritten: does this record's text overlap them?
+static inline bool textOverlaps(const StoredMessage &m, uint32_t begin, uint32_t end)
+{
+    return m.textOffset < end && (uint32_t)m.textOffset + m.textLength + 1 > begin;
 }
 
 // Retrieve a const pointer to message text by offset
@@ -224,7 +241,7 @@ const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket 
     if (avail > MAX_MESSAGE_SIZE - 1)
         avail = MAX_MESSAGE_SIZE - 1;
     size_t len = strnlen(payload, avail);
-    sm.textOffset = storeTextInPool(payload, len);
+    sm.textOffset = allocText(payload, len);
     sm.textLength = len;
 
     // Determine sender
@@ -308,7 +325,7 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
 
     // 💡 Re-store text into pool and update offset
     m.textLength = strnlen(rec.text, MAX_MESSAGE_SIZE - 1);
-    m.textOffset = storeTextInPool(rec.text, m.textLength);
+    m.textOffset = MessageStore::storeText(rec.text, m.textLength);
 
     return true;
 }
@@ -423,17 +440,6 @@ template <typename Predicate> static bool eraseFirstMatch(std::deque<StoredMessa
         }
     }
     return false;
-}
-
-template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessage> &deque, Predicate pred)
-{
-    for (auto it = deque.begin(); it != deque.end();) {
-        if (pred(*it)) {
-            it = deque.erase(it);
-        } else {
-            ++it;
-        }
-    }
 }
 
 bool MessageStore::pruneHiddenMessages()
@@ -569,7 +575,20 @@ const char *MessageStore::getText(const StoredMessage &msg)
 
 uint16_t MessageStore::storeText(const char *src, size_t len)
 {
-    // Wrapper around the internal helper
+    return messageStore.allocText(src, len);
+}
+
+// Reserve pool bytes for new text. The pool is a ring with no free list, so a wrap lands on bytes
+// that may still back a live record; that record is evicted rather than left pointing at foreign text.
+uint16_t MessageStore::allocText(const char *src, size_t len)
+{
+    if (len >= MAX_MESSAGE_SIZE)
+        len = MAX_MESSAGE_SIZE - 1;
+    uint32_t begin = g_poolWritePos;
+    if (begin + len + 1 > MESSAGE_TEXT_POOL_SIZE)
+        begin = 0;
+    const uint32_t end = begin + len + 1;
+    eraseAllMatches(liveMessages, [&](const StoredMessage &m) { return textOverlaps(m, begin, end); });
     return storeTextInPool(src, len);
 }
 
