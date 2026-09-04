@@ -704,14 +704,7 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
         // yields a *failed* encryption change here -- don't latch a connected/authenticated state
         // on a link that is actually being torn down.
         if (desc == nullptr || !desc->sec_state.encrypted) {
-            // Diagnostic (spike): name the SMP/HCI failure and who holds the roles, so a failed
-            // mesh-peer pairing can be told apart from a stale-bond reconnect. bonded/key_size say
-            // whether a bond was in play; the role bits say which side is the central.
-            LOG_WARN("BLE encryption change without encrypted link; ignoring (conn=%u bonded=%d authenticated=%d "
-                     "key_size=%u role=%s)",
-                     desc ? desc->conn_handle : 0xffff, desc ? desc->sec_state.bonded : -1,
-                     desc ? desc->sec_state.authenticated : -1, desc ? desc->sec_state.key_size : 0,
-                     desc ? (desc->role == BLE_GAP_ROLE_MASTER ? "master" : "slave") : "?");
+            LOG_WARN("BLE encryption change without encrypted link; ignoring");
             return;
         }
 
@@ -1093,7 +1086,7 @@ int NimbleBluetooth::getRssi()
 
 #ifdef ARCH_ESP32
 // From thebentern's ble-mesh-working branch, which carried it for units whose stored bond blobs
-// crash NimBLE during populate_db_from_nvs. Reinstated here because the spike saw NimBLE fail to
+// crash NimBLE during populate_db_from_nvs. Reinstated here because NimBLE was seen to fail
 // become active at all on some boots after flipping between builds with different BLE configs -
 // the same symptom, and the bond store is the state those builds share.
 static void clearCorruptBondStoreOnce()
@@ -1185,7 +1178,7 @@ void NimbleBluetooth::setup()
     } else {
         // No IO capability for no PIN mode
         security.setCapability(ESP_IO_CAP_NONE);
-        // No PIN mode: no MITM protection, and (spike) no BONDING either. With bonding on, the node
+        // No PIN mode: no MITM protection, and no BONDING either. With bonding on, the node
         // advertises the SMP bonding bit and a central "just works"-pairs on connect; if that pairing
         // fails the ACL is torn down before the (unauthenticated) mesh-peer characteristic can be
         // subscribed. Nothing in NO_PIN needs an encrypted link, so don't offer to bond at all.
