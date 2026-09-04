@@ -34,6 +34,9 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
 #include "mqtt/MQTT.h"
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 #include <ErriezCRC32.h>
 #include <cstdio>
 #include <cstring>
@@ -253,8 +256,8 @@ static meshtastic_MeshPacket makeDecoded(NodeNum from, NodeNum to, meshtastic_Po
 // because perhapsEncode only auto-signs packets that originate from us.
 static void signWithCurrentKey(meshtastic_MeshPacket *p)
 {
-    bool ok = crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
-                                  p->decoded.xeddsa_signature.bytes);
+    bool ok = crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.request_id, p->decoded.reply_id,
+                                  p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
     TEST_ASSERT_TRUE_MESSAGE(ok, "xeddsa_sign failed in test setup");
     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 }
@@ -407,6 +410,14 @@ void setUp(void)
     // mode opt in explicitly.
     setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
     myNodeInfo.my_node_num = LOCAL_NODE; // drives isFromUs()/getFrom()/isToUs()
+
+#ifdef ARCH_PORTDUINO
+    // The native test harness boots Portduino in simulated mode (`-s` in test_testing_command), and
+    // wouldEncryptWithPKC() hard-disables PKC whenever force_simradio is set - so B11/B12, which
+    // assert the PKC unicast path, can never pass under it. Model a real (non-sim) device instead,
+    // the same workaround test_admin_session_repro documents in its setUp.
+    portduino_config.force_simradio = false;
+#endif
 
     // Working primary channel with the default PSK so encrypt/decrypt round-trips.
     channels.initDefaults();
@@ -712,6 +723,32 @@ void test_A14_strict_bootstraps_identity_bound_signed_nodeinfo(void)
     TEST_ASSERT_TRUE(p.xeddsa_signed);
 }
 
+// A solicited first-contact NodeInfo (a want_response reply, so request_id != 0) must still
+// bootstrap: the v2 signing buffer binds request_id on both ends, so a nonzero value has to
+// round-trip through verifyFirstContactNodeInfo exactly like the unsolicited 0/0 case in A14.
+void test_A14b_strict_bootstraps_solicited_signed_nodeinfo(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    const NodeNum signer = crc32Buffer(pub, sizeof(pub));
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.public_key.size = sizeof(pub);
+    memcpy(user.public_key.bytes, pub, sizeof(pub));
+    meshtastic_MeshPacket p = makeDecoded(signer, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, 0);
+    p.decoded.request_id = 0x600DCAFE;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    const meshtastic_NodeInfoLite *node = mockNodeDB->getMeshNode(signer);
+    TEST_ASSERT_NOT_NULL(node);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(pub, node->public_key.bytes, sizeof(pub));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+}
+
 void test_A15_strict_rejects_nodeinfo_key_without_identity_binding(void)
 {
     setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
@@ -937,6 +974,9 @@ void test_B6_rich_shape_sweep_no_deadband(void)
     TEST_ASSERT_TRUE_MESSAGE(sawUnsigned, "rich sweep never crossed the fit boundary");
 }
 
+// Scope: the suite's default BALANCED policy (setUp). Under Balanced/Compatible, infrastructure
+// unicasts - acks included - stay unsigned for OTA interop; the Strict-signs-acks behavior is
+// pinned separately in B14/B15.
 void test_B7_infrastructure_port_signing_matrix(void)
 {
     uint8_t pub[32], priv[32];
@@ -1088,6 +1128,62 @@ void test_B13_licensed_port_and_destination_signing_matrix(void)
             TEST_ASSERT_TRUE(packet.xeddsa_signed);
             TEST_ASSERT_FALSE(packet.pki_encrypted);
         }
+    }
+}
+
+// B14: Strict signs explicit acks/naks - the self-originated ROUTING_APP unicasts - so Strict
+// peers (which drop unsigned non-PKI packets) can authenticate delivery reports. Built from a
+// real allocAckNak product to pin the "explicit ack == self-originated ROUTING unicast"
+// equivalence the sign gate relies on. Non-ack infrastructure unicasts must stay unsigned under
+// Strict: their roundTrip lands in the Strict unsigned-drop, which would be impossible had
+// perhapsEncode signed them (their key is registered, so a signature would have verified).
+void test_B14_strict_signs_explicit_acks(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    meshtastic_MeshPacket *ack = pipelineRouting->allocAckNak(meshtastic_Routing_Error_NONE, REMOTE_NODE, 0xABCD1234, 0, 0);
+    TEST_ASSERT_NOT_NULL_MESSAGE(ack, "allocAckNak failed in test setup");
+    meshtastic_MeshPacket p = *ack;
+    packetPool.release(ack);
+    TEST_ASSERT_EQUAL(LOCAL_NODE, getFrom(&p));
+    TEST_ASSERT_EQUAL(0xABCD1234, p.decoded.request_id);
+    TEST_ASSERT_TRUE_MESSAGE(signedEncodingFits(&p.decoded), "an ack plus signature must always fit a frame");
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, p.decoded.xeddsa_signature.size, "Strict must sign the explicit ack");
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+
+    const meshtastic_PortNum nonAckPorts[] = {
+        meshtastic_PortNum_NODEINFO_APP,
+        meshtastic_PortNum_TRACEROUTE_APP,
+        meshtastic_PortNum_POSITION_APP,
+    };
+    for (const auto port : nonAckPorts) {
+        meshtastic_MeshPacket unicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, port, SMALL_PAYLOAD);
+        TEST_ASSERT_EQUAL_MESSAGE(DECODE_POLICY_REJECT, roundTrip(&unicast),
+                                  "non-ack infrastructure unicasts must stay unsigned under Strict");
+    }
+}
+
+// B15: only Strict changes ack signing - Balanced and Compatible keep today's unsigned acks so
+// default meshes stay interoperable with every deployed receiver.
+void test_B15_balanced_and_compatible_do_not_sign_acks(void)
+{
+    const meshtastic_Config_SecurityConfig_PacketSignaturePolicy policies[] = {
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED,
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE,
+    };
+    for (const auto policy : policies) {
+        setPolicy(policy);
+        meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+        p.decoded.request_id = 0x11112222;
+        TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+        TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "non-Strict policies must not sign acks");
+        TEST_ASSERT_FALSE(p.xeddsa_signed);
     }
 }
 
@@ -2110,6 +2206,49 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
+// E14: the v2 signing buffer binds request_id. Channel crypto is CTR without a MAC, so without
+// this binding a signed ack's request_id would be malleable in flight - an attacker could aim a
+// captured "delivered" ack at a different outstanding request. The retargeted copy must drop.
+void test_E14_decoded_signed_ack_retargeted_request_id_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    p.decoded.request_id = 0xAAAA5555;
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+
+    p.decoded.request_id ^= 1; // same signed bytes, aimed at a different request
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "retargeted ack must fail verification");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E15: same binding for reply_id - a signed reply/tapback cannot be re-pointed at a different
+// message.
+void test_E15_decoded_signed_reply_retargeted_reply_id_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.decoded.reply_id = 0x5555AAAA;
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+
+    p.decoded.reply_id ^= 1; // re-point the tapback at a different message
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "retargeted reply must fail verification");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -2150,6 +2289,7 @@ void setup()
     RUN_TEST(test_A13_strict_accepts_locally_authenticated_pki_packet);
     RUN_TEST(test_A13b_strict_rejects_spoofed_pki_flag_on_encrypted_ingress);
     RUN_TEST(test_A14_strict_bootstraps_identity_bound_signed_nodeinfo);
+    RUN_TEST(test_A14b_strict_bootstraps_solicited_signed_nodeinfo);
     RUN_TEST(test_A15_strict_rejects_nodeinfo_key_without_identity_binding);
     RUN_TEST(test_A16_compatible_rejects_invalid_first_contact_nodeinfo);
 #if WARM_NODE_COUNT > 0
@@ -2172,6 +2312,8 @@ void setup()
     RUN_TEST(test_B11_normal_unicast_still_uses_pki);
     RUN_TEST(test_B12_licensed_receiver_does_not_decrypt_pki);
     RUN_TEST(test_B13_licensed_port_and_destination_signing_matrix);
+    RUN_TEST(test_B14_strict_signs_explicit_acks);
+    RUN_TEST(test_B15_balanced_and_compatible_do_not_sign_acks);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
@@ -2226,6 +2368,8 @@ void setup()
     RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
     RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
     RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
+    RUN_TEST(test_E14_decoded_signed_ack_retargeted_request_id_dropped);
+    RUN_TEST(test_E15_decoded_signed_reply_retargeted_reply_id_dropped);
 
     const int result = UNITY_END();
     airTime = savedAirTime;

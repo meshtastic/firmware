@@ -35,7 +35,7 @@ A client connected to a node over Bluetooth, USB serial, WiFi, or Ethernet has f
 
 There is no central authority to sign node keys. The first public key a node hears for a given node number is the one it binds to that node number, a Trust On First Use (TOFU) model that is a hard requirement of a decentralized mesh. Clients and firmware reduce the impact of this by keeping favorited nodes from rolling out of the node database and by flagging public-key changes in the client UI.
 
-Firmware 2.8.X adds XEdDSA packet signing to further secure node identity claims and the authenticity of subsequent messages. It reuses each node's existing x25519 key pair to produce signatures, so a receiver can verify that a packet came from the holder of the bound key. Once a node has been seen signing, unsigned packets claiming that identity can be rejected.
+Firmware 2.8.X adds XEdDSA packet signing to further secure node identity claims and the authenticity of subsequent messages. It reuses each node's existing x25519 key pair to produce signatures, so a receiver can verify that a packet came from the holder of the bound key. Once a node has been seen signing, unsigned packets claiming that identity can be rejected. Signatures also cover a packet's request/reply linkage, so a signed acknowledgement or reply cannot be retargeted at a different message, and nodes on the Strict signature policy additionally sign the explicit delivery acks/naks they send, allowing Strict peers to authenticate delivery reports.
 
 ### Known limitations
 

@@ -888,8 +888,8 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
-                                         p.decoded.xeddsa_signature.bytes));
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.request_id, p.decoded.reply_id,
+                                         p.decoded.payload.bytes, p.decoded.payload.size, p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 
     unitTest->publish(&p);
@@ -897,6 +897,47 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
     TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
     TEST_ASSERT_TRUE(mockRouter->packets_.front().xeddsa_signed);
     TEST_ASSERT_TRUE(mockNodeDB->emptyNode.bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+
+// A signed unicast ROUTING ack from a Strict sender, delivered decoded by a plaintext broker,
+// verifies at ingress with its request_id binding intact; retargeting the same signed ack at a
+// different request_id must be dropped.
+void test_receiveVerifiesSignedAckAndDropsRetargeted(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->emptyNode.public_key.size = 32;
+    memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
+
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    p.to = myNodeInfo.my_node_num;
+    p.decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+    p.decoded.request_id = 0xA5A5A5A5;
+    meshtastic_Routing ack = meshtastic_Routing_init_default;
+    ack.which_variant = meshtastic_Routing_error_reason_tag;
+    ack.error_reason = meshtastic_Routing_Error_NONE;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Routing_msg, &ack);
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.request_id, p.decoded.reply_id,
+                                         p.decoded.payload.bytes, p.decoded.payload.size, p.decoded.xeddsa_signature.bytes));
+    p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_TRUE(mockRouter->packets_.front().xeddsa_signed);
+
+    // Same signed bytes, aimed at a different outstanding request: verification must fail.
+    meshtastic_MeshPacket retargeted = p;
+    retargeted.id++; // dodge any dedup by id; the signature binds the original id too, but the
+                     // point pinned here is the request_id binding
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(
+        retargeted.from, retargeted.id, retargeted.decoded.portnum, retargeted.decoded.request_id, retargeted.decoded.reply_id,
+        retargeted.decoded.payload.bytes, retargeted.decoded.payload.size, retargeted.decoded.xeddsa_signature.bytes));
+    retargeted.decoded.request_id = 0x5A5A5A5A; // retarget after signing
+    unitTest->publish(&retargeted);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size()); // still only the first ack
 }
 
 // A decoded downlink carrying a signature that fails verification is dropped.
@@ -910,8 +951,8 @@ void test_receiveDropsBadSignatureOnDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
-                                         p.decoded.xeddsa_signature.bytes));
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.request_id, p.decoded.reply_id,
+                                         p.decoded.payload.bytes, p.decoded.payload.size, p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
 
@@ -1517,6 +1558,7 @@ void setup()
     RUN_TEST(test_receiveDropsUnsignedBroadcastFromSigner);
     RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
     RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
+    RUN_TEST(test_receiveVerifiesSignedAckAndDropsRetargeted);
     RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
     RUN_TEST(test_receiveCompatibleAcceptsUnsignedBroadcastFromSigner);
     RUN_TEST(test_receiveStrictDropsUnsignedPortnumsAndUnicast);
