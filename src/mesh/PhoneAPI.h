@@ -82,6 +82,10 @@ class PhoneAPI
      */
     uint32_t fromRadioNum = 0;
 
+    /// my_node_num as last handed to this client. The identity moves live when the first region set
+    /// mints the PKI key, and a client still addressing the old number NAKs PKI_SEND_FAIL_PUBLIC_KEY.
+    uint32_t reportedNodeNum = 0;
+
     /// We temporarily keep the packet here between the call to available and getFromRadio.  We will free it after the phone
     /// downloads it
     meshtastic_MeshPacket *packetForPhone = NULL;
@@ -132,6 +136,9 @@ class PhoneAPI
     std::vector<meshtastic_FileInfo> filesManifest = {};
 
     void resetReadIndex() { readIndex = 0; }
+
+    /// Load fromRadioScratch with a MyInfo for this connection and record the number it carried.
+    void fillMyInfo();
 
   public:
     PhoneAPI();

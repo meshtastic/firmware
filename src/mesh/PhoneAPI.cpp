@@ -549,6 +549,33 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     STATE_SEND_PACKETS // send packets or debug strings
  */
 
+void PhoneAPI::fillMyInfo()
+{
+    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
+    strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+    // strncpy does not terminate when the source fills the buffer; a 40+ char
+    // APP_ENV would make nanopb reject the MyInfo encode ("unterminated string").
+    myNodeInfo.pio_env[sizeof(myNodeInfo.pio_env) - 1] = '\0';
+    myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
+    fromRadioScratch.my_info = myNodeInfo;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    if (!getAdminAuthorized()) {
+        // device_id is a stable hardware identifier - useful for an attacker
+        // to fingerprint / correlate the device across observations. Strip it
+        // for unauthenticated clients. my_node_num is kept (it's broadcast
+        // on the mesh anyway). pio_env / min_app_version reveal the exact
+        // build flavour, useful only for picking which known-CVE to try.
+        // nodedb_count stays - clients need it to decide whether to pull
+        // the node DB after unlocking.
+        fromRadioScratch.my_info.device_id.size = 0;
+        memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
+        memset(fromRadioScratch.my_info.pio_env, 0, sizeof(fromRadioScratch.my_info.pio_env));
+        fromRadioScratch.my_info.min_app_version = 0;
+    }
+#endif
+    reportedNodeNum = myNodeInfo.my_node_num;
+}
+
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     // Respond to heartbeat by sending queue status
@@ -575,30 +602,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
     case STATE_SEND_MY_INFO:
         LOG_DEBUG("FromRadio=STATE_SEND_MY_INFO");
-        // If the user has specified they don't want our node to share its location, make sure to tell the phone
-        // app not to send locations on our behalf.
-        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
-        strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
-        // strncpy does not terminate when the source fills the buffer; a 40+ char
-        // APP_ENV would make nanopb reject the MyInfo encode ("unterminated string").
-        myNodeInfo.pio_env[sizeof(myNodeInfo.pio_env) - 1] = '\0';
-        myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
-        fromRadioScratch.my_info = myNodeInfo;
-#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        if (!getAdminAuthorized()) {
-            // device_id is a stable hardware identifier - useful for an attacker
-            // to fingerprint / correlate the device across observations. Strip it
-            // for unauthenticated clients. my_node_num is kept (it's broadcast
-            // on the mesh anyway). pio_env / min_app_version reveal the exact
-            // build flavour, useful only for picking which known-CVE to try.
-            // nodedb_count stays - clients need it to decide whether to pull
-            // the node DB after unlocking.
-            fromRadioScratch.my_info.device_id.size = 0;
-            memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
-            memset(fromRadioScratch.my_info.pio_env, 0, sizeof(fromRadioScratch.my_info.pio_env));
-            fromRadioScratch.my_info.min_app_version = 0;
-        }
-#endif
+        fillMyInfo();
         state = STATE_SEND_UIDATA;
 
         service->refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
@@ -1027,7 +1031,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         pauseBluetoothLogging = false;
         // Do we have a message from the mesh or packet from the local device?
         LOG_TRACE("FromRadio=STATE_SEND_PACKETS");
-        if (queueStatusPacketForPhone) {
+        if (reportedNodeNum != nodeDB->getNodeNum()) {
+            // The identity moved after the handshake (the first region set mints the PKI key), so tell the
+            // client before it addresses another admin packet to a number we no longer answer to.
+            LOG_INFO("Node num moved to 0x%08x, resend MyInfo", nodeDB->getNodeNum());
+            fillMyInfo();
+        } else if (queueStatusPacketForPhone) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
@@ -1682,6 +1691,8 @@ bool PhoneAPI::available()
         prefetchNodeInfos();
         return true;
     case STATE_SEND_PACKETS: {
+        if (reportedNodeNum != nodeDB->getNodeNum())
+            return true;
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service->getQueueStatusForPhone();
         if (!mqttClientProxyMessageForPhone)

@@ -26,6 +26,7 @@ constexpr uint32_t FULL_DUMP_NONCE = 0x51C0FFEE;
 constexpr uint32_t SECOND_NONCE = 0x0DDBA11;
 constexpr NodeNum SEEDED_NODE_A = 0x00000A01;
 constexpr NodeNum SEEDED_NODE_B = 0x00000A02;
+constexpr NodeNum RENUMBERED_SELF = 0x00C0FFEE; // stands in for crc32(public_key) after the first region set
 
 constexpr unsigned NUM_SINGLETON_PREFIX = 5; // my_info, deviceuiConfig, own node_info, metadata, region_presets
 constexpr unsigned NUM_CONFIG_MESSAGES = _meshtastic_AdminMessage_ConfigType_MAX + 1;
@@ -219,6 +220,18 @@ bool drainUntilComplete(DumpTranscript &t, unsigned maxMessages = 600)
         default:
             break;
         }
+    }
+    return false;
+}
+
+/// Read until available() reports idle; false if it never does within the cap.
+bool drainToIdle(unsigned maxReads = 8)
+{
+    uint8_t buf[meshtastic_FromRadio_size];
+    for (unsigned i = 0; i <= maxReads; i++) {
+        if (!api->available())
+            return true;
+        api->getFromRadio(buf);
     }
     return false;
 }
@@ -490,16 +503,31 @@ void test_dump_reaches_idle_after_complete()
     DumpTranscript t;
     TEST_ASSERT_TRUE(drainUntilComplete(t));
 
+    TEST_ASSERT_TRUE_MESSAGE(drainToIdle(), "post-complete drain never went idle: available() stuck true");
     uint8_t buf[meshtastic_FromRadio_size];
-    bool idle = false;
-    for (unsigned i = 0; i < 8 && !idle; i++) {
-        if (!api->available())
-            idle = true;
-        else
-            api->getFromRadio(buf); // replay drain: empty phases must advance toward idle
-    }
-    TEST_ASSERT_TRUE_MESSAGE(idle, "post-complete drain never went idle: available() stuck true");
     TEST_ASSERT_EQUAL_UINT(0, api->getFromRadio(buf));
+}
+
+// The first region set moves my_node_num live (NodeDB::createNewIdentity()) with no reboot to force a
+// re-handshake, so the stream must re-announce my_info - exactly once - on its own.
+void test_node_num_change_resends_my_info()
+{
+    startHandshake(FULL_DUMP_NONCE);
+    DumpTranscript t;
+    TEST_ASSERT_TRUE(drainUntilComplete(t));
+    TEST_ASSERT_TRUE_MESSAGE(drainToIdle(), "post-complete drain never went idle");
+
+    myNodeInfo.my_node_num = RENUMBERED_SELF;
+
+    TEST_ASSERT_TRUE_MESSAGE(api->available(), "a renumber must make the stream readable again");
+    meshtastic_FromRadio msg;
+    TEST_ASSERT_TRUE(readOneFromRadio(msg));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(meshtastic_FromRadio_my_info_tag, msg.which_payload_variant,
+                                   "a renumber must be announced as my_info");
+    TEST_ASSERT_EQUAL_UINT32(RENUMBERED_SELF, msg.my_info.my_node_num);
+
+    // Keyed on the number itself, not a sticky flag: nothing repeats once the client has been told.
+    TEST_ASSERT_FALSE_MESSAGE(api->available(), "my_info resend repeated after the client was told");
 }
 
 } // namespace
@@ -567,6 +595,7 @@ void setup()
     RUN_TEST(test_close_mid_dump_then_reconnect_restarts_clean);
     RUN_TEST(test_rehandshake_mid_dump_restarts_from_my_info);
     RUN_TEST(test_dump_reaches_idle_after_complete);
+    RUN_TEST(test_node_num_change_resends_my_info);
 
     exit(UNITY_END());
 }

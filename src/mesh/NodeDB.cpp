@@ -4560,6 +4560,10 @@ bool NodeDB::createNewIdentity()
     else
         LOG_ERROR("No room for our own node 0x%08x, identity moved without a self record", newNodeNum);
 
+    // Clients cache my_node_num from the handshake; the region set that mints the key never reboots.
+    if (service)
+        service->nudgeFromNum();
+
     return true;
 }
 
