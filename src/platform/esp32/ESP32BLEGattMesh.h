@@ -43,6 +43,10 @@ class ESP32BLEGattMesh : public BLEGattMeshHandler
     static void setupService(BLEServer *server);
     /// Start (or restart) the connectable mesh-peer advertisement. Main task only.
     static void startAdvertising();
+    /// A central connected (any advertising instance). Register it as a candidate mesh link so its
+    /// subscribe/notify state is tracked no matter which advertisement it arrived on. Fires from the
+    /// server's own connect callback, which - unlike a per-instance GAP callback - sees every link.
+    static void onConnect(uint16_t connHandle);
     /// A link dropped: forget it. True when it came in through the mesh-peer advertisement, so the
     /// phone API's own session handling must not run for it.
     static bool onDisconnect(uint16_t connHandle);

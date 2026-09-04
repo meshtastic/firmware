@@ -58,6 +58,13 @@ std::atomic<bool> pendingAdvertising{false};
 // 4d657368-4e6f-6465-4741-545400000001 (BLE_GATT_MESH_SERVICE_UUID) as NimBLE wants it: little-endian.
 const ble_uuid128_t meshServiceUuid =
     BLE_UUID128_INIT(0x01, 0x00, 0x00, 0x00, 0x54, 0x54, 0x41, 0x47, 0x65, 0x64, 0x6f, 0x4e, 0x68, 0x73, 0x65, 0x4d);
+// ...000002 (BLE_GATT_MESH_CHARACTERISTIC_UUID), same little-endian byte order.
+const ble_uuid128_t meshCharUuid =
+    BLE_UUID128_INIT(0x02, 0x00, 0x00, 0x00, 0x54, 0x54, 0x41, 0x47, 0x65, 0x64, 0x6f, 0x4e, 0x68, 0x73, 0x65, 0x4d);
+// The characteristic's value handle, resolved from the live GATT DB once it is started. The Arduino
+// wrapper's BLECharacteristic::getHandle() returns 0xFFFF for a service registered after the server's
+// own handle-resolution pass (which is our case), so ask NimBLE directly instead.
+uint16_t meshCharValueHandle = 0;
 
 uint16_t chunkFor(uint16_t conn)
 {
@@ -179,13 +186,22 @@ void ESP32BLEGattMesh::setupService(BLEServer *server)
     characteristic->setCallbacks(&callbacks);
     service->start();
 
+    // Force the server's GATT start now. The wrapper only resolves characteristic value handles (and
+    // builds its notify/subscribe tables) inside BLEServer::start(), which it normally triggers from
+    // BLEAdvertising::start(). This firmware advertises through the raw ble_gap_ext_adv API and never
+    // calls the wrapper's advertising, so without this our characteristic's handle stays 0xFFFF and
+    // notifications go nowhere. start() is guarded by m_gattsStarted, so this is a no-op if something
+    // already ran it.
+    server->start();
+
     {
         std::lock_guard<std::mutex> guard(lock);
         meshServer = server;
         meshCharacteristic = characteristic;
+        meshCharValueHandle = characteristic->getHandle();
         resetState();
     }
-    LOG_INFO("BLE GATT mesh: mesh-peer service registered");
+    LOG_INFO("BLE GATT mesh: mesh-peer service registered (char handle %u)", characteristic->getHandle());
 }
 
 void ESP32BLEGattMesh::startAdvertising()
@@ -274,6 +290,26 @@ void ESP32BLEGattMesh::startAdvertising()
         LOG_INFO("BLE GATT mesh: advertising the mesh-peer service on instance %d", BLE_GATT_MESH_ADV_INSTANCE);
 }
 
+void ESP32BLEGattMesh::onConnect(uint16_t connHandle)
+{
+    // Fires for every inbound link from the server callback, whichever advertisement it arrived on.
+    // Mark it a candidate mesh peer optimistically: the wrapper's per-characteristic subscribe
+    // dispatch does not fire for a service added after the GATT server started (the phone API never
+    // relies on it), and a connection made through the phone-API advertising instance never reaches
+    // our own GAP callback either - so this is the one hook that sees the link. platformNotify sends
+    // per-connection; a central that never enabled its CCCD simply ignores the notification.
+    {
+        std::lock_guard<std::mutex> guard(lock);
+        if (Link *l = addLink(connHandle, false)) {
+            l->subscribed = true;
+            l->chunk = chunkFor(connHandle);
+        }
+    }
+    LOG_INFO("BLE GATT mesh: onConnect registered conn %u (spike diag)", connHandle);
+    if (bleGattMeshHandler)
+        bleGattMeshHandler->wake();
+}
+
 bool ESP32BLEGattMesh::onDisconnect(uint16_t connHandle)
 {
     bool viaMeshAdv = false;
@@ -330,7 +366,26 @@ int ESP32BLEGattMesh::onGapEvent(struct ble_gap_event *event, void *arg)
             l->chunk = event->mtu.value > 3 ? event->mtu.value - 3 : BLE_GATT_MESH_MIN_CHUNK;
         break;
     }
+    case BLE_GAP_EVENT_SUBSCRIBE: {
+        // A CCCD write on the mesh characteristic. The Arduino wrapper's own subscribe bookkeeping
+        // (m_subscribedVec / BLECharacteristicCallbacks::onSubscribe) never fires here - the phone API
+        // never exercises that path, so it does not reach a service added afterward - so track the
+        // subscription ourselves off the raw GAP event, which this connection's handler does receive.
+        LOG_INFO("BLE GATT mesh: GAP subscribe conn %u attr %u notify %d (spike diag)", event->subscribe.conn_handle,
+                 event->subscribe.attr_handle, event->subscribe.cur_notify);
+        std::lock_guard<std::mutex> guard(lock);
+        if (meshCharacteristic && event->subscribe.attr_handle == meshCharacteristic->getHandle()) {
+            if (Link *l = addLink(event->subscribe.conn_handle, true)) {
+                l->subscribed = event->subscribe.cur_notify != 0;
+                l->chunk = chunkFor(event->subscribe.conn_handle);
+            }
+        }
+        if (bleGattMeshHandler)
+            bleGattMeshHandler->wake();
+        break;
+    }
     default:
+        LOG_DEBUG("BLE GATT mesh: GAP event type %d (spike diag)", event->type);
         break;
     }
     return rc;
@@ -378,23 +433,19 @@ size_t ESP32BLEGattMesh::platformPeers(BLEGattMeshPeer *out, size_t cap)
 
 bool ESP32BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, size_t len)
 {
-    uint16_t valueHandle;
+    // Notify through the wrapper's own characteristic path - the exact one the phone API's fromNum uses,
+    // which is proven to deliver. It resolves the attribute handle (m_handle) and mbuf internally and
+    // sends to every subscribed connection tracked in m_subscribedVec. setValue + notify() is atomic
+    // enough here because the pump runs single-threaded on the main task. peer is unused for now: this
+    // sends the fragment to all current subscribers (the exclude-the-arrival-peer refinement is TODO).
+    (void)peer;
     {
         std::lock_guard<std::mutex> guard(lock);
         if (!meshCharacteristic)
             return false;
-        valueHandle = meshCharacteristic->getHandle();
+        meshCharacteristic->setValue((uint8_t *)data, len);
     }
-
-    struct os_mbuf *om = ble_hs_mbuf_from_flat(data, (uint16_t)len);
-    if (!om)
-        return false;
-    // Consumes om whether or not it succeeds. ENOMEM here is the host out of mbufs; the pump retries.
-    const int rc = ble_gatts_notify_custom(peer, valueHandle, om);
-    if (rc != 0) {
-        LOG_DEBUG("BLE GATT mesh: notify to conn %u refused: rc=%d", peer, rc);
-        return false;
-    }
+    meshCharacteristic->notify();
     return true;
 }
 
