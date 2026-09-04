@@ -205,6 +205,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
+#ifdef SEEED_WIO_TRACKER_L1_PRO_1W
+// Indexed by SX1262 output power in dBm, matching RadioInterface::limitPower().
+// TODO: verify against measured output.
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10
+#endif
+
 // Default system gain to 0 if not defined
 #ifndef NUM_PA_POINTS
 #define NUM_PA_POINTS 1
@@ -234,7 +241,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SSD1306_ADDRESS_L 0x3C // Addr = 0
 #define SSD1306_ADDRESS_H 0x3D // Addr = 1
 
-#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
+#if (defined(SEEED_WIO_TRACKER_L1) || defined(SEEED_WIO_TRACKER_L1_PRO_1W)) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS SSD1306_ADDRESS_H
 #define USE_SH1106
 #endif
@@ -317,6 +324,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
 #define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 #define HM330X_ADDR 0x40
+#define AS3935_ADDR 0x03 // both address pins tied high, the common breakout-board default
+#define AS3935_ADDR_ALT 0x01
+#define AS3935_ADDR_ALT2 0x02
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -343,6 +353,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #define NCP5623_ADDR 0x38
 #define LP5562_ADDR 0x30
+#define LP5814_ADDR 0x2C
+
+// -----------------------------------------------------------------------------
+// Audio Codec
+// -----------------------------------------------------------------------------
+#if not __has_include("Codecs/es8311/ES8311.h")
+#define ES8311_ADDR 0x18 // same address as MCP9808_ADDR / STK8BXX_ADDR / LIS3DH_ADDR
+#endif
+#define ES7243E_ADDR 0x14
 
 // -----------------------------------------------------------------------------
 // Security
@@ -357,10 +376,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
-#define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A // same address as CST226SE
+#define FT6336U_ADDR 0x48 // same address as ADS1115
+#define CST328_ADDR 0x1A  // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
 #define CST226SE_ADDR_ALT 0x5A
+#define GT911_ADDR 0x5D // same address as SFA30_ADDR / LPS22HB_ADDR_ALT
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
@@ -582,7 +602,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_ADMIN 1
 #endif
 
-// // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
+// Store & Forward is implemented only for ESP32 and Portduino
+#if !defined(ARCH_ESP32) && !defined(ARCH_PORTDUINO) && !defined(MESHTASTIC_EXCLUDE_STOREFORWARD)
+#define MESHTASTIC_EXCLUDE_STOREFORWARD 1
+#endif
+
+// Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
 #ifdef MESHTASTIC_EXCLUDE_WIFI
 #define MESHTASTIC_EXCLUDE_WEBSERVER 1
 #undef HAS_WIFI

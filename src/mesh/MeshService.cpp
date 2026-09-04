@@ -445,6 +445,21 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
     return false;
 }
 
+// ASCII BEL, the in-band alert marker. Numeric so no control byte sits in the source, and
+// file-local because ASCII_BELL is already a macro in Screen.cpp and ExternalNotificationModule.cpp.
+static const uint8_t kAsciiBell = 7;
+
+bool MeshService::isAlertPayload(const meshtastic_MeshPacket &p)
+{
+    if (!moduleConfig.external_notification.alert_bell && !moduleConfig.external_notification.alert_bell_vibra &&
+        !moduleConfig.external_notification.alert_bell_buzzer)
+        return false;
+    for (pb_size_t i = 0; i < p.decoded.payload.size; i++)
+        if (p.decoded.payload.bytes[i] == kAsciiBell)
+            return true;
+    return false;
+}
+
 // Re-decode nested string-bearing payloads before local phone delivery so PB_VALIDATE_UTF8 rejects
 // malformed NodeInfo/Waypoint data a strict phone decoder could crash on. Mesh relay is unaffected.
 bool MeshService::phonePayloadIsDecodable(const meshtastic_Data &d)
