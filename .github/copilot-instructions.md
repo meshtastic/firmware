@@ -364,24 +364,26 @@ These apply to firmware source under `src/`. Code under `test/` is a deliberate 
 
 <a id="test-naming"></a>
 
-#### Test naming - `snake_case`, not `camelCase`
+#### Test naming - `test_` prefix and underscores, never one `camelCase` identifier
 
-**This section is the single authoritative statement of the rule. Do not restate it in `AGENTS.md`, `CLAUDE.md`, or anywhere else - link here instead.**
+**This section is the single authoritative statement of the rule. `AGENTS.md` and `CLAUDE.md` link here and must not restate it. The one permitted copy is the `test/**` entry in `.coderabbit.yaml`, because a YAML instruction cannot follow a link; keep it in sync with this section.**
 
-Under `test/`, suite directories and test functions are `snake_case` with a mandatory `test_` prefix. This is not drift from the `src/` convention and not an oversight: it is required by the harness and by Unity. **A review comment asking for `camelCase` on a test suite directory or a `test_*` function is wrong, and should be rejected rather than acted on.**
+Code under `test/` does not follow the `camelCase` rule above, and this is neither drift nor an oversight - the harness and Unity both depend on it. **A review comment asking for `camelCase` on a test suite directory or a `test_*` function is wrong, and should be rejected rather than acted on.**
 
-| Thing                           | Form                                | Example                                              |
-| ------------------------------- | ----------------------------------- | ---------------------------------------------------- |
-| Suite directory                 | `test_<area>`, lowercase            | `test_gps_fix_hold/`                                 |
-| Test function                   | `test_<subject>_<expectedBehavior>` | `test_validateConfigRegion_unsetRegionReturnsTrue()` |
-| Helpers/fixtures inside a suite | normal `src/` conventions           | `makeFakePacket()`, `class FakeRadio`                |
+Two distinct rules, often conflated:
 
-The `<subject>` segment often mirrors the `camelCase` symbol under test (`test_getRegion_returnsCorrectRegion_US`). What is fixed is the `test_` prefix and the `_` separators between segments, not the case inside a segment.
+| Thing                           | Rule                                                                         | Examples                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Suite directory                 | Strictly `test_[a-z0-9_]+` - lowercase `snake_case`, no exceptions           | `test_gps_fix_hold/`, `test_admin_radio/`                                    |
+| Test function                   | `test_` prefix, then `_`-separated segments. Case _within_ a segment is free | `test_5byte_sequence_rejected()`, `test_getRegion_returnsCorrectRegion_US()` |
+| Helpers/fixtures inside a suite | normal `src/` conventions                                                    | `makeFakePacket()`, `class FakeRadio`                                        |
+
+For functions, what is fixed is the `test_` prefix and the underscores between segments - not the case inside a segment. Both `test_validateConfigRegion_unsetRegionReturnsTrue` (segment mirrors the `camelCase` symbol under test) and `test_5byte_sequence_rejected` (all lowercase) are correct and both are common in the tree. What is forbidden is dropping the prefix or collapsing the segments into a single `camelCase` identifier (`testValidateConfigRegionUnsetRegionReturnsTrue`).
 
 Why it is fixed:
 
 - **The harness discovers suites by prefix and parses their verdicts by regex.** `bin/run-tests.sh` enumerates suites with `find test -maxdepth 1 -type d -name 'test_*'`, then matches PlatformIO's per-suite result lines against `test_[a-z0-9_]+` - lowercase only. A suite directory with an uppercase letter is enumerated but never matched, so it is reported as _missing_ and the whole run downgrades from GREEN to AMBER.
-- **The function name is the failure message.** `RUN_TEST` in `test/TestUtil.h` passes `#func` to `UnityDefaultTestRun()`, `testAssertEnvironmentIntact()` and `testStateCheckpoint()`, so the identifier is the only attribution a CI log carries for a failed assertion or a dirtied sandbox. The `_`-separated `subject_expectedBehavior` form is chosen so it reads as a sentence there.
+- **The function name is the failure message.** `RUN_TEST` in `test/TestUtil.h` passes `#func` to `UnityDefaultTestRun()`, `testAssertEnvironmentIntact()` and `testStateCheckpoint()`, so the identifier is the only attribution a CI log carries for a failed assertion or a dirtied sandbox. The underscores are what make it readable there; a single `camelCase` run-on is not.
 - **It is Unity's own convention**, shared with every other PlatformIO C++ project.
 
 Renaming a suite directory to `camelCase` breaks the harness's suite accounting; renaming the functions destroys the readability of CI output. Leave both alone.

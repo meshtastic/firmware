@@ -33,16 +33,22 @@ reviews:
         Ensure configurations include metadata found in other configs.
     - path: test/**
       instructions: >
-        Native C++ unit tests. Test names here are deliberately snake_case with a mandatory
-        test_ prefix - suite directories (test_<area>, lowercase) and test functions
-        (test_<subject>_<expectedBehavior>). This is NOT drift from the camelCase convention
-        used in src/, and it must not be "corrected". bin/run-tests.sh matches suite verdict
-        lines against test_[a-z0-9_]+ (lowercase only), so an uppercase suite directory is
-        reported as missing and downgrades the run to AMBER; RUN_TEST in test/TestUtil.h
-        passes #func to Unity, so the function name is the only attribution a CI failure
-        carries. Do NOT raise naming-convention comments on suite directories or test_*
-        functions. Helpers and fixtures inside a suite do follow the normal src/ conventions.
-        Authoritative rule: the "Test naming" section of .github/copilot-instructions.md.
+        Native C++ unit tests. The camelCase convention used in src/ does NOT apply here,
+        and this is deliberate, not drift. Two separate rules. Suite directories are
+        strictly test_[a-z0-9_]+, lowercase only. Test functions take a test_ prefix
+        followed by underscore-separated segments, and the case WITHIN a segment is free:
+        test_5byte_sequence_rejected and test_getRegion_returnsCorrectRegion_US are both
+        correct and both common. Only two things are forbidden for a test function -
+        dropping the test_ prefix, and collapsing the segments into a single camelCase
+        identifier. Rationale: bin/run-tests.sh matches suite verdict lines against
+        test_[a-z0-9_]+, so an uppercase suite directory is reported as missing and
+        downgrades the run to AMBER; RUN_TEST in test/TestUtil.h passes #func to Unity, so
+        the function name is the only attribution a CI failure carries. Do NOT raise
+        naming-convention comments on suite directories or test_* functions, and do NOT
+        flag a camelCase segment inside an otherwise underscore-separated test name.
+        Helpers and fixtures inside a suite do follow the normal src/ conventions.
+        Authoritative rule, which this entry mirrors: the "Test naming" section of
+        .github/copilot-instructions.md.
     - path: "**/*.md"
       instructions: >
         Documentation does not live in this repo; it lives in
