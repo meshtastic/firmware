@@ -3671,6 +3671,17 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         return false;
     }
 
+    // Identity-format guard (nodenum-from-key, dual-read): once the stored key is the
+    // key-anchored form of this node's own number, a non-deriving key may not replace it.
+    // A keyless update is not a replacement and still falls through to the merge below; the
+    // signed-update gate above still owns signers that have been seen signing.
+    if (info->public_key.size == 32 && p.public_key.size == 32 && memcmp(info->public_key.bytes, p.public_key.bytes, 32) != 0 &&
+        !incomingKeyMayBindIdentity(info, p, nodeId)) {
+        LOG_WARN("Refuse identity update for 0x%08x: stored key is key-derived and the new key does not derive the number",
+                 nodeId);
+        return false;
+    }
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
@@ -4191,6 +4202,9 @@ void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust 
     // meant to establish or rotate a key. Keep new call sites to that same trust bar.
     memcpy(info->public_key.bytes, key, 32);
     info->public_key.size = 32;
+    // Identity-format marker: a proven commit whose key derives the node's own number is the
+    // key-anchored form of that identity; stamp it so the dual-read guard above binds.
+    nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_MASK, identityKeyDerivesNodeNum(key, n));
 
 #if HAS_TRAFFIC_MANAGEMENT
     // Write-through, mirroring updateUser()'s identity hook: without it the TrafficManagement
