@@ -1481,6 +1481,17 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
 
+    // Floor as well as ceiling. On a board that declares an external PA gain the
+    // subtraction above can push the level below what the radio can physically
+    // emit: the chip then rejects the setting and stops transmitting altogether
+    // rather than transmitting weakly. Measured on a board with
+    // TX_GAIN_LORA 25 and tx_power -9: "Final Tx power: -34 dBm" and no packet
+    // ever left the queue.
+    if (power < RADIO_MIN_TX_POWER_DBM) {
+        LOG_WARN("Tx power %d dBm below radio minimum, raising to %d dBm", power, RADIO_MIN_TX_POWER_DBM);
+        power = RADIO_MIN_TX_POWER_DBM;
+    }
+
     LOG_INFO("Final Tx power: %d dBm", power);
 }
 
