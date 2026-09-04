@@ -1,0 +1,33 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32c6_out.ld"
+    },
+    "core": "esp32",
+    "extra_flags": ["-DARDUINO_USB_CDC_ON_BOOT=1", "-DARDUINO_USB_MODE=1"],
+    "f_cpu": "160000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "qio",
+    "mcu": "esp32c6",
+    "variant": "seeed_xiao_c6"
+  },
+  "connectivity": ["wifi", "bluetooth", "lora"],
+  "debug": {
+    "default_tool": "esp-builtin",
+    "onboard_tools": ["esp-builtin"],
+    "openocd_target": "esp32c6.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "seeed-xiao-c6",
+  "upload": {
+    "flash_size": "4MB",
+    "maximum_ram_size": 524288,
+    "maximum_size": 4194304,
+    "use_1200bps_touch": true,
+    "wait_for_upload_port": true,
+    "require_upload_port": true,
+    "speed": 460800
+  },
+  "url": "https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32C6-p-5884.html",
+  "vendor": "Seeed Studio"
+}
