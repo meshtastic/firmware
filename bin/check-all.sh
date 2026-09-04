@@ -48,6 +48,9 @@ done
 LOG=$(mktemp)
 trap 'rm -f "$LOG"' EXIT
 
+# Clean up legacy package(arduino-pico) used for rp2040/rp2350 from the base CI container if present
+[[ -d "${PLATFORMIO_CORE_DIR:-$HOME/.platformio}/packages/arduino-pico" ]] && rm -rf "${PLATFORMIO_CORE_DIR:-$HOME/.platformio}/packages/arduino-pico"
+
 # Keep streaming to the console so the CI log reads exactly as it did before; tee a copy for the
 # post-mortem classification below.
 pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt --inline-suppr" "${CHECK[@]}" --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high 2>&1 | tee "$LOG"
