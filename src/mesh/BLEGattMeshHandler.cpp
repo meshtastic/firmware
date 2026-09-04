@@ -85,6 +85,7 @@ bool BLEGattMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     slot.fragId = nextFragId++;
     // A relay must never go back to the peer that delivered it; an origination matches nothing.
     slot.exclude = arrivalPeer(mp->from, mp->id);
+    LOG_INFO("BLE GATT mesh: onSend queued id=0x%08x len=%u (spike diag)", mp->id, (unsigned)n);
 
     txTail = (txTail + 1) % BLE_GATT_MESH_TX_QUEUE_SIZE;
     txCount++;
@@ -135,6 +136,7 @@ bool BLEGattMeshHandler::pumpTx()
         txFragIdx = 0;
         txAttempts = 0;
         txActive = true;
+        LOG_INFO("BLE GATT mesh: pumpTx id=0x%04x peers=%u/%u (spike diag)", slot.fragId, (unsigned)txPeerCount, (unsigned)n);
     }
 
     const TxSlot &slot = txQueue[txHead];

@@ -130,6 +130,7 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
     {
         // NimBLE task: copy the value out and wake the pump. Nothing here may touch the mesh.
         const size_t len = characteristic->getLength();
+        LOG_INFO("BLE GATT mesh: onWrite conn %u len %u (spike diag)", desc->conn_handle, (unsigned)len);
         if (len == 0 || len > BLE_GATT_MESH_MAX_CHUNK)
             return;
         {
@@ -143,6 +144,7 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
 
     void onSubscribe(BLECharacteristic *, ble_gap_conn_desc *desc, uint16_t subValue) override
     {
+        LOG_INFO("BLE GATT mesh: onSubscribe conn %u subValue 0x%04x (spike diag)", desc->conn_handle, subValue);
         const bool subscribed = (subValue & 0x0001) != 0; // notifications, not indications
         {
             std::lock_guard<std::mutex> guard(lock);
