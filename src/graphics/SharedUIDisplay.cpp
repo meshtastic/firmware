@@ -557,13 +557,20 @@ const int *getTextPositions(OLEDDisplay *display)
         textPositions[5] = textFifthLine_medium;
         textPositions[6] = textSixthLine_medium;
     } else {
+        int bodyShift = 0;
+        if (isTFTColoringEnabled()) {
+            const int headerBottom = FONT_HEIGHT_SMALL + 1 + BASEUI_HEADER_MARGIN;
+            const int overlap = headerBottom - textFirstLine;
+            if (overlap > 0 && (textSixthLine + FONT_HEIGHT_SMALL + overlap) <= SCREEN_HEIGHT)
+                bodyShift = overlap;
+        }
         textPositions[0] = textZeroLine;
-        textPositions[1] = textFirstLine;
-        textPositions[2] = textSecondLine;
-        textPositions[3] = textThirdLine;
-        textPositions[4] = textFourthLine;
-        textPositions[5] = textFifthLine;
-        textPositions[6] = textSixthLine;
+        textPositions[1] = textFirstLine + bodyShift;
+        textPositions[2] = textSecondLine + bodyShift;
+        textPositions[3] = textThirdLine + bodyShift;
+        textPositions[4] = textFourthLine + bodyShift;
+        textPositions[5] = textFifthLine + bodyShift;
+        textPositions[6] = textSixthLine + bodyShift;
     }
     return textPositions;
 }
