@@ -53,4 +53,8 @@ Sample OCV curve for Li-SOCl2 primary lithium cells (e.g. Saft cells have fresh 
 // https://github.com/stm32duino/Arduino_Core_STM32/blob/main/variants/STM32WLxx/WL54CCU_WL55CCU_WLE4C(8-B-C)U_WLE5C(8-B-C)U/variant_RAK3172_MODULE.h
 #define RAK3172
 
+// RAK3172 module
+#define HAS_LSE 1
+#define STM32WL_LSE_DRIVE RCC_LSEDRIVE_LOW
+
 #endif
