@@ -925,7 +925,8 @@ bool GPS::setup()
             // Initialize the L76K Chip, use GPS + GLONASS + BEIDOU
             _serial_gps->write("$PCAS04,7*1E\r\n");
             delay(250);
-            // only ask for RMC and GGA
+            // Keep the extended L76K NMEA set enabled. In PCAS03 the fourth
+            // field is nGSV, so this command already enables GSV once per fix.
             _serial_gps->write("$PCAS03,1,1,1,1,1,1,1,1,0,0,,,0,0*02\r\n");
             delay(250);
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
@@ -2284,16 +2285,27 @@ bool GPS::lookForLocation()
     // Base UI can show satellites while the receiver is still acquiring or
     // while another validation check rejects the current position solution.
     // Prefer the true GSV satellites-in-view count and fall back to GGA.
+    //
+    // IMPORTANT: TinyGPSDatum::value() clears the isUpdated() flag. Capture
+    // freshness before reading the value so an old GGA value cannot later be
+    // mistaken for a new "0 satellites" report.
     const uint16_t satsInView = reader.satellitesInView();
+    const bool ggaSatsValid = reader.satellites.isValid();
+    const bool ggaSatsUpdated = reader.satellites.isUpdated();
+    const uint16_t ggaSats = ggaSatsValid ? reader.satellites.value() : 0;
+
     uint16_t reportedSats = 0;
-    bool haveSatelliteCount = false;
+    bool havePositiveSatelliteCount = false;
 
     if (satsInView > 0) {
+        // GSV is the authoritative source for satellites actually in view.
         reportedSats = satsInView;
-        haveSatelliteCount = true;
-    } else if (reader.satellites.isValid()) {
-        reportedSats = reader.satellites.value();
-        haveSatelliteCount = true;
+        havePositiveSatelliteCount = true;
+    } else if (ggaSatsValid && ggaSats > 0) {
+        // GGA reports satellites used by the fix. It is a useful fallback
+        // while a complete GSV cycle is not currently available.
+        reportedSats = ggaSats;
+        havePositiveSatelliteCount = true;
     }
 
     if (haveSatelliteCount && p.sats_in_view != reportedSats) {
