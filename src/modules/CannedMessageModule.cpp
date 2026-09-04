@@ -2184,9 +2184,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 this->ack = isAck;
                 waitingForAck = false;
             } else if (isAck) {
-                // Relay ACK → mark as RELAYED, still no final ACK
+                // A relay ACK is not a delivery, so stay in waitingForAck. Clearing it here makes the
+                // guard at the top reject the destination's own ACK and this stays RELAYED for good.
                 this->ack = false;
-                waitingForAck = false;
             } else {
                 // Explicit failure
                 this->ack = false;
