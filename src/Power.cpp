@@ -108,6 +108,10 @@ static const adc_channel_t adc_channel = ADC_CHANNEL;
 static const adc_unit_t unit = ADC_UNIT_2;
 #endif // BAT_MEASURE_ADC_UNIT
 
+#ifdef EXT_PWR_DETECT_ADC
+static const adc_channel_t ext_pwr_adc_channel = EXT_PWR_DETECT_ADC_CHANNEL;
+#endif
+
 static adc_oneshot_unit_handle_t adc_handle = nullptr;
 static adc_cali_handle_t adc_cali_handle = nullptr;
 static bool adc_calibrated = false;
@@ -209,6 +213,10 @@ static bool initAdcCalibration()
 #ifndef EXT_CHRG_DETECT_VALUE
 #define EXT_CHRG_DETECT_VALUE HIGH
 #endif
+#endif
+
+#if defined(EXT_PWR_DETECT_ADC) && !defined(EXT_PWR_DETECT_ADC_THRESHOLD_MV)
+#error "EXT_PWR_DETECT_ADC_THRESHOLD_MV must be defined with EXT_PWR_DETECT_ADC"
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -407,6 +415,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return clamp((int)(battery_SOC), 0, 100);
     }
 
+#ifdef EXT_PWR_DETECT_ADC
+    uint16_t getExtPowerSenseVoltage()
+    {
+        uint32_t raw = espAdcRead(ext_pwr_adc_channel);
+        return espAdcRawToMilliVolts(raw);
+    }
+#endif
+
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
@@ -455,20 +471,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
             scaled = __LL_ADC_CALC_DATA_TO_VOLTAGE(Vref, raw, LL_ADC_RESOLUTION);
             scaled *= operativeAdcMultiplier;
 #elif defined(ARCH_ESP32) // ADC block for espressif platforms
-            raw = espAdcRead();
-            int voltage_mv = 0;
-            if (adc_calibrated && adc_cali_handle) {
-                if (adc_cali_raw_to_voltage(adc_cali_handle, raw, &voltage_mv) != ESP_OK) {
-                    LOG_WARN("ADC calibration read failed; using raw value");
-                    voltage_mv = 0;
-                }
-            }
-            if (voltage_mv == 0) {
-                // Fallback approximate conversion without calibration
-                const int bits = adcBitWidthToBits(adc_width);
-                const float max_code = powf(2.0f, bits) - 1.0f;
-                voltage_mv = (int)((raw / max_code) * DEFAULT_VREF);
-            }
+            raw = espAdcRead(adc_channel);
+            int voltage_mv = espAdcRawToMilliVolts(raw);
             scaled = voltage_mv * operativeAdcMultiplier;
 #else                     // block for all other platforms
 #ifdef ARCH_NRF52
@@ -505,7 +509,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * ESP32 specific function for getting calibrated ADC reads
      */
-    uint32_t espAdcRead()
+    uint32_t espAdcRead(adc_channel_t channel)
     {
 
         uint32_t raw = 0;
@@ -518,7 +522,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             int val = 0;
-            esp_err_t err = adc_oneshot_read(adc_handle, adc_channel, &val);
+            esp_err_t err = adc_oneshot_read(adc_handle, channel, &val);
             if (err == ESP_OK) {
                 raw += val;
                 raw_c++;
@@ -529,6 +533,46 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
         return (raw / (raw_c < 1 ? 1 : raw_c));
     }
+
+    uint16_t espAdcRawToMilliVolts(uint32_t raw) {
+        int voltage_mv = 0;
+
+        if (adc_calibrated && adc_cali_handle) {
+            if (adc_cali_raw_to_voltage(adc_cali_handle, raw, &voltage_mv) != ESP_OK) {
+                LOG_WARN("ADC calibration read failed; using raw value");
+                voltage_mv = 0;
+            }
+        }
+
+        if (voltage_mv == 0) {
+            // Approximate conversion when ADC calibration is unavailable
+            float attenuationScale;
+
+            switch (atten) {
+            case ADC_ATTEN_DB_0:
+                attenuationScale = 1.0f;
+                break;
+            case ADC_ATTEN_DB_2_5:
+                attenuationScale = 1.0f / 0.75f;
+                break;
+            case ADC_ATTEN_DB_6:
+                attenuationScale = 1.0f / 0.50f;
+                break;
+            case ADC_ATTEN_DB_12:
+                attenuationScale = 1.0f / 0.25f;
+                break;
+            default:
+                LOG_ERROR("Unsupported ADC attenuation: %d", (int)atten);
+                return 0;
+        }
+
+        const int bits = adcBitWidthToBits(adc_width);
+        const float max_code = powf(2.0f, bits) - 1.0f;
+        voltage_mv = (int)((raw / max_code) * DEFAULT_VREF * attenuationScale);
+    }
+
+    return voltage_mv;
+}
 #endif
 
     /**
@@ -578,6 +622,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return false;
 #endif
 
+#elif defined(EXT_PWR_DETECT_ADC)
+        return getExtPowerSenseVoltage() >= EXT_PWR_DETECT_ADC_THRESHOLD_MV;
+
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
@@ -600,6 +647,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
         }
 #endif
+
         // A configured INA outranks the board's own charge-status pin, as it does BATTERY_PIN in
         // getBattVoltage(): an external charger leaves that pin idle, reading "not charging" forever.
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(DISABLE_INA_CHARGING_DETECTION)
@@ -615,10 +663,16 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
         }
 #endif
+
 #if defined(ELECROW_ThinkNode_M6)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
 #elif defined(EXT_CHRG_DETECT)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
+#elif defined(INFER_CHARGING_FROM_EXT_PWR)
+        {
+            int batteryPercent = getBatteryPercent();
+            return isVbusIn() && batteryPercent >= 0 && batteryPercent < 100;
+        }
 #elif defined(BATTERY_CHARGING_INV)
         return !digitalRead(BATTERY_CHARGING_INV);
 #else
@@ -897,6 +951,16 @@ bool Power::analogInit()
         LOG_ERROR("ADC channel config failed: %s", esp_err_to_name(err));
         return false;
     }
+
+    #ifdef EXT_PWR_DETECT_ADC
+    pinMode(EXT_PWR_DETECT_ADC, INPUT);
+
+    err = adc_oneshot_config_channel(adc_handle, ext_pwr_adc_channel, &chan_cfg);
+    if (err != ESP_OK) {
+        LOG_ERROR("External power ADC channel config failed: %s", esp_err_to_name(err));
+        return false;
+    }
+    #endif
 
     adc_calibrated = initAdcCalibration();
 #endif                    // ARCH_ESP32
