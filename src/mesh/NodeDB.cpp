@@ -4562,7 +4562,7 @@ bool NodeDB::createNewIdentity()
 
     // Clients cache my_node_num from the handshake; the region set that mints the key never reboots.
     if (service) {
-        service->identityMoved = true;
+        service->identityGeneration++;
         service->nudgeFromNum();
     }
 

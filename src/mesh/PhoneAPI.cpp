@@ -560,13 +560,8 @@ void PhoneAPI::fillMyInfo()
     fromRadioScratch.my_info = myNodeInfo;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     if (!getAdminAuthorized()) {
-        // device_id is a stable hardware identifier - useful for an attacker
-        // to fingerprint / correlate the device across observations. Strip it
-        // for unauthenticated clients. my_node_num is kept (it's broadcast
-        // on the mesh anyway). pio_env / min_app_version reveal the exact
-        // build flavour, useful only for picking which known-CVE to try.
-        // nodedb_count stays - clients need it to decide whether to pull
-        // the node DB after unlocking.
+        // device_id fingerprints the hardware and pio_env/min_app_version name the exact build to pick a
+        // known CVE for. my_node_num is broadcast on the mesh anyway, and nodedb_count is not secret.
         fromRadioScratch.my_info.device_id.size = 0;
         memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
         memset(fromRadioScratch.my_info.pio_env, 0, sizeof(fromRadioScratch.my_info.pio_env));
@@ -1917,11 +1912,11 @@ int PhoneAPI::onNotify(uint32_t newValue)
 
     if (state == STATE_SEND_PACKETS) {
         // Consumed by every connected client in this one notify pass, so no per-connection bookkeeping.
-        if (service->identityMoved)
+        if (service->identityMovePending())
             state = STATE_RESEND_MY_INFO;
         LOG_INFO("Tell client new packets %u", newValue);
         onNowHasData(newValue);
-    } else if (service->identityMoved && state != STATE_SEND_NOTHING && state != STATE_SEND_MY_INFO &&
+    } else if (service->identityMovePending() && state != STATE_SEND_NOTHING && state != STATE_SEND_MY_INFO &&
                config_nonce != SPECIAL_NONCE_ONLY_NODES) {
         // Mid-sync, and our my_info is already out with the old number. There is no steady state to
         // fall back from here, so restart the dump and let it carry the new one.

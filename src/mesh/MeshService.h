@@ -160,9 +160,13 @@ class MeshService
     /// senders.
     void nudgeFromNum() { fromNum++; }
 
-    /// Set with a nudgeFromNum() when our node num changes, and cleared once the notify pass has
-    /// reached every connected client. PhoneAPI keys its MyInfo re-announce off it.
-    bool identityMoved = false;
+    /// Bumped with a nudgeFromNum() when our node num changes; the seen counter only advances once a
+    /// notify pass has reached every client, so a move landing during a pass stays pending after it.
+    uint32_t identityGeneration = 0;
+    uint32_t identityGenerationSeen = 0;
+
+    /// True while a node num change still owes connected clients a fresh MyInfo.
+    bool identityMovePending() const { return identityGeneration != identityGenerationSeen; }
 
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)

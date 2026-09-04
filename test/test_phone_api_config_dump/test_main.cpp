@@ -575,10 +575,20 @@ void test_node_num_change_mid_dump_restarts_sync()
                                    "a mid-sync renumber must restart the dump");
     TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), msg.my_info.my_node_num);
 
+    // Everything after the my_info already read must arrive again, in order and complete.
     DumpTranscript t;
     TEST_ASSERT_TRUE_MESSAGE(drainUntilComplete(t), "restarted dump never completed");
-    TEST_ASSERT_EQUAL_UINT32(FULL_DUMP_NONCE, t.completeId);
+    const pb_size_t expectedPrefix[] = {meshtastic_FromRadio_deviceuiConfig_tag, meshtastic_FromRadio_node_info_tag,
+                                        meshtastic_FromRadio_metadata_tag, meshtastic_FromRadio_region_presets_tag};
+    TEST_ASSERT_EQUAL_UINT(NUM_SINGLETON_PREFIX - 1, sizeof(expectedPrefix) / sizeof(expectedPrefix[0]));
+    for (unsigned i = 0; i < NUM_SINGLETON_PREFIX - 1; i++)
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(expectedPrefix[i], t.variants[i], "restarted dump changed the header sequence");
+    TEST_ASSERT_EQUAL_UINT((unsigned)MAX_NUM_CHANNELS, t.channelIndices.size());
     TEST_ASSERT_EQUAL_UINT_MESSAGE(NUM_CONFIG_MESSAGES, t.configVariants.size(), "restarted dump lost part of the config");
+    TEST_ASSERT_EQUAL_UINT(NUM_MODULE_CONFIG_MESSAGES, t.moduleConfigVariants.size());
+    TEST_ASSERT_EQUAL_UINT(1, t.nodeNums.size()); // our own record; this test seeds no remotes
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), t.nodeNums[0]);
+    TEST_ASSERT_EQUAL_UINT32(FULL_DUMP_NONCE, t.completeId);
 }
 
 } // namespace
