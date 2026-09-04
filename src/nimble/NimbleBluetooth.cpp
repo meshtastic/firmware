@@ -704,7 +704,14 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
         // yields a *failed* encryption change here -- don't latch a connected/authenticated state
         // on a link that is actually being torn down.
         if (desc == nullptr || !desc->sec_state.encrypted) {
-            LOG_WARN("BLE encryption change without encrypted link; ignoring");
+            // Diagnostic (spike): name the SMP/HCI failure and who holds the roles, so a failed
+            // mesh-peer pairing can be told apart from a stale-bond reconnect. bonded/key_size say
+            // whether a bond was in play; the role bits say which side is the central.
+            LOG_WARN("BLE encryption change without encrypted link; ignoring (conn=%u bonded=%d authenticated=%d "
+                     "key_size=%u role=%s)",
+                     desc ? desc->conn_handle : 0xffff, desc ? desc->sec_state.bonded : -1,
+                     desc ? desc->sec_state.authenticated : -1, desc ? desc->sec_state.key_size : 0,
+                     desc ? (desc->role == BLE_GAP_ROLE_MASTER ? "master" : "slave") : "?");
             return;
         }
 
@@ -1171,8 +1178,11 @@ void NimbleBluetooth::setup()
     } else {
         // No IO capability for no PIN mode
         security.setCapability(ESP_IO_CAP_NONE);
-        // No PIN mode: no MITM protection
-        security.setAuthenticationMode(true, false, false);
+        // No PIN mode: no MITM protection, and (spike) no BONDING either. With bonding on, the node
+        // advertises the SMP bonding bit and a central "just works"-pairs on connect; if that pairing
+        // fails the ACL is torn down before the (unauthenticated) mesh-peer characteristic can be
+        // subscribed. Nothing in NO_PIN needs an encrypted link, so don't offer to bond at all.
+        security.setAuthenticationMode(false, false, false);
     }
     // Statics: setup() re-runs on BLE re-enable, and the library never frees these
     // caller-owned callback objects, so register the same instances every cycle.
