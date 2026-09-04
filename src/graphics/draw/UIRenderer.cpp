@@ -531,6 +531,7 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
         snprintf(textString, sizeof(textString), "GPS off");
     } else if (!gps || !gps->getIsConnected()) {
         snprintf(textString, sizeof(textString), "No Lock");
+<<<<<<< HEAD
     } else if (gps->getIsSleeping()) {
         // Runtime GNSS sleep is intentional energy saving, not lost UART data.
         snprintf(textString, sizeof(textString), "GPS sleep");
@@ -541,6 +542,9 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
     } else if (gps->getNumSatellites() == 0) {
         // No position lock and no visible satellites are different states.
         // Show "No Sats" only when the published satellite count is really 0.
+=======
+    } else if (gps->getNumSatellites() == 0) {
+>>>>>>> 0e3b79a18 (t-ech-plust-echo-plus)
         snprintf(textString, sizeof(textString), "No Sats");
     } else {
         snprintf(textString, sizeof(textString), "%u sats", gps->getNumSatellites());

@@ -7,6 +7,11 @@
 
 namespace graphics::SatellitesRenderer
 {
+<<<<<<< HEAD
+=======
+namespace SatellitesRenderer
+{
+>>>>>>> 0e3b79a18 (t-ech-plust-echo-plus)
 static const char *systemName(uint8_t s)
 {
     switch (s) {
@@ -80,6 +85,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
     display->drawString(x + 2, y + 14, top);
 
     char systems[46];
+<<<<<<< HEAD
     snprintf(systems, sizeof(systems), "GPS:%u GLO:%u BDS:%u QZS:%u",
              (unsigned)(live ? gps->getSatellitesUsedBySystem(TINYGPS_GNSS_GPS)
                              : gps->getSatellitesUsedBySystemSnapshot(TINYGPS_GNSS_GPS)),
@@ -99,16 +105,34 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
     // '*' means this SVID is explicitly listed by the checksum-valid GSA
     // sentence as used in the navigation solution.
     display->drawString(x + 2, y + 59, live ? "U SYS ID EL AZ SNR" : "LAST U SYS ID EL AZ SNR");
+=======
+    snprintf(systems, sizeof(systems), "GPS:%u GLO:%u BDS:%u", (unsigned)gps->getSatellitesUsedBySystem(TINYGPS_GNSS_GPS),
+             (unsigned)gps->getSatellitesUsedBySystem(TINYGPS_GNSS_GLONASS),
+             (unsigned)gps->getSatellitesUsedBySystem(TINYGPS_GNSS_BEIDOU));
+    display->drawString(x + 2, y + 14, systems);
+
+    display->drawString(x + 2, y + 28, "SYS ID EL  AZ  SNR");
+    display->drawHorizontalLine(x + 2, y + 44, w - 4);
+>>>>>>> 0e3b79a18 (t-ech-plust-echo-plus)
 
     const auto *sats = gps->getTrackedSatellites();
     const size_t cap = gps->getTrackedSatelliteCapacity();
     const TinyGPSTrackedSattelites *list[TINYGPS_MAX_SATS];
     size_t count = 0;
 
+<<<<<<< HEAD
     for (size_t i = 0; i < cap && count < TINYGPS_MAX_SATS; ++i) {
         const bool include = live ? gps->isTrackedSatelliteFresh(sats[i]) : (sats[i].prn != 0);
         if (include)
             list[count++] = &sats[i];
+=======
+    // Only render satellites from a recent, checksum-valid GSV sentence.
+    // Old GSV rows must not remain frozen on the E-Ink page indefinitely.
+    for (size_t i = 0; i < capacity && count < TINYGPS_MAX_SATS; ++i) {
+        if (gps->isTrackedSatelliteFresh(sats[i])) {
+            visible[count++] = &sats[i];
+        }
+>>>>>>> 0e3b79a18 (t-ech-plust-echo-plus)
     }
 
     std::sort(list, list + count, [live](const auto *a, const auto *b) {
@@ -141,6 +165,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
 
     for (size_t i = 0; i < count && yy + 11 <= bottom; ++i) {
         char row[40];
+<<<<<<< HEAD
         const bool usedInFix = live ? gps->isSatelliteUsed(*list[i]) : gps->isSatelliteUsedSnapshot(*list[i]);
         const char usedMark = usedInFix ? '*' : ' ';
         if (list[i]->tracked)
@@ -151,6 +176,15 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
             snprintf(row, sizeof(row), "%c %-3s %3u %2u %3u  --", usedMark, systemName(list[i]->system),
                      (unsigned)list[i]->prn, (unsigned)list[i]->elevation, (unsigned)list[i]->azimuth);
 
+=======
+        if (visible[i]->tracked) {
+            snprintf(row, sizeof(row), "%-3s %3u %2u %3u %3u", systemName(visible[i]->system), (unsigned)visible[i]->prn,
+                     (unsigned)visible[i]->elevation, (unsigned)visible[i]->azimuth, (unsigned)visible[i]->strength);
+        } else {
+            snprintf(row, sizeof(row), "%-3s %3u %2u %3u  --", systemName(visible[i]->system), (unsigned)visible[i]->prn,
+                     (unsigned)visible[i]->elevation, (unsigned)visible[i]->azimuth);
+        }
+>>>>>>> 0e3b79a18 (t-ech-plust-echo-plus)
         display->drawString(x + 2, yy, row);
         yy += 13;
     }
