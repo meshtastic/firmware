@@ -32,8 +32,15 @@ struct Link {
     bool used;
     uint16_t conn;
     uint16_t chunk;
-    bool subscribed;
-    bool viaMeshAdv; // connected through our advertisement rather than the phone API's
+    bool subscribed; // wrote the CCCD: a notify target
+    // Arrived through the mesh-peer advertisement (instance 2). Set in onGapEvent CONNECT and nowhere
+    // else: it is the slot accounting for that advertisement and the "not the phone's session" signal
+    // NimbleBluetooth's onDisconnect keys off, so it must mean exactly "came in on instance 2". It used
+    // to be set by onSubscribe too, and that conflation is what put both advertisements to sleep: a
+    // central that raced onto the phone-API set (both sets share the public address, so a CONNECT_IND
+    // lands on whichever ADV_IND it catches) and subscribed was counted against this slot, and when it
+    // dropped the early return in NimbleBluetooth skipped the phone-API re-arm as well.
+    bool viaMeshAdv;
 };
 // Every link the server can hold: a phone-API link that subscribes to the mesh characteristic is a peer too.
 std::array<Link, 4> links{};
@@ -93,12 +100,38 @@ Link *addLink(uint16_t conn, bool viaMeshAdv)
     return nullptr;
 }
 
-size_t meshLinkCount()
+// Links that came in through the mesh-peer advertisement; `holder` gets the conn of the first one, so a
+// "slots full" log can name who is occupying it instead of leaving that to guesswork on the bench.
+size_t meshLinkCount(uint16_t *holder = nullptr)
 {
     size_t n = 0;
-    for (const auto &l : links)
-        n += (l.used && l.viaMeshAdv) ? 1 : 0;
+    for (const auto &l : links) {
+        if (!l.used || !l.viaMeshAdv)
+            continue;
+        if (n == 0 && holder)
+            *holder = l.conn;
+        n++;
+    }
     return n;
+}
+
+// NimBLE's rc for the two ways a connectable set fails to start that look identical without this:
+// ENOMEM (6) is the host with no free connection slot - CONFIG_BT_NIMBLE_MAX_CONNECTIONS all in use,
+// so the set cannot be started until a link drops; 519 is HCI 0x07 Memory Capacity Exceeded, the
+// controller's activity budget (CONFIG_BT_CTRL_BLE_MAX_ACT) counting advertising sets, scans and
+// connections together. Anything else is unexpected.
+const char *advRcHint(int rc)
+{
+    switch (rc) {
+    case BLE_HS_ENOMEM:
+        return " (no free connection slot; retried on the next disconnect)";
+    case BLE_HS_ERR_HCI_BASE + 0x07:
+        return " (controller activity budget exhausted: CONFIG_BT_CTRL_BLE_MAX_ACT)";
+    case BLE_HS_EALREADY:
+        return " (already advertising)";
+    default:
+        return "";
+    }
 }
 
 void pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
@@ -144,15 +177,20 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
     {
         // The canonical "this link is a mesh peer" signal: a CCCD write enabling notifications. Only a
         // subscribed link is a notify target, so a plain phone-API client is never sent mesh frames.
+        // It says nothing about which advertisement the link arrived on, so viaMeshAdv stays as the
+        // CONNECT event left it (false here: a link unknown until now came in on the phone-API set).
         const bool subscribed = (subValue & 0x0001) != 0; // notifications, not indications
+        bool viaMeshAdv = false;
         {
             std::lock_guard<std::mutex> guard(lock);
-            if (Link *l = addLink(desc->conn_handle, true)) {
+            if (Link *l = addLink(desc->conn_handle, false)) {
                 l->subscribed = subscribed;
                 l->chunk = chunkFor(desc->conn_handle);
+                viaMeshAdv = l->viaMeshAdv;
             }
         }
-        LOG_INFO("BLE GATT mesh: conn %u %s", desc->conn_handle, subscribed ? "subscribed" : "unsubscribed");
+        LOG_INFO("BLE GATT mesh: conn %u %s (via %s advertisement)", desc->conn_handle,
+                 subscribed ? "subscribed" : "unsubscribed", viaMeshAdv ? "mesh-peer" : "phone-API");
         if (bleGattMeshHandler)
             bleGattMeshHandler->wake(); // flush anything queued while this peer was still connecting
     }
@@ -201,15 +239,26 @@ void ESP32BLEGattMesh::startAdvertising()
 {
     BLEServer *server;
     size_t linksNow;
+    uint16_t holder = BLE_HS_CONN_HANDLE_NONE;
     {
         std::lock_guard<std::mutex> guard(lock);
         if (!meshCharacteristic)
             return;
         server = meshServer;
-        linksNow = meshLinkCount();
+        linksNow = meshLinkCount(&holder);
     }
     if (linksNow >= BLE_GATT_MESH_MAX_LINKS) {
-        LOG_DEBUG("BLE GATT mesh: peer slots full, not advertising");
+        // INFO, not DEBUG, and with the holder: this is the line that says "a second phone cannot find
+        // this node over GATT right now, and here is who has the slot". At DEBUG it was invisible on a
+        // bench where exactly that was the question.
+        LOG_INFO("BLE GATT mesh: peer slot held by conn %u (%u/%u), not advertising", holder, (unsigned)linksNow,
+                 (unsigned)BLE_GATT_MESH_MAX_LINKS);
+        return;
+    }
+    // Re-armed on every disconnect (see onDisconnect), so this is frequently reached with the set
+    // already running; leave it alone rather than stop-and-restart it for a gap in the advertisement.
+    if (ble_gap_ext_adv_active(BLE_GATT_MESH_ADV_INSTANCE)) {
+        LOG_DEBUG("BLE GATT mesh: mesh-peer advertisement already running");
         return;
     }
 
@@ -231,7 +280,7 @@ void ESP32BLEGattMesh::startAdvertising()
     int8_t selectedTxPower = 0;
     int rc = ble_gap_ext_adv_configure(BLE_GATT_MESH_ADV_INSTANCE, &params, &selectedTxPower, onGapEvent, (void *)server);
     if (rc != 0) {
-        LOG_ERROR("BLE GATT mesh: ext adv configure failed: rc=%d", rc);
+        LOG_ERROR("BLE GATT mesh: ext adv configure failed: rc=%d%s", rc, advRcHint(rc));
         return;
     }
 
@@ -277,10 +326,15 @@ void ESP32BLEGattMesh::startAdvertising()
     }
 
     rc = ble_gap_ext_adv_start(BLE_GATT_MESH_ADV_INSTANCE, 0, 0);
-    if (rc != 0)
-        LOG_ERROR("BLE GATT mesh: ext adv start failed: rc=%d", rc);
-    else
+    if (rc == BLE_HS_ENOMEM) {
+        // Every connection slot is taken (the phone plus a mesh peer, or two mesh peers): expected on a
+        // full node, not an error. onDisconnect re-arms us, so the set comes back with the first free slot.
+        LOG_WARN("BLE GATT mesh: ext adv start deferred: rc=%d%s", rc, advRcHint(rc));
+    } else if (rc != 0) {
+        LOG_ERROR("BLE GATT mesh: ext adv start failed: rc=%d%s", rc, advRcHint(rc));
+    } else {
         LOG_INFO("BLE GATT mesh: advertising the mesh-peer service on instance %d", BLE_GATT_MESH_ADV_INSTANCE);
+    }
 }
 
 void ESP32BLEGattMesh::onConnect(uint16_t connHandle)
@@ -296,18 +350,23 @@ void ESP32BLEGattMesh::onConnect(uint16_t connHandle)
 bool ESP32BLEGattMesh::onDisconnect(uint16_t connHandle)
 {
     bool viaMeshAdv = false;
+    bool subscribed = false;
     {
         std::lock_guard<std::mutex> guard(lock);
         if (Link *l = findLink(connHandle)) {
             viaMeshAdv = l->viaMeshAdv;
+            subscribed = l->subscribed;
             l->used = false;
             pushRx(connHandle, nullptr, 0); // the pump drops its half-built packets
         }
     }
-    if (viaMeshAdv) {
-        LOG_INFO("BLE GATT mesh: peer conn %u disconnected", connHandle);
-        pendingAdvertising = true;
-    }
+    LOG_INFO("BLE GATT mesh: conn %u disconnected (via %s advertisement, %s)", connHandle, viaMeshAdv ? "mesh-peer" : "phone-API",
+             subscribed ? "was subscribed" : "never subscribed");
+    // Re-arm on every drop, not only a mesh-peer one, and let startAdvertising() decide: a phone-API
+    // link dropping is what frees the connection slot a deferred start (rc=ENOMEM) was waiting for,
+    // and a set that is already running is left alone there. Only re-arming for mesh-peer links left
+    // instance 2 dark whenever the slot had been taken by a link that arrived on the other set.
+    pendingAdvertising = true;
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
     return viaMeshAdv;

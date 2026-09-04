@@ -769,10 +769,10 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
             ESP32BLEGattMesh::onConnect(connHandle);
 #endif
 
-        // With Google Pixel 8 Android devices, this causes ESP32 device crash
-        // when phone reconnects. Disable this to make progress on the
-        // Arduino v3 migration while we investigate the Android compatibility
-        // issue.
+            // With Google Pixel 8 Android devices, this causes ESP32 device crash
+            // when phone reconnects. Disable this to make progress on the
+            // Arduino v3 migration while we investigate the Android compatibility
+            // issue.
 #if 0
         int dataLenResult = ble_gap_set_data_len(connHandle, kPreferredBleTxOctets, kPreferredBleTxTimeUs);
         if (dataLenResult == 0) {
@@ -794,7 +794,11 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 
 #if HAS_BLE_GATT_MESH && BLE_MESH_USE_EXT_ADV
         // A mesh-peer link dropping is not the phone's session ending: leave the PhoneAPI state and its
-        // advertisement alone. The mesh half re-arms its own advertisement.
+        // advertisement alone. The mesh half re-arms its own advertisement. This is true only for a link
+        // that arrived on the mesh-peer advertising set; one that came in on the phone-API set falls
+        // through to the session reset and the instance-0 re-arm below even if it subscribed to the mesh
+        // characteristic - subscribing used to flag it as a mesh-peer link, and that skipped this path
+        // and left the phone-API advertisement dark until reboot.
         if (ESP32BLEGattMesh::onDisconnect(desc->conn_handle))
             return;
 #endif

@@ -24,6 +24,13 @@ class BLEServer;
 
 // Links accepted through the mesh-peer advertisement. CONFIG_BT_NIMBLE_MAX_CONNECTIONS is 2 and one
 // slot stays reserved for the phone API, so the advertisement only runs while there is room.
+//
+// One slot means one mesh phone at a time: two dual-role phones scanning for this service race for it,
+// whoever connects first holds it, and the other cannot find this node over GATT until that link drops
+// (the log says so: "peer slot held by conn N"). On a bench with two phones and one radio, run the
+// second phone PERIPHERAL_ONLY so it never dials the radio, or raise this together with
+// CONFIG_BT_NIMBLE_MAX_CONNECTIONS / CONFIG_BT_CTRL_BLE_MAX_ACT in [ble_mesh_esp32] - each extra
+// connection and activity costs controller RAM that the ESP32 NimBLE bring-up is already tight on.
 #ifndef BLE_GATT_MESH_MAX_LINKS
 #define BLE_GATT_MESH_MAX_LINKS 1
 #endif
@@ -47,8 +54,10 @@ class ESP32BLEGattMesh : public BLEGattMeshHandler
     /// subscribe/notify state is tracked no matter which advertisement it arrived on. Fires from the
     /// server's own connect callback, which - unlike a per-instance GAP callback - sees every link.
     static void onConnect(uint16_t connHandle);
-    /// A link dropped: forget it. True when it came in through the mesh-peer advertisement, so the
-    /// phone API's own session handling must not run for it.
+    /// A link dropped: forget it and re-arm the mesh-peer advertisement (startAdvertising() decides
+    /// whether there is a slot). True when it came in through the mesh-peer advertisement, so the phone
+    /// API's own session handling must not run for it - and only then: a link that arrived on the
+    /// phone-API set is the phone's, however it used the mesh characteristic.
     static bool onDisconnect(uint16_t connHandle);
     /// The server is being torn down and its characteristics freed.
     static void teardown();
