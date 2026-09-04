@@ -15,9 +15,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/ring_buffer.h>
 // ── Bluefruit singleton stub (satisfies NodeDB.cpp ARCH_NRF52 path) ──────────
 #include "bluefruit.h"
 BlueFruitClass Bluefruit;
@@ -34,8 +38,15 @@ TwoWire Wire;
 TwoWire Wire1;
 
 // ── HardwareSerial singletons ────────────────────────────────────────────────
+// Serial stays a console shim (printk). Serial1 is bound to uart21 (the XIAO
+// header UART, TX=P2.08/D6 RX=P2.07/D7) when the board enables it - this is
+// the GPS port. Serial2 has no hardware.
 HardwareSerial Serial;
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart21), okay)
+HardwareSerial Serial1(DEVICE_DT_GET(DT_NODELABEL(uart21)));
+#else
 HardwareSerial Serial1;
+#endif
 HardwareSerial Serial2;
 
 // ── Timing functions - C linkage to match extern "C" declarations ────────────
@@ -71,17 +82,137 @@ extern "C" void NVIC_SystemReset(void)
 }
 #pragma pop_macro("NVIC_SystemReset")
 
-// ── HardwareSerial::write ─────────────────────────────────────────────────────
+// ── HardwareSerial ───────────────────────────────────────────────────────────
+//
+// Console instances (_udev == nullptr) keep the historical printk behavior.
+// Device-backed instances (Serial1 → uart21) implement a real UART with
+// interrupt-driven RX into a ring buffer. Producer is the UART ISR, consumer
+// is the GPS thread; Zephyr's ring_buf is safe for that single-producer/
+// single-consumer pattern without extra locking.
+
+namespace
+{
+struct UartRxState {
+    struct ring_buf rb;
+    uint8_t storage[512]; // >2 NMEA sentences of headroom at 9600 baud
+};
+
+void hw_serial_rx_isr(const struct device *dev, void *user_data)
+{
+    auto *st = static_cast<UartRxState *>(user_data);
+    while (uart_irq_update(dev) && uart_irq_rx_ready(dev)) {
+        uint8_t chunk[32];
+        int n = uart_fifo_read(dev, chunk, sizeof(chunk));
+        if (n <= 0) {
+            break;
+        }
+        // On overflow ring_buf_put stores what fits and drops the rest;
+        // NMEA parsers resynchronize on the next '$' so this is acceptable.
+        ring_buf_put(&st->rb, chunk, (uint32_t)n);
+    }
+}
+} // namespace
+
+void HardwareSerial::begin(unsigned long baud)
+{
+    const struct device *dev = static_cast<const struct device *>(_udev);
+    if (!dev || !device_is_ready(dev)) {
+        return;
+    }
+
+    uart_irq_rx_disable(dev);
+
+    struct uart_config cfg = {};
+    cfg.baudrate = (uint32_t)baud;
+    cfg.parity = UART_CFG_PARITY_NONE;
+    cfg.stop_bits = UART_CFG_STOP_BITS_1;
+    cfg.data_bits = UART_CFG_DATA_BITS_8;
+    cfg.flow_ctrl = UART_CFG_FLOW_CTRL_NONE;
+    int err = uart_configure(dev, &cfg);
+    if (err != 0) {
+        // Requires CONFIG_UART_USE_RUNTIME_CONFIGURE; without it the port
+        // stays at the device tree's current-speed.
+        printk("HardwareSerial: uart_configure(%lu) failed: %d\n", baud, err);
+    }
+
+    if (!_rx) {
+        auto *st = new UartRxState();
+        ring_buf_init(&st->rb, sizeof(st->storage), st->storage);
+        uart_irq_callback_user_data_set(dev, hw_serial_rx_isr, st);
+        _rx = st;
+    } else {
+        // Re-begin during GPS baud probing: discard bytes from the old rate.
+        ring_buf_reset(&static_cast<UartRxState *>(_rx)->rb);
+    }
+    uart_irq_rx_enable(dev);
+}
+
+void HardwareSerial::end()
+{
+    const struct device *dev = static_cast<const struct device *>(_udev);
+    if (dev && device_is_ready(dev)) {
+        uart_irq_rx_disable(dev);
+    }
+}
+
+int HardwareSerial::available()
+{
+    auto *st = static_cast<UartRxState *>(_rx);
+    if (!st) {
+        return 0;
+    }
+    return (int)(ring_buf_capacity_get(&st->rb) - ring_buf_space_get(&st->rb));
+}
+
+int HardwareSerial::read()
+{
+    auto *st = static_cast<UartRxState *>(_rx);
+    uint8_t c;
+    if (!st || ring_buf_get(&st->rb, &c, 1) != 1) {
+        return -1;
+    }
+    return c;
+}
+
+int HardwareSerial::peek()
+{
+    auto *st = static_cast<UartRxState *>(_rx);
+    uint8_t c;
+    if (!st || ring_buf_peek(&st->rb, &c, 1) != 1) {
+        return -1;
+    }
+    return c;
+}
+
+size_t HardwareSerial::readBytes(uint8_t *buf, size_t len)
+{
+    auto *st = static_cast<UartRxState *>(_rx);
+    if (!st) {
+        return 0;
+    }
+    return ring_buf_get(&st->rb, buf, (uint32_t)len);
+}
+
 size_t HardwareSerial::write(uint8_t c)
 {
-    // TODO(nrf54l15 Phase 3): route through Zephyr UART / USB-CDC console
-    // For now use printk so we at least get something over RTT/UART0
+    const struct device *dev = static_cast<const struct device *>(_udev);
+    if (dev && device_is_ready(dev)) {
+        uart_poll_out(dev, c);
+        return 1;
+    }
+    // Console shim path: printk so output reaches RTT/UART0.
     printk("%c", (char)c);
     return 1;
 }
 
 size_t HardwareSerial::write(const uint8_t *buf, size_t n)
 {
+    const struct device *dev = static_cast<const struct device *>(_udev);
+    if (dev && device_is_ready(dev)) {
+        for (size_t i = 0; i < n; i++)
+            uart_poll_out(dev, buf[i]);
+        return n;
+    }
     for (size_t i = 0; i < n; i++)
         printk("%c", (char)buf[i]);
     return n;
