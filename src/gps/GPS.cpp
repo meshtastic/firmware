@@ -1607,6 +1607,8 @@ if (tooLong && !gotLoc) {
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
         bool holdExpired = holdJustExpired(fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
+            // Satellite changes set shouldPublish directly in lookForLocation().
+            // Do not repeatedly republish an old positive satellite count here.
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
             }
