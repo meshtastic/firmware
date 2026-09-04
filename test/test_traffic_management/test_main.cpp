@@ -4024,9 +4024,12 @@ static void test_tm_trustLadder_l2FastPathDecayAndRenewal(void)
     module.handleReceived(makePositionPacket(kRemoteNode2, 374221234, -1220845678));
     TEST_ASSERT_EQUAL_UINT8(0, module.trustLevelForTest(kRemoteNode2));
 
-    // Vouch from the tenured verified signer: promoted AND upgraded to L2.
+    // Vouch from the tenured verified signer: promoted AND upgraded to L2. The
+    // vouch itself is signed (attester signing the attestation), which is the
+    // signature-required L2 fast path.
     meshtastic_MeshPacket v1 =
         makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    v1.xeddsa_signed = true;
     ProcessMessage r1 = module.handleReceived(v1);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r1));
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
@@ -4050,13 +4053,16 @@ static void test_tm_trustLadder_l2FastPathDecayAndRenewal(void)
     (void)module.runOnce();
     TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode));
     // ...and a renewal vouch (the subject is observed signing again) re-raises
-    // it to L2 while the neighborhood keeps vouching.
+    // it to L2 while the neighborhood keeps vouching. The renewal vouch is
+    // signed so it re-arms the L2 fast path (an unsigned renewal would only
+    // promote, leaving the subject at L1).
     meshtastic_MeshPacket signedSubj3 = makePositionPacket(kTargetNode, 374221234, -1220845678);
     signedSubj3.id = 0x2002;
     signedSubj3.xeddsa_signed = true;
     module.handleReceived(signedSubj3);
     meshtastic_MeshPacket v2 =
         makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    v2.xeddsa_signed = true;
     ProcessMessage r2 = module.handleReceived(v2);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
@@ -4080,6 +4086,61 @@ static void test_tm_trustLadder_l2FastPathDecayAndRenewal(void)
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r3));
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kRemoteNode4));
     TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode4)); // promoted, but only L1
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+// (m2) Trust ladder, signature-required L2: with the L2 floor armed and the
+// attester a tenured verified signer, the vouch's OWN signature is what
+// crosses the subject to L2. An unsigned vouch (old firmware that never signs
+// its attestations - the mixed-mesh case) clears every other gate, promotes,
+// and leaves the subject at L1; the same vouch carrying a router-verified
+// signature crosses to L2. The unsigned baseline is preserved exactly: the
+// signature gates only the L2 upgrade, not the promotion.
+static void test_tm_trustLadder_l2SignatureRequiredMixedMeshFallback(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000; // fresh 5-min window (tick 1)
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 600; // 2 ticks
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 86'400;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 300;    // 1-tick observed gate
+    moduleConfig.traffic_management.attestation_min_distinct_attesters = 1; // K=1
+    moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 300;   // 1-tick L2 floor
+    moduleConfig.traffic_management.rate_limit_window_secs = 0;
+
+    // Subject and tenured verified-signer attester, both observed signing (L1).
+    trackSender(module, kTargetNode);
+    trackSender(module, kRemoteNode);
+    TrafficManagementModule::s_testNowMs += 300'000; // both observed 1 tick (clears the observed gate)
+    meshtastic_MeshPacket signedSubj = makePositionPacket(kTargetNode, 374221234, -1220845678);
+    signedSubj.xeddsa_signed = true;
+    module.handleReceived(signedSubj);
+    meshtastic_MeshPacket signedAttester = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    signedAttester.xeddsa_signed = true;
+    module.handleReceived(signedAttester);
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode));
+
+    // UNSIGNED vouch from the tenured verified signer: every gate clears and
+    // the promotion lands, but the missing signature holds the subject at L1
+    // (mixed-mesh floor - old firmware never signs its attestations).
+    meshtastic_MeshPacket v1 =
+        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    ProcessMessage r1 = module.handleReceived(v1);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r1));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode)); // promoted, L2 withheld
+
+    // The SAME vouch with a router-verified signature crosses to L2.
+    meshtastic_MeshPacket v2 =
+        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    v2.xeddsa_signed = true;
+    ProcessMessage r2 = module.handleReceived(v2);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kTargetNode)); // L2 escapes probation
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
@@ -4113,9 +4174,11 @@ static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
     TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode));
     TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode));
 
-    // Tenured attester vouches: promotion + L2.
+    // Tenured attester vouches: promotion + L2 (signed vouch - signature-required
+    // L2 fast path; the tenure cap is the attester-age bound, not a signature gate).
     meshtastic_MeshPacket v1 =
         makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    v1.xeddsa_signed = true;
     ProcessMessage r1 = module.handleReceived(v1);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r1));
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
@@ -4135,6 +4198,7 @@ static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
     module.handleReceived(signedSubj2);
     meshtastic_MeshPacket v2 =
         makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kRemoteNode4, kRemoteNode2, 1'000'000);
+    v2.xeddsa_signed = true; // signed so the only bound left is the attester tenure cap
     ProcessMessage r2 = module.handleReceived(v2);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kRemoteNode4));
@@ -4329,6 +4393,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_promotionDecay_ttlRenewalAndPermanent);
     RUN_TEST(test_tm_promotionQuorum_perReporterCapsApply);
     RUN_TEST(test_tm_trustLadder_l2FastPathDecayAndRenewal);
+    RUN_TEST(test_tm_trustLadder_l2SignatureRequiredMixedMeshFallback);
     RUN_TEST(test_tm_trustLadder_tenureCappedL2Upgrade);
     RUN_TEST(test_tm_trustLadder_manualKeyL3Permanent);
 

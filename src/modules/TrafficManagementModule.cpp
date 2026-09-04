@@ -2458,17 +2458,23 @@ uint32_t TrafficManagementModule::attestationMinDistinctAttestersLocked() const
     return moduleConfig.traffic_management.attestation_min_distinct_attesters;
 }
 
-bool TrafficManagementModule::l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester) const
+bool TrafficManagementModule::l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester, bool signedObserved) const
 {
     // Signed fast path: the vouch upgrades the subject to L2 only when the
     // SUBJECT has been observed signing (trustLevel>=1, lastSignedTick set)
     // AND the ATTESTER is a verified signer (trustLevel>=1) observed locally
-    // for at least the L2 floor. The floor is the knob quantised to 5-min
-    // ticks; the mod-16 clock caps any tenure at 15 ticks (80 min), so a
-    // long-tenured attester saturates it. A disarmed floor (0 = neither knob
-    // armed) disables the fast path - the mixed-mesh floor where the ladder
-    // stays at the unsigned baseline. Caller holds cacheLock and checks the
-    // subject's level ceiling (< L2 / == L1) before granting.
+    // for at least the L2 floor AND the attestation packet itself carries a
+    // router-verified signature (the attester signed this vouch). The floor is
+    // the knob quantised to 5-min ticks; the mod-16 clock caps any tenure at
+    // 15 ticks (80 min), so a long-tenured attester saturates it. A disarmed
+    // floor (0 = neither knob armed) disables the fast path - the mixed-mesh
+    // floor where the ladder stays at the unsigned baseline. An UNSIGNED
+    // vouch (signedObserved false) is never eligible for L2: it still promotes
+    // (the unsigned baseline) but the subject stays at L1 - old firmware in a
+    // mixed mesh that never signs its attestations. Caller holds cacheLock and
+    // checks the subject's level ceiling (< L2 / == L1) before granting.
+    if (!signedObserved)
+        return false;
     const uint8_t l2Floor = l2FloorTicks();
     // trustLevel >= 1 already implies a verified-signature observation
     // (nothing else raises it), so no separate "has stamped" sentinel: the
@@ -2834,7 +2840,7 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
             // this re-arms, and the neighborhood keeps the record honest.
             if (entry->promotedWindowTick != 0)
                 entry->promotedWindowTick = currentRateTick();
-            if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester)) {
+            if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester, mp.xeddsa_signed)) {
                 entry->trustLevel = 2;
                 TM_LOG_INFO("Antispam: 0x%08x re-raised to neighbor-attested by verified signer 0x%08x", att.subject, attester);
             }
@@ -2855,15 +2861,17 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
         // Trust ladder: the unsigned vouch above grants the probation
         // exemption (promoted). If the SUBJECT has itself been observed
         // signing (trustLevel>=1, lastSignedTick set) AND the attester is a
-        // verified signer we have observed for at least the L2 floor, this
-        // vouch is worth more than the unsigned baseline - it marks the
-        // subject neighbor-attested (L2). The floor is the attester's observed
-        // age quantised to 5-min ticks (the mod-16 clock caps any tenure at
-        // 15 ticks = 80 min), so a tenure-capped L2 is a *bounded* upgrade: a
-        // fresh attester cannot buy L2 for a fresh subject. When neither the
-        // L2 knob nor the plain tenure knob is armed (old configs) the ladder
-        // stays flat - this is the mixed-mesh floor (Phase 1.1/2 behavior).
-        if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester)) {
+        // verified signer we have observed for at least the L2 floor AND this
+        // vouch carries a router-verified signature, it is worth more than the
+        // unsigned baseline - it marks the subject neighbor-attested (L2). The
+        // floor is the attester's observed age quantised to 5-min ticks (the
+        // mod-16 clock caps any tenure at 15 ticks = 80 min), so a tenure-capped
+        // L2 is a *bounded* upgrade: a fresh attester cannot buy L2 for a fresh
+        // subject. An unsigned vouch never crosses to L2 (mixed-mesh floor): it
+        // still promotes, but the subject stays at L1. When neither the L2 knob
+        // nor the plain tenure knob is armed (old configs) the ladder stays flat
+        // (Phase 1.1/2 behavior).
+        if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester, mp.xeddsa_signed)) {
             entry->trustLevel = 2;
             TM_LOG_INFO("Antispam: 0x%08x raised to neighbor-attested by verified signer 0x%08x", att.subject, attester);
         }

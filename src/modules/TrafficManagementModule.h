@@ -548,10 +548,12 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// neither floor is armed (L2 never upgrades, nothing decays).
     uint8_t l2FloorTicks() const;
     /// Trust ladder: signed fast path - true when `attester` may upgrade the
-    /// (L1) `subject` to L2: both observed signing, and the attester observed
-    /// locally for at least the L2 floor. False when the floor is disarmed.
-    /// Caller holds cacheLock.
-    bool l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester) const;
+    /// (L1) `subject` to L2: both observed signing, the attester observed
+    /// locally for at least the L2 floor, and the attestation packet itself
+    /// carrying a router-verified signature (attester signing the vouch).
+    /// False when the floor is disarmed or the vouch is unsigned (mixed-mesh
+    /// floor: it still promotes, but stays at L1). Caller holds cacheLock.
+    bool l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester, bool signedObserved) const;
     /// Group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
     /// and apply the group median when the cell fills. Returns true when a
     /// group budget was applied to `node`.
