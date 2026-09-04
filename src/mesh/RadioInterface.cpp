@@ -356,6 +356,39 @@ const RegionInfo *myRegion;
 bool RadioInterface::uses_default_frequency_slot = true;
 bool RadioInterface::uses_custom_channel_name = false;
 
+// A snapshot of the configured identity at settings time. Separate from the live values above.
+static meshtastic_Config_LoRaConfig configuredLora;
+static bool configuredSlotIsDefault = true;
+static bool configuredCaptured = false;
+
+void RadioInterface::captureConfiguredRadio()
+{
+    configuredLora = config.lora;
+    configuredSlotIsDefault = uses_default_frequency_slot;
+    configuredCaptured = true;
+}
+
+const meshtastic_Config_LoRaConfig &RadioInterface::configuredLoraConfig()
+{
+    // Before the first capture the live config is the only one there has been, so it is configured.
+    return configuredCaptured ? configuredLora : config.lora;
+}
+
+bool RadioInterface::configuredUsesDefaultSlot()
+{
+    return configuredCaptured ? configuredSlotIsDefault : uses_default_frequency_slot;
+}
+
+const RegionInfo *RadioInterface::configuredRegion()
+{
+#ifdef REGULATORY_LORA_REGIONCODE
+    // The same override initRegion() applies: a regulatory build pins the region whatever is configured.
+    return getRegion(REGULATORY_LORA_REGIONCODE);
+#else
+    return getRegion(configuredLoraConfig().region);
+#endif
+}
+
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
 // Global LoRa radio type
@@ -958,6 +991,7 @@ bool RadioInterface::init()
     // constructor time.
 
     applyModemConfig();
+    captureConfiguredRadio(); // boot is a settings event
 
     return true;
 }

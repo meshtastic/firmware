@@ -1,6 +1,7 @@
 // Unit tests for Default::getConfiguredOrDefaultMsScaled
 #include "Default.h"
 #include "MeshRadio.h"
+#include "RadioInterface.h"
 #include "TestUtil.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
@@ -228,17 +229,44 @@ static void useRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER; // routers never congestion-scale
     config.lora.region = region;
     initRegion();
+    // A committed setting, which is what the throttle is a property of.
+    RadioInterface::captureConfiguredRadio();
 }
 
-void test_trafficType_noRegion_returnsUnthrottled()
+void test_trafficType_unsetRegion_returnsUnthrottled()
 {
-    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
-    const RegionInfo *saved = myRegion;
-    myRegion = nullptr;
+    // UNSET resolves to PROFILE_UNDEF, whose throttles are the neutral 1. The throttle reads the
+    // configured region and getRegion() always answers, so this is the neutral-multiplier path
+    // rather than the old null-myRegion guard - same outcome for a node with no region set.
+    useRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     const uint32_t base = Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes);
     TEST_ASSERT_EQUAL_UINT32(base, Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes, TrafficType::TELEMETRY));
-    myRegion = saved;
+    TEST_ASSERT_EQUAL_UINT32(base, Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes, TrafficType::POSITION));
+}
+
+/**
+ * The invariant: how often a node may talk is a property of its settings. A feature that moves the
+ * radio to another region for one transmission must not stretch every other module's interval by
+ * that region's throttle while it is away.
+ */
+void test_trafficType_liveRegionMove_doesNotChangeTheThrottle()
+{
+    useRegion(meshtastic_Config_LoRaConfig_RegionCode_US); // committed: PROFILE_STD, neutral throttle
+    const uint32_t base = Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes);
+    TEST_ASSERT_EQUAL_UINT32(base, Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes, TrafficType::TELEMETRY));
+
+    // The radio moves without a settings commit - what a transient override does.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866; // PROFILE_LITE, x10
+    initRegion();
+    TEST_ASSERT_GREATER_THAN_INT8_MESSAGE(1, myRegion->profile->telemetryThrottle,
+                                          "the live region must actually throttle, or the test proves nothing");
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(base,
+                                     Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes, TrafficType::TELEMETRY),
+                                     "a live region move must not retune the telemetry interval");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(base, Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes, TrafficType::POSITION),
+                                     "nor the position interval");
 }
 
 void test_trafficType_neutralThrottle_returnsUnthrottled()
@@ -302,7 +330,8 @@ void setup()
     RUN_TEST(test_ms_result_is_int32_safe);
     RUN_TEST(test_scaled_overflow_saturates);
     RUN_TEST(test_configured_or_default_hop_limit);
-    RUN_TEST(test_trafficType_noRegion_returnsUnthrottled);
+    RUN_TEST(test_trafficType_unsetRegion_returnsUnthrottled);
+    RUN_TEST(test_trafficType_liveRegionMove_doesNotChangeTheThrottle);
     RUN_TEST(test_trafficType_neutralThrottle_returnsUnthrottled);
     RUN_TEST(test_trafficType_regionThrottleMultiplies);
     RUN_TEST(test_trafficType_overflowSaturates);
