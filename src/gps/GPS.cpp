@@ -2190,9 +2190,10 @@ bool GPS::lookForTime()
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
 
-        if (t.tm_mon > -1 && isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-            LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
-                      t.tm_min, t.tm_sec, ti.age());
+        if (t.tm_mon > -1 && isPlausibleNmeaTime(t) &&
+            perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d",
+                      d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, ti.age());
             return true;
         }
     }
@@ -2208,9 +2209,11 @@ bool GPS::lookForTime()
         t.tm_year = reader.zdaInfo.year - 1900;
         t.tm_isdst = false;
 
-        if (isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d", reader.zdaInfo.year, reader.zdaInfo.month,
-                      reader.zdaInfo.day, t.tm_hour, t.tm_min, t.tm_sec);
+        if (isPlausibleNmeaTime(t) &&
+            perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d",
+                      reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day,
+                      t.tm_hour, t.tm_min, t.tm_sec);
             return true;
         }
     }
