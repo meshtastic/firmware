@@ -53,7 +53,8 @@ class PhoneAPI
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
         STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_SEND_PACKETS,  // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_RESEND_MY_INFO // one-shot: our node num moved after the handshake, re-announce and fall back
     };
 
     // Satellite-DB replay (positions / telemetry / environment / status) used to live
@@ -81,10 +82,6 @@ class PhoneAPI
      * Each packet sent to the phone has an incrementing count
      */
     uint32_t fromRadioNum = 0;
-
-    /// my_node_num as last handed to this client. The identity moves live when the first region set
-    /// mints the PKI key, and a client still addressing the old number NAKs PKI_SEND_FAIL_PUBLIC_KEY.
-    uint32_t reportedNodeNum = 0;
 
     /// We temporarily keep the packet here between the call to available and getFromRadio.  We will free it after the phone
     /// downloads it

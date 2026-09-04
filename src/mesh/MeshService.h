@@ -160,6 +160,10 @@ class MeshService
     /// senders.
     void nudgeFromNum() { fromNum++; }
 
+    /// Set with a nudgeFromNum() when our node num changes, and cleared once the notify pass has
+    /// reached every connected client. PhoneAPI keys its MyInfo re-announce off it.
+    bool identityMoved = false;
+
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
      * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep

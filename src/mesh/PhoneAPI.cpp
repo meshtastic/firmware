@@ -573,7 +573,6 @@ void PhoneAPI::fillMyInfo()
         fromRadioScratch.my_info.min_app_version = 0;
     }
 #endif
-    reportedNodeNum = myNodeInfo.my_node_num;
 }
 
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
@@ -1031,12 +1030,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         pauseBluetoothLogging = false;
         // Do we have a message from the mesh or packet from the local device?
         LOG_TRACE("FromRadio=STATE_SEND_PACKETS");
-        if (reportedNodeNum != nodeDB->getNodeNum()) {
-            // The identity moved after the handshake (the first region set mints the PKI key), so tell the
-            // client before it addresses another admin packet to a number we no longer answer to.
-            LOG_INFO("Node num moved to 0x%08x, resend MyInfo", nodeDB->getNodeNum());
-            fillMyInfo();
-        } else if (queueStatusPacketForPhone) {
+        if (queueStatusPacketForPhone) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
@@ -1104,6 +1098,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.packet = replayPkt;
             }
         }
+        break;
+
+    case STATE_RESEND_MY_INFO:
+        // Our node num moved after this client's handshake, so it is addressing a number we no
+        // longer answer to. Re-announce, then carry on with live traffic.
+        LOG_INFO("FromRadio=STATE_RESEND_MY_INFO, node num now 0x%08x", nodeDB->getNodeNum());
+        fillMyInfo();
+        state = STATE_SEND_PACKETS;
         break;
 
     default:
@@ -1677,6 +1679,7 @@ bool PhoneAPI::available()
     case STATE_SEND_OWN_NODEINFO:
     case STATE_SEND_FILEMANIFEST:
     case STATE_SEND_COMPLETE_ID:
+    case STATE_RESEND_MY_INFO:
         return true;
 
     case STATE_SEND_OTHER_NODEINFOS: {
@@ -1691,8 +1694,6 @@ bool PhoneAPI::available()
         prefetchNodeInfos();
         return true;
     case STATE_SEND_PACKETS: {
-        if (reportedNodeNum != nodeDB->getNodeNum())
-            return true;
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service->getQueueStatusForPhone();
         if (!mqttClientProxyMessageForPhone)
@@ -1915,6 +1916,9 @@ int PhoneAPI::onNotify(uint32_t newValue)
                                              // doesn't call this from idle)
 
     if (state == STATE_SEND_PACKETS) {
+        // Consumed by every connected client in this one notify pass, so no per-connection bookkeeping.
+        if (service->identityMoved)
+            state = STATE_RESEND_MY_INFO;
         LOG_INFO("Tell client new packets %u", newValue);
         onNowHasData(newValue);
     } else {

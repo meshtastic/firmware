@@ -26,8 +26,8 @@ constexpr uint32_t FULL_DUMP_NONCE = 0x51C0FFEE;
 constexpr uint32_t SECOND_NONCE = 0x0DDBA11;
 constexpr NodeNum SEEDED_NODE_A = 0x00000A01;
 constexpr NodeNum SEEDED_NODE_B = 0x00000A02;
-constexpr NodeNum RENUMBERED_SELF = 0x00C0FFEE; // stands in for crc32(public_key) after the first region set
 
+constexpr unsigned MAX_IDLE_DRAIN_READS = 8; // replay phases left to drain after config_complete_id
 constexpr unsigned NUM_SINGLETON_PREFIX = 5; // my_info, deviceuiConfig, own node_info, metadata, region_presets
 constexpr unsigned NUM_CONFIG_MESSAGES = _meshtastic_AdminMessage_ConfigType_MAX + 1;
 constexpr unsigned NUM_MODULE_CONFIG_MESSAGES = _meshtastic_AdminMessage_ModuleConfigType_MAX + 1;
@@ -74,8 +74,12 @@ static_assert(sizeof(kExpectedModuleConfigVariants) / sizeof(kExpectedModuleConf
 /// PhoneAPI over a permanently-connected fake transport.
 class PhoneAPITestShim : public PhoneAPI
 {
+  public:
+    unsigned dataNotifications = 0; // transport wake-ups, i.e. "come and read"
+
   protected:
     bool checkIsConnected() override { return true; }
+    void onNowHasData(uint32_t fromRadioNum) override { dataNotifications++; }
 };
 
 /// Concrete Router with no radio interface: getQueueStatus() reports an all-zero queue.
@@ -225,10 +229,10 @@ bool drainUntilComplete(DumpTranscript &t, unsigned maxMessages = 600)
 }
 
 /// Read until available() reports idle; false if it never does within the cap.
-bool drainToIdle(unsigned maxReads = 8)
+bool drainToIdle()
 {
     uint8_t buf[meshtastic_FromRadio_size];
-    for (unsigned i = 0; i <= maxReads; i++) {
+    for (unsigned i = 0; i < MAX_IDLE_DRAIN_READS; i++) {
         if (!api->available())
             return true;
         api->getFromRadio(buf);
@@ -382,6 +386,14 @@ void test_only_nodes_nonce_sends_nodes_then_complete()
     TEST_ASSERT_EQUAL_UINT(0, countVariant(t, meshtastic_FromRadio_config_tag));
     TEST_ASSERT_EQUAL_UINT(0, countVariant(t, meshtastic_FromRadio_moduleConfig_tag));
     TEST_ASSERT_EQUAL_UINT(0, t.fileInfoCount);
+
+    // This nonce skips my_info entirely, so the trailing replay must not produce one either.
+    for (unsigned i = 0; i < MAX_IDLE_DRAIN_READS && api->available(); i++) {
+        meshtastic_FromRadio trailing;
+        if (readOneFromRadio(trailing))
+            TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_FromRadio_my_info_tag, trailing.which_payload_variant,
+                                          "nodes-only sync must not emit my_info");
+    }
 }
 
 // SPECIAL_NONCE_ONLY_CONFIG delivers the full config but skips the non-self node DB, and must
@@ -517,16 +529,26 @@ void test_node_num_change_resends_my_info()
     TEST_ASSERT_TRUE(drainUntilComplete(t));
     TEST_ASSERT_TRUE_MESSAGE(drainToIdle(), "post-complete drain never went idle");
 
-    myNodeInfo.my_node_num = RENUMBERED_SELF;
+    const uint32_t handshakeNodeNum = nodeDB->getNodeNum();
+    const unsigned notificationsBefore = api->dataNotifications;
 
-    TEST_ASSERT_TRUE_MESSAGE(api->available(), "a renumber must make the stream readable again");
+    // What the first region set does to an already-synced client: a minted key moves the number.
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, 0x5A, sizeof(config.security.public_key.bytes));
+    TEST_ASSERT_TRUE_MESSAGE(nodeDB->createNewIdentity(), "identity did not move");
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(handshakeNodeNum, nodeDB->getNodeNum(), "node num did not actually change");
+
+    service->loop(); // delivers the fromNum notify that arms the re-announce
+    TEST_ASSERT_GREATER_THAN_UINT_MESSAGE(notificationsBefore, api->dataNotifications,
+                                          "transport was never woken to come and read");
+
     meshtastic_FromRadio msg;
     TEST_ASSERT_TRUE(readOneFromRadio(msg));
     TEST_ASSERT_EQUAL_UINT_MESSAGE(meshtastic_FromRadio_my_info_tag, msg.which_payload_variant,
                                    "a renumber must be announced as my_info");
-    TEST_ASSERT_EQUAL_UINT32(RENUMBERED_SELF, msg.my_info.my_node_num);
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), msg.my_info.my_node_num);
 
-    // Keyed on the number itself, not a sticky flag: nothing repeats once the client has been told.
+    // One-shot: the stream falls back to live traffic and nothing repeats.
     TEST_ASSERT_FALSE_MESSAGE(api->available(), "my_info resend repeated after the client was told");
 }
 
