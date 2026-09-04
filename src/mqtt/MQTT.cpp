@@ -85,6 +85,42 @@ inline bool shouldDropMqttDownlink(const meshtastic_MeshPacket &packet)
     return false;
 }
 
+// A channel only counts for MQTT if it is actually usable, the same test Channels::anyMqttEnabled()
+// applies. getByName() ignores role, so a disabled slot that kept its settings answers for a channel
+// the user turned off. First match wins: duplicate global ids are legal, since any two blank-named
+// slots resolve to the same preset name.
+inline bool channelWantsDownlink(ChannelIndex i)
+{
+    const meshtastic_Channel &c = channels.getByIndex(i);
+    return c.role != meshtastic_Channel_Role_DISABLED && c.has_settings && c.settings.downlink_enabled;
+}
+
+inline int resolveDownlinkChannel(const char *channelId)
+{
+    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++)
+        if (channelWantsDownlink(i) && strcmp(channels.getGlobalId(i), channelId) == 0)
+            return (int)i;
+    return -1;
+}
+
+inline bool anyChannelWantsDownlink()
+{
+    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++)
+        if (channelWantsDownlink(i))
+            return true;
+    return false;
+}
+
+inline bool anyChannelWantsUplink()
+{
+    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++) {
+        const meshtastic_Channel &c = channels.getByIndex(i);
+        if (c.role != meshtastic_Channel_Role_DISABLED && c.has_settings && c.settings.uplink_enabled)
+            return true;
+    }
+    return false;
+}
+
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
@@ -93,26 +129,18 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         return;
     }
 
-    const meshtastic_Channel &ch = channels.getByName(e.channel_id);
-    // Find channel by channel_id and check downlink_enabled
-    if (!(strcmp(e.channel_id, "PKI") == 0 ||
-          (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && ch.settings.downlink_enabled))) {
-        return;
+    // The PKI topic names no local channel, so it borrows the primary index for the stamps below.
+    ChannelIndex chIndex = channels.getPrimaryIndex();
+    if (strcmp(e.channel_id, "PKI") == 0) {
+        if (!anyChannelWantsDownlink())
+            return;
+    } else {
+        const int resolved = resolveDownlinkChannel(e.channel_id);
+        if (resolved < 0)
+            return;
+        chIndex = (ChannelIndex)resolved;
     }
 
-    bool anyChannelHasDownlink = false;
-    size_t numChan = channels.getNumChannels();
-    for (size_t i = 0; i < numChan; ++i) {
-        const auto &c = channels.getByIndex(i);
-        if (c.settings.downlink_enabled) {
-            anyChannelHasDownlink = true;
-            break;
-        }
-    }
-
-    if (strcmp(e.channel_id, "PKI") == 0 && !anyChannelHasDownlink) {
-        return;
-    }
     // Generate node ID from nodenum for comparison
     std::string nodeId = nodeDB->getNodeId();
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
@@ -120,7 +148,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
         // receives it when we get our own packet back. Then we'll stop our retransmissions.
         if (isFromUs(e.packet)) {
-            auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+            auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, chIndex);
             if (!pAck)
                 return;
             pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
@@ -170,7 +198,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
             LOG_INFO("Ignore decoded admin packet");
             return;
         }
-        p->channel = ch.index;
+        p->channel = chIndex;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         // Already-decoded downlink skips perhapsDecode's crypto path entirely, so enforce the
         // signature policy here: verify a carried signature and apply unsigned-downgrade
@@ -544,10 +572,8 @@ void MQTT::sendSubscriptions()
 {
 #if HAS_NETWORKING
     bool hasDownlink = false;
-    size_t numChan = channels.getNumChannels();
-    for (size_t i = 0; i < numChan; i++) {
-        const auto &ch = channels.getByIndex(i);
-        if (ch.settings.downlink_enabled) {
+    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++) {
+        if (channelWantsDownlink(i)) {
             hasDownlink = true;
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribe to %s", topic.c_str());
@@ -706,12 +732,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         return;
     }
 #endif
-    bool uplinkEnabled = false;
-    for (int i = 0; i <= 7; i++) {
-        if (channels.getByIndex(i).settings.uplink_enabled)
-            uplinkEnabled = true;
-    }
-    if (!uplinkEnabled)
+    // For a PKI packet this is the only uplink gate, since the per-channel check below is bypassed,
+    // so a disabled slot's stale uplink_enabled would publish DMs the user opted out of uplinking.
+    if (!anyChannelWantsUplink())
         return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 
