@@ -12,7 +12,7 @@ rm -f $OUTDIR/firmware*
 rm -r $OUTDIR/* || true
 
 # Clean up legacy package from the base CI container if present
-rm -rf "${PLATFORMIO_CORE_DIR:-$HOME/.platformio}/packages/arduino-pico"
+[[ -d "${PLATFORMIO_CORE_DIR:-$HOME/.platformio}/packages/arduino-pico" ]] && rm -rf "${PLATFORMIO_CORE_DIR:-$HOME/.platformio}/packages/arduino-pico"
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
 platformio pkg install -e $1
