@@ -223,6 +223,51 @@ void test_clamp_long_name_fixes_partial_rune_at_cut()
     TEST_ASSERT_EQUAL_INT('?', buf[23]);
 }
 
+// --- utf8SequenceLength: the validity primitive both sanitizers share ---
+
+void test_sequence_length_ascii()
+{
+    TEST_ASSERT_EQUAL_size_t(1, utf8SequenceLength("a", 1));
+}
+
+void test_sequence_length_valid_2byte()
+{
+    TEST_ASSERT_EQUAL_size_t(2, utf8SequenceLength("\xC3\xA9", 2));
+}
+
+void test_sequence_length_valid_4byte()
+{
+    TEST_ASSERT_EQUAL_size_t(4, utf8SequenceLength("\xF0\x9F\x8C\x8D", 4));
+}
+
+void test_sequence_length_bare_continuation()
+{
+    TEST_ASSERT_EQUAL_size_t(0, utf8SequenceLength("\x80", 1));
+}
+
+void test_sequence_length_truncated()
+{
+    // A 2-byte lead with its continuation byte cut off by the end of the input
+    TEST_ASSERT_EQUAL_size_t(0, utf8SequenceLength("\xC3", 1));
+}
+
+void test_sequence_length_missing_continuation()
+{
+    TEST_ASSERT_EQUAL_size_t(0, utf8SequenceLength("\xC3z", 2));
+}
+
+void test_sequence_length_overlong()
+{
+    // C0 80 encodes U+0000 in two bytes
+    TEST_ASSERT_EQUAL_size_t(0, utf8SequenceLength("\xC0\x80", 2));
+}
+
+void test_sequence_length_surrogate_half()
+{
+    // ED A0 80 = U+D800
+    TEST_ASSERT_EQUAL_size_t(0, utf8SequenceLength("\xED\xA0\x80", 3));
+}
+
 void setup()
 {
     UNITY_BEGIN();
@@ -252,6 +297,16 @@ void setup()
     RUN_TEST(test_above_max_codepoint);
     RUN_TEST(test_waypoint_codepoint_encoding);
     RUN_TEST(test_waypoint_codepoint_rejects_invalid_scalars);
+
+    // utf8SequenceLength
+    RUN_TEST(test_sequence_length_ascii);
+    RUN_TEST(test_sequence_length_valid_2byte);
+    RUN_TEST(test_sequence_length_valid_4byte);
+    RUN_TEST(test_sequence_length_bare_continuation);
+    RUN_TEST(test_sequence_length_truncated);
+    RUN_TEST(test_sequence_length_missing_continuation);
+    RUN_TEST(test_sequence_length_overlong);
+    RUN_TEST(test_sequence_length_surrogate_half);
 
     // clampLongName
     RUN_TEST(test_clamp_long_name_short_unchanged);
