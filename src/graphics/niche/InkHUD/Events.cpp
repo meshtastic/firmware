@@ -551,9 +551,8 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
             return 0;
         inkhud->persistence->latestMessage.set(false, *stored, MessageStore::getText(*stored), stored->textLength);
     } else {
-        // Broadcasts are added to the global store by ThreadedMessageApplet::handleReceived().
-        // Here we only update the latestMessage cache used by AllMessageApplet / NotificationApplet.
-        // Copied, not allocated in the shared pool: pool bytes are only safe behind a live record.
+        // Broadcasts are added to the global store by ThreadedMessageApplet::handleReceived(). Here we only
+        // update the latestMessage cache, copying the text: pool bytes are only safe behind a live record.
         StoredMessage sm;
         sm.sender = packet->from;
         sm.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);

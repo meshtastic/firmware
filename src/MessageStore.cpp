@@ -593,6 +593,9 @@ uint16_t MessageStore::allocText(const char *src, size_t len)
         if (!textOverlaps(m, begin, end))
             return false;
         LOG_WARN("MessageStore: text pool reuse evicts message from 0x%08x", m.sender);
+#if ENABLE_MESSAGE_PERSISTENCE
+        markMessageStoreUnsaved(); // otherwise autosave skips and the record returns from flash
+#endif
         return true;
     });
     return storeTextInPool(src, len);

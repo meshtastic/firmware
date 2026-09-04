@@ -1,7 +1,5 @@
-// MessageStore text pool - src/MessageStore.cpp. Text lives in a fixed ring
-// with no free list, so a wrap reuses bytes that may still back a live record.
-// Every test here asserts one invariant: a record that is still live reads back
-// exactly the text it was stored with.
+// MessageStore text pool - src/MessageStore.cpp. The pool is a ring with no free list; every test here
+// asserts one invariant: a record that is still live reads back exactly the text it was stored with.
 #include "MeshTypes.h" // BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -59,9 +57,8 @@ void setUp(void)
 }
 void tearDown(void) {}
 
-// A full store of maximum-length messages is exactly one pool. The wrap that
-// follows used to overwrite the oldest live record's text while the record
-// stayed on screen.
+// A full store of maximum-length messages is exactly one pool; the wrap that follows used to
+// overwrite the oldest live record's text while the record stayed on screen.
 void test_wrap_never_rewrites_a_live_record()
 {
     for (uint32_t n = 1; n <= MAX_MESSAGES_SAVED + 2; n++) {
@@ -71,9 +68,8 @@ void test_wrap_never_rewrites_a_live_record()
     TEST_ASSERT_LESS_OR_EQUAL(MAX_MESSAGES_SAVED, messageStore.getLiveMessages().size());
 }
 
-// Text allocated without a record (as the InkHUD notification cache once did on
-// every received broadcast) churns the pool underneath the records. It may
-// evict them; it may not corrupt them.
+// Text allocated without a record (as the InkHUD notification cache once did on every broadcast)
+// churns the pool underneath the records. It may evict them; it may not corrupt them.
 void test_recordless_allocations_do_not_corrupt_records()
 {
     for (uint32_t n = 1; n <= 3; n++)

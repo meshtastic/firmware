@@ -505,7 +505,7 @@ Broadcasts and DMs take different paths into `messageStore`:
 
 The `LatestMessage` cache is not persisted to its own file. On boot, `InkHUD::begin()` calls `messageStore.loadFromFlash()` first, then `Persistence::loadLatestMessage()` rebuilds the cache by scanning the loaded messages for the most recent broadcast and DM.
 
-Text is stored in the firmware-wide shared text pool. Use `MessageStore::getText(msg)` to retrieve it from a `StoredMessage`.
+Records in `messageStore` keep their text in the firmware-wide shared pool; read it with `MessageStore::getText(msg)`. The `LatestMessage` cache holds its own copy; read it with `latestMessage.textOf(isBroadcast)`.
 
 ---
 
