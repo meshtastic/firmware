@@ -11,9 +11,7 @@ namespace meshtastic
  */
 enum OptionalBool { OptFalse = 0, OptTrue = 1, OptUnknown = 2 };
 
-/// Coarse charge/power state, derived from PowerStatus's own fields.
-/// Explicitly numbered, with Unknown=0 as the default/unset value, so this can be wire-mapped to a future
-/// protobuf enum (e.g. an admin/telemetry is_charging-style field) without the numbering shifting under it.
+/// Explicitly numbered so a future protobuf mapping doesn't shift under a reorder.
 enum class PowerState { Unknown = 0, Discharging = 1, Charging = 2, Charged = 3, Critical = 4 };
 
 /// Describes the state of the Power system.
@@ -58,9 +56,7 @@ class PowerStatus : public Status
 
     bool getIsCharging() const { return isCharging == OptTrue; }
 
-    /// PowerState::Charged means "powered and battery reads full" - StatusLEDModule keys its solid-LED
-    /// state off this value directly. Returns Unknown before the first real reading arrives (e.g. cold
-    /// boot, before Power::readPowerStatus() has run) rather than guessing from all-default fields.
+    /// Returns Unknown before the first real reading, rather than guessing from default fields.
     PowerState getPowerState() const
     {
         if (!isInitialized())
