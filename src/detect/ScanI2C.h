@@ -115,6 +115,8 @@ class ScanI2C
         LP5814,
         ES8311,
         ES7243E,
+        MODULINO_BUZZER,
+        QWIIC_BUZZER
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
@@ -172,6 +174,8 @@ class ScanI2C
     FoundDevice firstAQI() const;
 
     FoundDevice firstRGBLED() const;
+
+    FoundDevice firstBuzzer() const;
 
     virtual FoundDevice find(DeviceType) const;
 
