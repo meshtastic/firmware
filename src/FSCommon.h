@@ -56,12 +56,22 @@ using namespace Adafruit_LittleFS_Namespace;
 using namespace Adafruit_LittleFS_Namespace;
 #endif
 
+// Filesystem capacity, in bytes. Only ESP32's LittleFS and the nRF54L15 wrapper expose totalBytes()/usedBytes()
+// directly; the other backends need per-platform work (littlefs v1 traversal, FSInfo, statvfs), so callers must
+// use these helpers rather than reaching into FSCom.
+size_t fsTotalBytes();
+size_t fsUsedBytes();
+
 void fsInit();
-void fsListFiles();
-bool copyFile(const char *from, const char *to);
 bool renameFile(const char *pathFrom, const char *pathTo);
 bool fsFormat();
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount = 64, bool *wasLimited = nullptr);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && defined(SDCARD_USE_SPI1)
+#include <SPI.h>
+// HSPI bus set up by setupSDCard(). Reuse this for other devices on the same bus.
+extern SPIClass SPI_HSPI;
+#endif

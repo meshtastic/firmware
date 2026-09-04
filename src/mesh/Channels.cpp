@@ -128,11 +128,13 @@ bool Channels::ensureLicensedOperation()
         }
         auto &channelSettings = channel.settings;
         if (strcasecmp(channelSettings.name, Channels::adminChannel) == 0) {
-            channel.role = meshtastic_Channel_Role_DISABLED;
-            channelSettings.psk.bytes[0] = 0;
-            channelSettings.psk.size = 0;
-            hasEncryptionOrAdmin = true;
-            channels.setChannel(channel);
+            if (channel.role != meshtastic_Channel_Role_DISABLED || channelSettings.psk.size > 0) {
+                channel.role = meshtastic_Channel_Role_DISABLED;
+                channelSettings.psk.bytes[0] = 0;
+                channelSettings.psk.size = 0;
+                hasEncryptionOrAdmin = true;
+                channels.setChannel(channel);
+            }
 
         } else if (channelSettings.psk.size > 0) {
             channelSettings.psk.bytes[0] = 0;
@@ -164,67 +166,70 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ch.has_settings = true;
     ch.role = chIndex == 0 ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
 
+    static_assert(MAX_NUM_CHANNELS == 8, "the userPrefs switch below covers indices 0-7");
+
+// bin/platformio-custom.py completes every field of an index the vendor configured, so no field is
+// individually optional here and a new index costs one case rather than eighteen lines.
+#define USERPREFS_APPLY_CHANNEL(n)                                                                                               \
+    do {                                                                                                                         \
+        static const uint8_t userprefsPsk[] = USERPREFS_CHANNEL_##n##_PSK;                                                       \
+        static_assert(sizeof(userprefsPsk) <= sizeof(channelSettings.psk.bytes),                                                 \
+                      "USERPREFS_CHANNEL_" #n "_PSK is wider than psk.bytes");                                                   \
+        memcpy(channelSettings.psk.bytes, userprefsPsk, sizeof(userprefsPsk));                                                   \
+        channelSettings.psk.size = sizeof(userprefsPsk);                                                                         \
+        strncpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_##n##_NAME, sizeof(channelSettings.name) - 1);             \
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_##n##_PRECISION;                                  \
+        channelSettings.module_settings.is_muted = USERPREFS_CHANNEL_##n##_IS_MUTED;                                             \
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_##n##_UPLINK_ENABLED;                                                 \
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_##n##_DOWNLINK_ENABLED;                                             \
+    } while (0)
+
     switch (chIndex) {
-    case 0:
 #ifdef USERPREFS_CHANNEL_0_PSK
-        static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
-        memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
-        channelSettings.psk.size = sizeof(defaultpsk0);
-#endif
-#ifdef USERPREFS_CHANNEL_0_NAME
-        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_0_NAME);
-#endif
-#ifdef USERPREFS_CHANNEL_0_PRECISION
-        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
-#endif
-#ifdef USERPREFS_CHANNEL_0_UPLINK_ENABLED
-        channelSettings.uplink_enabled = USERPREFS_CHANNEL_0_UPLINK_ENABLED;
-#endif
-#ifdef USERPREFS_CHANNEL_0_DOWNLINK_ENABLED
-        channelSettings.downlink_enabled = USERPREFS_CHANNEL_0_DOWNLINK_ENABLED;
-#endif
+    case 0:
+        USERPREFS_APPLY_CHANNEL(0);
         break;
-    case 1:
+#endif
 #ifdef USERPREFS_CHANNEL_1_PSK
-        static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
-        memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
-        channelSettings.psk.size = sizeof(defaultpsk1);
-#endif
-#ifdef USERPREFS_CHANNEL_1_NAME
-        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_1_NAME);
-#endif
-#ifdef USERPREFS_CHANNEL_1_PRECISION
-        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
-#endif
-#ifdef USERPREFS_CHANNEL_1_UPLINK_ENABLED
-        channelSettings.uplink_enabled = USERPREFS_CHANNEL_1_UPLINK_ENABLED;
-#endif
-#ifdef USERPREFS_CHANNEL_1_DOWNLINK_ENABLED
-        channelSettings.downlink_enabled = USERPREFS_CHANNEL_1_DOWNLINK_ENABLED;
-#endif
+    case 1:
+        USERPREFS_APPLY_CHANNEL(1);
         break;
-    case 2:
+#endif
 #ifdef USERPREFS_CHANNEL_2_PSK
-        static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
-        memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
-        channelSettings.psk.size = sizeof(defaultpsk2);
-#endif
-#ifdef USERPREFS_CHANNEL_2_NAME
-        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_2_NAME);
-#endif
-#ifdef USERPREFS_CHANNEL_2_PRECISION
-        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
-#endif
-#ifdef USERPREFS_CHANNEL_2_UPLINK_ENABLED
-        channelSettings.uplink_enabled = USERPREFS_CHANNEL_2_UPLINK_ENABLED;
-#endif
-#ifdef USERPREFS_CHANNEL_2_DOWNLINK_ENABLED
-        channelSettings.downlink_enabled = USERPREFS_CHANNEL_2_DOWNLINK_ENABLED;
-#endif
+    case 2:
+        USERPREFS_APPLY_CHANNEL(2);
         break;
+#endif
+#ifdef USERPREFS_CHANNEL_3_PSK
+    case 3:
+        USERPREFS_APPLY_CHANNEL(3);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_4_PSK
+    case 4:
+        USERPREFS_APPLY_CHANNEL(4);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_5_PSK
+    case 5:
+        USERPREFS_APPLY_CHANNEL(5);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_6_PSK
+    case 6:
+        USERPREFS_APPLY_CHANNEL(6);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_7_PSK
+    case 7:
+        USERPREFS_APPLY_CHANNEL(7);
+        break;
+#endif
     default:
         break;
     }
+
+#undef USERPREFS_APPLY_CHANNEL
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
@@ -495,6 +500,21 @@ bool Channels::isWellKnownChannel(ChannelIndex chIndex)
     return false;
 }
 
+bool Channels::isEventChannel(ChannelIndex chIndex)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    static_assert(sizeof(configuredEventPsk) == 16 || sizeof(configuredEventPsk) == 32,
+                  "USERPREFS_CHANNEL_0_PSK must be an AES-128 or AES-256 key");
+    CryptoKey effectiveKey = getKey(chIndex);
+    return effectiveKey.length == sizeof(configuredEventPsk) &&
+           memcmp(effectiveKey.bytes, configuredEventPsk, sizeof(configuredEventPsk)) == 0;
+#else
+    (void)chIndex;
+    return false;
+#endif
+}
+
 bool Channels::hasDefaultChannel()
 {
     // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
@@ -516,7 +536,7 @@ bool Channels::hasDefaultChannel()
  */
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
-    if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
+    if (chIndex >= getNumChannels() || getHash(chIndex) != channelHash) {
         // LOG_DEBUG("Skip channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;
@@ -563,4 +583,13 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
 int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
 {
     return setCrypto(channelIndex);
+}
+
+bool isMutedForPacket(const meshtastic_MeshPacket &mp)
+{
+    if (!isBroadcast(mp.to) && isToUs(&mp))
+        return nodeInfoLiteIsMuted(nodeDB->getMeshNode(mp.from));
+
+    const meshtastic_Channel &ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+    return ch.settings.has_module_settings && ch.settings.module_settings.is_muted;
 }

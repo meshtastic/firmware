@@ -159,7 +159,8 @@ void test_E1_perhaps_decode_fuzz(void)
 
         DecodeState st = perhapsDecode(&p);
         // Any verdict is fine; the contract is that arbitrary ciphertext never crashes the pipeline.
-        TEST_ASSERT_TRUE(st == DECODE_SUCCESS || st == DECODE_FAILURE || st == DECODE_FATAL);
+        TEST_ASSERT_TRUE(st == DECODE_SUCCESS || st == DECODE_FAILURE || st == DECODE_OPAQUE || st == DECODE_FATAL ||
+                         st == DECODE_POLICY_REJECT);
     }
 }
 
@@ -450,7 +451,8 @@ static meshtastic_AdminMessage fuzzAdminMessage()
         // manual bandwidth==0 path that used to SIGFPE the validator.
         r.set_config.which_payload_variant = meshtastic_Config_lora_tag;
         r.set_config.payload_variant.lora.region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
-        r.set_config.payload_variant.lora.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
+        r.set_config.payload_variant.lora.modem_preset =
+            (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(_meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE);
         r.set_config.payload_variant.lora.use_preset = (rngRange(2) == 0);
         r.set_config.payload_variant.lora.bandwidth = rngRange(512); // includes 0
         r.set_config.payload_variant.lora.channel_num = rngNext();
@@ -553,7 +555,7 @@ static meshtastic_MeshBeacon fuzzBeacon()
         fuzzChannelSettings(b.offer_channel);
     b.offer_region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
     b.has_offer_preset = (rngRange(2) == 0);
-    b.offer_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
+    b.offer_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(_meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE);
     return b;
 }
 
@@ -614,6 +616,7 @@ void test_E7_nodedb_update_fuzz(void)
             mp.id = rngNext();
             mp.rx_snr = (float)((int)rngRange(60) - 30);
             mp.rx_rssi = (int32_t)rngRange(256) - 128;
+            mp.has_rx_rssi = (rngRange(2) != 0); // exercise both the presence and absence paths
             mp.hop_start = (uint8_t)rngRange(8);
             mp.hop_limit = (uint8_t)rngRange(8);
             mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
@@ -664,6 +667,7 @@ static void fuzzRxHeader(meshtastic_MeshPacket &mp, meshtastic_PortNum portnum)
     mp.channel = (uint8_t)rngRange(channels.getNumChannels());
     mp.rx_snr = (float)((int)rngRange(40) - 20);
     mp.rx_rssi = -(int)rngRange(130);
+    mp.has_rx_rssi = (rngRange(2) != 0); // exercise both the presence and absence paths
     mp.hop_start = (uint8_t)rngRange(8); // 0..7, wire-bounded
     mp.hop_limit = (uint8_t)rngRange(8);
     mp.want_ack = (rngRange(2) == 0);

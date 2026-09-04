@@ -1,4 +1,6 @@
+#include "UptimeClock.h"
 #include "configuration.h"
+#include "mesh/Throttle.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <InternalFileSystem.h>
@@ -51,12 +53,23 @@ uint16_t getVDDVoltage();
 
 // Weak empty variant shutdown prep function.
 // May be redefined by variant files.
-void variant_shutdown() __attribute__((weak));
-void variant_shutdown() {}
+// noinline: same reason as variant_enableBatteryLpcompWake() below -- weak default and call
+// site are in this file, so LTO would inline the empty body and drop the variant's override.
+__attribute__((noinline)) void variant_shutdown() __attribute__((weak));
+__attribute__((noinline)) void variant_shutdown() {}
 
 // Optional variant hook called each nrf52Loop(); e.g. for low-VDD System OFF.
-void variant_nrf52LoopHook(void) __attribute__((weak));
-void variant_nrf52LoopHook(void) {}
+__attribute__((noinline)) void variant_nrf52LoopHook(void) __attribute__((weak));
+__attribute__((noinline)) void variant_nrf52LoopHook(void) {}
+
+// Return false to skip LPCOMP wake when entering System OFF (e.g. user CLI shutdown).
+// noinline: weak default and call site are in this file; without it GCC may inline the
+// weak body and never link the strong override from variant.cpp.
+__attribute__((noinline)) bool variant_enableBatteryLpcompWake() __attribute__((weak));
+__attribute__((noinline)) bool variant_enableBatteryLpcompWake()
+{
+    return true;
+}
 
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
@@ -186,6 +199,17 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
+bool getDeviceId(uint8_t *deviceId)
+{
+    // Nordic burns a FIPS-compliant random id into each chip at the factory. We concatenate
+    // the device address to that random id to form the 16-byte hardware identifier.
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(deviceId, &device_id_start, sizeof(device_id_start));
+    memcpy(deviceId + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    return true;
+}
+
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
@@ -248,12 +272,17 @@ namespace
 {
 constexpr uint8_t NRF52_MAGIC_LFS_IS_CORRUPT = 0xF5;
 constexpr uint32_t MULTIPLE_CORRUPTION_DELAY_MILLIS = 20 * 60 * 1000;
-static unsigned long millis_until_formatting_again = 0;
+// When the last format happened, not when the next one is due: measuring forward from the event
+// bounds the pause below by the constant, where a stored deadline could hand delay() any value.
+// Armed separately because preFSBegin() runs in the first millisecond of boot, so a zero timestamp
+// is a legitimate value here, not an "unset" marker.
+static uint32_t last_format_ms = 0;
+static bool formatted_this_boot = false;
 
 // Report the critical error from loop(), giving a chance for the screen to be initialized first.
 inline void reportLittleFSCorruptionOnce()
 {
-    static bool report_corruption = !!millis_until_formatting_again;
+    static bool report_corruption = formatted_this_boot;
     if (report_corruption) {
         report_corruption = false;
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
@@ -268,7 +297,8 @@ void preFSBegin()
     if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
     NRF_POWER->GPREGRET = 0;
-    millis_until_formatting_again = millis() + MULTIPLE_CORRUPTION_DELAY_MILLIS;
+    last_format_ms = Time::getMillis();
+    formatted_this_boot = true;
     InternalFS.format();
     LOG_INFO("LittleFS format complete; restoring default settings");
 }
@@ -276,10 +306,16 @@ void preFSBegin()
 extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LittleFS corruption detected: %s", reason);
-    if (millis_until_formatting_again > millis()) {
+    // Test the armed flag first, since elapsed-since-0 is inside the backoff for the first 20
+    // minutes after each wrap.
+    if (formatted_this_boot && Throttle::isWithinTimespanMs(last_format_ms, MULTIPLE_CORRUPTION_DELAY_MILLIS)) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
-        const long millis_remain = millis_until_formatting_again - millis();
-        LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);
+        // Same clock Throttle just read, and clamped: the check above and a second, later read
+        // can straddle the backoff, which would wrap the remainder into a ~50-day delay().
+        const uint32_t elapsed = Time::getMillis() - last_format_ms;
+        const uint32_t millis_remain =
+            elapsed < MULTIPLE_CORRUPTION_DELAY_MILLIS ? MULTIPLE_CORRUPTION_DELAY_MILLIS - elapsed : 0;
+        LOG_WARN("Pausing %u seconds to avoid wear on flash storage", millis_remain / 1000);
         delay(millis_remain);
     }
     LOG_INFO("Rebooting to format LittleFS");
@@ -378,7 +414,11 @@ void nrf52Setup()
     pinMode(ADC_V, INPUT);
 #endif
 
-    uint32_t why = NRF_POWER->RESETREAS;
+    // The Adafruit core's init() (cores/nRF5/wiring.c) caches RESETREAS into a static and then
+    // W1C-clears the hardware register before setup() ever runs, so a raw NRF_POWER->RESETREAS
+    // read here is ALWAYS 0. Use the core's cached copy so this log line is actually meaningful
+    // (0x1 pin reset, 0x2 watchdog, 0x4 soft reset/SREQ, 0x8 CPU lockup, 0x10000 System OFF wake).
+    uint32_t why = readResetReason();
     // per
     // https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
     LOG_DEBUG("Reset reason: 0x%x", why);
@@ -395,7 +435,7 @@ void nrf52Setup()
 #ifdef BQ25703A_ADDR
     auto *bq = new BQ25713();
     if (!bq->setup())
-        LOG_ERROR("ERROR! Charge controller init failed");
+        LOG_ERROR("Charge controller init failed");
 #endif
 
     // Init random seed
@@ -481,25 +521,28 @@ void cpuDeepSleep(uint32_t msecToWake)
         // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
 
 #ifdef BATTERY_LPCOMP_INPUT
-        // Wake up if power rises again
-        nrf_lpcomp_config_t c;
-        c.reference = BATTERY_LPCOMP_THRESHOLD;
-        c.detection = NRF_LPCOMP_DETECT_UP;
-        c.hyst = NRF_LPCOMP_HYST_NOHYST;
-        nrf_lpcomp_configure(NRF_LPCOMP, &c);
-        nrf_lpcomp_input_select(NRF_LPCOMP, BATTERY_LPCOMP_INPUT);
-        nrf_lpcomp_enable(NRF_LPCOMP);
+        // Only enable LPCOMP wake if the variant allows it
+        if (variant_enableBatteryLpcompWake()) {
+            // Wake up if power rises again
+            nrf_lpcomp_config_t c;
+            c.reference = BATTERY_LPCOMP_THRESHOLD;
+            c.detection = NRF_LPCOMP_DETECT_UP;
+            c.hyst = NRF_LPCOMP_HYST_NOHYST;
+            nrf_lpcomp_configure(NRF_LPCOMP, &c);
+            nrf_lpcomp_input_select(NRF_LPCOMP, BATTERY_LPCOMP_INPUT);
+            nrf_lpcomp_enable(NRF_LPCOMP);
 
-        battery_adcEnable();
+            battery_adcEnable();
 
-        nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
-        while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
-            ;
+            nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
+            while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
+                ;
+        }
 #endif
 
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
-            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");
+            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off");
             NRF_POWER->SYSTEMOFF = 1;
         }
     }

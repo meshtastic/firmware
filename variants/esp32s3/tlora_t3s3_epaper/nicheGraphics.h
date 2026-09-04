@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FSCommon.h"
 #include "configuration.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -16,6 +17,7 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 
 // Shared NicheGraphics components
 // --------------------------------
@@ -29,9 +31,8 @@ void setupNicheGraphics()
     // SPI
     // -----------------------------
 
-    // Display is connected to HSPI
-    SPIClass *hspi = new SPIClass(HSPI);
-    hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
+    // Display shares the HSPI bus with the SD card; reuse it rather than re-init the same host.
+    SPIClass *hspi = &SPI_HSPI;
 
     // E-Ink Driver
     // -----------------------------
@@ -68,6 +69,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // -
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // -
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
+    inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet);              // -
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);          // -
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0

@@ -7,6 +7,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -244,8 +245,12 @@ void NRF52Bluetooth::shutdown()
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
-    disconnect();
+
+    // Clear the auto-restart flag before dropping the link: our DISCONNECTED event is only processed
+    // after this callback returns and would re-start advertising. startAdv()/resumeAdvertising() re-set it.
+    Bluefruit.Advertising.restartOnDisconnect(false);
     Bluefruit.Advertising.stop();
+    disconnect();
 }
 void NRF52Bluetooth::startDisabled()
 {
@@ -254,7 +259,7 @@ void NRF52Bluetooth::startDisabled()
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
-    LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
+    LOG_INFO("Disable NRF52 BT (tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
 {
@@ -282,7 +287,7 @@ void NRF52Bluetooth::setup()
         // current Bluefruit config. Without this check the node would silently run without BLE.
         // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
         // raise the ORIGIN accordingly.
-        LOG_ERROR("Bluefruit.begin failed - SoftDevice RAM reservation too small for this config");
+        LOG_ERROR("Bluefruit.begin failed: SoftDevice RAM too small");
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
@@ -369,6 +374,15 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    // shutdown() latches onUnwantedPairing to actively refuse pairing (used on the factory-reset /
+    // BT-disable teardown path). The real pairing passkey callback is installed only in setup(), but a
+    // shutdown()->resumeAdvertising() re-enable cycle skips setup() entirely (see setBluetoothEnable() in
+    // main-nrf52.cpp), so restore the correct callback here - otherwise the device silently refuses all
+    // pairing until the next reboot. Mirror the mode check in setup(): only PIN modes drive a passkey-
+    // display callback, so NO_PIN (Just Works) needs no restore.
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN)
+        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
@@ -389,7 +403,7 @@ void updateBatteryLevel(uint8_t level)
 }
 void NRF52Bluetooth::clearBonds()
 {
-    LOG_INFO("Clear bluetooth bonds!");
+    LOG_INFO("Clear bluetooth bonds");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -436,7 +450,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 
     if (match_request) {
         uint32_t start_time = millis();
-        while (millis() < start_time + 30000) {
+        while (Throttle::isWithinTimespanMs(start_time, 30000)) {
             if (!Bluefruit.connected(conn_handle))
                 break;
         }
@@ -457,17 +471,23 @@ bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passk
 // Disconnect any BLE connections
 void NRF52Bluetooth::disconnect()
 {
+    static constexpr uint32_t DISCONNECT_TIMEOUT_MSEC = 1000;
     uint8_t connection_num = Bluefruit.connected();
     if (connection_num) {
         // Close all connections. We're only expecting one.
         for (uint8_t i = 0; i < connection_num; i++)
             Bluefruit.disconnect(i);
 
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
+        // Best-effort wait: on Bluefruit's BLE event task the DISCONNECTED event can't be processed
+        // until this callback returns, so an unbounded wait would deadlock until the watchdog fires.
+        uint32_t start = millis();
+        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, DISCONNECT_TIMEOUT_MSEC))
+            delay(1);
 
-        LOG_INFO("Ended BLE connection");
+        if (Bluefruit.connected())
+            LOG_WARN("BLE disconnect unconfirmed after %ums, shutdown anyway", millis() - start);
+        else
+            LOG_INFO("Ended BLE connection");
     }
 }
 
