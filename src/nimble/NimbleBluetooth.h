@@ -20,3 +20,10 @@ class NimbleBluetooth : BluetoothApi
 };
 
 void setBluetoothEnable(bool enable);
+
+#if BLE_MESH_USE_EXT_ADV
+struct ble_gap_event;
+/// The Arduino BLE wrapper's own GAP event handler, for another advertising instance to chain to so the
+/// server's connection, MTU and subscription bookkeeping covers the links made through it.
+int nimbleServerGapEvent(struct ble_gap_event *event, void *arg);
+#endif

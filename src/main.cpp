@@ -50,6 +50,9 @@
 #elif HAS_BLE_MESH && defined(ARCH_NRF52)
 #include "platform/nrf52/NRF52BLEMesh.h"
 #endif
+#if HAS_BLE_GATT_MESH && defined(ARCH_ESP32) && BLE_MESH_USE_EXT_ADV
+#include "platform/esp32/ESP32BLEGattMesh.h"
+#endif
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
@@ -1100,6 +1103,13 @@ void setup()
 #endif
     if (bleMeshHandler && (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST))
         bleMeshHandler->start();
+#endif
+
+#if HAS_BLE_GATT_MESH && defined(ARCH_ESP32) && BLE_MESH_USE_EXT_ADV
+    // The service itself is registered by NimbleBluetooth::setupService(); this is the pump.
+    bleGattMeshHandler = new ESP32BLEGattMesh();
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER)
+        bleGattMeshHandler->start();
 #endif
 
     service = new MeshService();

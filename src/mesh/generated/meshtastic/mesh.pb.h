@@ -651,7 +651,9 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     /* Arrived via Unicast UDP */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8,
     /* Arrived via a connectionless BLE 5 extended advertisement */
-    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV = 9
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV = 9,
+    /* Arrived via a BLE GATT mesh-peer connection (a phone connected to this node as a mesh peer) */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT = 10
 } meshtastic_MeshPacket_TransportMechanism;
 
 /* Log levels, chosen to match python logging conventions. */
@@ -1672,8 +1674,8 @@ extern "C" {
 #define _meshtastic_MeshPacket_Delayed_ARRAYSIZE ((meshtastic_MeshPacket_Delayed)(meshtastic_MeshPacket_Delayed_DELAYED_DIRECT+1))
 
 #define _meshtastic_MeshPacket_TransportMechanism_MIN meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL
-#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV
-#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV+1))
+#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT
+#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT+1))
 
 #define _meshtastic_LogRecord_Level_MIN meshtastic_LogRecord_Level_UNSET
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL

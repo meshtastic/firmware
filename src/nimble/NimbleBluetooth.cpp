@@ -25,6 +25,10 @@
 
 #include "PowerStatus.h"
 
+#if HAS_BLE_GATT_MESH && BLE_MESH_USE_EXT_ADV
+#include "platform/esp32/ESP32BLEGattMesh.h"
+#endif
+
 #include "host/ble_gap.h"
 #include "host/ble_hs.h"
 #include "host/ble_hs_adv.h"
@@ -781,6 +785,13 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
         if (ble->isDeInit)
             return;
 
+#if HAS_BLE_GATT_MESH && BLE_MESH_USE_EXT_ADV
+        // A mesh-peer link dropping is not the phone's session ending: leave the PhoneAPI state and its
+        // advertisement alone. The mesh half re-arms its own advertisement.
+        if (ESP32BLEGattMesh::onDisconnect(desc->conn_handle))
+            return;
+#endif
+
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
         clearPairingDisplay();
@@ -846,6 +857,11 @@ int phoneAdvGapEvent(struct ble_gap_event *event, void *arg)
     return rc;
 }
 } // namespace
+
+int nimbleServerGapEvent(struct ble_gap_event *event, void *arg)
+{
+    return get(BLEServerGapCb{})(event, arg);
+}
 
 /*
     Advertise the PhoneAPI through the extended-advertising API.
@@ -1009,6 +1025,9 @@ void NimbleBluetooth::deinit()
 
     isDeInit = true;
     pendingStartAdvertising = false; // stack is going away; don't let runOnce retry the adv restart
+#if HAS_BLE_GATT_MESH && BLE_MESH_USE_EXT_ADV
+    ESP32BLEGattMesh::teardown(); // its characteristic is freed by BLEDevice::deinit() below
+#endif
 
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
@@ -1172,6 +1191,10 @@ void NimbleBluetooth::setup()
     bleServer->setCallbacks(&serverCallbacks);
     setupService();
     startAdvertising();
+#if HAS_BLE_GATT_MESH && BLE_MESH_USE_EXT_ADV
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER)
+        ESP32BLEGattMesh::startAdvertising();
+#endif
 }
 
 void NimbleBluetooth::setupService()
@@ -1241,6 +1264,11 @@ void NimbleBluetooth::setupService()
     BatteryCharacteristic->setValue(&initialLevel, 1);
     lastBatteryLevel = initialLevel;
     batteryService->start();
+
+#if HAS_BLE_GATT_MESH && BLE_MESH_USE_EXT_ADV
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER)
+        ESP32BLEGattMesh::setupService(bleServer);
+#endif
 }
 
 /// Given a level between 0-100, update the BLE attribute

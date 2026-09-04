@@ -173,7 +173,10 @@ typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     /* Enable broadcasting packets via UDP over the local network */
     meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1,
     /* Enable broadcasting packets via connectionless BLE extended advertisements */
-    meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST = 2
+    meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST = 2,
+    /* Serve BLE GATT mesh peers: phones connect to this node's mesh-peer service and exchange
+ mesh packets with it directly, without a phone-API session */
+    meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER = 4
 } meshtastic_Config_NetworkConfig_ProtocolFlags;
 
 /* Deprecated in 2.7.4: Unused */
@@ -760,8 +763,8 @@ extern "C" {
 #define _meshtastic_Config_NetworkConfig_AddressMode_ARRAYSIZE ((meshtastic_Config_NetworkConfig_AddressMode)(meshtastic_Config_NetworkConfig_AddressMode_STATIC+1))
 
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_MIN meshtastic_Config_NetworkConfig_ProtocolFlags_NO_BROADCAST
-#define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST
-#define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST+1))
+#define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER
+#define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER+1))
 
 #define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
 #define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MAX meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED

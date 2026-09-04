@@ -70,6 +70,9 @@ extern UdpMulticastHandler *udpHandler;
 #if HAS_BLE_MESH
 #include "mesh/BLEMeshHandler.h"
 #endif
+#if HAS_BLE_GATT_MESH
+#include "mesh/BLEGattMeshHandler.h"
+#endif
 
 // Global Screen singleton.
 extern std::unique_ptr<graphics::Screen> screen;
