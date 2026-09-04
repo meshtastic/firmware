@@ -248,16 +248,6 @@ void ESP32BLEGattMesh::startAdvertising()
         linksNow = meshLinkCount(&holder);
     }
     if (linksNow >= BLE_GATT_MESH_MAX_LINKS) {
-        // Stop a set that raced past this check. The count is read under lock and the ble_gap calls are
-        // made outside it (the host task takes the same lock in addLink and also delivers the HCI
-        // completion those calls wait on, so holding it across them would deadlock) - so a CONNECT can
-        // take the slot in between and leave the set advertising with no room for the peer it attracts.
-        // The CONNECT path re-arms for exactly this reason, and this branch is where it converges:
-        // whichever side wins, the state settles on "slot held, set off".
-        if (ble_gap_ext_adv_active(BLE_GATT_MESH_ADV_INSTANCE)) {
-            LOG_DEBUG("BLE GATT mesh: stopping the mesh-peer advertisement, the slot filled under it");
-            ble_gap_ext_adv_stop(BLE_GATT_MESH_ADV_INSTANCE);
-        }
         // INFO, not DEBUG, and with the holder: this is the line that says "a second phone cannot find
         // this node over GATT right now, and here is who has the slot". At DEBUG it was invisible on a
         // bench where exactly that was the question.
@@ -361,24 +351,15 @@ bool ESP32BLEGattMesh::onDisconnect(uint16_t connHandle)
 {
     bool viaMeshAdv = false;
     bool subscribed = false;
-    bool held = false;
     {
         std::lock_guard<std::mutex> guard(lock);
         if (Link *l = findLink(connHandle)) {
-            held = true;
             viaMeshAdv = l->viaMeshAdv;
             subscribed = l->subscribed;
             l->used = false;
             pushRx(connHandle, nullptr, 0); // the pump drops its half-built packets
         }
     }
-    // A handle this transport never held is not ours to report or re-arm for. With the feature on,
-    // onConnect registers every server link whichever set it arrived on, so this only skips the case
-    // where BLE_GATT_PEER is off - where the log line would claim mesh-transport involvement in a
-    // plain phone drop and latch pendingAdvertising for a service that does not exist. It therefore
-    // costs nothing to the deferred-start retry below, which needs a link the table does know about.
-    if (!held)
-        return false;
     LOG_INFO("BLE GATT mesh: conn %u disconnected (via %s advertisement, %s)", connHandle, viaMeshAdv ? "mesh-peer" : "phone-API",
              subscribed ? "was subscribed" : "never subscribed");
     // Re-arm on every drop, not only a mesh-peer one, and let startAdvertising() decide: a phone-API
@@ -415,11 +396,6 @@ int ESP32BLEGattMesh::onGapEvent(struct ble_gap_event *event, void *arg)
                 addLink(event->connect.conn_handle, true);
             }
             LOG_INFO("BLE GATT mesh: peer conn %u connected", event->connect.conn_handle);
-            // Re-arm even though a connection auto-terminates the set: startAdvertising() may have
-            // read "slot free" just before this link took it and started the set anyway, and its
-            // slot-full branch is what stops such a set. Asking for it here is what makes that
-            // convergence happen rather than waiting for the next disconnect.
-            pendingAdvertising = true;
         } else {
             pendingAdvertising = true; // the set stopped for a connection that never formed
         }
