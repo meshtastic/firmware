@@ -1597,12 +1597,7 @@ if (tooLong && !gotLoc) {
 >>>>>>> 0b74a29ad (t-echo-plus)
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
-                // Losing a position fix must not erase independent receiver
-                // status. Keep the latest satellite count so GPSStatus/Base
-                // UI can still show satellites that are currently visible.
-                const uint32_t lastSatsInView = p.sats_in_view;
                 p = meshtastic_Position_init_default;
-                p.sats_in_view = lastSatsInView;
                 hasValidLocation = false;
                 shouldPublish = true;
                 LOG_DEBUG_GPS("hasValidLocation FALLING EDGE");
@@ -1612,11 +1607,7 @@ if (tooLong && !gotLoc) {
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
         bool holdExpired = holdJustExpired(fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
-            // At the end of every scheduled GPS update window, also publish
-            // the current satellite status when TinyGPS++ has previously
-            // supplied a positive count. This keeps GPSStatus/Base UI in sync
-            // even if there is no new position fix in this particular window.
-            if ((gotTime && hasValidLocation) || p.sats_in_view > 0) {
+            if (gotTime && hasValidLocation) {
                 shouldPublish = true;
             }
             if (shouldPublish) {
@@ -2224,19 +2215,27 @@ bool GPS::lookForLocation()
         return false;
 
 #if GPS_DEBUG
-    LOG_DEBUG("AGE: LOC=%d DATE=%d TIME=%d FIXTYPE=%u", reader.location.age(), reader.date.age(), reader.time.age(),
-              parsedFixType);
+    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+              gsafixtype.age(),
+#else
+              0,
+#endif
+              reader.date.age(), reader.time.age());
 #endif // GPS_DEBUG
 
     // Is this a new point or are we re-reading the previous one?
     if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
         return false;
 
-    // Check that the position, time and date belong to a fresh solution.
-    // GSA freshness is no longer tied to the legacy TinyGPSCustom field;
-    // the native GSA parser is used directly.
-    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) && (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
-          (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
+    // check if a complete GPS solution set is available for reading
+    //   tinyGPSDatum::age() also includes isValid() test
+    // FIXME
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+          (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
+#endif
+          (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
         LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
@@ -2256,17 +2255,22 @@ bool GPS::lookForLocation()
 
     p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
 
-    // Dilution of precision is reported in 10^2 units.
-    // Prefer the native GSA values and fall back to GGA HDOP when GSA
-    // has not produced a value yet.
+    // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     const uint16_t gsaHdop = reader.gsaHDOP();
     const uint16_t gsaPdop = reader.gsaPDOP();
     p.HDOP = gsaHdop ? gsaHdop : reader.hdop.value();
-    p.PDOP = gsaPdop ? gsaPdop : static_cast<uint16_t>(1.41f * p.HDOP);
+    p.PDOP = gsaPdop ? gsaPdop : TinyGPSPlus::parseDecimal(gsapdop.value());
+#else
+    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+    p.HDOP = reader.hdop.value();
+    p.PDOP = 1.41 * reader.hdop.value();
+#endif
 
-    // Validate the HDOP value actually selected above.
-    if (p.HDOP == 0) {
-        LOG_WARN("BOGUS HDOP REJECTED: %u", p.HDOP);
+    // Discard incomplete or erroneous readings
+    if (reader.hdop.value() == 0) {
+        LOG_WARN("BOGUS hdop.value() REJECTED: %d", reader.hdop.value());
         return false;
     }
 
@@ -2278,7 +2282,6 @@ bool GPS::lookForLocation()
     p.altitude = reader.altitude.meters();
 
     p.fix_quality = fixQual;
-    p.fix_type = parsedFixType;
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     p.fix_type = fixType;
 #endif
@@ -2351,17 +2354,13 @@ bool GPS::lookForLocation()
 
 bool GPS::hasLock()
 {
-    // GGA fix quality must indicate a valid solution.
+    // Using GPGGA fix quality indicator
     if (fixQual >= 1 && fixQual <= 5) {
-        // Native GSA fix type: 1=no fix, 2=2D, 3=3D.
-        // Zero means no GSA fix type has been received yet, so trust GGA.
-        const uint8_t parsedFixType = reader.gsaFixType();
-        if (parsedFixType == 3 || parsedFixType == 2 || parsedFixType == 0)
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-            // Use GPGSA fix type 2D/3D (better) if available
-            if (fixType == 3 || fixtype == 2 || fixType == 0) // zero means "no data received"
+        // Use GPGSA fix type 2D/3D (better) if available
+        if (fixType == 3 || fixtype == 2 || fixType == 0) // zero means "no data received"
 #endif
-                return true;
+            return true;
     }
 
     return false;
