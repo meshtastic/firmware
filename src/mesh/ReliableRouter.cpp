@@ -70,7 +70,20 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
     // from the intended recipient.
     auto key = GlobalPacketId(getFrom(p), p->id);
     auto old = findPendingPacket(key);
+#ifdef USE_SERIAL_PACKET_IO
+    // This is a niche case for serial packet IO, where we want to generate an implicit ack
+    // when LoRa tx is disabled. This occurs if you are testing the serial connection between
+    // two nodes, and have LoRa TX disabled on both, and are forcing all traffic over the wire.
+    // The rebroadcast packet when Radio A sends, is sent back by Radio B over the wire,
+    // and so we need to generate an implicit ack even though an entry does not exist in Pending
+    // because LoRa TX is disabled.  Other than in testing, this case will not happen.
+    // It would be better if we could actually detect that this is first time we have heard the
+    // rebroadcast by some means other than checking Pending, like by checking wasSeenRecently,
+    // but the packet has already been recorded as wasSeenRecently.
+    if (old || !config.lora.tx_enabled) {
+#else
     if (old) {
+#endif
         LOG_DEBUG("Generate implicit ack");
         // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
         // marked as wantAck
