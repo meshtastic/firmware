@@ -976,6 +976,87 @@ static void test_channelSpacingCalculation_EU868_LONG_FAST()
     TEST_ASSERT_EQUAL_UINT32(1, numChannels);
 }
 
+static void test_channelSpacingCalculation_JP_LONG_FAST()
+{
+    // JP: freqStart=920.5, freqEnd=923.5, ARIB STD-T108 200kHz unit channels
+    // LONG_FAST: bw=250 kHz -> 2 unit channels (400 kHz slot), padding=75 kHz, spacing=0
+    // numChannels = floor((923.5 - 920.5 + 0.001) / 0.400) = 7
+    // fc(0) = 920.5 + 0.125 + 0.075 = 920.700 MHz (ARIB ch 24+25 center)
+    const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, jp->wideLora);
+    float spacing = jp->getSpacing(bw);
+    float padding = jp->getPadding(bw);
+    float channelSpacing = spacing + (padding * 2) + (bw / 1000.0f);
+    uint32_t numChannels = (uint32_t)((jp->freqEnd - jp->freqStart + spacing + 0.001f) / channelSpacing);
+    float firstFreq = jp->freqStart + (bw / 2000.0f) + padding;
+    float secondFreq = firstFreq + channelSpacing;
+    float lastFreq = firstFreq + 6 * channelSpacing;
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, spacing);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.075f, padding);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.400f, channelSpacing);
+    TEST_ASSERT_EQUAL_UINT32(7, numChannels);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, firstFreq);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.100f, secondFreq);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.100f, lastFreq);
+}
+
+static void test_channelSpacingCalculation_JP_LONG_SLOW()
+{
+    // LONG_SLOW: bw=125 kHz -> 1 unit channel (200 kHz slot), padding=37.5 kHz
+    // fc(0) = 920.5 + 0.0625 + 0.0375 = 920.600 MHz (ARIB ch 24 center)
+    const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, jp->wideLora);
+    float spacing = jp->getSpacing(bw);
+    float padding = jp->getPadding(bw);
+    float channelSpacing = spacing + (padding * 2) + (bw / 1000.0f);
+    uint32_t numChannels = (uint32_t)((jp->freqEnd - jp->freqStart + spacing + 0.001f) / channelSpacing);
+    float firstFreq = jp->freqStart + (bw / 2000.0f) + padding;
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0375f, padding);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.200f, channelSpacing);
+    TEST_ASSERT_EQUAL_UINT32(15, numChannels);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, firstFreq);
+}
+
+static void test_channelSpacingCalculation_JP_NARROW_SLOW()
+{
+    // NARROW_SLOW: bw=62.5 kHz -> 1 unit channel (200 kHz slot), padding=68.75 kHz
+    // fc(0) = 920.5 + 0.03125 + 0.06875 = 920.600 MHz (ARIB ch 24 center)
+    const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, jp->wideLora);
+    float spacing = jp->getSpacing(bw);
+    float padding = jp->getPadding(bw);
+    float channelSpacing = spacing + (padding * 2) + (bw / 1000.0f);
+    uint32_t numChannels = (uint32_t)((jp->freqEnd - jp->freqStart + spacing + 0.001f) / channelSpacing);
+    float firstFreq = jp->freqStart + (bw / 2000.0f) + padding;
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.06875f, padding);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.200f, channelSpacing);
+    TEST_ASSERT_EQUAL_UINT32(15, numChannels);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, firstFreq);
+}
+
+static void test_channelSpacingCalculation_JP_SHORT_TURBO()
+{
+    // SHORT_TURBO: bw=500 kHz -> 3 unit channels (600 kHz slot), padding=50 kHz
+    // fc(0) = 920.5 + 0.250 + 0.050 = 920.800 MHz (ARIB ch 24..26 center)
+    const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, jp->wideLora);
+    float spacing = jp->getSpacing(bw);
+    float padding = jp->getPadding(bw);
+    float channelSpacing = spacing + (padding * 2) + (bw / 1000.0f);
+    uint32_t numChannels = (uint32_t)((jp->freqEnd - jp->freqStart + spacing + 0.001f) / channelSpacing);
+    float firstFreq = jp->freqStart + (bw / 2000.0f) + padding;
+    float lastFreq = firstFreq + 4 * channelSpacing;
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.050f, padding);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.600f, channelSpacing);
+    TEST_ASSERT_EQUAL_UINT32(5, numChannels);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, firstFreq);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.200f, lastFreq);
+}
+
 // Placeholder: when protobuf region definitions include non-zero padding/spacing,
 // add tests here to verify the channel count and frequency calculations.
 static void test_channelSpacingCalculation_placeholder()
@@ -2622,6 +2703,10 @@ void setup()
     // Channel spacing (current + placeholder)
     RUN_TEST(test_channelSpacingCalculation_US_LONG_FAST);
     RUN_TEST(test_channelSpacingCalculation_EU868_LONG_FAST);
+    RUN_TEST(test_channelSpacingCalculation_JP_LONG_FAST);
+    RUN_TEST(test_channelSpacingCalculation_JP_LONG_SLOW);
+    RUN_TEST(test_channelSpacingCalculation_JP_NARROW_SLOW);
+    RUN_TEST(test_channelSpacingCalculation_JP_SHORT_TURBO);
     RUN_TEST(test_channelSpacingCalculation_placeholder);
 
     // handleSetConfig fromOthers dispatch
