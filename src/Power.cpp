@@ -997,6 +997,10 @@ void Power::reboot()
     ESP.restart();
 #elif defined(ARCH_NRF52)
     NVIC_SystemReset();
+#elif defined(ARCH_NRF54L15)
+    // Zephyr's own cold reset, as the crash handler on this platform already uses,
+    // so it can do its pre-reset bookkeeping instead of dropping straight into NVIC.
+    sys_reboot(SYS_REBOOT_COLD);
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
 #elif defined(ARCH_PORTDUINO_WASM)

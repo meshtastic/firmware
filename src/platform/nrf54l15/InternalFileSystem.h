@@ -96,8 +96,22 @@ class File
     {
         if (!_s || !_s->valid || _s->is_dir)
             return 0;
-        ssize_t n = fs_write(&_s->file, buf, len);
-        return n < 0 ? 0 : (size_t)n;
+        // fs_write() may perform a short write (like POSIX write()) - a single
+        // call is not guaranteed to consume the whole buffer. nanopb's stream
+        // callback treats any returned count short of what was requested as a
+        // fatal "io error" and aborts the encode, so this must loop until the
+        // whole buffer is written or a real error occurs. Without this, larger
+        // protobufs (DeviceState/LocalConfig) intermittently failed to save
+        // while small ones (a lightly-populated NodeDB) always fit in one
+        // fs_write() call and never exposed the bug.
+        size_t total = 0;
+        while (total < len) {
+            ssize_t n = fs_write(&_s->file, buf + total, len - total);
+            if (n <= 0)
+                break;
+            total += (size_t)n;
+        }
+        return total;
     }
 
     size_t write(uint8_t b) { return write(&b, 1); }
