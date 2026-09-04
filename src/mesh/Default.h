@@ -118,8 +118,9 @@ class Default
             float bwKHz;
             uint8_t sf;
             uint8_t cr;
+            uint16_t unusedPreambleLength; // only here to satisfy the out-param; airtime scaling ignores it
             if (config.lora.use_preset) {
-                modemPresetToParams(config.lora.modem_preset, false, bwKHz, sf, cr);
+                modemPresetToParams(config.lora.modem_preset, false, bwKHz, sf, cr, unusedPreambleLength);
             } else {
                 sf = config.lora.spread_factor;
                 bwKHz = bwCodeToKHz(config.lora.bandwidth);

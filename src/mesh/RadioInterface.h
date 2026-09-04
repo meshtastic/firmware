@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MemoryPool.h"
+#include "MeshRadio.h" // for the modem preset -> radio parameter helpers and their defaults
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
@@ -102,11 +103,9 @@ class RadioInterface
     static constexpr uint8_t NUM_SYM_CAD_24GHZ =
         4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
     uint32_t slotTimeMsec = computeSlotTimeMsec();
-    uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
-    static constexpr uint16_t preambleLengthDefault =
-        16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
-    static constexpr uint16_t wideLoraPreambleLengthDefault = 12; // 12 is default for wide Lora
-    uint32_t preambleTimeMsec = 165;                              // calculated on startup, this is the default for LongFast
+    // Set by applyModemConfig(); see LORA_PREAMBLE_LENGTH_DEFAULT in MeshRadio.h for why it is not RadioLib's 8.
+    uint16_t preambleLength = LORA_PREAMBLE_LENGTH_DEFAULT;
+    uint32_t preambleTimeMsec = 165; // calculated on startup, this is the default for LongFast
     static constexpr uint32_t PROCESSING_TIME_MSEC =
         4500;                           // time to construct, process and construct a packet again (empirically determined)
     static constexpr uint8_t CWmin = 3; // minimum CWsize
