@@ -9,6 +9,7 @@
 #include "PowerFSM.h"
 #include "SPILock.h"
 #include "gps/RTC.h"
+#include "graphics/ScreenMirror.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
@@ -692,6 +693,25 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSendInputEvent(r->send_input_event);
         break;
     }
+#if HAS_SCREEN_MIRROR
+    // Both verbs are documented local-connection-only: frames ride FromRadio,
+    // which never crosses the mesh, so honoring a remote arm request would
+    // stream the screen to whatever local client happens to be attached.
+    case meshtastic_AdminMessage_get_display_frame_request_tag: {
+        if (mp.from != 0)
+            break;
+        LOG_INFO("Client requests display frame");
+        graphics::screenMirror.requestFrame();
+        break;
+    }
+    case meshtastic_AdminMessage_set_display_mirror_tag: {
+        if (mp.from != 0)
+            break;
+        LOG_INFO("Client sets display mirror: %d", r->set_display_mirror);
+        graphics::screenMirror.setMirror(r->set_display_mirror);
+        break;
+    }
+#endif
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
@@ -2181,7 +2201,8 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_display_frame_request_tag)
         return true;
     else
         return false;
@@ -2211,6 +2232,14 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
 
     // Wake the device if asleep
     powerFSM.trigger(EVENT_INPUT);
+
+#if HAS_MUI_MIRROR
+    // MUI builds never construct an InputBroker (Modules.cpp skips it when
+    // displaymode is COLOR), so remote input reaches the LVGL UI directly.
+    if (graphics::muiInjectInputEvent(inputEvent.event_code, inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y))
+        return;
+#endif
+
 #if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
     // Inject the event through InputBroker
     if (inputBroker) {

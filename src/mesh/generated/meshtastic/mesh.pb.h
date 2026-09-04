@@ -670,6 +670,19 @@ typedef enum _meshtastic_LogRecord_Level {
     meshtastic_LogRecord_Level_TRACE = 5
 } meshtastic_LogRecord_Level;
 
+/* Pixel encodings of the framebuffer bytes. */
+typedef enum _meshtastic_DisplayFrame_Format {
+    /* Default; should not be sent. */
+    meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED = 0,
+    /* 1 bit per pixel, vertical LSB-first pages (SSD1306/OLEDDisplay layout):
+ byte index = x + (y / 8) * width, bit index = y % 8. */
+    meshtastic_DisplayFrame_Format_MONO_VLSB = 1,
+    /* 16 bits per pixel, RGB565 in little-endian byte order, rows tightly
+ packed. Used with the partial-update rect fields: data covers only
+ the rectangle. Streamed by LVGL-based color UIs. */
+    meshtastic_DisplayFrame_Format_RGB565 = 2
+} meshtastic_DisplayFrame_Format;
+
 typedef enum _meshtastic_LockdownStatus_State {
     /* Default; should not be sent. */
     meshtastic_LockdownStatus_State_STATE_UNSPECIFIED = 0,
@@ -695,6 +708,24 @@ typedef enum _meshtastic_LockdownStatus_State {
  which is only used during an in-progress enable flow. */
     meshtastic_LockdownStatus_State_DISABLED = 5
 } meshtastic_LockdownStatus_State;
+
+/* Physical panel technology, as a hint for client rendering and refresh
+ expectations. */
+typedef enum _meshtastic_DisplayInfo_PanelClass {
+    /* Default; should not be sent. */
+    meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED = 0,
+    /* Monochrome OLED (SSD1306/SH1106 family). */
+    meshtastic_DisplayInfo_PanelClass_OLED = 1,
+    /* Monochrome LCD (ST7567 family). */
+    meshtastic_DisplayInfo_PanelClass_LCD = 2,
+    /* Color TFT. */
+    meshtastic_DisplayInfo_PanelClass_TFT = 3,
+    /* E-ink panel: refresh is slow and full-screen; clients should prefer
+ one-shot frame requests over continuous mirroring. */
+    meshtastic_DisplayInfo_PanelClass_EINK = 4,
+    /* LED matrix (HUB75). */
+    meshtastic_DisplayInfo_PanelClass_HUB75 = 5
+} meshtastic_DisplayInfo_PanelClass;
 
 /* Struct definitions */
 /* A GPS Position */
@@ -1269,6 +1300,98 @@ typedef struct _meshtastic_QueueStatus {
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
 
+typedef PB_BYTES_ARRAY_T(384) meshtastic_DisplayFrame_data_t;
+/* A chunk of the device's display framebuffer, streamed to the local client
+ over BLE/serial/TCP. Frames larger than one chunk are split by byte offset;
+ a chunk with offset + data length == total_size completes the frame.
+ Chunks of one frame arrive contiguously (no other display_frame between
+ them; display_palette messages may interleave) and in offset order
+ (FromRadio is a reliable ordered stream), so clients may reassemble into
+ a single buffer without reordering. A frame whose streaming has begun is always drained to
+ completion, even if mirroring is disabled mid-frame. */
+typedef struct _meshtastic_DisplayFrame {
+    /* Display width in pixels. */
+    uint16_t width;
+    /* Display height in pixels. */
+    uint16_t height;
+    /* Pixel encoding of data. */
+    meshtastic_DisplayFrame_Format format;
+    /* Frame counter, constant across the chunks of one frame so the client
+ can detect interleaving or loss. Increments per captured frame, wraps
+ at uint32 range, and restarts from 1 on device reboot - treat any
+ change as "a new frame", not as an ordering guarantee. */
+    uint32_t frame_id;
+    /* Byte offset of this chunk within the full frame buffer. */
+    uint32_t offset;
+    /* Total size in bytes of the full frame buffer. */
+    uint32_t total_size;
+    /* The framebuffer bytes for this chunk. */
+    meshtastic_DisplayFrame_data_t data;
+    /* Optional partial-update rectangle (dirty-rect streaming from LVGL-based
+ color UIs, format RGB565). When rect_width > 0, data carries only the
+ rectangle's pixels and offset/total_size describe the rectangle's own
+ buffer; width/height above always remain the full display dimensions,
+ and each rectangle is an independently completed unit under its own
+ frame_id. MONO_VLSB frames never set these fields. */
+    uint16_t rect_x;
+    /* See rect_x. */
+    uint16_t rect_y;
+    /* See rect_x. */
+    uint16_t rect_width;
+    /* See rect_x. */
+    uint16_t rect_height;
+    /* Identity of the DisplayPalette that colorizes this frame, matching
+ DisplayPalette.signature. 0 when the device renders monochrome (no
+ color panel); clients without the referenced palette yet should render
+ monochrome until its chunks arrive. */
+    uint32_t palette_signature;
+} meshtastic_DisplayFrame;
+
+/* One colorized rectangle of the display. */
+typedef struct _meshtastic_DisplayPalette_ColorRegion {
+    /* Region origin and size in pixels. */
+    uint16_t x;
+    /* See x. */
+    uint16_t y;
+    /* See x. */
+    uint16_t width;
+    /* See x. */
+    uint16_t height;
+    /* RGB565 drawn for set (1) pixels inside this region. */
+    uint16_t on_color;
+    /* RGB565 drawn for clear (0) pixels inside this region. */
+    uint16_t off_color;
+} meshtastic_DisplayPalette_ColorRegion;
+
+/* Colorization palette for DisplayFrame streams from devices that paint the
+ 1bpp base UI onto a color panel. The panel applies per-region on/off
+ colors at flush time; streaming the same region table lets a client
+ render the mirror in the panel's true colors at 1bpp bandwidth.
+ Sent as FromRadio.display_palette, split by region index when the table
+ exceeds one message; re-sent only when the region layout or theme changes
+ (the signature changes with it). Regions are ordered by table index; a
+ region with a higher table index overrides lower-indexed ones where they
+ overlap, regardless of chunk boundaries. A client holding partial chunks
+ of a signature that no longer matches incoming chunks should discard
+ them. All colors are RGB565 in logical bit layout (RRRRRGGGGGGBBBBB). */
+typedef struct _meshtastic_DisplayPalette {
+    /* Identity of this palette; DisplayFrame.palette_signature references it.
+ Changes whenever the region table or theme changes. */
+    uint32_t signature;
+    /* RGB565 for set pixels outside all regions. */
+    uint32_t default_on_color;
+    /* RGB565 for clear pixels outside all regions. */
+    uint32_t default_off_color;
+    /* Table index of the first region in this chunk. */
+    uint8_t region_offset;
+    /* Total regions in the complete palette; region_offset + regions length
+ == region_total completes it. */
+    uint8_t region_total;
+    /* The regions of this chunk, in table order. */
+    pb_size_t regions_count;
+    meshtastic_DisplayPalette_ColorRegion regions[16];
+} meshtastic_DisplayPalette;
+
 /* Lockdown state report from firmware to client (for hardened builds
  with MESHTASTIC_LOCKDOWN). Sent immediately after config_complete_id
  to inform a freshly-connected unauthorized client what it must do,
@@ -1395,6 +1518,22 @@ typedef struct _meshtastic_NeighborInfo {
     meshtastic_Neighbor neighbors[10];
 } meshtastic_NeighborInfo;
 
+/* Static description of a device's display, sent inside DeviceMetadata
+ during the connection handshake. */
+typedef struct _meshtastic_DisplayInfo {
+    /* Display width in pixels. */
+    uint16_t width;
+    /* Display height in pixels. */
+    uint16_t height;
+    /* Pixel encoding that DisplayFrame streams from this device will use. */
+    meshtastic_DisplayFrame_Format format;
+    /* Physical panel technology. */
+    meshtastic_DisplayInfo_PanelClass panel_class;
+    /* True when the panel accepts touch input; clients may map taps on a
+ mirrored frame to AdminMessage.send_input_event touch coordinates. */
+    bool has_touch;
+} meshtastic_DisplayInfo;
+
 /* Device metadata response */
 typedef struct _meshtastic_DeviceMetadata {
     /* Device firmware version string */
@@ -1425,6 +1564,12 @@ typedef struct _meshtastic_DeviceMetadata {
     /* Indicates whether this firmware build includes XEdDSA packet signature verification.
  This is a read-only capability and must be false when XEdDSA is not compiled in. */
     bool has_xeddsa;
+    /* Describes the device's screen when one is present; absent on display-less
+ builds. Lets clients gate display-mirroring UI (see DisplayFrame) and
+ adapt to the panel - e.g. expect slow refresh from EINK, or offer
+ tap-to-touch when has_touch is set. */
+    bool has_display;
+    meshtastic_DisplayInfo display;
 } meshtastic_DeviceMetadata;
 
 /* A distinct set of legal modem presets shared by one or more LoRa regions.
@@ -1536,6 +1681,13 @@ typedef struct _meshtastic_FromRadio {
      illegal region+preset combination. A region that does not appear in
      any group carries no constraint info and should not be restricted. */
         meshtastic_LoRaRegionPresetMap region_presets;
+        /* One chunk of the device's display framebuffer, sent while display
+     mirroring is active (see AdminMessage.set_display_mirror and
+     AdminMessage.get_display_frame_request). */
+        meshtastic_DisplayFrame display_frame;
+        /* One chunk of the color palette referenced by display_frame's
+     palette_signature (see DisplayPalette). */
+        meshtastic_DisplayPalette display_palette;
     };
 } meshtastic_FromRadio;
 
@@ -1677,9 +1829,17 @@ extern "C" {
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
+#define _meshtastic_DisplayFrame_Format_MIN meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED
+#define _meshtastic_DisplayFrame_Format_MAX meshtastic_DisplayFrame_Format_RGB565
+#define _meshtastic_DisplayFrame_Format_ARRAYSIZE ((meshtastic_DisplayFrame_Format)(meshtastic_DisplayFrame_Format_RGB565+1))
+
 #define _meshtastic_LockdownStatus_State_MIN meshtastic_LockdownStatus_State_STATE_UNSPECIFIED
 #define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_DISABLED
 #define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_DISABLED+1))
+
+#define _meshtastic_DisplayInfo_PanelClass_MIN meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED
+#define _meshtastic_DisplayInfo_PanelClass_MAX meshtastic_DisplayInfo_PanelClass_HUB75
+#define _meshtastic_DisplayInfo_PanelClass_ARRAYSIZE ((meshtastic_DisplayInfo_PanelClass)(meshtastic_DisplayInfo_PanelClass_HUB75+1))
 
 #define meshtastic_Position_location_source_ENUMTYPE meshtastic_Position_LocSource
 #define meshtastic_Position_altitude_source_ENUMTYPE meshtastic_Position_AltSource
@@ -1712,6 +1872,10 @@ extern "C" {
 
 
 
+#define meshtastic_DisplayFrame_format_ENUMTYPE meshtastic_DisplayFrame_Format
+
+
+
 #define meshtastic_LockdownStatus_state_ENUMTYPE meshtastic_LockdownStatus_State
 
 #define meshtastic_ClientNotification_level_ENUMTYPE meshtastic_LogRecord_Level
@@ -1729,6 +1893,9 @@ extern "C" {
 
 #define meshtastic_DeviceMetadata_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
+
+#define meshtastic_DisplayInfo_format_ENUMTYPE meshtastic_DisplayFrame_Format
+#define meshtastic_DisplayInfo_panel_class_ENUMTYPE meshtastic_DisplayInfo_PanelClass
 
 #define meshtastic_LoRaPresetGroup_presets_ENUMTYPE meshtastic_Config_LoRaConfig_ModemPreset
 #define meshtastic_LoRaPresetGroup_default_preset_ENUMTYPE meshtastic_Config_LoRaConfig_ModemPreset
@@ -1761,6 +1928,9 @@ extern "C" {
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
+#define meshtastic_DisplayFrame_init_default     {0, 0, _meshtastic_DisplayFrame_Format_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_DisplayPalette_init_default   {0, 0, 0, 0, 0, 0, {meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default}}
+#define meshtastic_DisplayPalette_ColorRegion_init_default {0, 0, 0, 0, 0, 0}
 #define meshtastic_LockdownStatus_init_default   {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_default {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_default}}
 #define meshtastic_KeyVerificationNumberInform_init_default {0, "", 0}
@@ -1773,7 +1943,8 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_default}
+#define meshtastic_DisplayInfo_init_default      {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_default  {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_default {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
 #define meshtastic_LoRaRegionPresetMap_init_default {0, {meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default}, 0, {meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default}}
@@ -1800,6 +1971,9 @@ extern "C" {
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
+#define meshtastic_DisplayFrame_init_zero        {0, 0, _meshtastic_DisplayFrame_Format_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_DisplayPalette_init_zero      {0, 0, 0, 0, 0, 0, {meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero}}
+#define meshtastic_DisplayPalette_ColorRegion_init_zero {0, 0, 0, 0, 0, 0}
 #define meshtastic_LockdownStatus_init_zero      {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_zero  {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_zero}}
 #define meshtastic_KeyVerificationNumberInform_init_zero {0, "", 0}
@@ -1812,7 +1986,8 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_zero}
+#define meshtastic_DisplayInfo_init_zero         {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_zero     {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_zero   {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
 #define meshtastic_LoRaRegionPresetMap_init_zero {0, {meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero}, 0, {meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero}}
@@ -1968,6 +2143,30 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_DisplayFrame_width_tag        1
+#define meshtastic_DisplayFrame_height_tag       2
+#define meshtastic_DisplayFrame_format_tag       3
+#define meshtastic_DisplayFrame_frame_id_tag     4
+#define meshtastic_DisplayFrame_offset_tag       5
+#define meshtastic_DisplayFrame_total_size_tag   6
+#define meshtastic_DisplayFrame_data_tag         7
+#define meshtastic_DisplayFrame_rect_x_tag       8
+#define meshtastic_DisplayFrame_rect_y_tag       9
+#define meshtastic_DisplayFrame_rect_width_tag   10
+#define meshtastic_DisplayFrame_rect_height_tag  11
+#define meshtastic_DisplayFrame_palette_signature_tag 12
+#define meshtastic_DisplayPalette_ColorRegion_x_tag 1
+#define meshtastic_DisplayPalette_ColorRegion_y_tag 2
+#define meshtastic_DisplayPalette_ColorRegion_width_tag 3
+#define meshtastic_DisplayPalette_ColorRegion_height_tag 4
+#define meshtastic_DisplayPalette_ColorRegion_on_color_tag 5
+#define meshtastic_DisplayPalette_ColorRegion_off_color_tag 6
+#define meshtastic_DisplayPalette_signature_tag  1
+#define meshtastic_DisplayPalette_default_on_color_tag 2
+#define meshtastic_DisplayPalette_default_off_color_tag 3
+#define meshtastic_DisplayPalette_region_offset_tag 4
+#define meshtastic_DisplayPalette_region_total_tag 5
+#define meshtastic_DisplayPalette_regions_tag    6
 #define meshtastic_LockdownStatus_state_tag      1
 #define meshtastic_LockdownStatus_lock_reason_tag 2
 #define meshtastic_LockdownStatus_boots_remaining_tag 3
@@ -2003,6 +2202,11 @@ extern "C" {
 #define meshtastic_NeighborInfo_last_sent_by_id_tag 2
 #define meshtastic_NeighborInfo_node_broadcast_interval_secs_tag 3
 #define meshtastic_NeighborInfo_neighbors_tag    4
+#define meshtastic_DisplayInfo_width_tag         1
+#define meshtastic_DisplayInfo_height_tag        2
+#define meshtastic_DisplayInfo_format_tag        3
+#define meshtastic_DisplayInfo_panel_class_tag   4
+#define meshtastic_DisplayInfo_has_touch_tag     5
 #define meshtastic_DeviceMetadata_firmware_version_tag 1
 #define meshtastic_DeviceMetadata_device_state_version_tag 2
 #define meshtastic_DeviceMetadata_canShutdown_tag 3
@@ -2016,6 +2220,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hasPKC_tag     11
 #define meshtastic_DeviceMetadata_excluded_modules_tag 12
 #define meshtastic_DeviceMetadata_has_xeddsa_tag 14
+#define meshtastic_DeviceMetadata_display_tag    15
 #define meshtastic_LoRaPresetGroup_presets_tag   1
 #define meshtastic_LoRaPresetGroup_default_preset_tag 2
 #define meshtastic_LoRaPresetGroup_licensed_only_tag 3
@@ -2042,6 +2247,8 @@ extern "C" {
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
 #define meshtastic_FromRadio_lockdown_status_tag 18
 #define meshtastic_FromRadio_region_presets_tag  19
+#define meshtastic_FromRadio_display_frame_tag   20
+#define meshtastic_FromRadio_display_palette_tag 21
 #define meshtastic_Heartbeat_nonce_tag           1
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
@@ -2301,7 +2508,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNotification),  16) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_status,lockdown_status),  18) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_frame,display_frame),  20) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_palette,display_palette),  21)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -2320,6 +2529,45 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_preset
 #define meshtastic_FromRadio_payload_variant_deviceuiConfig_MSGTYPE meshtastic_DeviceUIConfig
 #define meshtastic_FromRadio_payload_variant_lockdown_status_MSGTYPE meshtastic_LockdownStatus
 #define meshtastic_FromRadio_payload_variant_region_presets_MSGTYPE meshtastic_LoRaRegionPresetMap
+#define meshtastic_FromRadio_payload_variant_display_frame_MSGTYPE meshtastic_DisplayFrame
+#define meshtastic_FromRadio_payload_variant_display_palette_MSGTYPE meshtastic_DisplayPalette
+
+#define meshtastic_DisplayFrame_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   width,             1) \
+X(a, STATIC,   SINGULAR, UINT32,   height,            2) \
+X(a, STATIC,   SINGULAR, UENUM,    format,            3) \
+X(a, STATIC,   SINGULAR, UINT32,   frame_id,          4) \
+X(a, STATIC,   SINGULAR, UINT32,   offset,            5) \
+X(a, STATIC,   SINGULAR, UINT32,   total_size,        6) \
+X(a, STATIC,   SINGULAR, BYTES,    data,              7) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_x,            8) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_y,            9) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_width,       10) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_height,      11) \
+X(a, STATIC,   SINGULAR, UINT32,   palette_signature,  12)
+#define meshtastic_DisplayFrame_CALLBACK NULL
+#define meshtastic_DisplayFrame_DEFAULT NULL
+
+#define meshtastic_DisplayPalette_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   signature,         1) \
+X(a, STATIC,   SINGULAR, UINT32,   default_on_color,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   default_off_color,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   region_offset,     4) \
+X(a, STATIC,   SINGULAR, UINT32,   region_total,      5) \
+X(a, STATIC,   REPEATED, MESSAGE,  regions,           6)
+#define meshtastic_DisplayPalette_CALLBACK NULL
+#define meshtastic_DisplayPalette_DEFAULT NULL
+#define meshtastic_DisplayPalette_regions_MSGTYPE meshtastic_DisplayPalette_ColorRegion
+
+#define meshtastic_DisplayPalette_ColorRegion_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   x,                 1) \
+X(a, STATIC,   SINGULAR, UINT32,   y,                 2) \
+X(a, STATIC,   SINGULAR, UINT32,   width,             3) \
+X(a, STATIC,   SINGULAR, UINT32,   height,            4) \
+X(a, STATIC,   SINGULAR, UINT32,   on_color,          5) \
+X(a, STATIC,   SINGULAR, UINT32,   off_color,         6)
+#define meshtastic_DisplayPalette_ColorRegion_CALLBACK NULL
+#define meshtastic_DisplayPalette_ColorRegion_DEFAULT NULL
 
 #define meshtastic_LockdownStatus_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
@@ -2435,9 +2683,20 @@ X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9) \
 X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10) \
 X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11) \
 X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12) \
-X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14)
+X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  display,          15)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
+#define meshtastic_DeviceMetadata_display_MSGTYPE meshtastic_DisplayInfo
+
+#define meshtastic_DisplayInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   width,             1) \
+X(a, STATIC,   SINGULAR, UINT32,   height,            2) \
+X(a, STATIC,   SINGULAR, UENUM,    format,            3) \
+X(a, STATIC,   SINGULAR, UENUM,    panel_class,       4) \
+X(a, STATIC,   SINGULAR, BOOL,     has_touch,         5)
+#define meshtastic_DisplayInfo_CALLBACK NULL
+#define meshtastic_DisplayInfo_DEFAULT NULL
 
 #define meshtastic_LoRaPresetGroup_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, UENUM,    presets,           1) \
@@ -2512,6 +2771,9 @@ extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
+extern const pb_msgdesc_t meshtastic_DisplayFrame_msg;
+extern const pb_msgdesc_t meshtastic_DisplayPalette_msg;
+extern const pb_msgdesc_t meshtastic_DisplayPalette_ColorRegion_msg;
 extern const pb_msgdesc_t meshtastic_LockdownStatus_msg;
 extern const pb_msgdesc_t meshtastic_ClientNotification_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationNumberInform_msg;
@@ -2525,6 +2787,7 @@ extern const pb_msgdesc_t meshtastic_Compressed_msg;
 extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
 extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
+extern const pb_msgdesc_t meshtastic_DisplayInfo_msg;
 extern const pb_msgdesc_t meshtastic_LoRaPresetGroup_msg;
 extern const pb_msgdesc_t meshtastic_LoRaRegionPresets_msg;
 extern const pb_msgdesc_t meshtastic_LoRaRegionPresetMap_msg;
@@ -2553,6 +2816,9 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
+#define meshtastic_DisplayFrame_fields &meshtastic_DisplayFrame_msg
+#define meshtastic_DisplayPalette_fields &meshtastic_DisplayPalette_msg
+#define meshtastic_DisplayPalette_ColorRegion_fields &meshtastic_DisplayPalette_ColorRegion_msg
 #define meshtastic_LockdownStatus_fields &meshtastic_LockdownStatus_msg
 #define meshtastic_ClientNotification_fields &meshtastic_ClientNotification_msg
 #define meshtastic_KeyVerificationNumberInform_fields &meshtastic_KeyVerificationNumberInform_msg
@@ -2566,6 +2832,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
 #define meshtastic_Neighbor_fields &meshtastic_Neighbor_msg
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
+#define meshtastic_DisplayInfo_fields &meshtastic_DisplayInfo_msg
 #define meshtastic_LoRaPresetGroup_fields &meshtastic_LoRaPresetGroup_msg
 #define meshtastic_LoRaRegionPresets_fields &meshtastic_LoRaRegionPresets_msg
 #define meshtastic_LoRaRegionPresetMap_fields &meshtastic_LoRaRegionPresetMap_msg
@@ -2584,7 +2851,11 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
-#define meshtastic_DeviceMetadata_size           56
+#define meshtastic_DeviceMetadata_size           72
+#define meshtastic_DisplayFrame_size             437
+#define meshtastic_DisplayInfo_size              14
+#define meshtastic_DisplayPalette_ColorRegion_size 24
+#define meshtastic_DisplayPalette_size           440
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510

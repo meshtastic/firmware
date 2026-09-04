@@ -637,6 +637,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// Display mirroring to the client (FromRadio.display_frame) rides the screen
+// and can be excluded independently with MESHTASTIC_EXCLUDE_SCREEN_MIRROR.
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#define HAS_SCREEN_MIRROR 1
+#else
+#define HAS_SCREEN_MIRROR 0
+#endif
+
+// Mirroring MUI (device-ui/LVGL) streams RGB565 dirty rects instead of the
+// 1bpp framebuffer, and needs a device-ui carrying the flush observer. Until
+// that lands upstream the whole path - queue, pool and input seam - compiles
+// out, so a color build that does not opt in carries none of it.
+#if HAS_SCREEN_MIRROR && HAS_TFT && defined(MESHTASTIC_MUI_MIRROR)
+#define HAS_MUI_MIRROR 1
+#else
+#define HAS_MUI_MIRROR 0
+#endif
+
 #ifndef USE_ETHERNET_DEFAULT
 #define USE_ETHERNET_DEFAULT 0
 #endif

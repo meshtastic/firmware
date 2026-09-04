@@ -60,6 +60,15 @@ PB_BIND(meshtastic_QueueStatus, meshtastic_QueueStatus, AUTO)
 PB_BIND(meshtastic_FromRadio, meshtastic_FromRadio, 2)
 
 
+PB_BIND(meshtastic_DisplayFrame, meshtastic_DisplayFrame, 2)
+
+
+PB_BIND(meshtastic_DisplayPalette, meshtastic_DisplayPalette, 2)
+
+
+PB_BIND(meshtastic_DisplayPalette_ColorRegion, meshtastic_DisplayPalette_ColorRegion, AUTO)
+
+
 PB_BIND(meshtastic_LockdownStatus, meshtastic_LockdownStatus, AUTO)
 
 
@@ -99,6 +108,9 @@ PB_BIND(meshtastic_Neighbor, meshtastic_Neighbor, AUTO)
 PB_BIND(meshtastic_DeviceMetadata, meshtastic_DeviceMetadata, AUTO)
 
 
+PB_BIND(meshtastic_DisplayInfo, meshtastic_DisplayInfo, AUTO)
+
+
 PB_BIND(meshtastic_LoRaPresetGroup, meshtastic_LoRaPresetGroup, AUTO)
 
 
@@ -121,6 +133,10 @@ PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
 
 
 PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
+
+
+
+
 
 
 
