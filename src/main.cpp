@@ -1491,6 +1491,13 @@ void loop()
 #endif
     power->powerCommandsCheck();
 
+    // Persist transmit-history changes here, outside packet processing:
+    // setLastSentToMesh() only marks state dirty, so the flash write (which
+    // stalls core 0 with the cache disabled) never runs inside Router RX
+    // handling. Throttled internally to once per 5 minutes.
+    if (transmitHistory)
+        transmitHistory->flushIfDue();
+
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
         if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {

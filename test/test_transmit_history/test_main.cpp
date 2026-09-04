@@ -168,6 +168,23 @@ static void test_save_and_load_round_trip()
     }
 }
 
+// setLastSentToMesh() no longer writes flash inline (the write is deferred out of the
+// packet-processing path). flushIfDue() is the deferred writer: with pending changes
+// and no prior save this boot, it must persist immediately - through the SafeFile
+// tmp-write/readback/rename path - and survive a reload.
+static void test_flushIfDue_persists_pending_changes()
+{
+    transmitHistory->clear(); // remove any on-disk file left by earlier tests
+
+    transmitHistory->setLastSentAtEpoch(meshtastic_PortNum_NODEINFO_APP, 1700000000);
+    transmitHistory->flushIfDue(); // first pending change after clear() -> saves immediately
+
+    resetTransmitHistory();
+    transmitHistory->loadFromDisk();
+
+    TEST_ASSERT_EQUAL_UINT32(1700000000, transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_NODEINFO_APP));
+}
+
 // --- Boot without RTC scenario ---
 
 // Crash-reboot protection: a send that happened moments before the reboot must still
@@ -324,6 +341,7 @@ void setup()
 
     // Persistence
     RUN_TEST(test_save_and_load_round_trip);
+    RUN_TEST(test_flushIfDue_persists_pending_changes);
     RUN_TEST(test_boot_after_recent_send_still_throttles);
 
     // Issue #9901 regression tests

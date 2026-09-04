@@ -1,6 +1,7 @@
 #include "TransmitHistory.h"
 #include "FSCommon.h"
 #include "SPILock.h"
+#include "SafeFile.h"
 #include "gps/RTC.h"
 #include <Throttle.h>
 
@@ -87,15 +88,24 @@ void TransmitHistory::setLastSentToMesh(uint16_t key)
         const uint8_t flags = (getRTCQuality() == RTCQualityNone) ? ENTRY_FLAG_BOOT_RELATIVE : ENTRY_FLAG_NONE;
         history[key] = makeStoredTimestamp(now, flags);
         dirty = true;
-        // Don't flush to disk on every transmit - flash has limited write endurance.
-        // The in-memory lastMillis map handles throttle during normal operation.
-        // Disk is flushed: before deep sleep (sleep.cpp) and periodically here,
-        // throttled to at most once per 5 minutes. Always save the first time
-        // after boot so a crash-reboot loop can't avoid persisting.
-        if (lastDiskSave == 0 || !Throttle::isWithinTimespanMs(lastDiskSave, SAVE_INTERVAL_MS)) {
-            if (saveToDisk()) {
-                lastDiskSave = millis();
-            }
+        // Do NOT write flash here. Callers reach this from inside packet
+        // processing (e.g. NodeInfoModule while the Router handles an RX), and
+        // a LittleFS write stalls core 0 with the flash cache disabled - the
+        // worst possible place for it. The main loop calls flushIfDue(), which
+        // persists at most once per SAVE_INTERVAL_MS (and immediately for the
+        // first change after boot, so a crash-reboot loop can't avoid
+        // persisting). sleep.cpp still flushes directly before deep sleep.
+    }
+}
+
+void TransmitHistory::flushIfDue()
+{
+    if (!dirty) {
+        return;
+    }
+    if (lastDiskSave == 0 || !Throttle::isWithinTimespanMs(lastDiskSave, SAVE_INTERVAL_MS)) {
+        if (saveToDisk()) {
+            lastDiskSave = millis();
         }
     }
 }
@@ -212,47 +222,45 @@ bool TransmitHistory::saveToDisk()
         return true;
     }
 
-    spiLock->lock();
-
-    FSCom.mkdir("/prefs");
-
-    // Remove old file first
-    if (FSCom.exists(FILENAME)) {
-        FSCom.remove(FILENAME);
+    {
+        concurrency::LockGuard g(spiLock);
+        FSCom.mkdir("/prefs");
     }
 
-    auto file = FSCom.open(FILENAME, FILE_O_WRITE);
-    if (file) {
-        FileHeader header{};
-        header.magic = MAGIC;
-        header.version = VERSION;
-        header.count = (uint8_t)min((size_t)MAX_ENTRIES, history.size());
+    // SafeFile writes to FILENAME.tmp, verifies the content by hash readback,
+    // then renames over the old file - so a crash mid-write can no longer
+    // destroy the existing history (the old remove-before-write here did
+    // exactly that). The file is tiny, so fullAtomic costs nothing.
+    // SafeFile takes spiLock itself around each filesystem operation.
+    SafeFile file(FILENAME, true);
 
-        file.write((uint8_t *)&header, sizeof(header));
+    FileHeader header{};
+    header.magic = MAGIC;
+    header.version = VERSION;
+    header.count = (uint8_t)min((size_t)MAX_ENTRIES, history.size());
 
-        uint8_t written = 0;
-        for (const auto &[key, stored] : history) {
-            if (written >= MAX_ENTRIES)
-                break;
-            Entry entry{};
-            entry.key = key;
-            entry.epochSeconds = stored.seconds;
-            entry.flags = stored.flags;
-            file.write((uint8_t *)&entry, sizeof(entry));
-            written++;
-        }
-        file.flush();
-        file.close();
-        LOG_DEBUG("TransmitHistory: saved %u entries to disk", written);
-        dirty = false;
-        spiLock->unlock();
-        return true;
-    } else {
-        LOG_WARN("TransmitHistory: failed to open file for writing");
+    file.write((uint8_t *)&header, sizeof(header));
+
+    uint8_t written = 0;
+    for (const auto &[key, stored] : history) {
+        if (written >= MAX_ENTRIES)
+            break;
+        Entry entry{};
+        entry.key = key;
+        entry.epochSeconds = stored.seconds;
+        entry.flags = stored.flags;
+        file.write((uint8_t *)&entry, sizeof(entry));
+        written++;
     }
 
-    spiLock->unlock();
-    return false;
+    if (!file.close()) {
+        LOG_WARN("TransmitHistory: failed to write history file");
+        return false;
+    }
+
+    LOG_DEBUG("TransmitHistory: saved %u entries to disk", written);
+    dirty = false;
+    return true;
 }
 
 void TransmitHistory::clear()
@@ -288,6 +296,8 @@ void TransmitHistory::setLastSentToMesh(uint16_t key)
 {
     lastMillis[key] = millis();
 }
+
+void TransmitHistory::flushIfDue() {}
 
 uint32_t TransmitHistory::getLastSentToMeshEpoch(uint16_t key) const
 {
