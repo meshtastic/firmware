@@ -702,10 +702,11 @@ NodeDB::NodeDB()
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
         {
             concurrency::LockGuard guard(&satelliteMutex);
-            nodePositions[info->num] = TypeConversions::ConvertToPositionLite(fixedGPS);
+            nodePositions[getNodeNum()] = TypeConversions::ConvertToPositionLite(fixedGPS);
         }
 #endif
-        nodeDB->setLocalPosition(fixedGPS);
+        // Call the member directly: the global nodeDB is still null until our ctor returns.
+        setLocalPosition(fixedGPS);
         config.position.fixed_position = true;
 #endif
     }
