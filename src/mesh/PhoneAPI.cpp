@@ -1916,10 +1916,9 @@ int PhoneAPI::onNotify(uint32_t newValue)
             state = STATE_RESEND_MY_INFO;
         LOG_INFO("Tell client new packets %u", newValue);
         onNowHasData(newValue);
-    } else if (service->identityMovePending() && state != STATE_SEND_NOTHING && state != STATE_SEND_MY_INFO &&
-               config_nonce != SPECIAL_NONCE_ONLY_NODES) {
-        // Mid-sync, and our my_info is already out with the old number. There is no steady state to
-        // fall back from here, so restart the dump and let it carry the new one.
+    } else if (service->identityMovePending() && state != STATE_SEND_NOTHING && state != STATE_SEND_MY_INFO) {
+        // Mid-sync, so this dump is already carrying the old number in its my_info, its self record or
+        // both, and has no steady state to fall back from. Restart it on the new one.
         LOG_INFO("Node num moved mid-sync, restart client config");
         handleStartConfig();
         onNowHasData(newValue);

@@ -591,6 +591,29 @@ void test_node_num_change_mid_dump_restarts_sync()
     TEST_ASSERT_EQUAL_UINT32(FULL_DUMP_NONCE, t.completeId);
 }
 
+// Same move during a nodes-only sync: the self record it already sent is gone from the DB, so that
+// dump restarts too, even though this nonce never carries a my_info to be stale.
+void test_node_num_change_mid_nodes_only_restarts_sync()
+{
+    seedRemoteNode(SEEDED_NODE_A);
+    startHandshake(SPECIAL_NONCE_ONLY_NODES);
+
+    meshtastic_FromRadio msg;
+    TEST_ASSERT_TRUE(readOneFromRadio(msg));
+    TEST_ASSERT_EQUAL_UINT(meshtastic_FromRadio_node_info_tag, msg.which_payload_variant);
+    const uint32_t staleSelf = msg.node_info.num;
+
+    mintIdentity();
+    service->loop();
+
+    DumpTranscript t;
+    TEST_ASSERT_TRUE_MESSAGE(drainUntilComplete(t), "restarted nodes-only dump never completed");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(nodeDB->getNumMeshNodes(), t.nodeNums.size(), "restart must resend every node");
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(staleSelf, t.nodeNums[0], "restart must carry the new self record");
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), t.nodeNums[0]);
+    TEST_ASSERT_EQUAL_UINT32(SPECIAL_NONCE_ONLY_NODES, t.completeId);
+}
+
 } // namespace
 
 void setUp(void)
@@ -658,6 +681,7 @@ void setup()
     RUN_TEST(test_dump_reaches_idle_after_complete);
     RUN_TEST(test_node_num_change_resends_my_info);
     RUN_TEST(test_node_num_change_mid_dump_restarts_sync);
+    RUN_TEST(test_node_num_change_mid_nodes_only_restarts_sync);
 
     exit(UNITY_END());
 }

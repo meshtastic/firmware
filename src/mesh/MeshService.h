@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <assert.h>
+#include <atomic>
 #include <string>
 
 #include "GPSStatus.h"
@@ -162,8 +163,8 @@ class MeshService
 
     /// Bumped with a nudgeFromNum() when our node num changes; the seen counter only advances once a
     /// notify pass has reached every client, so a move landing during a pass stays pending after it.
-    uint32_t identityGeneration = 0;
-    uint32_t identityGenerationSeen = 0;
+    std::atomic<uint32_t> identityGeneration{0};
+    std::atomic<uint32_t> identityGenerationSeen{0};
 
     /// True while a node num change still owes connected clients a fresh MyInfo.
     bool identityMovePending() const { return identityGeneration != identityGenerationSeen; }
