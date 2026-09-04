@@ -6,6 +6,10 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "configuration.h"
+
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+
 #include "MessageStore.h"
 #include <cstdio>
 #include <cstring>
@@ -93,14 +97,25 @@ void test_mixed_sizes_over_many_laps()
     }
 }
 
-// A record that survives wrap is the newest one, not a stale one
-void test_newest_record_is_readable_after_wrap()
+// The pool is sized for exactly MAX_MESSAGES_SAVED maximum-length messages; all of them must fit
+void test_full_pool_holds_exactly_max_messages()
 {
     for (uint32_t n = 1; n <= MAX_MESSAGES_SAVED; n++)
         addMessage(n, MAX_MESSAGE_SIZE - 1);
+    TEST_ASSERT_EQUAL(MAX_MESSAGES_SAVED, messageStore.getLiveMessages().size());
+    TEST_ASSERT_EQUAL_UINT32(0x1001, messageStore.getLiveMessages().front().sender);
+    assertLiveTextIntact("full pool");
+}
+
+// One past full: the wrap evicts the oldest record and the newest reads back intact
+void test_eviction_keeps_newest_after_wrap()
+{
+    for (uint32_t n = 1; n <= MAX_MESSAGES_SAVED + 1; n++)
+        addMessage(n, MAX_MESSAGE_SIZE - 1);
     const StoredMessage &last = messageStore.getLiveMessages().back();
-    TEST_ASSERT_EQUAL_UINT32(0x1000 + MAX_MESSAGES_SAVED, last.sender);
-    TEST_ASSERT_EQUAL_STRING(textFor(MAX_MESSAGES_SAVED, MAX_MESSAGE_SIZE - 1).c_str(), MessageStore::getText(last));
+    TEST_ASSERT_EQUAL_UINT32(0x1000 + MAX_MESSAGES_SAVED + 1, last.sender);
+    TEST_ASSERT_EQUAL_STRING(textFor(MAX_MESSAGES_SAVED + 1, MAX_MESSAGE_SIZE - 1).c_str(), MessageStore::getText(last));
+    assertLiveTextIntact("after wrap");
 }
 
 void setup()
@@ -110,8 +125,22 @@ void setup()
     RUN_TEST(test_wrap_never_rewrites_a_live_record);
     RUN_TEST(test_recordless_allocations_do_not_corrupt_records);
     RUN_TEST(test_mixed_sizes_over_many_laps);
-    RUN_TEST(test_newest_record_is_readable_after_wrap);
+    RUN_TEST(test_full_pool_holds_exactly_max_messages);
+    RUN_TEST(test_eviction_keeps_newest_after_wrap);
     exit(UNITY_END());
 }
 
 void loop() {}
+
+#else
+
+void setup()
+{
+    initializeTestEnvironment();
+    UNITY_BEGIN();
+    exit(UNITY_END());
+}
+
+void loop() {}
+
+#endif

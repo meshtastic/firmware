@@ -98,7 +98,7 @@ void InkHUD::AllMessageApplet::onRender(bool full)
     // ===================
 
     // Parse any non-ascii chars in the message
-    std::string text = parse(std::string(latestMessage->textOf(message)));
+    std::string text = parse(std::string(latestMessage->textOf(latestMessage->wasBroadcast)));
 
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
