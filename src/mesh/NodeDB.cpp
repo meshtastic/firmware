@@ -3807,9 +3807,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         }
 #endif
 
-        // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
+        // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway.
+        // Only from RF: on an MQTT or UDP packet the hop fields measure the path to the gateway, so a
+        // gateway that heard the sender directly invents a direct neighbour we have no RF path to.
         const int8_t hopsAway = getHopsAway(mp);
-        if (hopsAway >= 0) {
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopsAway >= 0) {
             info->has_hops_away = true;
             info->hops_away = hopsAway;
         }
