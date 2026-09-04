@@ -228,6 +228,14 @@ bool drainUntilComplete(DumpTranscript &t, unsigned maxMessages = 600)
     return false;
 }
 
+/// What the first region set does to a live node: a minted key moves my_node_num with it.
+void mintIdentity()
+{
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, 0x5A, sizeof(config.security.public_key.bytes));
+    TEST_ASSERT_TRUE_MESSAGE(nodeDB->createNewIdentity(), "identity did not move");
+}
+
 /// Read until available() reports idle; false if it never does within the cap.
 bool drainToIdle()
 {
@@ -532,10 +540,7 @@ void test_node_num_change_resends_my_info()
     const uint32_t handshakeNodeNum = nodeDB->getNodeNum();
     const unsigned notificationsBefore = api->dataNotifications;
 
-    // What the first region set does to an already-synced client: a minted key moves the number.
-    config.security.public_key.size = 32;
-    memset(config.security.public_key.bytes, 0x5A, sizeof(config.security.public_key.bytes));
-    TEST_ASSERT_TRUE_MESSAGE(nodeDB->createNewIdentity(), "identity did not move");
+    mintIdentity();
     TEST_ASSERT_NOT_EQUAL_MESSAGE(handshakeNodeNum, nodeDB->getNodeNum(), "node num did not actually change");
 
     service->loop(); // delivers the fromNum notify that arms the re-announce
@@ -550,6 +555,30 @@ void test_node_num_change_resends_my_info()
 
     // One-shot: the stream falls back to live traffic and nothing repeats.
     TEST_ASSERT_FALSE_MESSAGE(api->available(), "my_info resend repeated after the client was told");
+}
+
+// The same move landing mid-sync: my_info is already out with the old number and there is no
+// steady state to fall back from, so the dump restarts and carries the new one.
+void test_node_num_change_mid_dump_restarts_sync()
+{
+    startHandshake(FULL_DUMP_NONCE);
+
+    meshtastic_FromRadio msg;
+    for (unsigned i = 0; i < NUM_SINGLETON_PREFIX + MAX_NUM_CHANNELS; i++)
+        TEST_ASSERT_TRUE(readOneFromRadio(msg)); // through the channels, my_info long since sent
+
+    mintIdentity();
+    service->loop();
+
+    TEST_ASSERT_TRUE(readOneFromRadio(msg));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(meshtastic_FromRadio_my_info_tag, msg.which_payload_variant,
+                                   "a mid-sync renumber must restart the dump");
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), msg.my_info.my_node_num);
+
+    DumpTranscript t;
+    TEST_ASSERT_TRUE_MESSAGE(drainUntilComplete(t), "restarted dump never completed");
+    TEST_ASSERT_EQUAL_UINT32(FULL_DUMP_NONCE, t.completeId);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(NUM_CONFIG_MESSAGES, t.configVariants.size(), "restarted dump lost part of the config");
 }
 
 } // namespace
@@ -618,6 +647,7 @@ void setup()
     RUN_TEST(test_rehandshake_mid_dump_restarts_from_my_info);
     RUN_TEST(test_dump_reaches_idle_after_complete);
     RUN_TEST(test_node_num_change_resends_my_info);
+    RUN_TEST(test_node_num_change_mid_dump_restarts_sync);
 
     exit(UNITY_END());
 }
