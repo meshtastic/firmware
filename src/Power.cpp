@@ -995,7 +995,9 @@ void Power::reboot()
 #endif
 #if defined(ARCH_ESP32)
     ESP.restart();
-#elif defined(ARCH_NRF52)
+#elif defined(ARCH_NRF52) || defined(ARCH_NRF54L15)
+    // On nRF54L15 the Arduino shim maps NVIC_SystemReset to
+    // sys_reboot(SYS_REBOOT_COLD).
     NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
