@@ -73,8 +73,9 @@ class MeshService
     // This holds the last QueueStatus send
     meshtastic_QueueStatus lastQueueStatus;
 
-    /// The current nonce for the newest packet which has been queued for the phone
-    uint32_t fromNum = 0;
+    /// The current nonce for the newest packet which has been queued for the phone. Bumped from
+    /// whichever task queued it, read by loop(), hence atomic.
+    std::atomic<uint32_t> fromNum{0};
 
     /// Updated in loop() to detect when fromNum changes
     uint32_t oldFromNum = 0;
