@@ -52,40 +52,23 @@ enum class TrafficType { POSITION, TELEMETRY };
 // Unlike before, lost-and-found is NOT exempt from the relayed precision clamp.
 #define default_traffic_mgmt_lost_and_found_position_min_interval_secs (15 * 60) // 15 minutes
 
-// Antispam: the probation machinery ships on: first-seen accounting, the
-// 2-hop relay cap for probation IDs, and tenured-node vouching. The gossiped
-// budget / relay-budget / congestion-cap knobs ship disabled (0) and engage
-// only when an operator sets them. See the TrafficManagementConfig proto
-// comments for per-knob semantics.
-#define default_traffic_mgmt_probation_window_secs (5 * 60)             // 5 minutes of probation for first-seen IDs
-#define default_traffic_mgmt_attestation_min_tenure_secs (24 * 60 * 60) // 24 h: attesters must be this old
-#define default_traffic_mgmt_probation_max_hop_limit 2                  // probation broadcasts relay at <=2 hops (normal: 3)
-// The gossiped budget / relay-budget /
-// congestion-cap machinery engages only when an operator sets them.
+// Traffic-management antispam defaults. 0 disables the matching feature unless noted.
+#define default_traffic_mgmt_probation_window_secs (5 * 60)
+#define default_traffic_mgmt_attestation_min_tenure_secs (24 * 60 * 60)
+#define default_traffic_mgmt_probation_max_hop_limit 2
 #define default_traffic_mgmt_budget_gossip_enabled 0
 #define default_traffic_mgmt_group_budget_enabled 0
 #define default_traffic_mgmt_relay_budget_max_packets 0
 #define default_traffic_mgmt_congestion_hop_cap_pct 0
-// NO_RELAY gossip hardening: claims need a local basis, are capped per
-// reporter per window, and re-assert only after their TTL.
 #define default_traffic_mgmt_no_relay_requires_local_exhaustion 1
 #define default_traffic_mgmt_no_relay_max_subjects_per_window 3
 #define default_traffic_mgmt_no_relay_ttl_secs 120
-// Vouching: the attester must have been observed locally for a day, and
-// vouching is capped per subject and per attester per window.
-#define default_traffic_mgmt_attestation_min_observed_secs (24 * 60 * 60) // 24 h of local observation
+#define default_traffic_mgmt_no_relay_min_claimers 2
+#define default_traffic_mgmt_attestation_min_observed_secs (24 * 60 * 60)
 #define default_traffic_mgmt_vouch_max_per_subject_per_window 1
 #define default_traffic_mgmt_vouch_max_subjects_per_window 3
-// Promotion: needs 2 distinct non-co-located attesters in the same window;
-// the promotion bit itself is permanent (TTL 0) unless an operator enables
-// the decay lease.
 #define default_traffic_mgmt_attestation_min_distinct_attesters 2
 #define default_traffic_mgmt_attestation_promotion_ttl_secs 0
-// Trust ladder: a vouch uses the signed fast path (L2 upgrade) only when the
-// attester has been observed locally for 30 days AND both the attester and the
-// subject have been seen signing. The mod-16 rate clock quantises any tenure
-// to a 15-tick (80 min) ceiling, so the floor saturates; the same floor is
-// the decay window for L2.
 #define default_traffic_mgmt_attestation_l2_min_tenure_secs (30 * 24 * 60 * 60)
 
 // Hop scaling defaults

@@ -245,6 +245,10 @@ void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
 void optInDisablePositionSharing(meshtastic_ChannelFile &cf);
 /// Force all mesh-broadcast device telemetry (and the MQTT map-report location) back to opt-in/off.
 void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc);
+/// True when every antispam knob is still protobuf-zero (2.8 TMM config that never saw these fields).
+bool antispamKnobsUnconfigured(const meshtastic_ModuleConfig_TrafficManagementConfig &cfg);
+/// Write shipped antispam defaults without touching position/rate-limit fields.
+void installAntispamDefaults(meshtastic_ModuleConfig_TrafficManagementConfig &cfg);
 
 enum LoadFileResult {
     // Successfully opened the file

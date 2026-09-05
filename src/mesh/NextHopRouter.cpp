@@ -247,10 +247,8 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 #endif
 
 #if HAS_TRAFFIC_MANAGEMENT
-    // Check if traffic management wants to stop relaying a sender whose local
-    // relay budget is exhausted (or whose NO_RELAY was gossiped). Only relayed
-    // traffic counts: a packet addressed to us (or from us) must still reach
-    // our own client and its ACK/NAK path, so it is never "consumed" here.
+    // Deliver locally without TX when TMM says not to relay. isToUs / isFromUs
+    // still reach the client and ACK/NAK path.
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && trafficManagementModule && !isToUs(p) && !isFromUs(p) &&
         !trafficManagementModule->shouldRelay(*p)) {
         LOG_DEBUG("Antispam: not relaying 0x%08x (relay budget / no-relay)", getFrom(p));
@@ -290,9 +288,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     capEventRelayHops(tosend);
 #endif
 #if HAS_TRAFFIC_MANAGEMENT
-                    // Antispam: clamp the relayed copy's hop budget
-                    // (probation cap, congestion cap) and charge this relay to
-                    // the sender's local budget (gossips NO_RELAY on exhaustion).
+                    // Clamp hop_limit on the relayed copy and charge the sender's relay budget.
                     if (trafficManagementModule) {
                         const uint8_t capped = trafficManagementModule->relayHopCap(*p);
                         if (capped < tosend->hop_limit)

@@ -21,6 +21,13 @@
 #include <algorithm>
 #include <cstring>
 
+#ifndef PIO_UNIT_TESTING
+uint32_t TrafficManagementModule::clockMs()
+{
+    return Time::getMillis();
+}
+#endif
+
 #define TM_LOG_TRACE(fmt, ...) LOG_TRACE("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_DEBUG(fmt, ...) LOG_DEBUG("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_INFO(fmt, ...) LOG_INFO("[TM] " fmt, ##__VA_ARGS__)
@@ -331,6 +338,9 @@ void TrafficManagementModule::purgeAll()
         memset(antispam, 0, static_cast<size_t>(antispamCacheSize()) * sizeof(AntispamEntry));
     memset(vouchObs, 0, sizeof(vouchObs));
     memset(attestQuorum, 0, sizeof(attestQuorum));
+    memset(noRelayClaims, 0, sizeof(noRelayClaims));
+    memset(groupObs, 0, sizeof(groupObs));
+    memset(groupMedian, 0, sizeof(groupMedian));
 #endif
     // nodeInfoPayload stays nullptr on builds without the NodeInfo cache; no guard needed.
     if (nodeInfoPayload)
@@ -1079,6 +1089,9 @@ void TrafficManagementModule::flushCache()
         memset(antispam, 0, static_cast<size_t>(antispamCacheSize()) * sizeof(AntispamEntry));
     memset(vouchObs, 0, sizeof(vouchObs));
     memset(attestQuorum, 0, sizeof(attestQuorum));
+    memset(noRelayClaims, 0, sizeof(noRelayClaims));
+    memset(groupObs, 0, sizeof(groupObs));
+    memset(groupMedian, 0, sizeof(groupMedian));
 #endif
 }
 
@@ -1222,53 +1235,34 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             }
         }
 
-        // ---------------------------------------------------------------------
-        // Antispam: probation greylist + relay pricing
-        // ---------------------------------------------------------------------
-        // Stamped after the rate limiter so an attestation flood pays the same
-        // per-sender cost as any other traffic.
-        if (noteFirstSeen(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp), mp.xeddsa_signed)) {
-            // Group budget: this ID is fresh on this device - observe its
-            // (channel, RSSI class) co-occurrence. A cell that fills to
-            // group_budget_enabled fresh IDs is flagged, and every member
-            // gets a split budget.
-            observeGroupCooccurrence(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp));
-        }
-        if (mp.decoded.portnum == meshtastic_PortNum_ID_ATTESTATION_APP) {
-            // Promotion / NO_RELAY applied; no other module serves this portnum.
-            if (handleIdAttestation(mp)) {
-                logAction("consume", &mp, "id-attestation");
-                ignoreRequest = true;        // Suppress NAK
-                return ProcessMessage::STOP; // Consumed - not surfaced to clients
+        // Antispam: skip MQTT-injected frames (not RF-neighborhood evidence).
+        if (!mp.via_mqtt) {
+            if (noteFirstSeen(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp), mp.xeddsa_signed)) {
+                observeGroupCooccurrence(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp));
             }
-        }
-
-        // Probation promotion vouch: traffic from a locally established (tracked, out of
-        // probation, or promoted) sender on a long-tenured device gets a
-        // rate-capped KNOWN_SINCE, so neighbors that first saw the ID can
-        // promote it instead of waiting out their timers. One per hour
-        // per device (lastVouchSentMs), one per subject per window
-        // (vouch_max_per_subject_per_window), and a bounded number of
-        // distinct subjects per attester per window
-        // (vouch_max_subjects_per_window) - both enforced here under
-        // cacheLock via the same windowed table the receive side uses.
-        // lastVouchSentMs == 0 means "never vouched yet" (cold start): allow
-        // the first vouch immediately instead of waiting an hour of uptime.
-        if (cfg.probation_window_secs > 0 && uptimeSecs() >= cfg.attestation_min_tenure_secs &&
-            isEstablishedForVouching(mp.from) && (lastVouchSentMs == 0 || Throttle::hasElapsed(lastVouchSentMs, 3'600'000UL))) {
-            // Caps check + stamp under cacheLock; the gossip send happens
-            // after release (it reads nodeDB and takes the router's locks).
-            bool vouchWithinCaps = false;
-            {
-                concurrency::LockGuard guard(&cacheLock);
-                if (vouchWithinCapsLocked(nodeDB->getNodeNum(), mp.from)) {
-                    stampVouchObservationLocked(nodeDB->getNodeNum(), mp.from);
-                    lastVouchSentMs = nowMs;
-                    vouchWithinCaps = true;
+            if (mp.decoded.portnum == meshtastic_PortNum_ID_ATTESTATION_APP) {
+                if (handleIdAttestation(mp)) {
+                    logAction("consume", &mp, "id-attestation");
+                    ignoreRequest = true;
+                    return ProcessMessage::STOP;
                 }
             }
-            if (vouchWithinCaps)
-                sendKnownSinceGossip(mp.from);
+
+            if (cfg.probation_window_secs > 0 && uptimeSecs() >= cfg.attestation_min_tenure_secs &&
+                isEstablishedForVouching(mp.from) &&
+                (lastVouchSentMs == 0 || Throttle::deadlinePassedAt(nowMs, lastVouchSentMs + 3'600'000UL))) {
+                bool vouchWithinCaps = false;
+                {
+                    concurrency::LockGuard guard(&cacheLock);
+                    if (vouchWithinCapsLocked(nodeDB->getNodeNum(), mp.from)) {
+                        stampVouchObservationLocked(nodeDB->getNodeNum(), mp.from);
+                        lastVouchSentMs = nowMs;
+                        vouchWithinCaps = true;
+                    }
+                }
+                if (vouchWithinCaps)
+                    sendKnownSinceGossip(mp.from);
+            }
         }
     }
 
@@ -1767,9 +1761,6 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
 }
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-// Core rate-limit decision; caller must hold cacheLock. The public
-// isRateLimited() wraps it in the lock; handleIdAttestation calls it while
-// already holding the lock (the binary semaphore is not recursive).
 bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
 {
     const uint32_t windowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
@@ -1781,7 +1772,6 @@ bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
     if (!entry)
         return false;
 
-    // Window ticks: clamp to [1,15] so zero windowMs (config error) opens a new window.
     const uint8_t windowTicks = static_cast<uint8_t>(std::min(static_cast<uint32_t>(15), windowMs / kRateTimeTickMs));
     const uint8_t nowRateTick = currentRateTick();
     const bool windowExpired =
@@ -1793,33 +1783,20 @@ bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
         return false;
     }
 
-    // Increment counter, saturating at 63 (6-bit field max).
     const uint8_t currentCount = entry->getRateCount();
     if (currentCount < 0x3F)
         entry->setRateCount(static_cast<uint8_t>(currentCount + 1));
 
-    // Threshold capped at 60 so a saturated reading (63) always exceeds it.
-    // Median-of-neighbors: when budget gossip is on, the gossiped neighborhood median
-    // (effectiveRateThresholdLocked; we hold cacheLock) replaces the raw
-    // config value; config stays the floor the median can never drop below.
-    uint32_t threshold = moduleConfig.traffic_management.budget_gossip_enabled
-                             ? effectiveRateThresholdLocked(from)
-                             : moduleConfig.traffic_management.rate_limit_max_packets;
+    uint32_t threshold = effectiveRateThresholdLocked(from);
     if (threshold > 60)
         threshold = 60;
 
     const uint8_t count = entry->getRateCount();
     bool limited = count > threshold;
 
-    // Probation penalty: an unpromoted, L2-less sender whose first-seen
-    // window is still in force gets the lower rate budget (half of the
-    // effective threshold, floor of 1). L2+ (attested) escapes, matching
-    // inProbation(). The drop is charged separately so operators can tell
-    // probation budgeting from plain rate limiting in telemetry.
     if (!limited && moduleConfig.traffic_management.probation_window_secs > 0) {
         const AntispamEntry *asEntry = findAntispamEntry(from);
-        if (asEntry && asEntry->firstSeenTick != 0 && !asEntry->promoted && asEntry->trustLevel < 2 &&
-            antispamAgeInWindowLocked(asEntry, nowRateTick, probationWindowTicks())) {
+        if (inProbationLocked(asEntry)) {
             const uint32_t probationBudget = std::max<uint32_t>(1, threshold / 2);
             if (count > probationBudget) {
                 limited = true;
@@ -1832,6 +1809,28 @@ bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
         TM_LOG_DEBUG("Rate limit 0x%08x: count=%u threshold=%u -> %s", from, count, threshold, limited ? "DROP" : "at-limit");
     }
     return limited;
+}
+
+bool TrafficManagementModule::peekRateLimitedLocked(NodeNum from, uint32_t nowMs) const
+{
+    (void)nowMs;
+    const uint32_t windowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
+    if (windowMs == 0 || moduleConfig.traffic_management.rate_limit_max_packets == 0)
+        return false;
+
+    UnifiedCacheEntry *entry = const_cast<TrafficManagementModule *>(this)->findEntry(from);
+    if (!entry || entry->getRateCount() == 0)
+        return false;
+
+    const uint8_t windowTicks = static_cast<uint8_t>(std::min(static_cast<uint32_t>(15), windowMs / kRateTimeTickMs));
+    const uint8_t nowRateTick = currentRateTick();
+    if ((static_cast<uint8_t>(nowRateTick - entry->getRateTime()) & 0x0F) >= std::max(static_cast<uint8_t>(1), windowTicks))
+        return false;
+
+    uint32_t threshold = effectiveRateThresholdLocked(from);
+    if (threshold > 60)
+        threshold = 60;
+    return entry->getRateCount() > threshold;
 }
 #endif
 
@@ -1902,14 +1901,8 @@ void TrafficManagementModule::logAction(const char *action, const meshtastic_Mes
 }
 
 // =============================================================================
-// Antispam: probation greylist + gossiped rate budgets + relay pricing
-//
-// Decentralized antispam mechanism. State lives in a second
-// flat per-node table (AntispamEntry) allocated alongside the unified cache;
-// it is intentionally NOT packed into the 10-byte UnifiedCacheEntry because
-// the windowed relayed-for counter and the 3-sample budget median need real
-// fields, not bits. Every knob is config-gated and off by default except
-// probation accounting, which only records state.
+// Antispam: greylist, optional relay budget, KNOWN_SINCE / NO_RELAY.
+// Per-node state lives in AntispamEntry (not the 10-byte unified cache).
 // =============================================================================
 
 // Read-only lookup: returns the entry for `node` or nullptr. Never allocates
@@ -1933,11 +1926,25 @@ TrafficManagementModule::AntispamEntry *TrafficManagementModule::findAntispamEnt
 #endif
 }
 
-// Find or create the entry for `node`, evicting the tracked-longest victim
-// when the table is full. firstSeenTick is a 4-bit wrap value, so victims are
-// ordered by elapsed ticks, (now - firstSeen) mod 16 - a raw < on the ticks
-// misorders entries across the wrap boundary.
-TrafficManagementModule::AntispamEntry *TrafficManagementModule::findOrCreateAntispamEntry(NodeNum node, bool *isNew) const
+void TrafficManagementModule::clearAntispamAuxLocked(NodeNum node)
+{
+    if (node == 0)
+        return;
+    for (uint16_t i = 0; i < kNoRelayClaimEntries; i++) {
+        if (noRelayClaims[i].subject == node || noRelayClaims[i].attester == node)
+            memset(&noRelayClaims[i], 0, sizeof(NoRelayClaimCell));
+    }
+    for (uint16_t i = 0; i < kVouchObsEntries; i++) {
+        if (vouchObs[i].subject == node || vouchObs[i].attester == node)
+            memset(&vouchObs[i], 0, sizeof(VouchObsCell));
+    }
+    for (uint16_t i = 0; i < kAttestQuorumEntries; i++) {
+        if (attestQuorum[i].subject == node || attestQuorum[i].attester == node)
+            memset(&attestQuorum[i], 0, sizeof(AttestQuorumCell));
+    }
+}
+
+TrafficManagementModule::AntispamEntry *TrafficManagementModule::findOrCreateAntispamEntry(NodeNum node, bool *isNew)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
     (void)node;
@@ -1961,32 +1968,30 @@ TrafficManagementModule::AntispamEntry *TrafficManagementModule::findOrCreateAnt
     }
     if (isNew)
         *isNew = true;
-    // No free slot: evict the entry with the oldest first-seen stamp (or any
-    // zeroed slot). Linear scan is fine - the table is small (<=256) and this
-    // runs once per new node.
     AntispamEntry *victim = nullptr;
-    uint8_t victimElapsed = 0;
+    uint32_t oldestSeen = UINT32_MAX;
     for (uint16_t i = 0; i < size; i++) {
         if (antispam[i].node == 0) {
-            victim = &antispam[i]; // a zeroed slot always beats any live entry
+            victim = &antispam[i];
             break;
         }
-        const uint8_t elapsed = static_cast<uint8_t>(currentRateTick() - antispam[i].firstSeenTick);
-        if (!victim || elapsed > victimElapsed) {
+        const uint32_t seen = antispam[i].hasFirstSeen ? antispam[i].firstSeenSecs : UINT32_MAX;
+        if (!victim || seen < oldestSeen) {
             victim = &antispam[i];
-            victimElapsed = elapsed;
+            oldestSeen = seen;
         }
     }
     if (!victim)
         return nullptr;
+    if (victim->node != 0 && victim->node != node)
+        clearAntispamAuxLocked(victim->node);
     memset(victim, 0, sizeof(AntispamEntry));
     victim->node = node;
-    // Observed RSSI class starts at "no reading yet" (0xFF); a real class
-    // (0-3) only lands via an observation that carries a usable RSSI.
     victim->rssiClass = 0xFF;
-    // Stamp the entry immediately so it starts out as a maximal-age candidate
-    // and cannot be picked as its own replacement by the next eviction.
-    victim->firstSeenTick = currentRateTick();
+    victim->hasFirstSeen = 1;
+    victim->firstSeenSecs = uptimeSecs();
+    victim->hasWindow = 1;
+    victim->windowTick = currentRateTick();
     return victim;
 #endif
 }
@@ -1995,47 +2000,46 @@ uint32_t TrafficManagementModule::uptimeSecs() const
 {
     if (s_testUptimeSecs != 0xFFFFFFFFu)
         return s_testUptimeSecs;
+#ifdef PIO_UNIT_TESTING
+    return clockMs() / 1000;
+#else
     return Time::getUptimeSecs();
+#endif
 }
 
-uint8_t TrafficManagementModule::probationWindowTicks() const
+uint32_t TrafficManagementModule::observedAgeSecsLocked(const AntispamEntry *entry) const
 {
-    const uint32_t secs = moduleConfig.traffic_management.probation_window_secs;
-    if (secs == 0)
-        return 0; // probation accounting off
-    // Quantise to the 5-min budget tick; a sub-tick window still gets 1 tick.
-    return static_cast<uint8_t>(std::min<uint32_t>(15, (secs + (kRateTimeTickMs / 1000) - 1) / (kRateTimeTickMs / 1000)));
+    if (!entry || !entry->hasFirstSeen)
+        return 0;
+    const uint32_t now = uptimeSecs();
+    return now >= entry->firstSeenSecs ? now - entry->firstSeenSecs : 0;
+}
+
+bool TrafficManagementModule::attesterObservedEnoughLocked(const AntispamEntry *attesterEntry, uint32_t minSecs) const
+{
+    if (minSecs == 0)
+        return true;
+    return attesterEntry && attesterEntry->hasFirstSeen && observedAgeSecsLocked(attesterEntry) >= minSecs;
+}
+
+bool TrafficManagementModule::inProbationLocked(const AntispamEntry *entry) const
+{
+    if (!entry || !entry->hasFirstSeen || entry->promoted || entry->trustLevel >= 2)
+        return false;
+    const uint32_t windowSecs = moduleConfig.traffic_management.probation_window_secs;
+    if (windowSecs == 0)
+        return false;
+    return observedAgeSecsLocked(entry) < windowSecs;
 }
 
 bool TrafficManagementModule::inProbation(NodeNum node) const
 {
     if (node == 0)
         return false;
-    const uint8_t windowTicks = probationWindowTicks();
-    if (windowTicks == 0)
+    if (moduleConfig.traffic_management.probation_window_secs == 0)
         return false;
-
     concurrency::LockGuard guard(&cacheLock);
-    const AntispamEntry *entry = findAntispamEntry(node);
-    // L2+ (neighbor-attested / out-of-band-verified) escapes probation: a node
-    // the neighborhood has attested is not anonymous probation material, even
-    // if its unsigned first-seen window is still running and it is not
-    // promoted (a promotion can lapse while the trust record persists).
-    if (!entry || entry->firstSeenTick == 0 || entry->promoted || entry->trustLevel >= 2)
-        return false;
-    return antispamAgeInWindowLocked(entry, currentRateTick(), windowTicks);
-}
-
-// True when `entry`'s first-seen age (mod 16 rate ticks) is still inside the
-// probation window of `windowTicks`. Shared by inProbation() (locked) and
-// isRateLimited()'s probation budget penalty (already locked). A firstSeenTick
-// of 0 means "never stamped" and is treated as not in probation.
-bool TrafficManagementModule::antispamAgeInWindowLocked(const AntispamEntry *entry, uint8_t nowTick, uint8_t windowTicks)
-{
-    if (!entry || entry->firstSeenTick == 0)
-        return false;
-    const uint8_t ageTicks = static_cast<uint8_t>(nowTick - entry->firstSeenTick) & 0x0F;
-    return ageTicks < windowTicks;
+    return inProbationLocked(findAntispamEntry(node));
 }
 
 bool TrafficManagementModule::isEstablishedForVouching(NodeNum node) const
@@ -2044,55 +2048,51 @@ bool TrafficManagementModule::isEstablishedForVouching(NodeNum node) const
         return false;
     concurrency::LockGuard guard(&cacheLock);
     const AntispamEntry *entry = findAntispamEntry(node);
-    if (!entry || entry->firstSeenTick == 0)
+    if (!entry || !entry->hasFirstSeen)
         return false;
     if (entry->promoted)
         return true;
-    // Same probation math as inProbation(), inlined to avoid the second lock.
-    const uint8_t windowTicks = probationWindowTicks();
-    const uint8_t ageTicks = static_cast<uint8_t>(currentRateTick() - entry->firstSeenTick) & 0x0F;
-    return ageTicks >= windowTicks;
+    return !inProbationLocked(entry);
+}
+
+bool TrafficManagementModule::relayBudgetExempt(const meshtastic_MeshPacket &mp)
+{
+    if (mp.want_ack)
+        return true;
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return true;
+    return mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP || mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP;
 }
 
 bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass, bool signedObserved)
 {
     if (node == 0)
         return false;
-    const uint8_t windowTicks = probationWindowTicks();
-    const uint32_t groupMin = moduleConfig.traffic_management.group_budget_enabled;
-    if (windowTicks == 0 && groupMin == 0)
-        return false; // No antispam accounting active at all.
+    const auto &cfg = moduleConfig.traffic_management;
+    if (cfg.probation_window_secs == 0 && cfg.group_budget_enabled == 0 && cfg.relay_budget_max_packets == 0)
+        return false;
 
     concurrency::LockGuard guard(&cacheLock);
     bool isNew = false;
     AntispamEntry *entry = findOrCreateAntispamEntry(node, &isNew);
     if (!entry)
-        return false; // table full with no eviction target
-    // Observed context (channel, RSSI class) is last-seen state: refresh it on
-    // every observation so the co-location discount and the group membership
-    // check see where the node transmits NOW, not where it first appeared.
-    // RSSI class 0xFF (no usable reading on this packet) keeps the last real
-    // class rather than clobbering it with "unknown".
+        return false;
     entry->channel = channel;
     if (rssiClass != 0xFF)
         entry->rssiClass = rssiClass;
-    // Trust ladder L1: a packet whose signature the Router verified on the way
-    // in marks the node TOFU-signed. The Router clears xeddsa_signed on every
-    // ingress and only sets it after a successful checkXeddsaReceivePolicy, so
-    // the flag here is an observation, not a claim. Never downgrade (L2/L3
-    // survive an unsigned observation - the decay path owns the downgrade).
-    // The stamp refreshes at L1 AND L2: a continuing signer stays fresh, and
-    // only L3 (manual, permanent) is exempt from the decay clock.
     if (signedObserved && entry->trustLevel < 3) {
         if (entry->trustLevel == 0)
             entry->trustLevel = 1;
-        entry->lastSignedTick = currentRateTick();
+        entry->hasLastSigned = 1;
+        entry->lastSignedSecs = uptimeSecs();
     }
-    if (!isNew && entry->firstSeenTick != 0)
-        return false; // already tracked
-    entry->firstSeenTick = currentRateTick();
+    if (!isNew && entry->hasFirstSeen)
+        return false;
+    entry->hasFirstSeen = 1;
+    entry->firstSeenSecs = uptimeSecs();
+    entry->hasWindow = 1;
     entry->windowTick = currentRateTick();
-    TM_LOG_DEBUG("Antispam: first-seen 0x%08x (probation window %u ticks)", node, windowTicks);
+    TM_LOG_DEBUG("Antispam: first-seen 0x%08x", node);
     return true;
 }
 
@@ -2130,43 +2130,28 @@ uint32_t TrafficManagementModule::effectiveRateThresholdLocked(NodeNum sender) c
     uint32_t threshold = cfg.rate_limit_max_packets;
     if (threshold == 0)
         return 0;
-    if (cfg.budget_gossip_enabled == 0)
+
+    const AntispamEntry *entry = findAntispamEntry(sender);
+    if (entry && isInFlaggedGroupLocked(entry->channel, entry->rssiClass)) {
+        const uint32_t groupBudget = groupBudgetLocked(entry->channel, entry->rssiClass);
+        if (groupBudget > 0 && groupBudget < threshold)
+            threshold = groupBudget;
+    }
+    if (cfg.budget_gossip_enabled == 0 || !entry)
         return threshold;
 
-    uint32_t median = 0;
-    int tracked = -1;
-    {
-        const AntispamEntry *entry = findAntispamEntry(sender);
-        if (!entry)
-            return threshold;
-        tracked = 0;
-        // Median of up to 3 samples: sort a local copy and take the middle.
-        uint8_t samples[3];
-        const uint8_t n = std::min<uint8_t>(3, entry->budgetSampleCount);
-        for (uint8_t i = 0; i < 3; i++)
-            samples[i] = (i < n) ? entry->budgetSamples[i] : 0;
-        for (uint8_t i = 0; i < 3; i++)
-            for (uint8_t j = i + 1; j < 3; j++)
-                if (samples[j] < samples[i])
-                    std::swap(samples[i], samples[j]);
-        if (n >= 2)
-            median = samples[1]; // middle of the sorted set
-
-        // Group budget: a sender observed in a flagged (channel, rssiClass) group
-        // gets the group's split budget instead of the full local one.
-        if (isInFlaggedGroupLocked(entry->channel, entry->rssiClass)) {
-            const uint32_t groupBudget = groupBudgetLocked(entry->channel, entry->rssiClass);
-            if (groupBudget > 0 && groupBudget < threshold)
-                threshold = groupBudget;
-        }
-    }
-    if (median > threshold) {
-        // The neighborhood is seeing this sender outpace the local budget:
-        // clamp the effective threshold to the gossiped median. (The median
-        // can never lower it below the local config - config is the floor.)
+    uint8_t samples[3];
+    const uint8_t n = std::min<uint8_t>(3, entry->budgetSampleCount);
+    for (uint8_t i = 0; i < 3; i++)
+        samples[i] = (i < n) ? entry->budgetSamples[i] : 0;
+    for (uint8_t i = 0; i < 3; i++)
+        for (uint8_t j = i + 1; j < 3; j++)
+            if (samples[j] < samples[i])
+                std::swap(samples[i], samples[j]);
+    const uint32_t median = (n >= 2) ? samples[1] : 0;
+    // Neighbor samples may raise the local ceiling; they never lower it.
+    if (median > threshold)
         threshold = median;
-    }
-    (void)tracked;
     return threshold;
 }
 
@@ -2203,9 +2188,14 @@ void TrafficManagementModule::ingestNeighborTopSenders(NodeNum neighbor, const m
             entry->budgetSampleCount++;
             recorded = true;
         }
-        if (recorded)
+        if (recorded) {
+            if (!entry->hasWindow) {
+                entry->hasWindow = 1;
+                entry->windowTick = currentRateTick();
+            }
             TM_LOG_DEBUG("Antispam: budget sample for 0x%08x from 0x%08x: %u pkts (n=%u)", s.node, neighbor,
                          (unsigned)s.packets_this_window, (unsigned)entry->budgetSampleCount);
+        }
     }
 }
 
@@ -2235,17 +2225,15 @@ int TrafficManagementModule::peekSenderBudgetForTest(NodeNum sender, uint32_t *m
 
 int TrafficManagementModule::peekProbationStateForTest(NodeNum node)
 {
-    const uint8_t windowTicks = probationWindowTicks();
     concurrency::LockGuard guard(&cacheLock);
     const AntispamEntry *entry = findAntispamEntry(node);
-    if (!entry || entry->firstSeenTick == 0)
+    if (!entry || !entry->hasFirstSeen)
         return -1;
-    if (windowTicks == 0)
-        return 0; // accounting off -> never in probation
+    if (moduleConfig.traffic_management.probation_window_secs == 0)
+        return 0;
     if (entry->promoted || entry->trustLevel >= 2)
         return 0;
-    const uint8_t ageTicks = static_cast<uint8_t>(currentRateTick() - entry->firstSeenTick) & 0x0F;
-    return ageTicks < windowTicks ? 1 : 0;
+    return inProbationLocked(entry) ? 1 : 0;
 }
 
 uint32_t TrafficManagementModule::peekRelayedCountForTest(NodeNum node)
@@ -2373,7 +2361,7 @@ void TrafficManagementModule::stampAttestQuorumLocked(NodeNum attester, NodeNum 
     AttestQuorumCell *freeSlot = nullptr;
     AttestQuorumCell *stale = nullptr;
     for (uint16_t i = 0; i < kAttestQuorumEntries; i++) {
-        if (attestQuorum[i].windowTick == 0) {
+        if (attestQuorum[i].attester == 0) {
             if (!freeSlot)
                 freeSlot = &attestQuorum[i];
             continue;
@@ -2399,21 +2387,12 @@ uint8_t TrafficManagementModule::attestQuorumCountLocked(NodeNum subject) const
     return n;
 }
 
-uint8_t TrafficManagementModule::l2FloorTicks() const
+uint32_t TrafficManagementModule::l2FloorSecs() const
 {
-    // L2 floor: attestation_l2_min_tenure_secs (0 = fall back to the
-    // attestation_min_observed_secs observed-tenure gate, matching the
-    // unsigned observed-tenure path). Quantised to 5-min ticks; the mod-16
-    // clock caps any tenure at 15 ticks (80 min), so a long-tenured attester
-    // saturates the floor. 0 when neither floor is armed (L2 never upgrades,
-    // nothing decays).
-    const uint32_t tickSecs = kRateTimeTickMs / 1000;
     uint32_t secs = moduleConfig.traffic_management.attestation_l2_min_tenure_secs;
     if (secs == 0)
         secs = moduleConfig.traffic_management.attestation_min_observed_secs;
-    if (secs == 0)
-        return 0;
-    return static_cast<uint8_t>(std::min<uint32_t>(15, (secs + tickSecs - 1) / tickSecs));
+    return secs;
 }
 
 uint8_t TrafficManagementModule::trustLevelForTest(NodeNum node)
@@ -2422,35 +2401,33 @@ uint8_t TrafficManagementModule::trustLevelForTest(NodeNum node)
     const AntispamEntry *entry = findAntispamEntry(node);
     if (!entry)
         return 0;
-    // L3 is permanent (manual bit), so it reads directly from the cache.
     if (entry->trustLevel == 3)
         return 3;
-    // L2 is only valid while the last-signature stamp is fresh (or the L2
-    // floor is disarmed, in which case nothing decays). Mirrors the sweep so
-    // the test hook agrees with what isRateLimited sees between sweeps. No
-    // "stamp is 0" sentinel: 0 is a legitimate tick on the mod-16 clock, and
-    // an L2 record always has a signature observation by construction.
     if (entry->trustLevel == 2) {
-        const uint8_t floor = l2FloorTicks();
-        if (floor > 0) {
-            const uint8_t age = static_cast<uint8_t>(currentRateTick() - entry->lastSignedTick) & 0x0F;
+        const uint32_t floor = l2FloorSecs();
+        if (floor > 0 && entry->hasLastSigned) {
+            const uint32_t now = uptimeSecs();
+            const uint32_t age = now >= entry->lastSignedSecs ? now - entry->lastSignedSecs : 0;
             if (age >= floor)
-                return 1; // decayed to L1 between sweeps
+                return 1;
+        } else if (floor > 0 && !entry->hasLastSigned) {
+            return 1;
         }
         return 2;
     }
-    return entry->trustLevel; // 0 or 1
+    return entry->trustLevel;
 }
 
-void TrafficManagementModule::setLastSignedTickForTest(NodeNum node, uint8_t tick)
+void TrafficManagementModule::setLastSignedSecsForTest(NodeNum node, uint32_t secs)
 {
     concurrency::LockGuard guard(&cacheLock);
     AntispamEntry *entry = findAntispamEntry(node);
     if (!entry)
         return;
-    entry->lastSignedTick = tick;
+    entry->hasLastSigned = 1;
+    entry->lastSignedSecs = secs;
     if (entry->trustLevel < 1)
-        entry->trustLevel = 1; // a signature observation is at least L1
+        entry->trustLevel = 1;
 }
 
 uint32_t TrafficManagementModule::attestationMinDistinctAttestersLocked() const
@@ -2460,32 +2437,54 @@ uint32_t TrafficManagementModule::attestationMinDistinctAttestersLocked() const
 
 bool TrafficManagementModule::l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester, bool signedObserved) const
 {
-    // Signed fast path: the vouch upgrades the subject to L2 only when the
-    // SUBJECT has been observed signing (trustLevel>=1, lastSignedTick set)
-    // AND the ATTESTER is a verified signer (trustLevel>=1) observed locally
-    // for at least the L2 floor AND the attestation packet itself carries a
-    // router-verified signature (the attester signed this vouch). The floor is
-    // the knob quantised to 5-min ticks; the mod-16 clock caps any tenure at
-    // 15 ticks (80 min), so a long-tenured attester saturates it. A disarmed
-    // floor (0 = neither knob armed) disables the fast path - the mixed-mesh
-    // floor where the ladder stays at the unsigned baseline. An UNSIGNED
-    // vouch (signedObserved false) is never eligible for L2: it still promotes
-    // (the unsigned baseline) but the subject stays at L1 - old firmware in a
-    // mixed mesh that never signs its attestations. Caller holds cacheLock and
-    // checks the subject's level ceiling (< L2 / == L1) before granting.
     if (!signedObserved)
         return false;
-    const uint8_t l2Floor = l2FloorTicks();
-    // trustLevel >= 1 already implies a verified-signature observation
-    // (nothing else raises it), so no separate "has stamped" sentinel: the
-    // mod-16 tick makes 0 a legitimate stamp value, and the L2 decay check
-    // owns stamp freshness.
+    const uint32_t l2Floor = l2FloorSecs();
     if (l2Floor == 0 || !subject || subject->trustLevel < 1)
         return false;
     const AntispamEntry *attesterEntry = findAntispamEntry(attester);
-    if (!attesterEntry || attesterEntry->firstSeenTick == 0 || attesterEntry->trustLevel < 1)
+    if (!attesterEntry || attesterEntry->trustLevel < 1)
         return false;
-    return (static_cast<uint8_t>(currentRateTick() - attesterEntry->firstSeenTick) & 0x0F) >= l2Floor;
+    return attesterObservedEnoughLocked(attesterEntry, l2Floor);
+}
+
+void TrafficManagementModule::stampNoRelayClaimLocked(NodeNum attester, NodeNum subject, uint32_t nowMs)
+{
+    const uint8_t nowTick = currentRateTick();
+    NoRelayClaimCell *cell = nullptr;
+    NoRelayClaimCell *freeSlot = nullptr;
+    for (uint16_t i = 0; i < kNoRelayClaimEntries; i++) {
+        if (noRelayClaims[i].attester == attester && noRelayClaims[i].subject == subject) {
+            cell = &noRelayClaims[i];
+            break;
+        }
+        if (noRelayClaims[i].attester == 0 && !freeSlot)
+            freeSlot = &noRelayClaims[i];
+    }
+    if (!cell)
+        cell = freeSlot;
+    if (!cell)
+        return;
+    cell->attester = attester;
+    cell->subject = subject;
+    cell->windowTick = nowTick;
+    cell->claimMs = nowMs;
+}
+
+uint8_t TrafficManagementModule::noRelayClaimerCountLocked(NodeNum subject, uint32_t nowMs) const
+{
+    const auto &cfg = moduleConfig.traffic_management;
+    const uint8_t nowTick = currentRateTick();
+    uint8_t n = 0;
+    for (uint16_t i = 0; i < kNoRelayClaimEntries; i++) {
+        const NoRelayClaimCell &c = noRelayClaims[i];
+        if (c.attester == 0 || c.subject != subject || c.windowTick != nowTick)
+            continue;
+        if (cfg.no_relay_ttl_secs > 0 && Throttle::deadlinePassedAt(nowMs, c.claimMs + secsToMs(cfg.no_relay_ttl_secs)))
+            continue;
+        n++;
+    }
+    return n;
 }
 
 uint8_t TrafficManagementModule::peekAttestQuorumForTest(NodeNum subject)
@@ -2507,7 +2506,9 @@ uint8_t TrafficManagementModule::peekPromotedWindowTickForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
     const AntispamEntry *entry = findAntispamEntry(node);
-    return entry ? entry->promotedWindowTick : 0;
+    if (!entry || !entry->promoted || entry->promotedAtSecs == 0)
+        return 0;
+    return static_cast<uint8_t>((entry->promotedAtSecs % 255) + 1);
 }
 
 bool TrafficManagementModule::peekPromotedForTest(NodeNum node)
@@ -2580,10 +2581,12 @@ bool TrafficManagementModule::shouldRelay(const meshtastic_MeshPacket &mp) const
 {
     const auto &cfg = moduleConfig.traffic_management;
     if (cfg.relay_budget_max_packets == 0)
-        return true; // relay budget disabled -> unlimited relaying
+        return true;
     const NodeNum from = getFrom(&mp);
     if (from == 0 || from == nodeDB->getNodeNum())
-        return true; // unknown or local sender: normal policy
+        return true;
+    if (relayBudgetExempt(mp))
+        return true;
 
     concurrency::LockGuard guard(&cacheLock);
     const AntispamEntry *entry = findAntispamEntry(from);
@@ -2599,41 +2602,32 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
     const auto &cfg = moduleConfig.traffic_management;
     const NodeNum from = getFrom(&mp);
     if (from == 0 || from == nodeDB->getNodeNum())
-        return mp.hop_limit; // local traffic: never cap
+        return mp.hop_limit;
 
     bool changed = false;
     uint8_t cap = mp.hop_limit;
     bool senderInProbation = false;
-
-    // Probation cap.
-    const uint8_t probationCap = cfg.probation_max_hop_limit;
-    if (cfg.probation_window_secs > 0) {
+    {
         concurrency::LockGuard guard(&cacheLock);
-        const AntispamEntry *entry = findAntispamEntry(from);
-        const uint8_t windowTicks = probationWindowTicks();
-        if (entry && entry->firstSeenTick != 0 && !entry->promoted &&
-            (static_cast<uint8_t>(currentRateTick() - entry->firstSeenTick) & 0x0F) < windowTicks) {
-            senderInProbation = true;
-            if (probationCap > 0 && probationCap < cap) {
-                cap = probationCap;
-                changed = true;
-            }
+        senderInProbation = inProbationLocked(findAntispamEntry(from));
+        const uint8_t probationCap = cfg.probation_max_hop_limit;
+        if (senderInProbation && probationCap > 0 && probationCap < cap) {
+            cap = probationCap;
+            changed = true;
         }
     }
-    // Congestion hop cap: only for broadcast senders currently in probation,
-    // and only while the probation machinery is active.
     if (senderInProbation && cfg.congestion_hop_cap_pct > 0) {
         const float util = currentCongestionPct();
-        if (util >= static_cast<float>(cfg.congestion_hop_cap_pct)) {
-            if (1 < cap) {
-                cap = 1;
-                changed = true;
-            }
+        if (util >= static_cast<float>(cfg.congestion_hop_cap_pct) && cap > 1) {
+            cap = 1;
+            changed = true;
         }
     }
 
-    if (changed)
+    if (changed) {
+        concurrency::LockGuard guard(&cacheLock);
         incrementStatLocked(&stats.relay_hop_caps_applied);
+    }
     return cap;
 }
 
@@ -2645,41 +2639,29 @@ void TrafficManagementModule::recordRelayed(const meshtastic_MeshPacket &mp)
     const NodeNum from = getFrom(&mp);
     if (from == 0 || from == nodeDB->getNodeNum())
         return;
-    // Reliability machinery is exempt from the relay budget: want_ack/routing/admin traffic
-    // must never be starved by a spammer.
-    if (mp.want_ack || mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP || mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP)
+    if (relayBudgetExempt(mp))
         return;
 
     bool exhausted = false;
-    bool overRelay = false;
     {
         concurrency::LockGuard guard(&cacheLock);
-        // Look up the sender's entry without allocating a new one: charging a
-        // relay is a write to an existing entry, not a fresh observation, so a
-        // miss (untracked sender) must not evict a tracked one.
         AntispamEntry *entry = findAntispamEntry(from);
-        if (!entry)
+        if (!entry || entry->noRelay)
             return;
-        if (entry->noRelay)
-            return; // already exhausted this window
 
         if (entry->relayedCount < 0x3F)
             entry->relayedCount++;
-        // Locally observed over-relay: the moment our own count crosses the
-        // relay budget, a neighboring NO_RELAY claim for this sender is
-        // cross-checkable against this evidence.
-        overRelay = entry->relayedCount >= cfg.relay_budget_max_packets;
-        exhausted = overRelay && !entry->noRelayLocal;
+        exhausted = entry->relayedCount >= cfg.relay_budget_max_packets && !entry->noRelayLocal;
         if (exhausted) {
             entry->noRelay = true;
             entry->noRelayLocal = true;
-            entry->noRelayClaimer = 0; // local exhaustion, not a gossiped claim
+            entry->noRelayClaimer = 0;
             entry->noRelayClaimMs = 0;
             TM_LOG_INFO("Antispam: relay budget exhausted for 0x%08x (>=%u), stopping relay this window", from,
                         (unsigned)cfg.relay_budget_max_packets);
         }
-    } // lock released before sending (sendToMesh may take other locks)
-    if (overRelay)
+    }
+    if (exhausted)
         sendNoRelayGossip(from);
 }
 
@@ -2690,45 +2672,6 @@ bool TrafficManagementModule::sendNoRelayGossip(NodeNum subject)
     meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
     att.kind = meshtastic_IdAttestation_Kind_NO_RELAY;
     att.subject = subject;
-
-    meshtastic_MeshPacket *p = router ? router->allocForSending() : nullptr;
-    if (!p)
-        return false;
-    p->to = NODENUM_BROADCAST;
-    p->decoded.portnum = meshtastic_PortNum_ID_ATTESTATION_APP;
-    p->decoded.payload.size =
-        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_IdAttestation_msg, &att);
-    p->decoded.want_response = false;
-    p->hop_limit = 1; // one hop: this is local-neighborhood gossip
-    p->hop_start = 1;
-    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    p->want_ack = false;
-    incrementStat(&stats.no_relay_gossips_sent);
-    service->sendToMesh(p); // sendToMesh takes ownership of p
-    return true;
-}
-
-bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)
-{
-    const auto &cfg = moduleConfig.traffic_management;
-    if (!service || cfg.probation_window_secs == 0)
-        return false;
-    // Vouch only from a long-tenured device (tenure gate).
-    if (uptimeSecs() < cfg.attestation_min_tenure_secs)
-        return false;
-
-    meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
-    att.kind = meshtastic_IdAttestation_Kind_KNOWN_SINCE;
-    att.subject = subject;
-    // Wall-clock first-seen for the subject, if we can read it; 0 = "no clock".
-    if (nodeDB) {
-        meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(subject);
-        if (info) {
-            // NodeInfoLite has no first_heard today; use last_heard as a proxy
-            // for "when we saw this ID" - good enough for the tenure floor.
-            att.known_since_secs = info->last_heard;
-        }
-    }
     att.attester_tenure_secs = uptimeSecs();
 
     meshtastic_MeshPacket *p = router ? router->allocForSending() : nullptr;
@@ -2739,11 +2682,41 @@ bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_IdAttestation_msg, &att);
     p->decoded.want_response = false;
-    p->hop_limit = 2; // two hops: vouching is neighborhood-scoped
-    p->hop_start = 2;
+    p->hop_limit = 1;
+    p->hop_start = 1;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     p->want_ack = false;
-    service->sendToMesh(p); // sendToMesh takes ownership of p
+    incrementStat(&stats.no_relay_gossips_sent);
+    service->sendToMesh(p);
+    return true;
+}
+
+bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)
+{
+    const auto &cfg = moduleConfig.traffic_management;
+    if (!service || cfg.probation_window_secs == 0)
+        return false;
+    if (uptimeSecs() < cfg.attestation_min_tenure_secs)
+        return false;
+
+    meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
+    att.kind = meshtastic_IdAttestation_Kind_KNOWN_SINCE;
+    att.subject = subject;
+    att.attester_tenure_secs = uptimeSecs();
+
+    meshtastic_MeshPacket *p = router ? router->allocForSending() : nullptr;
+    if (!p)
+        return false;
+    p->to = NODENUM_BROADCAST;
+    p->decoded.portnum = meshtastic_PortNum_ID_ATTESTATION_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_IdAttestation_msg, &att);
+    p->decoded.want_response = false;
+    p->hop_limit = 1;
+    p->hop_start = 1;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    p->want_ack = false;
+    service->sendToMesh(p);
     return true;
 }
 
@@ -2752,9 +2725,9 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
     const auto &cfg = moduleConfig.traffic_management;
     const uint32_t nowMs = TrafficManagementModule::clockMs();
     meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
-    if (mp.decoded.payload.size == 0 ||
+    if (mp.via_mqtt || mp.decoded.payload.size == 0 ||
         !pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_IdAttestation_msg, &att))
-        return true; // consumed; undecodable
+        return true;
 
     const NodeNum attester = getFrom(&mp);
     if (attester == 0 || att.subject == 0 || att.subject == attester)
@@ -2765,61 +2738,23 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
     if (!entry)
         return true;
 
-    // Vouch accounting: stamp the (attester, subject) pair once the vouch
-    // passes the trust gates (tenure + observed tenure), so the per-subject /
-    // per-window caps price every processed vouch, not just the ones that
-    // promote. Rejected-by-gate vouches cost no cap quota: the gate outcome
-    // is about the attester, and retrying it cannot change the answer.
-    const auto recordVouch = [&](NodeNum att, NodeNum subj) {
+    const auto recordVouch = [&](NodeNum attesterNode, NodeNum subj) {
         if (cfg.vouch_max_per_subject_per_window > 0 || cfg.vouch_max_subjects_per_window > 0)
-            stampVouchObservationLocked(att, subj);
+            stampVouchObservationLocked(attesterNode, subj);
     };
 
     switch (att.kind) {
     case meshtastic_IdAttestation_Kind_KNOWN_SINCE: {
         if (cfg.probation_window_secs == 0)
             break;
-        // Tenure floor: the attester must be old enough, or its claim is worth
-        // nothing. tenure == 0 means "no clock" (see the proto), so it counts
-        // as untenured - accepting it would let a fresh attester promote
-        // probation out of existence.
-        if (att.attester_tenure_secs < cfg.attestation_min_tenure_secs)
+        if (!attesterObservedEnoughLocked(findAntispamEntry(attester), cfg.attestation_min_observed_secs))
             break;
-        // Observed floor: the self-reported tenure above is a claim, not an
-        // observation - a fresh radio can set it to any value. The attester
-        // must also have been observed by THIS device for at least
-        // attestation_min_observed_secs (first-seen tracking, independent of
-        // the attester's clock); that observation is the binding check. 0
-        // disables it (pre-observed-floor firmware behavior).
-        if (cfg.attestation_min_observed_secs > 0) {
-            const AntispamEntry *attesterEntry = findAntispamEntry(attester);
-            const bool sufficientlyObserved =
-                attesterEntry != nullptr && attesterEntry->firstSeenTick != 0 &&
-                (static_cast<uint8_t>(currentRateTick() - attesterEntry->firstSeenTick) & 0x0F) >=
-                    static_cast<uint8_t>(std::min<uint32_t>(15, cfg.attestation_min_observed_secs / (kRateTimeTickMs / 1000)));
-            if (!sufficientlyObserved)
-                break;
-        }
-        // Vouch caps: one attester may vouch for a given subject at most
-        // vouch_max_per_subject_per_window times per window, and for at most
-        // vouch_max_subjects_per_window distinct subjects per window. 0
-        // disables each check. The check runs against the pre-stamp count;
-        // the stamp below lands whether or not the cap admitted the vouch,
-        // so a vouch that cleared the trust gates costs the attester quota
-        // even when it ends up rejected. Checked before the promoted gate:
-        // a vouch for an already-promoted subject still costs quota, so the
-        // caps price repeat gossips rather than just first-time promotions.
         if (!vouchWithinCapsLocked(attester, att.subject)) {
             TM_LOG_DEBUG("Antispam: KNOWN_SINCE from 0x%08x for 0x%08x over vouch caps", attester, att.subject);
             recordVouch(attester, att.subject);
             break;
         }
         recordVouch(attester, att.subject);
-        // Quorum: count the DISTINCT attesters whose vouches cleared the gates.
-        // An attester whose observed context (channel + RSSI class) matches
-        // the subject's is discounted - the pair is indistinguishable from one
-        // operator's radios at one location, so it does not count toward the
-        // threshold. 0xFF RSSI (no usable reading) never matches.
         if (attestationMinDistinctAttestersLocked() > 0) {
             const AntispamEntry *attesterEntry = findAntispamEntry(attester);
             const bool coLocated = attesterEntry != nullptr && attesterEntry->rssiClass != 0xFF &&
@@ -2830,24 +2765,16 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
                 TM_LOG_DEBUG("Antispam: KNOWN_SINCE from 0x%08x for 0x%08x discounted (co-located)", attester, att.subject);
         }
         if (entry->promoted) {
-            // Already promoted: the vouch cost quota, but there is nothing left
-            // to do - except renew the window-scoped promotion TTL, so a
-            // neighborhood that keeps vouching holds the promotion across
-            // windows. And re-grant L2 when the signed fast path applies again:
-            // a subject whose L2 decayed to L1 (signatures went quiet) is
-            // upgraded back the moment it is observed signing and the
-            // attester is still a tenured verified signer - the sweep decays,
-            // this re-arms, and the neighborhood keeps the record honest.
-            if (entry->promotedWindowTick != 0)
-                entry->promotedWindowTick = currentRateTick();
+            if (entry->promotedAtSecs != 0)
+                entry->promotedAtSecs = uptimeSecs();
             if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester, mp.xeddsa_signed)) {
                 entry->trustLevel = 2;
                 TM_LOG_INFO("Antispam: 0x%08x re-raised to neighbor-attested by verified signer 0x%08x", att.subject, attester);
             }
             break;
         }
-        if (entry->firstSeenTick == 0)
-            break; // we have no local probation to shorten
+        if (!entry->hasFirstSeen)
+            break;
         const uint32_t requiredAttesters = attestationMinDistinctAttestersLocked();
         if (requiredAttesters > 0) {
             const uint8_t quorum = attestQuorumCountLocked(att.subject);
@@ -2858,94 +2785,64 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
             }
         }
         entry->promoted = true;
-        // Trust ladder: the unsigned vouch above grants the probation
-        // exemption (promoted). If the SUBJECT has itself been observed
-        // signing (trustLevel>=1, lastSignedTick set) AND the attester is a
-        // verified signer we have observed for at least the L2 floor AND this
-        // vouch carries a router-verified signature, it is worth more than the
-        // unsigned baseline - it marks the subject neighbor-attested (L2). The
-        // floor is the attester's observed age quantised to 5-min ticks (the
-        // mod-16 clock caps any tenure at 15 ticks = 80 min), so a tenure-capped
-        // L2 is a *bounded* upgrade: a fresh attester cannot buy L2 for a fresh
-        // subject. An unsigned vouch never crosses to L2 (mixed-mesh floor): it
-        // still promotes, but the subject stays at L1. When neither the L2 knob
-        // nor the plain tenure knob is armed (old configs) the ladder stays flat
-        // (Phase 1.1/2 behavior).
+        // Unsigned KNOWN_SINCE clears probation (promoted). Signed + observed attester floor raises L2.
         if (entry->trustLevel == 1 && l2VouchEligibleLocked(entry, attester, mp.xeddsa_signed)) {
             entry->trustLevel = 2;
             TM_LOG_INFO("Antispam: 0x%08x raised to neighbor-attested by verified signer 0x%08x", att.subject, attester);
         }
-        if (cfg.attestation_promotion_ttl_secs > 0) {
-            // Window-scoped promotion: the bit expires after the TTL without a
-            // renewal vouch (sweep); renewals refresh the stamp.
-            entry->promotedWindowTick = currentRateTick();
-        } else {
-            entry->promotedWindowTick = 0; // permanent (shipped default)
-        }
+        entry->promotedAtSecs = (cfg.attestation_promotion_ttl_secs > 0) ? uptimeSecs() : 0;
         incrementStatLocked(&stats.attestation_promotions);
-        TM_LOG_INFO("Antispam: promoted 0x%08x via KNOWN_SINCE from 0x%08x (tenure %us, quorum %u)", att.subject, attester,
-                    (unsigned)att.attester_tenure_secs, (unsigned)attestQuorumCountLocked(att.subject));
+        TM_LOG_INFO("Antispam: promoted 0x%08x via KNOWN_SINCE from 0x%08x (quorum %u)", att.subject, attester,
+                    (unsigned)attestQuorumCountLocked(att.subject));
         break;
     }
     case meshtastic_IdAttestation_Kind_NO_RELAY: {
         if (cfg.relay_budget_max_packets == 0)
             break;
-        // Tenure floor (mirrors the KNOWN_SINCE case above): a brand-new
-        // attester cannot declare "don't relay the gateway."
-        if (att.attester_tenure_secs < cfg.attestation_min_tenure_secs)
+        if (!attesterObservedEnoughLocked(findAntispamEntry(attester), cfg.attestation_min_observed_secs))
+            break;
+        if (cfg.no_relay_requires_local_exhaustion > 0 && entry->relayedCount == 0 && !entry->noRelayLocal)
             break;
         if (entry->noRelay) {
-            // Already in force: a repeat gossiped claim may refresh the
-            // stamp only after the re-assert TTL has passed (the cap below
-            // counts only claims inside the TTL, so this is a no-op for the
-            // quota). A locally exhausted sender is never gossiped for, so
-            // this only ever runs on the gossiped path.
+            if (entry->noRelayLocal)
+                break;
             if (entry->noRelayClaimer != 0 && entry->noRelayClaimer == attester && cfg.no_relay_ttl_secs > 0 &&
                 Throttle::deadlinePassedAt(nowMs, entry->noRelayClaimMs + secsToMs(cfg.no_relay_ttl_secs))) {
                 entry->noRelayClaimMs = nowMs;
             }
+            stampNoRelayClaimLocked(attester, att.subject, nowMs);
             break;
         }
-        // Observed-anchoring gate: honor a gossiped NO_RELAY only if THIS
-        // device has itself seen the subject over-relay this window - our own
-        // relay count for the subject crossed the relay budget, or the
-        // subject is over its local per-sender rate budget (rate-limited
-        // here). The claim is cross-checked against local observation rather
-        // than taken on its word; a free-floating claim from a neighbor that
-        // ran out for a reason we can't verify does not stop our relay.
-        // Non-zero is the shipped default; 0 accepts the bit on its own word.
-        if (cfg.no_relay_requires_local_exhaustion > 0) {
-            const bool locallyObserved = entry->noRelayLocal || entry->relayedCount >= cfg.relay_budget_max_packets ||
-                                         isRateLimitedLocked(att.subject, nowMs);
-            if (!locallyObserved)
-                break;
-        }
-        // Per-attester cap: at most no_relay_max_subjects_per_window
-        // distinct senders per window from one attester, counting only
-        // claims inside the re-assert TTL (0 disables the cap).
         if (cfg.no_relay_max_subjects_per_window > 0) {
             uint8_t claimerSubjects = 0;
-            for (uint16_t i = 0; i < antispamCacheSize(); i++) {
-                const AntispamEntry &cand = antispam[i];
-                if (cand.noRelay && cand.noRelayClaimer == attester) {
-                    // TTL in the module clock's timebase (virtual in tests):
-                    // a claim outside its TTL no longer counts against the cap.
-                    const bool insideTtl =
-                        cfg.no_relay_ttl_secs == 0 ||
-                        !Throttle::deadlinePassedAt(nowMs, cand.noRelayClaimMs + secsToMs(cfg.no_relay_ttl_secs));
-                    if (insideTtl && cand.node != att.subject)
-                        claimerSubjects++;
-                }
+            bool alreadyClaimed = false;
+            const uint8_t nowTick = currentRateTick();
+            for (uint16_t i = 0; i < kNoRelayClaimEntries; i++) {
+                const NoRelayClaimCell &c = noRelayClaims[i];
+                if (c.attester != attester || c.windowTick != nowTick)
+                    continue;
+                if (cfg.no_relay_ttl_secs > 0 && Throttle::deadlinePassedAt(nowMs, c.claimMs + secsToMs(cfg.no_relay_ttl_secs)))
+                    continue;
+                if (c.subject == att.subject)
+                    alreadyClaimed = true;
+                else
+                    claimerSubjects++;
             }
-            if (claimerSubjects >= cfg.no_relay_max_subjects_per_window)
+            if (!alreadyClaimed && claimerSubjects >= cfg.no_relay_max_subjects_per_window)
                 break;
         }
-        entry->noRelay = true;
-        entry->noRelayLocal = false; // gossiped, not local -> we never re-gossip it
-        entry->noRelayClaimer = attester;
-        entry->noRelayClaimMs = nowMs;
-        TM_LOG_INFO("Antispam: NO_RELAY for 0x%08x gossiped by 0x%08x (observed over-relay %u)", att.subject, attester,
-                    (unsigned)entry->relayedCount);
+        stampNoRelayClaimLocked(attester, att.subject, nowMs);
+        const uint32_t minClaimers = cfg.no_relay_min_claimers;
+        const bool quorumMet = minClaimers == 0 || noRelayClaimerCountLocked(att.subject, nowMs) >= minClaimers;
+        if (entry->noRelayLocal || quorumMet) {
+            entry->noRelay = true;
+            if (!entry->noRelayLocal) {
+                entry->noRelayClaimer = attester;
+                entry->noRelayClaimMs = nowMs;
+            }
+            TM_LOG_INFO("Antispam: NO_RELAY for 0x%08x gossiped by 0x%08x (relayed %u, claimers %u)", att.subject, attester,
+                        (unsigned)entry->relayedCount, (unsigned)noRelayClaimerCountLocked(att.subject, nowMs));
+        }
         break;
     }
     default:
@@ -2961,47 +2858,48 @@ bool TrafficManagementModule::observeGroupCooccurrence(NodeNum node, uint8_t cha
         return false;
 
     concurrency::LockGuard guard(&cacheLock);
-    // Find or create the cell for (channel, rssiClass, current window).
+    const uint8_t nowTick = currentRateTick();
     GroupObsCell *cell = nullptr;
     uint16_t cellIdx = 0;
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
-        const bool sameWindow = groupObs[i].windowTick == currentRateTick();
-        if (!sameWindow)
+        if (!groupObs[i].inUse || groupObs[i].windowTick != nowTick)
             continue;
         if (groupObs[i].channel == channel && groupObs[i].rssiClass == rssiClass) {
             cell = &groupObs[i];
             cellIdx = i;
             break;
         }
-        if (!cell) {
-            cell = &groupObs[i]; // reuse a same-window cell of a different class? No -
-            cell = nullptr;      // only same (channel,class) cells accumulate.
-        }
     }
     if (!cell) {
-        // Find a free (zeroed) cell or evict the stalest.
+        GroupObsCell *stale = nullptr;
+        uint16_t staleIdx = 0;
         for (uint16_t i = 0; i < kGroupObsEntries; i++) {
-            if (groupObs[i].windowTick == 0) {
+            if (!groupObs[i].inUse) {
                 cell = &groupObs[i];
                 cellIdx = i;
                 break;
             }
-            if (!cell || groupObs[i].windowTick < cell->windowTick) {
-                cell = &groupObs[i];
-                cellIdx = i;
+            if (!stale || ((static_cast<uint8_t>(nowTick - groupObs[i].windowTick) & 0x0F) >
+                           (static_cast<uint8_t>(nowTick - stale->windowTick) & 0x0F))) {
+                stale = &groupObs[i];
+                staleIdx = i;
             }
+        }
+        if (!cell) {
+            cell = stale;
+            cellIdx = staleIdx;
         }
         if (!cell)
             return false;
         memset(cell, 0, sizeof(GroupObsCell));
         cell->channel = channel;
         cell->rssiClass = rssiClass;
-        cell->windowTick = currentRateTick();
+        cell->windowTick = nowTick;
+        cell->inUse = 1;
         groupMedian[cellIdx] = 0;
     }
 
     cell->freshCount++;
-    // Budget: split one rate_limit_max_packets across the group.
     const uint32_t localBudget = moduleConfig.traffic_management.rate_limit_max_packets;
     if (cell->freshCount >= groupMin && localBudget > 0) {
         const uint32_t perMember = std::max<uint32_t>(1, localBudget / cell->freshCount);
@@ -3026,8 +2924,8 @@ bool TrafficManagementModule::isInFlaggedGroup(NodeNum node, uint8_t channel, ui
 bool TrafficManagementModule::isInFlaggedGroupLocked(uint8_t channel, uint8_t rssiClass) const
 {
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
-        if (groupObs[i].windowTick == currentRateTick() && groupObs[i].channel == channel && groupObs[i].rssiClass == rssiClass &&
-            groupObs[i].flagged) {
+        if (groupObs[i].inUse && groupObs[i].windowTick == currentRateTick() && groupObs[i].channel == channel &&
+            groupObs[i].rssiClass == rssiClass && groupObs[i].flagged) {
             // The flagged group's median is applied to every member.
             return groupMedian[i] > 0;
         }
@@ -3038,7 +2936,8 @@ bool TrafficManagementModule::isInFlaggedGroupLocked(uint8_t channel, uint8_t rs
 uint32_t TrafficManagementModule::groupBudgetLocked(uint8_t channel, uint8_t rssiClass) const
 {
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
-        if (groupObs[i].windowTick == currentRateTick() && groupObs[i].channel == channel && groupObs[i].rssiClass == rssiClass)
+        if (groupObs[i].inUse && groupObs[i].windowTick == currentRateTick() && groupObs[i].channel == channel &&
+            groupObs[i].rssiClass == rssiClass)
             return groupMedian[i];
     }
     return 0;
@@ -3048,7 +2947,8 @@ uint32_t TrafficManagementModule::groupBudgetForTest(uint8_t channel, uint8_t rs
 {
     concurrency::LockGuard guard(&cacheLock);
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
-        if (groupObs[i].windowTick == currentRateTick() && groupObs[i].channel == channel && groupObs[i].rssiClass == rssiClass)
+        if (groupObs[i].inUse && groupObs[i].windowTick == currentRateTick() && groupObs[i].channel == channel &&
+            groupObs[i].rssiClass == rssiClass)
             return groupMedian[i];
     }
     return 0;
@@ -3087,18 +2987,21 @@ void TrafficManagementModule::initAntispamCache()
 
 void TrafficManagementModule::maintainAntispamLocked()
 {
-    // The table can be absent if both the PSRAM and heap allocations failed at
-    // init; every other accessor guards this, and the sweep is no exception.
     if (!antispam)
         return;
     const uint8_t nowRateTick = currentRateTick();
+    const uint32_t nowSecs = uptimeSecs();
+    const uint32_t windowSecs = moduleConfig.traffic_management.probation_window_secs;
+    const uint32_t promoTtl = moduleConfig.traffic_management.attestation_promotion_ttl_secs;
+    const uint32_t l2Floor = l2FloorSecs();
     for (uint16_t i = 0; i < antispamCacheSize(); i++) {
         AntispamEntry &e = antispam[i];
         if (e.node == 0)
             continue;
-        // Window rollover: reset the windowed counters and any gossiped
-        // NO_RELAY bit (it was scoped to one budget window).
-        if (e.windowTick != 0 && (static_cast<uint8_t>(nowRateTick - e.windowTick) & 0x0F) >= 1) {
+        if (!e.hasWindow) {
+            e.hasWindow = 1;
+            e.windowTick = nowRateTick;
+        } else if ((static_cast<uint8_t>(nowRateTick - e.windowTick) & 0x0F) >= 1) {
             e.windowTick = nowRateTick;
             e.relayedCount = 0;
             e.noRelay = false;
@@ -3111,65 +3014,46 @@ void TrafficManagementModule::maintainAntispamLocked()
                 e.budgetSampleMark[k] = 0;
             }
         }
-        // Probation expiry: an entry whose first-seen window has fully aged
-        // out is stale; reclaim the slot (a re-observed node re-stamps it).
-        // Observed signers (trustLevel >= 1) are not anonymous probation
-        // material - they persist so their trust record survives across
-        // windows (only anonymous L0 entries are reclaimed here).
-        const uint8_t windowTicks = probationWindowTicks();
-        if (windowTicks > 0 && e.firstSeenTick != 0 && !e.promoted && e.trustLevel == 0) {
-            const uint8_t ageTicks = static_cast<uint8_t>(nowRateTick - e.firstSeenTick) & 0x0F;
-            if (ageTicks >= windowTicks)
+        if (windowSecs > 0 && e.hasFirstSeen && !e.promoted && e.trustLevel == 0) {
+            if (observedAgeSecsLocked(&e) >= windowSecs) {
+                clearAntispamAuxLocked(e.node);
                 memset(&e, 0, sizeof(AntispamEntry));
+                continue;
+            }
         }
-        // Promotion decay (window-scoped): a promotion armed with a TTL
-        // (promotedWindowTick != 0) lapses after the TTL without a renewal
-        // vouch. The renewal path refreshes the stamp, so a neighborhood
-        // that keeps vouching holds the promotion; a silent one does not.
-        // A permanent promotion (stamp 0) is never decayed.
-        if (e.promoted && e.promotedWindowTick != 0) {
-            const uint32_t ttlTicks =
-                std::min<uint32_t>(15, moduleConfig.traffic_management.attestation_promotion_ttl_secs / (kRateTimeTickMs / 1000));
-            if (ttlTicks > 0 && (static_cast<uint8_t>(nowRateTick - e.promotedWindowTick) & 0x0F) >= ttlTicks) {
+        if (e.promoted && e.promotedAtSecs != 0 && promoTtl > 0) {
+            const uint32_t age = (nowSecs >= e.promotedAtSecs) ? (nowSecs - e.promotedAtSecs) : 0;
+            if (age >= promoTtl) {
                 e.promoted = false;
-                e.promotedWindowTick = 0;
+                e.promotedAtSecs = 0;
                 TM_LOG_INFO("Antispam: promotion for 0x%08x lapsed without renewal", e.node);
             }
         }
-        // Trust ladder L2 decay: a neighbor-attested (L2) node whose verified
-        // signatures have stopped for the L2 floor lapses back to L1 (the
-        // TOFU floor), not to L0 - the key is still pinned, only the
-        // neighborhood attestation has gone quiet. L3 (manual) and L0/L1 are
-        // untouched. A disarmed floor (0) means nothing decays, mirroring the
-        // test hook. No "stamp is 0" sentinel: 0 is a legitimate tick.
-        if (e.trustLevel == 2) {
-            const uint8_t l2Floor = l2FloorTicks();
-            if (l2Floor > 0 && (static_cast<uint8_t>(nowRateTick - e.lastSignedTick) & 0x0F) >= l2Floor) {
+        if (e.trustLevel == 2 && l2Floor > 0) {
+            const bool quiet = !e.hasLastSigned || ((nowSecs >= e.lastSignedSecs) ? (nowSecs - e.lastSignedSecs) : 0) >= l2Floor;
+            if (quiet) {
                 e.trustLevel = 1;
                 TM_LOG_INFO("Antispam: 0x%08x lapsed from neighbor-attested back to TOFU-signed", e.node);
             }
         }
     }
-    // Group co-occurrence cells: clear any whose window tick has rolled.
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
-        if (groupObs[i].windowTick != 0 && (static_cast<uint8_t>(nowRateTick - groupObs[i].windowTick) & 0x0F) >= 1) {
+        if (groupObs[i].inUse && (static_cast<uint8_t>(nowRateTick - groupObs[i].windowTick) & 0x0F) >= 1) {
             memset(&groupObs[i], 0, sizeof(GroupObsCell));
             groupMedian[i] = 0;
         }
     }
-    // Vouch accounting: clear any cell whose window tick has rolled (the
-    // per-attester / per-subject caps are window-scoped).
     for (uint16_t i = 0; i < kVouchObsEntries; i++) {
-        if (vouchObs[i].windowTick != 0 && (static_cast<uint8_t>(nowRateTick - vouchObs[i].windowTick) & 0x0F) >= 1) {
+        if (vouchObs[i].attester != 0 && (static_cast<uint8_t>(nowRateTick - vouchObs[i].windowTick) & 0x0F) >= 1)
             memset(&vouchObs[i], 0, sizeof(VouchObsCell));
-        }
     }
-    // Promotion quorum: clear any cell whose window tick has rolled (the
-    // distinct-attester count is window-scoped, same as the vouch caps).
     for (uint16_t i = 0; i < kAttestQuorumEntries; i++) {
-        if (attestQuorum[i].windowTick != 0 && (static_cast<uint8_t>(nowRateTick - attestQuorum[i].windowTick) & 0x0F) >= 1) {
+        if (attestQuorum[i].attester != 0 && (static_cast<uint8_t>(nowRateTick - attestQuorum[i].windowTick) & 0x0F) >= 1)
             memset(&attestQuorum[i], 0, sizeof(AttestQuorumCell));
-        }
+    }
+    for (uint16_t i = 0; i < kNoRelayClaimEntries; i++) {
+        if (noRelayClaims[i].attester != 0 && (static_cast<uint8_t>(nowRateTick - noRelayClaims[i].windowTick) & 0x0F) >= 1)
+            memset(&noRelayClaims[i], 0, sizeof(NoRelayClaimCell));
     }
 }
 

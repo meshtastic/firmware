@@ -3,6 +3,7 @@
 #include "MeshModule.h"
 #include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
+#include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 
@@ -107,37 +108,23 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     }
 
     // =========================================================================
-    // Antispam: probation greylist + gossiped rate budgets + relay pricing
-    //
-    // Decentralized antispam mechanism (this branch). All of it
-    // is off-by-default behind config knobs except the probation *accounting*
-    // (recording first-seen state), which is harmless and may default on.
+    // Antispam: probation greylist, optional relay budget, KNOWN_SINCE / NO_RELAY
     // =========================================================================
 
-    /// Relay pricing: true when the relayer must NOT re-broadcast a packet from the
-    /// sender of `mp` this window (local relay budget exhausted, or a gossiped
-    /// NO_RELAY bit is in force). Local delivery is unaffected; only the
-    /// re-broadcast is suppressed. Consulted by the router's perhapsRebroadcast.
+    /// True when this packet should be rebroadcast. False means deliver locally
+    /// and skip TX. want_ack / ROUTING_APP / ADMIN_APP always return true.
     bool shouldRelay(const meshtastic_MeshPacket &mp) const;
 
-    /// Probation + relay pricing: effective hop_limit cap for a re-broadcast of `mp`. Returns
-    /// min(hop_limit, probation cap, congestion cap). Consulted by the router
-    /// on its relayed copy. No-op (returns hop_limit) when no cap applies.
+    /// hop_limit for the relayed copy: min(original, probation cap, congestion cap).
     uint8_t relayHopCap(const meshtastic_MeshPacket &mp) const;
 
-    /// Relay pricing: record that this node re-broadcast `mp` (per-sender relay-budget
-    /// accounting). The first exhaustion in a window gossips a NO_RELAY bit.
-    /// No-op when the relay budget is disabled.
+    /// Charge one rebroadcast to the sender's relay budget; gossips NO_RELAY on first exhaustion.
     void recordRelayed(const meshtastic_MeshPacket &mp);
 
-    /// Top-sender rate budget: fill `out` (kTopSendersCount) with the top senders by observed
-    /// rate this budget window, for the device-telemetry piggyback
-    /// (DeviceMetrics.top_senders). Entries are node=0 when unused.
+    /// Fill `out` with the top senders this rate window (node=0 if unused).
     void snapshotTopSenders(meshtastic_TopSender (&out)[kTopSendersCount]) const;
 
-    /// Top-sender rate budget: ingest one neighbor's gossiped top-senders (from received
-    /// DeviceMetrics.top_senders). Feeds the per-sender median budget table.
-    /// No-op when the budget gossip is disabled.
+    /// Ingest a neighbor's top-senders samples. No-op when budget gossip is off.
     void ingestNeighborTopSenders(NodeNum neighbor, const meshtastic_TopSender *entries, pb_size_t count);
 
     // Test hooks (antispam state introspection).
@@ -145,50 +132,27 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     uint32_t peekRelayedCountForTest(NodeNum node);                             // windowed relayed-for count
     bool peekNoRelayForTest(NodeNum node);                                      // gossiped/local NO_RELAY in force
     int peekSenderBudgetForTest(NodeNum sender, uint32_t *medianOut = nullptr); // -1 untracked
-    /// Test introspection: vouch count this window for an (attester, subject) pair (0 when none).
     uint8_t peekVouchCountForTest(NodeNum attester, NodeNum subject);
-    /// Test introspection: number of distinct subjects `attester` has vouched for this window (0 when none).
     uint8_t peekVouchSubjectsForTest(NodeNum attester);
-    /// Test introspection: number of distinct attesters whose vouches cleared the trust gates for
-    /// `subject` in the current window (the promotion quorum count).
     uint8_t peekAttestQuorumForTest(NodeNum subject);
-    /// Test introspection: the observed context of `subject` as packed
-    /// (rssiClass << 8) | channel (-1 = untracked). Lets tests arrange
-    /// co-location (matching pair) or not (any mismatch) deterministically.
     int16_t peekRssiChannelForTest(NodeNum node);
-    /// Test introspection: the 5-min tick the promotion for `node` was
-    /// accepted (0 when no window-scoped promotion TTL is armed, i.e. the
-    /// bit is permanent or the node is not promoted).
+    /// Non-zero when a promotion lease is armed; 0 when permanent or not promoted.
     uint8_t peekPromotedWindowTickForTest(NodeNum node);
-    /// Test introspection: the promoted bit for `node` (false when untracked).
     bool peekPromotedForTest(NodeNum node);
-    /// Trust ladder: current level for `node` (0 when untracked). 1 = a
-    /// verified signature was observed, 2 = a long-tenured signer vouched
-    /// (and the decay window has not lapsed it), 3 = manually verified.
+    /// 0 = anonymous, 1 = signed observation, 2 = neighbor-attested, 3 = manual.
     uint8_t trustLevelForTest(NodeNum node);
-    /// Test override for the last-verified-signature stamp (0 = clear).
-    void setLastSignedTickForTest(NodeNum node, uint8_t tick);
-    /// Test introspection: whether the in-force NO_RELAY for `node` was set
-    /// by local exhaustion (true) or gossiped in (false; also false when no
-    /// NO_RELAY is in force).
+    void setLastSignedSecsForTest(NodeNum node, uint32_t secs);
     bool peekNoRelayLocalForTest(NodeNum node);
-    /// Probation: test override for the uptime read used by the attester-tenure check.
-    /// 0xFFFFFFFF = production (reads Time::getUptimeSecs()); otherwise the
-    /// stored value is used, so tests can simulate a long-tenured device.
+    /// 0xFFFFFFFF = production (Time::getUptimeSecs() or test clock); otherwise the stored value.
     inline static uint32_t s_testUptimeSecs = 0xFFFFFFFFu;
     static void setUptimeSecsForTest(uint32_t secs) { s_testUptimeSecs = secs; }
-    /// Test-only congestion override: production reads airTime->channelUtilizationPercent().
-    /// Set to >= 0 to drive the congestion hop cap deterministically in tests.
     inline static int s_testCongestionPct = -1;
 
-    // Injectable monotonic clock (ms): tests advance s_testNowMs instead of sleeping across
-    // ticks (mirrors HopScalingModule); production reads millis().
     inline static uint32_t s_testNowMs = 0;
-    /// Monotonic module clock in ms (virtual under PIO_UNIT_TESTING).
 #ifdef PIO_UNIT_TESTING
     static uint32_t clockMs() { return s_testNowMs; }
 #else
-    static uint32_t clockMs() { return millis(); }
+    static uint32_t clockMs();
 #endif
 
   protected:
@@ -397,190 +361,76 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool nodeInfoSeeded = false;
     uint8_t sweepsSinceNodeInfoReconcile = 0;
 
-    // =========================================================================
-    // Antispam per-node state (probation, gossiped budgets, relay pricing)
-    // =========================================================================
-    // A second flat per-node table, deliberately NOT packed into the 10-byte
-    // UnifiedCacheEntry: the design doc's "10-byte entry has room" is true only
-    // of bit flags, and the windowed relayed-for counter + first-seen tick +
-    // gossiped budget need real fields. The unified cache already pins its slots
-    // against passive eviction (next_hop / special-role entries survive the
-    // sweep), so tracking a node's traffic here implies its unified entry lives;
-    // antispam entries self-expire via the 5-min budget window.
-
+    // Per-node greylist / relay-budget / trust state. Separate from the 10-byte
+    // unified cache: windowed counters and first-seen uptime need real fields.
     struct __attribute__((packed)) AntispamEntry {
         NodeNum node;
-        // Probation: 0 = no first-seen record, otherwise the 5-min budget-window tick
-        // (kRateTimeTickMs) the node was first observed. In-probation while
-        // (nowTick - firstSeenTick) < probation ticks; promoted when a
-        // KNOWN_SINCE attestation from a tenured attester is accepted.
-        uint8_t firstSeenTick;
-        // Relay pricing: packets re-broadcast by us for `node` in the current budget
-        // window (6-bit, saturates at 63 like rate_count).
+        uint32_t firstSeenSecs;  // uptime seconds; valid when hasFirstSeen
+        uint32_t lastSignedSecs; // uptime of last verified signature; valid when hasLastSigned
+        uint32_t promotedAtSecs; // uptime when the promotion lease was armed; 0 = permanent
+        NodeNum noRelayClaimer;  // last gossip attester; 0 = local exhaustion
+        uint32_t noRelayClaimMs;
+        NodeNum budgetSampleMark[3];
         uint8_t relayedCount;
-        // The 5-min window tick under which relayedCount and the
-        // budget samples were accumulated. Rollover (sweep) resets them.
-        uint8_t windowTick;
-        // Probation: accepted attestation -> probation window shortened. Sticky for
-        // the probation window's lifetime; cleared by the sweep with the entry.
+        uint8_t windowTick; // 5-min nibble clock; valid when hasWindow
         uint8_t promoted : 1;
-        // NO_RELAY in force for `node` (local exhaustion, never re-gossiped;
-        // or gossiped by a neighbor). Cleared at the next window rollover.
         uint8_t noRelay : 1;
-        // True when noRelay was set locally (budget exhausted here) -
-        // that is the only case where WE gossip it.
         uint8_t noRelayLocal : 1;
-        // Trust ladder: 0 = anonymous (probation), 1 = TOFU-signed (a verified
-        // signature was observed), 2 = neighbor-attested (a long-tenured signer
-        // vouched), 3 = out-of-band-verified (manual bit, no decay). L2 lapses
-        // back to L1 when the verified signatures stop (sweep, the L2 floor
-        // window); L3 is permanent.
-        uint8_t trustLevel : 2;
-        // The rate tick of the last verified signature observed from `node`
-        // (0 = none this entry's lifetime). Drives the L2 decay in the sweep.
-        uint8_t lastSignedTick;
-        // Gossiped median budget observations for a SENDER we track:
-        // up to 3 neighbor-reported window counts (packets_this_window).
-        // The median (middle of the sorted samples) is the gossiped budget;
-        // 2+ samples are required before it applies (a single liar is
-        // absorbed, a lone report is not trusted).
+        uint8_t trustLevel : 2; // 0 anonymous, 1 signed, 2 neighbor-attested, 3 manual
+        uint8_t hasFirstSeen : 1;
+        uint8_t hasLastSigned : 1;
+        uint8_t hasWindow : 1;
         uint8_t budgetSampleCount;
         uint8_t budgetSamples[3];
-        // Which neighbor (NodeNum, 0 = unused slot) contributed each
-        // budget sample, so a re-report from the same neighbor this window
-        // refreshes in place instead of double-counting.
-        NodeNum budgetSampleMark[3];
-        // Observed context of the node's most recent packet: RSSI class + channel,
-        // refreshed on every observation (last-seen, not first-sight). Feeds the group
-        // budget membership check, the top-senders telemetry, and the co-location
-        // discount on vouching. rssiClass 0xFF = no usable reading on the last packet
-        // (quality is target-dependent: some radios report no/absent RSSI).
         uint8_t rssiClass;
         uint8_t channel;
-        // Relay pricing: monotonic-clock stamp (ms) at which the in-force
-        // gossiped NO_RELAY for this sender was accepted, and the attester
-        // that declared it (0 = local exhaustion). A gossiped claim for the
-        // same (sender, attester) pair cannot be re-accepted until the
-        // re-assert TTL passes; the cap on distinct claimers' subjects
-        // counts only claims whose TTL has not passed. Cleared with the
-        // NO_RELAY bit at the next window rollover.
-        NodeNum noRelayClaimer;
-        uint32_t noRelayClaimMs;
-        // Promotion decay: the 5-min tick the promotion was accepted (0 = no
-        // window-scoped TTL armed, the promoted bit is permanent until
-        // eviction). The sweep clears the bit once the promotion has been
-        // held for attestation_promotion_ttl_secs worth of ticks without a
-        // renewal vouch; a passing vouch for an already-promoted subject
-        // refreshes the stamp.
-        uint8_t promotedWindowTick;
     };
-    static_assert(sizeof(AntispamEntry) == 36, "AntispamEntry should be 36 bytes");
+    static_assert(sizeof(AntispamEntry) == 45, "AntispamEntry should be 45 bytes");
 
     static constexpr uint16_t antispamCacheSize()
     {
-        return TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 ? std::min(TRAFFIC_MANAGEMENT_CACHE_SIZE, 256) : 0;
+        return TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 ? std::min(TRAFFIC_MANAGEMENT_CACHE_SIZE, (uint16_t)ANTISPAM_CACHE_SIZE) : 0;
     }
 
     mutable AntispamEntry *antispam =
         nullptr; // mutable: const query paths (inProbation, effectiveRateThresholdLocked, ...) only read or slot-fill it
     bool antispamFromPsram = false;
 
-    /// Probation window in 5-min ticks (>=1 while enabled), 0 when disabled.
-    uint8_t probationWindowTicks() const;
-    /// True when `node` is currently in probation (accounting on, config
-    /// probation_window_secs > 0, first-seen within the window, not promoted).
-    /// Caller must hold cacheLock when `entry` is supplied; else locks.
     bool inProbation(NodeNum node) const;
-    /// True when `entry`'s first-seen age (mod 16 rate ticks) is still inside
-    /// the probation window of `windowTicks`. Caller must hold cacheLock.
-    /// Shared by inProbation() and the probation budget penalty in isRateLimited().
-    static bool antispamAgeInWindowLocked(const AntispamEntry *entry, uint8_t nowTick, uint8_t windowTicks);
-    /// Stamp first-seen for `node` if not yet tracked (probation start),
-    /// and record its observation context (channel, RSSI class) for the group
-    /// budget. `signedObserved` is true when the Router verified the packet's
-    /// signature on the way in (mp.xeddsa_signed) - that observation stamps
-    /// the trust ladder to TOFU-signed (L1). Called from handleReceived() for
-    /// non-local, non-own traffic. Returns true when freshly tracked.
+    bool inProbationLocked(const AntispamEntry *entry) const;
+    uint32_t observedAgeSecsLocked(const AntispamEntry *entry) const;
+    bool attesterObservedEnoughLocked(const AntispamEntry *attesterEntry, uint32_t minSecs) const;
+    static bool relayBudgetExempt(const meshtastic_MeshPacket &mp);
     bool noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass, bool signedObserved);
-    /// Probation promotion vouch: true when `node` is locally established (tracked and out of
-    /// probation, or promoted). Used to gate the rate-capped KNOWN_SINCE gossip
-    /// so only tenured senders earn a vouch.
     bool isEstablishedForVouching(NodeNum node) const;
-    /// Effective per-sender rate threshold = clamp(config max, gossiped
-    /// median when the median exceeds the local floor multiple). The config
-    /// rate_limit_max_packets becomes the local floor; the median is the
-    /// ceiling the TMM enforces when budget_gossip_enabled > 0.
     uint32_t effectiveRateThreshold(NodeNum sender) const;
-    /// Same as effectiveRateThreshold() but for callers that already hold
-    /// cacheLock (e.g. isRateLimited, which reads the unified cache under it).
     uint32_t effectiveRateThresholdLocked(NodeNum sender) const;
-    /// Current channel utilization percent (test-override aware).
     float currentCongestionPct() const;
-    /// Emit one NO_RELAY gossip packet for `subject` (best-effort, no
-    /// allocation failure path). Returns false when the send couldn't happen.
     bool sendNoRelayGossip(NodeNum subject);
-    /// Emit one KNOWN_SINCE attestation gossip for `subject` when we are
-    /// tenured enough to vouch. Returns false when not sent.
     bool sendKnownSinceGossip(NodeNum subject);
-    /// Handle a received ID_ATTESTATION_APP payload (decode + apply
-    /// promotion / NO_RELAY). Returns true when the payload was consumed.
     bool handleIdAttestation(const meshtastic_MeshPacket &mp);
-    /// Vouch accounting (caller holds cacheLock): record one processed vouch
-    /// by `attester` for `subject` in the current window.
     void stampVouchObservationLocked(NodeNum attester, NodeNum subject);
-    /// Vouch accounting (caller holds cacheLock): true when a vouch by
-    /// `attester` for `subject` is within the per-subject and per-window
-    /// distinct-subject caps for the current window.
     bool vouchWithinCapsLocked(NodeNum attester, NodeNum subject) const;
-    /// Promotion quorum (caller holds cacheLock): record one gate-passing
-    /// vouch by `attester` for `subject` in the current window (at most one
-    /// credit per pair per window; repeats refresh in place).
     void stampAttestQuorumLocked(NodeNum attester, NodeNum subject);
-    /// Promotion quorum (caller holds cacheLock): number of distinct attesters
-    /// whose vouches cleared the trust gates for `subject` in the current
-    /// window.
     uint8_t attestQuorumCountLocked(NodeNum subject) const;
-    /// The distinct-attester promotion threshold (the config knob as uint32;
-    /// 0 = single-attester promotion). Caller holds cacheLock.
     uint32_t attestationMinDistinctAttestersLocked() const;
-    /// Trust ladder: the L2 floor in 5-min ticks from attestation_l2_min_
-    /// tenure_secs (falls back to attestation_min_observed_secs at 0). 0 when
-    /// neither floor is armed (L2 never upgrades, nothing decays).
-    uint8_t l2FloorTicks() const;
-    /// Trust ladder: signed fast path - true when `attester` may upgrade the
-    /// (L1) `subject` to L2: both observed signing, the attester observed
-    /// locally for at least the L2 floor, and the attestation packet itself
-    /// carrying a router-verified signature (attester signing the vouch).
-    /// False when the floor is disarmed or the vouch is unsigned (mixed-mesh
-    /// floor: it still promotes, but stays at L1). Caller holds cacheLock.
+    uint32_t l2FloorSecs() const;
     bool l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester, bool signedObserved) const;
-    /// Group budget: observe a fresh-ID co-occurrence (channel, rssiClass)
-    /// and apply the group median when the cell fills. Returns true when a
-    /// group budget was applied to `node`.
+    void stampNoRelayClaimLocked(NodeNum attester, NodeNum subject, uint32_t nowMs);
+    uint8_t noRelayClaimerCountLocked(NodeNum subject, uint32_t nowMs) const;
     bool observeGroupCooccurrence(NodeNum node, uint8_t channel, uint8_t rssiClass);
-    /// Group budget: true when `node`'s (channel, rssiClass) cell is flagged
-    /// and carries a group median. Called from isRateLimited().
     bool isInFlaggedGroup(NodeNum node, uint8_t channel, uint8_t rssiClass) const;
-    /// Same as isInFlaggedGroup for callers that already hold cacheLock.
     bool isInFlaggedGroupLocked(uint8_t channel, uint8_t rssiClass) const;
-    /// Same as groupBudgetForTest for callers that already hold cacheLock.
     uint32_t groupBudgetLocked(uint8_t channel, uint8_t rssiClass) const;
-    /// Group budget: the current group median for a (channel, rssiClass)
-    /// cell (0 when not flagged). Test hook.
     uint32_t groupBudgetForTest(uint8_t channel, uint8_t rssiClass);
-    /// Monotonic uptime in seconds (test-override aware).
     uint32_t uptimeSecs() const;
-    /// 4-class RSSI quantization of `mp` (0xFF when no usable reading).
-    /// 0 = < -110 dBm, 1 = -110..-100, 2 = -100..-90, 3 = >= -90.
     uint8_t rssiClassOf(const meshtastic_MeshPacket &mp);
-    /// Read-only lookup for `node`'s antispam entry: returns it or nullptr.
-    /// Never allocates and never evicts. nullptr when the table is compiled
-    /// out. Caller must hold cacheLock.
     AntispamEntry *findAntispamEntry(NodeNum node) const;
     /// Find or create the antispam entry for `node` (oldest-first eviction
-    /// when full, like findOrCreateEntry). nullptr when the table is
-    /// compiled out or full with no eviction target. Caller must hold cacheLock.
-    AntispamEntry *findOrCreateAntispamEntry(NodeNum node, bool *isNew) const;
+    /// when full). nullptr when the table is compiled out or full with no
+    /// eviction target. Caller must hold cacheLock.
+    AntispamEntry *findOrCreateAntispamEntry(NodeNum node, bool *isNew);
+    void clearAntispamAuxLocked(NodeNum node);
     /// Allocate the antispam table alongside the unified cache.
     /// Called from the constructor (single-threaded); no-op when the unified
     /// cache is compiled out.
@@ -594,50 +444,41 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     struct GroupObsCell {
         uint8_t channel;
         uint8_t rssiClass;
-        uint8_t windowTick; // 5-min tick, modular
+        uint8_t windowTick;
         uint8_t freshCount;
-        bool flagged;
+        uint8_t inUse;
+        uint8_t flagged;
     };
     GroupObsCell groupObs[kGroupObsEntries] = {};
-    /// Group median per cell (kept alongside; 0 = not computed).
     uint32_t groupMedian[kGroupObsEntries] = {};
 
-    // Vouching eligibility. An attester must have been up at least
-    // attestation_min_tenure_secs to carry weight; tracked via uptime (not
-    // per-node state) so a reboot restarts the vouching floor.
-    uint32_t lastVouchSentMs = 0; // per-subject vouch cadence guard (single value; cheap)
+    uint32_t lastVouchSentMs = 0;
 
-    // Vouch accounting, per (attester, subject) pair, keyed on the 5-min
-    // budget window tick: count of vouches accepted/issued for the pair
-    // this window, and the distinct subjects each attester has vouched.
-    // LRU over the fixed table; the table is window-scoped (entries of a
-    // rolled window are stale and reclaimable). Attestation traffic is
-    // low-rate, so full scans are fine.
     static constexpr uint16_t kVouchObsEntries = 16;
     struct VouchObsCell {
         NodeNum attester;
         NodeNum subject;
-        uint8_t count;      // vouches for this pair this window (0 = unused)
-        uint8_t windowTick; // 5-min tick the count accumulated under
+        uint8_t count;
+        uint8_t windowTick;
     };
     VouchObsCell vouchObs[kVouchObsEntries] = {};
 
-    // Promotion quorum, per (subject, attester) pair, same window-scoped shape
-    // as the vouch table above. Counts the DISTINCT attesters whose vouches
-    // cleared every trust gate (tenure, observed tenure, caps) for a subject
-    // in the current window - the threshold for attestation_min_distinct_
-    // attesters. Rejected-by-gate vouches do not count: a gate failure is
-    // about the attester, and retrying it cannot change the outcome. At most
-    // one quorum credit per attester per window (the pair table), refreshed
-    // in place on repeats. LRU over the fixed table; window-scoped, cleared
-    // on rollover by maintainAntispamLocked.
     static constexpr uint16_t kAttestQuorumEntries = 16;
     struct AttestQuorumCell {
         NodeNum subject;
         NodeNum attester;
-        uint8_t windowTick; // 5-min tick the credit accumulated under (0 = unused)
+        uint8_t windowTick;
     };
     AttestQuorumCell attestQuorum[kAttestQuorumEntries] = {};
+
+    static constexpr uint16_t kNoRelayClaimEntries = 16;
+    struct NoRelayClaimCell {
+        NodeNum attester;
+        NodeNum subject;
+        uint8_t windowTick;
+        uint32_t claimMs;
+    };
+    NoRelayClaimCell noRelayClaims[kNoRelayClaimEntries] = {};
 
     // =========================================================================
     // Cache Operations
@@ -724,6 +565,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Same decision as isRateLimited but for callers that already hold cacheLock
     /// (the binary semaphore is not recursive; a second lock would deadlock).
     bool isRateLimitedLocked(NodeNum from, uint32_t nowMs);
+    /// Read-only rate-limit check; never increments the window counter.
+    bool peekRateLimitedLocked(NodeNum from, uint32_t nowMs) const;
     /// True when `p`'s sender exceeded the undecodable-packet threshold for the current window.
     bool shouldDropUnknown(const meshtastic_MeshPacket *p, uint32_t nowMs);
 

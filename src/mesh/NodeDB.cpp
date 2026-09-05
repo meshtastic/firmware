@@ -1278,41 +1278,37 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
 #if HAS_TRAFFIC_MANAGEMENT
-    // Position dedup ships enabled at the 5-hour default window on all supported targets.
-    // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
-    // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
-    // Antispam: probation accounting ships on at the 5-minute window.
-    // It only records first-seen state; the probation-aware behaviors (hop cap,
-    // promotion) engage through the same config, so 0 also turns the window off.
-    mc.traffic_management.probation_window_secs = default_traffic_mgmt_probation_window_secs;
-    mc.traffic_management.attestation_min_tenure_secs = default_traffic_mgmt_attestation_min_tenure_secs;
-    mc.traffic_management.probation_max_hop_limit = default_traffic_mgmt_probation_max_hop_limit;
-    // Budget knobs (budget gossip, group budget, relay budget, congestion hop
-    // cap) ship disabled (0) and stay 0 here: they resolve to their
-    // default_traffic_mgmt_* macros at use, and the TMM treats 0 as off.
-    // NO_RELAY hardening ships on at its defaults: it only prices the
-    // gossiped no-relay mechanism above.
-    mc.traffic_management.no_relay_requires_local_exhaustion = default_traffic_mgmt_no_relay_requires_local_exhaustion;
-    mc.traffic_management.no_relay_max_subjects_per_window = default_traffic_mgmt_no_relay_max_subjects_per_window;
-    mc.traffic_management.no_relay_ttl_secs = default_traffic_mgmt_no_relay_ttl_secs;
-    // The vouch caps and the observed-tenure floor ship on at their
-    // defaults: they only bound the promotion mechanism.
-    mc.traffic_management.attestation_min_observed_secs = default_traffic_mgmt_attestation_min_observed_secs;
-    mc.traffic_management.vouch_max_per_subject_per_window = default_traffic_mgmt_vouch_max_per_subject_per_window;
-    mc.traffic_management.vouch_max_subjects_per_window = default_traffic_mgmt_vouch_max_subjects_per_window;
-    // Promotion needs a quorum of distinct non-co-located attesters in the
-    // same window; the promotion itself stays permanent (TTL 0) so the
-    // default does not cost vouch airtime.
-    mc.traffic_management.attestation_min_distinct_attesters = default_traffic_mgmt_attestation_min_distinct_attesters;
-    mc.traffic_management.attestation_promotion_ttl_secs = default_traffic_mgmt_attestation_promotion_ttl_secs;
-    // The L2 tenure floor ships at 30 days: the mod-16 clock saturates it to
-    // the 15-tick ceiling, so it is effectively "the attester must be as
-    // tenured as the observed-tenure gate allows." 0 would fall back to
-    // attestation_min_observed_secs; operators can disable the ladder by
-    // zeroing both.
-    mc.traffic_management.attestation_l2_min_tenure_secs = default_traffic_mgmt_attestation_l2_min_tenure_secs;
+    installAntispamDefaults(mc.traffic_management);
 #endif
+}
+
+bool antispamKnobsUnconfigured(const meshtastic_ModuleConfig_TrafficManagementConfig &cfg)
+{
+    return cfg.probation_window_secs == 0 && cfg.attestation_min_tenure_secs == 0 && cfg.probation_max_hop_limit == 0 &&
+           cfg.budget_gossip_enabled == 0 && cfg.group_budget_enabled == 0 && cfg.relay_budget_max_packets == 0 &&
+           cfg.congestion_hop_cap_pct == 0 && cfg.no_relay_requires_local_exhaustion == 0 &&
+           cfg.no_relay_max_subjects_per_window == 0 && cfg.no_relay_ttl_secs == 0 && cfg.attestation_min_observed_secs == 0 &&
+           cfg.vouch_max_per_subject_per_window == 0 && cfg.vouch_max_subjects_per_window == 0 &&
+           cfg.attestation_min_distinct_attesters == 0 && cfg.attestation_promotion_ttl_secs == 0 &&
+           cfg.attestation_l2_min_tenure_secs == 0 && cfg.no_relay_min_claimers == 0;
+}
+
+void installAntispamDefaults(meshtastic_ModuleConfig_TrafficManagementConfig &cfg)
+{
+    cfg.probation_window_secs = default_traffic_mgmt_probation_window_secs;
+    cfg.attestation_min_tenure_secs = default_traffic_mgmt_attestation_min_tenure_secs;
+    cfg.probation_max_hop_limit = default_traffic_mgmt_probation_max_hop_limit;
+    cfg.no_relay_requires_local_exhaustion = default_traffic_mgmt_no_relay_requires_local_exhaustion;
+    cfg.no_relay_max_subjects_per_window = default_traffic_mgmt_no_relay_max_subjects_per_window;
+    cfg.no_relay_ttl_secs = default_traffic_mgmt_no_relay_ttl_secs;
+    cfg.no_relay_min_claimers = default_traffic_mgmt_no_relay_min_claimers;
+    cfg.attestation_min_observed_secs = default_traffic_mgmt_attestation_min_observed_secs;
+    cfg.vouch_max_per_subject_per_window = default_traffic_mgmt_vouch_max_per_subject_per_window;
+    cfg.vouch_max_subjects_per_window = default_traffic_mgmt_vouch_max_subjects_per_window;
+    cfg.attestation_min_distinct_attesters = default_traffic_mgmt_attestation_min_distinct_attesters;
+    cfg.attestation_promotion_ttl_secs = default_traffic_mgmt_attestation_promotion_ttl_secs;
+    cfg.attestation_l2_min_tenure_secs = default_traffic_mgmt_attestation_l2_min_tenure_secs;
 }
 
 // --- 2.8 position/telemetry opt-in migration helpers -------------------------------------------------
@@ -2754,6 +2750,10 @@ void NodeDB::loadFromDisk()
     if (!moduleConfig.has_traffic_management) {
         LOG_INFO("Traffic management never configured, installing always-on defaults");
         installTrafficManagementDefaults(moduleConfig);
+        saveToDisk(SEGMENT_MODULECONFIG);
+    } else if (antispamKnobsUnconfigured(moduleConfig.traffic_management)) {
+        LOG_INFO("Traffic management antispam knobs unset, installing shipped defaults");
+        installAntispamDefaults(moduleConfig.traffic_management);
         saveToDisk(SEGMENT_MODULECONFIG);
     }
 
