@@ -53,7 +53,7 @@ are upper, `sx1262` and `lr1121` lower.
 | ------------------------------ | ----------------------------------------------------------------- |
 | `rfswitch-valid.yaml`          | A full seven-mode table on an `lr1121` is clean.                  |
 | `rfswitch-partial.yaml`        | Legal, but the omitted modes are named - they are driven all-LOW. |
-| `rfswitch-bad-pin.yaml`        | `DIO9` is not one of DIO5/6/7/8/10.                               |
+| `rfswitch-bad-pin.yaml`        | `DIO9` is a real pin name but not a switch pin on an `lr1121`.    |
 | `rfswitch-row-length.yaml`     | Rows shorter and longer than the declared pin count.              |
 | `rfswitch-bad-level.yaml`      | `high` and `On`: anything not exactly `HIGH` is silently LOW.     |
 | `rfswitch-no-pins.yaml`        | No `pins` list, so no switch pin is ever driven.                  |
@@ -61,11 +61,62 @@ are upper, `sx1262` and `lr1121` lower.
 | `rfswitch-not-a-map.yaml`      | `rfswitch_table` given a scalar.                                  |
 | `rfswitch-unknown-mode.yaml`   | `MODE_TRANSMIT` is not a mode.                                    |
 | `rfswitch-stranded-modes.yaml` | A `MODE_` row one level out, sitting under `Lora:` doing nothing. |
+| `rfswitch-auto-partial.yaml`   | **Silence guard** - under `auto` the omitted modes are not named. |
+| `rfswitch-inert-table.yaml`    | **Silence guard** - an sx1262's rows are not judged individually. |
 
 `rfswitch-partial.yaml` is legal but noted: the omitted modes are driven all-LOW.
 `module-mismatch-lr11xx.yaml` (LR11xx with no table - cannot transmit) and
 `module-mismatch-sx126x.yaml` (a table on a radio that never applies one) cover
 the module/table disagreement in both directions.
+
+Both silence guards exist because a mode list is only meaningful once the radio is known.
+Under `Module: auto` the part has not been probed, so naming the omitted modes against the
+union of both families would advise adding `MODE_TX_HP`, `MODE_GNSS` and `MODE_WIFI` rows to
+what may turn out to be an LR20x0. On a module that applies no table at all, singling out one
+row as ignored would imply the others are used, when the single `module-mismatch-sx126x.yaml`
+warning already says the whole table is inert.
+
+## LR20x0 rfswitch table and interrupt DIO
+
+The table is handed to an LR20x0 as well as an LR11xx, and the two parts have neither the
+same modes nor the same switch pins, so which findings are correct depends on the module.
+
+| File                                 | Expected                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| `rfswitch-lr2021.yaml`               | Clean. `MODE_RX_HF` is a real mode here, and `IRQ_DIO_NUM` keeps the IRQ clear. |
+| `rfswitch-lr2021-irq-collision.yaml` | `IRQ_DIO_NUM: 5` names a pin the table also drives as a switch line.            |
+| `rfswitch-lr2021-irq-default.yaml`   | The same collision reached by omitting the key: the radio default is DIO5.      |
+| `rfswitch-lr2021-irq-clear.yaml`     | **False-positive guard** - DIO5 as the IRQ, table on DIO6/7/8, is clean.        |
+| `rfswitch-lr2021-irq-all-low.yaml`   | DIO5 listed in `pins` but driven LOW everywhere: still a collision.             |
+| `rfswitch-lr2021-no-table.yaml`      | An LR20x0 with no table cannot transmit, same as an LR11xx without one.         |
+| `rfswitch-lr2021-wrong-mode.yaml`    | `MODE_TX_HP` and `MODE_GNSS` are LR11xx modes an LR20x0 does not have.          |
+
+`begin()` needs only SPI and BUSY, so a radio whose interrupt lands on a switch pin still
+reports init success and then never receives a packet.
+
+Why `-irq-all-low` is a fault and `-irq-clear` is not: `LR2021::config()` (from `begin()`)
+points the IRQ DIO at `FUNCTION_IRQ`, then `setRfSwitchTable()` calls `setDioFunction(...,
+FUNCTION_RF_SWITCH)` for every non-NC pin in the list whatever the levels are, and nothing
+re-asserts the IRQ function afterwards. Listing the pin is what breaks it, not driving it.
+
+`rfswitch-lr2021.yaml` also carries `LR2021_MAX_POWER` and `LR2021_MAX_POWER_HF` in a case
+that must stay at zero warnings, so dropping either from the checker's schema fails it.
+
+## TCXO probing (`Lora.TCXO_OPTIONAL`)
+
+A variant declares "a TCXO may or may not be fitted" at compile time with `TCXO_OPTIONAL`.
+A Portduino carrier cannot: the same `meshtasticd` binary runs on hardware populated either
+way, so the statement arrives as YAML and is answered at runtime.
+
+| File                               | Expected                                                                               |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `tcxo-optional.yaml`               | Clean. No Vref given, so the TCXO attempt uses the 1.6 V radio default.                |
+| `tcxo-optional-sx1262.yaml`        | Clean. Another family, explicit Vref, which is the one reported.                       |
+| `tcxo-optional-unsupported.yaml`   | An SX128x has no TCXO reference to probe for, so the key is inert.                     |
+| `tcxo-optional-contradiction.yaml` | `DIO3_TCXO_VOLTAGE: false` asks for DIO3 to be left alone; the probe drives it anyway. |
+
+With the probe asked for and no voltage given, the driver tries the radio default rather
+than skipping the TCXO attempt - otherwise there is nothing to fall back _from_.
 
 ## PA gain table (`TX_GAIN_LORA`)
 
@@ -141,13 +192,19 @@ the last-loaded file is reset to its default - here `config.yaml` sets
 The load order within `config.d/` comes from the filesystem, so the report warns
 rather than assuming alphabetical order.
 
-`rfswitch-sticky/` covers the one place where "the file loaded last wins" is false,
-and it documents a firmware bug rather than a configuration mistake. Its `config.d/`
-holds two switch tables; the last one loaded sets `MODE_RX` LOW on both pins, but the
-loader only ever writes HIGH and never writes LOW back, so the HIGH from the earlier
-file survives and the effective table is the OR of both. Verified with
-`meshtasticd --output-yaml`. Until the loader is fixed, `--check` reports this as an
-error and tells you to enable exactly one.
+`rfswitch-last-wins/` covers `Lora.rfswitch_table` across two `config.d/` files. It
+follows the same "last file loaded wins" rule as every other `Lora:` key - the loader
+resets a table's pins and mode rows before applying a replacement, so an earlier
+file's `MODE_RX` setting cannot leak through a later file that omits it. `--check`
+reports this as the standard cross-file-overlap info, not a special-cased error.
+
+`rfswitch-replace/` pins the replacement itself rather than the diagnostic. Which of
+two `config.d/` files wins is up to the filesystem, so the fixture above cannot assert
+the effective table by value; here the losing table sits in `config.yaml`, which is
+always loaded before `config.d/`, and the winner is therefore deterministic. The loser
+is the wider of the two - four pins and three mode rows, all `HIGH` - so any carryover
+appears as a surviving pin, a surviving mode row, or a `HIGH` that should be `LOW`.
+`--output-yaml` is what reports it: the `--check` report says no more than `set`.
 
 ## Running these as a normal boot
 

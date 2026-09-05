@@ -37,6 +37,19 @@ class LockingArduinoHal : public ArduinoHal
 #endif
 };
 
+// TCXO_OPTIONAL (variant define) or Lora.TCXO_OPTIONAL (Portduino YAML): probe for a TCXO and
+// fall back to the XTAL. LR11x0 tries XTAL first - TCXO-first hangs RadioLib's calibration wait.
+#if ARCH_PORTDUINO
+#define TCXO_OPTIONAL_ENABLED (portduino_config.tcxo_optional)
+#elif defined(TCXO_OPTIONAL)
+#define TCXO_OPTIONAL_ENABLED true
+#else
+#define TCXO_OPTIONAL_ENABLED false
+#endif
+
+// RadioLib's own default Vref, for a probe with no explicit voltage configured.
+#define TCXO_OPTIONAL_DEFAULT_VOLTAGE 1.6f
+
 #if defined(USE_STM32WLx)
 /**
  * A wrapper for the RadioLib STM32WLx_Module class, that doesn't connect any pins as they are virtual

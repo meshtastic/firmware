@@ -59,11 +59,13 @@ PASS=0
 FAIL=0
 
 # assert <description> <expected-exit> <fixture> <mode> [expected-substring...]
-#   mode:    "check" adds --check, "check-yaml" adds --check --output-yaml,
-#            "normal" runs with neither.
+#   mode:    "check" adds --check, "yaml" adds --output-yaml, "check-yaml" adds both
+#            (to assert that --check wins), "normal" runs with neither.
 #   fixture: a bare name runs from a scratch directory. A name containing a slash
 #            (configd-conflict/config.yaml) runs from that fixture's own directory,
 #            so a relative ConfigDirectory in it resolves the way it would in situ.
+#   Each expected substring must appear in the output. One prefixed with '!' must not:
+#   an info line that is merely absent today would otherwise be nobody's regression.
 assert() {
 	local desc="$1" want_rc="$2" fixture="$3" mode="$4"
 	shift 4
@@ -77,6 +79,7 @@ assert() {
 	local args=(--config "$config" -d "$WORKDIR/fs")
 	case $mode in
 	check) args+=(--check) ;;
+	yaml) args+=(--output-yaml) ;;
 	check-yaml) args+=(--check --output-yaml) ;;
 	esac
 
@@ -90,7 +93,11 @@ assert() {
 	[[ $rc -ne $want_rc ]] && problems+=("exit $rc, wanted $want_rc")
 	local needle
 	for needle in "$@"; do
-		grep -qF -- "$needle" <<<"$out" || problems+=("missing: $needle")
+		if [[ $needle == '!'* ]]; then
+			grep -qF -- "${needle#!}" <<<"$out" && problems+=("unexpected: ${needle#!}")
+		else
+			grep -qF -- "$needle" <<<"$out" || problems+=("missing: $needle")
+		fi
 	done
 
 	if [[ ${#problems[@]} -eq 0 ]]; then
@@ -152,8 +159,8 @@ assert "wrong-case module suggests the right spelling" 1 module-wrong-case.yaml 
 
 echo
 echo "LR11xx rfswitch table:"
-assert "unrecognised switch pin" 1 rfswitch-bad-pin.yaml check \
-	"'DIO9' is not a recognised pin" \
+assert "switch pin the module does not have" 1 rfswitch-bad-pin.yaml check \
+	"'DIO9' is not an RF switch pin on lr1121" \
 	"Result: 1 error, 0 warnings"
 assert "row length must match the pin count" 1 rfswitch-row-length.yaml check \
 	"MODE_STBY has 2 values but 3 pins are declared" \
@@ -190,14 +197,90 @@ assert "omitted modes are called out" 0 rfswitch-partial.yaml check \
 	"omits MODE_GNSS, MODE_TX_HF, MODE_TX_HP, MODE_WIFI" \
 	"default to all pins LOW" \
 	"Result: 0 errors, 0 warnings"
+# Under autodetect the part is not known yet, so neither is which modes it has. Naming them
+# against the union of both families would advise adding rows an LR20x0 cannot use.
+assert "omitted modes are not guessed at under auto" 0 rfswitch-auto-partial.yaml check \
+	'!default to all pins LOW' \
+	"Result: 0 errors, 0 warnings"
 
 echo
 echo "radio module and switch table must agree:"
 assert "LR11xx without a table cannot transmit" 0 module-mismatch-lr11xx.yaml check \
 	"Module is lr1121 but no Lora.rfswitch_table is set" \
 	"Result: 0 errors, 1 warning"
-assert "table on a non-LR11xx radio is ignored" 0 module-mismatch-sx126x.yaml check \
-	"the table is only applied to LR11xx radios" \
+assert "table on a radio that never applies one" 0 module-mismatch-sx126x.yaml check \
+	"the table is only applied to LR11xx and LR20x0 radios" \
+	"Result: 0 errors, 1 warning"
+# ...and that is the only thing worth saying. Judging the rows against a family's mode list
+# would report MODE_RX_HF as the ignored one, implying the others are applied.
+assert "an inert table is not judged row by row" 0 rfswitch-inert-table.yaml check \
+	"the table is only applied to LR11xx and LR20x0 radios" \
+	'!is not a mode' \
+	'!default to all pins LOW' \
+	"Result: 0 errors, 1 warning"
+
+echo
+echo "LR20x0 switch table and interrupt DIO:"
+# MODE_RX_HF is a real mode on this part, so it must not be rejected as an unknown key.
+assert "a correct LR20x0 table is accepted" 0 rfswitch-lr2021.yaml check \
+	"Module            : lr2021" \
+	"RF switch table   : set" \
+	"IRQ DIO           : DIO9" \
+	"Result: 0 errors, 0 warnings"
+# begin() needs only SPI and BUSY, so the radio reports init success either way.
+assert "IRQ DIO collides with a switch pin" 1 rfswitch-lr2021-irq-collision.yaml check \
+	"Lora.IRQ_DIO_NUM is DIO5, which Lora.rfswitch_table.pins also drives" \
+	"Result: 1 error, 0 warnings"
+# The same collision, reached by omitting the key: the radio default is DIO5.
+assert "default IRQ DIO collides with a switch pin" 1 rfswitch-lr2021-irq-default.yaml check \
+	"no Lora.IRQ_DIO_NUM is set" \
+	"raises its interrupt on DIO5 by default" \
+	"IRQ DIO           : DIO5 (radio default)" \
+	"Result: 1 error, 0 warnings"
+# DIO5 is the radio's own default, so a check keyed on the DIO number rather than the pins
+# list would fire on most working configs.
+assert "IRQ on DIO5 with the table elsewhere is clean" 0 rfswitch-lr2021-irq-clear.yaml check \
+	"IRQ DIO           : DIO5" \
+	"RF switch table   : set" \
+	"Result: 0 errors, 0 warnings"
+# Listing the pin is what breaks it, not driving it: setRfSwitchTable() reassigns the DIO
+# function for every pin in the list whatever the levels say.
+assert "IRQ pin listed but never driven HIGH" 1 rfswitch-lr2021-irq-all-low.yaml check \
+	"Lora.IRQ_DIO_NUM is DIO5, which Lora.rfswitch_table.pins also drives" \
+	"Result: 1 error, 0 warnings"
+# The collision check is gated on there being a table, so only the missing table is reported.
+assert "LR20x0 without a table cannot transmit" 0 rfswitch-lr2021-no-table.yaml check \
+	"Module is lr2021 but no Lora.rfswitch_table is set" \
+	"RF switch table   : not set" \
+	"Result: 0 errors, 1 warning"
+# A mode belonging to the other family is a dropped row, not a typo.
+assert "modes the LR20x0 does not have" 0 rfswitch-lr2021-wrong-mode.yaml check \
+	"Lora.rfswitch_table.MODE_TX_HP is not a mode lr2021 has" \
+	"Lora.rfswitch_table.MODE_GNSS is not a mode lr2021 has" \
+	"Result: 0 errors, 2 warnings"
+
+echo
+echo "TCXO probing (Lora.TCXO_OPTIONAL):"
+# With no explicit Vref the TCXO attempt uses the radio default rather than being skipped,
+# otherwise there would be nothing to fall back from.
+assert "probe with no Vref names the radio default" 0 tcxo-optional.yaml check \
+	"TCXO probe        : yes, 1600 mV (radio default) and XTAL" \
+	"Result: 0 errors, 0 warnings"
+# The same flag on another family, with an explicit Vref that must be the one reported.
+assert "probe on an SX126x uses the given Vref" 0 tcxo-optional-sx1262.yaml check \
+	"Module            : sx1262" \
+	"TCXO probe        : yes, 1800 mV and XTAL" \
+	"Result: 0 errors, 0 warnings"
+# On a part with no TCXO reference the key is read, stored and inert.
+assert "probe on a radio with no TCXO does nothing" 0 tcxo-optional-unsupported.yaml check \
+	"Lora.TCXO_OPTIONAL is set but Module is sx1280" \
+	"no TCXO reference to probe for" \
+	"Result: 0 errors, 1 warning"
+# A written-out false stores the same as an absent key, so the probe drives DIO3 regardless
+# of what the user asked for. Both keys behave as documented; only together are they wrong.
+assert "DIO3_TCXO_VOLTAGE off contradicts the probe" 0 tcxo-optional-contradiction.yaml check \
+	"Lora.DIO3_TCXO_VOLTAGE is off, which asks for DIO3 not to be driven" \
+	"The probe wins" \
 	"Result: 0 errors, 1 warning"
 
 echo
@@ -344,12 +427,20 @@ assert "config.d overrides are reported" 0 configd-conflict/config.yaml check \
 	"files define a 'Lora:' section" \
 	"The file loaded last wins" \
 	"Result: 0 errors,"
-# Switch tables are the one place "last wins" is false: the loader only ever writes
-# HIGH, so the effective table is the OR of every file. Proven with --output-yaml.
-assert "switch tables across files do not override" 1 rfswitch-sticky/config.yaml check \
-	"These do NOT override each other" \
-	"a HIGH from an earlier file survives a later file that sets LOW" \
-	"Enable exactly one"
+# rfswitch_table follows "last file wins" like every other Lora: key: no special-cased
+# error, just the standard cross-file-overlap info.
+assert "rfswitch tables across files: last one wins" 0 rfswitch-last-wins/config.yaml check \
+	"'Lora.rfswitch_table' is set in 2 files" \
+	"The file loaded last wins" \
+	"Result: 0 errors,"
+# The case above proves the diagnostic fires; it cannot prove the table was replaced rather than
+# merged, because which of two config.d/ files wins is up to the filesystem. This fixture puts the
+# loser in config.yaml, which is always loaded first, so the effective table is deterministic and
+# can be asserted by value. --output-yaml is the only output that reports it: the check report
+# says no more than "set".
+assert "a later rfswitch table replaces the earlier one" 0 rfswitch-replace/config.yaml yaml \
+	"pins: [DIO5, DIO6]" \
+	"MODE_RX: [LOW, LOW]"
 
 echo
 echo "--check takes precedence over --output-yaml:"

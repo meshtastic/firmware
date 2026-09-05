@@ -52,6 +52,39 @@ enum lora_module_enum {
     use_lr2021
 };
 
+// RF switch modes as the YAML names them; each family supports a different subset. The neutral
+// id lets one parser serve both, each interface translating to its own OpMode_t.
+enum RfSwitchModeId { RFSW_STBY, RFSW_RX, RFSW_TX, RFSW_TX_HP, RFSW_TX_HF, RFSW_RX_HF, RFSW_GNSS, RFSW_WIFI, RFSW_MODE_COUNT };
+
+// A mode the part does not have, for buildRfSwitchTable()'s modeMap.
+#define RFSW_MODE_UNSUPPORTED (-1)
+
+struct RfSwitchModeName {
+    const char *name;
+    RfSwitchModeId id;
+};
+
+// YAML spelling of every mode, in RfSwitchModeId order.
+extern const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT];
+
+// The switch-capable DIO numbers of each family, parallel to that interface's pin-constant
+// array: a configured DIO<n> is looked up by value here, and the index found selects the
+// constant. Not a slot mapping - Lora.rfswitch_table has 5 pin slots, the LR20x0 has 7 DIOs.
+extern const int8_t kLr11x0SwitchDios[5];
+extern const int8_t kLr20x0SwitchDios[7];
+
+// A module's switch-capable DIO numbers, nullptr if it applies no table; count gets the length.
+const int8_t *rfSwitchDiosFor(lora_module_enum module, size_t *count);
+
+// True if this module is handed the parsed table via setRfSwitchTable().
+bool moduleUsesRfSwitchTable(lora_module_enum module);
+
+// Build RadioLib's pin array and mode table from the parsed YAML, resolving each configured DIO
+// through the parallel dioNumbers/pinConsts and taking modeMap[i]'s OpMode_t for RfSwitchModeId
+// i. Returns rows written.
+size_t buildRfSwitchTable(uint32_t (&pins)[Module::RFSWITCH_MAX_PINS], Module::RfSwitchMode_t *table, size_t tableCapacity,
+                          const int8_t *dioNumbers, const uint32_t *pinConsts, size_t dioCount, const int32_t *modeMap);
+
 struct pinMapping {
     std::string config_section;
     std::string config_name;
@@ -90,8 +123,13 @@ extern struct portduino_config_struct {
 
     lora_module_enum lora_module;
     bool has_rfswitch_table = false;
-    uint32_t rfswitch_dio_pins[5] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
-    Module::RfSwitchMode_t rfswitch_table[8];
+    // The table as written: rfswitch_dio_num[i] is the DIO number for pin slot i (-1 = none),
+    // rfswitch_mode_high[m] has bit i set when slot i is HIGH in mode m.
+    int8_t rfswitch_dio_num[5] = {-1, -1, -1, -1, -1};
+    uint8_t rfswitch_mode_high[RFSW_MODE_COUNT] = {0};
+    bool rfswitch_mode_present[RFSW_MODE_COUNT] = {false};
+    // DIO carrying the radio's interrupt; -1 keeps RadioLib's default (DIO5 on an LR2021).
+    int irq_dio_num = -1;
     bool force_simradio = false;
     bool has_device_id = false;
     uint8_t device_id[16] = {0};
@@ -108,6 +146,11 @@ extern struct portduino_config_struct {
     int rf95_max_power = 20;
     bool dio2_as_rf_switch = false;
     int dio3_tcxo_voltage = 0;
+    // DIO3_TCXO_VOLTAGE was written out as false or 0 rather than left absent. Diagnostic only,
+    // and so not serialized - the key it came from round-trips as absent either way.
+    bool dio3_tcxo_voltage_disabled = false;
+    // Probe for a TCXO and fall back to the XTAL; runtime twin of the TCXO_OPTIONAL define.
+    bool tcxo_optional = false;
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
@@ -313,6 +356,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
+        if (tcxo_optional)
+            out << YAML::Key << "TCXO_OPTIONAL" << YAML::Value << tcxo_optional;
         if (lora_usb_pid != 0x5512)
             out << YAML::Key << "USB_PID" << YAML::Value << YAML::Hex << lora_usb_pid;
         if (lora_usb_vid != 0x1A86)
@@ -326,60 +371,33 @@ extern struct portduino_config_struct {
             out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
         if (spiSpeed != 2000000)
             out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
-        if (rfswitch_dio_pins[0] != RADIOLIB_NC) {
+        if (irq_dio_num >= 0)
+            out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << irq_dio_num;
+        if (has_rfswitch_table) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
+            // DIO numbers as written; a slot can be absent (sparse config), so remember its
+            // original index - row values below key off that, not position in this sequence.
             out << YAML::Key << "pins";
             out << YAML::Value << YAML::Flow << YAML::BeginSeq;
-
+            int emittedSlots[5];
+            size_t pinCount = 0;
             for (int i = 0; i < 5; i++) {
-                // set up the pin array first
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO5)
-                    out << "DIO5";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO6)
-                    out << "DIO6";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO7)
-                    out << "DIO7";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO8)
-                    out << "DIO8";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO10)
-                    out << "DIO10";
+                if (rfswitch_dio_num[i] < 0)
+                    continue;
+                out << ("DIO" + std::to_string(rfswitch_dio_num[i]));
+                emittedSlots[pinCount++] = i;
             }
             out << YAML::EndSeq;
 
-            for (int i = 0; i < 7; i++) {
-                switch (i) {
-                case 0:
-                    out << YAML::Key << "MODE_STBY";
-                    break;
-                case 1:
-                    out << YAML::Key << "MODE_RX";
-                    break;
-                case 2:
-                    out << YAML::Key << "MODE_TX";
-                    break;
-                case 3:
-                    out << YAML::Key << "MODE_TX_HP";
-                    break;
-                case 4:
-                    out << YAML::Key << "MODE_TX_HF";
-                    break;
-                case 5:
-                    out << YAML::Key << "MODE_GNSS";
-                    break;
-                case 6:
-                    out << YAML::Key << "MODE_WIFI";
-                    break;
-                }
-
+            // Only the modes the config carried, so a round trip invents no rows.
+            for (int m = 0; m < RFSW_MODE_COUNT; m++) {
+                if (!rfswitch_mode_present[m])
+                    continue;
+                out << YAML::Key << kRfSwitchModeNames[m].name;
                 out << YAML::Value << YAML::Flow << YAML::BeginSeq;
-                for (int j = 0; j < 5; j++) {
-                    if (rfswitch_table[i].values[j] == HIGH) {
-                        out << "HIGH";
-                    } else {
-                        out << "LOW";
-                    }
-                }
+                for (size_t j = 0; j < pinCount; j++)
+                    out << ((rfswitch_mode_high[m] & (1u << emittedSlots[j])) ? "HIGH" : "LOW");
                 out << YAML::EndSeq;
             }
             out << YAML::EndMap; // rfswitch_table
