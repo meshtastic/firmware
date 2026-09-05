@@ -14,6 +14,13 @@
 #define LED_POWER 25 // If defined we will blink this LED
 #endif
 
+#if defined(LED_POWER) // remove LED_POWER - they caused a LED to stuck at single state
+#undef LED_POWER
+#endif
+#define LED_HEARTBEAT 25 // use LED_HEARTBEAT instead
+#define USE_HEARTBEAT_REGARDLESS_POWER_STATE
+
+
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
