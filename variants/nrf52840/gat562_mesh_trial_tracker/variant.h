@@ -57,9 +57,35 @@ extern "C" {
  * Buttons
  */
 
-#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
-#define BUTTON_NEED_PULLUP
-#define PIN_BUTTON2 12
+// The board's only push-button (S1, right-hand edge) is the back/cancel key.
+// It used to be the user button, but with the joystick fitted that was pure
+// duplication: a user press is handled as INPUT_BROKER_RIGHT, and its long
+// press as SELECT, both of which the joystick already does. Nothing on the
+// board produced "back". Single press now cancels, a 4s hold shuts down.
+// Active-low with the internal pullup on: BUTTON_ACTIVE_LOW and
+// BUTTON_ACTIVE_PULLUP both already defaulted to true for PIN_BUTTON1, so the
+// electrical setup is unchanged from what works today. Note P0.09 doubles as
+// NFC1; it serves as GPIO here just as it does across the RAK4631 family,
+// none of which sets CONFIG_NFCT_PINS_AS_GPIOS.
+// PIN_BUTTON2/3/4 are not populated on this board.
+#define CANCEL_BUTTON_PIN 9
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP true
+
+// 5-way joystick (SW2). The pin assignment is printed on the silkscreen beside
+// the switch (28-U / 04-D / 30-L / 31-R / 26-SC) and matches the vendor's own
+// variant. Mapped through the trackball driver so all five directions reach
+// the input broker: canned messages, UI navigation, and the on-screen keyboard
+// work from the device without a phone. Switches short to ground (internal
+// pullups). TB_THRESHOLD stays undefined: that pulse accumulator is for
+// rollers, not clicky switches.
+#define HAS_TRACKBALL 1
+#define TB_UP 28
+#define TB_DOWN 4
+#define TB_LEFT 30
+#define TB_RIGHT 31
+#define TB_PRESS 26
+#define TB_DIRECTION FALLING
 
 /*
  * Analog pins
@@ -217,6 +243,13 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Board has the REG1 DC/DC inductor fitted (vendor's MeshCore uses NRF52BoardDCDC);
+// enabling the buck converter cuts active/radio current versus the LDO. REG0 is
+// left on its LDO to match the vendor: this board is supplied through VDD, not
+// VDDH, so the high-voltage stage is bypassed and NRF52_USE_DCDC_REG0 would do
+// nothing.
+#define NRF52_USE_DCDC_REG1
+
 // Testing USB detection
 #define NRF_APM
 
@@ -245,7 +278,15 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // #define RV3028_RTC (uint8_t)0b1010010
 
 // RAK18001 Buzzer in Slot C
-// #define PIN_BUZZER 21 // IO3 is PWM2
+// Buzzer and WS2812 RGB pins verified against the vendor's MeshCore variant
+// for this board (meshcore-dev/MeshCore variants/gat562_30s_mesh_kit); the
+// previously commented pin 21 here was wrong for the 30s Kit.
+#define PIN_BUZZER 33
+
+#define HAS_NEOPIXEL                         // Enable the use of neopixels
+#define NEOPIXEL_COUNT 1                     // How many neopixels are connected
+#define NEOPIXEL_DATA 29                     // gpio pin used to send data to the neopixels
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 // NEW: set this via protobuf instead!
 
 // Battery
