@@ -109,7 +109,7 @@ bool RadioLibInterface::canSendImmediately()
             LOG_ERROR("Hardware Failure! busyTx >60s");
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
             // reboot in 5 seconds when this condition occurs.
-            rebootAtMsec = lastTxStart + 65000;
+            rebootAtMsec = Time::skipZero(lastTxStart + 65000);
         }
         if (busyRx) {
             LOG_WARN("Can not send yet, busyRx");
@@ -125,7 +125,7 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
     // Handle false detections
     if (detected) {
         if (!activeReceiveStart) {
-            activeReceiveStart = millis();
+            activeReceiveStart = Time::skipZero(Time::getMillis());
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
             if (!(irq & syncWordHeaderValidFlag)) {
                 // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
@@ -269,11 +269,10 @@ void RadioLibInterface::updateNoiseFloor()
         return;
     }
 
-    uint32_t now = millis();
-    if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
+    if (Throttle::isWithinTimespanMs(lastNoiseFloorUpdate, NOISE_FLOOR_UPDATE_INTERVAL_MS)) {
         return;
     }
-    lastNoiseFloorUpdate = now;
+    lastNoiseFloorUpdate = Time::getMillis();
 
     int16_t rssi = getCurrentRSSI();
     if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
@@ -434,7 +433,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 meshtastic_MeshPacket *txp = txQueue.getFront();
                 assert(txp);
                 const uint32_t now = Time::getMillis();
-                // Not `long remaining = tx_after - millis()`: that uint32_t subtraction widens to
+                // Not `long remaining = tx_after - Time::getMillis()`: that uint32_t subtraction widens to
                 // ~4.29e9 where long is 64-bit (portduino), rescheduling a due packet ~49.7 days out.
                 if (txp->tx_after && !Throttle::deadlinePassedAt(now, txp->tx_after)) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
@@ -488,7 +487,7 @@ void RadioLibInterface::setTransmitDelay()
 
     if (p->tx_after) {
         unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
-        unsigned long now = millis();
+        unsigned long now = Time::getMillis();
         p->tx_after = min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr));
         notifyLater(p->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
@@ -530,7 +529,7 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     // Look for non-late packets only, so we don't do this twice!
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
-        p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
+        p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeightedWorst(p->rx_snr));
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
             LOG_TRACE("Move queued packet to late rebroadcast window %ums from now", (uint32_t)(p->tx_after - millis()));
@@ -750,7 +749,7 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
     // One attempt per window: the transient resets this recovers from need a single re-init, and a
     // chip that stays dead must not stall the TX/RX paths with a begin() attempt on every call
     if (lastChipRecoveryMs && Throttle::isWithinTimespanMs(lastChipRecoveryMs, 30 * 1000UL)) {
-        LOG_DEBUG("Radio recovery suppressed, %us since the last attempt", (millis() - lastChipRecoveryMs) / 1000);
+        LOG_DEBUG("Radio recovery suppressed, %us since the last attempt", (Time::getMillis() - lastChipRecoveryMs) / 1000);
         return false;
     }
 
@@ -761,11 +760,11 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
         // Attempts are a throttle window apart, so this is minutes of a provably deaf chip. begin() alone
         // clearly isn't reviving it; reboot to re-run init(), which redoes the power-on sequence it skips.
         LOG_ERROR("Radio still deaf after %u re-inits, rebooting", chipRecoveryFailures);
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
     }
     chipRecoveryFailures++;
 
-    lastChipRecoveryMs = millis();
+    lastChipRecoveryMs = Time::skipZero(Time::getMillis());
     RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
     LOG_ERROR("Radio chip state lost mid-operation, re-init");
     bool recovered = recoverChipStateLoss();
@@ -830,7 +829,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits
             enableInterrupt(isrTxLevel0);
-            lastTxStart = millis();
+            lastTxStart = Time::getMillis();
             printPacket("Started Tx", txp);
 #ifdef LED_LORA
             digitalWrite(LED_LORA, LED_STATE_ON);

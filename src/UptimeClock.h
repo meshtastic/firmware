@@ -44,6 +44,20 @@ void setMonotonicPublishHookForTests(MonotonicPublishHook hook);
 /// which is wrap-correct with no carry state at all.
 uint32_t getMillis();
 
+/// Step a millis value past 0. Stored stamps and deadlines conventionally use 0 for "unset", so the
+/// one tick per ~49.7-day wrap that lands on 0 would read as never-set; 1 is a 1 ms error instead.
+constexpr uint32_t skipZero(uint32_t ms)
+{
+    return ms ? ms : 1;
+}
+
+/// Start a countdown to delayMs from now, never 0. The sum is what has to dodge 0 - a non-zero
+/// read plus a delay lands there once per wrap - so this is not skipZero(getMillis()) + delayMs.
+inline uint32_t timerEndsAtMillis(uint32_t delayMs)
+{
+    return skipZero(getMillis() + delayMs);
+}
+
 /// Milliseconds since boot as a monotonic 64-bit count.
 ///
 /// A pure read: it derives its answer from a complete snapshot published by serviceMonotonic()
