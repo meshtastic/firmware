@@ -11,6 +11,9 @@
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
+// Set once Bluefruit is up; NRF52BLEMesh polls it before touching the SoftDevice (NRF52Bluetooth.h).
+bool nrf52BluetoothReady = false;
+
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
