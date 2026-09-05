@@ -150,7 +150,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     bool authorizedLicensedSigner = false;
     // Could tighten responses further by tracking the last public key queried.
     if (licensedRemote) {
-        const bool directedAdmin = mp.to == nodeDB->getNodeNum() && !isBroadcast(mp.to) &&
+        const bool directedAdmin = nodeDB && mp.to == nodeDB->getNodeNum() && !isBroadcast(mp.to) &&
                                    mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP && !mp.pki_encrypted;
         if (!directedAdmin || !mp.xeddsa_signed || mp.public_key.size != 32) {
             LOG_INFO("Ignore licensed admin payload without a directed Router-verified signature");

@@ -226,6 +226,64 @@ void test_licensed_signed_setter_with_session_is_accepted(void)
     TEST_ASSERT_EQUAL_STRING("LicensedAdmin", owner.long_name);
 }
 
+void test_licensed_signed_setter_unauthorized_signer_is_rejected(void)
+{
+    owner.is_licensed = true;
+    meshtastic_AdminMessage sessionResponse = meshtastic_AdminMessage_init_zero;
+    admin->setPassKey(&sessionResponse);
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp =
+        makeLicensedRemoteSetOwner("Attacker", sessionResponse.session_passkey.bytes, sessionResponse.session_passkey.size, m);
+    // Alter public key to stranger key not in config.security.admin_key
+    mp.public_key.bytes[0] ^= 0xFF;
+
+    admin->handleReceivedProtobuf(mp, &m);
+    TEST_ASSERT_NOT_NULL(admin->reply());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, admin->reply()->decoded.routing.error_reason);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
+}
+
+void test_licensed_signed_setter_broadcast_is_rejected(void)
+{
+    owner.is_licensed = true;
+    meshtastic_AdminMessage sessionResponse = meshtastic_AdminMessage_init_zero;
+    admin->setPassKey(&sessionResponse);
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeLicensedRemoteSetOwner("BroadcastAttack", sessionResponse.session_passkey.bytes,
+                                                          sessionResponse.session_passkey.size, m);
+    mp.to = NODENUM_BROADCAST;
+
+    admin->handleReceivedProtobuf(mp, &m);
+    TEST_ASSERT_NOT_NULL(admin->reply());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, admin->reply()->decoded.routing.error_reason);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
+}
+
+void test_licensed_setter_unsigned_is_rejected(void)
+{
+    owner.is_licensed = true;
+    meshtastic_AdminMessage sessionResponse = meshtastic_AdminMessage_init_zero;
+    admin->setPassKey(&sessionResponse);
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeLicensedRemoteSetOwner("UnsignedAttack", sessionResponse.session_passkey.bytes,
+                                                          sessionResponse.session_passkey.size, m);
+    mp.xeddsa_signed = false;
+
+    admin->handleReceivedProtobuf(mp, &m);
+    TEST_ASSERT_NOT_NULL(admin->reply());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, admin->reply()->decoded.routing.error_reason);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
+}
+
 // The node's session key is minted only by setPassKey (which runs when it answers an admin GET),
 // so before any GET the expected key is all-zero and any presented key mismatches.
 void test_expected_session_key_is_zero_before_any_get(void)
@@ -693,6 +751,9 @@ void setup()
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_remote_setter_without_session_is_rejected);
     RUN_TEST(test_licensed_signed_setter_with_session_is_accepted);
+    RUN_TEST(test_licensed_signed_setter_unauthorized_signer_is_rejected);
+    RUN_TEST(test_licensed_signed_setter_broadcast_is_rejected);
+    RUN_TEST(test_licensed_setter_unsigned_is_rejected);
     RUN_TEST(test_expected_session_key_is_zero_before_any_get);
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
