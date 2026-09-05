@@ -14,6 +14,7 @@
 #include <unity.h>
 
 #include "mesh/Channels.h"
+#include "mesh/Default.h"
 #include "mesh/NodeDB.h"
 #include <cstring>
 #include <initializer_list>
@@ -180,6 +181,28 @@ void test_optIn_telemetryAllFlagsOff()
     TEST_ASSERT_TRUE(mc.mqtt.map_reporting_enabled);
 }
 
+void test_antispam_unconfiguredZeroesThenDefaults(void)
+{
+    meshtastic_ModuleConfig_TrafficManagementConfig cfg = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+    cfg.position_min_interval_secs = 42;
+    TEST_ASSERT_TRUE(antispamKnobsUnconfigured(cfg));
+    installAntispamDefaults(cfg);
+    TEST_ASSERT_FALSE(antispamKnobsUnconfigured(cfg));
+    TEST_ASSERT_EQUAL_UINT32(42, cfg.position_min_interval_secs);
+    TEST_ASSERT_EQUAL_UINT32(default_traffic_mgmt_probation_window_secs, cfg.probation_window_secs);
+    TEST_ASSERT_EQUAL_UINT32(default_traffic_mgmt_no_relay_min_claimers, cfg.no_relay_min_claimers);
+    TEST_ASSERT_EQUAL_UINT32(0, cfg.relay_budget_max_packets);
+    TEST_ASSERT_EQUAL_UINT32(0, cfg.budget_gossip_enabled);
+    TEST_ASSERT_EQUAL_UINT32(0, cfg.group_budget_enabled);
+}
+
+void test_antispam_alreadyConfiguredLeftAloneByPredicate(void)
+{
+    meshtastic_ModuleConfig_TrafficManagementConfig cfg = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+    cfg.probation_window_secs = 12;
+    TEST_ASSERT_FALSE(antispamKnobsUnconfigured(cfg));
+}
+
 } // namespace
 
 void setUp(void) {}
@@ -205,6 +228,8 @@ void setup()
     RUN_TEST(test_optIn_secondaryUnderPublicZeroed);
     RUN_TEST(test_optIn_setsHasModuleSettingsOnZeroed);
     RUN_TEST(test_optIn_telemetryAllFlagsOff);
+    RUN_TEST(test_antispam_unconfiguredZeroesThenDefaults);
+    RUN_TEST(test_antispam_alreadyConfiguredLeftAloneByPredicate);
     exit(UNITY_END());
 }
 

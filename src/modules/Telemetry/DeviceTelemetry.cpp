@@ -16,6 +16,9 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <meshUtils.h>
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 
 #define MAGIC_USB_BATTERY_LEVEL 101
 static constexpr uint16_t TX_HISTORY_KEY_DEVICE_TELEMETRY = 0x8001;
@@ -58,6 +61,14 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                  t->variant.device_metrics.battery_level, t->variant.device_metrics.voltage);
 #endif
         nodeDB->updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
+#if HAS_TRAFFIC_MANAGEMENT
+        // Top-sender rate budget: ingest the neighbor's top-sender rate observations
+        // as budget samples (median-of-neighbors feeds the local rate budget).
+        // No-op when budget gossip is off.
+        if (trafficManagementModule)
+            trafficManagementModule->ingestNeighborTopSenders(getFrom(&mp), t->variant.device_metrics.top_senders,
+                                                              t->variant.device_metrics.top_senders_count);
+#endif
     }
     return false; // Let others look at this message also if they want
 }
@@ -116,6 +127,22 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
         t.variant.device_metrics.voltage = batteryMv / 1000.0f;
     }
     t.variant.device_metrics.uptime_seconds = Time::getUptimeSecs();
+#if HAS_TRAFFIC_MANAGEMENT
+    // Top-sender rate budget: advertise our top-3 senders (observed rate + RSSI
+    // class) on the periodic device-telemetry broadcast so neighbors can
+    // compute a median budget for each sender.
+    if (trafficManagementModule) {
+        meshtastic_TopSender top[TrafficManagementModule::kTopSendersCount];
+        trafficManagementModule->snapshotTopSenders(top);
+        t.variant.device_metrics.top_senders_count = 0;
+        for (uint16_t i = 0; i < TrafficManagementModule::kTopSendersCount; i++) {
+            if (top[i].node == 0)
+                continue;
+            t.variant.device_metrics.top_senders[t.variant.device_metrics.top_senders_count] = top[i];
+            t.variant.device_metrics.top_senders_count++;
+        }
+    }
+#endif
     return t;
 }
 

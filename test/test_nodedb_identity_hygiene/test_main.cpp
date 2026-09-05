@@ -95,6 +95,27 @@ meshtastic_SharedContact makeContact(NodeNum num, const char *longName, const ch
     return c;
 }
 
+// A fixed 32-byte key and the node number it derives (crc32) - builds a
+// key-anchored identity without depending on the real curve.
+static const uint8_t KEY_DERIVED_KEY[32] = {0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA,
+                                            0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5,
+                                            0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF};
+static NodeNum keyDerivedNum()
+{
+    return (NodeNum)crc32Buffer(KEY_DERIVED_KEY, sizeof(KEY_DERIVED_KEY));
+}
+
+// A User carrying the key-anchored identity: its key derives keyDerivedNum().
+static meshtastic_User makeDerivedKeyUser(const char *longName, const char *shortName)
+{
+    meshtastic_User u = meshtastic_User_init_zero;
+    strncpy(u.long_name, longName, sizeof(u.long_name) - 1);
+    strncpy(u.short_name, shortName, sizeof(u.short_name) - 1);
+    u.public_key.size = 32;
+    memcpy(u.public_key.bytes, KEY_DERIVED_KEY, 32);
+    return u;
+}
+
 void assertStoredKeyEquals(NodeNum num, uint8_t seed)
 {
     const meshtastic_NodeInfoLite *info = db->getMeshNode(num);
@@ -397,6 +418,98 @@ static void test_updateuser_warm_signer_refusal_does_not_evict(void)
 
 #endif // !(MESHTASTIC_EXCLUDE_PKI)
 
+// --- identity format (nodenum-from-key) ---
+
+// Dual-read discriminator: a key-anchored key derives exactly its own number.
+// Old records fail the predicate and stay in the legacy format.
+static void test_identity_predicate_keyDerivesNumber(void)
+{
+    const NodeNum num = keyDerivedNum();
+    TEST_ASSERT_TRUE(identityKeyDerivesNodeNum(KEY_DERIVED_KEY, num));
+    TEST_ASSERT_FALSE(identityKeyDerivesNodeNum(KEY_DERIVED_KEY, num + 1));
+    TEST_ASSERT_FALSE(identityKeyDerivesNodeNum(nullptr, num));
+
+    uint8_t legacy[32];
+    memset(legacy, 0x42, sizeof(legacy)); // arbitrary: does not derive num
+    TEST_ASSERT_FALSE(identityKeyDerivesNodeNum(legacy, num));
+
+    // A stored record only counts as key-derived when the predicate holds for
+    // ITS OWN number - the bit alone is not trusted (it is recomputed).
+    meshtastic_NodeInfoLite stored = meshtastic_NodeInfoLite_init_zero;
+    stored.num = num;
+    memcpy(stored.public_key.bytes, legacy, 32);
+    stored.public_key.size = 32;
+    nodeInfoLiteSetBit(&stored, NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_MASK, true); // stale bit
+    TEST_ASSERT_FALSE(storedIdentityIsKeyDerived(&stored));
+    memcpy(stored.public_key.bytes, KEY_DERIVED_KEY, 32);
+    TEST_ASSERT_TRUE(storedIdentityIsKeyDerived(&stored));
+}
+
+// Dual-read: once the stored key derives the node number, a NodeInfo with a
+// different non-deriving key is refused wholesale (key, name, marker).
+static void test_identity_dualread_keyDerivedRefusesNonDeriving(void)
+{
+    const NodeNum num = keyDerivedNum();
+
+    // Seed the record in the key-anchored form (first commit: no stored key,
+    // so the transition admits it and stamps the marker).
+    meshtastic_User seed = makeDerivedKeyUser("Alice", "AL");
+    TEST_ASSERT_TRUE(db->updateUser(num, seed));
+    TEST_ASSERT_TRUE(nodeInfoLiteIsKeyDerivedIdentity(db->getMeshNode(num)));
+
+    meshtastic_User u = makeUser("Imposter", "IM", /*keySeed=*/0x42); // non-deriving
+    TEST_ASSERT_FALSE(db->updateUser(num, u));
+
+    TEST_ASSERT_TRUE(identityKeyDerivesNodeNum(db->getMeshNode(num)->public_key.bytes, num)); // key intact
+    TEST_ASSERT_EQUAL_STRING("Alice", db->getMeshNode(num)->long_name);                       // refused wholesale
+    TEST_ASSERT_TRUE(nodeInfoLiteIsKeyDerivedIdentity(db->getMeshNode(num)));                 // marker intact
+}
+
+// Dual-read transition: a proven commit of a deriving key replaces a legacy
+// stored key; a later non-deriving key is then refused.
+static void test_identity_dualread_transitionLegacyToKeyDerived(void)
+{
+    const NodeNum num = keyDerivedNum();
+    db->push(num, 1000, /*keySeed=*/0x42); // legacy: 0x42 pattern does not derive num
+    TEST_ASSERT_FALSE(nodeInfoLiteIsKeyDerivedIdentity(db->getMeshNode(num)));
+
+    // The migration writer: a proven commit of the key that derives the number.
+    db->commitRemoteKey(num, KEY_DERIVED_KEY, NodeDB::KeyCommitTrust::ManuallyVerified);
+
+    const meshtastic_NodeInfoLite *info = db->getMeshNode(num);
+    TEST_ASSERT_TRUE(identityKeyDerivesNodeNum(info->public_key.bytes, num)); // format transitioned
+    TEST_ASSERT_TRUE(nodeInfoLiteIsKeyDerivedIdentity(info));                 // marker stamped
+
+    // The guard now binds: a non-deriving key cannot replace the anchored one.
+    meshtastic_User u = makeUser("Imposter", "IM", /*keySeed=*/0x42);
+    TEST_ASSERT_FALSE(db->updateUser(num, u));
+    TEST_ASSERT_TRUE(identityKeyDerivesNodeNum(db->getMeshNode(num)->public_key.bytes, num)); // intact
+}
+
+// Dual-read: a keyless update is never a key replacement, so the format guard
+// does not apply; the unauthenticated key pin still decides keyless-vs-stored.
+static void test_identity_dualread_keylessUpdateAllowed(void)
+{
+    const NodeNum num = keyDerivedNum();
+
+    // Keyless first contact: accepted, no marker (no key, nothing derives).
+    meshtastic_User keyless = makeUser("Alice", "AL"); // no key
+    TEST_ASSERT_TRUE(db->updateUser(num, keyless));
+    TEST_ASSERT_FALSE(nodeInfoLiteIsKeyDerivedIdentity(db->getMeshNode(num)));
+
+    // Guard policy against a key-anchored record with a keyless incoming:
+    // permissive - a missing key is not a TOFU key claim.
+    meshtastic_NodeInfoLite anchored = meshtastic_NodeInfoLite_init_zero;
+    anchored.num = num;
+    memcpy(anchored.public_key.bytes, KEY_DERIVED_KEY, 32);
+    anchored.public_key.size = 32;
+    meshtastic_User stillKeyless = makeUser("Bob", "BO");
+    TEST_ASSERT_TRUE(incomingKeyMayBindIdentity(&anchored, stillKeyless, num));
+    // ...while a different 32-byte (non-deriving) key is refused by the same policy.
+    meshtastic_User foreignKey = makeUser("Imposter", "IM", /*keySeed=*/0x42);
+    TEST_ASSERT_FALSE(incomingKeyMayBindIdentity(&anchored, foreignKey, num));
+}
+
 // --- persistence ---
 
 // The erasure guard's outcome must survive the disk round trip: after a keyless
@@ -503,6 +616,12 @@ IH_TEST_ENTRY void setup()
     RUN_TEST(test_updateuser_warm_signer_refusal_does_not_evict);
 #endif
 #endif
+
+    printf("\n=== identity format (nodenum-from-key) ===\n");
+    RUN_TEST(test_identity_predicate_keyDerivesNumber);
+    RUN_TEST(test_identity_dualread_keyDerivedRefusesNonDeriving);
+    RUN_TEST(test_identity_dualread_transitionLegacyToKeyDerived);
+    RUN_TEST(test_identity_dualread_keylessUpdateAllowed);
 
     printf("\n=== persistence ===\n");
     RUN_TEST(test_contact_key_guard_survives_reboot);

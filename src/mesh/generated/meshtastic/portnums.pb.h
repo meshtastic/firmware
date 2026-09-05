@@ -171,6 +171,9 @@ typedef enum _meshtastic_PortNum {
 
  ENCODING: binary (ota-common transport frames) */
     meshtastic_PortNum_LORA_OTA_APP = 79,
+    /* IdAttestation: probation promotion (KNOWN_SINCE) or stop-relay (NO_RELAY).
+ ENCODING: nanopb (meshtastic_IdAttestation) */
+    meshtastic_PortNum_ID_ATTESTATION_APP = 80,
     /* GroupAlarm integration
  Used for transporting GroupAlarm-related messages between Meshtastic nodes
  and companion applications/services. */

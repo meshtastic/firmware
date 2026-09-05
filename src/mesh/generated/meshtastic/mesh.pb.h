@@ -575,6 +575,14 @@ typedef enum _meshtastic_RemoteShell_OpCode {
     meshtastic_RemoteShell_OpCode_PONG = 68
 } meshtastic_RemoteShell_OpCode;
 
+typedef enum _meshtastic_IdAttestation_Kind {
+    meshtastic_IdAttestation_Kind_UNSPECIFIED = 0,
+    /* Shorten `subject`'s probation. The attester is the packet sender. */
+    meshtastic_IdAttestation_Kind_KNOWN_SINCE = 1,
+    /* Stop relaying `subject` this window. Recipients still deliver locally. */
+    meshtastic_IdAttestation_Kind_NO_RELAY = 2
+} meshtastic_IdAttestation_Kind;
+
 /* The priority of this message for sending.
  Higher priorities are sent first (when managing the transmit queue).
  This field is never sent over the air, it is only used internally inside of a local device node.
@@ -1029,6 +1037,20 @@ typedef struct _meshtastic_Waypoint {
 typedef struct _meshtastic_StatusMessage {
     char status[80];
 } meshtastic_StatusMessage;
+
+/* Neighborhood gossip on ID_ATTESTATION_APP (port 80). One record per packet.
+ Payload is unsigned; receivers gate on locally observed attester age, not
+ this message's self-reported fields. Unknown portnums are opaque-relayed
+ by older firmware, so hop_limit stays 1. */
+typedef struct _meshtastic_IdAttestation {
+    meshtastic_IdAttestation_Kind kind;
+    /* Node to promote or stop relaying. 0 is ignored. */
+    uint32_t subject;
+    /* Optional wall-clock last-heard of `subject` (unix seconds). 0 = unset. Unused by receivers. */
+    uint32_t known_since_secs;
+    /* Optional attester uptime in seconds. 0 = unset. Receivers use local observation, not this claim. */
+    uint32_t attester_tenure_secs;
+} meshtastic_IdAttestation;
 
 typedef PB_BYTES_ARRAY_T(435) meshtastic_MqttClientProxyMessage_data_t;
 /* This message will be proxied over the PhoneAPI for the client to deliver to the MQTT server */
@@ -1661,6 +1683,10 @@ extern "C" {
 #define _meshtastic_RemoteShell_OpCode_MAX meshtastic_RemoteShell_OpCode_PONG
 #define _meshtastic_RemoteShell_OpCode_ARRAYSIZE ((meshtastic_RemoteShell_OpCode)(meshtastic_RemoteShell_OpCode_PONG+1))
 
+#define _meshtastic_IdAttestation_Kind_MIN meshtastic_IdAttestation_Kind_UNSPECIFIED
+#define _meshtastic_IdAttestation_Kind_MAX meshtastic_IdAttestation_Kind_NO_RELAY
+#define _meshtastic_IdAttestation_Kind_ARRAYSIZE ((meshtastic_IdAttestation_Kind)(meshtastic_IdAttestation_Kind_NO_RELAY+1))
+
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX
 #define _meshtastic_MeshPacket_Priority_ARRAYSIZE ((meshtastic_MeshPacket_Priority)(meshtastic_MeshPacket_Priority_MAX+1))
@@ -1699,6 +1725,8 @@ extern "C" {
 
 
 
+
+#define meshtastic_IdAttestation_kind_ENUMTYPE meshtastic_IdAttestation_Kind
 
 
 #define meshtastic_MeshPacket_priority_ENUMTYPE meshtastic_MeshPacket_Priority
@@ -1754,6 +1782,7 @@ extern "C" {
 #define meshtastic_BoundingBox_init_default      {0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
+#define meshtastic_IdAttestation_init_default    {_meshtastic_IdAttestation_Kind_MIN, 0, 0, 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
@@ -1793,6 +1822,7 @@ extern "C" {
 #define meshtastic_BoundingBox_init_zero         {0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
+#define meshtastic_IdAttestation_init_zero       {_meshtastic_IdAttestation_Kind_MIN, 0, 0, 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
@@ -1913,6 +1943,10 @@ extern "C" {
 #define meshtastic_Waypoint_notify_on_exit_tag   12
 #define meshtastic_Waypoint_notify_favorites_only_tag 13
 #define meshtastic_StatusMessage_status_tag      1
+#define meshtastic_IdAttestation_kind_tag        1
+#define meshtastic_IdAttestation_subject_tag     2
+#define meshtastic_IdAttestation_known_since_secs_tag 3
+#define meshtastic_IdAttestation_attester_tenure_secs_tag 4
 #define meshtastic_MqttClientProxyMessage_topic_tag 1
 #define meshtastic_MqttClientProxyMessage_data_tag 2
 #define meshtastic_MqttClientProxyMessage_text_tag 3
@@ -2198,6 +2232,14 @@ X(a, STATIC,   SINGULAR, BOOL,     notify_favorites_only,  13)
 X(a, STATIC,   SINGULAR, STRING,   status,            1)
 #define meshtastic_StatusMessage_CALLBACK NULL
 #define meshtastic_StatusMessage_DEFAULT NULL
+
+#define meshtastic_IdAttestation_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    kind,              1) \
+X(a, STATIC,   SINGULAR, UINT32,   subject,           2) \
+X(a, STATIC,   SINGULAR, UINT32,   known_since_secs,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   attester_tenure_secs,   4)
+#define meshtastic_IdAttestation_CALLBACK NULL
+#define meshtastic_IdAttestation_DEFAULT NULL
 
 #define meshtastic_MqttClientProxyMessage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   topic,             1) \
@@ -2505,6 +2547,7 @@ extern const pb_msgdesc_t meshtastic_RemoteShell_msg;
 extern const pb_msgdesc_t meshtastic_BoundingBox_msg;
 extern const pb_msgdesc_t meshtastic_Waypoint_msg;
 extern const pb_msgdesc_t meshtastic_StatusMessage_msg;
+extern const pb_msgdesc_t meshtastic_IdAttestation_msg;
 extern const pb_msgdesc_t meshtastic_MqttClientProxyMessage_msg;
 extern const pb_msgdesc_t meshtastic_MeshPacket_msg;
 extern const pb_msgdesc_t meshtastic_NodeInfo_msg;
@@ -2546,6 +2589,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_BoundingBox_fields &meshtastic_BoundingBox_msg
 #define meshtastic_Waypoint_fields &meshtastic_Waypoint_msg
 #define meshtastic_StatusMessage_fields &meshtastic_StatusMessage_msg
+#define meshtastic_IdAttestation_fields &meshtastic_IdAttestation_msg
 #define meshtastic_MqttClientProxyMessage_fields &meshtastic_MqttClientProxyMessage_msg
 #define meshtastic_MeshPacket_fields &meshtastic_MeshPacket_msg
 #define meshtastic_NodeInfo_fields &meshtastic_NodeInfo_msg
@@ -2589,6 +2633,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                6
+#define meshtastic_IdAttestation_size            20
 #define meshtastic_KeyVerificationFinal_size     65
 #define meshtastic_KeyVerificationNumberInform_size 58
 #define meshtastic_KeyVerificationNumberRequest_size 52
@@ -2604,7 +2649,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 327
+#define meshtastic_NodeInfo_size                 387
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23

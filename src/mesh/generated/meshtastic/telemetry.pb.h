@@ -131,6 +131,23 @@ typedef enum _meshtastic_TelemetrySensorType {
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
+/* One of the top senders by observed packet rate this budget window.
+ Carried in DeviceMetrics.top_senders (max 3, descending). */
+typedef struct _meshtastic_TopSender {
+    /* The sender node number. 0 means no entry (unused slot); consumers
+ ignore it. */
+    uint32_t node;
+    /* Packets observed from this node in the local budget window
+ (traffic_management rate_limit_window_secs). Saturates at 255. */
+    uint32_t packets_this_window;
+    /* RSSI class of the strongest signal seen from this node in the window,
+ quantized to 4 classes so a noisy RF front end never flips the class
+ for a stable transmitter: 0 = < -110 dBm (far), 1 = -110..-100,
+ 2 = -100..-90, 3 = >= -90 (near). 255 means "no usable RSSI reading
+ this window"; consumers treat it as "unknown" and never rank it. */
+    uint32_t rssi_class;
+} meshtastic_TopSender;
+
 /* Key native device metrics such as battery level */
 typedef struct _meshtastic_DeviceMetrics {
     /* 0-100 (>100 means powered) */
@@ -148,6 +165,10 @@ typedef struct _meshtastic_DeviceMetrics {
     /* How long the device has been running since the last reboot (in seconds) */
     bool has_uptime_seconds;
     uint32_t uptime_seconds;
+    /* Top-3 senders by observed packet rate this window (empty when unused).
+ Neighbors may raise (not lower) their local rate ceiling to the median. */
+    pb_size_t top_senders_count;
+    meshtastic_TopSender top_senders[3];
 } meshtastic_DeviceMetrics;
 
 /* Weather station or other environmental metrics */
@@ -510,6 +531,16 @@ typedef struct _meshtastic_TrafficManagementStats {
     uint32_t hop_exhausted_packets;
     /* Number of times router hop preservation was applied */
     uint32_t router_hops_preserved;
+    /* Packets dropped because the sender is in probation and over the half-budget. */
+    uint32_t probation_budget_drops;
+    /* Relays skipped because the sender's relay budget or a NO_RELAY bit was in force. */
+    uint32_t no_relay_skips;
+    /* Probation windows shortened by an accepted KNOWN_SINCE. */
+    uint32_t attestation_promotions;
+    /* NO_RELAY gossip packets this node emitted. */
+    uint32_t no_relay_gossips_sent;
+    /* Relays whose hop_limit was clamped by the probation or congestion cap. */
+    uint32_t relay_hop_caps_applied;
 } meshtastic_TrafficManagementStats;
 
 /* Health telemetry metrics */
@@ -653,13 +684,15 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
-#define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_TopSender_init_default        {0, 0, 0}
+#define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0, 0, {meshtastic_TopSender_init_default, meshtastic_TopSender_init_default, meshtastic_TopSender_init_default}}
 #define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_TrafficManagementStats_init_default {0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_TrafficManagementStats_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_default    {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
@@ -667,12 +700,13 @@ extern "C" {
 #define meshtastic_AS3935Config_init_default     {0}
 #define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SEN6XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
-#define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_TopSender_init_zero           {0, 0, 0}
+#define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0, 0, {meshtastic_TopSender_init_zero, meshtastic_TopSender_init_zero, meshtastic_TopSender_init_zero}}
 #define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_TrafficManagementStats_init_zero {0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_TrafficManagementStats_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_zero       {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
@@ -682,11 +716,15 @@ extern "C" {
 #define meshtastic_SEN6XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define meshtastic_TopSender_node_tag            1
+#define meshtastic_TopSender_packets_this_window_tag 2
+#define meshtastic_TopSender_rssi_class_tag      3
 #define meshtastic_DeviceMetrics_battery_level_tag 1
 #define meshtastic_DeviceMetrics_voltage_tag     2
 #define meshtastic_DeviceMetrics_channel_utilization_tag 3
 #define meshtastic_DeviceMetrics_air_util_tx_tag 4
 #define meshtastic_DeviceMetrics_uptime_seconds_tag 5
+#define meshtastic_DeviceMetrics_top_senders_tag 6
 #define meshtastic_EnvironmentMetrics_temperature_tag 1
 #define meshtastic_EnvironmentMetrics_relative_humidity_tag 2
 #define meshtastic_EnvironmentMetrics_barometric_pressure_tag 3
@@ -806,6 +844,11 @@ extern "C" {
 #define meshtastic_TrafficManagementStats_unknown_packet_drops_tag 5
 #define meshtastic_TrafficManagementStats_hop_exhausted_packets_tag 6
 #define meshtastic_TrafficManagementStats_router_hops_preserved_tag 7
+#define meshtastic_TrafficManagementStats_probation_budget_drops_tag 8
+#define meshtastic_TrafficManagementStats_no_relay_skips_tag 9
+#define meshtastic_TrafficManagementStats_attestation_promotions_tag 10
+#define meshtastic_TrafficManagementStats_no_relay_gossips_sent_tag 11
+#define meshtastic_TrafficManagementStats_relay_hop_caps_applied_tag 12
 #define meshtastic_HealthMetrics_heart_bpm_tag   1
 #define meshtastic_HealthMetrics_spO2_tag        2
 #define meshtastic_HealthMetrics_temperature_tag 3
@@ -844,14 +887,23 @@ extern "C" {
 #define meshtastic_SEN6XState_voc_state_array_tag 6
 
 /* Struct field encoding specification for nanopb */
+#define meshtastic_TopSender_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   node,              1) \
+X(a, STATIC,   SINGULAR, UINT32,   packets_this_window,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   rssi_class,        3)
+#define meshtastic_TopSender_CALLBACK NULL
+#define meshtastic_TopSender_DEFAULT NULL
+
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, UINT32,   battery_level,     1) \
 X(a, STATIC,   OPTIONAL, FLOAT,    voltage,           2) \
 X(a, STATIC,   OPTIONAL, FLOAT,    channel_utilization,   3) \
 X(a, STATIC,   OPTIONAL, FLOAT,    air_util_tx,       4) \
-X(a, STATIC,   OPTIONAL, UINT32,   uptime_seconds,    5)
+X(a, STATIC,   OPTIONAL, UINT32,   uptime_seconds,    5) \
+X(a, STATIC,   REPEATED, MESSAGE,  top_senders,       6)
 #define meshtastic_DeviceMetrics_CALLBACK NULL
 #define meshtastic_DeviceMetrics_DEFAULT NULL
+#define meshtastic_DeviceMetrics_top_senders_MSGTYPE meshtastic_TopSender
 
 #define meshtastic_EnvironmentMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, FLOAT,    temperature,       1) \
@@ -988,7 +1040,12 @@ X(a, STATIC,   SINGULAR, UINT32,   nodeinfo_cache_hits,   3) \
 X(a, STATIC,   SINGULAR, UINT32,   rate_limit_drops,   4) \
 X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_drops,   5) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_exhausted_packets,   6) \
-X(a, STATIC,   SINGULAR, UINT32,   router_hops_preserved,   7)
+X(a, STATIC,   SINGULAR, UINT32,   router_hops_preserved,   7) \
+X(a, STATIC,   SINGULAR, UINT32,   probation_budget_drops,   8) \
+X(a, STATIC,   SINGULAR, UINT32,   no_relay_skips,    9) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_promotions,  10) \
+X(a, STATIC,   SINGULAR, UINT32,   no_relay_gossips_sent,  11) \
+X(a, STATIC,   SINGULAR, UINT32,   relay_hop_caps_applied,  12)
 #define meshtastic_TrafficManagementStats_CALLBACK NULL
 #define meshtastic_TrafficManagementStats_DEFAULT NULL
 
@@ -1064,6 +1121,7 @@ X(a, STATIC,   OPTIONAL, FIXED64,  voc_state_array,   6)
 #define meshtastic_SEN6XState_CALLBACK NULL
 #define meshtastic_SEN6XState_DEFAULT NULL
 
+extern const pb_msgdesc_t meshtastic_TopSender_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
@@ -1079,6 +1137,7 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
+#define meshtastic_TopSender_fields &meshtastic_TopSender_msg
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
 #define meshtastic_EnvironmentMetrics_fields &meshtastic_EnvironmentMetrics_msg
 #define meshtastic_PowerMetrics_fields &meshtastic_PowerMetrics_msg
@@ -1097,7 +1156,7 @@ extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AS3935Config_size             6
 #define meshtastic_AirQualityMetrics_size        157
-#define meshtastic_DeviceMetrics_size            27
+#define meshtastic_DeviceMetrics_size            87
 #define meshtastic_EnvironmentMetrics_size       312
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_HostMetrics_size              264
@@ -1107,7 +1166,8 @@ extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 #define meshtastic_SEN5XState_size               27
 #define meshtastic_SEN6XState_size               27
 #define meshtastic_Telemetry_size                320
-#define meshtastic_TrafficManagementStats_size   42
+#define meshtastic_TopSender_size                18
+#define meshtastic_TrafficManagementStats_size   72
 
 #ifdef __cplusplus
 } /* extern "C" */

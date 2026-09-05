@@ -16,6 +16,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
+#include <ErriezCRC32.h>                       // crc32Buffer: the identity-format predicate below
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -249,6 +250,10 @@ void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
 void optInDisablePositionSharing(meshtastic_ChannelFile &cf);
 /// Force all mesh-broadcast device telemetry (and the MQTT map-report location) back to opt-in/off.
 void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc);
+/// True when every antispam knob is still protobuf-zero (2.8 TMM config that never saw these fields).
+bool antispamKnobsUnconfigured(const meshtastic_ModuleConfig_TrafficManagementConfig &cfg);
+/// Write shipped antispam defaults without touching position/rate-limit fields.
+void installAntispamDefaults(meshtastic_ModuleConfig_TrafficManagementConfig &cfg);
 
 enum LoadFileResult {
     // Successfully opened the file
@@ -821,7 +826,11 @@ extern uint32_t error_address;
 // Use this instead of `if (snr_q4)`. Legacy records (bit clear) are unambiguously "unknown".
 #define NODEINFO_BITFIELD_HAS_SNR_SHIFT 10
 #define NODEINFO_BITFIELD_HAS_SNR_MASK (1u << NODEINFO_BITFIELD_HAS_SNR_SHIFT)
-// Bits 11..31 reserved for future single-bit flags.
+// Stored 32-byte key derives this node number (crc32). Recomputed on read; the dual-read
+// guard refuses a non-deriving replacement once that predicate holds.
+#define NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_SHIFT 11
+#define NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_MASK (1u << NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_SHIFT)
+// Bits 12..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
@@ -870,11 +879,51 @@ inline bool nodeInfoLiteHasSnr(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK);
 }
+inline bool nodeInfoLiteIsKeyDerivedIdentity(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_MASK);
+}
 /// A node that the eviction/migration paths must not drop: a favourite, an
 /// ignored (blocked) node, or a manually-verified key.
 inline bool nodeInfoLiteIsProtected(const meshtastic_NodeInfoLite *n)
 {
     return nodeInfoLiteIsFavorite(n) || nodeInfoLiteIsIgnored(n) || nodeInfoLiteIsKeyManuallyVerified(n);
+}
+
+// Pre-migration numbers come from MAC/random; key-anchored numbers from crc32(pubkey).
+// Dual-read: recompute from the key rather than trusting the persisted bit alone.
+inline bool identityKeyDerivesNodeNum(const uint8_t *key32, NodeNum num)
+{
+    return key32 != nullptr && crc32Buffer(key32, 32) == num;
+}
+/// True when the stored key is a valid 32-byte key that derives this node's own number.
+inline bool storedIdentityIsKeyDerived(const meshtastic_NodeInfoLite *n)
+{
+    return n && n->public_key.size == 32 && identityKeyDerivesNodeNum(n->public_key.bytes, n->num);
+}
+/// True when the incoming key is a valid 32-byte key that would derive the
+/// receiving node's own number - i.e. it is the key-anchored form of that identity.
+inline bool incomingKeyDerivesNodeNum(const meshtastic_User &user, NodeNum num)
+{
+    return user.public_key.size == 32 && identityKeyDerivesNodeNum(user.public_key.bytes, num);
+}
+/// Key-replacement policy for the identity-format migration (the dual-read):
+///  - a stored key that DERIVES the node number (key-anchored format) may not be replaced by a
+///    key that does not derive it. A non-deriving key for a key-anchored number is treated as a
+///    TOFU claim and refused unless it itself derives the number. This is the last TOFU hole on
+///    unsigned / warm-tier identity updates.
+///  - a stored LEGACY (non-deriving) key may still be replaced by a key that DOES derive the
+///    number (the transition from MAC-derived to key-derived).
+///  - two keys that both derive the number agree (a 32-byte key maps to one number), so they
+///    always match and never conflict.
+///  - a keyless incoming is never a key claim: it cannot (re)bind a key, so it is permissive.
+/// Returns true when `incoming` is allowed to (re)bind the identity for `num`.
+inline bool incomingKeyMayBindIdentity(const meshtastic_NodeInfoLite *stored, const meshtastic_User &incoming, NodeNum num)
+{
+    if (!storedIdentityIsKeyDerived(stored))
+        return true; // legacy (or absent) stored key: allow replacement, including the transition to a key-derived one
+    return incoming.public_key.size != 32 ||
+           incomingKeyDerivesNodeNum(incoming, num); // keyless is not a claim; a 32-byte key must derive
 }
 
 inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)
