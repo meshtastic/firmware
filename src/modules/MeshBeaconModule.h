@@ -92,17 +92,25 @@ class MeshBeaconModule
     /**
      * Reject only what can never become valid; sendBeacon() resolves the rest against the settings
      * in force. Called on an admin write, at boot, and when a LoRa change moves what can be run.
-     * Also the gatekeeper for the by-value and indexed target paths, which are mutually exclusive.
+     * Every destination comes from broadcast_targets; broadcast_on_channel is only their default.
      */
     static void sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
-    // False when a remote admin write of this config would not fit one LoRa payload. Such a config
-    // can be written locally over BLE but never read back: the response truncates to an empty
-    // payload and the remote client sees a silent no-op.
-    static bool fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+    // Encoded bytes this config costs as an AdminMessage, session passkey included. 0 if it will
+    // not encode at all.
+    static size_t remoteAdminSize(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
-    // True when the config names an explicit by-value target (any of the broadcast_on_* fields).
-    static bool hasExplicitTarget(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+    // Remote admin is always PKC encrypted, so the ciphertext gives up MESHTASTIC_PKC_OVERHEAD
+    // bytes that DATA_PAYLOAD_LEN - the decoded cap, which is what BLE gets - does not know about.
+    static constexpr size_t remoteAdminCeiling()
+    {
+        return (size_t)meshtastic_Constants_DATA_PAYLOAD_LEN - MESHTASTIC_PKC_OVERHEAD;
+    }
+
+    // False when a remote admin write of this config would not survive one PKC-encrypted LoRa
+    // frame. Such a config can be written locally over BLE but never read back: the response
+    // truncates to an empty payload and the remote client sees a silent no-op.
+    static bool fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     // Place the by-value offer and target channels in the channel table, so the TX path can find
     // their keys. An entry whose channel will not fit is withheld, never re-pointed at another

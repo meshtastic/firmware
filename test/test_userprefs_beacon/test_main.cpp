@@ -32,7 +32,7 @@ void tearDown(void) {}
 static const uint8_t kOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
 static const uint8_t kOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
 
-// The by-value target: name and PSK carried outright, so a vendor never has to describe a channel
+// The by-value default: name and PSK carried outright, so a vendor never has to describe a channel
 // table index that may not hold what they expect.
 static void test_on_channel_carries_its_own_name_and_psk()
 {
@@ -55,14 +55,17 @@ static void test_over_long_on_channel_name_is_truncated_and_terminated()
 
 // Region carries no has_ flag - UNSET is the absence - so an in-process writer that sets only the
 // value has to survive to the config. This is the case that broke when region was `optional`.
-static void test_on_region_preset_and_slot_are_applied()
+static void test_target_region_preset_and_slot_are_applied()
 {
     const auto &b = moduleConfig.mesh_beacon;
-    TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_ON_REGION, b.broadcast_on_region);
-    TEST_ASSERT_TRUE(b.has_broadcast_on_preset);
-    TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_ON_PRESET, b.broadcast_on_preset);
-    TEST_ASSERT_TRUE(b.has_broadcast_on_frequency_slot);
-    TEST_ASSERT_EQUAL_UINT32(USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT, b.broadcast_on_frequency_slot);
+    TEST_ASSERT_EQUAL_UINT(1, b.broadcast_targets_count);
+    const auto &t = b.broadcast_targets[0];
+    TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_TARGET_0_REGION, t.region);
+    TEST_ASSERT_TRUE(t.has_preset);
+    TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_TARGET_0_PRESET, t.preset);
+    TEST_ASSERT_TRUE(t.has_frequency_slot);
+    TEST_ASSERT_EQUAL_UINT32(USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT, t.frequency_slot);
+    TEST_ASSERT_FALSE_MESSAGE(t.has_channel_index, "it inherits the by-value default rather than naming a slot");
 }
 
 static void test_offer_channel_is_applied()
@@ -95,13 +98,13 @@ static void test_below_floor_interval_is_clamped()
 // The fixture names no indexed target, so the by-value half is the one that stands.
 static void test_by_value_target_is_not_cleared_by_the_boot_gate()
 {
-    TEST_ASSERT_TRUE(MeshBeaconModule::hasExplicitTarget(moduleConfig.mesh_beacon));
-    TEST_ASSERT_EQUAL_UINT(0, moduleConfig.mesh_beacon.broadcast_targets_count);
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
+    TEST_ASSERT_EQUAL_UINT(1, moduleConfig.mesh_beacon.broadcast_targets_count);
 
     // Idempotent: running the gate again must not erode a config it already accepted.
     MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
-    TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_ON_REGION, moduleConfig.mesh_beacon.broadcast_on_region);
+    TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_TARGET_0_REGION, moduleConfig.mesh_beacon.broadcast_targets[0].region);
 }
 
 // A vendor shipping both channels by value must still be administrable from a phone over LoRa.
@@ -117,7 +120,6 @@ static void test_stock_build_ships_no_beacon_target()
     const auto &b = moduleConfig.mesh_beacon;
     TEST_ASSERT_FALSE(b.has_broadcast_on_channel);
     TEST_ASSERT_FALSE(b.has_broadcast_offer_channel);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, b.broadcast_on_region);
     TEST_ASSERT_EQUAL_UINT(0, b.broadcast_targets_count);
 }
 
@@ -137,7 +139,7 @@ UPB_TEST_ENTRY void setup()
     printf("\n=== by-value beacon userPrefs ===\n");
     RUN_TEST(test_on_channel_carries_its_own_name_and_psk);
     RUN_TEST(test_over_long_on_channel_name_is_truncated_and_terminated);
-    RUN_TEST(test_on_region_preset_and_slot_are_applied);
+    RUN_TEST(test_target_region_preset_and_slot_are_applied);
     RUN_TEST(test_offer_channel_is_applied);
     RUN_TEST(test_flags_and_message_are_applied);
 

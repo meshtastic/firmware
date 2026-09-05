@@ -244,22 +244,11 @@ bool MeshBeaconModule::upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconC
         bcfg.has_broadcast_offer_frequency_slot = false;
     }
 
-    // The target is different: the TX path needs that channel's key to encrypt. Withheld whole
-    // rather than re-pointed at the primary, which would beacon on a channel nobody named.
-    if (bcfg.has_broadcast_on_channel && !placeChannelIdentity(bcfg.broadcast_on_channel, wrote)) {
-        LOG_WARN("Beacon: channel table full, the target channel cannot be placed - target withheld");
-        bcfg.has_broadcast_on_channel = false;
-        bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-        bcfg.has_broadcast_on_preset = false;
-        bcfg.has_broadcast_on_frequency_slot = false;
-    }
+    // The default target channel is different: the TX path needs its key to encrypt. The request
+    // is kept even when placement fails, so the entries inheriting it are skipped, not redirected.
+    if (bcfg.has_broadcast_on_channel && !placeChannelIdentity(bcfg.broadcast_on_channel, wrote))
+        LOG_WARN("Beacon: channel table full, broadcast_on_channel cannot be placed");
     return wrote;
-}
-
-bool MeshBeaconModule::hasExplicitTarget(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
-{
-    return bcfg.has_broadcast_on_channel || bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET ||
-           bcfg.has_broadcast_on_preset || bcfg.has_broadcast_on_frequency_slot;
 }
 
 // Length prefix width for a submessage body, plus its tag key.
@@ -268,34 +257,29 @@ static uint32_t submsgOverhead(size_t body, uint32_t keyBytes)
     return keyBytes + (body < 128 ? 1 : body < 16384 ? 2 : 3);
 }
 
-bool MeshBeaconModule::fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+size_t MeshBeaconModule::remoteAdminSize(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     // Measured rather than tabulated, so adding a field cannot silently invalidate the bound.
     size_t body = 0;
     if (!pb_get_encoded_size(&body, &meshtastic_ModuleConfig_MeshBeaconConfig_msg, &bcfg))
-        return false;
+        return 0;
     // ModuleConfig.mesh_beacon = 17 and AdminMessage.set_module_config = 35 both take a 2-byte tag
     // key; session_passkey is tag 101 (2-byte key) plus a length byte and 8 bytes of key.
     const size_t inModuleConfig = body + submsgOverhead(body, 2);
     const size_t inAdmin = inModuleConfig + submsgOverhead(inModuleConfig, 2);
-    return inAdmin + 11 <= (size_t)meshtastic_Constants_DATA_PAYLOAD_LEN;
+    return inAdmin + 11;
+}
+
+bool MeshBeaconModule::fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+{
+    const size_t size = remoteAdminSize(bcfg);
+    return size != 0 && size <= remoteAdminCeiling();
 }
 
 void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
-    // Two ways to name one destination, so only one may survive. The list wins: an index cannot
-    // mutate the channel table and a by-value entry can, so an ambiguous write gets no writes.
-    if (hasExplicitTarget(bcfg) && bcfg.broadcast_targets_count > 0) {
-        LOG_WARN("Beacon: both an explicit target and %u indexed targets, keeping the indexed ones",
-                 bcfg.broadcast_targets_count);
-        bcfg.has_broadcast_on_channel = false;
-        bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-        bcfg.has_broadcast_on_preset = false;
-        bcfg.has_broadcast_on_frequency_slot = false;
-    }
-
-    // Hard cap at 100 chars.
-    bcfg.broadcast_message[100] = '\0';
+    // Hard cap at whatever the schema allows, so a max_size change cannot leave this behind.
+    bcfg.broadcast_message[sizeof(bcfg.broadcast_message) - 1] = '\0';
     // Enforce interval minimum (0 means unset/use default).
     if (bcfg.broadcast_interval_secs != 0 && bcfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
         bcfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
@@ -333,36 +317,6 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
             }
         }
     }
-    // The explicit target, by the same rules and in the same order as an indexed one below.
-    if (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        const RegionInfo *r = getRegion(bcfg.broadcast_on_region);
-        if (r->code != bcfg.broadcast_on_region) {
-            LOG_WARN("Beacon: broadcast_on_region %d invalid, clearing", bcfg.broadcast_on_region);
-            bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-        }
-    }
-    if (bcfg.has_broadcast_on_preset && !isKnownModemPreset(bcfg.broadcast_on_preset)) {
-        LOG_WARN("Beacon: broadcast_on_preset %d is not a preset any region offers, clearing", bcfg.broadcast_on_preset);
-        bcfg.has_broadcast_on_preset = false;
-    }
-    if (bcfg.has_broadcast_on_frequency_slot) {
-        if (bcfg.broadcast_on_frequency_slot == 0) {
-            LOG_WARN("Beacon: broadcast_on_frequency_slot 0 means unset, clearing");
-            bcfg.has_broadcast_on_frequency_slot = false;
-        } else if (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && bcfg.has_broadcast_on_preset) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.use_preset = true;
-            probe.modem_preset = bcfg.broadcast_on_preset;
-            probe.region = bcfg.broadcast_on_region;
-            const uint32_t slots = RadioInterface::frequencySlotCount(probe);
-            if (bcfg.broadcast_on_frequency_slot > slots) {
-                LOG_WARN("Beacon: broadcast_on_frequency_slot %u outside 1..%u, clearing", bcfg.broadcast_on_frequency_slot,
-                         slots);
-                bcfg.has_broadcast_on_frequency_slot = false;
-            }
-        }
-    }
-
     // Validate each broadcast target so a bad preset/region is cleared on write rather than
     // relying on the runtime TX drop.
     for (pb_size_t i = 0; i < bcfg.broadcast_targets_count; i++) {
@@ -484,7 +438,10 @@ bool MeshBeaconModule::offerChannelSettings(const meshtastic_ModuleConfig_MeshBe
     // advertised is exactly what the operator wrote.
     if (!bcfg.has_broadcast_offer_channel)
         return false;
-    out = meshtastic_ChannelSettings_init_zero;
+    // Zeroed through a declaration, not `out = {...}`: arm-none-eabi rejects the init macro as an
+    // assignment operand where the host compiler accepts it.
+    const meshtastic_ChannelSettings zeroed = meshtastic_ChannelSettings_init_zero;
+    out = zeroed;
     strncpy(out.name, bcfg.broadcast_offer_channel.name, sizeof(out.name) - 1);
     out.psk.size = bcfg.broadcast_offer_channel.psk.size;
     memcpy(out.psk.bytes, bcfg.broadcast_offer_channel.psk.bytes, out.psk.size);
@@ -794,34 +751,19 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const uint16_t homeSlot =
         (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
 
-    // The by-value target, synthesised into a BroadcastTarget so the loop below stays the only
-    // place a target is resolved. Mutually exclusive with broadcast_targets - see sanitiseConfig.
-    meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget explicitTgt =
-        meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero;
-    const bool hasExplicit = hasExplicitTarget(bcfg);
-    bool explicitUsable = true;
-    if (hasExplicit) {
-        explicitTgt.has_preset = bcfg.has_broadcast_on_preset;
-        explicitTgt.preset = bcfg.broadcast_on_preset;
-        explicitTgt.region = bcfg.broadcast_on_region;
-        explicitTgt.has_frequency_slot = bcfg.has_broadcast_on_frequency_slot;
-        explicitTgt.frequency_slot = bcfg.broadcast_on_frequency_slot;
-        if (bcfg.has_broadcast_on_channel) {
-            const int16_t idx = channels.findByIdentity(bcfg.broadcast_on_channel.name, bcfg.broadcast_on_channel.psk.bytes,
-                                                        (uint8_t)bcfg.broadcast_on_channel.psk.size);
-            explicitUsable = idx >= 0;
-            explicitTgt.has_channel_index = explicitUsable;
-            explicitTgt.channel_index = explicitUsable ? (uint32_t)idx : 0;
-        }
-    }
-    if (hasExplicit && !explicitUsable) {
-        LOG_WARN("Beacon: explicit target names a channel the table does not hold, withholding it");
-        return;
-    }
+    // The by-value default an entry inherits when it names no index. Resolved once - the table
+    // cannot change mid-loop, and findByIdentity is not free.
+    const int16_t defaultChannelIndex =
+        bcfg.has_broadcast_on_channel
+            ? channels.findByIdentity(bcfg.broadcast_on_channel.name, bcfg.broadcast_on_channel.psk.bytes,
+                                      (uint8_t)bcfg.broadcast_on_channel.psk.size)
+            : -1;
+    if (bcfg.has_broadcast_on_channel && defaultChannelIndex < 0)
+        LOG_WARN("Beacon: broadcast_on_channel is not in the table, entries without an index are skipped");
 
-    // An empty list still beacons once, on the node's running preset and region over the primary
+    // An empty list still beacons once, on the node's running preset and region over the default
     // channel. Each entry below overrides only what it sets.
-    const int targetCount = hasExplicit ? 1 : (bcfg.broadcast_targets_count > 0 ? (int)bcfg.broadcast_targets_count : 1);
+    const int targetCount = bcfg.broadcast_targets_count > 0 ? (int)bcfg.broadcast_targets_count : 1;
 
     // The payload is identical across targets, so a repeat of one already sent is pure wasted
     // airtime. Keyed on resolved values, so an explicit "current region" dedups against an UNSET one.
@@ -841,8 +783,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         EffTarget tgt = {};
         tgt.preset = config.lora.modem_preset;
         tgt.usePreset = config.lora.use_preset;
-        const auto *bt =
-            hasExplicit ? &explicitTgt : (ti < (int)bcfg.broadcast_targets_count ? &bcfg.broadcast_targets[ti] : nullptr);
+        const auto *bt = ti < (int)bcfg.broadcast_targets_count ? &bcfg.broadcast_targets[ti] : nullptr;
         if (bt) {
             // A named preset is an instruction to run it, so it also turns use_preset on.
             if (bt->has_preset) {
@@ -854,11 +795,19 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
         // The channel decides both the key and, through its name, the frequency slot. An index that
         // is out of range or disabled cannot be transmitted on - see resolveBeaconChannel.
-        const BeaconChannel bc = resolveBeaconChannel(bt && bt->has_channel_index, bt ? bt->channel_index : 0, tgt.preset);
+        const bool ownIndex = bt && bt->has_channel_index;
+        // A named default missing from the table leaves an inheriting entry nothing to encrypt
+        // with, so it is skipped rather than sent on the primary that nobody asked for.
+        if (!ownIndex && bcfg.has_broadcast_on_channel && defaultChannelIndex < 0) {
+            LOG_DEBUG("Beacon: target %d inherits an unplaced broadcast_on_channel, skip", ti);
+            continue;
+        }
+        const uint32_t wantIndex = ownIndex ? bt->channel_index : (uint32_t)defaultChannelIndex;
+        const BeaconChannel bc = resolveBeaconChannel(ownIndex || defaultChannelIndex >= 0, wantIndex, tgt.preset);
         if (!bc.usable) {
             // Skipped, not redirected: the config still asks for that channel, so turning it back
             // on brings this target back without the operator having to rewrite anything.
-            LOG_DEBUG("Beacon: target %d channel_index %u unusable, skip", ti, bt->channel_index);
+            LOG_DEBUG("Beacon: target %d channel_index %u unusable, skip", ti, wantIndex);
             continue;
         }
         tgt.channelIndex = bc.index;

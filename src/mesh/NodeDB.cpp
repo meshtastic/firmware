@@ -1530,8 +1530,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
     moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
 #endif
-// The single explicit target, named by value. Mutually exclusive with the TARGET_<N>_* keys below;
-// sanitiseConfig clears these if a build defines both.
+// The by-value default channel, inherited by any target that names no index of its own.
 #ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
     moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
@@ -1548,16 +1547,15 @@ void NodeDB::installDefaultModuleConfig()
         moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
     }
 #endif
+// A destination's region, preset and slot now live on the target that uses them.
 #ifdef USERPREFS_MESH_BEACON_ON_REGION
-    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
+#error "USERPREFS_MESH_BEACON_ON_REGION removed; use USERPREFS_MESH_BEACON_TARGET_0_REGION"
 #endif
 #ifdef USERPREFS_MESH_BEACON_ON_PRESET
-    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
-    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
+#error "USERPREFS_MESH_BEACON_ON_PRESET removed; use USERPREFS_MESH_BEACON_TARGET_0_PRESET"
 #endif
 #ifdef USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT
-    moduleConfig.mesh_beacon.has_broadcast_on_frequency_slot = true;
-    moduleConfig.mesh_beacon.broadcast_on_frequency_slot = USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT;
+#error "USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT removed; use USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT"
 #endif
 // Tag 12 used to be the offer's channel-table index; the offer now carries its own name and PSK.
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX
