@@ -331,9 +331,9 @@ void portduinoSetup()
     return;
 #endif
 
-    if (portduino_config.force_simradio == true) {
-        portduino_config.lora_module = use_simradio;
-    } else if (configPath != nullptr) {
+    // An explicit -c is honored even under -s: it also carries non-radio settings
+    // (EnableUDP, display, GPIO) that have to survive simulated mode.
+    if (configPath != nullptr) {
         if (loadConfig(configPath)) {
             if (!yamlOnly && !configCheck)
                 std::cout << "Using " << configPath << " as config file" << std::endl;
@@ -343,6 +343,8 @@ void portduinoSetup()
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
+    } else if (portduino_config.force_simradio) {
+        // -s with no -c: the simulator brings its own defaults, so skip config discovery.
     } else if (access("config.yaml", R_OK) == 0) {
         if (loadConfig("config.yaml")) {
             if (!yamlOnly && !configCheck)
@@ -388,6 +390,12 @@ void portduinoSetup()
                 loadConfig(entry.path().string().c_str());
             }
         }
+    }
+
+    // Applied after every config source: ConfigDirectory entries can set Lora.Module
+    // too, and -s must win over all of them, including in --check / --output-yaml.
+    if (portduino_config.force_simradio) {
+        portduino_config.lora_module = use_simradio;
     }
 
 #ifndef ARCH_PORTDUINO_WASM
