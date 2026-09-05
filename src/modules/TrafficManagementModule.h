@@ -389,7 +389,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     static constexpr uint16_t antispamCacheSize()
     {
-        return TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 ? std::min(TRAFFIC_MANAGEMENT_CACHE_SIZE, (uint16_t)ANTISPAM_CACHE_SIZE) : 0;
+        return TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 ? std::min<uint16_t>(TRAFFIC_MANAGEMENT_CACHE_SIZE, ANTISPAM_CACHE_SIZE) : 0;
     }
 
     mutable AntispamEntry *antispam =
