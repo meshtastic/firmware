@@ -358,17 +358,15 @@ firmware/
 
 **This section is the single authoritative statement of the rule. `AGENTS.md` and `CLAUDE.md` link here and must not restate it. The one permitted copy is the `test/**` entry in `.coderabbit.yaml`, because a YAML instruction cannot follow a link; keep it in sync with this section.**
 
-The one-or-two-line limit above rests on "the diff and commit message carry the rationale". For a test that premise is false. A test outlives the PR that added it, and the next person to meet it is meeting it _because it failed_ - months later, in someone else's change, with the original discussion long out of reach. That reader has one decision to make: is this a real regression, or an expectation that has gone stale? The assertions alone cannot answer it. **A review comment asking a test header to be cut to one or two lines is wrong, and should be rejected rather than acted on.**
+The limit above rests on "the diff and commit message carry the rationale". For a test that premise is false: it is read when it fails, long after that message is out of reach, by someone deciding whether the failure is a real regression or a stale expectation. **A review comment asking a test header to be cut to one or two lines is wrong, and should be rejected rather than acted on.**
 
-So a test carries an obligation `src/` does not, and **may take as many lines as that obligation needs**:
+The header of `test_main.cpp` states three things, at whatever length they take:
 
-- **What is under test**, by symbol and file - `shouldArmFixHold()` / `fixHoldInForce()` in `src/gps/GPS.cpp`, not "the GPS logic".
-- **Why that behavior is required** - the contract being pinned, in terms of what the device does.
-- **The regression being guarded** - the specific wrong behavior that returns if these assertions are deleted or "fixed" to match new code. This is the part reviewers most often ask to cut and the part that carries the most value; it is the whole basis on which a future reader judges a red test.
+- **What is under test**, by symbol and file - `fixHoldInForce()` in `src/gps/GPS.cpp`, not "the GPS logic".
+- **Why that behavior is required** - the contract being pinned.
+- **The regression guarded** - the wrong behavior that returns if these assertions are deleted or relaxed.
 
-Put it in a header comment at the top of `test_main.cpp`. Per-case comments stay short: the case name plus the header should already carry the argument, so add a line only where one assertion turns on something non-obvious - a magic constant, a wrap boundary, a required ordering.
-
-This is not licence for narrative. The documentation rule below still applies in full: no debugging journey, no changelog prose, no restating what the assertions do. State the contract, name the regression, stop. `test/test_gps_fix_hold/test_main.cpp` is the worked example - eleven lines, each load-bearing.
+Per-case comments stay short; add one only where an assertion turns on something non-obvious. The allowance is for the argument, not for narrative: no debugging journey, no changelog prose, no restating what the assertions do. Worked example: `test/test_gps_fix_hold/test_main.cpp`.
 
 ### Naming Conventions
 
