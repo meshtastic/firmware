@@ -22,3 +22,13 @@
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
+
+void lateInitVariant()
+{
+    // power off NeoPixel on Feather RevE
+    // (on RevD that pin is not connected and the NeoPixel is on the
+    // 3.3V LDO along with the MCU and thus cannot be turned off)
+    // pinMode already set by initVariant() in
+    // framework-arduinoadafruitnrf52/variants/feather_nrf52840_express/variant.cpp
+    digitalWrite(PIN_NEOPIXEL_POWER, LOW);
+}
