@@ -132,7 +132,14 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
     if (RadioLibInterface::instance) {
         RadioLibInterface::instance->updateNoiseFloor();
-        telemetry.variant.local_stats.noise_floor = RadioLibInterface::instance->getAverageNoiseFloor();
+        // noise_floor has no has_/presence bit on the wire, so an unqualified read here would ship
+        // NOISE_FLOOR_DEFAULT indistinguishably from a real -120 dBm reading. Leave the field at its
+        // zero-init value instead, and say so, whenever we've never actually sampled a valid RSSI.
+        if (RadioLibInterface::instance->hasNoiseFloorSamples()) {
+            telemetry.variant.local_stats.noise_floor = RadioLibInterface::instance->getAverageNoiseFloor();
+        } else {
+            LOG_WARN("No valid noise floor samples yet; omitting noise_floor from local stats");
+        }
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
