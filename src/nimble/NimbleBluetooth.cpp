@@ -32,6 +32,8 @@
 #include "host/ble_gap.h"
 #include "host/ble_hs.h"
 #include "host/ble_hs_adv.h"
+#include "nimble/hci_common.h"
+extern "C" int ble_hs_hci_cmd_tx(uint16_t opcode, const void *cmd, uint8_t cmd_len, void *rsp, uint8_t rsp_len);
 #include "host/ble_store.h"
 #ifdef ARCH_ESP32
 #include <nvs.h>
@@ -1151,6 +1153,17 @@ void NimbleBluetooth::setup()
 
     BLEDevice::init(getDeviceName());
     BLEDevice::setPower(ESP_PWR_LVL_P9);
+
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+    // Prefer 1M PHY. This controller asserts in its remote PHY-update handler (esp-idf#15311) when an
+    // Apple central moves the link to 2M; Apple's guidance for accessories is to indicate 1M only.
+    // ble_gap_set_default_le_phy() is compiled out of the prebuilt host, so send the HCI command.
+    for (int i = 0; i < 200 && !ble_hs_synced(); i++)
+        delay(10);
+    struct ble_hci_le_set_default_phy_cp phy = {0, BLE_HCI_LE_PHY_1M_PREF_MASK, BLE_HCI_LE_PHY_1M_PREF_MASK};
+    int phyRc = ble_hs_hci_cmd_tx(BLE_HCI_OP(BLE_HCI_OGF_LE, BLE_HCI_OCF_LE_SET_DEFAULT_PHY), &phy, sizeof(phy), NULL, 0);
+    LOG_INFO("BLE default PHY set to 1M only, rc=%d", phyRc);
+#endif
 
     int mtuResult = BLEDevice::setMTU(kPreferredBleMtu);
     if (mtuResult == 0) {
