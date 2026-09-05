@@ -4,6 +4,9 @@
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#if HAS_BLE_GATT_MESH
+#include "NRF52BLEGattMesh.h"
+#endif
 #include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
@@ -65,6 +68,9 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
 
 void onConnect(uint16_t conn_handle)
 {
+#if HAS_BLE_GATT_MESH
+    NRF52BLEGattMesh::onConnect(conn_handle);
+#endif
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
     connectionHandle = conn_handle;
@@ -93,6 +99,11 @@ void onConnect(uint16_t conn_handle)
  */
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
+#if HAS_BLE_GATT_MESH
+    // A mesh peer's link is not the phone's session.
+    if (NRF52BLEGattMesh::onDisconnect(conn_handle))
+        return;
+#endif
     LOG_INFO("BLE Disconnected, reason = 0x%x", reason);
     if (bluetoothPhoneAPI) {
         bluetoothPhoneAPI->close();
@@ -140,7 +151,12 @@ void startAdv(void)
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     // IncludeService UUID
     // Bluefruit.ScanResponse.addService(meshBleService);
+#if HAS_BLE_GATT_MESH
+    if (!NRF52BLEGattMesh::addToScanResponse())
+        Bluefruit.ScanResponse.addTxPower();
+#else
     Bluefruit.ScanResponse.addTxPower();
+#endif
     Bluefruit.ScanResponse.addName();
     // Include Name
     // Bluefruit.Advertising.addName();
@@ -247,6 +263,9 @@ void setupMeshService(void)
     logRadio.setCccdWriteCallback(onCccd);
     logRadio.write32(0);
     logRadio.begin();
+#if HAS_BLE_GATT_MESH
+    NRF52BLEGattMesh::setupService();
+#endif
 }
 static uint32_t configuredPasskey;
 void NRF52Bluetooth::shutdown()
@@ -298,7 +317,12 @@ void NRF52Bluetooth::setup()
     // nrf52840_s140_v*.ld is re-based; enabling it without that change gets you a node with no
     // Bluetooth at all.
     Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
+#if HAS_BLE_GATT_MESH
+    // Two peripheral links: the phone and one mesh peer.
+    if (!Bluefruit.begin(2, 1)) {
+#else
     if (!Bluefruit.begin(1, 1)) {
+#endif
 #else
     if (!Bluefruit.begin()) {
 #endif
