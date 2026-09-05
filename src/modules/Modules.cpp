@@ -119,6 +119,10 @@
 #include "modules/StatusMessageModule.h"
 #endif
 
+#if !MESHTASTIC_EXCLUDE_ZPS
+#include "modules/esp32/ZPSModule.h"
+#endif
+
 #if defined(HAS_HARDWARE_WATCHDOG)
 #include "watchdog/watchdogThread.h"
 #endif
@@ -197,6 +201,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUS
     statusMessageModule = new StatusMessageModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_ZPS
+        zpsModule = new ZPSModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
     new GenericThreadModule();
