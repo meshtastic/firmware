@@ -334,6 +334,14 @@ static MockRadioInterface *installMockIface()
     return mock;
 }
 
+static CaptureRadioInterface *installCaptureIface()
+{
+    auto *capture = new CaptureRadioInterface();
+    nextHopRadio = capture;
+    shim->addInterface(std::unique_ptr<RadioInterface>(capture));
+    return capture;
+}
+
 static constexpr uint32_t TTL = NextHopRouter::ROUTE_TTL_MSEC;
 static constexpr uint8_t THRESH = NextHopRouter::ROUTE_FAILURE_THRESHOLD;
 static constexpr uint8_t HEALTH_MAX = NextHopRouter::ROUTE_HEALTH_MAX;
@@ -988,6 +996,33 @@ void test_rebroadcast_declined_send_releases_packet(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
 }
 
+void test_broadcast_first_hop_is_preserved_then_cleared_by_selected_relay(void)
+{
+    constexpr uint8_t selectedRelay = 0x11;
+    constexpr uint8_t otherRelay = 0x33;
+    CaptureRadioInterface *capture = installCaptureIface();
+    mockNodeDB->addNode(0x33333311, 0, true, 60);
+
+    meshtastic_MeshPacket p = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, NODENUM_BROADCAST, 0);
+    p.next_hop = selectedRelay;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, shim->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_FALSE(capture->sentPackets.empty());
+    TEST_ASSERT_EQUAL_HEX8(selectedRelay, capture->sentPackets[0].next_hop);
+
+    capture->reset();
+    p.from = kRemoteNode;
+    p.relay_node = 0x22;
+    p.next_hop = otherRelay;
+    TEST_ASSERT_FALSE(shim->perhapsRebroadcast(&p));
+    TEST_ASSERT_TRUE(capture->sentPackets.empty());
+
+    p.next_hop = selectedRelay;
+    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
+    TEST_ASSERT_FALSE(capture->sentPackets.empty());
+    TEST_ASSERT_EQUAL_HEX8(NO_NEXT_HOP_PREFERENCE, capture->sentPackets[0].next_hop);
+}
+
 // An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
 // last gate before the radio queue: MeshPacket.encrypted holds 256 bytes, the radio buffer 240.
 void test_send_rejects_payload_larger_than_radio_buffer(void)
@@ -1134,6 +1169,7 @@ void setup()
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
+    RUN_TEST(test_broadcast_first_hop_is_preserved_then_cleared_by_selected_relay);
     RUN_TEST(test_send_rejects_payload_larger_than_radio_buffer);
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);
