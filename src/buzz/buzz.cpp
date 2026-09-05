@@ -2,6 +2,11 @@
 #include "NodeDB.h"
 #include "configuration.h"
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#include <NonBlockingRtttl.h>
+#define HAS_PWM_RTTTL 1
+#endif
+
 #if !defined(ARCH_ESP32) && !defined(ARCH_RP2040) && !defined(ARCH_PORTDUINO)
 #include "Tone.h"
 #endif
@@ -150,6 +155,10 @@ void playTones(const ToneDuration *tone_durations, int size)
         config.device.buzzer_gpio = PIN_BUZZER;
 #endif
     if (config.device.buzzer_gpio) {
+#ifdef HAS_PWM_RTTTL
+        if (rtttl::isPlaying())
+            return; // a notification ringtone owns the PWM, don't reprogram it mid-note
+#endif
         for (int i = 0; i < size; i++) {
             const auto &tone_duration = tone_durations[i];
             tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
