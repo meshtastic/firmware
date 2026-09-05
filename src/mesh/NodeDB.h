@@ -711,6 +711,10 @@ class NodeDB
     /// read our db from flash
     void loadFromDisk();
 
+    /// Restore the owner fields from our own NodeDB row after devicestate was discarded.
+    /// Only valid once config is loaded. @return true if our row supplied them.
+    bool recoverOwnerFromNodeDB();
+
 #ifdef PIO_UNIT_TESTING
     // Grant the unit-test shim access to the private maintenance paths below
     // (migration / cleanup / eviction) without relaxing production access.
