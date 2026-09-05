@@ -4555,10 +4555,20 @@ bool NodeDB::createNewIdentity()
     // The number has moved, so the caller must persist it whatever happens next. Returning false here
     // would leave the new key saved against the old number, which is the break this exists to prevent.
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    if (info)
+    if (info) {
         TypeConversions::CopyUserToNodeInfoLite(info, owner);
-    else
+        // Our row was appended, but index 0 is self by invariant: the phone's own-nodeinfo read and the
+        // demote/evict scans that skip index 0 to protect us both depend on it.
+        if (info != &meshNodes->at(0))
+            std::swap(meshNodes->at(0), *info);
+    } else
         LOG_ERROR("No room for our own node 0x%08x, identity moved without a self record", newNodeNum);
+
+    // Clients cache my_node_num from the handshake; the region set that mints the key never reboots.
+    if (service) {
+        service->identityGeneration++;
+        service->nudgeFromNum();
+    }
 
     return true;
 }

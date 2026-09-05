@@ -53,7 +53,8 @@ class PhoneAPI
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
         STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_SEND_PACKETS,  // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_RESEND_MY_INFO // one-shot: our node num moved after the handshake, re-announce and fall back
     };
 
     // Satellite-DB replay (positions / telemetry / environment / status) used to live
@@ -132,6 +133,9 @@ class PhoneAPI
     std::vector<meshtastic_FileInfo> filesManifest = {};
 
     void resetReadIndex() { readIndex = 0; }
+
+    /// Load fromRadioScratch with a MyInfo for this connection and record the number it carried.
+    void fillMyInfo();
 
   public:
     PhoneAPI();
