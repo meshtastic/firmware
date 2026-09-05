@@ -174,12 +174,9 @@ static bool routingAuthCacheMatches(const meshtastic_MeshPacket &packet)
     concurrency::LockGuard guard(routingAuthCacheLock);
     if (!routingAuthCache.valid)
         return false;
-    if (routingAuthCache.policy != config.security.packet_signature_policy ||
-        memcmp(&routingAuthCache.wire, &packet, sizeof(packet)) != 0) {
-        routingAuthCache.valid = false;
+    if (routingAuthCache.policy != config.security.packet_signature_policy)
         return false;
-    }
-    return true;
+    return memcmp(&routingAuthCache.wire, &packet, sizeof(packet)) == 0;
 }
 
 static void storeRoutingAuthCache(const meshtastic_MeshPacket &wire, const meshtastic_MeshPacket &authenticated)
@@ -702,6 +699,8 @@ static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket 
     memcpy(node->public_key.bytes, user.public_key.bytes, user.public_key.size);
     nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
     p->xeddsa_signed = true;
+    p->public_key.size = user.public_key.size;
+    memcpy(p->public_key.bytes, user.public_key.bytes, user.public_key.size);
     LOG_DEBUG("Verified first-contact XEdDSA NodeInfo from 0x%08x", p->from);
     return NodeInfoBootstrapResult::VERIFIED;
 }
@@ -747,6 +746,8 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
                 return false;
             }
             if (p->xeddsa_signed) {
+                memcpy(p->public_key.bytes, senderKey.bytes, 32);
+                p->public_key.size = 32;
                 // Learn this node as a signer, so Balanced and Strict refuse its unsigned identity updates.
                 // A warm-tier key must be re-admitted before setting the signer bit; otherwise that
                 // protection is forgotten as soon as the node is evicted from the hot store.
