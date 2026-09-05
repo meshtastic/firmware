@@ -348,8 +348,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_module_config_tag:
         LOG_DEBUG("Client set module config");
-        if (!handleSetModuleConfig(r->set_module_config)) {
-            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        {
+            // TOO_LARGE where the beacon config could not be read back; BAD_REQUEST otherwise.
+            meshtastic_Routing_Error err = meshtastic_Routing_Error_BAD_REQUEST;
+            if (!handleSetModuleConfig(r->set_module_config, fromOthers, &err))
+                myReply = allocErrorResponse(err, &mp);
         }
         break;
 
@@ -1165,6 +1168,19 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             loraPresetWarnPending = true;
         }
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // Applies live, no reboot, so nothing else re-checks the beacon against the radio it now
+        // inherits.
+        if (moduleConfig.has_mesh_beacon &&
+            (validatedLora.region != oldLoraConfig.region || validatedLora.modem_preset != oldLoraConfig.modem_preset ||
+             validatedLora.use_preset != oldLoraConfig.use_preset)) {
+            MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
+            changes |= SEGMENT_MODULECONFIG;
+            if (meshBeaconBroadcastModule)
+                meshBeaconBroadcastModule->invalidateCache();
+        }
+#endif
+
         break;
     }
     case meshtastic_Config_bluetooth_tag:
@@ -1253,8 +1269,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         flushChannelWarnings();
 } // end of handleSetConfig
 
-bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
+bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool fromOthers, meshtastic_Routing_Error *err)
 {
+    int extraSegments = 0;
     bool shouldReboot = true;
     // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
     // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
@@ -1383,63 +1400,18 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Sanitize a local copy rather than const_cast-ing the const input (UB if a truly-const
         // object is ever passed); the validated copy is assigned into moduleConfig below.
         auto beaconCfg = c.payload_variant.mesh_beacon;
-        // Hard cap at 100 chars.
-        beaconCfg.broadcast_message[100] = '\0';
-        // Enforce interval minimum (0 means unset/use default).
-        if (beaconCfg.broadcast_interval_secs != 0 &&
-            beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
-            beaconCfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-        // Validate broadcast_offer_preset against broadcast_offer_region (or current region if unset).
-        if (beaconCfg.has_broadcast_offer_preset) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.use_preset = true;
-            probe.modem_preset = beaconCfg.broadcast_offer_preset;
-            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                probe.region = beaconCfg.broadcast_offer_region;
-            if (!RadioInterface::validateConfigLora(probe)) {
-                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clearing", beaconCfg.broadcast_offer_preset);
-                beaconCfg.has_broadcast_offer_preset = false;
-            }
+        MeshBeaconModule::sanitiseConfig(beaconCfg);
+        // Refused rather than stored: a config this large is writable over BLE but its read-back
+        // truncates to an empty payload, so a remote administrator could never see what it set.
+        if (fromOthers && !MeshBeaconModule::fitsRemoteAdmin(beaconCfg)) {
+            LOG_WARN("Beacon: config too large to read back over remote admin, rejecting the write");
+            if (err)
+                *err = meshtastic_Routing_Error_TOO_LARGE;
+            return false;
         }
-        // Validate broadcast_offer_region is a known region code.
-        if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            const RegionInfo *r = getRegion(beaconCfg.broadcast_offer_region);
-            if (r->code != beaconCfg.broadcast_offer_region) {
-                LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", beaconCfg.broadcast_offer_region);
-                beaconCfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-            }
-        }
-        // Validate each broadcast target so a bad preset/region is cleared on write rather than
-        // relying on the runtime TX drop.
-        for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
-            auto &t = beaconCfg.broadcast_targets[i];
-            // Region must be a known region code (UNSET = use running config at TX time).
-            if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-                const RegionInfo *r = getRegion(t.region);
-                if (r->code != t.region) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] region %d invalid, clearing", i, t.region);
-                    t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-                }
-            }
-            // Preset must be valid for the target region (or current region if unset).
-            if (t.has_preset) {
-                meshtastic_Config_LoRaConfig probe = config.lora;
-                probe.use_preset = true;
-                probe.modem_preset = t.preset;
-                if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                    probe.region = t.region;
-                if (!RadioInterface::validateConfigLora(probe)) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clearing", i, t.preset);
-                    t.has_preset = false;
-                    t.has_channel_index = false;
-                }
-            }
-            // channel_index must reference a real channel-table slot.
-            if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
-                LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
-                t.has_channel_index = false;
-            }
-        }
+        // The by-value channels need to be in the table for the TX path to find their keys.
+        if (MeshBeaconModule::upsertByValueChannels(beaconCfg))
+            extraSegments |= SEGMENT_CHANNELS;
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
@@ -1450,13 +1422,49 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     }
 #endif
     }
-    saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
+    saveChanges(SEGMENT_MODULECONFIG | extraSegments, shouldReboot);
     return true;
+}
+
+// A channel edit changes what the beacon can transmit on, so re-check it against the table as it
+// now stands.
+static void recheckBeaconAfterChannelEdit(ChannelIndex index)
+{
+#if !MESHTASTIC_EXCLUDE_BEACON
+    if (!moduleConfig.has_mesh_beacon)
+        return;
+    auto &beacon = moduleConfig.mesh_beacon;
+
+    // Deleted, not left pointed at the slot: an unrelated channel provisioned there later would
+    // otherwise inherit the beacon. Clearing only the index would redirect it onto the primary.
+    // Disabled is the whole test: a blank name and an empty PSK are both valid on a live channel,
+    // and reading them as "retired" deleted the operator's targets on an ordinary edit.
+    const meshtastic_Channel &slot = channels.getByIndex(index);
+    if (slot.role == meshtastic_Channel_Role_DISABLED) {
+        pb_size_t kept = 0;
+        for (pb_size_t i = 0; i < beacon.broadcast_targets_count; i++) {
+            const auto &t = beacon.broadcast_targets[i];
+            if (t.has_channel_index && t.channel_index == index) {
+                LOG_WARN("Beacon: channel %u retired, deleting broadcast_targets[%u]", index, i);
+                continue;
+            }
+            beacon.broadcast_targets[kept++] = beacon.broadcast_targets[i];
+        }
+        beacon.broadcast_targets_count = kept;
+    }
+
+    MeshBeaconModule::sanitiseConfig(beacon);
+    if (meshBeaconBroadcastModule)
+        meshBeaconBroadcastModule->invalidateCache();
+#else
+    (void)index;
+#endif
 }
 
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
+
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();
     }
@@ -1464,6 +1472,9 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
     // running the clamp first could evaluate secondaries against the previous primary and skip the clamp/warning.
     channels.onConfigChanged(); // tell the radios about this change
+
+    // After onConfigChanged(), so the beacon is re-checked against the channel table as it now is.
+    recheckBeaconAfterChannelEdit(cc.index);
 
     // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
     // that inherit a now-public primary key) and warn the client once if anything was coarsened.
@@ -1480,7 +1491,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS, false);
+    saveChanges(SEGMENT_CHANNELS | SEGMENT_MODULECONFIG, false);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)

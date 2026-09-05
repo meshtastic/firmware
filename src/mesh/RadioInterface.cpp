@@ -1118,10 +1118,21 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
  * When clamp==false, returns false on first error (pure validation).
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
-bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp)
+bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName,
+                                            bool announce, LoraSlotVerdict *verdict)
 {
     char err_string[160];
     float check_bw;
+
+    // A caller asking about a config the node will not run wants the clamp silent: the errors
+    // belong to whoever is applying a config, not to whoever is asking about one.
+    const auto announceError = [&]() {
+        if (!announce)
+            return;
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+    };
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1147,8 +1158,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                 }
                 snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
                          swapRegion->name);
-                LOG_INFO("%s", err_string);
-                sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+                if (announce) {
+                    LOG_INFO("%s", err_string);
+                    sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+                }
 
                 loraConfig.region = swapRegion->code;
                 newRegion = swapRegion;
@@ -1164,11 +1177,9 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             } else {
                 snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s", presetName, newRegion->name);
             }
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
-
+            // Only announce when applying: validation is a question, not an event.
             if (clamp) {
+                announceError();
                 loraConfig.modem_preset = newRegion->getDefaultPreset();
                 check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
             } else {
@@ -1190,11 +1201,9 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         snprintf(err_string, sizeof(err_string), "%s span %.0fkHz < requested %.0fkHz", newRegion->name, regionSpanKHz, check_bw);
-        LOG_ERROR("%s", err_string);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        sendErrorNotification(err_string);
-
+        // Only announce when applying: validation is a question, not an event.
         if (clamp) {
+            announceError();
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
             check_bw = bwCodeToKHz(loraConfig.bandwidth);
 
@@ -1206,7 +1215,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    // Null means "ask about the running node"; a caller validating some other config passes the
+    // name that config will run on, since the slot is picked by hashing it.
+    if (!channelName || !*channelName)
+        channelName = channels.getName(channels.getPrimaryIndex());
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
     // numFreqSlots can still be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
@@ -1217,7 +1229,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 
         // Check if we use the default frequency slot
         // overrideSlot: 0 = channel hash, -1 = preset hash, >0 = explicit slot
-        uses_default_frequency_slot =
+        const bool usesDefaultSlot =
             (loraConfig.channel_num == 0) || // user choice unset, no frequency override, so use default
             (newRegion->overrideSlot > 0 &&
              loraConfig.channel_num == newRegion->overrideSlot) || // user setting matches explicit override slot
@@ -1226,37 +1238,36 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             ((newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) &&
              ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot)); // user setting matches preset name hash
 
-        // check if user setting different to preset name
-        uses_custom_channel_name = (strcmp(channelName, presetNameDisplay) != 0);
+        // A custom name may hash to the default slot or not, so this is independent of the above.
+        const bool usesCustomChannelName = (strcmp(channelName, presetNameDisplay) != 0);
+        bool defaultSlot = usesDefaultSlot;
 
         if (loraConfig.channel_num > numFreqSlots) {
             snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
                      newRegion->name, numFreqSlots);
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
-
+            // Only announce when applying: validation is a question, not an event.
             if (clamp) {
-                if (uses_custom_channel_name) { // clamp to channel name hash
-                    loraConfig.channel_num =
-                        channelNameHashSlot + 1;          // channel_num is 1-based, but hash slot is 0-based, so add 1
-                } else if (newRegion->overrideSlot > 0) { // clamp to explicit override slot
-                    loraConfig.channel_num = newRegion->overrideSlot; // use the explicit override slot defined for this region
-                    uses_default_frequency_slot = true;
-                } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH && loraConfig.use_preset) {
-                    // clamp to preset name hash
-                    loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
-                    uses_default_frequency_slot = true;
-                } else if (loraConfig.use_preset) {                  // clamp to preset slot
-                    loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
-                    uses_default_frequency_slot = true;
-                } else { // if not using preset, and no custom channel name, just clamp to default anyway
-                    uses_default_frequency_slot = true;
-                };
+                announceError();
+                // The pin is what failed, so the repair is the region's own rule, which leaves the
+                // node on the default slot. Hash slots are 0-based, channel_num is 1-based.
+                if (newRegion->overrideSlot > 0)
+                    loraConfig.channel_num = newRegion->overrideSlot;
+                else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH)
+                    loraConfig.channel_num = presetNameHashSlot + 1;
+                else
+                    loraConfig.channel_num = channelNameHashSlot + 1;
+                defaultSlot = true;
             } else {
                 return false;
             }
         } // end of channel number check
+
+        // Reported, never applied here: NeighborInfoModule and Channels::hasDefaultChannel() read
+        // the published flags as the state of the running radio.
+        if (verdict) {
+            verdict->usesDefaultFrequencySlot = defaultSlot;
+            verdict->usesCustomChannelName = usesCustomChannelName;
+        }
     } else {
         // if we have a frequency override, we ignore the channel number and just use the override frequency
         snprintf(err_string, sizeof(err_string), "Frequency override in place, using %.3f", loraConfig.override_frequency);
@@ -1264,20 +1275,61 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     return true;
 }
 
-bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig)
+uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig)
 {
-    auto copy = loraConfig;
-    return checkOrClampConfigLora(copy, false);
+    const RegionInfo *region = getRegion(loraConfig.region);
+    const float bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
+                                           : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    // Same arithmetic as applyModemConfig(); a caller mid-clamp must not use this, because the
+    // bandwidth it is clamping to is not yet the one this derives from the config.
+    const float freqSlotWidth = region->profile->spacing + (region->profile->padding * 2) + (bw / 1000); // in MHz
+    return round((region->freqEnd - region->freqStart + region->profile->spacing) / freqSlotWidth);
 }
 
-void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+// The frequency slot rule, in one place. An in-range channel_num is the operator's pin and always
+// wins; with none, the region says how to derive it: overrideSlot -1 hashes the preset name, 0
+// hashes the channel name (custom or default - a blank name resolves to the preset name), >0 is
+// that slot. A custom channel name does not pick the rule, it is only what rule 0 hashes.
+uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
 {
-    checkOrClampConfigLora(loraConfig, true);
+    const RegionInfo *region = getRegion(loraConfig.region);
+    const uint32_t numFreqSlots = frequencySlotCount(loraConfig);
+
+    if (loraConfig.channel_num > 0 && loraConfig.channel_num <= numFreqSlots)
+        return loraConfig.channel_num; // already pinned
+
+    if (region->overrideSlot > 0)
+        return region->overrideSlot;
+    if (!numFreqSlots) // UNSET/degenerate region; % 0 is a SIGFPE
+        return 1;
+
+    const char *presetNameDisplay =
+        DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    if (!channelName || !*channelName)
+        channelName = presetNameDisplay;
+    const char *hashOf = (region->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) ? presetNameDisplay : channelName;
+    return (hash(hashOf) % numFreqSlots) + 1; // hash slots are 0-based, channel_num is 1-based
+}
+
+bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
+{
+    auto copy = loraConfig;
+    return checkOrClampConfigLora(copy, false, channelName);
+}
+
+RadioInterface::LoraSlotVerdict RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName,
+                                                                bool announce)
+{
+    // Seeded live so an override_frequency config, which settles neither flag, reports them
+    // unchanged rather than resetting them.
+    LoraSlotVerdict verdict = {uses_default_frequency_slot, uses_custom_channel_name};
+    checkOrClampConfigLora(loraConfig, true, channelName, announce, &verdict);
+    return verdict;
 }
 
 /**
- * Pull our channel settings etc... from protobufs to the dumb interface settings
- * Note: this must be given only settings which have been validated or clamped!
+ * Pull our channel settings etc... from protobufs to the dumb interface settings.
+ * Clamps config.lora in place first, so it is also where uses_default_frequency_slot is published.
  */
 void RadioInterface::applyModemConfig()
 {
@@ -1287,10 +1339,14 @@ void RadioInterface::applyModemConfig()
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     myRegion = newRegion;
 
+    LoraSlotVerdict slotVerdict = {uses_default_frequency_slot, uses_custom_channel_name};
+
     if (loraConfig.use_preset) {
-        if (!validateConfigLora(loraConfig)) {
-            loraConfig.modem_preset = newRegion->getDefaultPreset();
-        }
+        // Clamp, not validate-then-fall-back: the clamp settles the slot flags and swaps to the
+        // sibling EU region. A valid config is left untouched.
+        slotVerdict = clampConfigLora(loraConfig);
+        newRegion = getRegion(loraConfig.region); // the clamp may have swapped it
+        myRegion = newRegion;
         uint8_t newcr;
         modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
@@ -1307,16 +1363,16 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        if (validateConfigLora(loraConfig)) {
-        } else {
-            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
-            clampConfigLora(loraConfig);
-        }
+        slotVerdict = clampConfigLora(loraConfig);
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
     }
+
+    // The one place these are applied: this config is the radio now, so the flags describe it.
+    uses_default_frequency_slot = slotVerdict.usesDefaultFrequencySlot;
+    uses_custom_channel_name = slotVerdict.usesCustomChannelName;
 
     power = loraConfig.tx_power;
 

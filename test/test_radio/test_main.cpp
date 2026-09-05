@@ -1,3 +1,4 @@
+// trunk-ignore-all(trufflehog/Lob): matches test_* function names, not credentials
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -177,11 +178,212 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+// ---------------------------------------------------------------------------
+// Repairing an out-of-range frequency slot. The pin is the thing that failed, so the repair is the
+// region's own rule: overrideSlot -1 hashes the preset name, 0 the channel name, >0 is that slot.
+// ---------------------------------------------------------------------------
+
+/** A region that names its own slot keeps it, whatever the channel happens to be called. */
+static void test_clampSlot_regionSlotOutranksACustomName()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM; // overrideSlot 137
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    cfg.channel_num = 999;
+
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(137, cfg.channel_num, "the region's slot, not the hash of the name");
+    TEST_ASSERT_TRUE_MESSAGE(verdict.usesDefaultFrequencySlot, "the region's own rule leaves it on the default slot");
+    TEST_ASSERT_TRUE(verdict.usesCustomChannelName);
+}
+
+/** A channel-hash region hashes the name it was handed. */
+static void test_clampSlot_channelHashRegionUsesTheGivenName()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    cfg.channel_num = 999;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    derive.channel_num = 0; // no pin in the way, so this is the derived answer
+    const uint32_t expected = RadioInterface::resolveFrequencySlot(derive, "NYMesh");
+
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "the repair must agree with resolveFrequencySlot()");
+    TEST_ASSERT_TRUE(verdict.usesDefaultFrequencySlot);
+}
+
+/** An uncustomised name takes the same path: there is no separate preset-hash case for it. */
+static void test_clampSlot_defaultNamedChannelTakesTheSamePath()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    cfg.channel_num = 999;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    derive.channel_num = 0;
+    const uint32_t expected = RadioInterface::resolveFrequencySlot(derive, "LongFast");
+
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "LongFast", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "the preset's own name is just a channel name here");
+    TEST_ASSERT_FALSE(verdict.usesCustomChannelName);
+    TEST_ASSERT_TRUE(verdict.usesDefaultFrequencySlot);
+}
+
+/** Radio config only - a beacon target or offer never reaches this, both always run a preset.
+ *  The pin used to survive the clamp here, leaving the node on a slot the region does not hold. */
+static void test_clampSlot_customModemSettingsStillGetRepaired()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = false; // so the preset display name, and this channel's name, is "Custom"
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.bandwidth = 250;
+    cfg.spread_factor = 11;
+    cfg.coding_rate = 5;
+    cfg.channel_num = 999;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    derive.channel_num = 0;
+    const uint32_t expected = RadioInterface::resolveFrequencySlot(derive, "Custom");
+
+    RadioInterface::clampConfigLora(cfg, "Custom", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "an invalid pin must not survive the clamp");
+    TEST_ASSERT_TRUE_MESSAGE(cfg.channel_num >= 1 && cfg.channel_num <= RadioInterface::frequencySlotCount(cfg),
+                             "and what replaces it must be a slot the region holds");
+}
+
+/** Validation answers the question without repairing anything. */
+static void test_validateSlot_outOfRangePinIsRejected()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    cfg.channel_num = 999;
+
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg, "NYMesh"), "999 is past the top of US");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(999, cfg.channel_num, "validation must not repair what it rejects");
+
+    cfg.channel_num = 1;
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, "NYMesh"));
+}
+
+/** A pin the region does hold is the operator's choice, and is left alone. */
+static void test_clampSlot_inRangePinIsKept()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    meshtastic_Config_LoRaConfig derive = cfg;
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(derive, "NYMesh");
+    cfg.channel_num = (derived == 1) ? 2 : 1; // anything but the slot the name would have picked
+
+    const uint32_t pinned = cfg.channel_num;
+    const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(pinned, cfg.channel_num, "a valid pin is not the clamp's business");
+    TEST_ASSERT_FALSE_MESSAGE(verdict.usesDefaultFrequencySlot, "a deliberate pin is not the default slot");
+}
+
 // -----------------------------------------------------------------------
 // applyModemConfig() coding rate tests (via reconfigure)
 // -----------------------------------------------------------------------
 
 static TestableRadioInterface *testRadio;
+
+// ---------------------------------------------------------------------------
+// Frequency slot boundaries. Width is spacing + 2*padding + bandwidth; getFreq() returns the slot
+// CENTRE, so the upper edge is centre + bw/2 (getBw() is kHz, hence /2000 for MHz).
+// ---------------------------------------------------------------------------
+
+/** US: 26MHz of band at 250kHz tiles into exactly 104 slots, the last ending on 928.000. */
+static void test_frequencySlot_usTopSlotEndsOnBandEdge()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(104, RadioInterface::frequencySlotCount(config.lora),
+                                     "902-928MHz at 250kHz is exactly 104 slots");
+
+    config.lora.channel_num = 104; // top slot, 1-based
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 927.875f, testRadio->getFreq(), "top slot centre");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 928.0f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "the top slot must end on the band edge, never past it");
+}
+
+/** NZ_865 at 125kHz: 4MHz tiles into 32 slots, the last ending on 868.000. */
+static void test_frequencySlot_nz865NarrowBandwidthTopSlot()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_NZ_865;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW; // 125kHz
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(32, RadioInterface::frequencySlotCount(config.lora),
+                                     "864-868MHz at 125kHz is exactly 32 slots");
+
+    config.lora.channel_num = 32;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 867.9375f, testRadio->getFreq(), "top slot centre");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 868.0f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "halving the bandwidth must not push the top slot past the edge");
+}
+
+/** EU_868: a single 250kHz slot filling the whole 869.4-869.65 allocation. */
+static void test_frequencySlot_eu868IsExactlyOneSlot()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, RadioInterface::frequencySlotCount(config.lora),
+                                     "869.4-869.65MHz at 250kHz holds one slot and no more");
+
+    config.lora.channel_num = 1;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 869.525f, testRadio->getFreq(), "the only slot sits mid-band");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 869.65f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "the single slot fills the band exactly");
+}
+
+/** ITU1_2M: padding brackets each slot, coercing 15.6kHz onto the 20kHz ham raster. */
+static void test_frequencySlot_itu1_2mPaddingBracketsTopSlot()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_TINY_FAST; // 15.6kHz + 2*2.2kHz = 20kHz
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(100, RadioInterface::frequencySlotCount(config.lora),
+                                     "144-146MHz on a 20kHz raster is 100 slots");
+
+    config.lora.channel_num = 100;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 145.99f, testRadio->getFreq(), "top slot centre");
+    // Upper edge plus the trailing padding lands on 146.000: padding is a per-slot bracket, so the
+    // last slot stops 2.2kHz short of the edge rather than on it.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, 145.9978f, testRadio->getFreq() + testRadio->getBw() / 2000.0f,
+                                     "the padded raster must leave its trailing guard inside the band");
+}
 
 // After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
 // CR should come from the preset (5 for LONG_FAST), not from the zero default.
@@ -259,6 +461,63 @@ static void test_applyModemConfig_mediumTurbo()
 }
 
 // MEDIUM_TURBO is a 500 kHz preset, so it is invalid for EU_868 and must clamp to the region default.
+/**
+ * UNSET is "no region chosen yet", not a regulatory domain, so validation accepts every preset some
+ * region offers - not just the LONG_FAST default. Rejecting would clamp away a preset the user
+ * picked, on every boot and every set_config until they set a region.
+ */
+static void test_validateConfigLora_unsetRegionAcceptsEveryOfferedPreset()
+{
+    for (int p = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; p <= meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+         p++) {
+        // VERY_LONG_SLOW was deprecated in 2.5 and no region lists it, so it is not a preset a
+        // user can be holding - it is rejected under UNSET like any other unknown value.
+        if (p == meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW)
+            continue;
+
+        meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+        cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        cfg.use_preset = true;
+        cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)p;
+
+        char msg[64];
+        snprintf(msg, sizeof(msg), "preset %d must validate under UNSET", p);
+        TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), msg);
+
+        // And a clamp must leave it alone rather than rewriting it to the default.
+        meshtastic_Config_LoRaConfig clamped = cfg;
+        RadioInterface::clampConfigLora(clamped);
+        TEST_ASSERT_EQUAL_MESSAGE(p, clamped.modem_preset, msg);
+    }
+}
+
+/** The deprecated preset no region offers is rejected under UNSET, and clamped to the default. */
+static void test_clampConfigLora_unsetRegionClampsTheDeprecatedPreset()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW;
+
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "VERY_LONG_SLOW is offered by no region");
+    RadioInterface::clampConfigLora(cfg);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+/** A fabricated preset value is still rejected under UNSET, and clamped to the default. */
+static void test_clampConfigLora_unsetRegionStillClampsABogusPreset()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+    cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset,
+                              "a value no region offers is not a preset, and is clamped");
+}
+
 static void test_clampConfigLora_mediumTurboInvalidForEU868()
 {
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
@@ -504,6 +763,10 @@ void setup()
     RUN_TEST(test_lr20x0BandClassification);
     RUN_TEST(test_lr20x0BandHopDetection);
     RUN_TEST(test_lr20x0ReconfigurePathSelection);
+    RUN_TEST(test_frequencySlot_usTopSlotEndsOnBandEdge);
+    RUN_TEST(test_frequencySlot_nz865NarrowBandwidthTopSlot);
+    RUN_TEST(test_frequencySlot_eu868IsExactlyOneSlot);
+    RUN_TEST(test_frequencySlot_itu1_2mPaddingBracketsTopSlot);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
     RUN_TEST(test_bwCodeToKHz_roundTrip);
@@ -513,11 +776,20 @@ void setup()
     RUN_TEST(test_validateConfigLora_rejectsInvalidPresetForRegion);
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_clampSlot_regionSlotOutranksACustomName);
+    RUN_TEST(test_clampSlot_channelHashRegionUsesTheGivenName);
+    RUN_TEST(test_clampSlot_defaultNamedChannelTakesTheSamePath);
+    RUN_TEST(test_clampSlot_customModemSettingsStillGetRepaired);
+    RUN_TEST(test_validateSlot_outOfRangePinIsRejected);
+    RUN_TEST(test_clampSlot_inRangePinIsKept);
     RUN_TEST(test_applyModemConfig_freshFlashCodingRateNotZero);
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
     RUN_TEST(test_applyModemConfig_mediumTurbo);
+    RUN_TEST(test_validateConfigLora_unsetRegionAcceptsEveryOfferedPreset);
+    RUN_TEST(test_clampConfigLora_unsetRegionClampsTheDeprecatedPreset);
+    RUN_TEST(test_clampConfigLora_unsetRegionStillClampsABogusPreset);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);

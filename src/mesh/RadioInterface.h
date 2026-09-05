@@ -258,7 +258,25 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
-    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    // What a config settles the two published flags to. Reported by the clamp, applied by
+    // applyModemConfig() - so asking about a config the node will not run cannot move them.
+    struct LoraSlotVerdict {
+        bool usesDefaultFrequencySlot;
+        bool usesCustomChannelName;
+    };
+
+    // channelName is the name whose hash picks the default frequency slot. Null means "the current
+    // primary" - pass one explicitly to ask about a config that is not the running one.
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName = nullptr,
+                                       bool announce = true, LoraSlotVerdict *verdict = nullptr);
+
+    // 1-based slot this config lands on for a channel name, resolving the region override or name
+    // hash as applyModemConfig() does. Asks about a channel without making it primary first.
+    static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
+
+    // How many slots this config's region holds, deriving the bandwidth from it so every caller
+    // gets the count the radio will actually run on.
+    static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
@@ -270,11 +288,14 @@ class RadioInterface
     // records a critical error, and sends a client notification.
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
-    // Check if a candidate radio configuration is valid.
-    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
+    // Check if a candidate radio configuration is valid. Side-effect free: pass channelName to
+    // evaluate against a channel other than the running primary.
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
 
-    // Make a candidate radio configuration valid, even if it isn't.
-    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+    // Make a candidate radio configuration valid, even if it isn't; only applyModemConfig() applies
+    // the verdict. announce=false asks about a config the node will not run, and stays silent.
+    static LoraSlotVerdict clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
+                                           bool announce = true);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.

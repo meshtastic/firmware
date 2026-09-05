@@ -49,7 +49,7 @@ FALLBACK_AREA = "misc"
 # Envs that rebuild a fixed set of suites with different build flags. Their test_filter lives in
 # the ini and is read from there.
 NATIVE_INI = REPO / "variants" / "native" / "portduino" / "platformio.ini"
-SPECIAL_ENVS = ["coverage-event-policy", "coverage-channel-table"]
+SPECIAL_ENVS = ["coverage-event-policy", "coverage-channel-table", "coverage-beacon-userprefs"]
 
 # Suite names reach a shell as `-f <name>`. Constrained here, the one place the list is produced,
 # so a creatively named directory cannot become shell text.
