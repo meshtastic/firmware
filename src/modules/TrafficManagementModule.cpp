@@ -2281,7 +2281,8 @@ void TrafficManagementModule::stampVouchObservationLocked(NodeNum attester, Node
         cell = freeSlot ? freeSlot : leastUsed;
     if (!cell)
         return;
-    if (cell->windowTick != nowTick) {
+    // Re-key on a new pair (free slot or evicted cell), not only on a window roll.
+    if (cell->attester != attester || cell->subject != subject || cell->windowTick != nowTick) {
         cell->attester = attester;
         cell->subject = subject;
         cell->windowTick = nowTick;
@@ -2991,7 +2992,6 @@ void TrafficManagementModule::maintainAntispamLocked()
         return;
     const uint8_t nowRateTick = currentRateTick();
     const uint32_t nowSecs = uptimeSecs();
-    const uint32_t windowSecs = moduleConfig.traffic_management.probation_window_secs;
     const uint32_t promoTtl = moduleConfig.traffic_management.attestation_promotion_ttl_secs;
     const uint32_t l2Floor = l2FloorSecs();
     for (uint16_t i = 0; i < antispamCacheSize(); i++) {
@@ -3012,13 +3012,6 @@ void TrafficManagementModule::maintainAntispamLocked()
             for (uint8_t k = 0; k < 3; k++) {
                 e.budgetSamples[k] = 0;
                 e.budgetSampleMark[k] = 0;
-            }
-        }
-        if (windowSecs > 0 && e.hasFirstSeen && !e.promoted && e.trustLevel == 0) {
-            if (observedAgeSecsLocked(&e) >= windowSecs) {
-                clearAntispamAuxLocked(e.node);
-                memset(&e, 0, sizeof(AntispamEntry));
-                continue;
             }
         }
         if (e.promoted && e.promotedAtSecs != 0 && promoTtl > 0) {

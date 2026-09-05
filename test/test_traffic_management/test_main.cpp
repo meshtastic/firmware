@@ -3601,6 +3601,46 @@ static void test_tm_vouch_perSubjectAndPerWindowCaps(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+// Filling the 16-slot vouch table then stamping a new pair must re-key the
+// evicted cell; the old pair's count must not climb on the reused slot.
+static void test_tm_vouch_tableReuseRekeysCell(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.vouch_max_per_subject_per_window = 255;
+    moduleConfig.traffic_management.vouch_max_subjects_per_window = 255;
+    moduleConfig.traffic_management.attestation_min_distinct_attesters = 0;
+
+    const NodeNum attester = kRemoteNode;
+    trackSender(module, attester);
+
+    NodeNum firstSubject = 0;
+    NodeNum overflowSubject = 0;
+    uint16_t stamped = 0;
+    for (uint16_t i = 1; i < 32; i++) {
+        const NodeNum subject = 0x20000000u + i;
+        trackSender(module, subject);
+        meshtastic_MeshPacket v = makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, subject, attester, 1'000'000);
+        (void)module.handleReceived(v);
+        if (firstSubject == 0)
+            firstSubject = subject;
+        stamped++;
+        if (module.peekVouchSubjectsForTest(attester) < stamped) {
+            overflowSubject = subject;
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_EQUAL(0, overflowSubject);
+    TEST_ASSERT_EQUAL_UINT8(0, module.peekVouchCountForTest(attester, firstSubject));
+    TEST_ASSERT_EQUAL_UINT8(1, module.peekVouchCountForTest(attester, overflowSubject));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
 // (f) A self-vouch (subject == attester) is always rejected: the subject is not
 // tracked by the attester's own `from`, and the decode gate catches it too.
 static void test_tm_selfVouch_rejected(void)
@@ -4238,7 +4278,7 @@ static void test_tm_noRelay_sendRoundTrip_observedAttester(void)
     TEST_ASSERT_EQUAL_UINT32(1, sender.getStats().no_relay_gossips_sent);
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 
-    const meshtastic_MeshPacket &gossip = mockRouter.sentPackets.front();
+    const meshtastic_MeshPacket gossip = mockRouter.sentPackets.front();
     TEST_ASSERT_EQUAL_INT(meshtastic_PortNum_ID_ATTESTATION_APP, gossip.decoded.portnum);
     TEST_ASSERT_EQUAL_UINT8(1, gossip.hop_limit);
     TEST_ASSERT_EQUAL_UINT8(1, gossip.hop_start);
@@ -4330,6 +4370,34 @@ static void test_tm_tickZero_firstSeenAndNoRelayRoll(void)
     (void)module.runOnce();
     TEST_ASSERT_FALSE(module.peekNoRelayForTest(kTargetNode));
     TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kRemoteNode));
+}
+
+// Graduating the greylist must keep first-seen. Sweeping the row away would
+// put the next packet back into probation.
+static void test_tm_probation_survivesSweepAfterWindow(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
+
+    trackSender(module, kRemoteNode);
+    TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kRemoteNode));
+    meshtastic_MeshPacket pkt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    pkt.hop_limit = 3;
+    TEST_ASSERT_EQUAL_UINT8(2, module.relayHopCap(pkt));
+
+    TrafficManagementModule::s_testNowMs += 300'000;
+    (void)module.runOnce();
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kRemoteNode));
+    TEST_ASSERT_EQUAL_UINT8(3, module.relayHopCap(pkt));
+
+    trackSender(module, kRemoteNode);
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kRemoteNode));
+    TEST_ASSERT_EQUAL_UINT8(3, module.relayHopCap(pkt));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
 static void test_tm_viaMqtt_skipsAntispam(void)
@@ -4586,6 +4654,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_noRelay_perReporterCapAndTTLClearOnRollover);
     RUN_TEST(test_tm_knownSince_rejectedOnInsufficientObservedAttesterAge);
     RUN_TEST(test_tm_vouch_perSubjectAndPerWindowCaps);
+    RUN_TEST(test_tm_vouch_tableReuseRekeysCell);
     RUN_TEST(test_tm_selfVouch_rejected);
     RUN_TEST(test_tm_oldConfig_loadsClean);
     RUN_TEST(test_tm_probation_ratePenalty_wiredAndCharged);
@@ -4602,6 +4671,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_noRelay_sendRoundTrip_observedAttester);
     RUN_TEST(test_tm_relayHopCap_probationL2AndCongestion);
     RUN_TEST(test_tm_tickZero_firstSeenAndNoRelayRoll);
+    RUN_TEST(test_tm_probation_survivesSweepAfterWindow);
     RUN_TEST(test_tm_viaMqtt_skipsAntispam);
     RUN_TEST(test_tm_tableFull_evictionClearsNoRelay);
     RUN_TEST(test_tm_knownSince_hopLimitIsOne);
