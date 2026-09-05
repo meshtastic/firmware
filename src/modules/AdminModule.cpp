@@ -92,33 +92,6 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
     }
 }
 
-// Admin-channel retirement: a remote admin packet is out-of-band-anchored when the nodeDB
-// holds a MANUALLY verified key for the sender (the QR/NFC / pre-seeded anchor, i.e. the
-// out-of-band level of the identity trust ladder). The mesh cannot learn that bit from the
-// air - it is committed locally (key verification, shared contact) - so it is the "L3" of a
-// sender. The 3-slot admin_key list is the other accepted anchor; the legacy "admin" channel
-// remains only for 2.x LTS devices that predate both (config.security.admin_channel_enabled,
-// off by default on fresh installs).
-static bool remoteAdminOutOfBandAnchored(const meshtastic_MeshPacket &mp)
-{
-    if (mp.from == 0 || !nodeDB)
-        return false;
-    const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(mp.from);
-    return n && nodeInfoLiteIsKeyManuallyVerified(n);
-}
-
-// True when the packet carries a sender public key that matches one of the 3 admin_key slots.
-static bool senderKeyInAdminKeyList(const meshtastic_MeshPacket &mp)
-{
-    if (mp.public_key.size != 32)
-        return false;
-    for (int i = 0; i < 3; i++) {
-        if (config.security.admin_key[i].size == 32 && memcmp(mp.public_key.bytes, config.security.admin_key[i].bytes, 32) == 0)
-            return true;
-    }
-    return false;
-}
-
 /**
  * @brief Handle received protobuf message
  *
@@ -202,18 +175,18 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
 #endif
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
-        // Legacy admin channel retirement: remote admin on this channel needs an out-of-band
-        // anchor (a manually verified sender key, the out-of-band trust level) or a sender
-        // key in the 3-slot admin_key list. The admin_channel_enabled config flag is the 2.x
-        // LTS exception for devices that predate both (off by default on fresh installs):
-        // while it is on, the pre-retirement behavior holds for everyone.
-        if (!config.security.admin_channel_enabled && !remoteAdminOutOfBandAnchored(mp) && !senderKeyInAdminKeyList(mp)) {
-            LOG_INFO("Ignore admin channel, legacy admin not anchored");
+        if (!config.security.admin_channel_enabled) {
+            LOG_INFO("Ignore admin channel, legacy admin disabled");
             myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
             return handled;
         }
     } else if (mp.pki_encrypted) {
-        if (senderKeyInAdminKeyList(mp) || remoteAdminOutOfBandAnchored(mp)) {
+        if ((config.security.admin_key[0].size == 32 &&
+             memcmp(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0) ||
+            (config.security.admin_key[1].size == 32 &&
+             memcmp(mp.public_key.bytes, config.security.admin_key[1].bytes, 32) == 0) ||
+            (config.security.admin_key[2].size == 32 &&
+             memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
 
             // Note: PKC admin does NOT automatically authorize the
