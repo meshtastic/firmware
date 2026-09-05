@@ -1984,6 +1984,17 @@ std::unique_ptr<GPS> GPS::createGps()
         return nullptr;
     }
 #endif
+#if defined(ARCH_STM32)
+    if (_serial_gps) {
+        _serial_gps->setTx(_tx_gpio);
+        _serial_gps->setRx(_rx_gpio);
+        _serial_gps->begin(GPS_BAUDRATE);
+        if (!*_serial_gps) {
+            LOG_WARN("GPS serial port failed to initialize; disabling GPS");
+            return nullptr;
+        }
+    }
+#endif
 
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
@@ -2062,13 +2073,7 @@ std::unique_ptr<GPS> GPS::createGps()
         _serial_gps->setPins(new_gps->rx_gpio, new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);
 #elif defined(ARCH_STM32)
-        _serial_gps->setTx(new_gps->tx_gpio);
-        _serial_gps->setRx(new_gps->rx_gpio);
-        _serial_gps->begin(GPS_BAUDRATE);
-        if (!*_serial_gps) {
-            LOG_WARN("GPS serial port failed to initialize; disabling GPS");
-            return nullptr;
-        }
+        // Serial initialized and verified ready prior to hardware side effects above
 #elif defined(ARCH_PORTDUINO)
         // Portduino can't set the GPS pins directly.
         _serial_gps->begin(GPS_BAUDRATE);
