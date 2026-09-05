@@ -209,7 +209,7 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
     using TrafficManagementModule::peekCachedRole;
     using TrafficManagementModule::peekNodeInfoFlagsForTest;
     using TrafficManagementModule::runOnce;
-    using TrafficManagementModule::setLastSignedTickForTest;
+    using TrafficManagementModule::setLastSignedSecsForTest;
     using TrafficManagementModule::trustLevelForTest;
 
     bool ignoreRequestFlag() const { return ignoreRequest; }
@@ -245,6 +245,8 @@ static void resetTrafficConfig()
     // Virtual clock base (1 h in, so tick subtraction never underflows). Tests advance time by
     // bumping TrafficManagementModule::s_testNowMs instead of sleeping real seconds across a tick.
     TrafficManagementModule::s_testNowMs = 3600000;
+    TrafficManagementModule::s_testUptimeSecs = 0xFFFFFFFFu;
+    TrafficManagementModule::s_testCongestionPct = -1;
 }
 
 static meshtastic_MeshPacket makeDecodedPacket(meshtastic_PortNum port, NodeNum from, NodeNum to = NODENUM_BROADCAST)
@@ -3339,80 +3341,56 @@ static void trackSenderWithRssi(TrafficManagementModuleTestShim &module, NodeNum
     (void)module.handleReceived(pos);
 }
 
-// Deliver `n` text packets from `from` through the module's receive path
-// (each counts against the per-sender rate window).
-static void feedTexts(TrafficManagementModuleTestShim &module, NodeNum from, int n, uint32_t idBase = 0x4000)
-{
-    for (int i = 0; i < n; i++) {
-        meshtastic_MeshPacket txt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, from);
-        txt.id = idBase + i;
-        (void)module.handleReceived(txt);
-    }
-}
-
-// (a) A gossiped NO_RELAY is honored only when the receiver itself has seen
-// the subject over-relay this window (its relay count crossed the relay
-// budget here). A free-floating claim for a subject with no local
-// over-relay evidence is ignored; the same claim is honored once the
-// receiver has locally observed the over-relay. A locally exhausted subject
-// (budget crossed by our own relaying) is the same evidence and is honored.
+// (a) Gossiped NO_RELAY is honored only after this node has relayed the
+// subject at least once this window (when the local-observation gate is on)
+// and a claimer quorum is met. Local exhaustion installs the bit without
+// waiting for claimers. want_ack / ROUTING / ADMIN still relay.
 static void test_tm_noRelay_observedOverRelay_onlyPath(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
-    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000; // fresh 5-min window
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
 
     TrafficManagementModuleTestShim module;
     moduleConfig.traffic_management.relay_budget_max_packets = 4;
-    moduleConfig.traffic_management.probation_window_secs = 300; // tracking on (1 tick)
-    moduleConfig.traffic_management.rate_limit_window_secs = 300;
-    // Threshold 8 -> probation budget 4, so the attester's 11 packets below
-    // pass the limiter; the subject needs a full budget's worth of traffic
-    // (9 texts + tracking = 10 -> count 9 > 8) to be rate-limited here.
-    moduleConfig.traffic_management.rate_limit_max_packets = 8;
-    // Local-observation gate ON (default).
+    moduleConfig.traffic_management.probation_window_secs = 300;
     moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 1;
+    moduleConfig.traffic_management.no_relay_min_claimers = 2;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 0;
 
-    // Track subject + attester (subject must be locally tracked; attester is
-    // the `from` of the attestation).
     trackSender(module, kTargetNode);
     trackSender(module, kRemoteNode);
+    trackSender(module, kRemoteNode2);
 
-    // First: no local over-relay evidence (subject relayed 0 here, not
-    // rate-limited). The gossiped NO_RELAY is ignored.
-    meshtastic_MeshPacket att1 = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 100'000);
+    meshtastic_MeshPacket att1 = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 0);
     ProcessMessage r1 = module.handleReceived(att1);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r1));
     TEST_ASSERT_FALSE(module.peekNoRelayForTest(kTargetNode));
     TEST_ASSERT_EQUAL_UINT32(0, module.peekRelayedCountForTest(kTargetNode));
 
-    // Now give the receiver local evidence: push the subject over its local
-    // per-sender rate budget (the tracking packet is count 1; the 9th text
-    // lands count 9 > 8 and is the drop).
-    feedTexts(module, kTargetNode, 8);
-    meshtastic_MeshPacket dropCand = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode);
-    dropCand.id = 0x5000;
-    ProcessMessage rDrop = module.handleReceived(dropCand);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(rDrop));
-
-    // Same claim, re-sent: the subject is over-relaying here (observed), so
-    // the gate passes and the NO_RELAY is honored (gossiped, not local).
-    meshtastic_MeshPacket att2 = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 100'000);
+    module.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode));
+    TEST_ASSERT_EQUAL_UINT32(1, module.peekRelayedCountForTest(kTargetNode));
+    meshtastic_MeshPacket att2 = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 0);
     ProcessMessage r2 = module.handleReceived(att2);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_FALSE(module.peekNoRelayForTest(kTargetNode));
+
+    meshtastic_MeshPacket att3 = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode2, 0);
+    ProcessMessage r3 = module.handleReceived(att3);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r3));
     TEST_ASSERT_TRUE(module.peekNoRelayForTest(kTargetNode));
     TEST_ASSERT_FALSE(module.peekNoRelayLocalForTest(kTargetNode));
 
-    // A subject with a local relay count but no over-relay (below budget) is
-    // not honored.
-    trackSender(module, kRemoteNode2);
-    meshtastic_MeshPacket att3 =
-        makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kRemoteNode2, kRemoteNode, 100'000);
-    ProcessMessage r3 = module.handleReceived(att3);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r3));
-    TEST_ASSERT_FALSE(module.peekNoRelayForTest(kRemoteNode2));
+    meshtastic_MeshPacket text = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode);
+    TEST_ASSERT_FALSE(module.shouldRelay(text));
+    meshtastic_MeshPacket routing = makeDecodedPacket(meshtastic_PortNum_ROUTING_APP, kTargetNode);
+    TEST_ASSERT_TRUE(module.shouldRelay(routing));
+    meshtastic_MeshPacket admin = makeDecodedPacket(meshtastic_PortNum_ADMIN_APP, kTargetNode);
+    TEST_ASSERT_TRUE(module.shouldRelay(admin));
+    meshtastic_MeshPacket ack = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode);
+    ack.want_ack = true;
+    TEST_ASSERT_TRUE(module.shouldRelay(ack));
 
-    // A locally exhausted subject (our own relay count crossed the budget
-    // here) is the same evidence: honored, and the bit stays local.
     trackSender(module, kRemoteNode3);
     module.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode3));
     module.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode3));
@@ -3420,55 +3398,52 @@ static void test_tm_noRelay_observedOverRelay_onlyPath(void)
     module.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode3));
     TEST_ASSERT_EQUAL_UINT32(4, module.peekRelayedCountForTest(kRemoteNode3));
     TEST_ASSERT_TRUE(module.peekNoRelayLocalForTest(kRemoteNode3));
-    meshtastic_MeshPacket att4 =
-        makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kRemoteNode3, kRemoteNode, 100'000);
+    meshtastic_MeshPacket att4 = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kRemoteNode3, kRemoteNode, 0);
     ProcessMessage r4 = module.handleReceived(att4);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r4));
     TEST_ASSERT_TRUE(module.peekNoRelayForTest(kRemoteNode3));
-    TEST_ASSERT_TRUE(module.peekNoRelayLocalForTest(kRemoteNode3)); // local bit, not re-stamped as gossiped
+    TEST_ASSERT_TRUE(module.peekNoRelayLocalForTest(kRemoteNode3));
 
-    // With the gate OFF, a fresh subject's claim is honored without local
-    // over-relay evidence (pre-observation behavior).
     TrafficManagementModuleTestShim module2;
-    moduleConfig.traffic_management.probation_window_secs = 300; // tracking on
-    moduleConfig.traffic_management.rate_limit_window_secs = 0;
-    moduleConfig.traffic_management.rate_limit_max_packets = 0;
+    moduleConfig.traffic_management.probation_window_secs = 300;
     moduleConfig.traffic_management.relay_budget_max_packets = 4;
     moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 0;
+    moduleConfig.traffic_management.no_relay_min_claimers = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
     trackSender(module2, kRemoteNode2);
     trackSender(module2, kRemoteNode3);
-    meshtastic_MeshPacket att5 =
-        makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kRemoteNode3, kRemoteNode2, 100'000);
+    meshtastic_MeshPacket att5 = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kRemoteNode3, kRemoteNode2, 0);
     ProcessMessage r5 = module2.handleReceived(att5);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r5));
     TEST_ASSERT_TRUE(module2.peekNoRelayForTest(kRemoteNode3));
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (b) A NO_RELAY from an attester younger than attestation_min_tenure_secs is
-// rejected even when the local-exhaustion gate would have admitted it.
+// (b) A NO_RELAY from an attester this node has not observed long enough is
+// rejected even when the local-observation gate would have admitted it.
+// Self-reported attester_tenure_secs is not a receive gate.
 static void test_tm_noRelay_rejectedBelowTenureFloor(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
     TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
 
     TrafficManagementModuleTestShim module;
-    moduleConfig.traffic_management.probation_window_secs = 300;  // tracking on (1 tick)
-    moduleConfig.traffic_management.relay_budget_max_packets = 1; // local exhaustion armed
-    moduleConfig.traffic_management.attestation_min_tenure_secs = 86'400;
-    moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 0; // disable to isolate tenure check
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.relay_budget_max_packets = 1;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 300;
+    moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 0;
+    moduleConfig.traffic_management.no_relay_min_claimers = 0;
 
     trackSender(module, kTargetNode);
     trackSender(module, kRemoteNode);
 
-    // Tenure below the floor: rejected.
-    meshtastic_MeshPacket young = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 3'600);
+    meshtastic_MeshPacket young = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 0);
     ProcessMessage rYoung = module.handleReceived(young);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(rYoung));
     TEST_ASSERT_FALSE(module.peekNoRelayForTest(kTargetNode));
 
-    // Tenure at/above the floor: honored.
-    meshtastic_MeshPacket old = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 86'400);
+    TrafficManagementModule::s_testNowMs += 300'000;
+    meshtastic_MeshPacket old = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 0);
     ProcessMessage rOld = module.handleReceived(old);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(rOld));
     TEST_ASSERT_TRUE(module.peekNoRelayForTest(kTargetNode));
@@ -3491,7 +3466,9 @@ static void test_tm_noRelay_perReporterCapAndTTLClearOnRollover(void)
     moduleConfig.traffic_management.no_relay_max_subjects_per_window = 3;
     moduleConfig.traffic_management.no_relay_ttl_secs = 120;
     moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 0;
-    moduleConfig.traffic_management.attestation_min_tenure_secs = 86'400;
+    moduleConfig.traffic_management.no_relay_min_claimers = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 0;
 
     // Track 4 subjects + the attester.
     for (NodeNum n : {kTargetNode, kRemoteNode2, kRemoteNode3, kRemoteNode4, kRemoteNode})
@@ -3556,8 +3533,7 @@ static void test_tm_knownSince_rejectedOnInsufficientObservedAttesterAge(void)
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(rFresh));
     TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kTargetNode)); // still in probation
 
-    // Advance observed age: one full 5-min tick (attester's firstSeenTick is 1 tick
-    // older than now). Re-send the same vouch: accepted.
+    // Advance observed age by 5 minutes and re-send the same vouch: accepted.
     TrafficManagementModule::s_testNowMs += 300'000;
     meshtastic_MeshPacket aged =
         makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
@@ -4068,9 +4044,8 @@ static void test_tm_trustLadder_l2FastPathDecayAndRenewal(void)
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
     TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
 
-    // Mixed-mesh floor (Phase 1.1/2 behavior): with the L2 floor AND the
-    // observed-tenure fallback both disarmed, the same vouch still promotes
-    // but the ladder never leaves L1.
+    // Mixed-mesh floor: with the L2 floor AND the observed-tenure fallback
+    // both disarmed, the same vouch still promotes but the ladder never leaves L1.
     moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 0;
     moduleConfig.traffic_management.attestation_min_observed_secs = 0;
     trackSender(module, kRemoteNode4);
@@ -4144,27 +4119,24 @@ static void test_tm_trustLadder_l2SignatureRequiredMixedMeshFallback(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (n) Trust ladder, tenure cap: with the L2 floor at the shipped 30 days
-// (saturated to the mod-16 ceiling of 15 ticks), a fresh attester cannot buy
-// L2 for a signing subject; an attester observed for 15 ticks can. The floor
-// is a bounded upgrade, not a free pass for brand-new radios.
+// (n) Trust ladder, tenure cap: with the L2 floor at the shipped 30 days,
+// a fresh attester cannot buy L2 for a signing subject; an attester observed
+// for 30 days can.
 static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
-    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000; // tick 1
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
 
     TrafficManagementModuleTestShim module;
     moduleConfig.traffic_management.probation_window_secs = 600;
-    moduleConfig.traffic_management.attestation_min_tenure_secs = 86'400;
-    moduleConfig.traffic_management.attestation_min_observed_secs = 0; // isolate the L2 floor
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
     moduleConfig.traffic_management.attestation_min_distinct_attesters = 1;
-    moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 30 * 86'400; // 15-tick ceiling
+    moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 30UL * 86'400UL;
 
-    // The attester has been observed for 15 ticks (saturates the floor); the
-    // subject is fresh.
-    trackSender(module, kRemoteNode);                     // attester: first-seen tick 1
-    TrafficManagementModule::s_testNowMs += 15 * 300'000; // tick 16: attester age 15
-    trackSender(module, kTargetNode);                     // subject: first-seen tick 16
+    trackSender(module, kRemoteNode);
+    TrafficManagementModule::s_testNowMs += 30UL * 86'400UL * 1000UL;
+    trackSender(module, kTargetNode);
     meshtastic_MeshPacket signedAttester = makePositionPacket(kRemoteNode, 374221234, -1220845678);
     signedAttester.xeddsa_signed = true;
     module.handleReceived(signedAttester);
@@ -4174,20 +4146,15 @@ static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
     TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kTargetNode));
     TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode));
 
-    // Tenured attester vouches: promotion + L2 (signed vouch - signature-required
-    // L2 fast path; the tenure cap is the attester-age bound, not a signature gate).
-    meshtastic_MeshPacket v1 =
-        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 1'000'000);
+    meshtastic_MeshPacket v1 = makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 0);
     v1.xeddsa_signed = true;
     ProcessMessage r1 = module.handleReceived(v1);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r1));
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
     TEST_ASSERT_EQUAL_UINT8(2, module.trustLevelForTest(kTargetNode));
 
-    // A FRESH attester (age 0) vouching for a fresh signing subject: the
-    // promotion lands, but the tenure cap holds the subject at L1.
-    trackSender(module, kRemoteNode2); // fresh attester: first-seen tick 16
-    trackSender(module, kRemoteNode4); // fresh subject: first-seen tick 16
+    trackSender(module, kRemoteNode2);
+    trackSender(module, kRemoteNode4);
     meshtastic_MeshPacket signedAttester2 = makePositionPacket(kRemoteNode2, 374221234, -1220845678);
     signedAttester2.id = 0x3001;
     signedAttester2.xeddsa_signed = true;
@@ -4196,13 +4163,12 @@ static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
     signedSubj2.id = 0x3002;
     signedSubj2.xeddsa_signed = true;
     module.handleReceived(signedSubj2);
-    meshtastic_MeshPacket v2 =
-        makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kRemoteNode4, kRemoteNode2, 1'000'000);
-    v2.xeddsa_signed = true; // signed so the only bound left is the attester tenure cap
+    meshtastic_MeshPacket v2 = makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kRemoteNode4, kRemoteNode2, 0);
+    v2.xeddsa_signed = true;
     ProcessMessage r2 = module.handleReceived(v2);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kRemoteNode4));
-    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode4)); // promoted, tenure-capped at L1
+    TEST_ASSERT_EQUAL_UINT8(1, module.trustLevelForTest(kRemoteNode4));
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
@@ -4245,6 +4211,242 @@ static void test_tm_trustLadder_manualKeyL3Permanent(void)
     module.handleReceived(makePositionPacket(kRemoteNode3, 374221234, -1220845678));
     TEST_ASSERT_EQUAL_UINT8(3, module.trustLevelForTest(kRemoteNode3));
     TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+static void test_tm_noRelay_sendRoundTrip_observedAttester(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim sender;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.relay_budget_max_packets = 2;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 1;
+    moduleConfig.traffic_management.no_relay_min_claimers = 1;
+
+    trackSender(sender, kTargetNode);
+    sender.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode));
+    sender.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode));
+    TEST_ASSERT_TRUE(sender.peekNoRelayLocalForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT32(1, sender.getStats().no_relay_gossips_sent);
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    const meshtastic_MeshPacket &gossip = mockRouter.sentPackets.front();
+    TEST_ASSERT_EQUAL_INT(meshtastic_PortNum_ID_ATTESTATION_APP, gossip.decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT8(1, gossip.hop_limit);
+    TEST_ASSERT_EQUAL_UINT8(1, gossip.hop_start);
+    meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(gossip.decoded.payload.bytes, gossip.decoded.payload.size, &meshtastic_IdAttestation_msg, &att));
+    TEST_ASSERT_EQUAL_INT(meshtastic_IdAttestation_Kind_NO_RELAY, att.kind);
+    TEST_ASSERT_EQUAL_UINT32(kTargetNode, att.subject);
+
+    TrafficManagementModuleTestShim receiver;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.relay_budget_max_packets = 2;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 1;
+    moduleConfig.traffic_management.no_relay_min_claimers = 1;
+    trackSender(receiver, kTargetNode);
+    trackSender(receiver, kLocalNode);
+    receiver.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode));
+    meshtastic_MeshPacket incoming = gossip;
+    incoming.from = kLocalNode;
+    incoming.to = NODENUM_BROADCAST;
+    incoming.via_mqtt = false;
+    ProcessMessage rr = receiver.handleReceived(incoming);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(rr));
+    TEST_ASSERT_TRUE(receiver.peekNoRelayForTest(kTargetNode));
+    TEST_ASSERT_FALSE(receiver.peekNoRelayLocalForTest(kTargetNode));
+
+    router = nullptr;
+    service = nullptr;
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+static void test_tm_relayHopCap_probationL2AndCongestion(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
+    moduleConfig.traffic_management.congestion_hop_cap_pct = 50;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.attestation_min_distinct_attesters = 1;
+    moduleConfig.traffic_management.attestation_l2_min_tenure_secs = 0;
+
+    trackSender(module, kRemoteNode);
+    meshtastic_MeshPacket pkt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    pkt.hop_limit = 3;
+    TEST_ASSERT_EQUAL_UINT8(2, module.relayHopCap(pkt));
+    TEST_ASSERT_EQUAL_UINT32(1, module.getStats().relay_hop_caps_applied);
+
+    TrafficManagementModule::s_testCongestionPct = 80;
+    TEST_ASSERT_EQUAL_UINT8(1, module.relayHopCap(pkt));
+
+    uint8_t key[32];
+    memset(key, 0x11, sizeof(key));
+    module.onNodeKeyCommitted(kRemoteNode, key, true);
+    TEST_ASSERT_EQUAL_UINT8(3, module.trustLevelForTest(kRemoteNode));
+    TEST_ASSERT_EQUAL_UINT8(3, module.relayHopCap(pkt));
+
+    TrafficManagementModule::s_testCongestionPct = -1;
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+static void test_tm_tickZero_firstSeenAndNoRelayRoll(void)
+{
+    TrafficManagementModule::s_testNowMs = 0;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 600;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
+    moduleConfig.traffic_management.relay_budget_max_packets = 1;
+    moduleConfig.traffic_management.no_relay_min_claimers = 0;
+    moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+
+    trackSender(module, kRemoteNode);
+    TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kRemoteNode));
+    meshtastic_MeshPacket pkt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    pkt.hop_limit = 3;
+    TEST_ASSERT_EQUAL_UINT8(2, module.relayHopCap(pkt));
+
+    trackSender(module, kTargetNode);
+    module.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode));
+    TEST_ASSERT_TRUE(module.peekNoRelayForTest(kTargetNode));
+
+    TrafficManagementModule::s_testNowMs = 300'000;
+    (void)module.runOnce();
+    TEST_ASSERT_FALSE(module.peekNoRelayForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kRemoteNode));
+}
+
+static void test_tm_viaMqtt_skipsAntispam(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.relay_budget_max_packets = 1;
+    moduleConfig.traffic_management.no_relay_min_claimers = 0;
+    moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+
+    meshtastic_MeshPacket mqttPos = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    mqttPos.via_mqtt = true;
+    (void)module.handleReceived(mqttPos);
+    TEST_ASSERT_EQUAL_INT(-1, module.peekProbationStateForTest(kRemoteNode));
+
+    trackSender(module, kTargetNode);
+    meshtastic_MeshPacket mqttAtt = makeAttestationPacket(meshtastic_IdAttestation_Kind_NO_RELAY, kTargetNode, kRemoteNode, 0);
+    mqttAtt.via_mqtt = true;
+    (void)module.handleReceived(mqttAtt);
+    TEST_ASSERT_FALSE(module.peekNoRelayForTest(kTargetNode));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+static void test_tm_tableFull_evictionClearsNoRelay(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.relay_budget_max_packets = 1;
+    moduleConfig.traffic_management.no_relay_min_claimers = 0;
+    moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+
+    const NodeNum first = 0x10000001;
+    trackSender(module, first);
+    module.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, first));
+    TEST_ASSERT_TRUE(module.peekNoRelayForTest(first));
+
+    for (uint16_t i = 2; i < 300; i++) {
+        trackSender(module, static_cast<NodeNum>(0x10000000u + i));
+    }
+    TEST_ASSERT_EQUAL_INT(-1, module.peekProbationStateForTest(first));
+    meshtastic_MeshPacket text = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, first);
+    TEST_ASSERT_TRUE(module.shouldRelay(text));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+static void test_tm_knownSince_hopLimitIsOne(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 1;
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.vouch_max_per_subject_per_window = 0;
+    moduleConfig.traffic_management.vouch_max_subjects_per_window = 0;
+
+    trackSender(module, kRemoteNode);
+    TrafficManagementModule::s_testNowMs += 2000;
+    meshtastic_MeshPacket later = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    later.id = 0x7777;
+    (void)module.handleReceived(later);
+
+    bool found = false;
+    for (const meshtastic_MeshPacket &sent : mockRouter.sentPackets) {
+        if (sent.decoded.portnum != meshtastic_PortNum_ID_ATTESTATION_APP)
+            continue;
+        meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
+        if (!pb_decode_from_bytes(sent.decoded.payload.bytes, sent.decoded.payload.size, &meshtastic_IdAttestation_msg, &att))
+            continue;
+        if (att.kind != meshtastic_IdAttestation_Kind_KNOWN_SINCE)
+            continue;
+        TEST_ASSERT_EQUAL_UINT8(1, sent.hop_limit);
+        TEST_ASSERT_EQUAL_UINT32(0, att.known_since_secs);
+        TEST_ASSERT_EQUAL_UINT32(kRemoteNode, att.subject);
+        found = true;
+    }
+    TEST_ASSERT_TRUE(found);
+
+    router = nullptr;
+    service = nullptr;
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+static void test_tm_antispamMigration_zeroKnobsGetDefaults(void)
+{
+    meshtastic_ModuleConfig_TrafficManagementConfig cfg = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+    cfg.position_min_interval_secs = 12345;
+    cfg.rate_limit_max_packets = 7;
+    TEST_ASSERT_TRUE(antispamKnobsUnconfigured(cfg));
+    installAntispamDefaults(cfg);
+    TEST_ASSERT_FALSE(antispamKnobsUnconfigured(cfg));
+    TEST_ASSERT_EQUAL_UINT32(12345, cfg.position_min_interval_secs);
+    TEST_ASSERT_EQUAL_UINT32(7, cfg.rate_limit_max_packets);
+    TEST_ASSERT_EQUAL_UINT32(default_traffic_mgmt_probation_window_secs, cfg.probation_window_secs);
+    TEST_ASSERT_EQUAL_UINT32(default_traffic_mgmt_no_relay_min_claimers, cfg.no_relay_min_claimers);
+    TEST_ASSERT_EQUAL_UINT32(0, cfg.relay_budget_max_packets);
+
+    cfg.probation_window_secs = 99;
+    TEST_ASSERT_FALSE(antispamKnobsUnconfigured(cfg));
+    const uint32_t kept = cfg.probation_window_secs;
+    installAntispamDefaults(cfg);
+    TEST_ASSERT_EQUAL_UINT32(default_traffic_mgmt_probation_window_secs, cfg.probation_window_secs);
+    TEST_ASSERT_NOT_EQUAL(kept, cfg.probation_window_secs);
 }
 
 } // namespace
@@ -4396,6 +4598,13 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_trustLadder_l2SignatureRequiredMixedMeshFallback);
     RUN_TEST(test_tm_trustLadder_tenureCappedL2Upgrade);
     RUN_TEST(test_tm_trustLadder_manualKeyL3Permanent);
+    RUN_TEST(test_tm_noRelay_sendRoundTrip_observedAttester);
+    RUN_TEST(test_tm_relayHopCap_probationL2AndCongestion);
+    RUN_TEST(test_tm_tickZero_firstSeenAndNoRelayRoll);
+    RUN_TEST(test_tm_viaMqtt_skipsAntispam);
+    RUN_TEST(test_tm_tableFull_evictionClearsNoRelay);
+    RUN_TEST(test_tm_knownSince_hopLimitIsOne);
+    RUN_TEST(test_tm_antispamMigration_zeroKnobsGetDefaults);
 
     exit(UNITY_END());
 }
