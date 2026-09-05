@@ -20,6 +20,7 @@
 #include "mesh/RadioInterface.h"
 #include "mesh/ReliableRouter.h"
 #include "modules/RoutingModule.h"
+#include "modules/TrafficManagementModule.h"
 #include <cstdio>
 #include <cstring>
 #include <list>
@@ -988,6 +989,48 @@ void test_rebroadcast_declined_send_releases_packet(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
 }
 
+#if HAS_TRAFFIC_MANAGEMENT
+class TmmRebroadcastShim : public TrafficManagementModule
+{
+  public:
+    using TrafficManagementModule::handleReceived;
+};
+
+void test_rebroadcast_noRelay_skipsTxButNotToUs(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+
+    const meshtastic_LocalModuleConfig saved = moduleConfig;
+    moduleConfig.has_traffic_management = true;
+    moduleConfig.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.relay_budget_max_packets = 1;
+
+    TmmRebroadcastShim tmm;
+    trafficManagementModule = &tmm;
+
+    meshtastic_MeshPacket observe = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, NODENUM_BROADCAST, 0);
+    (void)tmm.handleReceived(observe);
+    tmm.recordRelayed(observe);
+    TEST_ASSERT_FALSE(tmm.shouldRelay(observe));
+
+    meshtastic_MeshPacket flood = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, NODENUM_BROADCAST, 0);
+    TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&flood), "NO_RELAY broadcast is consumed locally");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "NO_RELAY broadcast must not TX");
+
+    meshtastic_MeshPacket toUs = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kLocalNode, 0, true);
+    TEST_ASSERT_FALSE_MESSAGE(shim->perhapsRebroadcast(&toUs), "unicast toUs is not a rebroadcast");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "toUs must not TX");
+
+    meshtastic_MeshPacket routing = makeBehaviorPacket(meshtastic_PortNum_ROUTING_APP, kRemoteNode, NODENUM_BROADCAST, 0);
+    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&routing));
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "ROUTING still relays under NO_RELAY");
+
+    trafficManagementModule = nullptr;
+    moduleConfig = saved;
+}
+#endif
+
 // An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
 // last gate before the radio queue: MeshPacket.encrypted holds 256 bytes, the radio buffer 240.
 void test_send_rejects_payload_larger_than_radio_buffer(void)
@@ -1134,6 +1177,9 @@ void setup()
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
+#if HAS_TRAFFIC_MANAGEMENT
+    RUN_TEST(test_rebroadcast_noRelay_skipsTxButNotToUs);
+#endif
     RUN_TEST(test_send_rejects_payload_larger_than_radio_buffer);
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);

@@ -4255,12 +4255,13 @@ static void test_tm_noRelay_sendRoundTrip_observedAttester(void)
     moduleConfig.traffic_management.no_relay_requires_local_exhaustion = 1;
     moduleConfig.traffic_management.no_relay_min_claimers = 1;
     trackSender(receiver, kTargetNode);
-    trackSender(receiver, kLocalNode);
+    trackSender(receiver, kRemoteNode);
     receiver.recordRelayed(makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kTargetNode));
     meshtastic_MeshPacket incoming = gossip;
-    incoming.from = kLocalNode;
+    incoming.from = kRemoteNode;
     incoming.to = NODENUM_BROADCAST;
     incoming.via_mqtt = false;
+    incoming.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     ProcessMessage rr = receiver.handleReceived(incoming);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(rr));
     TEST_ASSERT_TRUE(receiver.peekNoRelayForTest(kTargetNode));
