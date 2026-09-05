@@ -136,6 +136,7 @@ bool NRF52BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
     }
 
     advActive = true;
+    LOG_DEBUG("BLE mesh adv burst: handle %u len %u %s", advHandle, advBufLen, ownsDedicatedSet ? "dedicated" : "shared");
     return true;
 }
 
@@ -209,11 +210,14 @@ void NRF52BLEMesh::onBleEvent(ble_evt_t *event)
         }
         break;
     }
-    case BLE_GAP_EVT_ADV_SET_TERMINATED:
-        // max_adv_evts reached - the burst for the current frame is done.
-        if (event->evt.gap_evt.params.adv_set_terminated.adv_handle == instance->advHandle)
+    case BLE_GAP_EVT_ADV_SET_TERMINATED: {
+        const ble_gap_evt_adv_set_terminated_t &t = event->evt.gap_evt.params.adv_set_terminated;
+        LOG_DEBUG("BLE mesh adv set %u terminated: reason %u after %u events (ours=%d)", t.adv_handle, t.reason,
+                  t.num_completed_adv_events, t.adv_handle == instance->advHandle);
+        if (t.adv_handle == instance->advHandle)
             instance->advActive = false;
         break;
+    }
     case BLE_GAP_EVT_TIMEOUT:
         if (event->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN) {
             instance->startScanning();
