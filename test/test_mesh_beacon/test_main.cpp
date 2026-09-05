@@ -846,8 +846,8 @@ static void test_adminValidation_messageTooLong_isTruncatedAt100(void)
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    // Byte at index 100 must be NUL (length capped at 100).
-    TEST_ASSERT_EQUAL('\0', moduleConfig.mesh_beacon.broadcast_message[100]);
+    // The last byte must be NUL: the cap follows the schema, whatever max_size currently is.
+    TEST_ASSERT_EQUAL('\0', moduleConfig.mesh_beacon.broadcast_message[sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1]);
     // Bytes before it should still be 'A'.
     TEST_ASSERT_EQUAL('A', moduleConfig.mesh_beacon.broadcast_message[0]);
 }
@@ -3839,7 +3839,7 @@ static void test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome(void)
 }
 
 // ===========================================================================
-// Group 8: the by-value target - the remote-administration shape
+// Group 8: channels named by value - the remote-administration shape
 // ===========================================================================
 
 // Every slot live, so a placement has nowhere to go without evicting a channel.
@@ -3878,7 +3878,7 @@ static const uint8_t kHomePsk[16] = {0xA1, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0
  * Both shapes in one write: the indexed list survives whole and every by-value field is cleared.
  * A by-value entry can write the channel table and an index cannot, so the ambiguous half goes.
  */
-static void test_byValue_explicitAndIndexedTargets_keepsIndexed(void)
+static void test_byValue_defaultChannelAndIndexedTargets_bothSurvive(void)
 {
     resetConfig();
     installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
@@ -3886,31 +3886,26 @@ static void test_byValue_explicitAndIndexedTargets_keepsIndexed(void)
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     onChannelByValue(bcfg, "ByValue", kByValuePsk, sizeof(kByValuePsk));
-    bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
-    bcfg.has_broadcast_on_frequency_slot = true;
-    bcfg.broadcast_on_frequency_slot = 3;
-    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets_count = 2;
     bcfg.broadcast_targets[0].has_channel_index = true;
     bcfg.broadcast_targets[0].channel_index = 0;
+    bcfg.broadcast_targets[1].has_preset = true;
+    bcfg.broadcast_targets[1].preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
 
     testAdmin->deferSaves();
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     const auto &out = moduleConfig.mesh_beacon;
-    TEST_ASSERT_EQUAL_MESSAGE(1, out.broadcast_targets_count, "the indexed list is the half that survives");
-    TEST_ASSERT_FALSE_MESSAGE(out.has_broadcast_on_channel, "the by-value channel is dropped, not merged in");
-    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_UNSET, out.broadcast_on_region,
-                              "the whole by-value target goes, not just its channel");
-    TEST_ASSERT_FALSE(out.has_broadcast_on_preset);
-    TEST_ASSERT_FALSE(out.has_broadcast_on_frequency_slot);
-    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1, channels.findByIdentity("ByValue", kByValuePsk, sizeof(kByValuePsk)),
-                                    "an ambiguous write must get no channel writes out of the firmware at all");
+    TEST_ASSERT_EQUAL_MESSAGE(2, out.broadcast_targets_count, "both entries are kept");
+    TEST_ASSERT_TRUE_MESSAGE(out.has_broadcast_on_channel, "the by-value default is not exclusive with the list");
+    TEST_ASSERT_GREATER_THAN_INT16_MESSAGE(-1, channels.findByIdentity("ByValue", kByValuePsk, sizeof(kByValuePsk)),
+                                           "and it is upserted, because entry 1 has no index of its own");
+    TEST_ASSERT_FALSE_MESSAGE(out.broadcast_targets[1].has_channel_index,
+                              "the firmware never fills an index in - a read back returns what was written");
 }
 
 /**
- * The by-value target alone is kept verbatim - it is the shape a remote client is told to use.
+ * The by-value channel alone is kept verbatim - it is the shape a remote client is told to use.
  */
 static void test_byValue_explicitTargetAlone_survivesWrite(void)
 {
@@ -3920,9 +3915,6 @@ static void test_byValue_explicitTargetAlone_survivesWrite(void)
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     onChannelByValue(bcfg, "ByValue", kByValuePsk, sizeof(kByValuePsk));
-    bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
     testAdmin->deferSaves();
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
@@ -3932,129 +3924,6 @@ static void test_byValue_explicitTargetAlone_survivesWrite(void)
     TEST_ASSERT_EQUAL_STRING("ByValue", out.broadcast_on_channel.name);
     TEST_ASSERT_EQUAL_UINT32(sizeof(kByValuePsk), out.broadcast_on_channel.psk.size);
     TEST_ASSERT_EQUAL_MEMORY(kByValuePsk, out.broadcast_on_channel.psk.bytes, sizeof(kByValuePsk));
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_868, out.broadcast_on_region);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, out.broadcast_on_preset);
-}
-
-/**
- * An unknown region code on the by-value target is cleared, exactly as it is on the offer.
- */
-static void test_byValue_unknownOnRegion_isCleared(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.broadcast_on_region = (meshtastic_Config_LoRaConfig_RegionCode)255;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-
-    testAdmin->deferSaves();
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_UNSET, moduleConfig.mesh_beacon.broadcast_on_region,
-                              "an unknown region is cleared to UNSET, which means inherit the running one");
-    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_on_preset,
-                             "region first, so a bad region cannot take a good preset with it");
-}
-
-/**
- * A preset value that is no preset at all is cleared. One this region cannot run is kept - that
- * describes a mesh elsewhere, which is the whole point of naming a target by value.
- */
-static void test_byValue_unknownOnPreset_isCleared(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
-
-    testAdmin->deferSaves();
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
-}
-
-/**
- * SHORT_TURBO on an EU_868 node is a request for a mesh this node cannot join, not a bad value.
- */
-static void test_byValue_onPresetThisRegionCannotRun_isKept(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
-
-    testAdmin->deferSaves();
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
-}
-
-/**
- * Slot 0 is what the proto reserves for "unset", so storing it as a pin would be a lie.
- */
-static void test_byValue_onFrequencySlotZero_isCleared(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_on_frequency_slot = true;
-    bcfg.broadcast_on_frequency_slot = 0;
-
-    testAdmin->deferSaves();
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_frequency_slot);
-}
-
-/**
- * With an explicit region and preset the bandwidth is fixed, so the slot count cannot move under
- * the pin later and a slot outside 1..count can be rejected now.
- */
-static void test_byValue_onFrequencySlotOutOfRangeExplicitPair_isCleared(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    bcfg.has_broadcast_on_frequency_slot = true;
-    bcfg.broadcast_on_frequency_slot = 250;
-
-    testAdmin->deferSaves();
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_frequency_slot);
-}
-
-/**
- * Without both an explicit region and preset the slot count is the running radio's, which the next
- * region change moves. Checking against it here would delete a pin the operator meant to keep.
- */
-static void test_byValue_onFrequencySlotOutOfRangeInheritedRegion_isKept(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.has_broadcast_on_frequency_slot = true;
-    bcfg.broadcast_on_frequency_slot = 250;
-
-    testAdmin->deferSaves();
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_on_frequency_slot,
-                             "an inherited region is not a bound - the pin stands until a region makes it checkable");
-    TEST_ASSERT_EQUAL_UINT32(250, moduleConfig.mesh_beacon.broadcast_on_frequency_slot);
 }
 
 /**
@@ -4181,116 +4050,16 @@ static void test_byValue_fullTable_targetIsWithheld(void)
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     onChannelByValue(bcfg, "ByValue", kByValuePsk, sizeof(kByValuePsk));
-    bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
-    bcfg.has_broadcast_on_frequency_slot = true;
-    bcfg.broadcast_on_frequency_slot = 5;
 
     testAdmin->deferSaves();
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     const auto &out = moduleConfig.mesh_beacon;
-    TEST_ASSERT_FALSE_MESSAGE(out.has_broadcast_on_channel, "an unplaceable target channel takes the whole target with it");
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, out.broadcast_on_region);
-    TEST_ASSERT_FALSE(out.has_broadcast_on_preset);
-    TEST_ASSERT_FALSE_MESSAGE(out.has_broadcast_on_frequency_slot,
-                              "the RF settings go with the channel - a bare retune is a different instruction");
+    TEST_ASSERT_TRUE_MESSAGE(out.has_broadcast_on_channel,
+                             "the request survives a full table - clearing it would silently retarget the primary");
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1, channels.findByIdentity("ByValue", kByValuePsk, sizeof(kByValuePsk)),
+                                    "but nothing was placed, so the send path has nothing to inherit");
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(7).role, "no live channel was evicted");
-}
-
-/**
- * Two 32-byte PSKs and a full message do not fit one LoRa payload. Such a config is writable over
- * BLE but its read-back truncates to an empty payload, so a remote administrator could never see
- * what it set - the write is refused with TOO_LARGE rather than stored.
- */
-static void test_byValue_oversizedRemoteWrite_isRejectedTooLarge(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    uint8_t bigPsk[32];
-    memset(bigPsk, 0x5A, sizeof(bigPsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
-    memset(bcfg.broadcast_message, 'x', 100);
-    bcfg.broadcast_message[100] = '\0';
-    // Every field the shape allows, each at its widest: two 32-byte PSKs, two full-length names and
-    // a 100-char message. Values chosen to survive sanitiseConfig, which runs before the size gate.
-    onChannelByValue(bcfg, "TargetChan1", bigPsk, sizeof(bigPsk));
-    bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
-    bcfg.has_broadcast_on_frequency_slot = true;
-    bcfg.broadcast_on_frequency_slot = 1;
-    bcfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-    bcfg.has_broadcast_offer_channel = true;
-    strncpy(bcfg.broadcast_offer_channel.name, "OfferChanAB", sizeof(bcfg.broadcast_offer_channel.name) - 1);
-    bcfg.broadcast_offer_channel.psk.size = sizeof(bigPsk);
-    memcpy(bcfg.broadcast_offer_channel.psk.bytes, bigPsk, sizeof(bigPsk));
-    bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_offer_preset = true;
-    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    bcfg.has_broadcast_offer_frequency_slot = true;
-    bcfg.broadcast_offer_frequency_slot = 1;
-
-    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::fitsRemoteAdmin(bcfg), "the fixture must actually exceed one LoRa payload");
-
-    testAdmin->deferSaves();
-    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
-    const bool ok = testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), true, &err);
-
-    TEST_ASSERT_FALSE_MESSAGE(ok, "an oversized remote write is refused, not truncated");
-    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_TOO_LARGE, err,
-                              "the client is told why; a silent no-op looks like success to it");
-    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.has_mesh_beacon, "a refused write stores nothing");
-    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1, channels.findByIdentity("TargetChan", bigPsk, sizeof(bigPsk)),
-                                    "and writes no channel either - the size gate runs before the upsert");
-}
-
-/**
- * The same config over BLE is fine: MAX_TO_FROM_RADIO_SIZE is 512, and a local client reads the
- * config back over the same link it wrote it on.
- */
-static void test_byValue_oversizedWriteFromLocalClient_isAccepted(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-
-    uint8_t bigPsk[32];
-    memset(bigPsk, 0x5A, sizeof(bigPsk));
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
-    memset(bcfg.broadcast_message, 'x', 100);
-    bcfg.broadcast_message[100] = '\0';
-    // The same config the remote write above is refused for, to prove the gate is the caller.
-    onChannelByValue(bcfg, "TargetChan1", bigPsk, sizeof(bigPsk));
-    bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
-    bcfg.has_broadcast_on_frequency_slot = true;
-    bcfg.broadcast_on_frequency_slot = 1;
-    bcfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-    bcfg.has_broadcast_offer_channel = true;
-    strncpy(bcfg.broadcast_offer_channel.name, "OfferChanAB", sizeof(bcfg.broadcast_offer_channel.name) - 1);
-    bcfg.broadcast_offer_channel.psk.size = sizeof(bigPsk);
-    memcpy(bcfg.broadcast_offer_channel.psk.bytes, bigPsk, sizeof(bigPsk));
-    bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_offer_preset = true;
-    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    bcfg.has_broadcast_offer_frequency_slot = true;
-    bcfg.broadcast_offer_frequency_slot = 1;
-    TEST_ASSERT_FALSE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
-
-    testAdmin->deferSaves();
-    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
-    const bool ok = testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), false, &err);
-
-    TEST_ASSERT_TRUE_MESSAGE(ok, "the size gate is a remote-admin bound only");
-    TEST_ASSERT_TRUE(moduleConfig.has_mesh_beacon);
-    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
 }
 
 /**
@@ -4308,16 +4077,193 @@ static void test_byValue_defaultKeyRemoteWrite_isAccepted(void)
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     strncpy(bcfg.broadcast_message, "join us", sizeof(bcfg.broadcast_message) - 1);
     onChannelByValue(bcfg, "LongFast", defaultKey, sizeof(defaultKey));
-    bcfg.broadcast_on_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 
     TEST_ASSERT_TRUE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MeshBeaconModule::remoteAdminCeiling(), MeshBeaconModule::remoteAdminSize(bcfg),
+                                      "the shape the by-value work exists for must clear the encrypted bound, not just the "
+                                      "decoded one");
 
     testAdmin->deferSaves();
     meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
     TEST_ASSERT_TRUE(testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), true, &err));
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
+}
+
+// An offer channel on a private 32-byte key plus a full indexed target list, with the message
+// length as the dial. sanitiseConfig is a no-op on it, so the measured size is the gated size.
+static void offerPlusFullIndexedList(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, const uint8_t *psk, size_t pskLen,
+                                     size_t messageLen)
+{
+    bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    bcfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
+    memset(bcfg.broadcast_message, 'x', messageLen);
+    bcfg.broadcast_message[messageLen] = '\0';
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "OfferChanAB", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = (pb_size_t)pskLen;
+    memcpy(bcfg.broadcast_offer_channel.psk.bytes, psk, pskLen);
+    bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = 1;
+
+    bcfg.broadcast_targets_count = (pb_size_t)(sizeof(bcfg.broadcast_targets) / sizeof(bcfg.broadcast_targets[0]));
+    for (pb_size_t i = 0; i < bcfg.broadcast_targets_count; i++) {
+        bcfg.broadcast_targets[i].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+        bcfg.broadcast_targets[i].has_preset = true;
+        bcfg.broadcast_targets[i].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+        bcfg.broadcast_targets[i].has_channel_index = true;
+        bcfg.broadcast_targets[i].channel_index = 0;
+        bcfg.broadcast_targets[i].has_frequency_slot = true;
+        bcfg.broadcast_targets[i].frequency_slot = 1;
+    }
+}
+
+// Both channels by value on private 32-byte keys, message length as the dial. The widest shape the
+// config can take, and the only one that spans the gap between the two bounds.
+static void bothChannelsByValue(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, const uint8_t *psk, size_t pskLen,
+                                size_t messageLen)
+{
+    bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    bcfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
+    memset(bcfg.broadcast_message, 'x', messageLen);
+    bcfg.broadcast_message[messageLen] = '\0';
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "OfferChanAB", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = (pb_size_t)pskLen;
+    memcpy(bcfg.broadcast_offer_channel.psk.bytes, psk, pskLen);
+    bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = 1;
+
+    onChannelByValue(bcfg, "TargetChan1", psk, pskLen);
+    bcfg.broadcast_targets_count = (pb_size_t)(sizeof(bcfg.broadcast_targets) / sizeof(bcfg.broadcast_targets[0]));
+    for (pb_size_t i = 0; i < bcfg.broadcast_targets_count; i++) {
+        bcfg.broadcast_targets[i].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+        bcfg.broadcast_targets[i].has_preset = true;
+        bcfg.broadcast_targets[i].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+        bcfg.broadcast_targets[i].has_channel_index = true;
+        bcfg.broadcast_targets[i].channel_index = 0;
+        bcfg.broadcast_targets[i].has_frequency_slot = true;
+        bcfg.broadcast_targets[i].frequency_slot = 1;
+    }
+}
+
+// Sweeps the message length for a config landing in the band between the two bounds - fits the
+// decoded cap, exceeds what survives encryption. Fails the test if the schema no longer reaches it.
+static size_t messageLenInPkcBand(const uint8_t *psk, size_t pskLen)
+{
+    meshtastic_ModuleConfig_MeshBeaconConfig probe;
+    size_t widest = 0;
+    for (size_t len = 0; len < sizeof(probe.broadcast_message); len++) {
+        bothChannelsByValue(probe, psk, pskLen, len);
+        const size_t size = MeshBeaconModule::remoteAdminSize(probe);
+        widest = size > widest ? size : widest;
+        if (size > MeshBeaconModule::remoteAdminCeiling() && size <= (size_t)meshtastic_Constants_DATA_PAYLOAD_LEN)
+            return len;
+    }
+    static char why[160];
+    snprintf(why, sizeof(why), "no message length lands in (%u, %u]; this shape tops out at %u",
+             (unsigned)MeshBeaconModule::remoteAdminCeiling(), (unsigned)meshtastic_Constants_DATA_PAYLOAD_LEN, (unsigned)widest);
+    TEST_FAIL_MESSAGE(why);
+    return 0;
+}
+
+/**
+ * A config sized into the band the PKC overhead reclaims: it fits the decoded payload cap, so the
+ * gate stored it while that was the bound, and is refused now the bound is what survives
+ * encryption. Remote admin is always PKC, so this is the write that reaches a real node.
+ */
+static void test_byValue_sizedBetweenTheBounds_isRejectedTooLarge(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    uint8_t bigPsk[32];
+    memset(bigPsk, 0x5A, sizeof(bigPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
+    bothChannelsByValue(bcfg, bigPsk, sizeof(bigPsk), messageLenInPkcBand(bigPsk, sizeof(bigPsk)));
+
+    // Pins the fix rather than the fixture: over the decoded cap too and either bound would refuse.
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE((size_t)meshtastic_Constants_DATA_PAYLOAD_LEN, MeshBeaconModule::remoteAdminSize(bcfg),
+                                      "the fixture must still fit the decoded cap, or it proves nothing");
+    TEST_ASSERT_FALSE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
+
+    testAdmin->deferSaves();
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_FALSE_MESSAGE(testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), true, &err),
+                              "what cannot survive the frame is not a remote-admin shape");
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_TOO_LARGE, err);
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.has_mesh_beacon, "a refused write stores nothing");
+}
+
+/**
+ * The same config from a local client is accepted: BLE carries it whole, and the operator is at the
+ * node to read it back.
+ */
+static void test_byValue_sizedBetweenTheBounds_fromLocalClient_isAccepted(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    uint8_t bigPsk[32];
+    memset(bigPsk, 0x5A, sizeof(bigPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
+    bothChannelsByValue(bcfg, bigPsk, sizeof(bigPsk), messageLenInPkcBand(bigPsk, sizeof(bigPsk)));
+    TEST_ASSERT_FALSE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
+
+    testAdmin->deferSaves();
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE_MESSAGE(testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), false, &err),
+                             "the size gate is a remote-admin bound only");
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
+}
+
+/**
+ * A client that can read the channel table names every destination by index, and the widest such
+ * config clears the bound with room to spare.
+ */
+static void test_byValue_widestIndexedList_hasRemoteAdminHeadroom(void)
+{
+    uint8_t bigPsk[32];
+    memset(bigPsk, 0x5A, sizeof(bigPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
+    offerPlusFullIndexedList(bcfg, bigPsk, sizeof(bigPsk), sizeof(bcfg.broadcast_message) - 1);
+
+    TEST_ASSERT_TRUE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
+    TEST_ASSERT_EQUAL_MESSAGE(181, MeshBeaconModule::remoteAdminSize(bcfg),
+                              "headroom changed - re-measure before adding a field or widening max_count");
+}
+
+/**
+ * A private mesh advertised to private destinations needs two 32-byte PSKs, and that is past the
+ * bound: legitimate, ordinary, and writable only by a local client. Not a misconfiguration.
+ */
+static void test_byValue_bothChannelsPrivate_exceedsTheRemoteAdminBound(void)
+{
+    uint8_t bigPsk[32];
+    memset(bigPsk, 0x5A, sizeof(bigPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
+    bothChannelsByValue(bcfg, bigPsk, sizeof(bigPsk), sizeof(bcfg.broadcast_message) - 1);
+
+    TEST_ASSERT_EQUAL_MESSAGE(230, MeshBeaconModule::remoteAdminSize(bcfg),
+                              "re-measure before adding a field or widening max_count");
+    TEST_ASSERT_FALSE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE((size_t)meshtastic_Constants_DATA_PAYLOAD_LEN, MeshBeaconModule::remoteAdminSize(bcfg),
+                                      "it is the PKC overhead that refuses this, not the decoded cap");
 }
 
 /**
@@ -4341,9 +4287,67 @@ static void test_broadcaster_byValueTarget_sendsOnThatChannel(void)
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
 
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "an explicit target is exactly one destination");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "an empty list is exactly one destination");
     TEST_ASSERT_EQUAL_MESSAGE((uint8_t)placed, mockRouter->sentPackets[0].channel,
                               "the packet goes out on the channel the by-value target named");
+}
+
+/**
+ * An entry that names no index of its own transmits on the by-value default.
+ */
+static void test_broadcaster_blankEntry_inheritsTheDefaultChannel(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    strncpy(bcfg.broadcast_message, "inherit", sizeof(bcfg.broadcast_message) - 1);
+    onChannelByValue(bcfg, "ByValue", kByValuePsk, sizeof(kByValuePsk));
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+    const int16_t placed = channels.findByIdentity("ByValue", kByValuePsk, sizeof(kByValuePsk));
+    TEST_ASSERT_GREATER_THAN_INT16(0, placed);
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_MESSAGE((uint8_t)placed, mockRouter->sentPackets[0].channel,
+                              "a blank entry takes the by-value default, not the primary");
+}
+
+/**
+ * An entry that names its own index overrides the by-value default rather than merging with it.
+ */
+static void test_broadcaster_entryIndex_overridesTheDefaultChannel(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    strncpy(bcfg.broadcast_message, "override", sizeof(bcfg.broadcast_message) - 1);
+    onChannelByValue(bcfg, "ByValue", kByValuePsk, sizeof(kByValuePsk));
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_channel_index = true;
+    bcfg.broadcast_targets[0].channel_index = channels.getPrimaryIndex();
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+    const int16_t placed = channels.findByIdentity("ByValue", kByValuePsk, sizeof(kByValuePsk));
+    TEST_ASSERT_GREATER_THAN_INT16(0, placed);
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_MESSAGE(channels.getPrimaryIndex(), mockRouter->sentPackets[0].channel,
+                              "the entry's own index wins over the default it would otherwise inherit");
 }
 
 /**
@@ -4358,8 +4362,9 @@ static void test_broadcaster_byValueTargetWithoutChannel_retunesThePrimary(void)
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     strncpy(bcfg.broadcast_message, "retune", sizeof(bcfg.broadcast_message) - 1);
-    bcfg.has_broadcast_on_preset = true;
-    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
     testAdmin->deferSaves();
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
@@ -4708,24 +4713,22 @@ BEACON_TEST_ENTRY void setup()
 
     printf("\n=== By-value target (remote administration) ===\n");
 
-    RUN_TEST(test_byValue_explicitAndIndexedTargets_keepsIndexed);
+    RUN_TEST(test_byValue_defaultChannelAndIndexedTargets_bothSurvive);
     RUN_TEST(test_byValue_explicitTargetAlone_survivesWrite);
-    RUN_TEST(test_byValue_unknownOnRegion_isCleared);
-    RUN_TEST(test_byValue_unknownOnPreset_isCleared);
-    RUN_TEST(test_byValue_onPresetThisRegionCannotRun_isKept);
-    RUN_TEST(test_byValue_onFrequencySlotZero_isCleared);
-    RUN_TEST(test_byValue_onFrequencySlotOutOfRangeExplicitPair_isCleared);
-    RUN_TEST(test_byValue_onFrequencySlotOutOfRangeInheritedRegion_isKept);
     RUN_TEST(test_byValue_targetChannel_isUpsertedIntoTable);
     RUN_TEST(test_byValue_offerChannel_isUpsertedIntoTable);
     RUN_TEST(test_byValue_existingChannel_isNotDuplicated);
     RUN_TEST(test_byValue_fullTable_offerIsWithheld);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_fullTable_targetIsWithheld);
-    RUN_TEST(test_byValue_oversizedRemoteWrite_isRejectedTooLarge);
-    RUN_TEST(test_byValue_oversizedWriteFromLocalClient_isAccepted);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
+    RUN_TEST(test_byValue_sizedBetweenTheBounds_isRejectedTooLarge);
+    RUN_TEST(test_byValue_sizedBetweenTheBounds_fromLocalClient_isAccepted);
+    RUN_TEST(test_byValue_widestIndexedList_hasRemoteAdminHeadroom);
+    RUN_TEST(test_byValue_bothChannelsPrivate_exceedsTheRemoteAdminBound);
     RUN_TEST(test_broadcaster_byValueTarget_sendsOnThatChannel);
+    RUN_TEST(test_broadcaster_blankEntry_inheritsTheDefaultChannel);
+    RUN_TEST(test_broadcaster_entryIndex_overridesTheDefaultChannel);
     RUN_TEST(test_broadcaster_byValueTargetWithoutChannel_retunesThePrimary);
     RUN_TEST(test_broadcaster_byValueTargetChannelMissing_withholdsTarget);
     RUN_TEST(test_sidecar_rearmSameId_movesTheIdRatherThanDuplicatingIt);

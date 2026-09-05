@@ -17,8 +17,8 @@
  Listeners deliver the text message to the local inbox and cache any offered
  channel/preset for the client app to act on - the firmware never auto-applies them. */
 typedef struct _meshtastic_MeshBeacon {
-    /* Human-readable beacon message. Max 100 bytes enforced by firmware on send. */
-    char message[101];
+    /* Human-readable beacon message. Max 60 bytes enforced by firmware on send. */
+    char message[61];
     /* Optional channel (name + PSK) being advertised to listening clients.
  A client app may offer to switch the user to this channel; firmware never applies it automatically.
  ChannelIdentity rather than ChannelSettings: only the name and PSK are needed to join, and the
@@ -78,7 +78,7 @@ extern const pb_msgdesc_t meshtastic_MeshBeacon_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_MESH_BEACON_PB_H_MAX_SIZE meshtastic_MeshBeacon_size
-#define meshtastic_MeshBeacon_size               161
+#define meshtastic_MeshBeacon_size               121
 
 #ifdef __cplusplus
 } /* extern "C" */
