@@ -569,8 +569,10 @@ void RadioLibInterface::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case
     // ignore the transmit interrupt
-    if (sendingPacket)
+    if (sendingPacket) {
+        RadioTxHooks::postTransmit(this, sendingPacket);
         completeSending();
+    }
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
 }
 
@@ -593,7 +595,6 @@ void RadioLibInterface::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
-        RadioTxHooks::postTransmit(this, p);
         // Keep this inside `if (p)`: completeSending() also runs on every setStandby(), where a hook
         // undoing its own pre-TX switch would recurse back through reconfigure().
         RadioTxHooks::packetReleased(this, p);

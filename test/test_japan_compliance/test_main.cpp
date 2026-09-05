@@ -149,6 +149,28 @@ void test_pause_does_not_shorten_existing_longer_tx_after(void)
     TEST_ASSERT_EQUAL_UINT32(2000, pkt2.tx_after); // Must not be overwritten to 1050
 }
 
+void test_failed_start_does_not_trigger_pause(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -95;
+
+    meshtastic_MeshPacket pkt1 = meshtastic_MeshPacket_init_zero;
+    pkt1.id = 0x1001;
+    Time::setTestMillis(1000);
+
+    // When startTransmit fails, only packetReleased is called (postTransmit is NOT called)
+    hook.packetReleased(&radio, &pkt1);
+
+    meshtastic_MeshPacket pkt2 = meshtastic_MeshPacket_init_zero;
+    pkt2.id = 0x1002;
+
+    // Immediately attempt next packet (t = 1005); since no transmit occurred, pause must NOT be triggered
+    Time::setTestMillis(1005);
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt2));
+}
+
 // ---------------------------------------------------------------------------
 // R1: Continuous RSSI Carrier Sensing (5 ms window, -80 dBm threshold)
 // ---------------------------------------------------------------------------
@@ -556,6 +578,7 @@ void setup()
     RUN_TEST(test_pause_first_transmission_no_defer);
     RUN_TEST(test_pause_consecutive_transmission_held_before_50ms);
     RUN_TEST(test_pause_does_not_shorten_existing_longer_tx_after);
+    RUN_TEST(test_failed_start_does_not_trigger_pause);
 
     RUN_TEST(test_carrier_sense_free_below_threshold);
     RUN_TEST(test_carrier_sense_busy_at_threshold);
