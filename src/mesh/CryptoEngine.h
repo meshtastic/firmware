@@ -58,6 +58,7 @@ class CryptoEngine
                                    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
+#endif
 
     // Temporary holder for a peer's not-yet-verified public key, learned in-band during an
     // in-progress key-verification handshake before it is committed to NodeDB. Lets the Router
@@ -73,9 +74,18 @@ class CryptoEngine
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    std::unique_ptr<AESSmall256> aes = nullptr;
+    std::unique_ptr<BlockCipher> aes = nullptr;
 
-#endif
+    static constexpr size_t AEAD_TAG_SIZE = 12;
+    // Sender and destination IDs are authenticated as associated data: the nonce already binds
+    // `from` and the packet id, and the hop fields are left out because relays rewrite them.
+    static constexpr size_t AEAD_AAD_SIZE = 2 * sizeof(uint32_t);
+
+    bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                          const uint8_t *plaintext, uint8_t *ciphertextWithTag);
+
+    bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t totalBytes,
+                          const uint8_t *ciphertextWithTag, uint8_t *plaintext);
 
     /**
      * Set the key used for encrypt, decrypt.
