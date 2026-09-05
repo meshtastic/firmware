@@ -679,6 +679,13 @@ bool GPS::verifyCachedProbePresence()
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
     _serial_gps->end();
     _serial_gps->begin(cachedProbeBaud);
+#if defined(ARCH_STM32)
+    if (!*_serial_gps) {
+        // begin() failed; invalidate cache and retry fresh probe to avoid STM32duino #3071 deadlock.
+        hasProbeCache = false;
+        return false;
+    }
+#endif
 #elif defined(ARCH_RP2040)
     _serial_gps->end();
     _serial_gps->setFIFOSize(256);
@@ -1665,6 +1672,12 @@ GnssModel_t GPS::probe(int serialSpeed)
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
         _serial_gps->end();
         _serial_gps->begin(serialSpeed);
+#if defined(ARCH_STM32)
+        if (!*_serial_gps) {
+            // begin() failed (unsupported baud / clock not ready); skip writes to avoid STM32duino #3071 deadlock.
+            return GNSS_MODEL_UNKNOWN;
+        }
+#endif
 #elif defined(ARCH_RP2040)
         _serial_gps->end();
         _serial_gps->setFIFOSize(256);
@@ -1963,6 +1976,14 @@ std::unique_ptr<GPS> GPS::createGps()
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 #endif
+#if defined(ARCH_STM32WL) && defined(ENABLE_HWSERIALLP1)
+    if (_serial_gps == &SerialLP1 && !stm32wlLpuartAvailable()) {
+        // If LPUART1 clock has failed to switch to HSI16 on boot, the GPS will not work and will hang the device.
+        // Disable GPS in this case.
+        LOG_WARN("GPS disabled: STM32WL LPUART1 clock hardware unavailable");
+        return nullptr;
+    }
+#endif
 
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
@@ -2044,6 +2065,10 @@ std::unique_ptr<GPS> GPS::createGps()
         _serial_gps->setTx(new_gps->tx_gpio);
         _serial_gps->setRx(new_gps->rx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);
+        if (!*_serial_gps) {
+            LOG_WARN("GPS serial port failed to initialize; disabling GPS");
+            return nullptr;
+        }
 #elif defined(ARCH_PORTDUINO)
         // Portduino can't set the GPS pins directly.
         _serial_gps->begin(GPS_BAUDRATE);
