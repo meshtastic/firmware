@@ -146,6 +146,10 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
     }
 
     mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV;
+    // Wire-carried flags that only the local stack may set: a sender must not suppress our MQTT uplink
+    // or schedule our transmit.
+    mp.via_mqtt = false;
+    mp.tx_after = 0;
 
     // Guard 3 (mirrors UdpMulticastHandler): authentication metadata is local-only. The Router
     // re-establishes it after a successful PKI decrypt; carrying it in from the wire would let a

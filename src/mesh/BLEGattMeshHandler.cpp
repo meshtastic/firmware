@@ -362,6 +362,10 @@ void BLEGattMeshHandler::deliverToRouter(BLEGattPeerId peer, const uint8_t *data
     }
 
     mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT;
+    // Wire-carried flags that only the local stack may set: a sender must not suppress our MQTT uplink
+    // or schedule our transmit.
+    mp.via_mqtt = false;
+    mp.tx_after = 0;
 
     // Authentication metadata is local-only; the Router re-establishes it after a PKI decrypt.
     mp.pki_encrypted = false;

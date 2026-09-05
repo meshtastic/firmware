@@ -137,8 +137,14 @@ const char *advRcHint(int rc)
 void pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
 {
     if (rxCount >= rxQueue.size()) {
-        LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u", len, conn);
-        return;
+        if (len) {
+            LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u", len, conn);
+            return;
+        }
+        // A disconnect marker must land or the pump keeps that handle's half-built packets for the
+        // next peer the stack gives it: overwrite the newest chunk, which belongs to a dead link anyway.
+        rxTail = (rxTail + rxQueue.size() - 1) % rxQueue.size();
+        rxCount--;
     }
     RxChunk &r = rxQueue[rxTail];
     r.conn = conn;

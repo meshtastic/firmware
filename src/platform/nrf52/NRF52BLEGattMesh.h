@@ -29,6 +29,8 @@ class NRF52BLEGattMesh : public BLEGattMeshHandler
     /// link had subscribed to the mesh characteristic: the phone API's session handling must not run.
     static void onConnect(uint16_t conn);
     static bool onDisconnect(uint16_t conn);
+    /// Restart the connectable advertisement if a peripheral slot is free and it is not running.
+    static void rearmAdvertising();
 
   protected:
     bool platformReady() override;

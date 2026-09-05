@@ -76,8 +76,14 @@ Link *addLink(uint16_t conn)
 void pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
 {
     if (rxCount >= rxQueue.size()) {
-        LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u", len, conn);
-        return;
+        if (len) {
+            LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u", len, conn);
+            return;
+        }
+        // A disconnect marker must land or the pump keeps that handle's half-built packets for the
+        // next peer the stack gives it: overwrite the newest chunk, which belongs to a dead link anyway.
+        rxTail = (rxTail + rxQueue.size() - 1) % rxQueue.size();
+        rxCount--;
     }
     RxChunk &r = rxQueue[rxTail];
     r.conn = conn;
@@ -151,10 +157,24 @@ bool NRF52BLEGattMesh::addToScanResponse()
     return true;
 }
 
+void NRF52BLEGattMesh::rearmAdvertising()
+{
+    // Bluefruit stops the connectable advertisement on connect and restarts it only when no peripheral
+    // link is left, so with the phone and a peer sharing the radio the free slot would otherwise go
+    // unadvertised. Bluefruit's own connect/disconnect handling ran synchronously before the deferred
+    // callbacks this is reached from.
+    if ((config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER) &&
+        Bluefruit.Periph.connected() < 2 && !Bluefruit.Advertising.isRunning())
+        Bluefruit.Advertising.start(0);
+}
+
 void NRF52BLEGattMesh::onConnect(uint16_t conn)
 {
-    concurrency::LockGuard guard(&lock);
-    addLink(conn);
+    {
+        concurrency::LockGuard guard(&lock);
+        addLink(conn);
+    }
+    rearmAdvertising();
 }
 
 bool NRF52BLEGattMesh::onDisconnect(uint16_t conn)
@@ -171,6 +191,9 @@ bool NRF52BLEGattMesh::onDisconnect(uint16_t conn)
     LOG_INFO("BLE GATT mesh: conn %u disconnected (%s)", conn, subscribed ? "was a mesh peer" : "never subscribed");
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
+    // Bluefruit's restartOnDisconnect only fires when no peripheral link is left; with one still up,
+    // whoever just dropped could never come back without this.
+    rearmAdvertising();
     return subscribed;
 }
 
@@ -214,8 +237,10 @@ size_t NRF52BLEGattMesh::platformPeers(BLEGattMeshPeer *out, size_t cap)
 
 bool NRF52BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, size_t len)
 {
-    // Bluefruit refuses when the peer has not enabled notifications or the SoftDevice queue is full;
-    // the pump retries the latter and the former clears itself on the CCCD write.
+    // Bluefruit's notify blocks up to 100 ms waiting for a buffer, so a peer whose link is gone must be
+    // refused here, not discovered by timing out fifty times on the main task.
+    if (!Bluefruit.connected(peer))
+        return false;
     return meshPeerCharacteristic.notify(peer, data, (uint16_t)len);
 }
 

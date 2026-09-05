@@ -41,7 +41,7 @@ static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 // Last ToRadio value received from the phone
 static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
-static uint16_t connectionHandle;
+static uint16_t connectionHandle = BLE_CONN_HANDLE_INVALID;
 static bool passkeyShowing;
 
 class BluetoothPhoneAPI : public PhoneAPI
@@ -54,7 +54,9 @@ class BluetoothPhoneAPI : public PhoneAPI
         PhoneAPI::onNowHasData(fromRadioNum);
 
         LOG_INFO("BLE notify fromNum");
-        fromNum.notify32(fromRadioNum);
+        // The phone's link, not Bluefruit's default (the most recent connect): a mesh peer may be newer.
+        if (connectionHandle != BLE_CONN_HANDLE_INVALID)
+            fromNum.notify32(connectionHandle, fromRadioNum);
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
@@ -66,14 +68,28 @@ class BluetoothPhoneAPI : public PhoneAPI
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
 
+#if HAS_BLE_GATT_MESH
+// The phone is whichever link uses the phone API, not whichever connected last: with a mesh peer on
+// the radio at the same time, connect order says nothing. Called from every phone-API access.
+static void notePhoneLink(uint16_t conn_handle)
+{
+    if (connectionHandle == conn_handle)
+        return;
+    connectionHandle = conn_handle;
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
+}
+#endif
+
 void onConnect(uint16_t conn_handle)
 {
-#if HAS_BLE_GATT_MESH
-    NRF52BLEGattMesh::onConnect(conn_handle);
-#endif
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
+#if HAS_BLE_GATT_MESH
+    NRF52BLEGattMesh::onConnect(conn_handle);
+#else
     connectionHandle = conn_handle;
+#endif
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
@@ -88,9 +104,11 @@ void onConnect(uint16_t conn_handle)
     }
 #endif
 
+#if !HAS_BLE_GATT_MESH
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
+#endif
 }
 /**
  * Callback invoked when a connection is dropped
@@ -100,9 +118,14 @@ void onConnect(uint16_t conn_handle)
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
 #if HAS_BLE_GATT_MESH
-    // A mesh peer's link is not the phone's session.
-    if (NRF52BLEGattMesh::onDisconnect(conn_handle))
+    NRF52BLEGattMesh::onDisconnect(conn_handle);
+    // Only the phone's link ends the phone's session; a mesh peer, or a link that never used the
+    // phone API, dropping must not close it.
+    if (conn_handle != connectionHandle) {
+        LOG_INFO("BLE link %u dropped, reason = 0x%x (not the phone's)", conn_handle, reason);
         return;
+    }
+    connectionHandle = BLE_CONN_HANDLE_INVALID;
 #endif
     LOG_INFO("BLE Disconnected, reason = 0x%x", reason);
     if (bluetoothPhoneAPI) {
@@ -137,6 +160,9 @@ void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
     // and cccd value = 0x0002 means indications are enabled
 
     if (chr->uuid == fromNum.uuid || chr->uuid == logRadio.uuid) {
+#if HAS_BLE_GATT_MESH
+        notePhoneLink(conn_hdl);
+#endif
         auto result = cccd_value == 2 ? chr->indicateEnabled(conn_hdl) : chr->notifyEnabled(conn_hdl);
         if (result) {
             LOG_INFO("Notify/Indicate enabled");
@@ -193,6 +219,9 @@ static void authorizeRead(uint16_t conn_hdl)
  */
 void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
+#if HAS_BLE_GATT_MESH
+    notePhoneLink(conn_hdl);
+#endif
     if (request->offset == 0) {
         // If the read is long, we will get multiple authorize invocations - we only populate data on the first
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
@@ -207,6 +236,9 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
 
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
+#if HAS_BLE_GATT_MESH
+    notePhoneLink(conn_hdl);
+#endif
     LOG_INFO("toRadioWriteCb data %p, len %u", data, len);
     if (memcmp(lastToRadio, data, len) != 0) {
         LOG_DEBUG("New ToRadio packet");
@@ -559,8 +591,8 @@ void NRF52Bluetooth::sendLog(const uint8_t *logMessage, size_t length)
 {
     if (!isConnected() || length > 512)
         return;
-    if (logRadio.indicateEnabled())
-        logRadio.indicate(logMessage, (uint16_t)length);
+    if (logRadio.indicateEnabled(connectionHandle))
+        logRadio.indicate(connectionHandle, logMessage, (uint16_t)length);
     else
-        logRadio.notify(logMessage, (uint16_t)length);
+        logRadio.notify(connectionHandle, logMessage, (uint16_t)length);
 }
