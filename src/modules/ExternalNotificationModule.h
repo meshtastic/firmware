@@ -69,7 +69,13 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     void setExternalState(uint8_t index = 0, bool on = false);
     bool getExternal(uint8_t index = 0);
 
-    void setMute(bool mute) { isSilenced = mute; }
+    void setMute(bool mute)
+    {
+        isSilenced = mute;
+        if (mute) {
+            stopNow();
+        }
+    }
     bool getMute() { return isSilenced; }
 
     bool canBuzz();
@@ -86,6 +92,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 #endif
 
   protected:
+    enum class BuzzerPlaybackBackend : uint8_t { NONE, DIGITAL, PWM, I2S, NRF52_I2S };
+
     /** Called to handle a particular incoming message
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
@@ -99,12 +107,18 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     // Drive the configured buzzer output (I2S, PWM ringtone, or plain GPIO).
     void triggerBuzzerOutput();
     void triggerVibraOutput();
-    void armNagCycle();
+    uint32_t armNagCycle(uint32_t startedAt);
+    void stopBuzzerNow();
 
     bool isNagging = false;
 
     bool isSilenced = false;
     bool buzzerShouldAlert = false;
+    bool buzzerPlaybackStarted = false;
+    BuzzerPlaybackBackend buzzerPlaybackBackend = BuzzerPlaybackBackend::NONE;
+    bool buzzerAlertIsDirectMessage = false;
+    uint32_t buzzerAlertStarted = 0;
+    uint32_t buzzerAlertDurationMs = 0;
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,

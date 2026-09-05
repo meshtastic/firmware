@@ -59,7 +59,7 @@ int32_t ICM20948Sensor::runOnce()
             sensor->sleep(true);
             isAsleep = true;
         }
-        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+        return MOTION_SENSOR_SLEEP_CHECK_INTERVAL_MS;
     }
     if (isAsleep) {
         sensor->sleep(false);

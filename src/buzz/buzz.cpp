@@ -1,4 +1,5 @@
 #include "buzz.h"
+#include "BuzzerMode.h"
 #include "NodeDB.h"
 #include "configuration.h"
 
@@ -98,19 +99,19 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
     // trailing rest flushes the last note out of the I2S DMA buffer before teardown
     strncat(rtttl, ",32p", sizeof(rtttl) - strlen(rtttl) - 1);
 
-    audioThread->beginRttl(rtttl, strlen(rtttl));
-    while (audioThread->isPlaying()) {
+    if (!audioThread->beginRttlIfIdle(rtttl, strlen(rtttl))) {
+        return;
+    }
+    while (audioThread->isPlaying(AudioThread::RtttlOwner::SYSTEM)) {
         delay(10);
     }
-    audioThread->stop(); // release I2S so the amp goes silent instead of looping the last buffer
+    audioThread->stopRtttlIfOwnedBy(AudioThread::RtttlOwner::SYSTEM);
 }
 #endif
 
 void playTones(const ToneDuration *tone_durations, int size)
 {
-    if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
-        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY) {
-        // Buzzer is disabled or not set to system tones
+    if (!buzzerModeAllowsSystemTones(config.device.buzzer_mode)) {
         return;
     }
 #ifdef HAS_I2S
