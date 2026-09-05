@@ -2,6 +2,13 @@
 #include <cstring> // Include for strstr
 #include <vector>
 
+// TinyGPS++ exposes checksum statistics only through a private member; this build
+// does not use those counters and the local access pattern is invalid. Disable the
+// statistics branch to avoid direct access to private state in a single-file fix.
+#ifndef TINYGPS_OPTION_NO_STATISTICS
+#define TINYGPS_OPTION_NO_STATISTICS
+#endif
+
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
