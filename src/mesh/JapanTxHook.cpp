@@ -98,7 +98,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
             p->tx_after = deadline;
         const uint32_t now = Time::getMillis();
         LOG_DEBUG("JP LBT: deferring packet 0x%08x for mandatory 50ms pause (remaining %ums)", p->id,
-                  deadline > now ? deadline - now : 0);
+                  Throttle::deadlinePassedAt(now, deadline) ? 0 : deadline - now);
         return PRETX_DEFER;
     }
 
