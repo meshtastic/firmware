@@ -178,7 +178,10 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    # release-artifacts and publish-nightly both need this job, so a dispatch or schedule
+    # must reach it on any ref. Skipping event/ refs is only about sparing push and PR
+    # runs on those branches the build cost.
+    if: contains(fromJSON('["workflow_dispatch", "schedule"]'), github.event_name) || !contains(github.ref_name, 'event/')
     strategy:
       fail-fast: false
       matrix:
@@ -187,6 +190,9 @@ jobs:
     uses: ./.github/workflows/build_windows_bin.yml
     with:
       windows_ver: ${{ matrix.windows_ver }}
+      # WiX and the MSI cost several minutes, and only the release and nightly publishes
+      # consume one. Push, PR and merge_group runs build just the exe.
+      build_msi: ${{ contains(fromJSON('["workflow_dispatch", "schedule"]'), github.event_name) }}
     # secrets: inherit
 
   package-pio-deps-native-tft:
@@ -481,9 +487,14 @@ jobs:
         run: python3 bin/size_report.py ./current-sizes.json --budgets bin/ram_budgets.json --enforce-budgets
 
   release-artifacts:
-    permissions: # Needed for 'gh release upload'.
-      contents: write
+    permissions:
+      contents: write # Needed for 'gh release upload'.
+      actions: read # SignPath pulls the MSI artifact back through the GitHub API.
     runs-on: ubuntu-latest
+    # Only the flag is lifted to job scope, so the token itself reaches the signing step
+    # and no other: the secrets context is not available in a step-level `if`.
+    env:
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -493,6 +504,7 @@ jobs:
       - gather-artifacts
       - build-debian-src
       - package-pio-deps-native-tft
+      - Windows
       # - MacOS
     steps:
       - name: Checkout
@@ -543,6 +555,53 @@ jobs:
           merge-multiple: true
           path: ./output/pio-deps-native-tft
 
+      # The winget manifests pin the MSI's SHA256 against its release-asset URL, so
+      # the MSI has to reach the release unchanged or `winget install` fails the hash.
+      - name: Download the Windows MSI
+        uses: actions/download-artifact@v8
+        with:
+          pattern: meshtasticd-msi-*-${{ needs.version.outputs.long }}
+          merge-multiple: true
+          path: ./output/msi
+
+      # Signing happens here rather than in the build so it covers release MSIs only:
+      # nightlies never reach this job. It also has to precede the upload below, because
+      # package_winget.yml hashes the published asset, so signing after would leave every
+      # winget manifest pinning a stale SHA256. Skipped with a warning until the secret
+      # exists, which leaves the MSI unsigned rather than failing the release.
+      - name: Sign the MSI
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ needs.Windows.outputs.msi_artifact_id }}
+          wait-for-completion: true
+          # A SignPath Foundation certificate needs a human to approve each release, so
+          # this waits far longer than the 600s default before giving up.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ./output/msi
+
+      - name: Report the MSI signing state
+        # The signed MSI is extracted over the unsigned download, so a name change on
+        # either side would leave both behind and publish whichever the glob hit first.
+        # Fail here instead: package_winget.yml also rejects a release carrying two MSIs.
+        run: |
+          set -euo pipefail
+          count=$(find ./output/msi -maxdepth 1 -name '*.msi' | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly one MSI in ./output/msi, found $count."
+            exit 1
+          fi
+          if [ "${SIGNPATH_ENABLED}" = "true" ]; then
+            echo "MSI signed by SignPath."
+          else
+            echo "::warning::SIGNPATH_API_TOKEN is not set; publishing an unsigned MSI."
+          fi
+
       - name: Zip Linux sources
         working-directory: output
         run: |
@@ -574,6 +633,7 @@ jobs:
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{ needs.version.outputs.long }}.json
           gh release upload v${{ needs.version.outputs.long }} ./output/meshtasticd-${{ needs.version.outputs.deb }}-src.zip
           gh release upload v${{ needs.version.outputs.long }} ./output/platformio-deps-native-tft-${{ needs.version.outputs.long }}.zip
+          gh release upload v${{ needs.version.outputs.long }} ./output/msi/*.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -736,7 +796,7 @@ jobs:
   publish-nightly:
     runs-on: ubuntu-24.04
     if: github.repository_owner == 'meshtastic' && (github.event_name == 'schedule' || github.event.inputs.nightly == 'true')
-    needs: [setup, version, gather-artifacts]
+    needs: [setup, version, gather-artifacts, Windows]
     env:
       targets: |-
         esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
@@ -748,6 +808,20 @@ jobs:
           pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./stage
+
+      # The nightly MSI is a plain download off firmware-nightly/; it is deliberately
+      # not submitted to winget, which only carries the alpha and beta channels.
+      - name: Get the Windows MSI
+        uses: actions/download-artifact@v8
+        with:
+          pattern: meshtasticd-msi-*-${{ needs.version.outputs.long }}
+          merge-multiple: true
+          path: ./stage
+
+      - name: Drop the winget manifests from the nightly stage
+        # They ship in the same artifact, but their InstallerUrl points at a release
+        # asset the nightly never publishes. Only the MSI belongs on the page.
+        run: rm -rf ./stage/manifests
 
       - name: Generate Release manifest
         run: |
