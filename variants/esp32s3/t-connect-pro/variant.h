@@ -1,6 +1,5 @@
-// LilyGo T-Connect-Pro (ESP32-S3R8). The LoRa module, the ST7796 LCD and the W5500 all hang off
-// one SPI bus (SCK 12 / MISO 13 / MOSI 11), so every peripheral has to stay on SPI2_HOST - the
-// host the Arduino `SPI` object uses on the S3 - and share it through transactions.
+// LilyGo T-Connect-Pro (ESP32-S3R8). LoRa, the ST7796 LCD and the W5500 share one SPI bus
+// (SCK 12 / MISO 13 / MOSI 11), so every peripheral stays on SPI2_HOST.
 
 #define I2C_SDA 39
 #define I2C_SCL 40

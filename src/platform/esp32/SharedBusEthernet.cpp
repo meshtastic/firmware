@@ -13,10 +13,8 @@
 
 SharedBusEthernet sharedBusEthernet;
 
-// esp_eth calls these from its own RX task, so they are the only place the W5500 touches the bus.
-// Taking spiLock here is what serialises it against the display and the radio; the Arduino
-// transaction underneath still guards the peripheral registers. Lock order is spiLock -> SPI
-// transaction, matching LockingArduinoHal, so the radio path cannot deadlock against this.
+// Called from esp_eth's RX task. Lock order is spiLock -> SPI transaction, matching
+// LockingArduinoHal, so the radio path cannot deadlock against this.
 static void *ethSpiInit(const void *ctx)
 {
     return (void *)ctx;

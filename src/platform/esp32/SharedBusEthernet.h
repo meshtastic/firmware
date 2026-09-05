@@ -7,17 +7,8 @@
 #include <ETH.h>
 #include <esp_eth_driver.h>
 
-/**
- * W5500 driver for boards where the MAC shares its SPI bus with other peripherals.
- *
- * Arduino's ETHClass reaches SPI through SPIClass, whose mutex is invisible to LovyanGFX and to
- * anything else driving the peripheral registers directly, so a display sharing the bus corrupts
- * the MAC's frame-header reads. This installs esp_eth itself so the SPI callbacks can take
- * spiLock - the one mutex the radio, display, SD and sensors all already honour.
- *
- * NetworkInterface supplies localIP()/connected()/config() and the ARDUINO_EVENT_ETH_GOT_IP
- * plumbing; only the link-state events need forwarding by hand.
- */
+// W5500 driver for boards whose MAC shares its SPI bus. Installs esp_eth directly so the SPI
+// callbacks can take spiLock, which Arduino's ETHClass cannot.
 class SharedBusEthernet : public NetworkInterface
 {
   public:
