@@ -295,6 +295,51 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Estimated distance to the leading edge of the storm, in km */
     bool has_lightning_distance_km;
     float lightning_distance_km;
+    /* Soil pH, 0-14 */
+    bool has_soil_ph;
+    float soil_ph;
+    /* pH of water or other solution, 0-14 */
+    bool has_ph;
+    float ph;
+    /* Electrical conductivity in mS/cm */
+    bool has_electrical_conductivity;
+    float electrical_conductivity;
+    /* Salinity in mg/l */
+    bool has_salinity;
+    float salinity;
+    /* Nitrogen concentration in mg/kg */
+    bool has_nitrogen;
+    float nitrogen;
+    /* Phosphorus concentration in mg/kg */
+    bool has_phosphorus;
+    float phosphorus;
+    /* Potassium concentration in mg/kg */
+    bool has_potassium;
+    float potassium;
+    /* Dissolved oxygen in mg/l */
+    bool has_dissolved_oxygen;
+    float dissolved_oxygen;
+    /* Oxidation-reduction potential (ORP) in mV */
+    bool has_orp;
+    float orp;
+    /* Chemical oxygen demand in mg/l */
+    bool has_chemical_oxygen_demand;
+    float chemical_oxygen_demand;
+    /* Turbidity in NTU */
+    bool has_turbidity;
+    float turbidity;
+    /* Nitrate concentration in ppm */
+    bool has_nitrate;
+    float nitrate;
+    /* Ammonium concentration in ppm */
+    bool has_ammonium;
+    float ammonium;
+    /* Biochemical oxygen demand in mg/l */
+    bool has_biochemical_oxygen_demand;
+    float biochemical_oxygen_demand;
+    /* Solar irradiance in W/m^2 (distinct from the radiation field's uR/h) */
+    bool has_solar_irradiance;
+    float solar_irradiance;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -643,7 +688,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_TopSender_init_default        {0, 0, 0}
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0, 0, {meshtastic_TopSender_init_default, meshtastic_TopSender_init_default, meshtastic_TopSender_init_default}}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -657,7 +702,7 @@ extern "C" {
 #define meshtastic_SEN6XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_TopSender_init_zero           {0, 0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0, 0, {meshtastic_TopSender_init_zero, meshtastic_TopSender_init_zero, meshtastic_TopSender_init_zero}}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -720,6 +765,21 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_one_wire_temperature_ch7_tag 39
 #define meshtastic_EnvironmentMetrics_lightning_strike_count_1h_tag 40
 #define meshtastic_EnvironmentMetrics_lightning_distance_km_tag 41
+#define meshtastic_EnvironmentMetrics_soil_ph_tag 42
+#define meshtastic_EnvironmentMetrics_ph_tag     43
+#define meshtastic_EnvironmentMetrics_electrical_conductivity_tag 44
+#define meshtastic_EnvironmentMetrics_salinity_tag 45
+#define meshtastic_EnvironmentMetrics_nitrogen_tag 46
+#define meshtastic_EnvironmentMetrics_phosphorus_tag 47
+#define meshtastic_EnvironmentMetrics_potassium_tag 48
+#define meshtastic_EnvironmentMetrics_dissolved_oxygen_tag 49
+#define meshtastic_EnvironmentMetrics_orp_tag    50
+#define meshtastic_EnvironmentMetrics_chemical_oxygen_demand_tag 51
+#define meshtastic_EnvironmentMetrics_turbidity_tag 52
+#define meshtastic_EnvironmentMetrics_nitrate_tag 53
+#define meshtastic_EnvironmentMetrics_ammonium_tag 54
+#define meshtastic_EnvironmentMetrics_biochemical_oxygen_demand_tag 55
+#define meshtastic_EnvironmentMetrics_solar_irradiance_tag 56
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -885,7 +945,22 @@ X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch5,  37) \
 X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch6,  38) \
 X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch7,  39) \
 X(a, STATIC,   OPTIONAL, UINT32,   lightning_strike_count_1h,  40) \
-X(a, STATIC,   OPTIONAL, FLOAT,    lightning_distance_km,  41)
+X(a, STATIC,   OPTIONAL, FLOAT,    lightning_distance_km,  41) \
+X(a, STATIC,   OPTIONAL, FLOAT,    soil_ph,          42) \
+X(a, STATIC,   OPTIONAL, FLOAT,    ph,               43) \
+X(a, STATIC,   OPTIONAL, FLOAT,    electrical_conductivity,  44) \
+X(a, STATIC,   OPTIONAL, FLOAT,    salinity,         45) \
+X(a, STATIC,   OPTIONAL, FLOAT,    nitrogen,         46) \
+X(a, STATIC,   OPTIONAL, FLOAT,    phosphorus,       47) \
+X(a, STATIC,   OPTIONAL, FLOAT,    potassium,        48) \
+X(a, STATIC,   OPTIONAL, FLOAT,    dissolved_oxygen,  49) \
+X(a, STATIC,   OPTIONAL, FLOAT,    orp,              50) \
+X(a, STATIC,   OPTIONAL, FLOAT,    chemical_oxygen_demand,  51) \
+X(a, STATIC,   OPTIONAL, FLOAT,    turbidity,        52) \
+X(a, STATIC,   OPTIONAL, FLOAT,    nitrate,          53) \
+X(a, STATIC,   OPTIONAL, FLOAT,    ammonium,         54) \
+X(a, STATIC,   OPTIONAL, FLOAT,    biochemical_oxygen_demand,  55) \
+X(a, STATIC,   OPTIONAL, FLOAT,    solar_irradiance,  56)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -1082,7 +1157,7 @@ extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 #define meshtastic_AS3935Config_size             6
 #define meshtastic_AirQualityMetrics_size        157
 #define meshtastic_DeviceMetrics_size            87
-#define meshtastic_EnvironmentMetrics_size       222
+#define meshtastic_EnvironmentMetrics_size       312
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_HostMetrics_size              264
 #define meshtastic_LocalStats_size               87
@@ -1090,7 +1165,7 @@ extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 #define meshtastic_PowerMetrics_size             81
 #define meshtastic_SEN5XState_size               27
 #define meshtastic_SEN6XState_size               27
-#define meshtastic_Telemetry_size                272
+#define meshtastic_Telemetry_size                320
 #define meshtastic_TopSender_size                18
 #define meshtastic_TrafficManagementStats_size   72
 

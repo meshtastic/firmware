@@ -68,6 +68,11 @@
 
 AdminModule *adminModule;
 
+#ifdef ARCH_STM32
+// Client detach window before the DFU jump (see the enter_dfu case).
+static constexpr uint32_t STM32_DFU_DETACH_DELAY_MS = 5000;
+#endif
+
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 static bool licensedIdentityWillMigrate()
 {
@@ -619,7 +624,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN
         IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32)
+#if defined(ARCH_STM32)
+        // Delay the jump so this ACK reaches the client and it releases the port before the
+        // STM32WL ROM bootloader takes the UART and autobauds off the next byte it sees.
+        LOG_INFO("Entering DFU in %us - disconnect now", (STM32_DFU_DETACH_DELAY_MS + 999) / 1000);
+        enterDfuAtMsec = millis() + STM32_DFU_DETACH_DELAY_MS;
+        // Guard against enterDfuAtMsec rolling over to 0, the sentinel powerCommandsCheck() reads as unarmed.
+        if (enterDfuAtMsec == 0)
+            enterDfuAtMsec = 1;
+#elif defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
         break;
@@ -653,8 +666,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                                        SEGMENT_DEVICESTATE | SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_CHANNELS)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
             LOG_DEBUG("Rebooting after preferences restore");
-            reboot(1000);
             disableBluetooth();
+            reboot(DEFAULT_REBOOT_SECONDS);
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
@@ -1194,10 +1207,20 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
+        // A supplied public key that is itself blacklisted is re-derived too, so a restore carrying a whole
+        // low-entropy pair cannot skip the check just by populating both fields.
         if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
-        } else if (config.security.public_key.size == 0) {
-            nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+        } else if (config.security.public_key.size == 0 || nodeDB->checkLowEntropyPublicKey(config.security.public_key)) {
+            // Warn at set time, not after the next reboot, and only when the key really was replaced: a
+            // blacklisted public key whose private key derives a clean one is re-derived, and that stuck.
+            uint8_t priorPrivateKey[32];
+            memcpy(priorPrivateKey, config.security.private_key.bytes, 32);
+            const bool keygenSucceeded = nodeDB->generateCryptoKeyPair(priorPrivateKey);
+            const bool keyWasReplaced = memcmp(priorPrivateKey, config.security.private_key.bytes, 32) != 0;
+            if (keygenSucceeded && keyWasReplaced && nodeDB->keyIsLowEntropy) {
+                sendWarning(LOW_ENTROPY_RESTORE_WARNING);
+            }
         }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
@@ -1233,10 +1256,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
-    // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
-    // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
-                                              meshtastic_ModuleConfig_serial_tag, meshtastic_ModuleConfig_statusmessage_tag)) {
+    // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
+    // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
+    // next PowerFSM transition. Everything else reboots, so take BLE down before the phone interferes.
+    if (!hasOpenEditTransaction &&
+        !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag, meshtastic_ModuleConfig_serial_tag,
+                   meshtastic_ModuleConfig_statusmessage_tag, meshtastic_ModuleConfig_mesh_beacon_tag)) {
         disableBluetooth();
     }
 
@@ -1250,8 +1275,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (!MQTT::isValidConfig(c.payload_variant.mqtt)) {
             return false;
         }
-        // Disable Bluetooth to prevent interference during MQTT configuration
-        disableBluetooth();
+        // Disable Bluetooth to prevent interference during MQTT configuration, except inside an edit
+        // transaction: saveChanges() defers the reboot there, so nothing would bring BLE back.
+        if (!hasOpenEditTransaction)
+            disableBluetooth();
         moduleConfig.has_mqtt = true;
         {
             char prevPass[sizeof(moduleConfig.mqtt.password)];
@@ -1269,7 +1296,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             LOG_ERROR("Invalid serial config");
             return false;
         }
-        disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
+        // Same transaction caveat as MQTT above: a deferred reboot would leave BLE down with no restore.
+        if (!hasOpenEditTransaction)
+            disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
         moduleConfig.has_serial = true;
         moduleConfig.serial = c.payload_variant.serial;
         break;

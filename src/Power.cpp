@@ -23,6 +23,7 @@
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
@@ -762,9 +763,11 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         } else {
             LOG_WARN("[AW35615] not found at 0x22");
         }
+        getBattVoltage(); // initial read cached_mv
         return true;
     }
 
+    virtual bool isBatteryConnect() override { return true; }
     virtual uint16_t getBattVoltage() override
     {
         if (!initialized)
@@ -800,7 +803,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
     {
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isVbusPresent();
+            return _aw35615.isVbusPresent() && cached_mv >= 4200;
         }
         // Fallback to base GPIO/board checks (or false) if CC chip is absent
         return false;
@@ -813,7 +816,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isSinkAttached();
+            return _aw35615.isSinkAttached() && cached_mv >= 4200;
         }
         return isVbusIn();
     }
@@ -974,6 +977,14 @@ void Power::powerCommandsCheck()
         shutdownAtMsec = 0;
         shutdown();
     }
+
+#ifdef ARCH_STM32
+    // Deferred DFU entry; the delay is armed by AdminModule's enter_dfu handler (rationale there).
+    if (enterDfuAtMsec && Throttle::deadlinePassed(enterDfuAtMsec)) {
+        enterDfuAtMsec = 0;
+        enterDfuMode(); // never returns
+    }
+#endif
 }
 
 void Power::reboot()
@@ -1236,12 +1247,23 @@ void Power::logHeapUsage()
     // The first line has no earlier sample to difference against
     const int32_t delta = lastHeapLogTime ? (int32_t)(heapFree - lastHeapLogFree) : 0;
 
+    // min only ever falls: one step down is a transient alloc, repeated new lows are a leak.
+    // A steady min with a shrinking largest block is fragmentation. Empty where unsupported.
+    char detail[64] = "";
+    const uint32_t minFree = memGet.getMinFreeHeap();
+    const uint32_t maxAlloc = memGet.getMaxAllocHeap();
+    if (minFree || maxAlloc)
+        snprintf(detail, sizeof(detail), ", min %u, largest block %u", minFree, maxAlloc);
+
     const uint32_t psramTotal = memGet.getPsramSize();
     if (psramTotal)
-        LOG_INFO("Heap: %u/%u bytes free (%d since last), PSRAM: %u/%u bytes free", heapFree, heapTotal, delta,
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)%s, PSRAM: %u/%u bytes free", heapFree, heapTotal, delta, detail,
                  memGet.getFreePsram(), psramTotal);
     else
-        LOG_INFO("Heap: %u/%u bytes free (%d since last)", heapFree, heapTotal, delta);
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)%s", heapFree, heapTotal, delta, detail);
+
+    // Which tagged subsystem moved since boot
+    memaudit::logBreakdown("periodic");
 
     lastHeapLogFree = heapFree;
     lastHeapLogTime = millis();
