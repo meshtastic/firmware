@@ -996,18 +996,34 @@ class TmmRebroadcastShim : public TrafficManagementModule
     using TrafficManagementModule::handleReceived;
 };
 
+class ScopedTmmFixture
+{
+  public:
+    explicit ScopedTmmFixture(TrafficManagementModule *m) : savedModule(trafficManagementModule), savedConfig(moduleConfig)
+    {
+        trafficManagementModule = m;
+    }
+    ~ScopedTmmFixture()
+    {
+        trafficManagementModule = savedModule;
+        moduleConfig = savedConfig;
+    }
+
+  private:
+    TrafficManagementModule *savedModule;
+    meshtastic_LocalModuleConfig savedConfig;
+};
+
 void test_rebroadcast_noRelay_skipsTxButNotToUs(void)
 {
     MockRadioInterface *mockIface = installMockIface();
 
-    const meshtastic_LocalModuleConfig saved = moduleConfig;
+    TmmRebroadcastShim tmm;
+    ScopedTmmFixture tmmFixture(&tmm);
     moduleConfig.has_traffic_management = true;
     moduleConfig.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
     moduleConfig.traffic_management.probation_window_secs = 300;
     moduleConfig.traffic_management.relay_budget_max_packets = 1;
-
-    TmmRebroadcastShim tmm;
-    trafficManagementModule = &tmm;
 
     meshtastic_MeshPacket observe = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, NODENUM_BROADCAST, 0);
     (void)tmm.handleReceived(observe);
@@ -1025,9 +1041,6 @@ void test_rebroadcast_noRelay_skipsTxButNotToUs(void)
     meshtastic_MeshPacket routing = makeBehaviorPacket(meshtastic_PortNum_ROUTING_APP, kRemoteNode, NODENUM_BROADCAST, 0);
     TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&routing));
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "ROUTING still relays under NO_RELAY");
-
-    trafficManagementModule = nullptr;
-    moduleConfig = saved;
 }
 #endif
 

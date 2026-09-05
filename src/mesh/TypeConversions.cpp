@@ -124,9 +124,7 @@ void TypeConversions::CopyUserToNodeInfoLite(meshtastic_NodeInfoLite *lite, cons
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK, user.has_is_unmessagable);
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK, user.has_is_unmessagable && user.is_unmessagable);
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_USER_MASK, true);
-    // Identity-format marker: stamp the key-derived bit from the (possibly just-merged) stored
-    // key, never from the incoming user - an incoming key for a node that does not derive its
-    // number must not flip the format marker on.
+    // Stamp the key-derived bit from the stored key, never from the incoming user.
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_MASK, storedIdentityIsKeyDerived(lite));
 }
 

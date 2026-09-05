@@ -95,11 +95,8 @@ meshtastic_SharedContact makeContact(NodeNum num, const char *longName, const ch
     return c;
 }
 
-// A fixed 32-byte key and the node number IT derives (crc32) - the key-anchored
-// (key-derived) identity for that number. Used to build records in the new
-// identity format without depending on the real curve. (Solving crc32 for a
-// CHOSEN number needs 32 variable bits; deriving the number from a fixed key
-// is exact and instant.)
+// A fixed 32-byte key and the node number it derives (crc32) - builds a
+// key-anchored identity without depending on the real curve.
 static const uint8_t KEY_DERIVED_KEY[32] = {0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA,
                                             0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5,
                                             0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF};
@@ -423,10 +420,8 @@ static void test_updateuser_warm_signer_refusal_does_not_evict(void)
 
 // --- identity format (nodenum-from-key) ---
 
-// The format predicate itself: the key-anchored key derives exactly ONE node
-// number (its own); any other key is not a key-derived identity. This is the
-// dual-read's discriminator - old records simply fail it and stay in the
-// legacy format.
+// Dual-read discriminator: a key-anchored key derives exactly its own number.
+// Old records fail the predicate and stay in the legacy format.
 static void test_identity_predicate_keyDerivesNumber(void)
 {
     const NodeNum num = keyDerivedNum();
@@ -450,10 +445,8 @@ static void test_identity_predicate_keyDerivesNumber(void)
     TEST_ASSERT_TRUE(storedIdentityIsKeyDerived(&stored));
 }
 
-// Dual-read, key-anchored side: once the stored key derives the node number, a
-// NodeInfo carrying a DIFFERENT (non-deriving) key is a TOFU claim and is
-// refused - key, name, and the format marker all stay put. This is the last
-// TOFU hole on unsigned / warm-tier identity updates.
+// Dual-read: once the stored key derives the node number, a NodeInfo with a
+// different non-deriving key is refused wholesale (key, name, marker).
 static void test_identity_dualread_keyDerivedRefusesNonDeriving(void)
 {
     const NodeNum num = keyDerivedNum();
@@ -472,12 +465,8 @@ static void test_identity_dualread_keyDerivedRefusesNonDeriving(void)
     TEST_ASSERT_TRUE(nodeInfoLiteIsKeyDerivedIdentity(db->getMeshNode(num)));                 // marker intact
 }
 
-// Dual-read, transition: a legacy (non-deriving) stored key is REPLACED by a
-// key that derives the node number through the proven path (commitRemoteKey -
-// manual verification / boot regeneration), not through updateUser's
-// unauthenticated merge (whose key pin refuses ANY key swap). The proven path
-// stamps the format marker, and the dual-read guard then binds: a later
-// non-deriving key is refused wholesale.
+// Dual-read transition: a proven commit of a deriving key replaces a legacy
+// stored key; a later non-deriving key is then refused.
 static void test_identity_dualread_transitionLegacyToKeyDerived(void)
 {
     const NodeNum num = keyDerivedNum();
@@ -497,11 +486,8 @@ static void test_identity_dualread_transitionLegacyToKeyDerived(void)
     TEST_ASSERT_TRUE(identityKeyDerivesNodeNum(db->getMeshNode(num)->public_key.bytes, num)); // intact
 }
 
-// Dual-read, keyless transparency: a keyless update is never a key replacement,
-// so the format guard does not apply to it (a fresh node takes a keyless
-// update, marker stays off; and against a key-anchored record the guard's
-// policy is explicitly permissive - the separate unauthenticated key pin
-// decides keyless-vs-stored-key, as it always has).
+// Dual-read: a keyless update is never a key replacement, so the format guard
+// does not apply; the unauthenticated key pin still decides keyless-vs-stored.
 static void test_identity_dualread_keylessUpdateAllowed(void)
 {
     const NodeNum num = keyDerivedNum();

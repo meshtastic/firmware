@@ -826,14 +826,8 @@ extern uint32_t error_address;
 // Use this instead of `if (snr_q4)`. Legacy records (bit clear) are unambiguously "unknown".
 #define NODEINFO_BITFIELD_HAS_SNR_SHIFT 10
 #define NODEINFO_BITFIELD_HAS_SNR_MASK (1u << NODEINFO_BITFIELD_HAS_SNR_SHIFT)
-// Identity-format marker: the stored 32-byte public key actually derives this node's own
-// number (crc32(public_key) == num). Set whenever we store a key that satisfies that predicate.
-// It is not a separate wire field - it is recomputed from the stored key on every read - so
-// old firmware that never sets it simply behaves as the pre-migration (legacy number) format,
-// and new firmware dual-reads both during the transition. The key-anchored format refuses to
-// let a non-deriving key replace a stored key that derives the number (the last TOFU hole on
-// warm-tier / unsigned identity updates); a legacy (non-deriving) stored key may still be
-// replaced by a key-derived one.
+// Stored 32-byte key derives this node number (crc32). Recomputed on read; the dual-read
+// guard refuses a non-deriving replacement once that predicate holds.
 #define NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_SHIFT 11
 #define NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_MASK (1u << NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_SHIFT)
 // Bits 12..31 reserved for future single-bit flags.
@@ -896,13 +890,8 @@ inline bool nodeInfoLiteIsProtected(const meshtastic_NodeInfoLite *n)
     return nodeInfoLiteIsFavorite(n) || nodeInfoLiteIsIgnored(n) || nodeInfoLiteIsKeyManuallyVerified(n);
 }
 
-// --- Identity-format (nodenum-from-key) helpers -------------------------------------------
-// The pre-migration format derives a node number from the radio MAC (or picks it at random on
-// collision); the key-anchored format derives it from the identity public key (crc32 of the
-// 32-byte key). `identityKeyDerivesNodeNum` is the shared predicate: a stored key is "key-
-// derived" for a node when it satisfies it for that node's own number. Recomputing it from the
-// key on every read (rather than trusting a persisted bit alone) is the dual-read: an old
-// record that predates the format simply fails the predicate and stays in the legacy format.
+// Pre-migration numbers come from MAC/random; key-anchored numbers from crc32(pubkey).
+// Dual-read: recompute from the key rather than trusting the persisted bit alone.
 inline bool identityKeyDerivesNodeNum(const uint8_t *key32, NodeNum num)
 {
     return key32 != nullptr && crc32Buffer(key32, 32) == num;
