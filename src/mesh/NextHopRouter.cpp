@@ -451,6 +451,10 @@ int32_t NextHopRouter::doRetransmissions()
     // for(auto el: pending) {
     for (auto it = pending.begin(), nextIt = it; it != pending.end(); it = nextIt) {
         ++nextIt; // we use this odd pattern because we might be deleting it...
+
+        // Every send below can loop an ACK/NAK back inline and erase this record, so keep a copy of
+        // the key and stop trusting `p` afterwards. See the commit message for the reentrancy path.
+        const GlobalPacketId key = it->first;
         auto &p = it->second;
 
         bool stillValid = true; // assume we'll keep this record around
@@ -465,7 +469,7 @@ int32_t NextHopRouter::doRetransmissions()
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
-                stopRetransmission(it->first);
+                stopRetransmission(key);
                 stillValid = false; // just deleted it
             } else {
                 LOG_DEBUG("Send retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
@@ -532,17 +536,24 @@ int32_t NextHopRouter::doRetransmissions()
                     }
                 }
 
-                // Queue again
-                --p.numRetransmissions;
-                setNextTx(&p);
+                // Queue again, via a fresh lookup rather than `p`, which the sends above may have freed.
+                PendingPacket *rec = findPendingPacket(key);
+                if (!rec) {
+                    stillValid = false;
+                } else {
+                    --rec->numRetransmissions;
+                    setNextTx(rec);
+                }
             }
         }
 
         if (stillValid) {
-            // Update our desired sleep delay
-            int32_t t = p.nextTxMsec - now;
+            // Update our desired sleep delay. Read through a fresh lookup for the same reason.
+            if (const PendingPacket *rec = findPendingPacket(key)) {
+                int32_t t = rec->nextTxMsec - now;
 
-            d = min(t, d);
+                d = min(t, d);
+            }
         }
     }
 
