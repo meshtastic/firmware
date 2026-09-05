@@ -11,13 +11,14 @@
 >
 > **Need this? It's here.**
 >
-> |                                                           |                                                            |
-> | --------------------------------------------------------- | ---------------------------------------------------------- |
-> | General helpers (clamp, UTF-8, string fmt…)               | `src/meshUtils.h`                                          |
-> | Logging macros (LOG_DEBUG / INFO / WARN…)                 | `src/DebugConfiguration.h`                                 |
-> | Elapsed time / deadlines (never bare `millis()` compares) | `src/mesh/Throttle.h`                                      |
-> | New module skeleton                                       | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
-> | Observer / event wiring                                   | `src/Observer.h`                                           |
+> |                                                           |                                                                                    |
+> | --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+> | General helpers (clamp, UTF-8, string fmt…)               | `src/meshUtils.h`                                                                  |
+> | Logging macros (LOG_DEBUG / INFO / WARN…)                 | `src/DebugConfiguration.h`                                                         |
+> | Elapsed time / deadlines (never bare `millis()` compares) | `src/mesh/Throttle.h`                                                              |
+> | New module skeleton                                       | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h`                         |
+> | Observer / event wiring                                   | `src/Observer.h`                                                                   |
+> | Test naming (the `src/` rule does **not** apply)          | [copilot-instructions.md#test-naming](.github/copilot-instructions.md#test-naming) |
 
 **Read `.github/copilot-instructions.md` first.** That file is the canonical agent-facing document for this repo. It covers project layout, coding conventions, the build system, CI/CD, the native C++ test suite, and the MCP Server & Hardware Test Harness. Read it top-to-bottom before starting any non-trivial change.
 
