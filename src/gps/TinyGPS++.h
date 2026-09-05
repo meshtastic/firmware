@@ -382,6 +382,7 @@ class TinyGPSPlus
         }
         return best;
     }
+
     uint16_t gsaVDOP() const
     {
         uint16_t best = 0;
@@ -422,8 +423,11 @@ class TinyGPSPlus
         return total;
     }
 
-    bool hasValidGLL() const { return gllInfo.valid && gllLocation.isValid() && gllTime.isValid(); }
-    bool hasValidZDA() const { return zdaInfo.valid && zdaTime.isValid(); }
+    bool hasValidGLL() const
+    {
+        return gllInfo.valid && isFreshAuxTimestamp(gllInfo.lastUpdate) && gllLocation.isValid() && gllTime.isValid();
+    }
+    bool hasValidZDA() const { return zdaInfo.valid && isFreshAuxTimestamp(zdaInfo.lastUpdate) && zdaTime.isValid(); }
     TinyGPSAntennaStatus antennaStatus() const { return antInfo.status; }
 
     TinyGPSHDOP hdop;
@@ -494,6 +498,8 @@ class TinyGPSPlus
     TinyGPSAntennaStatus pendingAntennaStatus = TINYGPS_ANT_UNKNOWN;
 
     uint32_t sentenceTime = 0;
+    uint32_t lastGGAUpdate = 0;
+    uint8_t pendingFixQ = 0;
     uint8_t fixQ = 0; /* From Eric S. Raymond's website:
                          http://www.catb.org/gpsd/NMEA.html#_gga_global_positioning_system_fix_data 0 - fix not available, 1 - GPS
                          fix, 2 - Differential GPS fix (values above 2 are 2.3 features) 3 = PPS fix 4 = Real Time Kinematic 5 =
