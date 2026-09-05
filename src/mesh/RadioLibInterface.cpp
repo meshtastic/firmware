@@ -830,8 +830,15 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
-            // This send failed, but make sure to 'complete' it properly
-            completeSending();
+            auto p = sendingPacket;
+            sendingPacket = NULL;
+#ifdef LED_LORA
+            digitalWrite(LED_LORA, LED_STATE_OFF);
+#endif
+            if (p) {
+                RadioTxHooks::packetReleased(this, p);
+                packetPool.release(p);
+            }
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
