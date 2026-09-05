@@ -29,11 +29,14 @@
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
 #elif defined(ARCH_RP2040)
+#include <FreeRTOS.h>
 #include <SimpleMDNS.h>
+#include <atomic>
+#include <task.h>
 #endif
 
-#ifndef DISABLE_NTP
 #include "Throttle.h"
+#ifndef DISABLE_NTP
 #include <NTPClient.h>
 #endif
 
@@ -61,6 +64,39 @@ unsigned long lastrun_ntp = 0;
 
 bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
 bool isReconnecting = false; // If we are currently reconnecting
+
+#ifdef ARCH_RP2040
+// On the CYW43 under FreeRTOS even WiFi.beginNoBlock() holds the caller for several seconds (up to the WiFi timeout,
+// 15 s); from the main loop that trips the 8 s hardware watchdog. Join from a short-lived task and poll for the link.
+// Pinned to core 0: the CYW43 shim is written for the core-0 LWIP thread and its core assertions are NDEBUG-only.
+// The claim is load/store only - ARMv6-M has no LDREX, so an exchange() would call libatomic.
+static std::atomic<bool> wifiJoinRunning{false};
+static uint32_t wifiJoinStartMillis = 0; // 0 = nothing in flight
+
+static void wifiJoinTaskFn(void *)
+{
+    const char *psk = config.network.wifi_psk[0] ? config.network.wifi_psk : NULL;
+    WiFi.beginNoBlock(config.network.wifi_ssid, psk);
+    wifiJoinRunning.store(false, std::memory_order_release);
+    vTaskDelete(NULL);
+}
+
+static bool startWifiJoin()
+{
+    if (wifiJoinRunning.load(std::memory_order_acquire))
+        return true; // previous join still in progress
+    wifiJoinRunning.store(true, std::memory_order_relaxed);
+    uint32_t startedAt = millis();
+    wifiJoinStartMillis = startedAt == 0 ? 1 : startedAt;
+    if (xTaskCreateAffinitySet(wifiJoinTaskFn, "wifijoin", 1536, NULL, uxTaskPriorityGet(NULL), 1u << 0, NULL) != pdPASS) {
+        LOG_ERROR("Could not start WiFi join task");
+        wifiJoinRunning.store(false, std::memory_order_relaxed);
+        wifiJoinStartMillis = 0;
+        return false;
+    }
+    return true;
+}
+#endif
 #if defined(USE_WS5500) || defined(USE_CH390D)
 static volatile bool ethNetworkConnectedPending = false;
 #endif
@@ -265,8 +301,9 @@ static int32_t reconnectWiFi()
 #endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
 
-        // Start the non-blocking wait for 5 seconds
-        wifiReconnectStartMillis = millis();
+        // Start the non-blocking wait for 5 seconds. 0 is this field's "not armed", so never store it as a time.
+        uint32_t startedAt = millis();
+        wifiReconnectStartMillis = startedAt == 0 ? 1 : startedAt;
         wifiReconnectPending = true;
         // Do not attempt to connect yet, wait for the next invocation
         return 5000; // Schedule next check soon
@@ -281,7 +318,11 @@ static int32_t reconnectWiFi()
                 WiFi.useStaticBuffers(true);
                 WiFi.mode(WIFI_STA);
 #endif
+#ifdef ARCH_RP2040
+                startWifiJoin();
+#else
                 WiFi.begin(wifiName, wifiPsw);
+#endif
             }
             isReconnecting = false;
             wifiReconnectPending = false;
@@ -311,7 +352,20 @@ static int32_t reconnectWiFi()
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
-        needReconnect = APStartupComplete;
+        // CYW43::begin() can wait on the link past its own timeout with no deadline, never releasing the claim.
+        if (wifiJoinStartMillis != 0 && wifiJoinRunning.load(std::memory_order_relaxed) &&
+            Throttle::hasElapsed(wifiJoinStartMillis, 60000)) {
+            LOG_ERROR("WiFi join stuck in the driver for 60 s, reboot to recover");
+            wifiJoinStartMillis = 0; // say it once
+            uint32_t rebootAt = millis() + 5000;
+            rebootAtMsec = rebootAt == 0 ? 1 : rebootAt;
+        }
+
+        // Lost the link, or a join that has not come up within 30 s: start the join over once the join task is done.
+        // 0 means not armed, and Throttle::hasElapsed() leaves that test to the caller.
+        needReconnect = !wifiJoinRunning.load(std::memory_order_acquire) &&
+                        (APStartupComplete || (!isReconnecting && wifiReconnectStartMillis != 0 &&
+                                               Throttle::hasElapsed(wifiReconnectStartMillis, 30000)));
 #endif
         return 1000; // check once per second
     } else {
