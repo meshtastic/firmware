@@ -1,6 +1,7 @@
 #include "RadioInterface.h"
 #include "Channels.h"
 #include "DisplayFormatters.h"
+#include "JapanTxHook.h"
 #include "LLCC68Interface.h"
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
@@ -372,6 +373,7 @@ extern SPIClass SPI1;
 
 std::unique_ptr<RadioInterface> initLoRa()
 {
+    initJapanTxHook();
     std::unique_ptr<RadioInterface> rIf = nullptr;
 
 #if ARCH_PORTDUINO

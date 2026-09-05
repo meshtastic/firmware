@@ -449,7 +449,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     packetPool.release(bad);
                     setTransmitDelay();
                 } else if (action == RadioTxHook::PRETX_DEFER) {
-                    setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                    const uint32_t nowAfter = Time::getMillis();
+                    if (txp->tx_after && !Throttle::deadlinePassedAt(nowAfter, txp->tx_after)) {
+                        uint32_t remaining = txp->tx_after - nowAfter;
+                        notifyLater(remaining, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+                    } else {
+                        setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                    }
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
                         if (!RadioTxHooks::holdsRadio(txp)) {
@@ -587,6 +593,7 @@ void RadioLibInterface::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
+        RadioTxHooks::postTransmit(this, p);
         // Keep this inside `if (p)`: completeSending() also runs on every setStandby(), where a hook
         // undoing its own pre-TX switch would recurse back through reconfigure().
         RadioTxHooks::packetReleased(this, p);
