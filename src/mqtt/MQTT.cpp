@@ -869,3 +869,43 @@ void MQTT::perhapsReportToMap()
     // Update the last report time
     last_report_to_map = millis();
 }
+
+bool MQTT::publishOwnPacket(meshtastic_MeshPacket &mp)
+{
+    if (!(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
+        return false;
+
+    ChannelIndex chIndex = channels.getPrimaryIndex();
+    const char *channelId = channels.getGlobalId(chIndex);
+
+    // This path never goes through Router::send(), so nothing else encrypts this packet for
+    // us - do it ourselves, the same way Router::send() does for on-air packets, so MQTT
+    // uplinks of locally-generated data respect moduleConfig.mqtt.encryption_enabled instead
+    // of always going out in plaintext.
+    if (moduleConfig.mqtt.encryption_enabled) {
+        uint8_t scratch[sizeof(mp.encrypted.bytes)];
+        size_t numBytes = pb_encode_to_bytes(scratch, sizeof(scratch), &meshtastic_Data_msg, &mp.decoded);
+
+        int16_t hash = channels.setActiveByIndex(chIndex);
+        if (hash < 0) {
+            LOG_WARN("MQTT publishOwnPacket: no usable channel key, dropping");
+            return false;
+        }
+        mp.channel = hash;
+
+        crypto->encryptPacket(mp.from, mp.id, numBytes, scratch);
+        memcpy(mp.encrypted.bytes, scratch, numBytes);
+        mp.encrypted.size = numBytes;
+        mp.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    }
+
+    std::string nodeId = nodeDB->getNodeId();
+    const meshtastic_ServiceEnvelope se = {
+        .packet = &mp, .channel_id = (char *)channelId, .gateway_id = const_cast<char *>(nodeId.c_str())};
+    size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &se);
+
+    std::string topic = cryptTopic + channelId + "/" + nodeId;
+    LOG_DEBUG("MQTT Publish own packet to %s, %u bytes (%s)", topic.c_str(), numBytes,
+              moduleConfig.mqtt.encryption_enabled ? "encrypted" : "plaintext");
+    return publish(topic.c_str(), bytes, numBytes, false);
+}

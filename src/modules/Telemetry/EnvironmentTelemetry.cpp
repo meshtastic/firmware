@@ -702,7 +702,8 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     // getMetrics() doesn't always get evaluated because of
     // short-circuit evaluation rules in c++
     bool get_metrics;
-    m->time = getTime();
+    // getTime() alone isn't valid to check for RTC validity
+    m->time = getValidTime(RTCQualityDevice);
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 

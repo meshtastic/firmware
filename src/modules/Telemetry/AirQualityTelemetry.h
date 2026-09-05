@@ -10,11 +10,21 @@
 #define AIR_QUALITY_TELEMETRY_MODULE_ENABLE 0
 #endif
 
+// Local retention window, shared by mesh/mqtt/phone publishing. Each slot is
+// sizeof(BufferedReading<meshtastic_AirQualityMetrics>) ~= 220 bytes
+// Boards with RAM to spare can raise it by defining AIR_QUALITY_TELEMETRY_HISTORY_SIZE in their
+// own variant.h
+#ifndef AIR_QUALITY_TELEMETRY_HISTORY_SIZE
+#define AIR_QUALITY_TELEMETRY_HISTORY_SIZE 16
+#endif
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#include "TelemetryHistory.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CConsumer.h"
+#include "mqtt/MQTT.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -49,15 +59,24 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
     virtual int32_t runOnce() override;
-    /** Called to get current Air Quality data
-    @return true if it contains valid data
-    */
+
     bool getAirQualityTelemetry(meshtastic_Telemetry *m);
+
     virtual meshtastic_MeshPacket *allocReply() override;
-    /**
-     * Send our Telemetry into the mesh
-     */
-    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+
+    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST);
+    void logSendPacket(meshtastic_Telemetry &m);
+
+    meshtastic_MeshPacket *allocTelemetryHistoryPacket() override { return allocDataPacket(); }
+    meshtastic_MeshPacket *allocTelemetryPacket(const meshtastic_Telemetry &m) override { return allocDataProtobuf(m); }
+
+    // Keep our own copy of whatever was just published
+    void onPublishedTelemetry(const meshtastic_MeshPacket &p) override
+    {
+        if (lastMeasurementPacket != nullptr)
+            packetPool.release(lastMeasurementPacket);
+        lastMeasurementPacket = packetPool.allocCopy(p);
+    }
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
@@ -66,15 +85,18 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
 
   private:
     bool firstTime = true;
+
     int32_t awakeAheadOfTimeMs = 0;
     int32_t startAirQualityTelemetryCycle = 0;
+
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
-    // uint32_t sendToPhoneIntervalMs = 1000; // Send to phone every minute
-    uint32_t lastSentToPhone = 0;
 
     // Map for supported sensors to re-scan
     std::map<uint8_t, ScanI2C::DeviceType> supportedSensors;
+
+    // Telemetry record history, shared by mesh/mqtt/phone publishing
+    TelemetryHistoryBuffer<meshtastic_AirQualityMetrics, AIR_QUALITY_TELEMETRY_HISTORY_SIZE> history;
 };
 
 #endif

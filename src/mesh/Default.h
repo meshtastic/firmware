@@ -37,6 +37,8 @@
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
+#define default_telemetry_read_interval_secs (15 * 60) // default telemetry read interval
+#define min_telemetry_read_interval_secs (6 * 60)      // min telemetry interval to avoid lag in queues
 
 enum class TrafficType { POSITION, TELEMETRY };
 
@@ -71,6 +73,7 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_mqtt_root "msh"
 #define default_mqtt_encryption_enabled true
 #define default_mqtt_tls_enabled false
+#define default_mqtt_telemetry_uplink_enabled false
 
 #define IF_ROUTER(routerVal, normalVal)                                                                                          \
     ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||                                                        \

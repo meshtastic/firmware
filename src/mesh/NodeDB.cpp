@@ -1443,6 +1443,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mqtt.tls_enabled = default_mqtt_tls_enabled;
 #endif
 
+#ifdef USERPREFS_MQTT_TELEMETRY_UPLINK_ENABLED
+    moduleConfig.mqtt.telemetry_uplink_enabled = USERPREFS_MQTT_TELEMETRY_UPLINK_ENABLED;
+#else
+    moduleConfig.mqtt.telemetry_uplink_enabled = default_mqtt_telemetry_uplink_enabled;
+#endif
+
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
 
@@ -1681,6 +1687,12 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.air_quality_interval = USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL;
 #else
     moduleConfig.telemetry.air_quality_interval = 0;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_TELEM_READ_INTERVAL
+    moduleConfig.telemetry.air_quality_telemetry_read_interval = USERPREFS_CONFIG_AQ_TELEM_READ_INTERVAL;
+#else
+    moduleConfig.telemetry.air_quality_telemetry_read_interval = 0;
 #endif
 
 #ifdef USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED
