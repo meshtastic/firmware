@@ -113,6 +113,13 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     if (strcmp(e.channel_id, "PKI") == 0 && !anyChannelHasDownlink) {
         return;
     }
+    // The self-gateway branch below returns before shouldDropMqttDownlink() ever runs, so check
+    // ignore_mqtt here or a user who opted out of MQTT still gets MQTT-driven ACKs.
+    if (config.lora.ignore_mqtt) {
+        LOG_INFO("Drop MQTT ignore_mqtt");
+        return;
+    }
+
     // Generate node ID from nodenum for comparison
     std::string nodeId = nodeDB->getNodeId();
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
