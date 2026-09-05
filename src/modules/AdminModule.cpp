@@ -146,6 +146,30 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 #endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
+    const bool licensedRemote = owner.is_licensed && mp.from != 0;
+    bool authorizedLicensedSigner = false;
+    // Could tighten responses further by tracking the last public key queried.
+    if (licensedRemote) {
+        const bool directedAdmin = nodeDB && mp.to == nodeDB->getNodeNum() && !isBroadcast(mp.to) &&
+                                   mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP && !mp.pki_encrypted;
+        if (!directedAdmin || !mp.xeddsa_signed || mp.public_key.size != 32) {
+            LOG_INFO("Ignore licensed admin payload without a directed Router-verified signature");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+            return handled;
+        }
+        for (const auto &adminKey : config.security.admin_key) {
+            if (adminKey.size == 32 && memcmp(mp.public_key.bytes, adminKey.bytes, 32) == 0) {
+                authorizedLicensedSigner = true;
+                break;
+            }
+        }
+        if (!messageIsResponse(r) && !authorizedLicensedSigner) {
+            LOG_INFO("Received signed licensed admin payload from a non-allowlisted key");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+            return handled;
+        }
+        LOG_INFO("Signed licensed admin payload with Router-verified sender");
+    }
     if (messageIsResponse(r)) {
         // Only accept a response from a remote we sent the matching request to. from == 0 is a
         // local client, which PhoneAPI has already gated.
@@ -179,6 +203,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
 #endif
+    } else if (authorizedLicensedSigner) {
+        // Router verified a plaintext licensed-mode signer against the admin allowlist above.
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin disabled");
@@ -206,7 +232,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             // that pointer is unrelated, so the path was unsafe.)
 
             // Automatically favorite the node that is using the admin key
-            auto remoteNode = nodeDB->getMeshNode(mp.from);
+            auto remoteNode = nodeDB ? nodeDB->getMeshNode(mp.from) : nullptr;
             if (remoteNode && !nodeInfoLiteIsFavorite(remoteNode)) {
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
                     // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
