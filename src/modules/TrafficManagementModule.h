@@ -7,6 +7,8 @@
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 
+#include <algorithm>
+
 #if HAS_TRAFFIC_MANAGEMENT
 
 // Replay provenance gate: when 1 (default), direct responses are spoofed only for nodes whose
