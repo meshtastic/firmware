@@ -3,7 +3,6 @@
 #ifdef T5_S3_EPAPER_PRO
 
 #include "Observer.h"
-#include "TouchDrvGT911.hpp"
 #include "Wire.h"
 #include "buzz.h"
 #include "concurrency/OSThread.h"
@@ -12,6 +11,7 @@
 #include "main.h"
 #include "mesh/Throttle.h"
 #include "sleep.h"
+#include "touch/TouchDrvGT911.hpp"
 #include <cstring>
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
