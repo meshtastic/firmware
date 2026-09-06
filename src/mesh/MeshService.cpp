@@ -368,7 +368,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     return res ? ERRNO_OK : ERRNO_UNKNOWN;
 }
 
-void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
+ErrorCode MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
@@ -404,6 +404,8 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     if (res == ERRNO_SHOULD_RELEASE) {
         releaseToPool(p);
     }
+
+    return res;
 }
 
 bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
@@ -412,36 +414,31 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 
     assert(node);
 
-    if (nodeDB->hasValidPosition(node)) {
-#if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
-        if (positionModule) {
-            if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
-                LOG_DEBUG("Skip position ping; no fresh position since boot");
-                return false;
-            }
-            // Prefer the node's current channel, but fall back to the position channel
-            // (matching PositionModule::sendOurPosition() behavior).
-            uint8_t sendChan = node->channel;
-            if (getPositionPrecisionForChannel(sendChan) == 0 && !findPositionChannel(sendChan)) {
-                // No channel with position enabled: fall back to sending nodeinfo, as before.
-                if (nodeInfoModule) {
-                    LOG_INFO("No position-enabled channel; send nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d", dest,
-                             wantReplies, node->channel);
-                    nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
-                }
-                return false;
-            }
-            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
-            return positionModule->sendOurPosition(dest, wantReplies, sendChan);
-        }
-    } else {
-#endif
+    // Every path that puts no position on the air falls back to nodeinfo, so a false return
+    // always means "nodeinfo went instead" - what the callers report to the user.
+    auto sendNodeInfoInstead = [&]() {
         if (nodeInfoModule) {
             LOG_INFO("Send nodeinfo ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
+        return false;
+    };
+
+#if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
+    if (nodeDB->hasValidPosition(node) && positionModule &&
+        (config.position.fixed_position || nodeDB->hasLocalPositionSinceBoot())) {
+        // Prefer the node's current channel, but fall back to the position channel
+        // (matching PositionModule::sendOurPosition() behavior).
+        uint8_t sendChan = node->channel;
+        if (getPositionPrecisionForChannel(sendChan) == 0 && !findPositionChannel(sendChan))
+            return sendNodeInfoInstead(); // No channel carries positions
+
+        LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
+        if (positionModule->sendOurPosition(dest, wantReplies, sendChan))
+            return true;
     }
-    return false;
+#endif
+    return sendNodeInfoInstead();
 }
 
 // ASCII BEL, the in-band alert marker. Numeric so no control byte sits in the source, and

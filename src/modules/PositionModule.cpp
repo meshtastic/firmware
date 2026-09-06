@@ -463,7 +463,13 @@ bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (channel > 0)
         p->channel = channel;
 
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    // Only ERRNO_OK / ERRNO_SHOULD_RELEASE mean the router took the packet; anything else (full
+    // TX queue, duty cycle abort) released it unsent, and must not stamp the broadcast cadence.
+    ErrorCode res = service->sendToMesh(p, RX_SRC_LOCAL, true);
+    if (res != ERRNO_OK && res != ERRNO_SHOULD_RELEASE) {
+        LOG_WARN("Position send rejected by router: %d", res);
+        return false;
+    }
 
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
