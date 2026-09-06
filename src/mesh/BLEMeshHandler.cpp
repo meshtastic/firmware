@@ -150,6 +150,12 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
     // or schedule our transmit.
     mp.via_mqtt = false;
     mp.tx_after = 0;
+    // priority is local-only too, and unlike want_ack/next_hop/relay_node it is NOT a field the LoRa
+    // header carries - so fixPriority() always derives it locally for a LoRa arrival, and this bearer
+    // is the first that lets a sender choose it. Left as sent, a crafted frame with priority MAX
+    // outranks ACK (the ceiling fixPriority assigns) and, once perhapsRebroadcast copies it into the
+    // TX queue, replaceLowerPriorityPacket evicts one of ours to make room for it.
+    mp.priority = meshtastic_MeshPacket_Priority_UNSET;
 
     // Guard 3 (mirrors UdpMulticastHandler): authentication metadata is local-only. The Router
     // re-establishes it after a successful PKI decrypt; carrying it in from the wire would let a

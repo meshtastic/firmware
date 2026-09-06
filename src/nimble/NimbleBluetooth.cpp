@@ -1090,7 +1090,7 @@ int NimbleBluetooth::getRssi()
     return 0;
 }
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && defined(HAS_BLE_MESH)
 // From thebentern's ble-mesh-working branch, which carried it for units whose stored bond blobs
 // crash NimBLE during populate_db_from_nvs. Reinstated here because NimBLE was seen to fail
 // become active at all on some boots after flipping between builds with different BLE configs -
@@ -1131,7 +1131,11 @@ static void clearCorruptBondStoreOnce()
 
 void NimbleBluetooth::setup()
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && defined(HAS_BLE_MESH)
+    // Gated on the mesh build, not on ARCH_ESP32. Its own comment says why it exists: NimBLE fails
+    // to come up "after flipping between builds with different BLE configs", which is this feature's
+    // hazard and nobody else's. Unguarded it erased the bond database - unpairing every phone, once,
+    // with no notice - on the first boot of any ESP32 build cut from this branch.
     clearCorruptBondStoreOnce();
 #endif
     // Uncomment for testing
@@ -1195,11 +1199,19 @@ void NimbleBluetooth::setup()
     } else {
         // No IO capability for no PIN mode
         security.setCapability(ESP_IO_CAP_NONE);
+#ifdef HAS_BLE_GATT_MESH
         // No PIN mode: no MITM protection, and no BONDING either. With bonding on, the node
         // advertises the SMP bonding bit and a central "just works"-pairs on connect; if that pairing
         // fails the ACL is torn down before the (unauthenticated) mesh-peer characteristic can be
         // subscribed. Nothing in NO_PIN needs an encrypted link, so don't offer to bond at all.
+        //
+        // Gated: the reason is the mesh-peer characteristic, so a build without it keeps develop's
+        // behaviour. Unguarded, every ESP32 build from this branch silently stopped offering to bond
+        // in NO_PIN - a pairing change for users who enabled nothing.
         security.setAuthenticationMode(false, false, false);
+#else
+        security.setAuthenticationMode(true, false, false);
+#endif
     }
     // Statics: setup() re-runs on BLE re-enable, and the library never frees these
     // caller-owned callback objects, so register the same instances every cycle.

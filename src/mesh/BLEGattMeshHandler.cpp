@@ -366,6 +366,10 @@ void BLEGattMeshHandler::deliverToRouter(BLEGattPeerId peer, const uint8_t *data
     // or schedule our transmit.
     mp.via_mqtt = false;
     mp.tx_after = 0;
+    // Same reason as the advertisement bearer: priority is not on the LoRa wire, so this is the
+    // first path that lets a sender pick it, and priority MAX outranks the ACK ceiling fixPriority
+    // assigns locally.
+    mp.priority = meshtastic_MeshPacket_Priority_UNSET;
 
     // Authentication metadata is local-only; the Router re-establishes it after a PKI decrypt.
     mp.pki_encrypted = false;
