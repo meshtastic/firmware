@@ -432,8 +432,7 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 return false;
             }
             LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
-            positionModule->sendOurPosition(dest, wantReplies, sendChan);
-            return true;
+            return positionModule->sendOurPosition(dest, wantReplies, sendChan);
         }
     } else {
 #endif
