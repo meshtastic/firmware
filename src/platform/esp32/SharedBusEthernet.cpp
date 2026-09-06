@@ -182,7 +182,11 @@ bool SharedBusEthernet::begin()
     }
 
     // Registered before start so the START event is not missed.
-    esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent, this);
+    if (esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent, this) != ESP_OK) {
+        LOG_ERROR("W5500 event handler register failed");
+        teardown();
+        return false;
+    }
 
     if (esp_eth_start(ethHandle) != ESP_OK) {
         LOG_ERROR("W5500 start failed");
