@@ -91,7 +91,6 @@ static const uint8_t A0 = PIN_A0;
 // ICM20948 IMU + magnetometer, same I2C bus as the OLED. Skips the generic auto-probe
 // heuristic (register value can be misread as BMI270/MPU6050) and forces the known chip.
 #define HAS_ICM20948
-#define ICM_20948_INT_PIN (32 + 13) // Sensor_INT: P1.13, open drain with a 10K pullup to VDD3V3
 
 // External serial flash ZD25WQ32CEIGR
 // QSPI Pins
