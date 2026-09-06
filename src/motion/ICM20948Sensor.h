@@ -24,10 +24,8 @@
 #define ICM_20948_WOM_THRESHOLD 16U
 #endif
 
-// Define a pin in variant.h to use interrupts to read the ICM-20948
-#ifndef ICM_20948_WOM_THRESHOLD
-#define ICM_20948_INT_PIN 255
-#endif
+// Define ICM_20948_INT_PIN in variant.h to drive wake-on-motion from the INT pin
+// instead of polling. The driver configures it active-low.
 
 // Uncomment this line to enable helpful debug messages on Serial
 // #define ICM_20948_DEBUG 1
