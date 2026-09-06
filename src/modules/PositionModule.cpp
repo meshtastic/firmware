@@ -400,13 +400,15 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 bool PositionModule::sendOurPosition()
 {
     bool requestReplies = currentGeneration != radioGeneration;
-    currentGeneration = radioGeneration;
 
     // If we changed channels, ask everyone else for their latest info
     uint8_t positionChannel;
     if (findPositionChannel(positionChannel)) {
         LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-        return sendOurPosition(NODENUM_BROADCAST, requestReplies, positionChannel);
+        if (!sendOurPosition(NODENUM_BROADCAST, requestReplies, positionChannel))
+            return false;
+        currentGeneration = radioGeneration; // only a send that went out consumes the channel change
+        return true;
     }
     LOG_INFO("Skip pos@%x:6 broadcast; position sharing disabled on all channels", localPosition.timestamp);
     return false;
