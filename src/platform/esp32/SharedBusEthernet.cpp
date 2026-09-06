@@ -66,7 +66,7 @@ void SharedBusEthernet::onEthEvent(void *arg, esp_event_base_t, int32_t id, void
     switch (id) {
     case ETHERNET_EVENT_CONNECTED:
         event.event_id = ARDUINO_EVENT_ETH_CONNECTED;
-        event.event_info.eth_connected = self->handle();
+        event.event_info.eth_connected = self->ethHandle;
         self->setStatusBits(ESP_NETIF_CONNECTED_BIT);
         break;
     case ETHERNET_EVENT_DISCONNECTED:
@@ -93,16 +93,12 @@ void SharedBusEthernet::onEthEvent(void *arg, esp_event_base_t, int32_t id, void
 // Reverse of begin()'s creation order, so a failed begin() leaves no handle set and can be retried.
 void SharedBusEthernet::teardown()
 {
-    if (eventRegistered) {
-        esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent);
-        eventRegistered = false;
-    }
+    esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent);
     if (glueHandle) {
         esp_eth_del_netif_glue(glueHandle);
         glueHandle = nullptr;
     }
-    if (_esp_netif)
-        destroyNetif();
+    destroyNetif();
     if (ethHandle) {
         esp_eth_driver_uninstall(ethHandle);
         ethHandle = nullptr;
@@ -128,10 +124,6 @@ bool SharedBusEthernet::begin()
     digitalWrite(ETH_CS_PIN, HIGH);
 
     spi_device_interface_config_t devcfg = {};
-    devcfg.mode = 0;
-    devcfg.clock_speed_hz = ETH_SHARED_SPI_MHZ * 1000 * 1000;
-    devcfg.spics_io_num = ETH_CS_PIN;
-    devcfg.queue_size = 20;
 
     // spi_host_id and devcfg go unused once custom_spi_driver is set, but the config macro wants them.
     eth_w5500_config_t w5500Config = ETH_W5500_DEFAULT_CONFIG(SPI2_HOST, &devcfg);
@@ -190,7 +182,7 @@ bool SharedBusEthernet::begin()
     }
 
     // Registered before start so the START event is not missed.
-    eventRegistered = esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent, this) == ESP_OK;
+    esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent, this);
 
     if (esp_eth_start(ethHandle) != ESP_OK) {
         LOG_ERROR("W5500 start failed");

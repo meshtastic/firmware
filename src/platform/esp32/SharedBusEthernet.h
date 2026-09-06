@@ -15,7 +15,6 @@ class SharedBusEthernet : public NetworkInterface
     bool begin();
     uint16_t linkSpeed() const;
     bool fullDuplex() const;
-    esp_eth_handle_t handle() const { return ethHandle; }
 
   protected:
     size_t printDriverInfo(Print &out) const override;
@@ -28,7 +27,6 @@ class SharedBusEthernet : public NetworkInterface
     esp_eth_netif_glue_handle_t glueHandle = nullptr;
     esp_eth_mac_t *ethMac = nullptr;
     esp_eth_phy_t *ethPhy = nullptr;
-    bool eventRegistered = false;
 };
 
 extern SharedBusEthernet sharedBusEthernet;

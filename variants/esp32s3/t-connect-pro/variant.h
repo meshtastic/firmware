@@ -12,9 +12,8 @@
 #define GPS_DEFAULT_NOT_PRESENT 1
 
 // ST7796 LCD, 2.33" 480x222 - the same panel as the T-Lora Pager
-#define TFT_CS 21
 #define HAS_SPI_TFT 1
-#define ST7796_CS TFT_CS
+#define ST7796_CS 21
 #define ST7796_RS 41  // DC
 #define ST7796_SDA 11 // MOSI
 #define ST7796_SCK 12
