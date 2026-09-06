@@ -81,7 +81,9 @@ typedef struct _meshtastic_NodeInfoLite {
     uint8_t hops_away;
     /* Last byte of the node number of the node that should be used as the next hop to reach this node. */
     uint8_t next_hop;
-    /* Bitfield for storing booleans. See NODEINFO_BITFIELD_* in src/mesh/NodeDB.h. */
+    /* Bitfield for storing booleans. See NODEINFO_BITFIELD_* in src/mesh/NodeDB.h.
+ Bit 11 is NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA, mirrored on the wire as
+ NodeInfo.heard_on_current_lora. */
     uint32_t bitfield;
     /* A full name for this user, i.e. "Kevin Hester". */
     char long_name[25];
