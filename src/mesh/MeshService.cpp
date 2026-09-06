@@ -414,8 +414,7 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 
     assert(node);
 
-    // Every path that puts no position on the air falls back to nodeinfo, so a false return
-    // always means "nodeinfo went instead" - what the callers report to the user.
+    // A false return always means "nodeinfo went instead" - the callers report that to the user.
     auto sendNodeInfoInstead = [&]() {
         if (nodeInfoModule) {
             LOG_INFO("Send nodeinfo ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);

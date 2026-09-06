@@ -31,8 +31,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     PositionModule();
 
     /**
-     * Send our position into the mesh. Returns true only when a packet was handed to the router,
-     * so callers stamp their broadcast cadence on an actual send rather than an attempt.
+     * Send our position into the mesh. True only when the router took the packet.
      */
     bool sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
     bool sendOurPosition();

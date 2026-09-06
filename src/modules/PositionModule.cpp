@@ -9,6 +9,7 @@
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GPSLog.h"
@@ -291,7 +292,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     meshtastic_MeshPacket *reply = allocPositionPacket(precision);
     if (reply) {
-        lastSentReply = millis(); // Track when we sent this reply
+        lastSentReply = Time::getMillis(); // Track when we sent this reply
     }
     return reply;
 }
@@ -463,11 +464,10 @@ bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (channel > 0)
         p->channel = channel;
 
-    // Only ERRNO_OK / ERRNO_SHOULD_RELEASE mean the router took the packet; anything else (full
-    // TX queue, duty cycle abort) released it unsent, and must not stamp the broadcast cadence.
+    // Rejected (full TX queue, duty cycle abort) means released unsent: never stamp the cadence.
     ErrorCode res = service->sendToMesh(p, RX_SRC_LOCAL, true);
     if (res != ERRNO_OK && res != ERRNO_SHOULD_RELEASE) {
-        LOG_WARN("Position send rejected by router: %d", res);
+        LOG_WARN("Position send rejected by router: 0x%x", res);
         return false;
     }
 
@@ -548,7 +548,7 @@ int32_t PositionModule::runOnce()
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     // Local-only delivery, so it runs regardless of mesh opt-in state or channel utilization.
     // Only send while the queue is empty (phone assumed connected), like telemetry. The cadence
@@ -726,7 +726,7 @@ void PositionModule::handleNewPosition()
         if (!nodeDB->copyNodePosition(node->num, selfPos))
             return;
         auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
         uint32_t msSinceLastSend = now - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold) {
             if (!Throttle::hasElapsed(lastGpsSend, minimumTimeThreshold)) {
