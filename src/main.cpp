@@ -1502,8 +1502,7 @@ void loop()
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
-            // Sample first: resetAGC() recalibrates the frontend, which biases an RSSI read taken right
-            // after it. This is #9347's periodic feeder, lost when merge e55947595 dropped its call sites.
+            // Sample before resetAGC(): recalibrating the frontend biases an RSSI read taken right after it.
             RadioLibInterface::instance->updateNoiseFloor();
             RadioLibInterface::instance->periodicRadioMaintenance();
         }

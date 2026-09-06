@@ -131,14 +131,10 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
     if (RadioLibInterface::instance) {
-        RadioLibInterface::instance->updateNoiseFloor();
         // No presence bit: leave zero-init when no valid sample exists instead of publishing
         // NOISE_FLOOR_DEFAULT as a real reading.
-        if (RadioLibInterface::instance->hasNoiseFloorSamples()) {
+        if (RadioLibInterface::instance->hasNoiseFloorSamples())
             telemetry.variant.local_stats.noise_floor = RadioLibInterface::instance->getAverageNoiseFloor();
-        } else {
-            LOG_DEBUG("No valid noise floor samples yet; omitting noise_floor from local stats");
-        }
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
