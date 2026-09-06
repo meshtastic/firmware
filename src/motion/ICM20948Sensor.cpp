@@ -2,6 +2,7 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
 #include "detect/ScanI2CTwoWire.h"
+#include "mesh/Throttle.h"
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
@@ -33,21 +34,6 @@ bool ICM20948Sensor::init()
     }
     return wakeOnMotionOk;
 }
-
-#ifdef ICM_20948_INT_PIN
-
-int32_t ICM20948Sensor::runOnce()
-{
-    // Wake on motion using hardware interrupts - this is the most efficient way to check for motion
-    if (ICM20948_IRQ) {
-        ICM20948_IRQ = false;
-        sensor->clearInterrupts();
-        wakeScreen();
-    }
-    return MOTION_SENSOR_CHECK_INTERVAL_MS;
-}
-
-#else
 
 int32_t ICM20948Sensor::runOnce()
 {
@@ -105,7 +91,20 @@ int32_t ICM20948Sensor::runOnce()
         screen->setHeading(heading);
 #endif
 
-    // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
+#ifdef ICM_20948_INT_PIN
+    if (ICM20948_IRQ) {
+        ICM20948_IRQ = false;
+        sensor->clearInterrupts();
+        wakeScreen();
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    }
+    // No board has ever shipped firmware that uses this pin, so keep polling the status
+    // register as well - just rarely. An INT that never fires then only costs latency.
+    if (!Throttle::hasElapsed(lastWomPollMs, MOTION_SENSOR_IRQ_KEEPALIVE_MS))
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    lastWomPollMs = millis();
+#endif
+
     auto status = sensor->setBank(0);
     if (sensor->status != ICM_20948_Stat_Ok) {
         LOG_DEBUG("ICM20948 isWakeOnMotion failed to set bank - %s", sensor->statusString());
@@ -125,8 +124,6 @@ int32_t ICM20948Sensor::runOnce()
     }
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 }
-
-#endif
 
 void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {
