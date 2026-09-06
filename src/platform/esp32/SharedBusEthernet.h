@@ -22,9 +22,13 @@ class SharedBusEthernet : public NetworkInterface
 
   private:
     static void onEthEvent(void *arg, esp_event_base_t base, int32_t id, void *data);
+    void teardown();
 
     esp_eth_handle_t ethHandle = nullptr;
     esp_eth_netif_glue_handle_t glueHandle = nullptr;
+    esp_eth_mac_t *ethMac = nullptr;
+    esp_eth_phy_t *ethPhy = nullptr;
+    bool eventRegistered = false;
 };
 
 extern SharedBusEthernet sharedBusEthernet;

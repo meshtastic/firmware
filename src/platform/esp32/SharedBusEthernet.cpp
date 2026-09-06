@@ -90,6 +90,33 @@ void SharedBusEthernet::onEthEvent(void *arg, esp_event_base_t, int32_t id, void
     Network.postEvent(&event);
 }
 
+// Reverse of begin()'s creation order, so a failed begin() leaves no handle set and can be retried.
+void SharedBusEthernet::teardown()
+{
+    if (eventRegistered) {
+        esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent);
+        eventRegistered = false;
+    }
+    if (glueHandle) {
+        esp_eth_del_netif_glue(glueHandle);
+        glueHandle = nullptr;
+    }
+    if (_esp_netif)
+        destroyNetif();
+    if (ethHandle) {
+        esp_eth_driver_uninstall(ethHandle);
+        ethHandle = nullptr;
+    }
+    if (ethPhy) {
+        ethPhy->del(ethPhy);
+        ethPhy = nullptr;
+    }
+    if (ethMac) {
+        ethMac->del(ethMac);
+        ethMac = nullptr;
+    }
+}
+
 bool SharedBusEthernet::begin()
 {
     if (ethHandle)
@@ -120,16 +147,19 @@ bool SharedBusEthernet::begin()
     phyConfig.phy_addr = 1;
     phyConfig.reset_gpio_num = ETH_RST_PIN;
 
-    esp_eth_mac_t *mac = esp_eth_mac_new_w5500(&w5500Config, &macConfig);
-    esp_eth_phy_t *phy = esp_eth_phy_new_w5500(&phyConfig);
-    if (!mac || !phy) {
+    ethMac = esp_eth_mac_new_w5500(&w5500Config, &macConfig);
+    ethPhy = esp_eth_phy_new_w5500(&phyConfig);
+    if (!ethMac || !ethPhy) {
         LOG_ERROR("W5500 MAC/PHY alloc failed");
+        teardown();
         return false;
     }
 
-    esp_eth_config_t ethConfig = ETH_DEFAULT_CONFIG(mac, phy);
+    esp_eth_config_t ethConfig = ETH_DEFAULT_CONFIG(ethMac, ethPhy);
     if (esp_eth_driver_install(&ethConfig, &ethHandle) != ESP_OK || !ethHandle) {
         LOG_ERROR("W5500 driver install failed");
+        ethHandle = nullptr;
+        teardown();
         return false;
     }
 
@@ -143,24 +173,28 @@ bool SharedBusEthernet::begin()
     _esp_netif = esp_netif_new(&netifConfig);
     if (!_esp_netif) {
         LOG_ERROR("W5500 netif alloc failed");
+        teardown();
         return false;
     }
     if (!initNetif(ESP_NETIF_ID_ETH)) {
         LOG_ERROR("W5500 netif init failed");
+        teardown();
         return false;
     }
 
     glueHandle = esp_eth_new_netif_glue(ethHandle);
     if (!glueHandle || esp_netif_attach(_esp_netif, glueHandle) != ESP_OK) {
         LOG_ERROR("W5500 netif attach failed");
+        teardown();
         return false;
     }
 
     // Registered before start so the START event is not missed.
-    esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent, this);
+    eventRegistered = esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, onEthEvent, this) == ESP_OK;
 
     if (esp_eth_start(ethHandle) != ESP_OK) {
         LOG_ERROR("W5500 start failed");
+        teardown();
         return false;
     }
 
