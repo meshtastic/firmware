@@ -710,6 +710,8 @@ void PositionModule::trySmartBroadcast(const meshtastic_PositionLite &selfPos, u
         return;
 
     lastGpsSend = nowMs;
+    if (transmitHistory)
+        transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
     LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
               "minTimeInterval=%ims)",
               localPosition.timestamp, smartPosition.distanceTraveled, smartPosition.distanceThreshold, msSinceLastSend,
