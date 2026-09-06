@@ -83,6 +83,7 @@ class ICM20948Sensor : public MotionSensor
     bool isAsleep = false;
 #ifdef ICM_20948_INT_PIN
     uint32_t lastWomPollMs = 0;
+    bool intPinProven = false;
 #endif
     static constexpr const char *compassCalibrationFileName = "/prefs/compass_icm20948.dat";
 #ifdef MUZI_BASE

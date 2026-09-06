@@ -94,13 +94,14 @@ int32_t ICM20948Sensor::runOnce()
 #ifdef ICM_20948_INT_PIN
     if (ICM20948_IRQ) {
         ICM20948_IRQ = false;
+        intPinProven = true;
         sensor->clearInterrupts();
         wakeScreen();
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
-    // No board has ever shipped firmware that uses this pin, so keep polling the status
-    // register as well - just rarely. An INT that never fires then only costs latency.
-    if (!Throttle::hasElapsed(lastWomPollMs, MOTION_SENSOR_IRQ_KEEPALIVE_MS))
+    // Back off to the keepalive only once the pin has actually fired. No vendor firmware
+    // uses this line, so an unproven one keeps full-rate polling instead of costing latency.
+    if (intPinProven && !Throttle::hasElapsed(lastWomPollMs, MOTION_SENSOR_IRQ_KEEPALIVE_MS))
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     lastWomPollMs = millis();
 #endif
