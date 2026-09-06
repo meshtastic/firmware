@@ -11,8 +11,11 @@ bool BMA423Sensor::init()
         return false;
     }
 
-    sensor.configAccelerometer(OperationMode::NORMAL, AccelFullScaleRange::FS_2G, 100.0f, AccelBandwidth::NORMAL_AVG4,
-                               AccelPerfMode::CONTINUOUS_MODE);
+    if (!sensor.configAccelerometer(OperationMode::NORMAL, AccelFullScaleRange::FS_2G, 100.0f, AccelBandwidth::NORMAL_AVG4,
+                                    AccelPerfMode::CONTINUOUS_MODE)) {
+        LOG_DEBUG("BMA423 accelerometer config failed");
+        return false;
+    }
 
 #ifdef T_WATCH_S3
     // Need to raise the wrist function, need to set the correct axis
@@ -24,8 +27,10 @@ bool BMA423Sensor::init()
     // The tap detector defaults to double tap; tilt and double tap both wake the screen.
     sensor.setOnTiltDetectedCallback([this] { wakeRequested = true; });
     sensor.setOnTapCallback([this](TapType) { wakeRequested = true; });
-    sensor.enableTiltDetector(true, true);
-    sensor.enableTapDetector(true, true);
+    if (!sensor.enableTiltDetector(true, true) || !sensor.enableTapDetector(true, true)) {
+        LOG_DEBUG("BMA423 wake detector setup failed");
+        return false;
+    }
 
     LOG_DEBUG("BMA423 init ok");
     return true;
