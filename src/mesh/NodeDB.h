@@ -598,7 +598,9 @@ class NodeDB
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    /// Mint a keypair and reject it if the public key is known-weak.
     bool generateBlacklistCheckedKeyPair();
+    /// Derive and vet the public key from the stored private key.
     bool derivePublicKeyFromPrivate();
 #endif
 
@@ -879,6 +881,7 @@ inline bool nodeInfoLiteHasSnr(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK);
 }
+/// True when the stored bitfield marks a key-derived identity.
 inline bool nodeInfoLiteIsKeyDerivedIdentity(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_IS_KEY_DERIVED_IDENTITY_MASK);
@@ -890,8 +893,8 @@ inline bool nodeInfoLiteIsProtected(const meshtastic_NodeInfoLite *n)
     return nodeInfoLiteIsFavorite(n) || nodeInfoLiteIsIgnored(n) || nodeInfoLiteIsKeyManuallyVerified(n);
 }
 
-// Pre-migration numbers come from MAC/random; key-anchored numbers from crc32(pubkey).
-// Dual-read: recompute from the key rather than trusting the persisted bit alone.
+/// Pre-migration numbers come from MAC/random; key-anchored numbers from crc32(pubkey).
+/// Dual-read: recompute from the key rather than trusting the persisted bit alone.
 inline bool identityKeyDerivesNodeNum(const uint8_t *key32, NodeNum num)
 {
     return key32 != nullptr && crc32Buffer(key32, 32) == num;

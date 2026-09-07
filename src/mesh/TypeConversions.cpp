@@ -104,6 +104,7 @@ meshtastic_Position TypeConversions::ConvertToPosition(meshtastic_PositionLite l
     return position;
 }
 
+/// Copy User fields into NodeInfoLite, stamping the key-derived bit from the stored key.
 void TypeConversions::CopyUserToNodeInfoLite(meshtastic_NodeInfoLite *lite, const meshtastic_User &user)
 {
     if (!lite)

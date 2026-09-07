@@ -167,6 +167,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
+/// Learn next-hop from ACK/reply and then consider rebroadcast.
 void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     NodeNum ourNodeNum = getNodeNum();
@@ -227,7 +228,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
     Router::sniffReceived(p, c);
 }
 
-/* Check if we should be rebroadcasting this packet if so, do so. */
+/** Check if we should be rebroadcasting this packet if so, do so. */
 bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
 #if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL

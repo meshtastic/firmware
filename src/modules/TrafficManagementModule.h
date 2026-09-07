@@ -129,31 +129,45 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Ingest a neighbor's top-senders samples. No-op when budget gossip is off.
     void ingestNeighborTopSenders(NodeNum neighbor, const meshtastic_TopSender *entries, pb_size_t count);
 
-    // Test hooks (antispam state introspection).
-    int peekProbationStateForTest(NodeNum node);                                // -1 untracked, 0 established, 1 in-probation
-    uint32_t peekRelayedCountForTest(NodeNum node);                             // windowed relayed-for count
-    bool peekNoRelayForTest(NodeNum node);                                      // gossiped/local NO_RELAY in force
+    /// Test hooks (antispam state introspection).
+    /// -1 untracked, 0 established, 1 in-probation.
+    int peekProbationStateForTest(NodeNum node);
+    /// Test hook: windowed relayed-for count for `node`.
+    uint32_t peekRelayedCountForTest(NodeNum node); // windowed relayed-for count
+    /// Test hook: true when gossiped or local NO_RELAY is in force.
+    bool peekNoRelayForTest(NodeNum node); // gossiped/local NO_RELAY in force
+    /// Test hook: sender relay budget, or -1 if untracked.
     int peekSenderBudgetForTest(NodeNum sender, uint32_t *medianOut = nullptr); // -1 untracked
+    /// Test hook: vouch count for (attester, subject) this window.
     uint8_t peekVouchCountForTest(NodeNum attester, NodeNum subject);
+    /// Test hook: distinct subjects this attester vouched for this window.
     uint8_t peekVouchSubjectsForTest(NodeNum attester);
+    /// Test hook: distinct attesters toward subject's promotion quorum.
     uint8_t peekAttestQuorumForTest(NodeNum subject);
+    /// Test hook: packed RSSI class and channel, or -1 if untracked.
     int16_t peekRssiChannelForTest(NodeNum node);
     /// Non-zero when a promotion lease is armed; 0 when permanent or not promoted.
     uint8_t peekPromotedWindowTickForTest(NodeNum node);
+    /// Test hook: true when the subject currently holds a promotion.
     bool peekPromotedForTest(NodeNum node);
     /// 0 = anonymous, 1 = signed observation, 2 = neighbor-attested, 3 = manual.
     uint8_t trustLevelForTest(NodeNum node);
+    /// Test hook: override last-signed uptime seconds.
     void setLastSignedSecsForTest(NodeNum node, uint32_t secs);
+    /// Test hook: true when NO_RELAY came from local budget exhaustion.
     bool peekNoRelayLocalForTest(NodeNum node);
     /// 0xFFFFFFFF = production (Time::getUptimeSecs() or test clock); otherwise the stored value.
     inline static uint32_t s_testUptimeSecs = 0xFFFFFFFFu;
+    /// Pin antispam uptime for tests; pass 0xFFFFFFFF to restore production.
     static void setUptimeSecsForTest(uint32_t secs) { s_testUptimeSecs = secs; }
     inline static int s_testCongestionPct = -1;
 
     inline static uint32_t s_testNowMs = 0;
 #ifdef PIO_UNIT_TESTING
+    /// Test clock: returns s_testNowMs.
     static uint32_t clockMs() { return s_testNowMs; }
 #else
+    /// Production clock: Time::getMillis().
     static uint32_t clockMs();
 #endif
 
@@ -363,8 +377,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool nodeInfoSeeded = false;
     uint8_t sweepsSinceNodeInfoReconcile = 0;
 
-    // Per-node greylist / relay-budget / trust state. Separate from the 10-byte
-    // unified cache: windowed counters and first-seen uptime need real fields.
+    /// Per-node greylist / relay-budget / trust state. Separate from the 10-byte
+    /// unified cache: windowed counters and first-seen uptime need real fields.
     struct __attribute__((packed)) AntispamEntry {
         NodeNum node;
         uint32_t firstSeenSecs;  // uptime seconds; valid when hasFirstSeen
@@ -389,6 +403,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     };
     static_assert(sizeof(AntispamEntry) == 45, "AntispamEntry should be 45 bytes");
 
+    /// Compiled antispam table size (min of unified cache and ANTISPAM_CACHE_SIZE).
     static constexpr uint16_t antispamCacheSize()
     {
         return TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 ? std::min<uint16_t>(TRAFFIC_MANAGEMENT_CACHE_SIZE, ANTISPAM_CACHE_SIZE) : 0;
@@ -398,40 +413,71 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         nullptr; // mutable: const query paths (inProbation, effectiveRateThresholdLocked, ...) only read or slot-fill it
     bool antispamFromPsram = false;
 
+    /// True while `node` is still inside the greylist probation window.
     bool inProbation(NodeNum node) const;
+    /// True while first-seen age is still inside probation_window_secs.
     bool inProbationLocked(const AntispamEntry *entry) const;
+    /// Seconds since first-seen, or 0 if untracked. Caller must hold cacheLock.
     uint32_t observedAgeSecsLocked(const AntispamEntry *entry) const;
+    /// True when the attester has been observed locally for at least `minSecs`.
     bool attesterObservedEnoughLocked(const AntispamEntry *attesterEntry, uint32_t minSecs) const;
+    /// True for want_ack / ROUTING_APP / ADMIN_APP (always rebroadcast).
     static bool relayBudgetExempt(const meshtastic_MeshPacket &mp);
+    /// Record first-seen (and optional signed observation) for `node`.
     bool noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass, bool signedObserved);
+    /// True when local observation is old enough to vouch for others.
     bool isEstablishedForVouching(NodeNum node) const;
+    /// Effective rate threshold for `sender` (lock wrapper).
     uint32_t effectiveRateThreshold(NodeNum sender) const;
+    /// Rate threshold including probation penalty and group budget.
     uint32_t effectiveRateThresholdLocked(NodeNum sender) const;
+    /// Channel utilization percent, or s_testCongestionPct when pinned.
     float currentCongestionPct() const;
+    /// Emit a hop_limit=1 NO_RELAY gossip for `subject`.
     bool sendNoRelayGossip(NodeNum subject);
+    /// Emit a hop_limit=1 KNOWN_SINCE gossip for `subject`.
     bool sendKnownSinceGossip(NodeNum subject);
+    /// Handle an ID_ATTESTATION_APP packet (KNOWN_SINCE / VOUCH / NO_RELAY).
     bool handleIdAttestation(const meshtastic_MeshPacket &mp);
+    /// Record one vouch for (attester, subject). Re-keys reused cells.
     void stampVouchObservationLocked(NodeNum attester, NodeNum subject);
+    /// True when this vouch is within per-subject and per-attester caps.
     bool vouchWithinCapsLocked(NodeNum attester, NodeNum subject) const;
+    /// Record attester toward subject's promotion quorum.
     void stampAttestQuorumLocked(NodeNum attester, NodeNum subject);
+    /// Distinct attesters currently counted toward subject's quorum.
     uint8_t attestQuorumCountLocked(NodeNum subject) const;
+    /// Configured distinct-attester floor for L2 promotion.
     uint32_t attestationMinDistinctAttestersLocked() const;
+    /// Minimum observed tenure before an L2 (neighbor-attested) upgrade.
     uint32_t l2FloorSecs() const;
+    /// True when `attester` may raise `subject` to L2.
     bool l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester, bool signedObserved) const;
+    /// Record a NO_RELAY claim from `attester` on `subject`.
     void stampNoRelayClaimLocked(NodeNum attester, NodeNum subject, uint32_t nowMs);
+    /// Distinct live NO_RELAY claimers for `subject` (TTL-aware).
     uint8_t noRelayClaimerCountLocked(NodeNum subject, uint32_t nowMs) const;
+    /// Note channel×RSSI co-occurrence for group-budget tracking.
     bool observeGroupCooccurrence(NodeNum node, uint8_t channel, uint8_t rssiClass);
+    /// True when this node's channel×RSSI class is currently flagged.
     bool isInFlaggedGroup(NodeNum node, uint8_t channel, uint8_t rssiClass) const;
+    /// Flagged-group test with channel×RSSI already resolved.
     bool isInFlaggedGroupLocked(uint8_t channel, uint8_t rssiClass) const;
+    /// Group relay budget for this channel×RSSI class.
     uint32_t groupBudgetLocked(uint8_t channel, uint8_t rssiClass) const;
+    /// Test hook: group budget for a channel×RSSI class.
     uint32_t groupBudgetForTest(uint8_t channel, uint8_t rssiClass);
+    /// Uptime seconds; tests may pin this via s_testUptimeSecs.
     uint32_t uptimeSecs() const;
+    /// Quantize packet RSSI into a 4-class bucket.
     uint8_t rssiClassOf(const meshtastic_MeshPacket &mp);
+    /// Read-only antispam lookup; never allocates. Caller must hold cacheLock.
     AntispamEntry *findAntispamEntry(NodeNum node) const;
     /// Find or create the antispam entry for `node` (oldest-first eviction
     /// when full). nullptr when the table is compiled out or full with no
     /// eviction target. Caller must hold cacheLock.
     AntispamEntry *findOrCreateAntispamEntry(NodeNum node, bool *isNew);
+    /// Drop vouch, quorum, and NO_RELAY auxiliary rows for `node`.
     void clearAntispamAuxLocked(NodeNum node);
     /// Allocate the antispam table alongside the unified cache.
     /// Called from the constructor (single-threaded); no-op when the unified

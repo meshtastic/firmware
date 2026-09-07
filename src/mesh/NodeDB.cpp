@@ -1267,12 +1267,12 @@ void NodeDB::initConfigIntervals()
 #endif
 }
 
-// Always-on traffic management defaults. Only booleans are written; every
-// numeric field stays 0 and resolves to its default_traffic_mgmt_* macro at
-// use (e.g. position dedup precision/interval), so fork-wide tuning changes
-// take effect without another migration. Rate limiting and the features that
-// exhaust or reshape relayed traffic (exhaust_hop_*, drop_unknown_enabled,
-// nodeinfo_direct_response) stay opt-in.
+/// Always-on traffic management defaults. Only booleans are written; every
+/// numeric field stays 0 and resolves to its default_traffic_mgmt_* macro at
+/// use (e.g. position dedup precision/interval), so fork-wide tuning changes
+/// take effect without another migration. Rate limiting and the features that
+/// exhaust or reshape relayed traffic (exhaust_hop_*, drop_unknown_enabled,
+/// nodeinfo_direct_response) stay opt-in.
 static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
 {
     mc.has_traffic_management = true;
@@ -1283,6 +1283,7 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
 #endif
 }
 
+/// True when every antispam knob is still protobuf-zero.
 bool antispamKnobsUnconfigured(const meshtastic_ModuleConfig_TrafficManagementConfig &cfg)
 {
     return cfg.probation_window_secs == 0 && cfg.attestation_min_tenure_secs == 0 && cfg.probation_max_hop_limit == 0 &&
@@ -1294,6 +1295,7 @@ bool antispamKnobsUnconfigured(const meshtastic_ModuleConfig_TrafficManagementCo
            cfg.attestation_l2_min_tenure_secs == 0 && cfg.no_relay_min_claimers == 0;
 }
 
+/// Write shipped antispam defaults without touching position/rate-limit fields.
 void installAntispamDefaults(meshtastic_ModuleConfig_TrafficManagementConfig &cfg)
 {
     cfg.probation_window_secs = default_traffic_mgmt_probation_window_secs;
@@ -2337,6 +2339,7 @@ void NodeDB::nodeDBSelfCare()
     }
 }
 
+/// Load device state, channels, and node database from flash.
 void NodeDB::loadFromDisk()
 {
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
@@ -4181,6 +4184,7 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
 #endif
 }
 
+/// Overwrite a remote node's public key from a possession-proven path.
 void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)
 {
     if (!key32 || n == 0)
@@ -4460,8 +4464,8 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-// A freshly minted keypair must not itself land on the blacklist. Fail with no key rather than persist
-// a known-weak identity: only a broken entropy source can land here, and retrying would not fix that.
+/// A freshly minted keypair must not itself land on the blacklist. Fail with no key rather than persist
+/// a known-weak identity: only a broken entropy source can land here, and retrying would not fix that.
 bool NodeDB::generateBlacklistCheckedKeyPair()
 {
     crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
@@ -4473,8 +4477,8 @@ bool NodeDB::generateBlacklistCheckedKeyPair()
     return false;
 }
 
-// Derive the public key from the stored private key and vet it. The entry check cannot see a weak key
-// when the stored public key is absent, and a failed derivation must not leave sizes claiming a pair.
+/// Derive the public key from the stored private key and vet it. The entry check cannot see a weak key
+/// when the stored public key is absent, and a failed derivation must not leave sizes claiming a pair.
 bool NodeDB::derivePublicKeyFromPrivate()
 {
     config.security.public_key.size = 32;
@@ -4492,6 +4496,7 @@ bool NodeDB::derivePublicKeyFromPrivate()
 }
 #endif
 
+/// Generate or restore the node's identity keypair once a region is set.
 bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)

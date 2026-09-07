@@ -181,6 +181,7 @@ void test_optIn_telemetryAllFlagsOff()
     TEST_ASSERT_TRUE(mc.mqtt.map_reporting_enabled);
 }
 
+/// Zeroed antispam knobs receive shipped defaults.
 void test_antispam_unconfiguredZeroesThenDefaults(void)
 {
     meshtastic_ModuleConfig_TrafficManagementConfig cfg = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
@@ -196,6 +197,7 @@ void test_antispam_unconfiguredZeroesThenDefaults(void)
     TEST_ASSERT_EQUAL_UINT32(0, cfg.group_budget_enabled);
 }
 
+/// Already-configured antispam knobs are left alone.
 void test_antispam_alreadyConfiguredLeftAloneByPredicate(void)
 {
     meshtastic_ModuleConfig_TrafficManagementConfig cfg = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
@@ -210,6 +212,7 @@ void setUp(void) {}
 void tearDown(void) {}
 
 extern "C" {
+/// Unity test runner entry point.
 void setup()
 {
     initializeTestEnvironment();

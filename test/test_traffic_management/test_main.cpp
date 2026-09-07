@@ -219,6 +219,7 @@ MockNodeDB *mockNodeDB = nullptr;
 
 static void installWellKnownPrimaryChannel(); // defined below, next to the other channel fixtures
 
+/// Reset moduleConfig, config, and channel fixtures for a TMM test.
 static void resetTrafficConfig()
 {
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
@@ -329,8 +330,8 @@ static void installWellKnownPrimaryChannel()
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 }
 
-// Build an encoded ID_ATTESTATION_APP packet from `from` (the attester) with the
-// given kind / subject / self-reported tenure.
+/// Build an encoded ID_ATTESTATION_APP packet from `from` (the attester) with the
+/// given kind / subject / self-reported tenure.
 static meshtastic_MeshPacket makeAttestationPacket(meshtastic_IdAttestation_Kind kind, NodeNum subject, NodeNum from,
                                                    uint32_t tenureSecs = 0)
 {
@@ -344,7 +345,7 @@ static meshtastic_MeshPacket makeAttestationPacket(meshtastic_IdAttestation_Kind
     return packet;
 }
 
-// Track a node in the antispam table (first-seen stamp) via one position broadcast.
+/// Track a node in the antispam table (first-seen stamp) via one position broadcast.
 static void trackSender(TrafficManagementModuleTestShim &module, NodeNum node)
 {
     meshtastic_MeshPacket pos = makePositionPacket(node, 374221234 + (int)(node & 0xFF), -1220845678);
@@ -3323,8 +3324,8 @@ static void test_tm_fuzz_nodenum_blitz(void)
 // Antispam: NO_RELAY gossiped-DoS hardening + vouch trust + probation penalty
 // =============================================================================
 
-// Build a broadcast position packet carrying a received RSSI (dBm), so the
-// TMM's 4-class quantization (rssiClassOf) can be driven from tests.
+/// Build a broadcast position packet carrying a received RSSI (dBm), so the
+/// TMM's 4-class quantization (rssiClassOf) can be driven from tests.
 static meshtastic_MeshPacket makePositionPacketWithRssi(NodeNum from, int rssiDbm)
 {
     meshtastic_MeshPacket pos = makePositionPacket(from, 374221234 + (int)(from & 0xFF), -1220845678);
@@ -3333,18 +3334,18 @@ static meshtastic_MeshPacket makePositionPacketWithRssi(NodeNum from, int rssiDb
     return pos;
 }
 
-// Track a node in the antispam table (first-seen stamp) via one position
-// broadcast carrying the given RSSI.
+/// Track a node in the antispam table (first-seen stamp) via one position
+/// broadcast carrying the given RSSI.
 static void trackSenderWithRssi(TrafficManagementModuleTestShim &module, NodeNum node, int rssiDbm)
 {
     meshtastic_MeshPacket pos = makePositionPacketWithRssi(node, rssiDbm);
     (void)module.handleReceived(pos);
 }
 
-// (a) Gossiped NO_RELAY is honored only after this node has relayed the
-// subject at least once this window (when the local-observation gate is on)
-// and a claimer quorum is met. Local exhaustion installs the bit without
-// waiting for claimers. want_ack / ROUTING / ADMIN still relay.
+/// (a) Gossiped NO_RELAY is honored only after this node has relayed the
+/// subject at least once this window (when the local-observation gate is on)
+/// and a claimer quorum is met. Local exhaustion installs the bit without
+/// waiting for claimers. want_ack / ROUTING / ADMIN still relay.
 static void test_tm_noRelay_observedOverRelay_onlyPath(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3419,9 +3420,9 @@ static void test_tm_noRelay_observedOverRelay_onlyPath(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (b) A NO_RELAY from an attester this node has not observed long enough is
-// rejected even when the local-observation gate would have admitted it.
-// Self-reported attester_tenure_secs is not a receive gate.
+/// (b) A NO_RELAY from an attester this node has not observed long enough is
+/// rejected even when the local-observation gate would have admitted it.
+/// Self-reported attester_tenure_secs is not a receive gate.
 static void test_tm_noRelay_rejectedBelowTenureFloor(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3450,10 +3451,10 @@ static void test_tm_noRelay_rejectedBelowTenureFloor(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (c) Per-reporter cap: one attester may mark at most
-// no_relay_max_subjects_per_window distinct subjects per window. The 4th is
-// rejected. A window rollover (via the 60 s maintenance sweep with the clock
-// advanced a tick) clears the claims and the cap resets.
+/// (c) Per-reporter cap: one attester may mark at most
+/// no_relay_max_subjects_per_window distinct subjects per window. The 4th is
+/// rejected. A window rollover (via the 60 s maintenance sweep with the clock
+/// advanced a tick) clears the claims and the cap resets.
 static void test_tm_noRelay_perReporterCapAndTTLClearOnRollover(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3509,9 +3510,9 @@ static void test_tm_noRelay_perReporterCapAndTTLClearOnRollover(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (d) A KNOWN_SINCE vouch is rejected when the receiver has not observed the
-// attester for attestation_min_observed_secs, even with a very high
-// self-reported tenure. Once observed age passes, the same vouch is accepted.
+/// (d) A KNOWN_SINCE vouch is rejected when the receiver has not observed the
+/// attester for attestation_min_observed_secs, even with a very high
+/// self-reported tenure. Once observed age passes, the same vouch is accepted.
 static void test_tm_knownSince_rejectedOnInsufficientObservedAttesterAge(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3544,10 +3545,10 @@ static void test_tm_knownSince_rejectedOnInsufficientObservedAttesterAge(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (e) Vouch caps: one attester may vouch for a given subject at most
-// vouch_max_per_subject_per_window times per window, and for at most
-// vouch_max_subjects_per_window distinct subjects per window. The second
-// vouch for the same subject is capped; the 4th distinct subject is capped.
+/// (e) Vouch caps: one attester may vouch for a given subject at most
+/// vouch_max_per_subject_per_window times per window, and for at most
+/// vouch_max_subjects_per_window distinct subjects per window. The second
+/// vouch for the same subject is capped; the 4th distinct subject is capped.
 static void test_tm_vouch_perSubjectAndPerWindowCaps(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3601,8 +3602,8 @@ static void test_tm_vouch_perSubjectAndPerWindowCaps(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// Filling the 16-slot vouch table then stamping a new pair must re-key the
-// evicted cell; the old pair's count must not climb on the reused slot.
+/// Filling the 16-slot vouch table then stamping a new pair must re-key the
+/// evicted cell; the old pair's count must not climb on the reused slot.
 static void test_tm_vouch_tableReuseRekeysCell(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3641,8 +3642,8 @@ static void test_tm_vouch_tableReuseRekeysCell(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (f) A self-vouch (subject == attester) is always rejected: the subject is not
-// tracked by the attester's own `from`, and the decode gate catches it too.
+/// (f) A self-vouch (subject == attester) is always rejected: the subject is not
+/// tracked by the attester's own `from`, and the decode gate catches it too.
 static void test_tm_selfVouch_rejected(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3668,9 +3669,9 @@ static void test_tm_selfVouch_rejected(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (g) An old serialized LocalModuleConfig (without the new antispam knobs)
-// must load cleanly: the new uint32 fields are zero-filled and the module
-// treats 0 as the pre-existing "off" / "unconstrained" behavior.
+/// (g) An old serialized LocalModuleConfig (without the new antispam knobs)
+/// must load cleanly: the new uint32 fields are zero-filled and the module
+/// treats 0 as the pre-existing "off" / "unconstrained" behavior.
 static void test_tm_oldConfig_loadsClean(void)
 {
     // Zero-init the module config (simulates an old firmware that never wrote
@@ -3707,10 +3708,10 @@ static void test_tm_oldConfig_loadsClean(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (h) The probation rate penalty is wired: an unpromoted, in-window sender whose
-// rate count exceeds the probation budget (half of the effective threshold,
-// floor 1) is dropped, and the drop is charged to probation_budget_drops
-// (in addition to the usual rate_limit_drops charge in the drop path).
+/// (h) The probation rate penalty is wired: an unpromoted, in-window sender whose
+/// rate count exceeds the probation budget (half of the effective threshold,
+/// floor 1) is dropped, and the drop is charged to probation_budget_drops
+/// (in addition to the usual rate_limit_drops charge in the drop path).
 static void test_tm_probation_ratePenalty_wiredAndCharged(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3746,11 +3747,11 @@ static void test_tm_probation_ratePenalty_wiredAndCharged(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (i) Observed context caching: a node's cached (channel, RSSI class) is
-// last-seen state. A packet without RSSI leaves the class at "no reading yet"
-// (0xFF); a real reading stores its 4-class quantization; a later packet with
-// a different RSSI refreshes it; a subsequent packet without RSSI keeps the
-// last real class. The channel always follows the last observation.
+/// (i) Observed context caching: a node's cached (channel, RSSI class) is
+/// last-seen state. A packet without RSSI leaves the class at "no reading yet"
+/// (0xFF); a real reading stores its 4-class quantization; a later packet with
+/// a different RSSI refreshes it; a subsequent packet without RSSI keeps the
+/// last real class. The channel always follows the last observation.
 static void test_tm_observedRssiChannel_lastSeenRefresh(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3782,13 +3783,13 @@ static void test_tm_observedRssiChannel_lastSeenRefresh(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (j) Promotion quorum: a subject is promoted only once K distinct
-// non-co-located, gate-passing attesters have vouched for it in the current
-// window. One attester is insufficient at K=2 (even repeated); a second
-// distinct attester completes the quorum. Co-located attestors (matching
-// cached channel + RSSI class) are discounted: a co-located attester never
-// advances the count, and a fleet of them alone cannot reach K. At K=0 the
-// single-attester behavior is preserved (old-config compat).
+/// (j) Promotion quorum: a subject is promoted only once K distinct
+/// non-co-located, gate-passing attesters have vouched for it in the current
+/// window. One attester is insufficient at K=2 (even repeated); a second
+/// distinct attester completes the quorum. Co-located attestors (matching
+/// cached channel + RSSI class) are discounted: a co-located attester never
+/// advances the count, and a fleet of them alone cannot reach K. At K=0 the
+/// single-attester behavior is preserved (old-config compat).
 static void test_tm_promotionKAttester_quorumAndCoLocationDiscount(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3874,10 +3875,10 @@ static void test_tm_promotionKAttester_quorumAndCoLocationDiscount(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (k) Promotion decay: with the window-scoped TTL armed, a promotion lapses
-// after the TTL without a renewal vouch (the node returns to probation
-// behavior), and a renewal vouch inside the TTL refreshes the stamp and holds
-// the promotion. With TTL 0 (shipped default) the promotion is permanent.
+/// (k) Promotion decay: with the window-scoped TTL armed, a promotion lapses
+/// after the TTL without a renewal vouch (the node returns to probation
+/// behavior), and a renewal vouch inside the TTL refreshes the stamp and holds
+/// the promotion. With TTL 0 (shipped default) the promotion is permanent.
 static void test_tm_promotionDecay_ttlRenewalAndPermanent(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3949,11 +3950,11 @@ static void test_tm_promotionDecay_ttlRenewalAndPermanent(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (l) Per-reporter report caps still apply on the quorum path: with
-// vouch_max_subjects_per_window = 2, a third distinct subject vouched by the
-// same attester in the same window is rejected (no quorum stamp, no
-// promotion) - the cap bounds how many distinct subjects one attester may
-// advance per window, exactly as it bounds promotions.
+/// (l) Per-reporter report caps still apply on the quorum path: with
+/// vouch_max_subjects_per_window = 2, a third distinct subject vouched by the
+/// same attester in the same window is rejected (no quorum stamp, no
+/// promotion) - the cap bounds how many distinct subjects one attester may
+/// advance per window, exactly as it bounds promotions.
 static void test_tm_promotionQuorum_perReporterCapsApply(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -3998,12 +3999,12 @@ static void test_tm_promotionQuorum_perReporterCapsApply(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (m) Trust ladder, signed fast path: a Router-verified signature stamps the
-// node TOFU-signed (L1); a KNOWN_SINCE vouch from a tenured verified signer
-// upgrades the subject to neighbor-attested (L2) instead of the unsigned
-// baseline; L2 lapses back to L1 in the sweep once the signatures stop; a
-// renewal vouch re-raises it. Unsigned behavior (floor disarmed) is the
-// mixed-mesh baseline: promoted but L0/L1 only.
+/// (m) Trust ladder, signed fast path: a Router-verified signature stamps the
+/// node TOFU-signed (L1); a KNOWN_SINCE vouch from a tenured verified signer
+/// upgrades the subject to neighbor-attested (L2) instead of the unsigned
+/// baseline; L2 lapses back to L1 in the sweep once the signatures stop; a
+/// renewal vouch re-raises it. Unsigned behavior (floor disarmed) is the
+/// mixed-mesh baseline: promoted but L0/L1 only.
 static void test_tm_trustLadder_l2FastPathDecayAndRenewal(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4104,13 +4105,13 @@ static void test_tm_trustLadder_l2FastPathDecayAndRenewal(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (m2) Trust ladder, signature-required L2: with the L2 floor armed and the
-// attester a tenured verified signer, the vouch's OWN signature is what
-// crosses the subject to L2. An unsigned vouch (old firmware that never signs
-// its attestations - the mixed-mesh case) clears every other gate, promotes,
-// and leaves the subject at L1; the same vouch carrying a router-verified
-// signature crosses to L2. The unsigned baseline is preserved exactly: the
-// signature gates only the L2 upgrade, not the promotion.
+/// (m2) Trust ladder, signature-required L2: with the L2 floor armed and the
+/// attester a tenured verified signer, the vouch's OWN signature is what
+/// crosses the subject to L2. An unsigned vouch (old firmware that never signs
+/// its attestations - the mixed-mesh case) clears every other gate, promotes,
+/// and leaves the subject at L1; the same vouch carrying a router-verified
+/// signature crosses to L2. The unsigned baseline is preserved exactly: the
+/// signature gates only the L2 upgrade, not the promotion.
 static void test_tm_trustLadder_l2SignatureRequiredMixedMeshFallback(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4159,9 +4160,9 @@ static void test_tm_trustLadder_l2SignatureRequiredMixedMeshFallback(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (n) Trust ladder, tenure cap: with the L2 floor at the shipped 30 days,
-// a fresh attester cannot buy L2 for a signing subject; an attester observed
-// for 30 days can.
+/// (n) Trust ladder, tenure cap: with the L2 floor at the shipped 30 days,
+/// a fresh attester cannot buy L2 for a signing subject; an attester observed
+/// for 30 days can.
 static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4212,11 +4213,11 @@ static void test_tm_trustLadder_tenureCappedL2Upgrade(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-// (o) Trust ladder L3: a manually verified key (QR/NFC or pre-seeded
-// admin-key list) raises the antispam record to the out-of-band level -
-// permanent (no decay), escaping probation, and immune to the sweep's
-// probation reclaim (which only clears anonymous L0 entries). An unverified
-// key commit leaves the ladder alone.
+/// (o) Trust ladder L3: a manually verified key (QR/NFC or pre-seeded
+/// admin-key list) raises the antispam record to the out-of-band level -
+/// permanent (no decay), escaping probation, and immune to the sweep's
+/// probation reclaim (which only clears anonymous L0 entries). An unverified
+/// key commit leaves the ladder alone.
 static void test_tm_trustLadder_manualKeyL3Permanent(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4253,6 +4254,7 @@ static void test_tm_trustLadder_manualKeyL3Permanent(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// NO_RELAY gossip round-trips when the attester was locally observed.
 static void test_tm_noRelay_sendRoundTrip_observedAttester(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4312,6 +4314,7 @@ static void test_tm_noRelay_sendRoundTrip_observedAttester(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// Relay hop cap applies probation, L2, and congestion limits.
 static void test_tm_relayHopCap_probationL2AndCongestion(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4344,6 +4347,7 @@ static void test_tm_relayHopCap_probationL2AndCongestion(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// Tick 0 is a live window, not a sentinel for first-seen or NO_RELAY.
 static void test_tm_tickZero_firstSeenAndNoRelayRoll(void)
 {
     TrafficManagementModule::s_testNowMs = 0;
@@ -4372,8 +4376,8 @@ static void test_tm_tickZero_firstSeenAndNoRelayRoll(void)
     TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kRemoteNode));
 }
 
-// Graduating the greylist must keep first-seen. Sweeping the row away would
-// put the next packet back into probation.
+/// Graduating the greylist must keep first-seen. Sweeping the row away would
+/// put the next packet back into probation.
 static void test_tm_probation_survivesSweepAfterWindow(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4400,6 +4404,7 @@ static void test_tm_probation_survivesSweepAfterWindow(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// MQTT-sourced packets skip antispam tracking.
 static void test_tm_viaMqtt_skipsAntispam(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4425,6 +4430,7 @@ static void test_tm_viaMqtt_skipsAntispam(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// Table-full eviction clears NO_RELAY auxiliary state for the victim.
 static void test_tm_tableFull_evictionClearsNoRelay(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4451,6 +4457,7 @@ static void test_tm_tableFull_evictionClearsNoRelay(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// KNOWN_SINCE gossip is sent with hop_limit 1.
 static void test_tm_knownSince_hopLimitIsOne(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
@@ -4496,6 +4503,7 @@ static void test_tm_knownSince_hopLimitIsOne(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// Zeroed antispam knobs migrate to shipped defaults.
 static void test_tm_antispamMigration_zeroKnobsGetDefaults(void)
 {
     meshtastic_ModuleConfig_TrafficManagementConfig cfg = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
@@ -4539,6 +4547,7 @@ void tearDown(void)
     setBootRelativeTimeForUnitTest(0);
 }
 
+/// Unity test runner entry point.
 TM_TEST_ENTRY void setup()
 {
     delay(10);

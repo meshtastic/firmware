@@ -22,6 +22,7 @@
 #include <cstring>
 
 #ifndef PIO_UNIT_TESTING
+/// Monotonic millisecond clock; tests return s_testNowMs.
 uint32_t TrafficManagementModule::clockMs()
 {
     return Time::getMillis();
@@ -249,6 +250,7 @@ void TrafficManagementModule::incrementStat(uint32_t *field)
     (*field)++;
 }
 
+/// Saturating increment of a stats counter. Caller must hold cacheLock.
 void TrafficManagementModule::incrementStatLocked(uint32_t *field) const
 {
     // Caller holds cacheLock - taking it here would deadlock (non-recursive Lock).
@@ -289,10 +291,10 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
 #endif
 }
 
-// The two caches are compile-time independent (TMM_HAS_NODEINFO_CACHE keys on PSRAM or
-// native tests, the
-// unified cache on a per-variant size that may be overridden to 0), so each is purged under
-// its own guard - a build with only one of them must still forget deleted nodes.
+/// The two caches are compile-time independent (TMM_HAS_NODEINFO_CACHE keys on PSRAM or
+/// native tests, the
+/// unified cache on a per-variant size that may be overridden to 0), so each is purged under
+/// its own guard - a build with only one of them must still forget deleted nodes.
 void TrafficManagementModule::purgeNode(NodeNum node)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 || TMM_HAS_NODEINFO_CACHE
@@ -327,6 +329,7 @@ void TrafficManagementModule::purgeNode(NodeNum node)
 #endif
 }
 
+/// Clear both cache tables (resetNodes / factory reset). Thread-safe.
 void TrafficManagementModule::purgeAll()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 || TMM_HAS_NODEINFO_CACHE
@@ -734,6 +737,7 @@ void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshta
     // obsTick/hasObserved deliberately untouched: only a heard frame makes a node servable.
 }
 
+/// Key-only commit hook for writes that bypass updateUser.
 void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key32[32], bool proven)
 {
     // Same module-disabled gate as onNodeIdentityCommitted (see there for rationale).
@@ -1080,6 +1084,7 @@ bool TrafficManagementModule::preloadNextHopsFromNodeDB()
 // Epoch Management
 // =============================================================================
 
+/// Clear unified, antispam, and auxiliary tables used by traffic management.
 void TrafficManagementModule::flushCache()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
@@ -1319,6 +1324,7 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
 // Periodic Maintenance
 // =============================================================================
 
+/// Periodic sweep: expire timed state, saturate ticks, reconcile with NodeDB.
 int32_t TrafficManagementModule::runOnce()
 {
     if (!moduleConfig.has_traffic_management)
@@ -1748,6 +1754,7 @@ bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket
     return result;
 }
 
+/// True when `from` is over the current rate threshold (lock wrapper).
 bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
@@ -1761,6 +1768,7 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
 }
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+/// Rate-limit check with the cache lock already held.
 bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
 {
     const uint32_t windowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
@@ -1811,6 +1819,7 @@ bool TrafficManagementModule::isRateLimitedLocked(NodeNum from, uint32_t nowMs)
     return limited;
 }
 
+/// Rate-limit peek that does not charge the window counter.
 bool TrafficManagementModule::peekRateLimitedLocked(NodeNum from, uint32_t nowMs) const
 {
     (void)nowMs;
@@ -1905,9 +1914,9 @@ void TrafficManagementModule::logAction(const char *action, const meshtastic_Mes
 // Per-node state lives in AntispamEntry (not the 10-byte unified cache).
 // =============================================================================
 
-// Read-only lookup: returns the entry for `node` or nullptr. Never allocates
-// and never evicts - a miss costs nothing, which is what read-only callers
-// (probation checks, budget reads, snapshots) rely on.
+/// Read-only lookup: returns the entry for `node` or nullptr. Never allocates
+/// and never evicts - a miss costs nothing, which is what read-only callers
+/// (probation checks, budget reads, snapshots) rely on.
 TrafficManagementModule::AntispamEntry *TrafficManagementModule::findAntispamEntry(NodeNum node) const
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
@@ -1926,6 +1935,7 @@ TrafficManagementModule::AntispamEntry *TrafficManagementModule::findAntispamEnt
 #endif
 }
 
+/// Drop vouch, quorum, and NO_RELAY auxiliary rows for `node`.
 void TrafficManagementModule::clearAntispamAuxLocked(NodeNum node)
 {
     if (node == 0)
@@ -1944,6 +1954,7 @@ void TrafficManagementModule::clearAntispamAuxLocked(NodeNum node)
     }
 }
 
+/// Find or create the antispam row for `node` (oldest-first eviction).
 TrafficManagementModule::AntispamEntry *TrafficManagementModule::findOrCreateAntispamEntry(NodeNum node, bool *isNew)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
@@ -1996,6 +2007,7 @@ TrafficManagementModule::AntispamEntry *TrafficManagementModule::findOrCreateAnt
 #endif
 }
 
+/// Uptime seconds; tests may pin this via s_testUptimeSecs.
 uint32_t TrafficManagementModule::uptimeSecs() const
 {
     if (s_testUptimeSecs != 0xFFFFFFFFu)
@@ -2007,6 +2019,7 @@ uint32_t TrafficManagementModule::uptimeSecs() const
 #endif
 }
 
+/// Seconds since first-seen, or 0 if untracked. Caller must hold cacheLock.
 uint32_t TrafficManagementModule::observedAgeSecsLocked(const AntispamEntry *entry) const
 {
     if (!entry || !entry->hasFirstSeen)
@@ -2015,6 +2028,7 @@ uint32_t TrafficManagementModule::observedAgeSecsLocked(const AntispamEntry *ent
     return now >= entry->firstSeenSecs ? now - entry->firstSeenSecs : 0;
 }
 
+/// True when the attester has been observed locally for at least `minSecs`.
 bool TrafficManagementModule::attesterObservedEnoughLocked(const AntispamEntry *attesterEntry, uint32_t minSecs) const
 {
     if (minSecs == 0)
@@ -2022,6 +2036,7 @@ bool TrafficManagementModule::attesterObservedEnoughLocked(const AntispamEntry *
     return attesterEntry && attesterEntry->hasFirstSeen && observedAgeSecsLocked(attesterEntry) >= minSecs;
 }
 
+/// True while first-seen age is still inside probation_window_secs.
 bool TrafficManagementModule::inProbationLocked(const AntispamEntry *entry) const
 {
     if (!entry || !entry->hasFirstSeen || entry->promoted || entry->trustLevel >= 2)
@@ -2032,6 +2047,7 @@ bool TrafficManagementModule::inProbationLocked(const AntispamEntry *entry) cons
     return observedAgeSecsLocked(entry) < windowSecs;
 }
 
+/// True while `node` is still inside the greylist probation window.
 bool TrafficManagementModule::inProbation(NodeNum node) const
 {
     if (node == 0)
@@ -2042,6 +2058,7 @@ bool TrafficManagementModule::inProbation(NodeNum node) const
     return inProbationLocked(findAntispamEntry(node));
 }
 
+/// True when local observation is old enough to vouch for others.
 bool TrafficManagementModule::isEstablishedForVouching(NodeNum node) const
 {
     if (node == 0 || moduleConfig.traffic_management.probation_window_secs == 0)
@@ -2055,6 +2072,7 @@ bool TrafficManagementModule::isEstablishedForVouching(NodeNum node) const
     return !inProbationLocked(entry);
 }
 
+/// True for want_ack / ROUTING_APP / ADMIN_APP (always rebroadcast).
 bool TrafficManagementModule::relayBudgetExempt(const meshtastic_MeshPacket &mp)
 {
     if (mp.want_ack)
@@ -2064,6 +2082,7 @@ bool TrafficManagementModule::relayBudgetExempt(const meshtastic_MeshPacket &mp)
     return mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP || mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP;
 }
 
+/// Record first-seen (and optional signed observation) for `node`.
 bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass, bool signedObserved)
 {
     if (node == 0)
@@ -2096,6 +2115,7 @@ bool TrafficManagementModule::noteFirstSeen(NodeNum node, uint8_t channel, uint8
     return true;
 }
 
+/// Quantize packet RSSI into a 4-class bucket.
 uint8_t TrafficManagementModule::rssiClassOf(const meshtastic_MeshPacket &mp)
 {
     // 4-class quantization tolerates a noisy RF front end; 0xFF = no reading.
@@ -2111,6 +2131,7 @@ uint8_t TrafficManagementModule::rssiClassOf(const meshtastic_MeshPacket &mp)
     return 0;
 }
 
+/// Channel utilization percent, or s_testCongestionPct when pinned.
 float TrafficManagementModule::currentCongestionPct() const
 {
     if (s_testCongestionPct >= 0)
@@ -2118,12 +2139,14 @@ float TrafficManagementModule::currentCongestionPct() const
     return airTime ? airTime->channelUtilizationPercent() : 0.0f;
 }
 
+/// Effective rate threshold for `sender` (lock wrapper).
 uint32_t TrafficManagementModule::effectiveRateThreshold(NodeNum sender) const
 {
     concurrency::LockGuard guard(&cacheLock);
     return effectiveRateThresholdLocked(sender);
 }
 
+/// Rate threshold including probation penalty and group budget.
 uint32_t TrafficManagementModule::effectiveRateThresholdLocked(NodeNum sender) const
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2155,6 +2178,7 @@ uint32_t TrafficManagementModule::effectiveRateThresholdLocked(NodeNum sender) c
     return threshold;
 }
 
+/// Ingest a neighbor's top-sender samples. No-op when budget gossip is off.
 void TrafficManagementModule::ingestNeighborTopSenders(NodeNum neighbor, const meshtastic_TopSender *entries, pb_size_t count)
 {
     if (neighbor == 0 || !entries || count == 0)
@@ -2199,6 +2223,7 @@ void TrafficManagementModule::ingestNeighborTopSenders(NodeNum neighbor, const m
     }
 }
 
+/// Test hook: sender relay budget, or -1 if untracked.
 int TrafficManagementModule::peekSenderBudgetForTest(NodeNum sender, uint32_t *medianOut)
 {
     uint32_t median = 0;
@@ -2223,6 +2248,7 @@ int TrafficManagementModule::peekSenderBudgetForTest(NodeNum sender, uint32_t *m
     return 0;
 }
 
+/// Test hook: -1 untracked, 0 established, 1 in-probation.
 int TrafficManagementModule::peekProbationStateForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2236,6 +2262,7 @@ int TrafficManagementModule::peekProbationStateForTest(NodeNum node)
     return inProbationLocked(entry) ? 1 : 0;
 }
 
+/// Test hook: windowed relayed-for count for `node`.
 uint32_t TrafficManagementModule::peekRelayedCountForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2243,6 +2270,7 @@ uint32_t TrafficManagementModule::peekRelayedCountForTest(NodeNum node)
     return entry ? entry->relayedCount : 0;
 }
 
+/// Test hook: true when gossiped or local NO_RELAY is in force.
 bool TrafficManagementModule::peekNoRelayForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2256,6 +2284,7 @@ bool TrafficManagementModule::peekNoRelayForTest(NodeNum node)
 // and the maintenance sweep zeroes rolled-over entries (maintainAntispamLocked).
 // A full scan is fine - attestation traffic is low-rate.
 
+/// Record one vouch for (attester, subject). Re-keys reused cells.
 void TrafficManagementModule::stampVouchObservationLocked(NodeNum attester, NodeNum subject)
 {
     const uint8_t nowTick = currentRateTick();
@@ -2292,11 +2321,11 @@ void TrafficManagementModule::stampVouchObservationLocked(NodeNum attester, Node
         cell->count++;
 }
 
-// True when the (attester, subject) vouch is within both caps:
-// per-subject (this pair's count this window < vouch_max_per_subject_per_window)
-// and per-attester distinct-subject (this window's distinct subject count
-// for the attester < vouch_max_subjects_per_window, counting the target
-// subject once). 0 on either knob disables that check.
+/// True when the (attester, subject) vouch is within both caps:
+/// per-subject (this pair's count this window < vouch_max_per_subject_per_window)
+/// and per-attester distinct-subject (this window's distinct subject count
+/// for the attester < vouch_max_subjects_per_window, counting the target
+/// subject once). 0 on either knob disables that check.
 bool TrafficManagementModule::vouchWithinCapsLocked(NodeNum attester, NodeNum subject) const
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2325,6 +2354,7 @@ bool TrafficManagementModule::vouchWithinCapsLocked(NodeNum attester, NodeNum su
     return true;
 }
 
+/// Test hook: vouch count for (attester, subject) this window.
 uint8_t TrafficManagementModule::peekVouchCountForTest(NodeNum attester, NodeNum subject)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2336,6 +2366,7 @@ uint8_t TrafficManagementModule::peekVouchCountForTest(NodeNum attester, NodeNum
     return 0;
 }
 
+/// Test hook: distinct subjects this attester vouched for this window.
 uint8_t TrafficManagementModule::peekVouchSubjectsForTest(NodeNum attester)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2347,6 +2378,7 @@ uint8_t TrafficManagementModule::peekVouchSubjectsForTest(NodeNum attester)
     return n;
 }
 
+/// Record attester toward subject's promotion quorum.
 void TrafficManagementModule::stampAttestQuorumLocked(NodeNum attester, NodeNum subject)
 {
     const uint8_t nowTick = currentRateTick();
@@ -2378,6 +2410,7 @@ void TrafficManagementModule::stampAttestQuorumLocked(NodeNum attester, NodeNum 
     cell->windowTick = nowTick;
 }
 
+/// Distinct attesters currently counted toward subject's quorum.
 uint8_t TrafficManagementModule::attestQuorumCountLocked(NodeNum subject) const
 {
     const uint8_t nowTick = currentRateTick();
@@ -2388,6 +2421,7 @@ uint8_t TrafficManagementModule::attestQuorumCountLocked(NodeNum subject) const
     return n;
 }
 
+/// Minimum observed tenure before an L2 (neighbor-attested) upgrade.
 uint32_t TrafficManagementModule::l2FloorSecs() const
 {
     uint32_t secs = moduleConfig.traffic_management.attestation_l2_min_tenure_secs;
@@ -2396,6 +2430,7 @@ uint32_t TrafficManagementModule::l2FloorSecs() const
     return secs;
 }
 
+/// Test hook: 0 anonymous, 1 signed, 2 neighbor-attested, 3 manual.
 uint8_t TrafficManagementModule::trustLevelForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2419,6 +2454,7 @@ uint8_t TrafficManagementModule::trustLevelForTest(NodeNum node)
     return entry->trustLevel;
 }
 
+/// Test hook: override last-signed uptime seconds.
 void TrafficManagementModule::setLastSignedSecsForTest(NodeNum node, uint32_t secs)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2431,11 +2467,13 @@ void TrafficManagementModule::setLastSignedSecsForTest(NodeNum node, uint32_t se
         entry->trustLevel = 1;
 }
 
+/// Configured distinct-attester floor for L2 promotion.
 uint32_t TrafficManagementModule::attestationMinDistinctAttestersLocked() const
 {
     return moduleConfig.traffic_management.attestation_min_distinct_attesters;
 }
 
+/// True when `attester` may raise `subject` to L2.
 bool TrafficManagementModule::l2VouchEligibleLocked(const AntispamEntry *subject, NodeNum attester, bool signedObserved) const
 {
     if (!signedObserved)
@@ -2449,6 +2487,7 @@ bool TrafficManagementModule::l2VouchEligibleLocked(const AntispamEntry *subject
     return attesterObservedEnoughLocked(attesterEntry, l2Floor);
 }
 
+/// Record a NO_RELAY claim from `attester` on `subject`.
 void TrafficManagementModule::stampNoRelayClaimLocked(NodeNum attester, NodeNum subject, uint32_t nowMs)
 {
     const uint8_t nowTick = currentRateTick();
@@ -2472,6 +2511,7 @@ void TrafficManagementModule::stampNoRelayClaimLocked(NodeNum attester, NodeNum 
     cell->claimMs = nowMs;
 }
 
+/// Distinct live NO_RELAY claimers for `subject` (TTL-aware).
 uint8_t TrafficManagementModule::noRelayClaimerCountLocked(NodeNum subject, uint32_t nowMs) const
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2488,12 +2528,14 @@ uint8_t TrafficManagementModule::noRelayClaimerCountLocked(NodeNum subject, uint
     return n;
 }
 
+/// Test hook: distinct attesters toward subject's promotion quorum.
 uint8_t TrafficManagementModule::peekAttestQuorumForTest(NodeNum subject)
 {
     concurrency::LockGuard guard(&cacheLock);
     return attestQuorumCountLocked(subject);
 }
 
+/// Test hook: packed RSSI class and channel, or -1 if untracked.
 int16_t TrafficManagementModule::peekRssiChannelForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2503,6 +2545,7 @@ int16_t TrafficManagementModule::peekRssiChannelForTest(NodeNum node)
     return static_cast<int16_t>(static_cast<int16_t>(entry->rssiClass) << 8) | entry->channel;
 }
 
+/// Test hook: promotion lease tick, or 0 if permanent/none.
 uint8_t TrafficManagementModule::peekPromotedWindowTickForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2512,6 +2555,7 @@ uint8_t TrafficManagementModule::peekPromotedWindowTickForTest(NodeNum node)
     return static_cast<uint8_t>((entry->promotedAtSecs % 255) + 1);
 }
 
+/// Test hook: true when the subject currently holds a promotion.
 bool TrafficManagementModule::peekPromotedForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2519,6 +2563,7 @@ bool TrafficManagementModule::peekPromotedForTest(NodeNum node)
     return entry && entry->promoted;
 }
 
+/// Test hook: true when NO_RELAY came from local budget exhaustion.
 bool TrafficManagementModule::peekNoRelayLocalForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2527,6 +2572,7 @@ bool TrafficManagementModule::peekNoRelayLocalForTest(NodeNum node)
 }
 #endif
 
+/// Fill `out` with this window's top senders (node=0 if unused).
 void TrafficManagementModule::snapshotTopSenders(meshtastic_TopSender (&out)[kTopSendersCount]) const
 {
     for (int i = 0; i < kTopSendersCount; i++)
@@ -2578,6 +2624,7 @@ void TrafficManagementModule::snapshotTopSenders(meshtastic_TopSender (&out)[kTo
 #endif
 }
 
+/// False means deliver locally and skip TX; exempt ports always return true.
 bool TrafficManagementModule::shouldRelay(const meshtastic_MeshPacket &mp) const
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2598,6 +2645,7 @@ bool TrafficManagementModule::shouldRelay(const meshtastic_MeshPacket &mp) const
     return true;
 }
 
+/// hop_limit for the relayed copy: min(original, probation cap, congestion cap).
 uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) const
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2632,6 +2680,7 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
     return cap;
 }
 
+/// Charge one rebroadcast to the sender's relay budget; may gossip NO_RELAY.
 void TrafficManagementModule::recordRelayed(const meshtastic_MeshPacket &mp)
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2666,6 +2715,7 @@ void TrafficManagementModule::recordRelayed(const meshtastic_MeshPacket &mp)
         sendNoRelayGossip(from);
 }
 
+/// Emit a hop_limit=1 NO_RELAY gossip for `subject`.
 bool TrafficManagementModule::sendNoRelayGossip(NodeNum subject)
 {
     if (!service)
@@ -2692,6 +2742,7 @@ bool TrafficManagementModule::sendNoRelayGossip(NodeNum subject)
     return true;
 }
 
+/// Emit a hop_limit=1 KNOWN_SINCE gossip for `subject`.
 bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2721,6 +2772,7 @@ bool TrafficManagementModule::sendKnownSinceGossip(NodeNum subject)
     return true;
 }
 
+/// Handle an ID_ATTESTATION_APP packet (KNOWN_SINCE / VOUCH / NO_RELAY).
 bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &mp)
 {
     const auto &cfg = moduleConfig.traffic_management;
@@ -2852,6 +2904,7 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
     return true;
 }
 
+/// Note channel×RSSI co-occurrence for group-budget tracking.
 bool TrafficManagementModule::observeGroupCooccurrence(NodeNum node, uint8_t channel, uint8_t rssiClass)
 {
     const uint32_t groupMin = moduleConfig.traffic_management.group_budget_enabled;
@@ -2915,6 +2968,7 @@ bool TrafficManagementModule::observeGroupCooccurrence(NodeNum node, uint8_t cha
     return cell->flagged;
 }
 
+/// True when this node's channel×RSSI class is currently flagged.
 bool TrafficManagementModule::isInFlaggedGroup(NodeNum node, uint8_t channel, uint8_t rssiClass) const
 {
     (void)node; // membership is by (channel, rssiClass) cell, not per-node lookup
@@ -2922,6 +2976,7 @@ bool TrafficManagementModule::isInFlaggedGroup(NodeNum node, uint8_t channel, ui
     return isInFlaggedGroupLocked(channel, rssiClass);
 }
 
+/// Flagged-group test with channel×RSSI already resolved.
 bool TrafficManagementModule::isInFlaggedGroupLocked(uint8_t channel, uint8_t rssiClass) const
 {
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
@@ -2934,6 +2989,7 @@ bool TrafficManagementModule::isInFlaggedGroupLocked(uint8_t channel, uint8_t rs
     return false;
 }
 
+/// Group relay budget for this channel×RSSI class.
 uint32_t TrafficManagementModule::groupBudgetLocked(uint8_t channel, uint8_t rssiClass) const
 {
     for (uint16_t i = 0; i < kGroupObsEntries; i++) {
@@ -2944,6 +3000,7 @@ uint32_t TrafficManagementModule::groupBudgetLocked(uint8_t channel, uint8_t rss
     return 0;
 }
 
+/// Test hook: group budget for a channel×RSSI class.
 uint32_t TrafficManagementModule::groupBudgetForTest(uint8_t channel, uint8_t rssiClass)
 {
     concurrency::LockGuard guard(&cacheLock);
@@ -2960,6 +3017,7 @@ uint32_t TrafficManagementModule::groupBudgetForTest(uint8_t channel, uint8_t rs
 // =============================================================================
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+/// Allocate the antispam table alongside the unified cache.
 void TrafficManagementModule::initAntispamCache()
 {
     if (antispam)
@@ -2986,6 +3044,7 @@ void TrafficManagementModule::initAntispamCache()
 // Antispam: maintenance sweep (called from runOnce under cacheLock)
 // =============================================================================
 
+/// Per-sweep antispam maintenance. Caller must hold cacheLock.
 void TrafficManagementModule::maintainAntispamLocked()
 {
     if (!antispam)

@@ -100,12 +100,13 @@ meshtastic_SharedContact makeContact(NodeNum num, const char *longName, const ch
 static const uint8_t KEY_DERIVED_KEY[32] = {0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA,
                                             0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5,
                                             0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF};
+/// Node number derived from KEY_DERIVED_KEY (crc32).
 static NodeNum keyDerivedNum()
 {
     return (NodeNum)crc32Buffer(KEY_DERIVED_KEY, sizeof(KEY_DERIVED_KEY));
 }
 
-// A User carrying the key-anchored identity: its key derives keyDerivedNum().
+/// A User carrying the key-anchored identity: its key derives keyDerivedNum().
 static meshtastic_User makeDerivedKeyUser(const char *longName, const char *shortName)
 {
     meshtastic_User u = meshtastic_User_init_zero;
@@ -420,8 +421,8 @@ static void test_updateuser_warm_signer_refusal_does_not_evict(void)
 
 // --- identity format (nodenum-from-key) ---
 
-// Dual-read discriminator: a key-anchored key derives exactly its own number.
-// Old records fail the predicate and stay in the legacy format.
+/// Dual-read discriminator: a key-anchored key derives exactly its own number.
+/// Old records fail the predicate and stay in the legacy format.
 static void test_identity_predicate_keyDerivesNumber(void)
 {
     const NodeNum num = keyDerivedNum();
@@ -445,8 +446,8 @@ static void test_identity_predicate_keyDerivesNumber(void)
     TEST_ASSERT_TRUE(storedIdentityIsKeyDerived(&stored));
 }
 
-// Dual-read: once the stored key derives the node number, a NodeInfo with a
-// different non-deriving key is refused wholesale (key, name, marker).
+/// Dual-read: once the stored key derives the node number, a NodeInfo with a
+/// different non-deriving key is refused wholesale (key, name, marker).
 static void test_identity_dualread_keyDerivedRefusesNonDeriving(void)
 {
     const NodeNum num = keyDerivedNum();
@@ -465,8 +466,8 @@ static void test_identity_dualread_keyDerivedRefusesNonDeriving(void)
     TEST_ASSERT_TRUE(nodeInfoLiteIsKeyDerivedIdentity(db->getMeshNode(num)));                 // marker intact
 }
 
-// Dual-read transition: a proven commit of a deriving key replaces a legacy
-// stored key; a later non-deriving key is then refused.
+/// Dual-read transition: a proven commit of a deriving key replaces a legacy
+/// stored key; a later non-deriving key is then refused.
 static void test_identity_dualread_transitionLegacyToKeyDerived(void)
 {
     const NodeNum num = keyDerivedNum();
@@ -486,8 +487,8 @@ static void test_identity_dualread_transitionLegacyToKeyDerived(void)
     TEST_ASSERT_TRUE(identityKeyDerivesNodeNum(db->getMeshNode(num)->public_key.bytes, num)); // intact
 }
 
-// Dual-read: a keyless update is never a key replacement, so the format guard
-// does not apply; the unauthenticated key pin still decides keyless-vs-stored.
+/// Dual-read: a keyless update is never a key replacement, so the format guard
+/// does not apply; the unauthenticated key pin still decides keyless-vs-stored.
 static void test_identity_dualread_keylessUpdateAllowed(void)
 {
     const NodeNum num = keyDerivedNum();
@@ -578,6 +579,7 @@ void tearDown(void)
     mockService = nullptr;
 }
 
+/// Unity test runner entry point.
 IH_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();

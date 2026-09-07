@@ -999,10 +999,12 @@ class TmmRebroadcastShim : public TrafficManagementModule
 class ScopedTmmFixture
 {
   public:
+    /// RAII swap of the global TMM pointer and moduleConfig.
     explicit ScopedTmmFixture(TrafficManagementModule *m) : savedModule(trafficManagementModule), savedConfig(moduleConfig)
     {
         trafficManagementModule = m;
     }
+    /// Restore the previous TMM pointer and moduleConfig.
     ~ScopedTmmFixture()
     {
         trafficManagementModule = savedModule;
@@ -1014,6 +1016,7 @@ class ScopedTmmFixture
     meshtastic_LocalModuleConfig savedConfig;
 };
 
+/// NO_RELAY skips TX on flood packets but still delivers to-us traffic.
 void test_rebroadcast_noRelay_skipsTxButNotToUs(void)
 {
     MockRadioInterface *mockIface = installMockIface();
@@ -1105,6 +1108,7 @@ void test_event_mode_hop_behavior(void)
 
 // ===========================================================================
 
+/// Unity test runner entry point.
 void setup()
 {
     initializeTestEnvironment();

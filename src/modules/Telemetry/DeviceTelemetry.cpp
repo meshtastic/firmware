@@ -50,6 +50,7 @@ int32_t DeviceTelemetryModule::runOnce()
     return sendToPhoneIntervalMs;
 }
 
+/// Ingest device metrics, including neighbor top-sender budget samples.
 bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
@@ -103,6 +104,7 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
     return NULL;
 }
 
+/// Build the local device-metrics telemetry payload.
 meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
 {
     meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
