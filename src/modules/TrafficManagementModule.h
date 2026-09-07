@@ -393,7 +393,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static DirectResponseThrottleEntry *directResponseSlot(DirectResponseThrottleEntry *table, NodeNum key, uint32_t nowMs,
                                                            uint32_t windowMs);
     /// True when the requestor is within the role-clamped hop limit for direct responses.
-    bool isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const;
+    bool isWithinMaxHopsOfRequestor(const meshtastic_MeshPacket *p) const;
     /// True when `from` exceeded the configured packet budget for the current rate window.
     bool isRateLimited(NodeNum from, uint32_t nowMs);
     /// True when `p`'s sender exceeded the undecodable-packet threshold for the current window.

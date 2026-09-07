@@ -988,6 +988,32 @@ void test_rebroadcast_declined_send_releases_packet(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
 }
 
+// A direct NodeInfo reply from TrafficManagementModule is a unicast the mesh must carry back to the
+// requestor. hop_limit 0 is refused outright, so such a reply never leaves the answering node.
+void test_rebroadcast_zeroHopUnicast_isNotRelayed(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.hop_start = 0;
+    p.hop_limit = 0;
+    p.next_hop = mockNodeDB->getLastByteOfNodeNum(kLocalNode); // addressed at us to relay
+
+    TEST_ASSERT_FALSE_MESSAGE(shim->perhapsRebroadcast(&p), "a zero-hop unicast must not be relayed");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "no packet should be handed to the radio at all");
+}
+
+void test_rebroadcast_oneHopUnicast_addressedAtUs_isRelayed(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.hop_start = 1;
+    p.hop_limit = 1;
+    p.next_hop = mockNodeDB->getLastByteOfNodeNum(kLocalNode);
+
+    TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&p), "a one-hop unicast addressed at us must be relayed");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "exactly one packet should reach the radio");
+}
+
 // An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
 // last gate before the radio queue: MeshPacket.encrypted holds 256 bytes, the radio buffer 240.
 void test_send_rejects_payload_larger_than_radio_buffer(void)
@@ -1134,6 +1160,8 @@ void setup()
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
+    RUN_TEST(test_rebroadcast_zeroHopUnicast_isNotRelayed);
+    RUN_TEST(test_rebroadcast_oneHopUnicast_addressedAtUs_isRelayed);
     RUN_TEST(test_send_rejects_payload_larger_than_radio_buffer);
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);

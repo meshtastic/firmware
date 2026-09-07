@@ -1425,8 +1425,17 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Caller already verified: nodeinfo_direct_response, portnum, want_response,
     // !isBroadcast, !isToUs, !isFromUs
 
-    if (!isMinHopsFromRequestor(p))
+    if (!isWithinMaxHopsOfRequestor(p))
         return false;
+
+    // A request that crossed a hop reached us through a relayer, and that relayer is the only
+    // return path we can address. Without it, leave the request for the genuine target.
+    const int8_t hopsAway = getHopsAway(*p, -1);
+    if (hopsAway > 0 && p->relay_node == NO_RELAY_NODE) {
+        TM_LOG_DEBUG("NodeInfo request from 0x%08x is %d hops out with no relayer, not responding", getFrom(p),
+                     static_cast<int>(hopsAway));
+        return false;
+    }
 
     meshtastic_User cachedUser = meshtastic_User_init_zero;
     bool hasCachedUser = false;
@@ -1562,17 +1571,18 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
                      static_cast<unsigned>(cachedSourceChannel), static_cast<unsigned>(p->channel));
     }
 
-    // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
-    // hop_limit=0 ensures this reply travels only one hop (direct to requestor).
+    // Spoof the sender as the target node so the requestor sees a valid NodeInfo response, and
+    // grant exactly the hops the request spent reaching us so the reply can get back.
     reply->from = p->to;
     reply->to = getFrom(p);
     reply->channel = p->channel;
     reply->decoded.request_id = p->id;
-    reply->hop_limit = 0;
-    // hop_start=0 is set explicitly because Router::send() only sets it for isFromUs(),
+    reply->hop_limit = (hopsAway > 0) ? static_cast<uint8_t>(hopsAway) : 0;
+    // hop_start is set explicitly because Router::send() only sets it for isFromUs(),
     // and our spoofed from means isFromUs() is false.
-    reply->hop_start = 0;
-    reply->next_hop = nodeDB->getLastByteOfNodeNum(getFrom(p));
+    reply->hop_start = reply->hop_limit;
+    // Steer back along the path the request arrived on; a direct requestor is its own relayer.
+    reply->next_hop = (hopsAway > 0) ? p->relay_node : nodeDB->getLastByteOfNodeNum(getFrom(p));
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
     service->sendToMesh(reply);
@@ -1631,7 +1641,7 @@ bool TrafficManagementModule::directResponseAllowed(NodeNum requester, NodeNum t
     return true;
 }
 
-bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const
+bool TrafficManagementModule::isWithinMaxHopsOfRequestor(const meshtastic_MeshPacket *p) const
 {
     int8_t hopsAway = getHopsAway(*p, -1);
     if (hopsAway < 0)

@@ -565,6 +565,89 @@ static void test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops(void)
 }
 
 /**
+ * Verify a ROUTER serving a 1-hop requestor sends a reply that can route back to it.
+ * Important because the request is consumed, so an undeliverable reply answers nobody.
+ */
+static void test_tm_nodeinfo_routerMultiHop_replyRoutesBackToRequestor(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 3;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    mockNodeDB->setCachedNode(kTargetNode);
+    // Signed-only replay gate (default) requires the target be a known signer to be served.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.dropNodeInfoCacheForTest(); // exercise the NodeDB fallback path
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.id = 0x2468ace0;
+    request.hop_start = 3;
+    request.hop_limit = 2;     // 1 hop away: inside the router clamp of 3, outside direct earshot
+    request.relay_node = 0x42; // the neighbour that handed us the request
+    const uint8_t hopsAway = static_cast<uint8_t>(request.hop_start - request.hop_limit);
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_UINT8(1, hopsAway);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
+    TEST_ASSERT_TRUE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(1, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    const meshtastic_MeshPacket &reply = mockRouter.sentPackets.front();
+    TEST_ASSERT_EQUAL_UINT32(kTargetNode, reply.from);
+    TEST_ASSERT_EQUAL_UINT32(kRemoteNode, reply.to);
+    // Enough hops to cross the distance the request came, and steered back at the relayer we heard.
+    TEST_ASSERT_EQUAL_UINT8(hopsAway, reply.hop_limit);
+    TEST_ASSERT_EQUAL_UINT8(hopsAway, reply.hop_start);
+    TEST_ASSERT_EQUAL_UINT8(request.relay_node, reply.next_hop);
+}
+
+/**
+ * Verify a multi-hop request with no relayer byte is left alone rather than answered.
+ * Important because there is no return path to address, and consuming it would answer nobody.
+ */
+static void test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 3;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    mockNodeDB->setCachedNode(kTargetNode);
+    // Signed-only replay gate (default) requires the target be a known signer to be served.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.dropNodeInfoCacheForTest(); // exercise the NodeDB fallback path
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.id = 0x13570246;
+    request.hop_start = 3;
+    request.hop_limit = 1;              // 2 hops away
+    request.relay_node = NO_RELAY_NODE; // no relayer learned, so no way to address a reply
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    // Forwarded untouched, so the genuine target still gets the chance to answer.
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+/**
  * Verify NodeInfo direct-response success path and reply packet fields.
  * Important because this path consumes the request and generates a spoofed cached reply.
  */
@@ -3327,6 +3410,8 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_fromUs_bypassesPositionAndRateFilters);
     RUN_TEST(test_tm_localDestination_bypassesTransitFilters);
     RUN_TEST(test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops);
+    RUN_TEST(test_tm_nodeinfo_routerMultiHop_replyRoutesBackToRequestor);
+    RUN_TEST(test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown);
     RUN_TEST(test_tm_nodeinfo_directResponse_respondsFromCache);
     RUN_TEST(test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo);
     RUN_TEST(test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity);
