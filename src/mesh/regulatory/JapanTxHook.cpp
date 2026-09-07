@@ -18,11 +18,7 @@ void initJapanTxHook()
     }
 }
 
-JapanTxHook::JapanTxHook() : RadioTxHook()
-{
-    if (!japanTxHook)
-        japanTxHook = this;
-}
+JapanTxHook::JapanTxHook() : RadioTxHook() {}
 
 JapanTxHook::~JapanTxHook()
 {

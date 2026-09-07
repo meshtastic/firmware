@@ -598,6 +598,30 @@ void test_radio_reconfigure_region_switch(void)
     TEST_ASSERT_NULL(japanTxHook);
 }
 
+void test_stack_allocated_hook_does_not_clobber_global(void)
+{
+    TEST_ASSERT_NULL(japanTxHook);
+    {
+        JapanTxHook stackHook;
+        TEST_ASSERT_NULL(japanTxHook);
+    }
+    TEST_ASSERT_NULL(japanTxHook);
+
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    initJapanTxHook();
+    JapanTxHook *globalInstance = japanTxHook;
+    TEST_ASSERT_NOT_NULL(globalInstance);
+    {
+        JapanTxHook stackHook;
+        TEST_ASSERT_EQUAL_PTR(globalInstance, japanTxHook);
+    }
+    TEST_ASSERT_EQUAL_PTR(globalInstance, japanTxHook);
+
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    initJapanTxHook();
+    TEST_ASSERT_NULL(japanTxHook);
+}
+
 void test_max_tx_duration_getter(void)
 {
     TEST_ASSERT_EQUAL_UINT32(4000, JapanTxHook::getMaxTxDurationMs(meshtastic_Config_LoRaConfig_RegionCode_JP));
@@ -741,6 +765,7 @@ void setup()
     RUN_TEST(test_pretx_defer_rollover_calculation);
     RUN_TEST(test_dynamic_hook_attachment_on_region_switch);
     RUN_TEST(test_radio_reconfigure_region_switch);
+    RUN_TEST(test_stack_allocated_hook_does_not_clobber_global);
 
     exit(UNITY_END());
 }
