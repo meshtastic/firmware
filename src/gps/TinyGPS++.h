@@ -57,6 +57,7 @@ enum {
     GPS_SENTENCE_GLL,
     GPS_SENTENCE_ZDA,
     GPS_SENTENCE_TXT,
+    GPS_SENTENCE_VTG,
     GPS_SENTENCE_OTHER
 };
 
@@ -80,6 +81,10 @@ enum TinyGPSGnssSystem {
 struct TinyGPSGSAInfo {
     uint8_t system = TINYGPS_GNSS_UNKNOWN;
     uint8_t satellitesUsed = 0;
+    // NMEA GSA can explicitly report at most 12 SVIDs per system. Keep the
+    // checksum-valid IDs so the UI can distinguish satellites merely in view
+    // from satellites actually used in the navigation solution.
+    uint16_t satelliteIds[12] = {};
     uint8_t fixType = 0; // 1=no fix, 2=2D, 3=3D
     uint16_t pdop = 0;   // scaled by 100
     uint16_t hdop = 0;   // scaled by 100
@@ -111,6 +116,12 @@ struct TinyGPSANTInfo {
     TinyGPSAntennaStatus status = TINYGPS_ANT_UNKNOWN;
     bool valid = false;
     uint32_t lastUpdate = 0;
+};
+
+struct TinyGPSVTGInfo {
+    bool valid = false;
+    char mode = 'N';
+    uint32_t lastUpdate = 0; // millis() of last checksum-valid VTG sentence
 };
 
 struct RawDegrees {
@@ -323,6 +334,11 @@ class TinyGPSPlus
     TinyGPSTime time;
     TinyGPSSpeed speed;
     TinyGPSCourse course;
+    // Separate VTG navigation data. RMC remains the primary source; these are
+    // only used as a read-only Course/Speed fallback when fresh RMC is absent.
+    TinyGPSSpeed vtgSpeed;
+    TinyGPSCourse vtgCourse;
+    TinyGPSVTGInfo vtgInfo;
     TinyGPSAltitude altitude;
     TinyGPSInteger satellites;
     TinyGPSTrackedSattelites trackedSatellites[TINYGPS_MAX_SATS];
@@ -390,6 +406,16 @@ class TinyGPSPlus
             if (gsaInfo[sys].valid)
                 total += gsaInfo[sys].satellitesUsed;
         return total;
+    }
+
+    bool gsaSatelliteUsedSnapshot(uint8_t system, uint16_t prn) const
+    {
+        if (system < TINYGPS_GNSS_GPS || system > TINYGPS_GNSS_QZSS || !gsaInfo[system].valid || prn == 0)
+            return false;
+        for (uint8_t i = 0; i < 12; ++i)
+            if (gsaInfo[system].satelliteIds[i] == prn)
+                return true;
+        return false;
     }
 
     uint8_t gsaFixTypeSnapshot() const
@@ -466,6 +492,13 @@ class TinyGPSPlus
         return system < 7 && gsaInfo[system].valid && isFreshAuxTimestamp(gsaInfo[system].lastUpdate)
                    ? gsaInfo[system].satellitesUsed
                    : 0;
+    }
+
+    bool gsaSatelliteUsed(uint8_t system, uint16_t prn) const
+    {
+        return system >= TINYGPS_GNSS_GPS && system <= TINYGPS_GNSS_QZSS &&
+               gsaInfo[system].valid && isFreshAuxTimestamp(gsaInfo[system].lastUpdate) &&
+               gsaSatelliteUsedSnapshot(system, prn);
     }
 
     uint16_t gsaSatellitesUsedTotal() const
@@ -615,6 +648,7 @@ class TinyGPSPlus
     uint8_t curTermOffset = 0;
     int8_t trackedSatellitesIndex = -1; // current GSV satellite slot, -1 means invalid
     uint8_t currentGSVSystem = TINYGPS_GNSS_UNKNOWN;
+    bool currentGSVTalkerIsGP = false; // L76K uses GP for both GPS and QZSS GSV
 
     // GSV/NMEA 4.x state. The optional signal ID is used to keep multiple
     // $GNGSV signal groups from erasing each other.
@@ -639,6 +673,7 @@ class TinyGPSPlus
     uint8_t currentGSATalkerSystem = TINYGPS_GNSS_UNKNOWN;
     uint8_t pendingGSASystem = TINYGPS_GNSS_UNKNOWN;
     uint8_t pendingGSAUsed = 0;
+    uint16_t pendingGSAIds[12] = {};
     uint8_t pendingGSAFixType = 0;
     uint16_t pendingGSAPDOP = 0;
     uint16_t pendingGSAHDOP = 0;
@@ -646,6 +681,7 @@ class TinyGPSPlus
 
     char pendingGLLStatus = 'V';
     char pendingGLLMode = 'N';
+    char pendingVTGMode = 'N';
 
     uint8_t pendingZDADay = 0;
     uint8_t pendingZDAMonth = 0;

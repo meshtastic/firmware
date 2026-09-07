@@ -80,21 +80,25 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
     display->drawString(x + 2, y + 14, top);
 
     char systems[46];
-    snprintf(systems, sizeof(systems), "GPS:%u GLO:%u BDS:%u",
+    snprintf(systems, sizeof(systems), "GPS:%u GLO:%u BDS:%u QZS:%u",
              (unsigned)(live ? gps->getSatellitesUsedBySystem(TINYGPS_GNSS_GPS)
                              : gps->getSatellitesUsedBySystemSnapshot(TINYGPS_GNSS_GPS)),
              (unsigned)(live ? gps->getSatellitesUsedBySystem(TINYGPS_GNSS_GLONASS)
                              : gps->getSatellitesUsedBySystemSnapshot(TINYGPS_GNSS_GLONASS)),
              (unsigned)(live ? gps->getSatellitesUsedBySystem(TINYGPS_GNSS_BEIDOU)
-                             : gps->getSatellitesUsedBySystemSnapshot(TINYGPS_GNSS_BEIDOU)));
-    display->drawString(x + 2, y + 27, systems);
+                             : gps->getSatellitesUsedBySystemSnapshot(TINYGPS_GNSS_BEIDOU)),
+             (unsigned)(live ? gps->getSatellitesUsedBySystem(TINYGPS_GNSS_QZSS)
+                             : gps->getSatellitesUsedBySystemSnapshot(TINYGPS_GNSS_QZSS)));
+    display->drawString(x + 2, y + 28, systems);
 
     char dop[48];
     snprintf(dop, sizeof(dop), "Fix:%u P:%u H:%u V:%u", (unsigned)fix, (unsigned)pdop, (unsigned)hdop, (unsigned)vdop);
-    display->drawString(x + 2, y + 41, dop);
+    display->drawString(x + 2, y + 38, dop);
 
-    display->drawHorizontalLine(x + 2, y + 57, w - 4);
-    display->drawString(x + 2, y + 57, live ? "SYS ID EL  AZ  SNR" : "LAST SYS ID EL AZ SNR");
+    display->drawHorizontalLine(x + 2, y + 51, w - 4);
+    // '*' means this SVID is explicitly listed by the checksum-valid GSA
+    // sentence as used in the navigation solution.
+    display->drawString(x + 2, y + 53, live ? "U SYS ID EL AZ SNR" : "LAST U SYS ID EL AZ SNR");
 
     const auto *sats = gps->getTrackedSatellites();
     const size_t cap = gps->getTrackedSatelliteCapacity();
@@ -107,7 +111,11 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
             list[count++] = &sats[i];
     }
 
-    std::sort(list, list + count, [](const auto *a, const auto *b) {
+    std::sort(list, list + count, [live](const auto *a, const auto *b) {
+        const bool aUsed = live ? gps->isSatelliteUsed(*a) : gps->isSatelliteUsedSnapshot(*a);
+        const bool bUsed = live ? gps->isSatelliteUsed(*b) : gps->isSatelliteUsedSnapshot(*b);
+        if (aUsed != bUsed)
+            return aUsed > bUsed;
         if (a->tracked != b->tracked)
             return a->tracked > b->tracked;
         if (a->strength != b->strength)
@@ -117,7 +125,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
         return a->prn < b->prn;
     });
 
-    int16_t yy = y + 72;
+    int16_t yy = y + 54;
     const int16_t bottom = y + h - 4;
 
     if (count == 0) {
@@ -133,15 +141,18 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
 
     for (size_t i = 0; i < count && yy + 11 <= bottom; ++i) {
         char row[40];
+        const bool usedInFix = live ? gps->isSatelliteUsed(*list[i]) : gps->isSatelliteUsedSnapshot(*list[i]);
+        const char usedMark = usedInFix ? '*' : ' ';
         if (list[i]->tracked)
-            snprintf(row, sizeof(row), "%-3s %3u %2u %3u %3u", systemName(list[i]->system), (unsigned)list[i]->prn,
-                     (unsigned)list[i]->elevation, (unsigned)list[i]->azimuth, (unsigned)list[i]->strength);
+            snprintf(row, sizeof(row), "%c %-3s %3u %2u %3u %3u", usedMark, systemName(list[i]->system),
+                     (unsigned)list[i]->prn, (unsigned)list[i]->elevation, (unsigned)list[i]->azimuth,
+                     (unsigned)list[i]->strength);
         else
-            snprintf(row, sizeof(row), "%-3s %3u %2u %3u  --", systemName(list[i]->system), (unsigned)list[i]->prn,
-                     (unsigned)list[i]->elevation, (unsigned)list[i]->azimuth);
+            snprintf(row, sizeof(row), "%c %-3s %3u %2u %3u  --", usedMark, systemName(list[i]->system),
+                     (unsigned)list[i]->prn, (unsigned)list[i]->elevation, (unsigned)list[i]->azimuth);
 
         display->drawString(x + 2, yy, row);
-        yy += 13;
+        yy += 12;
     }
 }
 } // namespace graphics::SatellitesRenderer

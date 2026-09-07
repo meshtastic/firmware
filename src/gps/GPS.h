@@ -151,6 +151,11 @@ class GPS : private concurrency::OSThread
     const TinyGPSTrackedSattelites *getTrackedSatellites() const { return reader.trackedSatellites; }
     size_t getTrackedSatelliteCapacity() const { return TINYGPS_MAX_SATS; }
     bool isTrackedSatelliteFresh(const TinyGPSTrackedSattelites &sat) const { return reader.isTrackedSatelliteFresh(sat); }
+    bool isSatelliteUsed(const TinyGPSTrackedSattelites &sat) const { return reader.gsaSatelliteUsed(sat.system, sat.prn); }
+    bool isSatelliteUsedSnapshot(const TinyGPSTrackedSattelites &sat) const
+    {
+        return reader.gsaSatelliteUsedSnapshot(sat.system, sat.prn);
+    }
 
     uint16_t getSatellitesUsed() const { return reader.gsaSatellitesUsedTotal(); }
     uint16_t getSatellitesTracked() const { return reader.satellitesTracked(); }
@@ -177,34 +182,51 @@ class GPS : private concurrency::OSThread
     uint16_t getGsaHDOP() const { return reader.gsaHDOP(); }
     uint16_t getGsaVDOP() const { return reader.gsaVDOP(); }
 
-    // Fresh RMC Course-over-Ground for the compass fallback.
-    // This is deliberately read-only: it must not consume TinyGPS++'s
-    // isUpdated() flags or influence GPS scheduling/power management.
+    // Fresh Course-over-Ground for the compass fallback. RMC is always the
+    // primary source. Only if a complete fresh RMC Course+Speed pair is absent
+    // do we use a checksum-valid fresh VTG pair. This helper is read-only and
+    // cannot affect TinyGPS++ update flags, GPS publishing, or power scheduling.
     bool getFreshCourseOverGround(float &courseDeg, float &speedKmph, uint32_t &sampleMillis)
     {
         constexpr uint32_t COURSE_MAX_AGE_MS = 5000U;
 
-        // A sleeping receiver has no live course, even if the last RMC value
-        // is still stored in TinyGPS++. Require the same valid fix used by
-        // the rest of the internal GNSS path.
+        // A sleeping receiver has no live course, even if old values remain
+        // stored. Require the same valid internal GNSS lock as the rest of the
+        // navigation path.
         if (powerState != GPS_ACTIVE || !hasLock())
             return false;
 
-        if (!reader.course.isValid() || !reader.speed.isValid())
+        // Priority 1: RMC.
+        if (reader.course.isValid() && reader.speed.isValid()) {
+            const uint32_t courseAge = reader.course.age();
+            const uint32_t speedAge = reader.speed.age();
+            if (courseAge <= COURSE_MAX_AGE_MS && speedAge <= COURSE_MAX_AGE_MS) {
+                const uint32_t rawCourse = reader.course.peekValue(); // 1/100 degree
+                if (rawCourse < 36000U) {
+                    courseDeg = rawCourse * 0.01f;
+                    speedKmph = reader.speed.peekValue() * (0.01f * _GPS_KMPH_PER_KNOT);
+                    sampleMillis = millis() - ((courseAge > speedAge) ? courseAge : speedAge);
+                    return true;
+                }
+            }
+        }
+
+        // Priority 2: VTG fallback. Never overwrite or modify RMC state.
+        if (!reader.vtgInfo.valid || !reader.vtgCourse.isValid() || !reader.vtgSpeed.isValid())
             return false;
 
-        const uint32_t courseAge = reader.course.age();
-        const uint32_t speedAge = reader.speed.age();
-        if (courseAge > COURSE_MAX_AGE_MS || speedAge > COURSE_MAX_AGE_MS)
+        const uint32_t vtgCourseAge = reader.vtgCourse.age();
+        const uint32_t vtgSpeedAge = reader.vtgSpeed.age();
+        if (vtgCourseAge > COURSE_MAX_AGE_MS || vtgSpeedAge > COURSE_MAX_AGE_MS)
             return false;
 
-        const uint32_t rawCourse = reader.course.peekValue(); // 1/100 degree from RMC
-        if (rawCourse >= 36000U)
+        const uint32_t rawVtgCourse = reader.vtgCourse.peekValue();
+        if (rawVtgCourse >= 36000U)
             return false;
 
-        courseDeg = rawCourse * 0.01f;
-        speedKmph = reader.speed.peekValue() * (0.01f * _GPS_KMPH_PER_KNOT);
-        sampleMillis = millis() - courseAge;
+        courseDeg = rawVtgCourse * 0.01f;
+        speedKmph = reader.vtgSpeed.peekValue() * (0.01f * _GPS_KMPH_PER_KNOT);
+        sampleMillis = millis() - ((vtgCourseAge > vtgSpeedAge) ? vtgCourseAge : vtgSpeedAge);
         return true;
     }
 

@@ -501,8 +501,8 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 /**
  * Return the best non-magnetometer movement heading available.
  *
- * Prefer fresh, checksum-valid RMC Course-over-Ground while moving, then fall
- * back to the established 10 m position-baseline bearing.
+ * Prefer fresh, checksum-valid Course-over-Ground while moving (RMC first,
+ * VTG fallback), then fall back to the established 10 m position-baseline bearing.
  */
 float Screen::estimatedHeading(double lat, double lon)
 {
@@ -510,7 +510,8 @@ float Screen::estimatedHeading(double lat, double lon)
     static float positionHeading = -1.0f;
     static uint32_t lastPositionHeadingAtMs = 0;
 
-    // Separate state for RMC Course-over-Ground. Keeping this independent of
+    // Separate state for GNSS Course-over-Ground (RMC first, VTG fallback).
+    // Keeping this independent of
     // the 10 m position baseline prevents one fallback from poisoning the
     // other when the GNSS receiver sleeps or wakes again.
     static float filteredRmcHeading = -1.0f;
@@ -532,8 +533,9 @@ float Screen::estimatedHeading(double lat, double lon)
         (effectiveUpdateIntervalSecs > (UINT32_MAX / 2000U)) ? UINT32_MAX : (effectiveUpdateIntervalSecs * 2000U);
 
 #if !MESHTASTIC_EXCLUDE_GPS
-    // Preferred GPS fallback: checksum-valid, fresh RMC Course-over-Ground.
-    // RMC course is movement direction, so reject very low speeds where GNSS
+    // Preferred GPS fallback: checksum-valid fresh COG. GPS.h chooses RMC
+    // first and VTG only when RMC is missing/stale. COG is movement direction,
+    // so reject very low speeds where GNSS
     // COG becomes noisy and let the longer 10 m position baseline take over.
     if (gps) {
         float rmcCourseDeg = 0.0f;
@@ -542,7 +544,7 @@ float Screen::estimatedHeading(double lat, double lon)
         if (gps->getFreshCourseOverGround(rmcCourseDeg, rmcSpeedKmph, rmcSampleMs)) {
             constexpr float RMC_MIN_SPEED_KMPH = 1.5f;
             if (rmcSpeedKmph >= RMC_MIN_SPEED_KMPH) {
-                // Only feed the filter once per actual RMC sample. The UI can
+                // Only feed the filter once per actual GNSS COG sample. The UI can
                 // call estimatedHeading() much faster than the receiver emits NMEA.
                 if (rmcSampleMs != lastRmcSampleMs) {
                     // After a long sleep/outage, adopt the first new course
@@ -586,8 +588,8 @@ float Screen::estimatedHeading(double lat, double lon)
         }
     }
 
-    // Do not carry an old RMC filter state across a long receiver sleep. A new
-    // valid RMC sample after wake will then become the new heading immediately.
+    // Do not carry an old COG filter state across a long receiver sleep. A new
+    // valid RMC/VTG sample after wake will then become the new heading immediately.
     if (lastRmcSampleMs != 0 && (uint32_t)(now - lastRmcSampleMs) > 10000U) {
         filteredRmcHeading = -1.0f;
         lastRmcSampleMs = 0;
