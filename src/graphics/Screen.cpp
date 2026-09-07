@@ -274,9 +274,16 @@ static inline float wrapDelta180(float delta)
     return delta;
 }
 
+// File-local freshness timestamp keeps this enhancement compatible with the
+// existing Screen.h API: hasHeading() still returns hasCompass.
+static uint32_t lastHardwareCompassUpdateMs = 0;
+
 void Screen::setHeading(float heading)
 {
     const float wrappedHeading = wrapHeading360(heading);
+    // Refresh even when the delta is below the display filter threshold: the
+    // sensor is alive even if the physical heading did not change.
+    lastHardwareCompassUpdateMs = millis();
 
     if (!hasCompass) {
         hasCompass = true;
@@ -492,16 +499,23 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 #endif
 
 /**
- * Given a recent lat/lon return a guess of the heading the user is walking on.
+ * Return the best non-magnetometer movement heading available.
  *
- * We keep a series of "after you've gone 10 meters, what is your heading since
- * the last reference point?"
+ * Prefer fresh, checksum-valid RMC Course-over-Ground while moving, then fall
+ * back to the established 10 m position-baseline bearing.
  */
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b = -1.0f;
-    static uint32_t lastHeadingAtMs = 0;
+    static float positionHeading = -1.0f;
+    static uint32_t lastPositionHeadingAtMs = 0;
+
+    // Separate state for RMC Course-over-Ground. Keeping this independent of
+    // the 10 m position baseline prevents one fallback from poisoning the
+    // other when the GNSS receiver sleeps or wakes again.
+    static float filteredRmcHeading = -1.0f;
+    static uint32_t lastRmcSampleMs = 0;
+
     const uint32_t now = millis();
     const uint32_t gpsUpdateIntervalSecs =
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
@@ -517,31 +531,92 @@ float Screen::estimatedHeading(double lat, double lon)
     const uint32_t headingStaleMs =
         (effectiveUpdateIntervalSecs > (UINT32_MAX / 2000U)) ? UINT32_MAX : (effectiveUpdateIntervalSecs * 2000U);
 
-    if (oldLat == 0) {
-        // Need at least two position points before we can infer heading.
-        oldLat = lat;
-        oldLon = lon;
+#if !MESHTASTIC_EXCLUDE_GPS
+    // Preferred GPS fallback: checksum-valid, fresh RMC Course-over-Ground.
+    // RMC course is movement direction, so reject very low speeds where GNSS
+    // COG becomes noisy and let the longer 10 m position baseline take over.
+    if (gps) {
+        float rmcCourseDeg = 0.0f;
+        float rmcSpeedKmph = 0.0f;
+        uint32_t rmcSampleMs = 0;
+        if (gps->getFreshCourseOverGround(rmcCourseDeg, rmcSpeedKmph, rmcSampleMs)) {
+            constexpr float RMC_MIN_SPEED_KMPH = 1.5f;
+            if (rmcSpeedKmph >= RMC_MIN_SPEED_KMPH) {
+                // Only feed the filter once per actual RMC sample. The UI can
+                // call estimatedHeading() much faster than the receiver emits NMEA.
+                if (rmcSampleMs != lastRmcSampleMs) {
+                    // After a long sleep/outage, adopt the first new course
+                    // directly instead of slowly blending from an hours-old heading.
+                    if (filteredRmcHeading < 0.0f || lastRmcSampleMs == 0 ||
+                        (uint32_t)(now - lastRmcSampleMs) > 10000U) {
+                        filteredRmcHeading = wrapHeading360(rmcCourseDeg);
+                    } else {
+                        const float delta = wrapDelta180(rmcCourseDeg - filteredRmcHeading);
+                        const float absDelta = (delta >= 0.0f) ? delta : -delta;
 
-        return b;
+                        // Speed-adaptive circular smoothing. Walking gets more
+                        // damping; faster motion follows turns more promptly.
+                        float alpha = 0.35f;
+                        float maxStep = 30.0f;
+                        if (rmcSpeedKmph >= 15.0f) {
+                            alpha = 0.75f;
+                            maxStep = 120.0f;
+                        } else if (rmcSpeedKmph >= 5.0f) {
+                            alpha = 0.55f;
+                            maxStep = 60.0f;
+                        }
+
+                        // A large, clearly intentional turn should not be
+                        // over-damped, especially once moving at useful speed.
+                        if (absDelta > 60.0f && rmcSpeedKmph >= 5.0f)
+                            alpha = (alpha < 0.75f) ? 0.75f : alpha;
+
+                        float step = delta * alpha;
+                        if (step > maxStep)
+                            step = maxStep;
+                        else if (step < -maxStep)
+                            step = -maxStep;
+
+                        filteredRmcHeading = wrapHeading360(filteredRmcHeading + step);
+                    }
+                    lastRmcSampleMs = rmcSampleMs;
+                }
+                return filteredRmcHeading;
+            }
+        }
     }
 
-    float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
-    if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
-        if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
-            // Heading is stale after prolonged no-movement; force reacquire.
-            b = -1.0f;
+    // Do not carry an old RMC filter state across a long receiver sleep. A new
+    // valid RMC sample after wake will then become the new heading immediately.
+    if (lastRmcSampleMs != 0 && (uint32_t)(now - lastRmcSampleMs) > 10000U) {
+        filteredRmcHeading = -1.0f;
+        lastRmcSampleMs = 0;
+    }
+#endif
+
+    // Final fallback: infer movement direction from two positions at least
+    // 10 metres apart. This also works with a valid external/phone position.
+    if (oldLat == 0) {
+        oldLat = lat;
+        oldLon = lon;
+        return positionHeading;
+    }
+
+    const float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
+    if (d < 10) {
+        if (lastPositionHeadingAtMs != 0 && (now - lastPositionHeadingAtMs) >= headingStaleMs) {
+            positionHeading = -1.0f;
             oldLat = lat;
             oldLon = lon;
         }
-        return b;
+        return positionHeading;
     }
 
-    b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
+    positionHeading = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
-    lastHeadingAtMs = now;
-
-    return b;
+    lastPositionHeadingAtMs = now;
+    return positionHeading;
 }
 
 /// We will skip one node - the one for us, so we just blindly loop over all
@@ -1095,6 +1170,13 @@ static uint32_t lastScreenTransition;
 
 int32_t Screen::runOnce()
 {
+    // A hardware heading is preferred only while the sensor keeps updating.
+    // If it stops for 3 s, release hasCompass so CompassRenderer can use the
+    // GPS/RMC fallback. A later sensor sample immediately takes priority again.
+    constexpr uint32_t COMPASS_SENSOR_MAX_AGE_MS = 3000U;
+    if (hasCompass && (uint32_t)(millis() - lastHardwareCompassUpdateMs) > COMPASS_SENSOR_MAX_AGE_MS)
+        hasCompass = false;
+
     // If we don't have a screen, don't ever spend any CPU for us.
     if (!useDisplay) {
         enabled = false;
@@ -2157,8 +2239,8 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         lastGpsDisplayFreshSats = currentFreshSats;
 
         if (showingNormalScreen && screenOn) {
-            if (availabilityChanged || lockChanged || connectionChanged || hasTimeChanged || searchingChanged ||
-                sleepingChanged || freshSatsChanged) {
+            if (availabilityChanged || lockChanged || connectionChanged || hasTimeChanged || searchingChanged || sleepingChanged ||
+                freshSatsChanged) {
                 // Important semantic transitions (especially >0 -> 0 sats)
                 // must reach a physical E-Ink panel immediately.
                 forceDisplay(true);

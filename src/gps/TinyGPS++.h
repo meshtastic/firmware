@@ -148,6 +148,10 @@ template <typename T> struct TinyGPSDatum {
         return val;
     }
 
+    // Read the last checksum-committed value without consuming FLAG_UPDATED.
+    // UI/diagnostic fallbacks must never change the parser state seen by GPS.cpp.
+    T peekValue() const { return val; }
+
     TinyGPSDatum() : flags(FLAG_DEFAULT), val(T()) {}
 
   protected:
@@ -257,12 +261,12 @@ struct TinyGPSAltitude : public TinyGPSDatum<int32_t> {
 };
 
 struct TinyGPSTrackedSattelites {
-    uint8_t system;      // TinyGPSGnssSystem
-    uint16_t prn;        // Satellite ID / SVID
-    uint8_t elevation;   // degrees above horizon: 0..90
-    uint16_t azimuth;    // degrees from true north: 0..359
-    uint8_t strength;    // C/N0 (commonly shown as SNR) in dB-Hz
-    bool tracked;        // true if the GSV SNR/CN0 field is present
+    uint8_t system;    // TinyGPSGnssSystem
+    uint16_t prn;      // Satellite ID / SVID
+    uint8_t elevation; // degrees above horizon: 0..90
+    uint16_t azimuth;  // degrees from true north: 0..359
+    uint8_t strength;  // C/N0 (commonly shown as SNR) in dB-Hz
+    bool tracked;      // true if the GSV SNR/CN0 field is present
     uint32_t lastUpdate; // millis() of last checksum-valid GSV sentence for this satellite
 };
 
@@ -348,9 +352,15 @@ class TinyGPSPlus
         return sat.prn != 0 && isFreshAuxTimestamp(sat.lastUpdate);
     }
 
-    uint32_t gsvAge() const { return lastGSVUpdate ? (uint32_t)(millis() - lastGSVUpdate) : static_cast<uint32_t>(ULONG_MAX); }
+    uint32_t gsvAge() const
+    {
+        return lastGSVUpdate ? (uint32_t)(millis() - lastGSVUpdate) : static_cast<uint32_t>(ULONG_MAX);
+    }
 
-    uint32_t ggaAge() const { return lastGGAUpdate ? (uint32_t)(millis() - lastGGAUpdate) : static_cast<uint32_t>(ULONG_MAX); }
+    uint32_t ggaAge() const
+    {
+        return lastGGAUpdate ? (uint32_t)(millis() - lastGGAUpdate) : static_cast<uint32_t>(ULONG_MAX);
+    }
 
     // Raw last-valid GSA/GSV snapshot helpers. These deliberately ignore age.
     // They are for UI/diagnostics while the receiver is IDLE/SLEEPING only;
@@ -470,7 +480,8 @@ class TinyGPSPlus
     uint8_t gsaFixType() const
     {
         uint8_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].fixType > best)
                 best = gsaInfo[s].fixType;
         }
@@ -480,9 +491,11 @@ class TinyGPSPlus
     uint16_t gsaPDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].pdop > 0 &&
-                (best == 0 || gsaInfo[s].pdop < best)) {
+                (best == 0 || gsaInfo[s].pdop < best))
+            {
                 best = gsaInfo[s].pdop;
             }
         }
@@ -492,9 +505,11 @@ class TinyGPSPlus
     uint16_t gsaHDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].hdop > 0 &&
-                (best == 0 || gsaInfo[s].hdop < best)) {
+                (best == 0 || gsaInfo[s].hdop < best))
+            {
                 best = gsaInfo[s].hdop;
             }
         }
@@ -504,9 +519,11 @@ class TinyGPSPlus
     uint16_t gsaVDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
+        {
             if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].vdop > 0 &&
-                (best == 0 || gsaInfo[s].vdop < best)) {
+                (best == 0 || gsaInfo[s].vdop < best))
+            {
                 best = gsaInfo[s].vdop;
             }
         }
@@ -569,7 +586,12 @@ class TinyGPSPlus
     // 4 = RTK fixed, 5 = RTK float, etc.
     uint8_t fixQuality() const { return fixQ; }
 
-    enum { FLAG_DEFAULT = 0, FLAG_IS_CHECKSUM_TERM = (1 << 0), FLAG_SENTENCE_HAS_FIX = (1 << 1) };
+    enum
+    {
+        FLAG_DEFAULT = 0,
+        FLAG_IS_CHECKSUM_TERM = (1 << 0),
+        FLAG_SENTENCE_HAS_FIX = (1 << 1)
+    };
 
     void setSentenceHasFix(bool const i_value)
     {
