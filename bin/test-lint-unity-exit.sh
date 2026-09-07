@@ -12,8 +12,9 @@
 # anything" is what catches a rule that reports the right number of findings in the wrong places, or
 # that collapses two findings on one line into one.
 #
-# Not a Unity suite and not counted in test/native-suite-count - same arrangement as
-# bin/test-state-check.sh, and for the same reason: it asserts the behaviour of a process.
+# Not a Unity suite and not a test_* directory, so outside the suite count run-tests.sh derives
+# from test/ - same arrangement as bin/test-state-check.sh, and for the same reason: it asserts
+# the behaviour of a process.
 #
 # Usage: ./bin/test-lint-unity-exit.sh   (exit 0 = all fixtures behaved)
 

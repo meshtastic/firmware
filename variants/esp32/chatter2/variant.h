@@ -5,7 +5,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 // Debugging
-// #define GPS_DEBUG
+// #define GPS_DEBUG 1
 
 // Lora
 #define USE_LLCC68 // Original Chatter2 with LLCC68 module

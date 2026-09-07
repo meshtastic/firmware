@@ -21,7 +21,7 @@ void test_timestamp_zeroed_when_rx_time_absent()
     std::string json = MeshPacketSerializer::JsonSerialize(&packet, false);
     Json::Value root = parse_json(json);
     TEST_ASSERT_TRUE(root.isMember("timestamp"));
-    TEST_ASSERT_EQUAL_UINT32(0u, root["timestamp"].asUInt()); // must not leak the millis() placeholder
+    TEST_ASSERT_EQUAL_UINT32(0u, root["timestamp"].asUInt()); // must not leak the uptime placeholder
 }
 
 void test_encrypted_timestamp_zeroed_when_rx_time_absent()

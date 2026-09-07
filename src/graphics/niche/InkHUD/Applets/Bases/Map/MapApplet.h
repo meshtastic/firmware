@@ -16,7 +16,9 @@ The base applet doesn't handle any events; this is left to the derived applets.
 
 #include "configuration.h"
 #include <list>
+#include <vector>
 
+#include "WaypointStore.h"
 #include "graphics/niche/InkHUD/Applet.h"
 
 #include "GPSStatus.h"
@@ -41,6 +43,7 @@ class MapApplet : public Applet
     void zoomIn();
     void zoomOut();
     void resetZoom();
+    bool focusWaypoint(uint32_t waypointId);
     bool isZoomLocked() const { return s_zoomLocked; }
     bool canZoomIn() const;
     bool canZoomOut() const;
@@ -57,6 +60,9 @@ class MapApplet : public Applet
     int onGpsStatusUpdate(const meshtastic::Status *status);
     CallbackObserver<MapApplet, const meshtastic::Status *> gpsStatusObserver =
         CallbackObserver<MapApplet, const meshtastic::Status *>(this, &MapApplet::onGpsStatusUpdate);
+    int onWaypointStoreChanged(const WaypointStore *store);
+    CallbackObserver<MapApplet, const WaypointStore *> waypointStoreObserver =
+        CallbackObserver<MapApplet, const WaypointStore *>(this, &MapApplet::onWaypointStoreChanged);
 
     static bool s_zoomLocked;
     static int s_lockedZoom;
@@ -68,6 +74,24 @@ class MapApplet : public Applet
         float northMeters = 0; // Meters north of map center. Negative if south.
         uint8_t hopsAway = 0;  // Determines marker size
     };
+
+    struct WaypointMarker {
+        float eastMeters = 0;
+        float northMeters = 0;
+        uint32_t id = 0;
+        uint32_t icon = 0;
+        uint32_t geofenceRadiusMeters = 0;
+        bool hasMarker = false;
+        bool hasBoundingBox = false;
+        float boxWestMeters = 0;
+        float boxEastMeters = 0;
+        float boxSouthMeters = 0;
+        float boxNorthMeters = 0;
+    };
+
+    bool mapWaypointIconGlyph(uint32_t codepoint, std::string &glyph);
+    uint8_t fallbackBadgeNumber(const WaypointMarker &entry);
+    void drawWaypointFallbackMarker(const WaypointMarker &entry, int16_t x, int16_t y);
 
     Marker calculateMarker(float lat, float lng, uint8_t hopsAway);
     void calculateAllMarkers();
@@ -81,8 +105,10 @@ class MapApplet : public Applet
     bool centerIsOurNode = false; // True if map is centered on our own position (GPS or phone)
 
     std::list<Marker> markers;
+    std::vector<WaypointMarker> waypointMarkers;
     uint32_t widthMeters = 0;  // Map width: meters
     uint32_t heightMeters = 0; // Map height: meters
+    uint32_t focusedWaypointId = 0;
 };
 
 } // namespace NicheGraphics::InkHUD

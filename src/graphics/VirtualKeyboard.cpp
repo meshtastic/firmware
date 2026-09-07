@@ -666,7 +666,13 @@ void VirtualKeyboard::handleLongPress()
         break;
     case VK_ESC:
         if (onTextEntered) {
-            onTextEntered("");
+            // Copy-and-clear before invoking, like handlePress/submitText: the callback can
+            // destroy this keyboard (OnScreenKeyboardModule::stop), so the member must not be
+            // the std::function still executing on the stack.
+            std::function<void(const std::string &)> callback = onTextEntered;
+            onTextEntered = nullptr;
+            inputText = "";
+            callback("");
         }
         break;
     default:

@@ -115,7 +115,7 @@ bool GpsdSerial::connectToGpsd()
     std::string portStr = std::to_string(_port);
 
     if (getaddrinfo(_host.c_str(), portStr.c_str(), &hints, &res) != 0 || !res) {
-        LOG_WARN("gpsdSerial: could not resolve %s", _host.c_str());
+        LOG_WARN("gpsdSerial: can't resolve %s", _host.c_str());
         return false;
     }
 

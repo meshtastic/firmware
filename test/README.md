@@ -33,6 +33,8 @@ Randomisation costs one `pio` invocation per suite (about 4.7s each), because Pl
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
+**Never add `--without-building` to a test run.** PlatformIO links every native test program to the single `$BUILD_DIR/$PROGNAME` path and attributes Unity output by text alone, so a run that only builds beforehand executes whichever suite was linked last under _every_ suite's name - all reporting PASSED. Build once with `--without-testing` to warm the shared src objects if you like; the run itself must still build. `bin/check-test-attribution.py` grades the JUnit reports for exactly this and is wired into both `bin/run-tests.sh` (RED) and CI.
+
 **Raw `pio test` (no sanitizers, no verdict logic)** - use when you need to override the env or inspect verbose Unity output:
 
 ```bash
@@ -467,8 +469,8 @@ Unity suite, because what it asserts - the exit status and printed report of
 `meshtasticd --check`, and the fact that a normal run still refuses a bad config - are
 properties of the process, not of a linkable function. Fixtures live in
 `test/fixtures/portduino-config/` (see the README there); CI runs it in
-`test_native.yml`. It is not counted in `native-suite-count`, which only tracks `test_*`
-directories.
+`test_native.yml`. It is not a `test_*` directory, so it sits outside the suite count the
+harness derives from `test/`.
 
 ```bash
 pio run -e native && ./bin/test-config-check.sh
@@ -476,10 +478,11 @@ pio run -e native && ./bin/test-config-check.sh
 
 ## Existing Test Suites
 
-**This table is a description, not an inventory.** The canonical suite total lives in
-`test/native-suite-count`, is machine-checked against `test/test_*` on every full run and in CI
-(`test_native.yml`), and is the only number that should be trusted or quoted. Entries below carry
-per-suite descriptions the count cannot; do not infer completeness from the row count.
+**This table is a description, not an inventory.** The canonical suite total is the number of
+`test_*` directories under `test/`, detected on the fly by `bin/run-tests.sh` on every full run
+and cross-checked against the suites that actually ran. That derived count is the only number
+that should be trusted or quoted. Entries below carry per-suite descriptions the count cannot;
+do not infer completeness from the row count.
 
 | Suite                        | Module Under Test             |
 | ---------------------------- | ----------------------------- |

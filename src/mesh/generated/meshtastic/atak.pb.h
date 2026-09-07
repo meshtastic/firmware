@@ -332,7 +332,7 @@ typedef enum _meshtastic_CotType {
     /* y-: TAKTALK room/membership broadcast. Payload carried via the
  TakTalkRoomData typed variant (sender_callsign, room_id, room_name,
  participants). The CoT type literally has a trailing dash and no
- second atom - not a typo. */
+ second atom — not a typo. */
     meshtastic_CotType_CotType_y = 126
 } meshtastic_CotType;
 
@@ -380,7 +380,7 @@ typedef enum _meshtastic_DrawnShape_Kind {
     /* u-r-b-bullseye: Bullseye ring with range rings and bearing reference */
     meshtastic_DrawnShape_Kind_Kind_Bullseye = 7,
     /* u-d-c-e: Ellipse with distinct major/minor axes (same storage as
- Kind_Circle - uses major_cm/minor_cm/angle_deg - but receivers
+ Kind_Circle — uses major_cm/minor_cm/angle_deg — but receivers
  render it as a non-circular ellipse rather than a round circle). */
     meshtastic_DrawnShape_Kind_Kind_Ellipse = 8,
     /* u-d-v: 2D vehicle outline drawn on the map. Vertices carry the
@@ -400,7 +400,7 @@ typedef enum _meshtastic_DrawnShape_Kind {
  end of parse; builder uses it to decide which of <strokeColor> /
  <fillColor> to emit in the reconstructed XML. */
 typedef enum _meshtastic_DrawnShape_StyleMode {
-    /* Unspecified - receiver infers from which color fields are non-zero. */
+    /* Unspecified — receiver infers from which color fields are non-zero. */
     meshtastic_DrawnShape_StyleMode_StyleMode_Unspecified = 0,
     /* Stroke only. No <fillColor> in the source XML. Used for polylines,
  ranging lines, bullseye rings. */
@@ -417,7 +417,7 @@ typedef enum _meshtastic_DrawnShape_StyleMode {
  alone is ambiguous (e.g. a-u-G could be a 2525 symbol or a custom icon
  depending on the iconset path). */
 typedef enum _meshtastic_Marker_Kind {
-    /* Unspecified - fall back to TAKPacketV2.cot_type_id */
+    /* Unspecified — fall back to TAKPacketV2.cot_type_id */
     meshtastic_Marker_Kind_Kind_Unspecified = 0,
     /* b-m-p-s-m: Spot map marker */
     meshtastic_Marker_Kind_Kind_Spot = 1,
@@ -680,10 +680,10 @@ typedef struct _meshtastic_AircraftTrack {
  hundred meters of the anchor has per-vertex deltas in the ±10^4 range.
  Under sint32+zigzag those encode as 2 bytes each (tag+varint), versus the
  4 bytes that sfixed32 would always require. At 32 vertices that is ~128
- bytes of savings - the difference between fitting under the LoRa MTU or
+ bytes of savings — the difference between fitting under the LoRa MTU or
  not. Absolute coordinates (values ~10^9) would cost sint32 varint 5 bytes
  per field, which is why TAKPacketV2's top-level latitude_i / longitude_i
- stay sfixed32 - only small values win with sint32. */
+ stay sfixed32 — only small values win with sint32. */
 typedef struct _meshtastic_CotGeoPoint {
     /* Latitude delta from TAKPacketV2.latitude_i, in 1e-7 degree units.
  Add to the enclosing event's latitude_i to recover the absolute latitude. */
@@ -791,7 +791,7 @@ typedef struct _meshtastic_Marker {
 
  Covers CoT type u-rb-a. The anchor position is on
  TAKPacketV2.latitude_i/longitude_i; the target endpoint is carried as a
- CotGeoPoint - same delta-from-anchor encoding used by DrawnShape.vertices
+ CotGeoPoint — same delta-from-anchor encoding used by DrawnShape.vertices
  so a self-anchored RAB (common case) encodes in zero bytes. */
 typedef struct _meshtastic_RangeAndBearing {
     /* Target/anchor endpoint (delta-encoded from TAKPacketV2.latitude_i/longitude_i). */
@@ -899,12 +899,12 @@ typedef struct _meshtastic_CasevacReport {
  same as the envelope callsign but ATAK sometimes carries a distinct
  ops-number here. */
     pb_callback_t title;
-    /* Primary medline free-text - the single most clinically important line
+    /* Primary medline free-text — the single most clinically important line
  on a MEDLINE form (e.g. "2 urgent litter patients, smoke on approach").
  MUST be preserved under MTU pressure as long as any casevac is sent. */
     pb_callback_t medline_remarks;
     /* Line 3 (newer ATAK format): patient counts by precedence level.
- Coexists with the enum-style `precedence` field (tag 1) - older ATAK
+ Coexists with the enum-style `precedence` field (tag 1) — older ATAK
  emits a single enum, newer ATAK emits these counts, and both can be
  set simultaneously. Senders populate whichever style(s) the source
  XML had; receivers prefer counts when non-zero. */
@@ -946,19 +946,19 @@ typedef struct _meshtastic_CasevacReport {
  (e.g. "Primary HLZ is soccer field"). */
     pb_callback_t hlz_remarks;
     /* Per-patient clinical records. Each entry is one patient's ZMIST card
- (Zap number / Mechanism / Injuries / Signs / Treatment). Repeatable -
+ (Zap number / Mechanism / Injuries / Signs / Treatment). Repeatable —
  a mass-casualty event can carry 1-6 entries in practice, limited by
  the 237 B LoRa MTU. */
     pb_callback_t zmist;
 } meshtastic_CasevacReport;
 
-/* Per-patient clinical summary record - one entry per patient in a CASEVAC.
+/* Per-patient clinical summary record — one entry per patient in a CASEVAC.
  Maps directly to ATAK's <zMist> child element inside <zMistsMap>.
  All fields are optional free-text; senders populate what they have. */
 typedef struct _meshtastic_ZMistEntry {
     /* Patient identifier / sequence label (e.g. "ZMIST-1", "ZMIST-2"). */
     pb_callback_t title;
-    /* Zap number - unique patient tracking ID (often a terse code like
+    /* Zap number — unique patient tracking ID (often a terse code like
  "Gunshot" or a serial). */
     pb_callback_t z;
     /* Mechanism of injury (e.g. "Penetrating trauma", "Blast injury"). */
@@ -997,7 +997,7 @@ typedef struct _meshtastic_EmergencyAlert {
  creation time; the fields below carry structured metadata the raw-detail
  fallback currently loses.
 
- Fields are deliberately lean - this variant is closer to the MTU ceiling
+ Fields are deliberately lean — this variant is closer to the MTU ceiling
  than the others, so every string is capped in options. */
 typedef struct _meshtastic_TaskRequest {
     /* Short tag for the task category (e.g. "engage", "observe", "recon",
@@ -1017,7 +1017,7 @@ typedef struct _meshtastic_TaskRequest {
 
 /* Weather annotation from <environment> CoT detail element.
 
- Attaches to any TAKPacketV2 regardless of payload_variant - an Aircraft,
+ Attaches to any TAKPacketV2 regardless of payload_variant — an Aircraft,
  PLI, or Marker can all carry observed conditions at the emitting station.
  ATAK-CIV ships an XSD for <environment> but no dedicated handler, so the
  element round-trips through the generic detail pipeline; this message
@@ -1026,7 +1026,7 @@ typedef struct _meshtastic_TaskRequest {
  Target wire cost: ~6-8 bytes compressed with a fully populated instance.
 
  Named `TAKEnvironment` (not just `Environment`) because the bare name
- collides with `SwiftUI.Environment` - every SwiftUI view in a consuming
+ collides with `SwiftUI.Environment` — every SwiftUI view in a consuming
  iOS app uses the `@Environment` property wrapper, and importing the
  generated proto module would make `Environment` ambiguous in every one
  of those files. The `TAK` prefix matches the convention used by the
@@ -1055,7 +1055,7 @@ typedef struct _meshtastic_TAKEnvironment {
  The receiving ATAK client restores those from its own defaults, same as
  every other CoT carried over Meshtastic today.
 
- Attaches to any TAKPacketV2 - a PLI with a sensor on the operator's head,
+ Attaches to any TAKPacketV2 — a PLI with a sensor on the operator's head,
  an Aircraft with a FLIR turret, a Marker dropped on a UAV.
  Target wire cost: ~7-14 bytes compressed (dominated by model string). */
 typedef struct _meshtastic_SensorFov {
@@ -1065,30 +1065,30 @@ typedef struct _meshtastic_SensorFov {
  SensorDetailHandler default (270°) and save varint bytes over centi-deg. */
     uint32_t azimuth_deg;
     /* Maximum range of the cone in meters.
- Optional - if unset, receivers should use the ATAK-CIV default of 100m. */
+ Optional — if unset, receivers should use the ATAK-CIV default of 100m. */
     bool has_range_m;
     uint32_t range_m;
     /* Horizontal field of view in whole degrees (cone's angular width).
  ATAK-CIV default is 45°. */
     uint32_t fov_horizontal_deg;
     /* Vertical field of view in whole degrees. ATAK-CIV default is 45°.
- Optional - a value of 0 means "not set / use horizontal FOV". */
+ Optional — a value of 0 means "not set / use horizontal FOV". */
     uint32_t fov_vertical_deg;
     /* Elevation angle in whole degrees. Positive = up, negative = down.
  Range -90 to +90. sint32 for varint efficiency on small negatives. */
     int32_t elevation_deg;
     /* Roll (camera tilt) in whole degrees, -180 to +180.
- Optional - use 0 if the sensor doesn't track roll. */
+ Optional — use 0 if the sensor doesn't track roll. */
     int32_t roll_deg;
     /* Free-form device model identifier, e.g. "FLIR-Boson-640", "SEEK".
- Optional - empty string means "unknown model" (ATAK-CIV default). */
+ Optional — empty string means "unknown model" (ATAK-CIV default). */
     pb_callback_t model;
 } meshtastic_SensorFov;
 
 /* TAKTALK chat message payload (CoT type m-t-t).
 
  TAKTALK is an ATAK plugin for voice + text team messaging. The voice
- audio stream goes over UDP/RTP and is NOT carried by the mesh - only
+ audio stream goes over UDP/RTP and is NOT carried by the mesh — only
  the text envelope (this message) is. `from_voice` marks messages sent
  via push-to-talk speech-to-text so receivers can render a mic icon
  next to the text.
@@ -1122,7 +1122,7 @@ typedef struct _meshtastic_TakTalkMessage {
  Announces a TAKTALK chatroom's friendly name and roster so peers can
  resolve room UUIDs (used in TakTalkMessage.chatroom_id and
  GeoChat.room_id) to a display name and participant list. Not a chat
- message itself - these events are emitted by TAKTALK when rooms are
+ message itself — these events are emitted by TAKTALK when rooms are
  created or memberships change. */
 typedef struct _meshtastic_TakTalkRoomData {
     /* Callsign of the device broadcasting the room state (typically the
@@ -1161,7 +1161,7 @@ typedef struct _meshtastic_Marti {
  primary-vs-cc distinction the same way ATAK does.
 
  If dest_callsign is [TAKPacketV2.callsign] (self-addressed, unusual but
- legal - e.g. ATAK echoing back to its own room), the builder still emits
+ legal — e.g. ATAK echoing back to its own room), the builder still emits
  the element so loopback shapes round-trip cleanly. */
     pb_callback_t dest_callsign;
 } meshtastic_Marti;

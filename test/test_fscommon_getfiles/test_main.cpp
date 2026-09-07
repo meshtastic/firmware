@@ -112,6 +112,9 @@ void test_getfiles_depth_limit(void)
 
 // 4. A path that will not fit meshtastic_FileInfo::file_name is dropped, not truncated into the
 //    manifest, and the drop is reported.
+// Not built on Windows: any path long enough to overrun the 228-byte file_name also exceeds the
+// 260-byte MAX_PATH, so the tree is never created and there is nothing to drop.
+#ifndef _WIN32
 void test_getfiles_rejects_overlong_path(void)
 {
     // file_name is 228 bytes; build a nested path that overruns it while each component stays
@@ -148,6 +151,7 @@ void test_getfiles_rejects_overlong_path(void)
         *strrchr(dir, '/') = '\0';
     }
 }
+#endif
 
 // 5. pathEndsWithDot() - no entry in the manifest may end in '.', which is how the walk filters the
 //    "." and ".." pseudo-entries some backends return.
@@ -231,7 +235,9 @@ void setup()
     RUN_TEST(test_getfiles_respects_max_count);
     RUN_TEST(test_getfiles_unlimited_when_under_cap);
     RUN_TEST(test_getfiles_depth_limit);
+#ifndef _WIN32
     RUN_TEST(test_getfiles_rejects_overlong_path);
+#endif
     RUN_TEST(test_getfiles_skips_dot_entries);
     RUN_TEST(test_getfiles_reports_sizes);
     RUN_TEST(test_getfiles_missing_dir_is_empty);

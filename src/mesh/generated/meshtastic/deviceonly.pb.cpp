@@ -24,7 +24,7 @@ PB_BIND(meshtastic_NodePositionEntry, meshtastic_NodePositionEntry, AUTO)
 PB_BIND(meshtastic_NodeTelemetryEntry, meshtastic_NodeTelemetryEntry, AUTO)
 
 
-PB_BIND(meshtastic_NodeEnvironmentEntry, meshtastic_NodeEnvironmentEntry, AUTO)
+PB_BIND(meshtastic_NodeEnvironmentEntry, meshtastic_NodeEnvironmentEntry, 2)
 
 
 PB_BIND(meshtastic_NodeStatusEntry, meshtastic_NodeStatusEntry, AUTO)

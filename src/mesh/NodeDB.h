@@ -80,6 +80,11 @@ static const uint8_t LOW_ENTROPY_HASHES[][32] = {
     {0xcc, 0x11, 0xfb, 0x1a, 0xab, 0xa1, 0x31, 0x87, 0x6a, 0xc6, 0xde, 0x88, 0x87, 0xa9, 0xb9, 0x59,
      0x37, 0x82, 0x8d, 0xb2, 0xcc, 0xd8, 0x97, 0x40, 0x9a, 0x5c, 0x8f, 0x40, 0x55, 0xcb, 0x4c, 0x3e}};
 static const char LOW_ENTROPY_WARNING[] = "Compromised keys were detected and regenerated.";
+// Shown when a user tries to restore/set a known pre-2.8 low-entropy key: explains why the saved
+// key did not persist and that the node's identity (NodeNum == crc32(public_key)) changed with it.
+static const char LOW_ENTROPY_RESTORE_WARNING[] =
+    "That key is a known pre-2.8 low-entropy key and can't be restored. A new secure key was "
+    "generated; your node number has changed.";
 #endif
 static const char LICENSED_IDENTITY_MIGRATION_WARNING[] =
     "Licensed signing generated a new identity key; this node identity changed.";
@@ -223,6 +228,18 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
 #endif
 }
 
+/// Post-decode, the encrypted bitfield makes MISSING_OR_UNKNOWN decidable.
+/// Local packets are exempt; Router::dispatchReceived uses this predicate to set skipHandle.
+inline bool shouldSkipHandleForPostDecodeHop(const meshtastic_MeshPacket &p)
+{
+#if !MESHTASTIC_PREHOP_DROP
+    (void)p;
+    return false;
+#else
+    return !isFromUs(&p) && classifyHopStart(p) != HopStartStatus::VALID;
+#endif
+}
+
 /// Rate-limited debug log when hop_start is invalid/missing and packet is dropped.
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
 
@@ -247,6 +264,14 @@ enum LoadFileResult {
 };
 
 enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
+
+// RAM-only arrival stamp (monotonic uptime secs) for nodes heard before the wall clock was trusted,
+// backfilled into last_heard as an epoch once it is. last_heard persists, so it cannot hold this.
+// Bounded, linear-scan, reuse-oldest, never persisted - dies with the boot, as does its timebase.
+struct NodeHeardAt {
+    NodeNum num = 0;                ///< node this stamp describes; 0 == empty slot
+    uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard
+};
 
 class NodeDB
 {
@@ -307,6 +332,10 @@ class NodeDB
     void updateFrom(const meshtastic_MeshPacket &p);
 
     void addFromContact(const meshtastic_SharedContact);
+
+    /// On the clock-becoming-trusted transition (see RTC.cpp): convert every RAM arrival stamp into
+    /// a real last_heard epoch, never backwards, then empty the table. updateFrom() takes over.
+    void backfillHeardAt();
 
     /** Update position info for this node based on received position data
      */
@@ -563,6 +592,10 @@ class NodeDB
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    bool generateBlacklistCheckedKeyPair();
+    bool derivePublicKeyFromPrivate();
+#endif
 
     /// Consolidate crypto key generation logic used across multiple modules
     /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
@@ -571,6 +604,10 @@ class NodeDB
     bool notifyPendingLicensedIdentityMigration();
 
     bool createNewIdentity();
+
+    /// Mint the identity keypair outside the boot path and re-seat my_node_num == crc32(public_key).
+    /// @return true if my_node_num moved; the caller must then also persist SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE.
+    bool ensurePkiIdentity();
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
@@ -637,6 +674,31 @@ class NodeDB
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;           // When last sorted the nodeDB
+
+    /// See NodeHeardAt. Caps how many distinct nodes can be dated once the clock arrives; a node
+    /// pushed out by reuse-oldest just stays "last heard: unknown", the same as before this table.
+    static constexpr size_t kMaxHeardAt = 32;
+    NodeHeardAt heardAt[kMaxHeardAt] = {};
+
+    /// Stamp (or re-stamp) a node's RAM arrival record; used instead of writing a non-epoch into
+    /// last_heard whenever the wall clock is untrusted.
+    void recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptimeSecs);
+
+    /// addFromContact's anti-eviction stamp: a real epoch when the clock is trusted, otherwise a
+    /// RAM arrival stamp that evictionRecency() honours - never a boot-relative last_heard.
+    void stampContactHeardNow(meshtastic_NodeInfoLite *info);
+
+    /// Read the node's RAM arrival stamp. The boolean carries presence because uptime second 0 is valid.
+    bool getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const;
+
+    struct EvictionRecency {
+        uint32_t value;
+        bool heardThisBoot;
+    };
+
+    /// Eviction ranking with current-boot stamps newer than every persisted epoch.
+    EvictionRecency evictionRecency(const meshtastic_NodeInfoLite *n) const;
+    static bool evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent);
 
     /*
      * Internal boolean to track sorting paused

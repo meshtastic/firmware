@@ -42,12 +42,12 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora.setIrqAction(callback); }
+    virtual void setRadioIsr(void (*callback)()) override { lora.setIrqAction(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
@@ -73,5 +73,15 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+  private:
+    /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */
+    bool fullBegin(float freq);
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
+    /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
+    bool recoverChipStateLoss() override { return fullBegin(getFreq()); }
 };
 #endif

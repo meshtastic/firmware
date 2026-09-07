@@ -111,7 +111,7 @@ bool getDeviceId(uint8_t *deviceId)
 void rp2040Setup()
 {
     if (watchdog_caused_reboot()) {
-        LOG_WARN("Rebooted by watchdog!");
+        LOG_WARN("Rebooted by watchdog");
     }
 
     /* Sets a random seed to make sure we get different random numbers on each boot. */

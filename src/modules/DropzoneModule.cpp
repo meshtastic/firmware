@@ -12,6 +12,7 @@
 #include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
 #include "modules/Telemetry/UnitConversions.h"
 
+#include "mesh/Throttle.h"
 #include <string>
 
 DropzoneModule *dropzoneModule;
@@ -19,7 +20,7 @@ DropzoneModule *dropzoneModule;
 int32_t DropzoneModule::runOnce()
 {
     // Send on a 5 second delay from receiving the matching request
-    if (startSendConditions != 0 && (startSendConditions + 5000U) < millis()) {
+    if (startSendConditions != 0 && Throttle::hasElapsed(startSendConditions, 5000U)) {
         service->sendToMesh(sendConditions(), RX_SRC_LOCAL);
         startSendConditions = 0;
     }

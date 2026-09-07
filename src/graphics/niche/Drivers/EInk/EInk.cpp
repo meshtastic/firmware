@@ -54,7 +54,7 @@ int32_t EInk::runOnce()
     // - polling timeout
     // - other error (derived classes)
     if (failed) {
-        LOG_WARN("Display update failed. Check wiring & power supply.");
+        LOG_WARN("Display update failed. Check wiring & power supply");
         updateRunning = false;
         failed = false;
         return disable();
