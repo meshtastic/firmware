@@ -49,6 +49,16 @@ uint32_t JapanTxHook::getTxPauseDurationMs(meshtastic_Config_LoRaConfig_RegionCo
     return (region == meshtastic_Config_LoRaConfig_RegionCode_JP) ? INTER_TX_PAUSE_MS : 0;
 }
 
+uint32_t JapanTxHook::getMaxTxDurationMs()
+{
+    return isJapanRegion() ? MAX_TX_DURATION_MS : UINT32_MAX;
+}
+
+uint32_t JapanTxHook::getMaxTxDurationMs(meshtastic_Config_LoRaConfig_RegionCode region)
+{
+    return (region == meshtastic_Config_LoRaConfig_RegionCode_JP) ? MAX_TX_DURATION_MS : UINT32_MAX;
+}
+
 uint32_t JapanTxHook::computeBackoffMs(uint32_t count)
 {
     if (count == 0)
@@ -79,6 +89,15 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
 {
     if (!isJapanRegion() || !p)
         return PRETX_SEND;
+
+    if (iface) {
+        const uint32_t airtimeMs = iface->getPacketTime(p);
+        if (airtimeMs > MAX_TX_DURATION_MS) {
+            LOG_WARN("JP: packet 0x%08x airtime %ums exceeds ARIB STD-T108 4s limit (max %ums), dropping", p->id, airtimeMs,
+                     MAX_TX_DURATION_MS);
+            return PRETX_DROP;
+        }
+    }
 
     const uint32_t pauseMs = getTxPauseDurationMs();
     if (lastTxEndTime != 0 && !Throttle::hasElapsed(lastTxEndTime, pauseMs)) {

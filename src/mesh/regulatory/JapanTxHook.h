@@ -14,6 +14,7 @@ class JapanTxHook : public RadioTxHook
     static constexpr int16_t CARRIER_SENSE_THRESHOLD_DBM = -80;
     static constexpr uint32_t CARRIER_SENSE_TIME_MS = 5;
     static constexpr uint32_t INTER_TX_PAUSE_MS = 50;
+    static constexpr uint32_t MAX_TX_DURATION_MS = 4000;
     static constexpr uint32_t BACKOFF_BASE_MS = 250;
     static constexpr uint32_t BACKOFF_MAX_MS = 4000;
     static constexpr int16_t RSSI_UNAVAILABLE = 0;
@@ -30,6 +31,8 @@ class JapanTxHook : public RadioTxHook
 
     static uint32_t getTxPauseDurationMs();
     static uint32_t getTxPauseDurationMs(meshtastic_Config_LoRaConfig_RegionCode region);
+    static uint32_t getMaxTxDurationMs();
+    static uint32_t getMaxTxDurationMs(meshtastic_Config_LoRaConfig_RegionCode region);
     static bool isJapanRegion();
     static uint32_t computeBackoffMs(uint32_t count);
 

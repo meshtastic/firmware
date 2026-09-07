@@ -33,11 +33,13 @@ class MockRadioInterface : public RadioInterface
         return rssiToReturn;
     }
 
+    uint32_t packetTimeToReturn = 10;
+
     uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
     {
         (void)totalPacketLen;
         (void)received;
-        return 10;
+        return packetTimeToReturn;
     }
 
     ErrorCode send(meshtastic_MeshPacket *p) override
@@ -581,6 +583,106 @@ void test_dynamic_hook_attachment_on_region_switch(void)
     TEST_ASSERT_NULL(japanTxHook);
 }
 
+void test_max_tx_duration_getter(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(4000, JapanTxHook::getMaxTxDurationMs(meshtastic_Config_LoRaConfig_RegionCode_JP));
+    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, JapanTxHook::getMaxTxDurationMs(meshtastic_Config_LoRaConfig_RegionCode_US));
+    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, JapanTxHook::getMaxTxDurationMs(meshtastic_Config_LoRaConfig_RegionCode_EU_868));
+
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    TEST_ASSERT_EQUAL_UINT32(4000, JapanTxHook::getMaxTxDurationMs());
+
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, JapanTxHook::getMaxTxDurationMs());
+}
+
+void test_max_tx_airtime_allowed_under_4000ms(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -95;
+    radio.packetTimeToReturn = 3900;
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x2001;
+
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+}
+
+void test_max_tx_airtime_boundary_exactly_4000ms(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -95;
+    radio.packetTimeToReturn = 4000;
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x2002;
+
+    // ARIB STD-T108 §3.4.1 caps transmission duration at <= 4000ms. Exactly 4000ms is permitted.
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+}
+
+void test_max_tx_airtime_dropped_over_4000ms(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -95;
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x2003;
+
+    // 4001 ms (> 4000ms) must be dropped
+    radio.packetTimeToReturn = 4001;
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DROP, hook.beforeTransmit(&radio, &pkt));
+
+    // High airtime (e.g. 5500 ms on SF12 custom settings) must also be dropped
+    pkt.id = 0x2004;
+    radio.packetTimeToReturn = 5500;
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DROP, hook.beforeTransmit(&radio, &pkt));
+}
+
+void test_non_jp_bypasses_max_tx_airtime(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -95;
+    radio.packetTimeToReturn = 6000;
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x2005;
+
+    // Non-JP region must bypass the 4000ms cap entirely
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+}
+
+void test_dropped_packet_does_not_trigger_pause(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -95;
+
+    // First, attempt a packet that is dropped because airtime exceeds 4s
+    radio.packetTimeToReturn = 4500;
+    meshtastic_MeshPacket badPkt = meshtastic_MeshPacket_init_zero;
+    badPkt.id = 0xbad1;
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DROP, hook.beforeTransmit(&radio, &badPkt));
+
+    // Dropping a packet does not record tx end time
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getLastTxEndTime());
+
+    // Next valid packet (< 4s) transmitted immediately must NOT be deferred
+    radio.packetTimeToReturn = 50;
+    meshtastic_MeshPacket goodPkt = meshtastic_MeshPacket_init_zero;
+    goodPkt.id = 0x600d;
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &goodPkt));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -609,6 +711,13 @@ void setup()
 
     RUN_TEST(test_non_jp_bypasses_carrier_sense);
     RUN_TEST(test_non_jp_bypasses_pause_enforcement);
+
+    RUN_TEST(test_max_tx_duration_getter);
+    RUN_TEST(test_max_tx_airtime_allowed_under_4000ms);
+    RUN_TEST(test_max_tx_airtime_boundary_exactly_4000ms);
+    RUN_TEST(test_max_tx_airtime_dropped_over_4000ms);
+    RUN_TEST(test_non_jp_bypasses_max_tx_airtime);
+    RUN_TEST(test_dropped_packet_does_not_trigger_pause);
 
     RUN_TEST(test_null_packet_is_noop);
     RUN_TEST(test_dispatcher_integration);
