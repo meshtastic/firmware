@@ -94,5 +94,11 @@ template <class T> class SX128xInterface : public RadioLibInterface
     int16_t trySetStandby();
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
-    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
+    bool recoverChipStateLoss() override
+    {
+        if (!reinitChip() || programModemParams() != RADIOLIB_ERR_NONE)
+            return false;
+        applyCadDetPeak(); // the reset took the CAD threshold with the rest of the chip state
+        return true;
+    }
 };
