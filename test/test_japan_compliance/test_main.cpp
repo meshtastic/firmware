@@ -68,6 +68,7 @@ void tearDown(void)
 {
     Time::useRealClock();
     setRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    initJapanTxHook();
 }
 
 // R2: Inter-Transmission Pause Duration Getter & Enforcement
