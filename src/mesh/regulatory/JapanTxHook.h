@@ -14,7 +14,7 @@ class JapanTxHook : public RadioTxHook
     static constexpr int16_t CARRIER_SENSE_THRESHOLD_DBM = -80;
     static constexpr uint32_t CARRIER_SENSE_TIME_MS = 5;
     static constexpr uint32_t INTER_TX_PAUSE_MS = 50;
-    static constexpr uint32_t BACKOFF_BASE_MS = 500;
+    static constexpr uint32_t BACKOFF_BASE_MS = 250;
     static constexpr uint32_t BACKOFF_MAX_MS = 4000;
     static constexpr int16_t RSSI_UNAVAILABLE = 0;
     // Lower bound accommodates SX126x (-141 dBm), SX127x (-164 dBm HF offset), and LR11x0, above SPI errors (< -500).

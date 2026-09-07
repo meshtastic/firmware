@@ -244,17 +244,17 @@ void test_before_transmit_busy_defers_and_backs_off(void)
     Time::setTestMillis(5000);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
     TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
-    // 1st backoff: range [500, 1000]
-    TEST_ASSERT_TRUE(pkt.tx_after >= 5000 + 500);
-    TEST_ASSERT_TRUE(pkt.tx_after <= 5000 + 1000);
+    // 1st backoff: range [250, 500]
+    TEST_ASSERT_TRUE(pkt.tx_after >= 5000 + 250);
+    TEST_ASSERT_TRUE(pkt.tx_after <= 5000 + 500);
 
     // 2nd consecutive busy
     Time::setTestMillis(6000);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
     TEST_ASSERT_EQUAL_UINT32(2, hook.getBusyCount());
-    // 2nd backoff: range [1000, 2000]
-    TEST_ASSERT_TRUE(pkt.tx_after >= 6000 + 1000);
-    TEST_ASSERT_TRUE(pkt.tx_after <= 6000 + 2000);
+    // 2nd backoff: range [500, 1000]
+    TEST_ASSERT_TRUE(pkt.tx_after >= 6000 + 500);
+    TEST_ASSERT_TRUE(pkt.tx_after <= 6000 + 1000);
 
     // Channel becomes free: transmits and resets busy count
     radio.rssiToReturn = -90;
@@ -270,13 +270,13 @@ void test_exponential_backoff_computation(void)
     constexpr int NUM_BACKOFF_SAMPLES = 20;
     for (int i = 0; i < NUM_BACKOFF_SAMPLES; i++) {
         uint32_t b1 = JapanTxHook::computeBackoffMs(1);
-        TEST_ASSERT_TRUE(b1 >= 500 && b1 <= 1000);
+        TEST_ASSERT_TRUE(b1 >= 250 && b1 <= 500);
 
         uint32_t b2 = JapanTxHook::computeBackoffMs(2);
-        TEST_ASSERT_TRUE(b2 >= 1000 && b2 <= 2000);
+        TEST_ASSERT_TRUE(b2 >= 500 && b2 <= 1000);
 
         uint32_t b3 = JapanTxHook::computeBackoffMs(3);
-        TEST_ASSERT_TRUE(b3 >= 2000 && b3 <= 4000);
+        TEST_ASSERT_TRUE(b3 >= 1000 && b3 <= 2000);
 
         uint32_t b4 = JapanTxHook::computeBackoffMs(4);
         TEST_ASSERT_TRUE(b4 >= 2000 && b4 <= 4000);
