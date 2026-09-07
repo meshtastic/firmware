@@ -9,8 +9,13 @@ JapanTxHook *japanTxHook = nullptr;
 
 void initJapanTxHook()
 {
-    if (!japanTxHook)
+    bool shouldBeActive = JapanTxHook::isJapanRegion();
+    if (shouldBeActive && !japanTxHook)
         japanTxHook = new JapanTxHook();
+    else if (!shouldBeActive && japanTxHook) {
+        delete japanTxHook;
+        japanTxHook = nullptr;
+    }
 }
 
 uint32_t getTxPauseDurationMs()
@@ -70,16 +75,7 @@ bool JapanTxHook::performCarrierSense(RadioInterface *iface)
             LOG_DEBUG("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi, CARRIER_SENSE_THRESHOLD_DBM);
             return false;
         }
-        delay(1);
-#ifdef PIO_UNIT_TESTING
-        if (Time::useTestClock.load(std::memory_order_relaxed))
-            Time::advanceTestMillis(1);
-#endif
-    }
-    int16_t finalRssi = iface->getCurrentRSSI();
-    if (isValidRssi(finalRssi) && finalRssi >= CARRIER_SENSE_THRESHOLD_DBM) {
-        LOG_DEBUG("JP LBT: carrier sensed at end of 5ms window (RSSI %d dBm >= %d dBm)", finalRssi, CARRIER_SENSE_THRESHOLD_DBM);
-        return false;
+        delayMicroseconds(250);
     }
     return true;
 }

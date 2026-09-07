@@ -7,14 +7,7 @@
 
 class RadioInterface;
 
-/**
- * RadioTxHook implementing ARIB STD-T108 compliance for Japan (JP) region.
- * Enforces:
- *  1. Continuous RSSI carrier sensing for >= 5 ms at -80 dBm threshold before transmission,
- *     with exponential backoff (500 ms - 4000 ms) when busy.
- *  2. Minimum 50 ms inter-transmission pause between consecutive transmissions.
- *  3. Complete isolation for non-JP regions (zero delay, zero RSSI gating).
- */
+/// RadioTxHook enforcing ARIB STD-T108 carrier sensing and inter-transmission pause for Japan.
 class JapanTxHook : public RadioTxHook
 {
   public:

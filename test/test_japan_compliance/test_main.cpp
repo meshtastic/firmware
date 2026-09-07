@@ -23,6 +23,7 @@ class MockRadioInterface : public RadioInterface
 
     int16_t getCurrentRSSI() override
     {
+        Time::advanceTestMillis(1);
         if (!rssiSequence.empty()) {
             if (sequenceIndex < rssiSequence.size()) {
                 return rssiSequence[sequenceIndex++];
@@ -67,9 +68,7 @@ void tearDown(void)
     setRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 }
 
-// ---------------------------------------------------------------------------
 // R2: Inter-Transmission Pause Duration Getter & Enforcement
-// ---------------------------------------------------------------------------
 
 void test_pause_duration_getter(void)
 {
@@ -171,9 +170,7 @@ void test_failed_start_does_not_trigger_pause(void)
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt2));
 }
 
-// ---------------------------------------------------------------------------
 // R1: Continuous RSSI Carrier Sensing (5 ms window, -80 dBm threshold)
-// ---------------------------------------------------------------------------
 
 void test_carrier_sense_free_below_threshold(void)
 {
@@ -270,7 +267,8 @@ void test_exponential_backoff_computation(void)
 {
     TEST_ASSERT_EQUAL_UINT32(0, JapanTxHook::computeBackoffMs(0));
 
-    for (int i = 0; i < 20; i++) {
+    constexpr int NUM_BACKOFF_SAMPLES = 20;
+    for (int i = 0; i < NUM_BACKOFF_SAMPLES; i++) {
         uint32_t b1 = JapanTxHook::computeBackoffMs(1);
         TEST_ASSERT_TRUE(b1 >= 500 && b1 <= 1000);
 
@@ -289,9 +287,7 @@ void test_exponential_backoff_computation(void)
     }
 }
 
-// ---------------------------------------------------------------------------
 // R3: Non-JP Region Isolation (Zero added delay, zero RSSI gating)
-// ---------------------------------------------------------------------------
 
 void test_non_jp_bypasses_carrier_sense(void)
 {
@@ -328,9 +324,7 @@ void test_non_jp_bypasses_pause_enforcement(void)
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt2));
 }
 
-// ---------------------------------------------------------------------------
 // Edge Cases & Dispatcher Integration
-// ---------------------------------------------------------------------------
 
 void test_null_packet_is_noop(void)
 {
@@ -569,6 +563,24 @@ void test_pretx_defer_rollover_calculation(void)
     TEST_ASSERT_FALSE(txAfter > nowAfter);
 }
 
+void test_dynamic_hook_attachment_on_region_switch(void)
+{
+    // US region: initJapanTxHook() must not allocate or attach
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    initJapanTxHook();
+    TEST_ASSERT_NULL(japanTxHook);
+
+    // JP region: initJapanTxHook() must instantiate and attach
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    initJapanTxHook();
+    TEST_ASSERT_NOT_NULL(japanTxHook);
+
+    // Switch away from JP: must delete and clear instance
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    initJapanTxHook();
+    TEST_ASSERT_NULL(japanTxHook);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -603,6 +615,7 @@ void setup()
     RUN_TEST(test_millisecond_rollover_safety);
     RUN_TEST(test_deadline_wrap_zero_remapped_to_one);
     RUN_TEST(test_pretx_defer_rollover_calculation);
+    RUN_TEST(test_dynamic_hook_attachment_on_region_switch);
 
     exit(UNITY_END());
 }
