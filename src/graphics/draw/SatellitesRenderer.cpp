@@ -95,10 +95,10 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
     snprintf(dop, sizeof(dop), "Fix:%u P:%u H:%u V:%u", (unsigned)fix, (unsigned)pdop, (unsigned)hdop, (unsigned)vdop);
     display->drawString(x + 2, y + 41, dop);
 
-    display->drawHorizontalLine(x + 2, y + 51, w - 4);
+    display->drawHorizontalLine(x + 2, y + 54, w - 4);
     // '*' means this SVID is explicitly listed by the checksum-valid GSA
     // sentence as used in the navigation solution.
-    display->drawString(x + 2, y + 53, live ? "U SYS ID EL AZ SNR" : "LAST U SYS ID EL AZ SNR");
+    display->drawString(x + 2, y + 56, live ? "U SYS ID EL AZ SNR" : "LAST U SYS ID EL AZ SNR");
 
     const auto *sats = gps->getTrackedSatellites();
     const size_t cap = gps->getTrackedSatelliteCapacity();
@@ -125,7 +125,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
         return a->prn < b->prn;
     });
 
-    int16_t yy = y + 66;
+    int16_t yy = y + 68;
     const int16_t bottom = y + h - 4;
 
     if (count == 0) {
