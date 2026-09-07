@@ -3,11 +3,11 @@
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "configuration.h"
-#include "mesh/JapanTxHook.h"
 #include "mesh/MeshRadio.h"
 #include "mesh/RadioInterface.h"
 #include "mesh/RadioTxHook.h"
 #include "mesh/Throttle.h"
+#include "mesh/regulatory/JapanTxHook.h"
 #include <unity.h>
 #include <vector>
 
@@ -77,10 +77,10 @@ void test_pause_duration_getter(void)
     TEST_ASSERT_EQUAL_UINT32(0, JapanTxHook::getTxPauseDurationMs(meshtastic_Config_LoRaConfig_RegionCode_EU_868));
 
     setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
-    TEST_ASSERT_EQUAL_UINT32(50, getTxPauseDurationMs());
+    TEST_ASSERT_EQUAL_UINT32(50, JapanTxHook::getTxPauseDurationMs());
 
     setRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    TEST_ASSERT_EQUAL_UINT32(0, getTxPauseDurationMs());
+    TEST_ASSERT_EQUAL_UINT32(0, JapanTxHook::getTxPauseDurationMs());
 }
 
 void test_pause_first_transmission_no_defer(void)

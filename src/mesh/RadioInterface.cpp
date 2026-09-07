@@ -1,7 +1,6 @@
 #include "RadioInterface.h"
 #include "Channels.h"
 #include "DisplayFormatters.h"
-#include "JapanTxHook.h"
 #include "LLCC68Interface.h"
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
@@ -19,6 +18,7 @@
 #include "detect/LoRaRadioType.h"
 #include "main.h"
 #include "meshUtils.h" // for pow_of_2
+#include "regulatory/JapanTxHook.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>

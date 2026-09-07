@@ -18,11 +18,6 @@ void initJapanTxHook()
     }
 }
 
-uint32_t getTxPauseDurationMs()
-{
-    return JapanTxHook::getTxPauseDurationMs();
-}
-
 JapanTxHook::JapanTxHook() : RadioTxHook()
 {
     if (!japanTxHook)

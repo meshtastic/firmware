@@ -19,7 +19,6 @@ class JapanTxHook : public RadioTxHook
     static constexpr int16_t RSSI_UNAVAILABLE = 0;
     // Lower bound accommodates SX126x (-141 dBm), SX127x (-164 dBm HF offset), and LR11x0, above SPI errors (< -500).
     static constexpr int16_t RSSI_VALID_MIN = -192;
-    static constexpr int16_t RSSI_MIN_VALID_DBM = RSSI_VALID_MIN;
     static constexpr int16_t RSSI_INVALID_DRIVER_ERROR = -706;
 
     JapanTxHook();
@@ -56,4 +55,3 @@ class JapanTxHook : public RadioTxHook
 
 extern JapanTxHook *japanTxHook;
 void initJapanTxHook();
-uint32_t getTxPauseDurationMs();
