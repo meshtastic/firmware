@@ -93,7 +93,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
 
     char dop[48];
     snprintf(dop, sizeof(dop), "Fix:%u P:%u H:%u V:%u", (unsigned)fix, (unsigned)pdop, (unsigned)hdop, (unsigned)vdop);
-    display->drawString(x + 2, y + 38, dop);
+    display->drawString(x + 2, y + 41, dop);
 
     display->drawHorizontalLine(x + 2, y + 51, w - 4);
     // '*' means this SVID is explicitly listed by the checksum-valid GSA
@@ -125,7 +125,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
         return a->prn < b->prn;
     });
 
-    int16_t yy = y + 54;
+    int16_t yy = y + 66;
     const int16_t bottom = y + h - 4;
 
     if (count == 0) {
@@ -152,7 +152,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *, int16_t x, int16_t y)
                      (unsigned)list[i]->prn, (unsigned)list[i]->elevation, (unsigned)list[i]->azimuth);
 
         display->drawString(x + 2, yy, row);
-        yy += 12;
+        yy += 13;
     }
 }
 } // namespace graphics::SatellitesRenderer
