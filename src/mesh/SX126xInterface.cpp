@@ -200,6 +200,12 @@ template <typename T> bool SX126xInterface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
 
+#ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
+    // begin() applied the optimization table; re-apply the fixed PA config.
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setOutputPower(power, false);
+#endif
+
     if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
 
@@ -248,14 +254,18 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (power > SX126X_MAX_POWER) // This chip has lower power limits than some
         power = SX126X_MAX_POWER;
 
+#ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
+    err = lora.setOutputPower(power, false); // external PA: fixed PA config
+#else
     err = lora.setOutputPower(power);
+#endif
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
