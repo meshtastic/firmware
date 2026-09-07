@@ -368,7 +368,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     return res ? ERRNO_OK : ERRNO_UNKNOWN;
 }
 
-void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
+ErrorCode MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
@@ -404,6 +404,8 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     if (res == ERRNO_SHOULD_RELEASE) {
         releaseToPool(p);
     }
+
+    return res;
 }
 
 bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
@@ -412,35 +414,22 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 
     assert(node);
 
-    if (nodeDB->hasValidPosition(node)) {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
-        if (positionModule) {
-            if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
-                LOG_DEBUG("Skip position ping; no fresh position since boot");
-                return false;
-            }
-            // Prefer the node's current channel, but fall back to the position channel
-            // (matching PositionModule::sendOurPosition() behavior).
-            uint8_t sendChan = node->channel;
-            if (getPositionPrecisionForChannel(sendChan) == 0 && !findPositionChannel(sendChan)) {
-                // No channel with position enabled: fall back to sending nodeinfo, as before.
-                if (nodeInfoModule) {
-                    LOG_INFO("No position-enabled channel; send nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d", dest,
-                             wantReplies, node->channel);
-                    nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
-                }
-                return false;
-            }
-            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
-            positionModule->sendOurPosition(dest, wantReplies, sendChan);
+    // Prefer the node's current channel, but fall back to the position channel
+    // (matching PositionModule::sendOurPosition() behavior).
+    uint8_t sendChan = node->channel;
+    if (nodeDB->hasValidPosition(node) && positionModule &&
+        (config.position.fixed_position || nodeDB->hasLocalPositionSinceBoot()) &&
+        (getPositionPrecisionForChannel(sendChan) != 0 || findPositionChannel(sendChan))) {
+        LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
+        if (positionModule->sendOurPosition(dest, wantReplies, sendChan))
             return true;
-        }
-    } else {
+    }
 #endif
-        if (nodeInfoModule) {
-            LOG_INFO("Send nodeinfo ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
-            nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
-        }
+    // No position went out, so a false return tells the callers the nodeinfo fallback was used.
+    if (nodeInfoModule) {
+        LOG_INFO("Send nodeinfo ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+        nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
     }
     return false;
 }

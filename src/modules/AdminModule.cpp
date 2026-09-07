@@ -1207,10 +1207,20 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
+        // A supplied public key that is itself blacklisted is re-derived too, so a restore carrying a whole
+        // low-entropy pair cannot skip the check just by populating both fields.
         if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
-        } else if (config.security.public_key.size == 0) {
-            nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+        } else if (config.security.public_key.size == 0 || nodeDB->checkLowEntropyPublicKey(config.security.public_key)) {
+            // Warn at set time, not after the next reboot, and only when the key really was replaced: a
+            // blacklisted public key whose private key derives a clean one is re-derived, and that stuck.
+            uint8_t priorPrivateKey[32];
+            memcpy(priorPrivateKey, config.security.private_key.bytes, 32);
+            const bool keygenSucceeded = nodeDB->generateCryptoKeyPair(priorPrivateKey);
+            const bool keyWasReplaced = memcmp(priorPrivateKey, config.security.private_key.bytes, 32) != 0;
+            if (keygenSucceeded && keyWasReplaced && nodeDB->keyIsLowEntropy) {
+                sendWarning(LOW_ENTROPY_RESTORE_WARNING);
+            }
         }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
