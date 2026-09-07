@@ -1362,9 +1362,13 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lat_truncated = truncateCoordinate(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateCoordinate(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 5 h default
+    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 6 h default
     // is only for TTL sizing - feeding it here would silently defeat that contract.
     uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
+    // Sender floor must clear the tick-quantised receiver window, else stationary refreshes are pure airtime.
+    static_assert(default_position_stationary_broadcast_secs * 1000UL >=
+                      default_traffic_mgmt_position_min_interval_secs * 1000UL + kPosTimeTickMs,
+                  "stationary broadcast floor must exceed the position dedup window by one dedup tick");
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);

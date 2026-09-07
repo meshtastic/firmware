@@ -21,9 +21,9 @@
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
 // Floor for our own position broadcasts when stationary (unchanged beyond the broadcast
 // precision) or fixed_position: identical positions get deduped by traffic management anyway.
-// Held one hour above default_traffic_mgmt_position_min_interval_secs so this refresh clears
-// the receivers' dedup window instead of being dropped as a duplicate.
-#define default_position_stationary_broadcast_secs (6 * 60 * 60)
+// One dedup tick (TrafficManagementModule::kPosTimeTickMs) above the window so this refresh
+// always clears the receivers' tick-quantised window instead of being dropped as a duplicate.
+#define default_position_stationary_broadcast_secs (default_traffic_mgmt_position_min_interval_secs + 6 * 60)
 #define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
@@ -42,10 +42,9 @@ enum class TrafficType { POSITION, TELEMETRY };
 
 // Traffic management defaults
 #define default_traffic_mgmt_position_precision_bits 19 // ~90m grid cells (±45m)
-// Kept below default_position_stationary_broadcast_secs so a stationary node's periodic refresh
-// is not deduped away by its neighbours.
-#define default_traffic_mgmt_position_min_interval_secs (5 * 60 * 60) // 5 hours between identical positions
-// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 5h default).
+// default_position_stationary_broadcast_secs (sender floor) is derived from this: window + one tick.
+#define default_traffic_mgmt_position_min_interval_secs (6 * 60 * 60) // 6 hours between identical positions
+// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 6h default).
 #define default_traffic_mgmt_tracker_position_min_interval_secs (60 * 60) // 1 hour
 // Role cap: lost-and-found origins may refresh a duplicate position this often, so a lost
 // device updates frequently without flooding. (Quantised to the dedup tick: ~2 ticks.)
