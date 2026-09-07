@@ -550,8 +550,7 @@ float Screen::estimatedHeading(double lat, double lon)
                 if (rmcSampleMs != lastRmcSampleMs) {
                     // After a long sleep/outage, adopt the first new course
                     // directly instead of slowly blending from an hours-old heading.
-                    if (filteredRmcHeading < 0.0f || lastRmcSampleMs == 0 ||
-                        (uint32_t)(now - lastRmcSampleMs) > 10000U) {
+                    if (filteredRmcHeading < 0.0f || lastRmcSampleMs == 0 || (uint32_t)(now - lastRmcSampleMs) > 10000U) {
                         filteredRmcHeading = wrapHeading360(rmcCourseDeg);
                     } else {
                         const float delta = wrapDelta180(rmcCourseDeg - filteredRmcHeading);
@@ -718,9 +717,6 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     isI2cScreen = true;
 #else
     dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
-                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-    isAUTOOled = true;
-    isI2cScreen = true;
 #endif
 
 #if defined(USE_ST7789)
@@ -2268,8 +2264,8 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         lastGpsDisplayFreshSats = currentFreshSats;
 
         if (showingNormalScreen && screenOn) {
-            if (availabilityChanged || lockChanged || connectionChanged || hasTimeChanged || searchingChanged || sleepingChanged ||
-                freshSatsChanged) {
+            if (availabilityChanged || lockChanged || connectionChanged || hasTimeChanged || searchingChanged ||
+                sleepingChanged || freshSatsChanged) {
                 // Important semantic transitions (especially >0 -> 0 sats)
                 // must reach a physical E-Ink panel immediately.
                 forceDisplay(true);

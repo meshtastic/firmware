@@ -147,6 +147,10 @@ template <typename T> struct TinyGPSDatum {
         return val;
     }
 
+    // Read the last checksum-committed value without consuming FLAG_UPDATED.
+    // UI/diagnostic fallbacks must never change the parser state seen by GPS.cpp.
+    T peekValue() const { return val; }
+
     TinyGPSDatum() : flags(FLAG_DEFAULT), val(T()) {}
 
   protected:
@@ -447,12 +451,7 @@ class TinyGPSPlus
     // Returns number of bytes written, excluding the 0 terminator.
     int GGA(char *buf);
 
-    enum
-    {
-        FLAG_DEFAULT = 0,
-        FLAG_IS_CHECKSUM_TERM = (1 << 0),
-        FLAG_SENTENCE_HAS_FIX = (1 << 1)
-    };
+    enum { FLAG_DEFAULT = 0, FLAG_IS_CHECKSUM_TERM = (1 << 0), FLAG_SENTENCE_HAS_FIX = (1 << 1) };
 
     void setSentenceHasFix(bool const i_value)
     {

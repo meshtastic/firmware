@@ -176,6 +176,37 @@ class GPS : private concurrency::OSThread
     uint16_t getGsaHDOP() const { return reader.gsaHDOP(); }
     uint16_t getGsaVDOP() const { return reader.gsaVDOP(); }
 
+    // Fresh RMC Course-over-Ground for the compass fallback.
+    // This is deliberately read-only: it must not consume TinyGPS++'s
+    // isUpdated() flags or influence GPS scheduling/power management.
+    bool getFreshCourseOverGround(float &courseDeg, float &speedKmph, uint32_t &sampleMillis)
+    {
+        constexpr uint32_t COURSE_MAX_AGE_MS = 5000U;
+
+        // A sleeping receiver has no live course, even if the last RMC value
+        // is still stored in TinyGPS++. Require the same valid fix used by
+        // the rest of the internal GNSS path.
+        if (powerState != GPS_ACTIVE || !hasLock())
+            return false;
+
+        if (!reader.course.isValid() || !reader.speed.isValid())
+            return false;
+
+        const uint32_t courseAge = reader.course.age();
+        const uint32_t speedAge = reader.speed.age();
+        if (courseAge > COURSE_MAX_AGE_MS || speedAge > COURSE_MAX_AGE_MS)
+            return false;
+
+        const uint32_t rawCourse = reader.course.peekValue(); // 1/100 degree from RMC
+        if (rawCourse >= 36000U)
+            return false;
+
+        courseDeg = rawCourse * 0.01f;
+        speedKmph = reader.speed.peekValue() * (0.01f * _GPS_KMPH_PER_KNOT);
+        sampleMillis = millis() - courseAge;
+        return true;
+    }
+
     bool hasValidGLL() const { return reader.hasValidGLL(); }
     double getGLLLatitude() { return reader.gllLocation.isValid() ? reader.gllLocation.lat() : 0.0; }
     double getGLLLongitude() { return reader.gllLocation.isValid() ? reader.gllLocation.lng() : 0.0; }
