@@ -166,7 +166,12 @@ RTCSetResult readFromRTC()
         TwoWire &rtcBus = Wire;
 #endif
         tm t;
-        if (!rtc.begin(rtcBus, PCF_RTC_ADDRESS, PCF_RTC_CHIP) || !rtc.getTime(t)) {
+        if (!rtc.begin(rtcBus, PCF_RTC_ADDRESS, PCF_RTC_CHIP)) {
+            LOG_WARN("%s not responding at 0x%02X", rtc.chipName(), PCF_RTC_ADDRESS);
+            return RTCSetResultInvalidTime;
+        }
+        if (!rtc.getTime(t)) {
+            // Only the chip itself can tell us the oscillator stopped, so ask after begin() worked.
             LOG_WARN("%s read failed%s", rtc.chipName(), rtc.lostPower() ? " (oscillator stopped)" : "");
             return RTCSetResultInvalidTime;
         }
