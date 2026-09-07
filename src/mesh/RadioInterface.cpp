@@ -1166,17 +1166,12 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             if (clamp) {
                 snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s, using %s", presetName, newRegion->name,
                          defaultName);
-            } else {
-                snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s", presetName, newRegion->name);
-            }
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
-
-            if (clamp) {
+                LOG_INFO("%s", err_string);
+                sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
                 loraConfig.modem_preset = newRegion->getDefaultPreset();
                 check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
             } else {
+                LOG_INFO("Preset %s invalid for %s, defer to clamp", presetName, newRegion->name);
                 return false;
             }
         }
