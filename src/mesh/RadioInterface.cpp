@@ -943,8 +943,8 @@ RadioInterface::RadioInterface()
 
 bool RadioInterface::reconfigure()
 {
-    initJapanTxHook();
     applyModemConfig();
+    initJapanTxHook();
     return true;
 }
 

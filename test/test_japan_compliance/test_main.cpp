@@ -583,6 +583,21 @@ void test_dynamic_hook_attachment_on_region_switch(void)
     TEST_ASSERT_NULL(japanTxHook);
 }
 
+void test_radio_reconfigure_region_switch(void)
+{
+    MockRadioInterface radio;
+
+    // Start in JP: reconfigure attaches hook
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    radio.reconfigure();
+    TEST_ASSERT_NOT_NULL(japanTxHook);
+
+    // Switch to US: reconfigure must update myRegion first via applyModemConfig(), then detach hook
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    radio.reconfigure();
+    TEST_ASSERT_NULL(japanTxHook);
+}
+
 void test_max_tx_duration_getter(void)
 {
     TEST_ASSERT_EQUAL_UINT32(4000, JapanTxHook::getMaxTxDurationMs(meshtastic_Config_LoRaConfig_RegionCode_JP));
@@ -725,6 +740,7 @@ void setup()
     RUN_TEST(test_deadline_wrap_zero_remapped_to_one);
     RUN_TEST(test_pretx_defer_rollover_calculation);
     RUN_TEST(test_dynamic_hook_attachment_on_region_switch);
+    RUN_TEST(test_radio_reconfigure_region_switch);
 
     exit(UNITY_END());
 }
