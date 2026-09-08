@@ -401,11 +401,24 @@ bool Channels::anyMqttEnabled()
     return false;
 }
 
-const char *Channels::getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset)
+void Channels::captureCommittedPrimary()
+{
+    committedPrimary = getByIndex(getPrimaryIndex()).settings;
+    committedPrimaryCaptured = true;
+}
+
+const meshtastic_ChannelSettings &Channels::committedSettings(ChannelIndex chIndex)
+{
+    if (committedPrimaryCaptured && chIndex == getPrimaryIndex())
+        return committedPrimary;
+    return getByIndex(chIndex).settings;
+}
+
+const char *Channels::nameForSettings(const meshtastic_ChannelSettings &settings, meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                      bool usePreset)
 {
     // Convert the short "" representation for Default into a usable string
-    const meshtastic_ChannelSettings &channelSettings = getByIndex(chIndex).settings;
-    const char *channelName = channelSettings.name;
+    const char *channelName = settings.name;
     if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app effed up and forgot to set channelSettings.name
@@ -419,6 +432,11 @@ const char *Channels::getNameForPreset(size_t chIndex, meshtastic_Config_LoRaCon
     return channelName;
 }
 
+const char *Channels::getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset)
+{
+    return nameForSettings(getByIndex(chIndex).settings, preset, usePreset);
+}
+
 const char *Channels::getName(size_t chIndex)
 {
     // The display name, which follows the live radio - what a user reading a screen expects.
@@ -427,12 +445,12 @@ const char *Channels::getName(size_t chIndex)
 
 bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
-    const auto &ch = getByIndex(chIndex);
-    if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
-        // The configured preset on both sides: modules gate transmissions on this, so a momentary
-        // radio move must not change it. Under the live preset an explicit "LongFast" name flipped.
+    // Uses committed channel and committed preset only: modules gate transmissions on this, so a
+    // borrowed channel or preset is not used. See RadioInterface::configuredLoraConfig().
+    const meshtastic_ChannelSettings &settings = committedSettings(chIndex);
+    if (settings.psk.size == 1 && settings.psk.bytes[0] == 1) {
         const meshtastic_Config_LoRaConfig &cfg = RadioInterface::configuredLoraConfig();
-        const char *name = getNameForPreset(chIndex, cfg.modem_preset, cfg.use_preset);
+        const char *name = nameForSettings(settings, cfg.modem_preset, cfg.use_preset);
         const char *presetName = DisplayFormatters::getModemPresetDisplayName(cfg.modem_preset, false, cfg.use_preset);
         // Check if the name is the default derived from the modem preset
         if (strcmp(name, presetName) == 0)
