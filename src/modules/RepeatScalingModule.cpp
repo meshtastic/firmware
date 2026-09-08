@@ -25,38 +25,42 @@ RepeatScalingModule *repeatScalingModule;
 //
 // Either way, meshTooBusyForExtraRepeats() forces the threshold back to 1 on a busy/dense mesh.
 
-namespace
-{
-// Thresholds above which the mesh is busy/dense enough that extra repeats aren't worth the airtime.
-constexpr float BUSY_CHANNEL_UTIL_PERCENT = 10.0f;
-constexpr float BUSY_AIR_UTIL_TX_PERCENT = 4.0f;
-constexpr uint16_t BUSY_DIRECT_ACTIVE_NODES = 10;
-
 // True if channel/air utilization or direct-neighbor density says the mesh is too busy for extra
 // repeats. Logs which condition tripped.
-bool meshTooBusyForExtraRepeats()
+bool RepeatScalingModule::meshTooBusy(float channelUtilPercent, float airUtilTxPercent, uint16_t directActiveNodes)
 {
-    if (airTime && airTime->channelUtilizationPercent() > BUSY_CHANNEL_UTIL_PERCENT) {
-        LOG_DEBUG("[REPEATSCALE] Mesh busy: chUtil=%.1f%% > %.1f%%", airTime->channelUtilizationPercent(),
-                  BUSY_CHANNEL_UTIL_PERCENT);
+    if (channelUtilPercent > BUSY_CHANNEL_UTIL_PERCENT) {
+        LOG_DEBUG("[REPEATSCALE] Mesh busy: chUtil=%.1f%% > %.1f%%", channelUtilPercent, BUSY_CHANNEL_UTIL_PERCENT);
         return true;
     }
-    if (airTime && airTime->utilizationTXPercent() > BUSY_AIR_UTIL_TX_PERCENT) {
-        LOG_DEBUG("[REPEATSCALE] Mesh busy: airUtilTX=%.1f%% > %.1f%%", airTime->utilizationTXPercent(),
-                  BUSY_AIR_UTIL_TX_PERCENT);
+    if (airUtilTxPercent > BUSY_AIR_UTIL_TX_PERCENT) {
+        LOG_DEBUG("[REPEATSCALE] Mesh busy: airUtilTX=%.1f%% > %.1f%%", airUtilTxPercent, BUSY_AIR_UTIL_TX_PERCENT);
         return true;
     }
 #if HAS_VARIABLE_HOPS
     // perHop[0] is HopScalingModule's estimate of active direct (hop_away == 0) neighbors.
-    if (hopScalingModule && hopScalingModule->getLastPerHopCounts().perHop[0] > BUSY_DIRECT_ACTIVE_NODES) {
-        LOG_DEBUG("[REPEATSCALE] Mesh busy: directActiveNodes=%u > %u", hopScalingModule->getLastPerHopCounts().perHop[0],
-                  BUSY_DIRECT_ACTIVE_NODES);
+    if (directActiveNodes > BUSY_DIRECT_ACTIVE_NODES) {
+        LOG_DEBUG("[REPEATSCALE] Mesh busy: directActiveNodes=%u > %u", directActiveNodes, BUSY_DIRECT_ACTIVE_NODES);
         return true;
     }
+#else
+    (void)directActiveNodes;
 #endif
     return false;
 }
-} // namespace
+
+// Gathers what the policy needs from the globals; the decision itself lives in meshTooBusy().
+bool RepeatScalingModule::meshTooBusyForExtraRepeats()
+{
+    const float channelUtilPercent = airTime ? airTime->channelUtilizationPercent() : 0.0f;
+    const float airUtilTxPercent = airTime ? airTime->utilizationTXPercent() : 0.0f;
+#if HAS_VARIABLE_HOPS
+    const uint16_t directActiveNodes = hopScalingModule ? hopScalingModule->getLastPerHopCounts().perHop[0] : 0;
+#else
+    const uint16_t directActiveNodes = 0;
+#endif
+    return meshTooBusy(channelUtilPercent, airUtilTxPercent, directActiveNodes);
+}
 
 // Per-portnum duplicate-tolerance threshold; see the design notes above for the full rationale.
 uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket *p)

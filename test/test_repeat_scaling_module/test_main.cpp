@@ -37,6 +37,17 @@ class RepeatScalingModulePlainShim : public RepeatScalingModule
     using RepeatScalingModule::registerDupeHeard;
 };
 
+// Substitutes the busy/dense decision itself, so the behaviour that depends on it can be tested
+// without driving airTime/hopScalingModule.
+class RepeatScalingModuleBusyShim : public RepeatScalingModule
+{
+  public:
+    using RepeatScalingModule::getDupeCancelThreshold;
+
+    bool testMeshBusy = false;
+    bool meshTooBusyForExtraRepeats() override { return testMeshBusy; }
+};
+
 static RepeatScalingModuleTestShim *shim = nullptr;
 static RepeatScalingModulePlainShim *plainShim = nullptr;
 
@@ -47,8 +58,9 @@ class ScopedChannelUtil
   public:
     explicit ScopedChannelUtil(float percent) : previous(airTime)
     {
-        // channelUtilizationPercent() == sum(channelUtilization[]) / (PERIODS * 10 * 1000) * 100
-        busy.channelUtilization[0] = static_cast<uint32_t>(percent / 100.0f * CHANNEL_UTILIZATION_PERIODS * 10 * 1000);
+        // AirTime's buckets are private, so drive them through the public write path: every report
+        // type sums into channelUtilization[], and RX_ALL_LOG touches nothing else.
+        busy.logAirtime(RX_ALL_LOG, static_cast<uint32_t>(percent / 100.0f * CHANNEL_UTILIZATION_PERIODS * 10 * 1000));
         airTime = &busy;
     }
     ~ScopedChannelUtil() { airTime = previous; }
@@ -58,21 +70,9 @@ class ScopedChannelUtil
     AirTime *previous;
 };
 
-class ScopedAirUtilTx
-{
-  public:
-    explicit ScopedAirUtilTx(float percent) : previous(airTime)
-    {
-        // utilizationTXPercent() == sum(utilizationTX[]) / MS_IN_HOUR * 100
-        busy.utilizationTX[0] = static_cast<uint32_t>(percent / 100.0f * MS_IN_HOUR);
-        airTime = &busy;
-    }
-    ~ScopedAirUtilTx() { airTime = previous; }
-
-  private:
-    AirTime busy;
-    AirTime *previous;
-};
+// No ScopedAirUtilTx counterpart: TX_LOG is the only report type that reaches utilizationTX[], and
+// it sums into channelUtilization[] as well, so 4% of an hour reads as 240% of the 60s channel
+// window and trips the channel arm first. That arm is covered by meshTooBusy() directly instead.
 
 #if HAS_VARIABLE_HOPS
 class ScopedDirectActiveNodes
@@ -278,20 +278,6 @@ void test_next_hop_gate_tolerated_when_channel_util_low(void)
     TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&p));
 }
 
-void test_next_hop_gate_suppressed_by_busy_air_util_tx(void)
-{
-    ScopedAirUtilTx busy(5.0f); // above the 4% BUSY_AIR_UTIL_TX_PERCENT gate
-    meshtastic_MeshPacket p = makeUndecodableFloodedDm(kSender1, kId1);
-    TEST_ASSERT_EQUAL_UINT8(1, plainShim->getDupeCancelThreshold(&p));
-}
-
-void test_next_hop_gate_tolerated_when_air_util_tx_low(void)
-{
-    ScopedAirUtilTx notBusy(4.0f); // exactly at the threshold, not above it
-    meshtastic_MeshPacket p = makeUndecodableFloodedDm(kSender1, kId1);
-    TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&p));
-}
-
 #if HAS_VARIABLE_HOPS
 void test_next_hop_gate_suppressed_by_busy_direct_node_count(void)
 {
@@ -330,22 +316,49 @@ void test_channel_util_at_gate_does_not_suppress(void)
     TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&p));
 }
 
-void test_busy_air_util_tx_suppresses_text_message_threshold(void)
+// --- the policy itself, called directly: the only way to reach the air-util arm ---
+
+void test_meshTooBusy_quiet_mesh_is_not_busy(void)
 {
-    ScopedAirUtilTx busy(5.0f); // above the 4% BUSY_AIR_UTIL_TX_PERCENT gate
-    meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
-    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    p.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-    TEST_ASSERT_EQUAL_UINT8(1, plainShim->getDupeCancelThreshold(&p));
+    TEST_ASSERT_FALSE(RepeatScalingModule::meshTooBusy(0.0f, 0.0f, 0));
 }
 
-void test_air_util_tx_at_gate_does_not_suppress(void)
+void test_meshTooBusy_channel_util_boundary(void)
 {
-    ScopedAirUtilTx notBusy(4.0f); // exactly at the threshold, not above it
+    const float gate = RepeatScalingModule::BUSY_CHANNEL_UTIL_PERCENT;
+    TEST_ASSERT_FALSE(RepeatScalingModule::meshTooBusy(gate, 0.0f, 0)); // at the gate, not above it
+    TEST_ASSERT_TRUE(RepeatScalingModule::meshTooBusy(gate + 1.0f, 0.0f, 0));
+}
+
+void test_meshTooBusy_air_util_tx_boundary(void)
+{
+    const float gate = RepeatScalingModule::BUSY_AIR_UTIL_TX_PERCENT;
+    TEST_ASSERT_FALSE(RepeatScalingModule::meshTooBusy(0.0f, gate, 0)); // at the gate, not above it
+    TEST_ASSERT_TRUE(RepeatScalingModule::meshTooBusy(0.0f, gate + 1.0f, 0));
+}
+
+#if HAS_VARIABLE_HOPS
+void test_meshTooBusy_direct_nodes_boundary(void)
+{
+    const uint16_t gate = RepeatScalingModule::BUSY_DIRECT_ACTIVE_NODES;
+    TEST_ASSERT_FALSE(RepeatScalingModule::meshTooBusy(0.0f, 0.0f, gate)); // at the gate, not above it
+    TEST_ASSERT_TRUE(RepeatScalingModule::meshTooBusy(0.0f, 0.0f, gate + 1));
+}
+#endif
+
+// --- and that getDupeCancelThreshold actually consults the (substitutable) gate ---
+
+void test_busy_gate_suppresses_text_message_threshold(void)
+{
+    RepeatScalingModuleBusyShim busyShim;
     meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
     p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-    TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&p));
+
+    busyShim.testMeshBusy = false;
+    TEST_ASSERT_EQUAL_UINT8(2, busyShim.getDupeCancelThreshold(&p));
+    busyShim.testMeshBusy = true;
+    TEST_ASSERT_EQUAL_UINT8(1, busyShim.getDupeCancelThreshold(&p));
 }
 
 #if HAS_VARIABLE_HOPS
@@ -558,8 +571,6 @@ void setup()
     RUN_TEST(test_next_hop_gate_is_overridden_by_a_cached_portnum);
     RUN_TEST(test_next_hop_gate_suppressed_by_busy_channel_util);
     RUN_TEST(test_next_hop_gate_tolerated_when_channel_util_low);
-    RUN_TEST(test_next_hop_gate_suppressed_by_busy_air_util_tx);
-    RUN_TEST(test_next_hop_gate_tolerated_when_air_util_tx_low);
 #if HAS_VARIABLE_HOPS
     RUN_TEST(test_next_hop_gate_suppressed_by_busy_direct_node_count);
     RUN_TEST(test_next_hop_gate_tolerated_when_direct_node_count_low);
@@ -568,8 +579,13 @@ void setup()
     printf("\n=== meshTooBusyForExtraRepeats gate ===\n");
     RUN_TEST(test_busy_channel_util_suppresses_text_message_threshold);
     RUN_TEST(test_channel_util_at_gate_does_not_suppress);
-    RUN_TEST(test_busy_air_util_tx_suppresses_text_message_threshold);
-    RUN_TEST(test_air_util_tx_at_gate_does_not_suppress);
+    RUN_TEST(test_meshTooBusy_quiet_mesh_is_not_busy);
+    RUN_TEST(test_meshTooBusy_channel_util_boundary);
+    RUN_TEST(test_meshTooBusy_air_util_tx_boundary);
+#if HAS_VARIABLE_HOPS
+    RUN_TEST(test_meshTooBusy_direct_nodes_boundary);
+#endif
+    RUN_TEST(test_busy_gate_suppresses_text_message_threshold);
 #if HAS_VARIABLE_HOPS
     RUN_TEST(test_busy_direct_node_count_suppresses_text_message_threshold);
     RUN_TEST(test_direct_node_count_at_gate_does_not_suppress);

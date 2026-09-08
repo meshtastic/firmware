@@ -32,10 +32,24 @@ class RepeatScalingModule
     // Duplicates heard (and tolerated) so far for (sender, id), or 0. For logging at TX time.
     uint8_t getToleratedDupeCount(NodeNum sender, PacketId id) const;
 
+    // Thresholds above which the mesh is busy/dense enough that extra repeats aren't worth the
+    // airtime. Public so tests assert against the policy rather than restating the numbers.
+    static constexpr float BUSY_CHANNEL_UTIL_PERCENT = 10.0f;
+    static constexpr float BUSY_AIR_UTIL_TX_PERCENT = 4.0f;
+    static constexpr uint16_t BUSY_DIRECT_ACTIVE_NODES = 10;
+
+    // The busy/dense policy itself, taking its inputs rather than reading globals: AirTime's
+    // buckets are private, so a test can only reach this arm of the decision by calling it here.
+    static bool meshTooBusy(float channelUtilPercent, float airUtilTxPercent, uint16_t directActiveNodes);
+
   protected:
     // Duplicates to tolerate before cancelling our own rebroadcast. Virtual so tests can inject a
     // threshold without relying on a real portnum case.
     virtual uint8_t getDupeCancelThreshold(const meshtastic_MeshPacket *p);
+
+    // Reads airTime/hopScalingModule and applies meshTooBusy(). Virtual so tests can set the
+    // condition without driving the globals.
+    virtual bool meshTooBusyForExtraRepeats();
 
     // Ephemeral ring buffer of per-(sender, id) heard-duplicate counts (not persistent state).
     uint8_t registerDupeHeard(NodeNum sender, PacketId id);
