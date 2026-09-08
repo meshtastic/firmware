@@ -92,6 +92,21 @@ inline void saturatingIncrement(uint8_t &counter)
         counter++;
 }
 
+/// True when this packet arrived on a LoRa radio. The on-air via_mqtt flag is
+/// attacker-chosen (clear header bit) and is not used here.
+bool arrivedViaRadio(const meshtastic_MeshPacket &mp)
+{
+    switch (mp.transport_mechanism) {
+    case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA:
+    case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT1:
+    case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT2:
+    case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT3:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /// Return a short human-readable name for common port numbers.
 /// Falls back to "port:<N>" for unknown ports.
 const char *portName(int portnum)
@@ -1219,32 +1234,32 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             }
         }
 
-        // Antispam: skip MQTT-injected frames (not RF-neighborhood evidence).
-        if (!mp.via_mqtt) {
+        // Antispam: track LoRa arrivals even if via_mqtt is set (that bit is unauthenticated).
+        if (arrivedViaRadio(mp)) {
             noteFirstSeen(mp.from, static_cast<uint8_t>(mp.channel), rssiClassOf(mp));
-            if (mp.decoded.portnum == meshtastic_PortNum_ID_ATTESTATION_APP) {
-                if (handleIdAttestation(mp)) {
-                    logAction("consume", &mp, "id-attestation");
-                    ignoreRequest = true;
-                    return ProcessMessage::STOP;
-                }
+        }
+        if (mp.decoded.portnum == meshtastic_PortNum_ID_ATTESTATION_APP) {
+            if (handleIdAttestation(mp)) {
+                logAction("consume", &mp, "id-attestation");
+                ignoreRequest = true;
+                return ProcessMessage::STOP;
             }
+        }
 
-            if (cfg.probation_window_secs > 0 && uptimeSecs() >= cfg.attestation_min_tenure_secs &&
-                isEstablishedForVouching(mp.from) &&
-                (lastVouchSentMs == 0 || Throttle::deadlinePassedAt(nowMs, lastVouchSentMs + 3'600'000UL))) {
-                bool vouchWithinCaps = false;
-                {
-                    concurrency::LockGuard guard(&cacheLock);
-                    if (vouchWithinCapsLocked(nodeDB->getNodeNum(), mp.from)) {
-                        stampVouchObservationLocked(nodeDB->getNodeNum(), mp.from);
-                        lastVouchSentMs = nowMs;
-                        vouchWithinCaps = true;
-                    }
+        if (arrivedViaRadio(mp) && cfg.probation_window_secs > 0 && uptimeSecs() >= cfg.attestation_min_tenure_secs &&
+            isEstablishedForVouching(mp.from) &&
+            (lastVouchSentMs == 0 || Throttle::deadlinePassedAt(nowMs, lastVouchSentMs + 3'600'000UL))) {
+            bool vouchWithinCaps = false;
+            {
+                concurrency::LockGuard guard(&cacheLock);
+                if (vouchWithinCapsLocked(nodeDB->getNodeNum(), mp.from)) {
+                    stampVouchObservationLocked(nodeDB->getNodeNum(), mp.from);
+                    lastVouchSentMs = nowMs;
+                    vouchWithinCaps = true;
                 }
-                if (vouchWithinCaps)
-                    sendKnownSinceGossip(mp.from);
             }
+            if (vouchWithinCaps)
+                sendKnownSinceGossip(mp.from);
         }
     }
 
@@ -2225,11 +2240,14 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
     uint8_t cap = mp.hop_limit;
     {
         concurrency::LockGuard guard(&cacheLock);
-        const bool senderInProbation = inProbationLocked(findAntispamEntry(from));
         const uint8_t probationCap = cfg.probation_max_hop_limit;
-        if (senderInProbation && probationCap > 0 && probationCap < cap) {
-            cap = probationCap;
-            changed = true;
+        if (cfg.probation_window_secs > 0 && probationCap > 0 && probationCap < cap) {
+            const AntispamEntry *entry = findAntispamEntry(from);
+            const bool senderInProbation = !entry || !entry->hasFirstSeen || inProbationLocked(entry);
+            if (senderInProbation) {
+                cap = probationCap;
+                changed = true;
+            }
         }
         if (changed)
             incrementStatLocked(&stats.relay_hop_caps_applied);
@@ -2270,8 +2288,11 @@ bool TrafficManagementModule::handleIdAttestation(const meshtastic_MeshPacket &m
 {
     const auto &cfg = moduleConfig.traffic_management;
     meshtastic_IdAttestation att = meshtastic_IdAttestation_init_zero;
-    if (mp.via_mqtt || mp.decoded.payload.size == 0 ||
+    if (mp.decoded.payload.size == 0 ||
         !pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_IdAttestation_msg, &att))
+        return true;
+    // Consume MQTT and spoofed-via_mqtt vouches without treating them as RF-neighborhood evidence.
+    if (!arrivedViaRadio(mp) || mp.via_mqtt)
         return true;
 
     const NodeNum attester = getFrom(&mp);

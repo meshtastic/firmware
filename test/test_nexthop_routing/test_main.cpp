@@ -1020,6 +1020,7 @@ void test_rebroadcast_probation_hop_cap_preserves_hopsAway(void)
     observed.from = kRemoteNode;
     observed.to = NODENUM_BROADCAST;
     observed.id = 0x0BADF00E;
+    observed.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     observed.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     observed.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     (void)tmm.handleReceived(observed);

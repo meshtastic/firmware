@@ -254,6 +254,7 @@ static meshtastic_MeshPacket makeDecodedPacket(meshtastic_PortNum port, NodeNum 
     packet.channel = 0;
     packet.hop_start = 3;
     packet.hop_limit = 3;
+    packet.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     packet.decoded.portnum = port;
     packet.decoded.has_bitfield = true;
@@ -270,6 +271,7 @@ static meshtastic_MeshPacket makeUnknownPacket(NodeNum from, NodeNum to = NODENU
     packet.channel = 0;
     packet.hop_start = 3;
     packet.hop_limit = 3;
+    packet.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     packet.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     packet.encrypted.size = 0;
     return packet;
@@ -3286,6 +3288,7 @@ static void test_tm_fuzz_nodenum_blitz(void)
         p.channel = 0;
         p.hop_start = (uint8_t)rngRange(8); // 0..7, wire-bounded
         p.hop_limit = (uint8_t)rngRange(8);
+        p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         p.decoded.want_response = (rngRange(2) == 0);
 
         if (rngRange(5) == 0) {
@@ -3864,26 +3867,104 @@ static void test_tm_probation_survivesSweepAfterWindow(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
-/// MQTT-sourced packets skip antispam tracking.
-static void test_tm_viaMqtt_skipsAntispam(void)
+/// LoRa frames with via_mqtt set are still first-seen and hop-capped (the bit is unauthenticated).
+static void test_tm_viaMqtt_loraStillTracked(void)
 {
     const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
     TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
 
     TrafficManagementModuleTestShim module;
     moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
+
+    meshtastic_MeshPacket loraMqtt = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    loraMqtt.via_mqtt = true;
+    (void)module.handleReceived(loraMqtt);
+    TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kRemoteNode));
+
+    meshtastic_MeshPacket pkt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    pkt.via_mqtt = true;
+    pkt.hop_limit = 3;
+    TEST_ASSERT_EQUAL_UINT8(2, module.relayHopCap(pkt));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+/// LoRa KNOWN_SINCE with via_mqtt set is consumed and does not end probation.
+static void test_tm_viaMqtt_knownSinceNotEvidence(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.attestation_min_distinct_attesters = 1;
+    moduleConfig.traffic_management.vouch_max_per_subject_per_window = 0;
+    moduleConfig.traffic_management.vouch_max_subjects_per_window = 0;
+
+    trackSender(module, kTargetNode);
+    trackSender(module, kRemoteNode);
+    meshtastic_MeshPacket mqttAtt = makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 0);
+    mqttAtt.via_mqtt = true;
+    ProcessMessage r = module.handleReceived(mqttAtt);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r));
+    TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().attestation_promotions);
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+/// MQTT-injected frames are not first-seen and cannot vouch; hop cap still applies (fail-closed).
+static void test_tm_mqttTransport_untrackedButHopCapped(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
     moduleConfig.traffic_management.attestation_min_observed_secs = 0;
 
     meshtastic_MeshPacket mqttPos = makePositionPacket(kRemoteNode, 374221234, -1220845678);
     mqttPos.via_mqtt = true;
+    mqttPos.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
     (void)module.handleReceived(mqttPos);
     TEST_ASSERT_EQUAL_INT(-1, module.peekProbationStateForTest(kRemoteNode));
+
+    meshtastic_MeshPacket pkt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    pkt.via_mqtt = true;
+    pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+    pkt.hop_limit = 3;
+    TEST_ASSERT_EQUAL_UINT8(2, module.relayHopCap(pkt));
 
     trackSender(module, kTargetNode);
     meshtastic_MeshPacket mqttAtt = makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 0);
     mqttAtt.via_mqtt = true;
-    (void)module.handleReceived(mqttAtt);
+    mqttAtt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+    ProcessMessage r = module.handleReceived(mqttAtt);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r));
     TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().attestation_promotions);
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+/// Untracked originators are hop-capped while probation is on; disabled probation does not cap.
+static void test_tm_relayHopCap_untrackedIsProbation(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
+
+    meshtastic_MeshPacket pkt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    pkt.hop_limit = 3;
+    TEST_ASSERT_EQUAL_INT(-1, module.peekProbationStateForTest(kRemoteNode));
+    TEST_ASSERT_EQUAL_UINT8(2, module.relayHopCap(pkt));
+
+    moduleConfig.traffic_management.probation_window_secs = 0;
+    TEST_ASSERT_EQUAL_UINT8(3, module.relayHopCap(pkt));
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
@@ -4167,9 +4248,12 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_promotionQuorum_perReporterCapsApply);
     RUN_TEST(test_tm_oldConfig_loadsClean);
     RUN_TEST(test_tm_relayHopCap_probationOnly);
+    RUN_TEST(test_tm_relayHopCap_untrackedIsProbation);
     RUN_TEST(test_tm_tickZero_firstSeen);
     RUN_TEST(test_tm_probation_survivesSweepAfterWindow);
-    RUN_TEST(test_tm_viaMqtt_skipsAntispam);
+    RUN_TEST(test_tm_viaMqtt_loraStillTracked);
+    RUN_TEST(test_tm_viaMqtt_knownSinceNotEvidence);
+    RUN_TEST(test_tm_mqttTransport_untrackedButHopCapped);
     RUN_TEST(test_tm_tableFull_evictionDropsOldest);
     RUN_TEST(test_tm_tableFull_evictionPreservesPromoted);
     RUN_TEST(test_tm_tableFull_evictionPreservesEstablished);

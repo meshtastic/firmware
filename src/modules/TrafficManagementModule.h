@@ -104,7 +104,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
     }
 
-    /// hop_limit for the relayed copy: min(original, probation cap).
+    /// hop_limit for the relayed copy: min(original, probation cap). Untracked senders
+    /// are treated as in-probation while probation is enabled.
     uint8_t relayHopCap(const meshtastic_MeshPacket &mp) const;
 
     /// -1 untracked, 0 established, 1 in-probation.
