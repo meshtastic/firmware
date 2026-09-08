@@ -86,15 +86,6 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
     if (!isJapanRegion() || !p)
         return PRETX_SEND;
 
-    if (iface) {
-        const uint32_t airtimeMs = iface->getPacketTime(p);
-        if (airtimeMs > MAX_TX_DURATION_MS) {
-            LOG_WARN("JP: packet 0x%08x airtime %ums exceeds ARIB STD-T108 4s limit (max %ums), dropping", p->id, airtimeMs,
-                     MAX_TX_DURATION_MS);
-            return PRETX_DROP;
-        }
-    }
-
     const uint32_t pauseMs = getTxPauseDurationMs();
     if (lastTxEndTime != 0 && !Throttle::hasElapsed(lastTxEndTime, pauseMs)) {
         uint32_t deadline = lastTxEndTime + pauseMs;

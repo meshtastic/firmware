@@ -240,6 +240,12 @@ class RadioInterface
     [[nodiscard]] virtual uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) = 0;
 
     /**
+     * Compute static LoRa packet airtime in milliseconds for given modulation parameters.
+     * Pure arithmetic calculation based on standard Semtech formula (no hardware or buffer dependency).
+     */
+    static uint32_t calculateLoRaAirtimeMs(float bwKHz, uint8_t sf, uint8_t cr, uint32_t payloadLen);
+
+    /**
      * Get the channel we saved.
      */
     [[nodiscard]] uint32_t getChannelNum();

@@ -20,10 +20,14 @@ class MockRadioInterface : public RadioInterface
     int16_t rssiToReturn = -100;
     std::vector<int16_t> rssiSequence;
     size_t sequenceIndex = 0;
+    uint32_t sampleCount = 0;
 
     int16_t getCurrentRSSI() override
     {
-        Time::advanceTestMillis(1);
+        sampleCount++;
+        if (sampleCount % 4 == 0) {
+            Time::advanceTestMillis(1);
+        }
         if (!rssiSequence.empty()) {
             if (sequenceIndex < rssiSequence.size()) {
                 return rssiSequence[sequenceIndex++];
@@ -209,11 +213,23 @@ void test_carrier_sense_busy_spike_during_window(void)
 {
     JapanTxHook hook;
     MockRadioInterface radio;
-    // Initial readings clear, spike on 3rd sample, then clear again
-    radio.rssiSequence = {-90, -90, -75, -90, -90};
+    // 20-sample sequence (5ms at 250us/sample): clear, spike on 9th sample (during 3rd ms), then clear
+    radio.rssiSequence = {-90, -90, -90, -90, -90, -90, -90, -90, -75, -90, -90, -90, -90, -90, -90, -90, -90, -90, -90, -90};
 
     Time::setTestMillis(1000);
     TEST_ASSERT_FALSE(hook.performCarrierSense(&radio));
+}
+
+void test_carrier_sense_20_samples_clear_window(void)
+{
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -85;
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_TRUE(hook.performCarrierSense(&radio));
+    // 5 ms window with 250 us sampling takes exactly 20 samples
+    TEST_ASSERT_EQUAL_UINT32(20, radio.sampleCount);
 }
 
 void test_carrier_sense_threshold_boundaries(void)
@@ -636,91 +652,74 @@ void test_max_tx_duration_getter(void)
     TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, JapanTxHook::getMaxTxDurationMs());
 }
 
-void test_max_tx_airtime_allowed_under_4000ms(void)
+void test_calculate_lora_airtime_ms(void)
 {
-    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
-    JapanTxHook hook;
-    MockRadioInterface radio;
-    radio.rssiToReturn = -95;
-    radio.packetTimeToReturn = 3900;
+    // LONG_FAST params: BW 250, SF 11, CR 5, 255 bytes -> ~2157 ms (<= 4000)
+    uint32_t fastAirtime = RadioInterface::calculateLoRaAirtimeMs(250.0f, 11, 5, 255);
+    TEST_ASSERT_TRUE_MESSAGE(fastAirtime > 2000 && fastAirtime <= 4000, "LONG_FAST max airtime must be <= 4000ms");
 
-    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
-    pkt.id = 0x2001;
+    // LONG_SLOW params: BW 125, SF 12, CR 8, 255 bytes -> ~14295 ms (> 4000)
+    uint32_t slowAirtime = RadioInterface::calculateLoRaAirtimeMs(125.0f, 12, 8, 255);
+    TEST_ASSERT_TRUE_MESSAGE(slowAirtime > 10000, "LONG_SLOW max airtime must be > 10000ms");
 
-    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+    // Custom compliant: BW 125, SF 10, CR 5, 255 bytes -> ~2362 ms (<= 4000)
+    uint32_t customOk = RadioInterface::calculateLoRaAirtimeMs(125.0f, 10, 5, 255);
+    TEST_ASSERT_TRUE_MESSAGE(customOk > 2000 && customOk <= 4000, "SF10 BW125 CR5 max airtime must be <= 4000ms");
+
+    // Invalid inputs
+    TEST_ASSERT_EQUAL_UINT32(0, RadioInterface::calculateLoRaAirtimeMs(0, 10, 5, 255));
+    TEST_ASSERT_EQUAL_UINT32(0, RadioInterface::calculateLoRaAirtimeMs(125, 4, 5, 255));
 }
 
-void test_max_tx_airtime_boundary_exactly_4000ms(void)
+void test_validate_config_lora_jp_rejects_custom_settings_exceeding_4s(void)
 {
-    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
-    JapanTxHook hook;
-    MockRadioInterface radio;
-    radio.rssiToReturn = -95;
-    radio.packetTimeToReturn = 4000;
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = false;
+    cfg.bandwidth = bwKHzToCode(125);
+    cfg.spread_factor = 12;
+    cfg.coding_rate = 8;
 
-    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
-    pkt.id = 0x2002;
-
-    // ARIB STD-T108 §3.4.1 caps transmission duration at <= 4000ms. Exactly 4000ms is permitted.
-    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
 }
 
-void test_max_tx_airtime_dropped_over_4000ms(void)
+void test_validate_config_lora_jp_accepts_custom_settings_under_4s(void)
 {
-    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
-    JapanTxHook hook;
-    MockRadioInterface radio;
-    radio.rssiToReturn = -95;
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = false;
+    cfg.bandwidth = bwKHzToCode(125);
+    cfg.spread_factor = 10;
+    cfg.coding_rate = 5;
 
-    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
-    pkt.id = 0x2003;
-
-    // 4001 ms (> 4000ms) must be dropped
-    radio.packetTimeToReturn = 4001;
-    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DROP, hook.beforeTransmit(&radio, &pkt));
-
-    // High airtime (e.g. 5500 ms on SF12 custom settings) must also be dropped
-    pkt.id = 0x2004;
-    radio.packetTimeToReturn = 5500;
-    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DROP, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
 }
 
-void test_non_jp_bypasses_max_tx_airtime(void)
+void test_clamp_config_lora_jp_clamps_custom_settings_exceeding_4s(void)
 {
-    setRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    JapanTxHook hook;
-    MockRadioInterface radio;
-    radio.rssiToReturn = -95;
-    radio.packetTimeToReturn = 6000;
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = false;
+    cfg.bandwidth = bwKHzToCode(125);
+    cfg.spread_factor = 12;
+    cfg.coding_rate = 8;
 
-    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
-    pkt.id = 0x2005;
+    RadioInterface::clampConfigLora(cfg);
 
-    // Non-JP region must bypass the 4000ms cap entirely
-    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_TRUE(cfg.use_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
 }
 
-void test_dropped_packet_does_not_trigger_pause(void)
+void test_validate_config_lora_non_jp_allows_custom_settings_exceeding_4s(void)
 {
-    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
-    JapanTxHook hook;
-    MockRadioInterface radio;
-    radio.rssiToReturn = -95;
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.use_preset = false;
+    cfg.bandwidth = bwKHzToCode(125);
+    cfg.spread_factor = 12;
+    cfg.coding_rate = 8;
 
-    // First, attempt a packet that is dropped because airtime exceeds 4s
-    radio.packetTimeToReturn = 4500;
-    meshtastic_MeshPacket badPkt = meshtastic_MeshPacket_init_zero;
-    badPkt.id = 0xbad1;
-    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DROP, hook.beforeTransmit(&radio, &badPkt));
-
-    // Dropping a packet does not record tx end time
-    TEST_ASSERT_EQUAL_UINT32(0, hook.getLastTxEndTime());
-
-    // Next valid packet (< 4s) transmitted immediately must NOT be deferred
-    radio.packetTimeToReturn = 50;
-    meshtastic_MeshPacket goodPkt = meshtastic_MeshPacket_init_zero;
-    goodPkt.id = 0x600d;
-    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &goodPkt));
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
 }
 
 void setup()
@@ -738,6 +737,7 @@ void setup()
     RUN_TEST(test_carrier_sense_busy_at_threshold);
     RUN_TEST(test_carrier_sense_busy_above_threshold);
     RUN_TEST(test_carrier_sense_busy_spike_during_window);
+    RUN_TEST(test_carrier_sense_20_samples_clear_window);
     RUN_TEST(test_carrier_sense_threshold_boundaries);
     RUN_TEST(test_carrier_sense_unavailable_and_invalid_rssi_does_not_block);
     RUN_TEST(test_carrier_sense_ultra_low_rssi_valid_and_clear);
@@ -753,11 +753,11 @@ void setup()
     RUN_TEST(test_non_jp_bypasses_pause_enforcement);
 
     RUN_TEST(test_max_tx_duration_getter);
-    RUN_TEST(test_max_tx_airtime_allowed_under_4000ms);
-    RUN_TEST(test_max_tx_airtime_boundary_exactly_4000ms);
-    RUN_TEST(test_max_tx_airtime_dropped_over_4000ms);
-    RUN_TEST(test_non_jp_bypasses_max_tx_airtime);
-    RUN_TEST(test_dropped_packet_does_not_trigger_pause);
+    RUN_TEST(test_calculate_lora_airtime_ms);
+    RUN_TEST(test_validate_config_lora_jp_rejects_custom_settings_exceeding_4s);
+    RUN_TEST(test_validate_config_lora_jp_accepts_custom_settings_under_4s);
+    RUN_TEST(test_clamp_config_lora_jp_clamps_custom_settings_exceeding_4s);
+    RUN_TEST(test_validate_config_lora_non_jp_allows_custom_settings_exceeding_4s);
 
     RUN_TEST(test_null_packet_is_noop);
     RUN_TEST(test_dispatcher_integration);

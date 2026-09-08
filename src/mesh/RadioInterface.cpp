@@ -797,6 +797,48 @@ uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool rece
     return getPacketTime(pl, received);
 }
 
+uint32_t RadioInterface::calculateLoRaAirtimeMs(float bwKHz, uint8_t sf, uint8_t cr, uint32_t payloadLen)
+{
+    if (bwKHz <= 0.0f || sf < LORA_SF_MIN || sf > LORA_SF_MAX)
+        return 0;
+    if (cr < LORA_CR_MIN || cr > LORA_CR_MAX)
+        cr = LORA_CR_DEFAULT;
+
+    // Symbol length in microseconds: (10000 << sf) / (bwKHz * 10)
+    uint32_t symbolLength_us = ((uint32_t)10000 << sf) / (uint32_t)(bwKHz * 10.0f);
+
+    // Low Data Rate Optimization is required when symbol duration > 16 ms (16000 us)
+    bool ldrOptimize = (symbolLength_us > 16000);
+
+    uint8_t sfDivisor = 4 * sf;
+    if (ldrOptimize) {
+        sfDivisor = 4 * (sf - 2);
+    }
+    if (sfDivisor == 0)
+        return 0;
+
+    uint8_t sfCoeff1_x4 = 17; // 4.25 * 4
+    uint8_t sfCoeff2 = 8;
+    if (sf == 5 || sf == 6) {
+        sfCoeff1_x4 = 25; // 6.25 * 4
+        sfCoeff2 = 0;
+    }
+
+    constexpr int8_t bitsPerCrc = 16;
+    constexpr int8_t nSymbolHeader = 20; // explicit header
+    constexpr uint16_t preambleLen = 16; // Meshtastic default preamble length
+
+    int32_t bitCount = (int32_t)8 * payloadLen + bitsPerCrc - 4 * sf + sfCoeff2 + nSymbolHeader;
+    if (bitCount < 0)
+        bitCount = 0;
+
+    uint32_t nPreCodedSymbols = (bitCount + (sfDivisor - 1)) / sfDivisor;
+    uint32_t nSymbol_x4 = (preambleLen + 8) * 4 + sfCoeff1_x4 + nPreCodedSymbols * cr * 4;
+
+    uint64_t totalTimeUs = ((uint64_t)symbolLength_us * nSymbol_x4) / 4;
+    return (uint32_t)((totalTimeUs + 999) / 1000);
+}
+
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
 {
@@ -1181,6 +1223,25 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     } else {
         // Clamp at the source so numFreqSlots below can never be 0 (bandwidth 0 is reachable from a crafted set_config)
         check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+        if (newRegion->code == meshtastic_Config_LoRaConfig_RegionCode_JP) {
+            uint8_t sf = clampSpreadFactor(loraConfig.spread_factor);
+            uint8_t cr = clampCodingRate(loraConfig.coding_rate);
+            uint32_t maxAirtimeMs = calculateLoRaAirtimeMs(check_bw, sf, cr, MAX_LORA_PAYLOAD_LEN);
+            if (maxAirtimeMs > JapanTxHook::getMaxTxDurationMs(newRegion->code)) {
+                snprintf(err_string, sizeof(err_string), "Custom LoRa config airtime %ums exceeds 4s limit for %s", maxAirtimeMs,
+                         newRegion->name);
+                if (clamp) {
+                    LOG_INFO("%s, using default preset", err_string);
+                    sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+                    loraConfig.use_preset = true;
+                    loraConfig.modem_preset = newRegion->getDefaultPreset();
+                    check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                } else {
+                    LOG_INFO("%s, defer to clamp", err_string);
+                    return false;
+                }
+            }
+        }
     }
 
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
