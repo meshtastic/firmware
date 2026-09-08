@@ -20,6 +20,9 @@
 #include "mesh/RadioInterface.h"
 #include "mesh/ReliableRouter.h"
 #include "modules/RoutingModule.h"
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #include <cstdio>
 #include <cstring>
 #include <list>
@@ -427,9 +430,17 @@ void setUp(void)
     reliableRadio->reset();
     mockRoutingModule->ackNaks.clear();
     configureBehaviorChannels();
+#if HAS_TRAFFIC_MANAGEMENT
+    trafficManagementModule = nullptr;
+#endif
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{
+#if HAS_TRAFFIC_MANAGEMENT
+    trafficManagementModule = nullptr;
+#endif
+}
 
 // ===========================================================================
 // Group 1 - resolveLastByte (M1)
@@ -988,6 +999,47 @@ void test_rebroadcast_declined_send_releases_packet(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
 }
 
+#if HAS_TRAFFIC_MANAGEMENT
+class TrafficManagementModuleTestShim : public TrafficManagementModule
+{
+  public:
+    using TrafficManagementModule::handleReceived;
+};
+
+void test_rebroadcast_probation_hop_cap_preserves_hopsAway(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    TrafficManagementModuleTestShim tmm;
+    trafficManagementModule = &tmm;
+
+    moduleConfig.has_traffic_management = true;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
+
+    meshtastic_MeshPacket observed = meshtastic_MeshPacket_init_zero;
+    observed.from = kRemoteNode;
+    observed.to = NODENUM_BROADCAST;
+    observed.id = 0x0BADF00E;
+    observed.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    observed.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    (void)tmm.handleReceived(observed);
+    TEST_ASSERT_EQUAL_INT(1, tmm.peekProbationStateForTest(kRemoteNode));
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.hop_start = 7;
+    p.hop_limit = 7;
+
+    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
+    TEST_ASSERT_EQUAL_UINT8(2, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(3, mockIface->lastHopStart);
+
+    trafficManagementModule = nullptr;
+    moduleConfig.has_traffic_management = false;
+    moduleConfig.traffic_management.probation_window_secs = 0;
+    moduleConfig.traffic_management.probation_max_hop_limit = 0;
+}
+#endif
+
 // An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
 // last gate before the radio queue: MeshPacket.encrypted holds 256 bytes, the radio buffer 240.
 void test_send_rejects_payload_larger_than_radio_buffer(void)
@@ -1135,6 +1187,9 @@ void setup()
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
     RUN_TEST(test_send_rejects_payload_larger_than_radio_buffer);
+#if HAS_TRAFFIC_MANAGEMENT
+    RUN_TEST(test_rebroadcast_probation_hop_cap_preserves_hopsAway);
+#endif
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);
 #endif

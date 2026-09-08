@@ -1916,16 +1916,19 @@ TrafficManagementModule::AntispamEntry *TrafficManagementModule::findOrCreateAnt
     if (isNew)
         *isNew = true;
     AntispamEntry *victim = nullptr;
-    uint32_t oldestSeen = UINT32_MAX;
+    uint8_t victimTier = 0xFF; // 0 = in-probation, 1 = established, 2 = promoted
+    uint32_t victimSeen = UINT32_MAX;
     for (uint16_t i = 0; i < size; i++) {
         if (antispam[i].node == 0) {
             victim = &antispam[i];
             break;
         }
-        const uint32_t seen = antispam[i].hasFirstSeen ? antispam[i].firstSeenSecs : UINT32_MAX;
-        if (!victim || seen < oldestSeen) {
+        const uint8_t tier = antispam[i].promoted ? 2 : (inProbationLocked(&antispam[i]) ? 0 : 1);
+        const uint32_t seen = antispam[i].hasFirstSeen ? antispam[i].firstSeenSecs : 0;
+        if (!victim || tier < victimTier || (tier == victimTier && seen < victimSeen)) {
             victim = &antispam[i];
-            oldestSeen = seen;
+            victimTier = tier;
+            victimSeen = seen;
         }
     }
     if (!victim)

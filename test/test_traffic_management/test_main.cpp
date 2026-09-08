@@ -3705,9 +3705,8 @@ static void test_tm_promotionDecay_ttlRenewalAndPermanent(void)
         makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 100'000);
     ProcessMessage r3 = module.handleReceived(v3);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r3));
-    TEST_ASSERT_EQUAL_UINT8(module.peekPromotedWindowTickForTest(kTargetNode) != stampAtRenew ? 1 : 0,
-                            1); // the renewal moved the stamp to the current tick
-    (void)module.runOnce();     // sweep one tick after the renewal: still promoted
+    TEST_ASSERT_NOT_EQUAL_UINT8(stampAtRenew, module.peekPromotedWindowTickForTest(kTargetNode));
+    (void)module.runOnce(); // sweep one tick after the renewal: still promoted
     TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
 
     // TTL 0 (shipped default): permanent promotion, stamp stays 0, survives
@@ -3905,6 +3904,57 @@ static void test_tm_tableFull_evictionDropsOldest(void)
         trackSender(module, static_cast<NodeNum>(0x10000000u + i));
     }
     TEST_ASSERT_EQUAL_INT(-1, module.peekProbationStateForTest(first));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+/// A promoted row outranks probationary strangers under table pressure.
+static void test_tm_tableFull_evictionPreservesPromoted(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 600;
+    moduleConfig.traffic_management.attestation_min_tenure_secs = 0;
+    moduleConfig.traffic_management.attestation_min_observed_secs = 0;
+    moduleConfig.traffic_management.attestation_min_distinct_attesters = 1;
+    moduleConfig.traffic_management.vouch_max_per_subject_per_window = 0;
+    moduleConfig.traffic_management.vouch_max_subjects_per_window = 0;
+
+    trackSender(module, kTargetNode);
+    trackSender(module, kRemoteNode);
+    meshtastic_MeshPacket v = makeAttestationPacket(meshtastic_IdAttestation_Kind_KNOWN_SINCE, kTargetNode, kRemoteNode, 100'000);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(v)));
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
+
+    for (uint16_t i = 1; i < 300; i++)
+        trackSender(module, static_cast<NodeNum>(0x20000000u + i));
+
+    TEST_ASSERT_TRUE(module.peekPromotedForTest(kTargetNode));
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kTargetNode));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
+/// An established (window-aged) row outranks later probationary strangers.
+static void test_tm_tableFull_evictionPreservesEstablished(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+
+    trackSender(module, kRemoteNode);
+    TEST_ASSERT_EQUAL_INT(1, module.peekProbationStateForTest(kRemoteNode));
+
+    TrafficManagementModule::s_testNowMs += 300'000;
+    (void)module.runOnce();
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kRemoteNode));
+
+    for (uint16_t i = 1; i < 300; i++)
+        trackSender(module, static_cast<NodeNum>(0x20000000u + i));
+
+    TEST_ASSERT_EQUAL_INT(0, module.peekProbationStateForTest(kRemoteNode));
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
@@ -4121,6 +4171,8 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_probation_survivesSweepAfterWindow);
     RUN_TEST(test_tm_viaMqtt_skipsAntispam);
     RUN_TEST(test_tm_tableFull_evictionDropsOldest);
+    RUN_TEST(test_tm_tableFull_evictionPreservesPromoted);
+    RUN_TEST(test_tm_tableFull_evictionPreservesEstablished);
     RUN_TEST(test_tm_knownSince_hopLimitIsOne);
     RUN_TEST(test_tm_antispamMigration_zeroKnobsGetDefaults);
     exit(UNITY_END());
