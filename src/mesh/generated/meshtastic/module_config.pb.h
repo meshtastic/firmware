@@ -48,8 +48,14 @@ typedef enum _meshtastic_ModuleConfig_AudioConfig_Audio_Baud {
     meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1400 = 4,
     meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1300 = 5,
     meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1200 = 6,
+    /* Removed from libcodec2 upstream. A device configured to one of these
+ falls back to CODEC2_700C. */
     meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700 = 7,
-    meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B = 8
+    meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B = 8,
+    /* Replaces CODEC2_700. Default for new configurations. */
+    meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700C = 9,
+    /* Lowest rate, and the only one usable on slower modem presets. */
+    meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_450 = 10
 } meshtastic_ModuleConfig_AudioConfig_Audio_Baud;
 
 /* TODO: REPLACE */
@@ -225,7 +231,7 @@ typedef struct _meshtastic_ModuleConfig_AudioConfig {
     bool codec2_enabled;
     /* PTT Pin */
     uint8_t ptt_pin;
-    /* The audio sample rate to use for codec2 */
+    /* The codec2 bitrate to encode at. Sample rate is always 8 kHz. */
     meshtastic_ModuleConfig_AudioConfig_Audio_Baud bitrate;
     /* I2S Word Select */
     uint8_t i2s_ws;
@@ -588,8 +594,8 @@ extern "C" {
 #define _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_ARRAYSIZE ((meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType)(meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_EITHER_EDGE_ACTIVE_HIGH+1))
 
 #define _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_DEFAULT
-#define _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MAX meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B
-#define _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_ARRAYSIZE ((meshtastic_ModuleConfig_AudioConfig_Audio_Baud)(meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B+1))
+#define _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MAX meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_450
+#define _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_ARRAYSIZE ((meshtastic_ModuleConfig_AudioConfig_Audio_Baud)(meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_450+1))
 
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600
