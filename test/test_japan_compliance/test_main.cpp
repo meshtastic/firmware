@@ -264,16 +264,20 @@ void test_before_transmit_busy_defers_and_backs_off(void)
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
     TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
     // 1st backoff: range [250, 500]
-    TEST_ASSERT_TRUE(pkt.tx_after >= 5000 + 250);
-    TEST_ASSERT_TRUE(pkt.tx_after <= 5000 + 500);
+    const uint32_t now1 = Time::getMillis();
+    const uint32_t delay1 = pkt.tx_after - now1;
+    TEST_ASSERT_TRUE(delay1 >= 250);
+    TEST_ASSERT_TRUE(delay1 <= 500);
 
     // 2nd consecutive busy
     Time::setTestMillis(6000);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
     TEST_ASSERT_EQUAL_UINT32(2, hook.getBusyCount());
     // 2nd backoff: range [500, 1000]
-    TEST_ASSERT_TRUE(pkt.tx_after >= 6000 + 500);
-    TEST_ASSERT_TRUE(pkt.tx_after <= 6000 + 1000);
+    const uint32_t now2 = Time::getMillis();
+    const uint32_t delay2 = pkt.tx_after - now2;
+    TEST_ASSERT_TRUE(delay2 >= 500);
+    TEST_ASSERT_TRUE(delay2 <= 1000);
 
     // Channel becomes free: transmits and resets busy count
     radio.rssiToReturn = -90;
@@ -418,20 +422,23 @@ void test_carrier_sense_unavailable_and_invalid_rssi_does_not_block(void)
     JapanTxHook hook;
     MockRadioInterface radio;
 
-    // Default 0 dBm (unavailable) must not be treated as busy >= -80 dBm
-    radio.rssiToReturn = JapanTxHook::RSSI_UNAVAILABLE;
+    // Transient 0 dBm (unavailable) alongside valid clear samples must not falsely trigger busy
+    radio.rssiSequence = {-95, -95, JapanTxHook::RSSI_UNAVAILABLE, -95, -95};
+    radio.sequenceIndex = 0;
     Time::setTestMillis(1000);
-    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "0 dBm (unavailable) must not block");
+    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "0 dBm glitch alongside valid samples must not block");
 
-    // Negative driver error codes (e.g. -706) must not be treated as busy
-    radio.rssiToReturn = JapanTxHook::RSSI_INVALID_DRIVER_ERROR;
+    // Negative driver error codes (e.g. -706) alongside valid clear samples must not falsely trigger busy
+    radio.rssiSequence = {-95, -95, JapanTxHook::RSSI_INVALID_DRIVER_ERROR, -95, -95};
+    radio.sequenceIndex = 0;
     Time::setTestMillis(2000);
-    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "-706 (driver error) must not block");
+    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "-706 glitch alongside valid samples must not block");
 
-    // Reading beyond physical receiver floor (< -192 dBm) must not block
-    radio.rssiToReturn = -193;
+    // Reading beyond physical receiver floor (< -192 dBm) alongside valid clear samples must not falsely trigger busy
+    radio.rssiSequence = {-95, -95, -193, -95, -95};
+    radio.sequenceIndex = 0;
     Time::setTestMillis(3000);
-    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "-193 dBm (out of physical range) must not block");
+    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "-193 dBm glitch alongside valid samples must not block");
 }
 
 void test_carrier_sense_ultra_low_rssi_valid_and_clear(void)
@@ -529,22 +536,47 @@ void test_carrier_sense_positive_rssi_and_error_codes_do_not_block(void)
     JapanTxHook hook;
     MockRadioInterface radio;
 
-    // Positive RSSI (+10 dBm) must not be treated as valid busy signal
-    radio.rssiToReturn = 10;
+    // Positive RSSI (+10 dBm) glitch alongside valid samples must not be treated as valid busy signal
+    radio.rssiSequence = {-95, -95, 10, -95, -95};
+    radio.sequenceIndex = 0;
     Time::setTestMillis(1000);
-    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "+10 dBm must not block");
+    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "+10 dBm glitch alongside valid samples must not block");
 
-    // Negative error code (-706) must not be treated as valid busy signal
-    radio.rssiToReturn = -706;
+    // Negative error code (-706) glitch alongside valid samples must not be treated as valid busy signal
+    radio.rssiSequence = {-95, -95, -706, -95, -95};
+    radio.sequenceIndex = 0;
     Time::setTestMillis(2000);
-    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "-706 must not block");
+    TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "-706 glitch alongside valid samples must not block");
 }
 
-void test_carrier_sense_null_iface_returns_true_immediately(void)
+void test_carrier_sense_null_iface_fails_safe(void)
 {
     JapanTxHook hook;
     Time::setTestMillis(1000);
-    TEST_ASSERT_TRUE(hook.performCarrierSense(nullptr));
+    TEST_ASSERT_FALSE(hook.performCarrierSense(nullptr));
+}
+
+void test_carrier_sense_no_valid_samples_defers_tx(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+
+    // RSSI 0 (uninitialized / unavailable) throughout entire window must fail-safe
+    radio.rssiToReturn = 0;
+    Time::setTestMillis(1000);
+    TEST_ASSERT_FALSE_MESSAGE(hook.performCarrierSense(&radio), "All-zero RSSI must fail carrier sense");
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x8001;
+    Time::setTestMillis(2000);
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
+
+    // All error codes (-706) throughout window must also fail-safe
+    radio.rssiToReturn = -706;
+    Time::setTestMillis(3000);
+    TEST_ASSERT_FALSE_MESSAGE(hook.performCarrierSense(&radio), "All-error RSSI must fail carrier sense");
 }
 
 void test_dispatcher_packet_released_resets_busy_count(void)
@@ -743,7 +775,8 @@ void setup()
     RUN_TEST(test_carrier_sense_ultra_low_rssi_valid_and_clear);
     RUN_TEST(test_is_valid_rssi_helper);
     RUN_TEST(test_carrier_sense_positive_rssi_and_error_codes_do_not_block);
-    RUN_TEST(test_carrier_sense_null_iface_returns_true_immediately);
+    RUN_TEST(test_carrier_sense_null_iface_fails_safe);
+    RUN_TEST(test_carrier_sense_no_valid_samples_defers_tx);
     RUN_TEST(test_before_transmit_busy_defers_and_backs_off);
     RUN_TEST(test_packet_released_resets_busy_count);
     RUN_TEST(test_dispatcher_packet_released_resets_busy_count);

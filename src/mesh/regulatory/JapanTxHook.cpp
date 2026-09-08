@@ -68,15 +68,23 @@ uint32_t JapanTxHook::computeBackoffMs(uint32_t count)
 bool JapanTxHook::performCarrierSense(RadioInterface *iface)
 {
     if (!iface)
-        return true;
+        return false;
+    bool hasValidSample = false;
     const uint32_t start = Time::getMillis();
     while (!Throttle::hasElapsed(start, CARRIER_SENSE_TIME_MS)) {
         int16_t rssi = iface->getCurrentRSSI();
-        if (isValidRssi(rssi) && rssi >= CARRIER_SENSE_THRESHOLD_DBM) {
-            LOG_DEBUG("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi, CARRIER_SENSE_THRESHOLD_DBM);
-            return false;
+        if (isValidRssi(rssi)) {
+            hasValidSample = true;
+            if (rssi >= CARRIER_SENSE_THRESHOLD_DBM) {
+                LOG_DEBUG("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi, CARRIER_SENSE_THRESHOLD_DBM);
+                return false;
+            }
         }
         delayMicroseconds(250);
+    }
+    if (!hasValidSample) {
+        LOG_WARN("JP LBT: no valid RSSI sample obtained during 5ms window");
+        return false;
     }
     return true;
 }
