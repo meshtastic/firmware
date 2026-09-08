@@ -3,8 +3,11 @@
 #include "MeshModule.h"
 #include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
+#include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+
+#include <algorithm>
 
 #if HAS_TRAFFIC_MANAGEMENT
 
@@ -101,14 +104,37 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
     }
 
+    /// hop_limit for the relayed copy: min(original, probation cap).
+    uint8_t relayHopCap(const meshtastic_MeshPacket &mp) const;
+
+    /// -1 untracked, 0 established, 1 in-probation.
+    int peekProbationStateForTest(NodeNum node);
+    /// Vouch count for (attester, subject) this window.
+    uint8_t peekVouchCountForTest(NodeNum attester, NodeNum subject);
+    /// Distinct subjects this attester vouched for this window.
+    uint8_t peekVouchSubjectsForTest(NodeNum attester);
+    /// Distinct attesters toward subject's promotion quorum.
+    uint8_t peekAttestQuorumForTest(NodeNum subject);
+    /// Packed RSSI class and channel, or -1 if untracked.
+    int16_t peekRssiChannelForTest(NodeNum node);
+    /// Non-zero when a promotion lease is armed; 0 when permanent or not promoted.
+    uint8_t peekPromotedWindowTickForTest(NodeNum node);
+    /// True when the subject currently holds a promotion.
+    bool peekPromotedForTest(NodeNum node);
+    /// 0xFFFFFFFF = production (Time::getUptimeSecs() or test clock); otherwise the stored value.
+    inline static uint32_t s_testUptimeSecs = 0xFFFFFFFFu;
+    /// Pin antispam uptime for tests; pass 0xFFFFFFFF to restore production.
+    static void setUptimeSecsForTest(uint32_t secs) { s_testUptimeSecs = secs; }
+
     // Injectable monotonic clock (ms): tests advance s_testNowMs instead of sleeping across
-    // ticks (mirrors HopScalingModule); production reads millis().
+    // ticks (mirrors HopScalingModule); production reads Time::getMillis().
     inline static uint32_t s_testNowMs = 0;
-    /// Monotonic module clock in ms (virtual under PIO_UNIT_TESTING).
 #ifdef PIO_UNIT_TESTING
+    /// Test clock: returns s_testNowMs.
     static uint32_t clockMs() { return s_testNowMs; }
 #else
-    static uint32_t clockMs() { return millis(); }
+    /// Production clock: Time::getMillis().
+    static uint32_t clockMs();
 #endif
 
   protected:
@@ -297,7 +323,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads (flat array; PSRAM on hardware, heap in tests)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
 
-    meshtastic_TrafficManagementStats stats;
+    mutable meshtastic_TrafficManagementStats
+        stats; // mutable: updated from const methods (stats counters don't affect observable const state)
 
     // Set during alterReceived() when the packet's hops should be exhausted; checked by
     // perhapsRebroadcast() for the matching packet key. Reset at start of handleReceived().
@@ -313,6 +340,92 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static constexpr uint8_t kNodeInfoReconcileSweeps = 60; // sweeps between reconciliations (60 x 60 s = 1 h)
     bool nodeInfoSeeded = false;
     uint8_t sweepsSinceNodeInfoReconcile = 0;
+
+    /// Per-node greylist state. Separate from the 10-byte unified cache:
+    /// first-seen uptime and promotion need real fields.
+    struct __attribute__((packed)) AntispamEntry {
+        NodeNum node;
+        uint32_t firstSeenSecs;  // uptime seconds; valid when hasFirstSeen
+        uint32_t promotedAtSecs; // uptime when the promotion lease was armed; 0 = permanent
+        uint8_t windowTick;      // 5-min nibble clock; valid when hasWindow
+        uint8_t promoted : 1;
+        uint8_t hasFirstSeen : 1;
+        uint8_t hasWindow : 1;
+        uint8_t rssiClass;
+        uint8_t channel;
+    };
+    static_assert(sizeof(AntispamEntry) == 16, "AntispamEntry should be 16 bytes");
+
+    /// Compiled antispam table size (min of unified cache and ANTISPAM_CACHE_SIZE).
+    static constexpr uint16_t antispamCacheSize()
+    {
+        return TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 ? std::min<uint16_t>(TRAFFIC_MANAGEMENT_CACHE_SIZE, ANTISPAM_CACHE_SIZE) : 0;
+    }
+
+    mutable AntispamEntry *antispam = nullptr; // mutable: const query paths (inProbation, relayHopCap) only read or slot-fill it
+    bool antispamFromPsram = false;
+
+    /// True while `node` is still inside the greylist probation window.
+    bool inProbation(NodeNum node) const;
+    /// True while first-seen age is still inside probation_window_secs.
+    bool inProbationLocked(const AntispamEntry *entry) const;
+    /// Seconds since first-seen, or 0 if untracked. Caller must hold cacheLock.
+    uint32_t observedAgeSecsLocked(const AntispamEntry *entry) const;
+    /// True when the attester has been observed locally for at least `minSecs`.
+    bool attesterObservedEnoughLocked(const AntispamEntry *attesterEntry, uint32_t minSecs) const;
+    /// Record first-seen for `node`.
+    bool noteFirstSeen(NodeNum node, uint8_t channel, uint8_t rssiClass);
+    /// True when local observation is old enough to vouch for others.
+    bool isEstablishedForVouching(NodeNum node) const;
+    /// Emit a hop_limit=1 KNOWN_SINCE gossip for `subject`.
+    bool sendKnownSinceGossip(NodeNum subject);
+    /// Handle an ID_ATTESTATION_APP packet (unsigned KNOWN_SINCE ends probation).
+    bool handleIdAttestation(const meshtastic_MeshPacket &mp);
+    /// Record one vouch for (attester, subject). Re-keys reused cells.
+    void stampVouchObservationLocked(NodeNum attester, NodeNum subject);
+    /// True when this vouch is within per-subject and per-attester caps.
+    bool vouchWithinCapsLocked(NodeNum attester, NodeNum subject) const;
+    /// Record attester toward subject's promotion quorum.
+    void stampAttestQuorumLocked(NodeNum attester, NodeNum subject);
+    /// Distinct attesters currently counted toward subject's quorum.
+    uint8_t attestQuorumCountLocked(NodeNum subject) const;
+    /// Configured distinct-attester floor for ending probation.
+    uint32_t attestationMinDistinctAttestersLocked() const;
+    /// Uptime seconds; tests may pin this via s_testUptimeSecs.
+    uint32_t uptimeSecs() const;
+    /// Quantize packet RSSI into a 4-class bucket.
+    uint8_t rssiClassOf(const meshtastic_MeshPacket &mp);
+    /// Read-only antispam lookup; never allocates. Caller must hold cacheLock.
+    AntispamEntry *findAntispamEntry(NodeNum node) const;
+    /// Find or create the antispam entry for `node` (oldest-first eviction
+    /// when full). nullptr when the table is compiled out or full with no
+    /// eviction target. Caller must hold cacheLock.
+    AntispamEntry *findOrCreateAntispamEntry(NodeNum node, bool *isNew);
+    /// Drop vouch and quorum auxiliary rows for `node`.
+    void clearAntispamAuxLocked(NodeNum node);
+    /// Allocate the antispam table alongside the unified cache.
+    void initAntispamCache();
+    /// Per-sweep maintenance of the antispam table. Caller must hold cacheLock.
+    void maintainAntispamLocked();
+
+    static constexpr uint16_t kVouchObsEntries = 16;
+    struct VouchObsCell {
+        NodeNum attester;
+        NodeNum subject;
+        uint8_t count;
+        uint8_t windowTick;
+    };
+    VouchObsCell vouchObs[kVouchObsEntries] = {};
+
+    static constexpr uint16_t kAttestQuorumEntries = 16;
+    struct AttestQuorumCell {
+        NodeNum subject;
+        NodeNum attester;
+        uint8_t windowTick;
+    };
+    AttestQuorumCell attestQuorum[kAttestQuorumEntries] = {};
+
+    uint32_t lastVouchSentMs = 0;
 
     // =========================================================================
     // Cache Operations
@@ -403,6 +516,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     void logAction(const char *action, const meshtastic_MeshPacket *p, const char *reason) const;
     /// Increment a stats counter under cacheLock.
     void incrementStat(uint32_t *field);
+    /// Increment a stats counter without taking cacheLock (caller holds it).
+    void incrementStatLocked(uint32_t *field) const;
 };
 
 static_assert(TRAFFIC_MANAGEMENT_CACHE_SIZE <= UINT16_MAX, "cacheSize() returns uint16_t");

@@ -221,7 +221,19 @@ static inline int get_max_num_nodes()
 // unclassified - fail small rather than defaulting large (2.8.0 lesson).
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 400
 #endif
-#endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
+#endif
+
+// Antispam table is a second per-node store. Cap it independently so nRF/SMALL
+// heaps do not grow by ~9 KB on top of the unified cache.
+#ifndef ANTISPAM_CACHE_SIZE
+#if !HAS_TRAFFIC_MANAGEMENT
+#define ANTISPAM_CACHE_SIZE 0
+#elif defined(NRF52840_XXAA) || MESHTASTIC_MEM_CLASS <= MEM_CLASS_SMALL
+#define ANTISPAM_CACHE_SIZE 64
+#else
+#define ANTISPAM_CACHE_SIZE 256
+#endif
+#endif // ANTISPAM_CACHE_SIZE
 
 // Enforce the per-class boot-cache budget (memory/MemClass.h) over the three big
 // boot-allocated mesh caches. Entry sizes are pinned by static_asserts at their

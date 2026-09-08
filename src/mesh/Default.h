@@ -52,6 +52,25 @@ enum class TrafficType { POSITION, TELEMETRY };
 // Unlike before, lost-and-found is NOT exempt from the relayed precision clamp.
 #define default_traffic_mgmt_lost_and_found_position_min_interval_secs (15 * 60) // 15 minutes
 
+// Traffic-management antispam defaults. 0 disables the matching feature unless noted.
+#define default_traffic_mgmt_probation_window_secs (5 * 60)
+#define default_traffic_mgmt_attestation_min_tenure_secs (24 * 60 * 60)
+#define default_traffic_mgmt_probation_max_hop_limit 2
+#define default_traffic_mgmt_budget_gossip_enabled 0
+#define default_traffic_mgmt_group_budget_enabled 0
+#define default_traffic_mgmt_relay_budget_max_packets 0
+#define default_traffic_mgmt_congestion_hop_cap_pct 0
+#define default_traffic_mgmt_no_relay_requires_local_exhaustion 1
+#define default_traffic_mgmt_no_relay_max_subjects_per_window 3
+#define default_traffic_mgmt_no_relay_ttl_secs 120
+#define default_traffic_mgmt_no_relay_min_claimers 2
+#define default_traffic_mgmt_attestation_min_observed_secs (24 * 60 * 60)
+#define default_traffic_mgmt_vouch_max_per_subject_per_window 1
+#define default_traffic_mgmt_vouch_max_subjects_per_window 3
+#define default_traffic_mgmt_attestation_min_distinct_attesters 2
+#define default_traffic_mgmt_attestation_promotion_ttl_secs 0
+#define default_traffic_mgmt_attestation_l2_min_tenure_secs (30 * 24 * 60 * 60)
+
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
 #define default_hop_scaling_max_target_nodes 80          // generous extension ceiling (2 × min)
