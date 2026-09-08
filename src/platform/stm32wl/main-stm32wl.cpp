@@ -1,6 +1,7 @@
 #include "FSCommon.h"
 #include "configuration.h"
 #include "error.h"
+#include "gps/GPS.h"
 #include "gps/RTC.h"
 #include <Throttle.h>
 #include <cstring>
@@ -20,23 +21,27 @@ static bool stm32wlRtcValid = false;
 #endif
 
 // ─── Bootloader redirect ──────────────────────────────────────────────────────
-// Uses .noinit SRAM instead of TAMP backup registers: STM32duino's clock init can wipe the
-// backup domain via __HAL_RCC_BACKUPRESET_FORCE/RELEASE before setup() runs, but .noinit
-// survives NVIC_SystemReset() and this constructor fires before HAL_Init() touches anything.
+// Magic word in .noinit, not TAMP backup regs (STM32duino clock init can wipe those): it
+// survives NVIC_SystemReset(), and the .preinit_array hook below runs before HAL_Init().
 
+// STM32WLxx system-memory bootloader base, AN2606 "STM32WLxx bootloader":
+// https://www.st.com/resource/en/application_note/an2606-stm32-microcontroller-system-memory-boot-mode-stmicroelectronics.pdf
 #define BOOTLOADER_MAGIC 0xD00DB007UL
 #define SYS_MEM_BASE 0x1FFF0000UL
 
-// Placed in .noinit - not zeroed at startup, survives NVIC_SystemReset().
+// .noinit - not zeroed at startup, survives NVIC_SystemReset().
 __attribute__((section(".noinit"), used)) volatile uint32_t g_bootloaderMagic;
 
-// Fires before main() / HAL_Init(). Must use only core Cortex-M registers.
-__attribute__((constructor(101), used)) static void earlyBootCheck(void)
+// Runs from .preinit_array (below), before every constructor incl. the core's premain()/init(),
+// so RCC/SysTick/HAL are still at reset. Core Cortex-M / CMSIS registers only.
+__attribute__((used)) static void earlyBootCheck(void)
 {
     if (g_bootloaderMagic != BOOTLOADER_MAGIC)
         return;
     g_bootloaderMagic = 0;
 
+    // Return SysTick/NVIC/RCC to reset state before the jump - ST's system bootloader expects it.
+    // https://community.st.com/t5/stm32-mcus/how-to-jump-to-system-bootloader-from-application-code-on-stm32/ta-p/49424
     SysTick->CTRL = 0;
     SysTick->LOAD = 0;
     SysTick->VAL = 0;
@@ -44,20 +49,56 @@ __attribute__((constructor(101), used)) static void earlyBootCheck(void)
         NVIC->ICER[i] = 0xFFFFFFFF;
         NVIC->ICPR[i] = 0xFFFFFFFF;
     }
+
+    // Same writes CMSIS system_stm32wlxx.c SystemInit() makes, repeated here in case a hook
+    // between reset and .preinit_array moved SYSCLK onto the PLL (RM0461 reset values).
+    RCC->CR |= 0x00000061U;  // MSION, MSI range 4 MHz
+    RCC->CFGR = 0x00070000U; // SYSCLK=MSI, AHB/APB prescalers /1, MCO off
+    RCC->CR = 0x00000061U;   // HSEON/HSEBYP/CSSON/PLLON off
+    RCC->PLLCFGR = 0x22040100U;
+    RCC->CIER = 0x00000000U;
+    RCC->CICR = 0x0000033FU; // clear all RCC interrupt flags
+
     __DSB();
     __ISB();
     SCB->VTOR = SYS_MEM_BASE;
     __set_MSP(*(volatile uint32_t *)SYS_MEM_BASE);
     ((void (*)(void))(*(volatile uint32_t *)(SYS_MEM_BASE + 4)))();
-    // Should never be reached: the bootloader ROM does not return. A bare reset
-    // (rather than returning normally) avoids unwinding through this function's
-    // epilogue, which would restore registers relative to the now-repointed MSP.
+    // Not reached: the bootloader ROM does not return. Reset rather than return, to avoid
+    // unwinding this function's epilogue against the now-repointed MSP.
     NVIC_SystemReset();
+}
+
+// __libc_init_array runs .preinit_array entries before any .init_array constructor, so this
+// precedes the core's premain() (constructor(101)) regardless of link order.
+__attribute__((section(".preinit_array"), used)) static void (*const earlyBootCheckEntry)(void) = &earlyBootCheck;
+
+// Drain and release a UART before the reset, as cpuDeepSleep() does.
+static void quiesceSerial(HardwareSerial &port)
+{
+    if (port) {
+        port.flush();
+        port.end();
+    }
 }
 
 void enterDfuMode()
 {
     g_bootloaderMagic = BOOTLOADER_MAGIC;
+
+    // The ROM bootloader autobauds off the first byte on USART1 (PB6/PB7) or USART2 (PA2/PA3),
+    // and every WL UART and GPS sits on those pins. Silence them all before the reset.
+#if !MESHTASTIC_EXCLUDE_GPS
+    if (gps)
+        gps->disable();
+#endif
+    quiesceSerial(Serial);
+#ifdef ENABLE_HWSERIAL1
+    quiesceSerial(Serial1);
+#endif
+#ifdef ENABLE_HWSERIAL2
+    quiesceSerial(Serial2);
+#endif
     HAL_NVIC_SystemReset();
 }
 
@@ -140,25 +181,19 @@ void cpuDeepSleep(uint32_t msecToWake)
         // Hardware can't shutdown, but firmware has already prepared itself for shutdown
         // Do not leave the device unresponsive, reset instead
         LOG_WARN("STM32WL: hardware RTC failed, can't deep sleep/shutdown");
-        if (Serial) {
-            Serial.flush();
-            Serial.end();
+        quiesceSerial(Serial);
+        HAL_NVIC_SystemReset();
+    } else {
+        quiesceSerial(Serial);
+
+        if (msecToWake != portMAX_DELAY) {
+            LowPower.shutdown(msecToWake);
+        } else {
+            LowPower.shutdown();
         }
+        // RTC wakes from shutdown into MCU reset, so this code should never be reached
         HAL_NVIC_SystemReset();
     }
-
-    if (Serial) {
-        Serial.flush();
-        Serial.end();
-    }
-
-    if (msecToWake != portMAX_DELAY) {
-        LowPower.shutdown(msecToWake);
-    } else {
-        LowPower.shutdown();
-    }
-    // RTC wakes from shutdown into MCU reset, so this code should never be reached
-    HAL_NVIC_SystemReset();
 #endif
 }
 

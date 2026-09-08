@@ -133,9 +133,6 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #include <cstdlib>
 #include <cstring>
 #include <vector>
-#ifdef ARCH_ESP32
-#include <esp_heap_caps.h>
-#endif
 
 /**
  * @brief Platform-agnostic filesystem format / wipe.
@@ -253,12 +250,6 @@ void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vec
 } // namespace
 #endif
 
-#ifdef ARCH_ESP32
-// Headroom kept below the allocator's largest free block when sizing the manifest: the block reported
-// includes the allocator's own bookkeeping, and other tasks keep allocating while the SPI lock is held.
-static constexpr size_t FILES_MANIFEST_HEAP_MARGIN = 1024;
-#endif
-
 /**
  * @brief Get the list of files in a directory.
  *
@@ -286,32 +277,24 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, s
     // Cap at what a vector of FileInfo can hold at all: it keeps the probe's byte count from wrapping
     // for a huge maxCount, and it is also the bound reserve() would otherwise reject with a throw.
     size_t reservedCount = std::min(maxCount, filenames.max_size());
-#ifdef ARCH_ESP32
-    // Ask the allocator for the largest contiguous block malloc() could hand out. MALLOC_CAP_DEFAULT
-    // is the capability heap_caps_malloc_default() (what operator new resolves to) falls back to
-    // across every region, internal and PSRAM alike, so this is the "will new succeed" question
-    // asked directly. Nothing is freed before the reserve, so there is no hole for another task to
-    // take between the probe and the allocation.
-    const size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
-    // Leave a margin below the largest block: the allocator's own overhead sits inside it, and other
-    // threads keep allocating while we hold the SPI lock.
-    const size_t usable = largest > FILES_MANIFEST_HEAP_MARGIN ? largest - FILES_MANIFEST_HEAP_MARGIN : 0;
-    reservedCount = std::min(reservedCount, usable / sizeof(meshtastic_FileInfo));
-#else
-    // Other targets have no largest-block query. Probe with malloc() - the allocation that returns
-    // nullptr on failure under every build (new(std::nothrow) is not that: libstdc++ implements it as
-    // a try/catch around the throwing form) - free the probe, and reserve the size that fit. Not
-    // airtight against a concurrent allocator, but the SPI lock the caller holds serialises the usual
-    // competitors and it is strictly better than letting reserve() be the first to find out.
+    // Probe with malloc() - the allocation that returns nullptr on failure under every build (new(std::nothrow)
+    // is not that: libstdc++ implements it as a try/catch around the throwing form) - free the probe, and
+    // reserve the size that fit. Not airtight against a concurrent allocator, but the SPI lock the caller holds
+    // serialises the usual competitors and it is strictly better than letting reserve() be the first to find
+    // out. On ESP32 do NOT replace this with heap_caps_get_largest_free_block(): it walks every TLSF block of
+    // every matching heap while holding the allocator lock, and on PSRAM boards that walk blocks wifi_malloc()
+    // on the other core long enough to trip the interrupt watchdog (#11666).
     while (reservedCount > 0) {
         void *probe = malloc(reservedCount * sizeof(meshtastic_FileInfo));
         if (probe) {
+            // Observable access so LTO cannot elide the malloc()/free() pair and turn the probe
+            // into a compile-time yes.
+            *static_cast<volatile char *>(probe) = 0;
             free(probe);
             break;
         }
         reservedCount /= 2;
     }
-#endif
     if (reservedCount == 0) {
         if (wasLimited)
             *wasLimited = true;
