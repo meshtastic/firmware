@@ -1428,8 +1428,8 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     if (!isWithinMaxHopsOfRequestor(p))
         return false;
 
-    // A request that crossed a hop reached us through a relayer, and that relayer is the only
-    // return path we can address. Without it, leave the request for the genuine target.
+    // A request that crossed a hop but names no relayer is anomalous: we cannot corroborate the
+    // path it took. Leave it for the genuine target rather than consume it on a guess.
     const int8_t hopsAway = getHopsAway(*p, -1);
     if (hopsAway > 0 && p->relay_node == NO_RELAY_NODE) {
         TM_LOG_DEBUG("NodeInfo request from 0x%08x is %d hops out with no relayer, not responding", getFrom(p),
@@ -1581,8 +1581,8 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // hop_start is set explicitly because Router::send() only sets it for isFromUs(),
     // and our spoofed from means isFromUs() is false.
     reply->hop_start = reply->hop_limit;
-    // Steer back along the path the request arrived on; a direct requestor is its own relayer.
-    reply->next_hop = (hopsAway > 0) ? p->relay_node : nodeDB->getLastByteOfNodeNum(getFrom(p));
+    // next_hop is deliberately left unset: NextHopRouter::sendWithNextHop() overwrites it from the
+    // NodeDB route (with staleness and unique-neighbour checks, else flooding) on the way out.
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
     service->sendToMesh(reply);

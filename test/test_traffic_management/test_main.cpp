@@ -565,10 +565,10 @@ static void test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops(void)
 }
 
 /**
- * Verify a ROUTER serving a 1-hop requestor sends a reply that can route back to it.
- * Important because the request is consumed, so an undeliverable reply answers nobody.
+ * Verify a ROUTER serving a 1-hop requestor grants the reply enough hops to get back.
+ * Important because the request is consumed, so a reply that expires en route answers nobody.
  */
-static void test_tm_nodeinfo_routerMultiHop_replyRoutesBackToRequestor(void)
+static void test_tm_nodeinfo_routerMultiHop_replyCarriesHopBudgetToReturn(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 3;
     config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
@@ -589,7 +589,7 @@ static void test_tm_nodeinfo_routerMultiHop_replyRoutesBackToRequestor(void)
     request.id = 0x2468ace0;
     request.hop_start = 3;
     request.hop_limit = 2;     // 1 hop away: inside the router clamp of 3, outside direct earshot
-    request.relay_node = 0x42; // the neighbour that handed us the request
+    request.relay_node = 0x42; // a relayer is present, so the no-relayer guard does not fire
     const uint8_t hopsAway = static_cast<uint8_t>(request.hop_start - request.hop_limit);
 
     ProcessMessage result = module.handleReceived(request);
@@ -604,15 +604,17 @@ static void test_tm_nodeinfo_routerMultiHop_replyRoutesBackToRequestor(void)
     const meshtastic_MeshPacket &reply = mockRouter.sentPackets.front();
     TEST_ASSERT_EQUAL_UINT32(kTargetNode, reply.from);
     TEST_ASSERT_EQUAL_UINT32(kRemoteNode, reply.to);
-    // Enough hops to cross the distance the request came, and steered back at the relayer we heard.
+    // Enough hops to cross the distance the request came from.
     TEST_ASSERT_EQUAL_UINT8(hopsAway, reply.hop_limit);
     TEST_ASSERT_EQUAL_UINT8(hopsAway, reply.hop_start);
-    TEST_ASSERT_EQUAL_UINT8(request.relay_node, reply.next_hop);
+    // Routing is the router's call: NextHopRouter::sendWithNextHop() sets next_hop from the NodeDB
+    // route, so TMM must leave it unset rather than steer with the relayer byte it happened to see.
+    TEST_ASSERT_EQUAL_UINT8(NO_NEXT_HOP_PREFERENCE, reply.next_hop);
 }
 
 /**
  * Verify a multi-hop request with no relayer byte is left alone rather than answered.
- * Important because there is no return path to address, and consuming it would answer nobody.
+ * Important because consuming an anomalous request would answer nobody if the guess is wrong.
  */
 static void test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown(void)
 {
@@ -635,7 +637,7 @@ static void test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown(void)
     request.id = 0x13570246;
     request.hop_start = 3;
     request.hop_limit = 1;              // 2 hops away
-    request.relay_node = NO_RELAY_NODE; // no relayer learned, so no way to address a reply
+    request.relay_node = NO_RELAY_NODE; // no relayer, so the path it took cannot be corroborated
 
     ProcessMessage result = module.handleReceived(request);
     meshtastic_TrafficManagementStats stats = module.getStats();
@@ -690,7 +692,8 @@ static void test_tm_nodeinfo_directResponse_respondsFromCache(void)
     TEST_ASSERT_FALSE(reply.decoded.want_response);
     TEST_ASSERT_EQUAL_UINT8(0, reply.hop_limit);
     TEST_ASSERT_EQUAL_UINT8(0, reply.hop_start);
-    TEST_ASSERT_EQUAL_UINT8(mockNodeDB->getLastByteOfNodeNum(kRemoteNode), reply.next_hop);
+    // Left to NextHopRouter::sendWithNextHop(), which resolves it from the NodeDB route.
+    TEST_ASSERT_EQUAL_UINT8(NO_NEXT_HOP_PREFERENCE, reply.next_hop);
     TEST_ASSERT_TRUE(reply.decoded.has_bitfield);
     TEST_ASSERT_EQUAL_UINT8(BITFIELD_OK_TO_MQTT_MASK, reply.decoded.bitfield);
 }
@@ -3410,7 +3413,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_fromUs_bypassesPositionAndRateFilters);
     RUN_TEST(test_tm_localDestination_bypassesTransitFilters);
     RUN_TEST(test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops);
-    RUN_TEST(test_tm_nodeinfo_routerMultiHop_replyRoutesBackToRequestor);
+    RUN_TEST(test_tm_nodeinfo_routerMultiHop_replyCarriesHopBudgetToReturn);
     RUN_TEST(test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown);
     RUN_TEST(test_tm_nodeinfo_directResponse_respondsFromCache);
     RUN_TEST(test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo);
