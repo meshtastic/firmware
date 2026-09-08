@@ -1324,6 +1324,10 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     if (einkScreensaver != NULL) {
         screensaverFrame = einkScreensaver;
         ui->setFrames(&screensaverFrame, 1);
+
+        // Drop the nav bar before the sleep / shutdown screen is rendered
+        static OverlayCallback screensaverOverlays[] = {NotificationRenderer::drawBannercallback};
+        ui->setOverlays(screensaverOverlays, 1);
     }
 
     // Else, display the usual "overlay" screensaver
