@@ -1316,10 +1316,13 @@ typedef PB_BYTES_ARRAY_T(384) meshtastic_DisplayFrame_data_t;
  over BLE/serial/TCP. Frames larger than one chunk are split by byte offset;
  a chunk with offset + data length == total_size completes the frame.
  Chunks of one frame arrive contiguously (no other display_frame between
- them; display_palette messages may interleave) and in offset order
- (FromRadio is a reliable ordered stream), so clients may reassemble into
- a single buffer without reordering. A frame whose streaming has begun is always drained to
- completion, even if mirroring is disabled mid-frame. */
+ them; display_palette messages may interleave) and in offset order, so a
+ client never has to reorder. It does have to check for loss: the queue to
+ the client drops its oldest entry when full, and a frame in flight can be
+ truncated when mirroring is disabled. A client MUST verify that offset
+ equals the number of bytes it has already accumulated for this frame_id,
+ and discard the partial frame on any gap or frame_id change. An incomplete
+ frame must never be rendered. */
 typedef struct _meshtastic_DisplayFrame {
     /* Display width in pixels. */
     uint16_t width;
@@ -1327,10 +1330,12 @@ typedef struct _meshtastic_DisplayFrame {
     uint16_t height;
     /* Pixel encoding of data. */
     meshtastic_DisplayFrame_Format format;
-    /* Frame counter, constant across the chunks of one frame so the client
- can detect interleaving or loss. Increments per captured frame, wraps
- at uint32 range, and restarts from 1 on device reboot - treat any
- change as "a new frame", not as an ordering guarantee. */
+    /* Frame counter, constant across the chunks of one frame, so a change
+ marks the start of a new frame. It cannot reveal loss WITHIN a frame,
+ since every chunk of that frame carries the same value; only offset
+ contiguity can. Increments per captured frame, wraps at uint32 range,
+ and restarts from 1 on device reboot, so treat any change as "a new
+ frame" rather than as an ordering guarantee. */
     uint32_t frame_id;
     /* Byte offset of this chunk within the full frame buffer. */
     uint32_t offset;
@@ -1411,15 +1416,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        - storage already unlocked, client must auth
-   "token_missing"     - no boot token on flash
-   "token_expired"     - boot token wall-clock TTL elapsed
-   "token_boots_zero"  - boot token boot-count TTL exhausted
-   "token_hmac_fail"   - token tampered or wrong device
-   "token_dek_fail"    - token DEK decrypt failed
-   "token_wrong_size"  - token file corrupted
-   "token_bad_magic"   - token file corrupted
-   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
+   "needs_auth"        — storage already unlocked, client must auth
+   "token_missing"     — no boot token on flash
+   "token_expired"     — boot token wall-clock TTL elapsed
+   "token_boots_zero"  — boot token boot-count TTL exhausted
+   "token_hmac_fail"   — token tampered or wrong device
+   "token_dek_fail"    — token DEK decrypt failed
+   "token_wrong_size"  — token file corrupted
+   "token_bad_magic"   — token file corrupted
+   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];
@@ -1577,7 +1582,7 @@ typedef struct _meshtastic_DeviceMetadata {
     bool has_xeddsa;
     /* Describes the device's screen when one is present; absent on display-less
  builds. Lets clients gate display-mirroring UI (see DisplayFrame) and
- adapt to the panel - e.g. expect slow refresh from EINK, or offer
+ adapt to the panel, e.g. expect slow refresh from EINK, or offer
  tap-to-touch when has_touch is set. */
     bool has_display;
     meshtastic_DisplayInfo display;
