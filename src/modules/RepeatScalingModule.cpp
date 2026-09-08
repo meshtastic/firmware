@@ -5,6 +5,18 @@
 #include "modules/HopScalingModule.h"
 
 RepeatScalingModule *repeatScalingModule;
+RepeatScalingTxHook *repeatScalingTxHook;
+
+// The packet is on the air: say so if it only got there because we tolerated heard duplicates.
+void RepeatScalingTxHook::transmitStarted(RadioInterface *, const meshtastic_MeshPacket *p)
+{
+    if (!repeatScalingModule)
+        return;
+    const uint8_t dupesTolerated = repeatScalingModule->getToleratedDupeCount(p->from, p->id);
+    if (dupesTolerated > 0)
+        LOG_DEBUG("[REPEATSCALE] Transmitting 0x%08x from=0x%08x after tolerating %u duplicate(s)", p->id, p->from,
+                  dupesTolerated);
+}
 
 // Design notes for getDupeCancelThreshold()'s policy (kept here rather than inline):
 //

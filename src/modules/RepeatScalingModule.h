@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MeshTypes.h"
+#include "RadioTxHook.h"
 #include "mesh/mesh-pb-constants.h"
 
 /**
@@ -71,4 +72,15 @@ class RepeatScalingModule
     uint8_t dupeCountsNextSlot = 0;
 };
 
+/**
+ * Reports at TX time how many duplicates a rebroadcast tolerated before going out, so the radio
+ * driver holds no repeat-scaling code. One instance is created with the module and registers itself.
+ */
+class RepeatScalingTxHook : public RadioTxHook
+{
+  public:
+    void transmitStarted(RadioInterface *iface, const meshtastic_MeshPacket *p) override;
+};
+
 extern RepeatScalingModule *repeatScalingModule;
+extern RepeatScalingTxHook *repeatScalingTxHook;
