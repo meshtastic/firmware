@@ -235,9 +235,8 @@ static void useRegion(meshtastic_Config_LoRaConfig_RegionCode region)
 
 void test_trafficType_unsetRegion_returnsUnthrottled()
 {
-    // UNSET resolves to PROFILE_UNDEF, whose throttles are the neutral 1. The throttle reads the
-    // configured region and getRegion() always answers, so this is the neutral-multiplier path
-    // rather than the old null-myRegion guard - same outcome for a node with no region set.
+    // UNSET resolves to PROFILE_UNDEF, whose throttles are the neutral 1, and getRegion() always
+    // answers - so a node with no region set takes the neutral-multiplier path, never a null region.
     useRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     const uint32_t base = Default::getConfiguredOrDefaultMsScaled(0, 60u, kUnscaledNodes);
