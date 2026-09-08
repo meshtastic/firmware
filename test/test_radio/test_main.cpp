@@ -578,6 +578,44 @@ static void test_configuredUsesDefaultSlot_ignoresALiveSlotMove(void)
 }
 
 /**
+ * commitConfig() captures after the radio accepted the config. applyModemConfig() clamps
+ * config.lora in place, so capturing first would snapshot a value the radio refused.
+ */
+static void test_commitConfig_snapshotsTheAcceptedConfigNotTheRequestedOne(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true);
+
+    // LITE_FAST is not a US preset, so applyModemConfig() rewrites it to the region default.
+    // Three distinct values: LONG_SLOW is the stale snapshot, LITE_FAST the ask, LONG_FAST accepted.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+    initRegion();
+
+    testRadio->commitConfig();
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                              "the requested preset must have been clamped in place");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                              RadioInterface::configuredLoraConfig().modem_preset,
+                              "the snapshot holds the accepted preset, not the requested or the previous one");
+}
+
+/** reconfigure() is the borrowed path: it programs the radio and leaves the snapshot alone. */
+static void test_reconfigure_doesNotMoveTheSnapshot(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    initRegion();
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                              RadioInterface::configuredLoraConfig().modem_preset,
+                              "programming the radio is not a settings commit");
+}
+
+/**
  * The configured region must resolve exactly as initRegion() did for the same committed config.
  *
  * This is the invariant that covers REGULATORY_LORA_REGIONCODE without needing the flag set: on a
@@ -675,6 +713,8 @@ void setup()
     RUN_TEST(test_configuredUsesDefaultSlot_ignoresALiveSlotMove);
     RUN_TEST(test_configuredRegion_ignoresALiveRegionMove);
     RUN_TEST(test_configuredRegion_agreesWithInitRegionAtCommitTime);
+    RUN_TEST(test_commitConfig_snapshotsTheAcceptedConfigNotTheRequestedOne);
+    RUN_TEST(test_reconfigure_doesNotMoveTheSnapshot);
     exit(UNITY_END());
 }
 

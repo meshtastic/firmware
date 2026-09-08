@@ -366,6 +366,7 @@ void RadioInterface::captureConfiguredRadio()
     configuredLora = config.lora;
     configuredSlotIsDefault = uses_default_frequency_slot;
     configuredCaptured = true;
+    channels.captureCommittedPrimary();
 }
 
 const meshtastic_Config_LoRaConfig &RadioInterface::configuredLoraConfig()
@@ -671,7 +672,7 @@ std::unique_ptr<RadioInterface> initLoRa()
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
 
-        if (rIf && !rIf->reconfigure()) {
+        if (rIf && !rIf->commitConfig()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");

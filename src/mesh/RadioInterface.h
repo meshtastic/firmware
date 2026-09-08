@@ -200,7 +200,17 @@ class RadioInterface
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
+    /// This is the BORROWED path: it programs the radio without moving the configured snapshot.
     virtual bool reconfigure();
+
+    /// Apply a permanent config change: program the radio, then snapshot what it accepted.
+    /// applyModemConfig() clamps config.lora in place, so the capture must come last.
+    bool commitConfig()
+    {
+        const bool ok = reconfigure();
+        captureConfiguredRadio();
+        return ok;
+    }
 
     /** The delay to use for retransmitting dropped packets */
     [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
@@ -260,6 +270,8 @@ class RadioInterface
 
     // The radio as configured, which is not always the radio as it is running. Status gates - may
     // a module run, transmit, how often - ask these; only radio programming reads the live values.
+    // TRAP: only fields where committed and accepted coincide are meaningful. tx_power, bandwidth,
+    // spread_factor and coding_rate are clamped into members by applyModemConfig(), not into this.
     static const meshtastic_Config_LoRaConfig &configuredLoraConfig();
 
     // Settings-time twin of uses_default_frequency_slot.
@@ -346,9 +358,7 @@ class RadioInterface
 
     int reloadConfig(void *unused)
     {
-        reconfigure();
-        // Settings time: only a committed config reaches here, so this is what the node IS.
-        captureConfiguredRadio();
+        commitConfig(); // only a committed config reaches here, so this is what the node IS
         return 0;
     }
 };
