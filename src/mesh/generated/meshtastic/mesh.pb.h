@@ -1315,6 +1315,13 @@ typedef PB_BYTES_ARRAY_T(384) meshtastic_DisplayFrame_data_t;
 /* A chunk of the device's display framebuffer, streamed to the local client
  over BLE/serial/TCP. Frames larger than one chunk are split by byte offset;
  a chunk with offset + data length == total_size completes the frame.
+ This is application-level chunking of a framebuffer into several complete
+ FromRadio messages, and is unrelated to ClientApiChunkedPayload, which
+ splits ONE serialized FromRadio across a small BLE MTU. A frame cannot ride
+ that wrapper: FromRadio is statically capped at MAX_TO_FROM_RADIO_SIZE, far
+ below a full framebuffer. The two compose - a chunked-transport client
+ receives these frames through it.
+
  Chunks of one frame arrive contiguously (no other display_frame between
  them; display_palette messages may interleave) and in offset order, so a
  client never has to reorder. It does have to check for loss: the queue to
@@ -2237,7 +2244,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hasPKC_tag     11
 #define meshtastic_DeviceMetadata_excluded_modules_tag 12
 #define meshtastic_DeviceMetadata_has_xeddsa_tag 14
-#define meshtastic_DeviceMetadata_display_tag    15
+#define meshtastic_DeviceMetadata_display_tag    16
 #define meshtastic_LoRaPresetGroup_presets_tag   1
 #define meshtastic_LoRaPresetGroup_default_preset_tag 2
 #define meshtastic_LoRaPresetGroup_licensed_only_tag 3
@@ -2264,8 +2271,8 @@ extern "C" {
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
 #define meshtastic_FromRadio_lockdown_status_tag 18
 #define meshtastic_FromRadio_region_presets_tag  19
-#define meshtastic_FromRadio_display_frame_tag   20
-#define meshtastic_FromRadio_display_palette_tag 21
+#define meshtastic_FromRadio_display_frame_tag   21
+#define meshtastic_FromRadio_display_palette_tag 22
 #define meshtastic_Heartbeat_nonce_tag           1
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
@@ -2527,8 +2534,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNot
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_status,lockdown_status),  18) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_frame,display_frame),  20) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_palette,display_palette),  21)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_frame,display_frame),  21) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_palette,display_palette),  22)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -2702,7 +2709,7 @@ X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10) \
 X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11) \
 X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  display,          15)
+X(a, STATIC,   OPTIONAL, MESSAGE,  display,          16)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 #define meshtastic_DeviceMetadata_display_MSGTYPE meshtastic_DisplayInfo
@@ -2869,7 +2876,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
-#define meshtastic_DeviceMetadata_size           72
+#define meshtastic_DeviceMetadata_size           73
 #define meshtastic_DisplayFrame_size             437
 #define meshtastic_DisplayInfo_size              14
 #define meshtastic_DisplayPalette_ColorRegion_size 24
