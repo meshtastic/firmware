@@ -118,7 +118,7 @@ bool configureInput(uint8_t pin)
 
 bool configureOutput(uint8_t pin, bool level)
 {
-    return ioExpander.pinMode(pin, true) && ioExpander.digitalWrite(pin, level);
+    return ioExpander.digitalWrite(pin, level) && ioExpander.pinMode(pin, true);
 }
 
 } // namespace
