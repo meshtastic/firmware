@@ -13,7 +13,7 @@ class BMA423Sensor : public MotionSensor
 {
   private:
     SensorBMA423 sensor;
-    volatile bool BMA_IRQ = false;
+    bool wakeRequested = false;
 
   public:
     explicit BMA423Sensor(ScanI2C::FoundDevice foundDevice);
