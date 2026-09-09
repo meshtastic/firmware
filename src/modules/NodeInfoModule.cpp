@@ -19,6 +19,7 @@
 NodeInfoModule *nodeInfoModule;
 
 static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
+static constexpr uint32_t OwnerSyncRetryMs = 30 * 1000;
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
@@ -137,6 +138,15 @@ void NodeInfoModule::triggerImmediateNodeInfoCheck()
     setIntervalFromNow(0);
 }
 
+void NodeInfoModule::requestOwnerSync()
+{
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN)
+        return;
+
+    ownerSyncPending = true;
+    setIntervalFromNow(0);
+}
+
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     return allocNodeInfo(false);
@@ -236,10 +246,15 @@ int32_t NodeInfoModule::runOnce()
 {
     if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         // If we changed channels, ask everyone else for their latest info
-        bool requestReplies = currentGeneration != radioGeneration;
+        const bool isOwnerSync = ownerSyncPending;
+        bool requestReplies = !isOwnerSync && currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
-        if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies))
+        if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies, 0, isOwnerSync, isOwnerSync)) {
             currentGeneration = radioGeneration; // only a send that went out consumes the channel change
+            ownerSyncPending = false;
+        }
     }
+    if (ownerSyncPending)
+        return OwnerSyncRetryMs;
     return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }

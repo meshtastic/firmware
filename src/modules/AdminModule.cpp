@@ -1929,7 +1929,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 void AdminModule::flushPendingOwnerSync()
 {
     if (ownerSyncPending && nodeInfoModule) {
-        nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, true, true);
+        nodeInfoModule->requestOwnerSync();
         ownerSyncPending = false;
     }
 }

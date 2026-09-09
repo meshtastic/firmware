@@ -447,7 +447,7 @@ void menuHandler::licensedToNormalConfirmMenu()
         }
         applyLoraRegion(pendingRegion, false);
         if (selected == 1 && nodeInfoModule)
-            nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, true, true);
+            nodeInfoModule->requestOwnerSync();
     };
     screen->showOverlayBanner(confirmBanner);
 }

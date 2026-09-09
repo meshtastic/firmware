@@ -24,6 +24,9 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     bool sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
                          bool _shorterTimeout = false, bool bypassCadenceThrottle = false);
 
+    /** Queue one owner announcement after a license transition. */
+    void requestOwnerSync();
+
     /**
      * Schedule an immediate NodeInfo periodic check.
      * Used when external conditions change (for example time source quality).
@@ -49,6 +52,7 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
   private:
     bool shorterTimeout = false;
+    bool ownerSyncPending = false;
     bool suppressReplyForCurrentRequest = false;
     /// Sender -> uptime seconds (Time::getUptimeSecs()) at our last reply. Seconds, not millis:
     /// the suppression window is hours wide. See handleReceivedProtobuf().

@@ -1110,6 +1110,7 @@ class NodeInfoTestShim : public NodeInfoModule
     using MeshModule::currentRequest; // allocReply() only suppresses while a request is in flight
     using NodeInfoModule::allocReply;
     using NodeInfoModule::handleReceivedProtobuf;
+    using NodeInfoModule::runOnce;
 };
 
 static meshtastic_MeshPacket makeNodeInfoPacket(bool signed_)
@@ -1794,9 +1795,39 @@ void test_N12_owner_sync_announcement_does_not_request_replies(void)
 {
     NodeInfoTestShim shim;
 
-    TEST_ASSERT_TRUE(shim.sendOurNodeInfo(NODENUM_BROADCAST, false, 0, true, true));
+    shim.requestOwnerSync();
+    shim.runOnce();
     TEST_ASSERT_EQUAL_UINT32(1, pipelineRouter->nodeInfoWantResponses.size());
     TEST_ASSERT_FALSE(pipelineRouter->nodeInfoWantResponses[0]);
+}
+
+void test_N13_owner_sync_retries_admission_without_queuing_a_burst(void)
+{
+    static AirTime saturated;
+    c14SavedAirTime = airTime;
+    airTime = &saturated;
+    saturated.logAirtime(TX_LOG, MS_IN_HOUR);
+
+    NodeInfoTestShim shim;
+    shim.requestOwnerSync();
+    TEST_ASSERT_EQUAL_UINT32(30 * 1000, shim.runOnce());
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineRouter->nodeInfoWantResponses.size());
+
+    airTime = c14SavedAirTime;
+    c14SavedAirTime = nullptr;
+    shim.runOnce();
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineRouter->nodeInfoWantResponses.size());
+    TEST_ASSERT_FALSE(pipelineRouter->nodeInfoWantResponses[0]);
+}
+
+void test_N14_owner_sync_preserves_client_hidden_silence(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN;
+    NodeInfoTestShim shim;
+
+    shim.requestOwnerSync();
+    shim.runOnce();
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineRouter->nodeInfoWantResponses.size());
 }
 
 void test_L1_licensed_nodeinfo_publishes_public_key(void)
@@ -2222,6 +2253,8 @@ void setup()
     RUN_TEST(test_N10_stale_stamp_does_not_alias_after_a_full_wrap);
     RUN_TEST(test_N11_window_still_applies_across_the_wrap);
     RUN_TEST(test_N12_owner_sync_announcement_does_not_request_replies);
+    RUN_TEST(test_N13_owner_sync_retries_admission_without_queuing_a_burst);
+    RUN_TEST(test_N14_owner_sync_preserves_client_hidden_silence);
 
     printf("\n=== Group L: licensed identity and plaintext signing ===\n");
     RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);
