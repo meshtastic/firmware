@@ -27,6 +27,7 @@ constexpr uint32_t SECOND_NONCE = 0x0DDBA11;
 constexpr NodeNum SEEDED_NODE_A = 0x00000A01;
 constexpr NodeNum SEEDED_NODE_B = 0x00000A02;
 
+constexpr unsigned MAX_IDLE_DRAIN_READS = 8; // replay phases left to drain after config_complete_id
 constexpr unsigned NUM_SINGLETON_PREFIX = 5; // my_info, deviceuiConfig, own node_info, metadata, region_presets
 constexpr unsigned NUM_CONFIG_MESSAGES = _meshtastic_AdminMessage_ConfigType_MAX + 1;
 constexpr unsigned NUM_MODULE_CONFIG_MESSAGES = _meshtastic_AdminMessage_ModuleConfigType_MAX + 1;
@@ -73,8 +74,12 @@ static_assert(sizeof(kExpectedModuleConfigVariants) / sizeof(kExpectedModuleConf
 /// PhoneAPI over a permanently-connected fake transport.
 class PhoneAPITestShim : public PhoneAPI
 {
+  public:
+    unsigned dataNotifications = 0; // transport wake-ups, i.e. "come and read"
+
   protected:
     bool checkIsConnected() override { return true; }
+    void onNowHasData(uint32_t fromRadioNum) override { dataNotifications++; }
 };
 
 /// Concrete Router with no radio interface: getQueueStatus() reports an all-zero queue.
@@ -219,6 +224,26 @@ bool drainUntilComplete(DumpTranscript &t, unsigned maxMessages = 600)
         default:
             break;
         }
+    }
+    return false;
+}
+
+/// What the first region set does to a live node: a minted key moves my_node_num with it.
+void mintIdentity()
+{
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, 0x5A, sizeof(config.security.public_key.bytes));
+    TEST_ASSERT_TRUE_MESSAGE(nodeDB->createNewIdentity(), "identity did not move");
+}
+
+/// Read until available() reports idle; false if it never does within the cap.
+bool drainToIdle()
+{
+    uint8_t buf[meshtastic_FromRadio_size];
+    for (unsigned i = 0; i < MAX_IDLE_DRAIN_READS; i++) {
+        if (!api->available())
+            return true;
+        api->getFromRadio(buf);
     }
     return false;
 }
@@ -369,6 +394,14 @@ void test_only_nodes_nonce_sends_nodes_then_complete()
     TEST_ASSERT_EQUAL_UINT(0, countVariant(t, meshtastic_FromRadio_config_tag));
     TEST_ASSERT_EQUAL_UINT(0, countVariant(t, meshtastic_FromRadio_moduleConfig_tag));
     TEST_ASSERT_EQUAL_UINT(0, t.fileInfoCount);
+
+    // This nonce skips my_info entirely, so the trailing replay must not produce one either.
+    for (unsigned i = 0; i < MAX_IDLE_DRAIN_READS && api->available(); i++) {
+        meshtastic_FromRadio trailing;
+        if (readOneFromRadio(trailing))
+            TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_FromRadio_my_info_tag, trailing.which_payload_variant,
+                                          "nodes-only sync must not emit my_info");
+    }
 }
 
 // SPECIAL_NONCE_ONLY_CONFIG delivers the full config but skips the non-self node DB, and must
@@ -490,16 +523,95 @@ void test_dump_reaches_idle_after_complete()
     DumpTranscript t;
     TEST_ASSERT_TRUE(drainUntilComplete(t));
 
+    TEST_ASSERT_TRUE_MESSAGE(drainToIdle(), "post-complete drain never went idle: available() stuck true");
     uint8_t buf[meshtastic_FromRadio_size];
-    bool idle = false;
-    for (unsigned i = 0; i < 8 && !idle; i++) {
-        if (!api->available())
-            idle = true;
-        else
-            api->getFromRadio(buf); // replay drain: empty phases must advance toward idle
-    }
-    TEST_ASSERT_TRUE_MESSAGE(idle, "post-complete drain never went idle: available() stuck true");
     TEST_ASSERT_EQUAL_UINT(0, api->getFromRadio(buf));
+}
+
+// The first region set moves my_node_num live (NodeDB::createNewIdentity()) with no reboot to force a
+// re-handshake, so the stream must re-announce my_info - exactly once - on its own.
+void test_node_num_change_resends_my_info()
+{
+    startHandshake(FULL_DUMP_NONCE);
+    DumpTranscript t;
+    TEST_ASSERT_TRUE(drainUntilComplete(t));
+    TEST_ASSERT_TRUE_MESSAGE(drainToIdle(), "post-complete drain never went idle");
+
+    const uint32_t handshakeNodeNum = nodeDB->getNodeNum();
+    const unsigned notificationsBefore = api->dataNotifications;
+
+    mintIdentity();
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(handshakeNodeNum, nodeDB->getNodeNum(), "node num did not actually change");
+
+    service->loop(); // delivers the fromNum notify that arms the re-announce
+    TEST_ASSERT_GREATER_THAN_UINT_MESSAGE(notificationsBefore, api->dataNotifications,
+                                          "transport was never woken to come and read");
+
+    meshtastic_FromRadio msg;
+    TEST_ASSERT_TRUE(readOneFromRadio(msg));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(meshtastic_FromRadio_my_info_tag, msg.which_payload_variant,
+                                   "a renumber must be announced as my_info");
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), msg.my_info.my_node_num);
+
+    // One-shot: the stream falls back to live traffic and nothing repeats.
+    TEST_ASSERT_FALSE_MESSAGE(api->available(), "my_info resend repeated after the client was told");
+}
+
+// The same move landing mid-sync: my_info is already out with the old number and there is no
+// steady state to fall back from, so the dump restarts and carries the new one.
+void test_node_num_change_mid_dump_restarts_sync()
+{
+    startHandshake(FULL_DUMP_NONCE);
+
+    meshtastic_FromRadio msg;
+    for (unsigned i = 0; i < NUM_SINGLETON_PREFIX + MAX_NUM_CHANNELS; i++)
+        TEST_ASSERT_TRUE(readOneFromRadio(msg)); // through the channels, my_info long since sent
+
+    mintIdentity();
+    service->loop();
+
+    TEST_ASSERT_TRUE(readOneFromRadio(msg));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(meshtastic_FromRadio_my_info_tag, msg.which_payload_variant,
+                                   "a mid-sync renumber must restart the dump");
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), msg.my_info.my_node_num);
+
+    // Everything after the my_info already read must arrive again, in order and complete.
+    DumpTranscript t;
+    TEST_ASSERT_TRUE_MESSAGE(drainUntilComplete(t), "restarted dump never completed");
+    const pb_size_t expectedPrefix[] = {meshtastic_FromRadio_deviceuiConfig_tag, meshtastic_FromRadio_node_info_tag,
+                                        meshtastic_FromRadio_metadata_tag, meshtastic_FromRadio_region_presets_tag};
+    TEST_ASSERT_EQUAL_UINT(NUM_SINGLETON_PREFIX - 1, sizeof(expectedPrefix) / sizeof(expectedPrefix[0]));
+    for (unsigned i = 0; i < NUM_SINGLETON_PREFIX - 1; i++)
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(expectedPrefix[i], t.variants[i], "restarted dump changed the header sequence");
+    TEST_ASSERT_EQUAL_UINT((unsigned)MAX_NUM_CHANNELS, t.channelIndices.size());
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(NUM_CONFIG_MESSAGES, t.configVariants.size(), "restarted dump lost part of the config");
+    TEST_ASSERT_EQUAL_UINT(NUM_MODULE_CONFIG_MESSAGES, t.moduleConfigVariants.size());
+    TEST_ASSERT_EQUAL_UINT(1, t.nodeNums.size()); // our own record; this test seeds no remotes
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), t.nodeNums[0]);
+    TEST_ASSERT_EQUAL_UINT32(FULL_DUMP_NONCE, t.completeId);
+}
+
+// Same move during a nodes-only sync: the self record it already sent is gone from the DB, so that
+// dump restarts too, even though this nonce never carries a my_info to be stale.
+void test_node_num_change_mid_nodes_only_restarts_sync()
+{
+    seedRemoteNode(SEEDED_NODE_A);
+    startHandshake(SPECIAL_NONCE_ONLY_NODES);
+
+    meshtastic_FromRadio msg;
+    TEST_ASSERT_TRUE(readOneFromRadio(msg));
+    TEST_ASSERT_EQUAL_UINT(meshtastic_FromRadio_node_info_tag, msg.which_payload_variant);
+    const uint32_t staleSelf = msg.node_info.num;
+
+    mintIdentity();
+    service->loop();
+
+    DumpTranscript t;
+    TEST_ASSERT_TRUE_MESSAGE(drainUntilComplete(t), "restarted nodes-only dump never completed");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(nodeDB->getNumMeshNodes(), t.nodeNums.size(), "restart must resend every node");
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(staleSelf, t.nodeNums[0], "restart must carry the new self record");
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), t.nodeNums[0]);
+    TEST_ASSERT_EQUAL_UINT32(SPECIAL_NONCE_ONLY_NODES, t.completeId);
 }
 
 } // namespace
@@ -567,6 +679,9 @@ void setup()
     RUN_TEST(test_close_mid_dump_then_reconnect_restarts_clean);
     RUN_TEST(test_rehandshake_mid_dump_restarts_from_my_info);
     RUN_TEST(test_dump_reaches_idle_after_complete);
+    RUN_TEST(test_node_num_change_resends_my_info);
+    RUN_TEST(test_node_num_change_mid_dump_restarts_sync);
+    RUN_TEST(test_node_num_change_mid_nodes_only_restarts_sync);
 
     exit(UNITY_END());
 }

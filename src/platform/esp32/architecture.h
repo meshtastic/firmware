@@ -227,6 +227,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_RCC6
 #elif defined(SEEED_WIO_TRACKER_L2)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L2
+#elif defined(T_CONNECT_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_T_CONNECT_PRO
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

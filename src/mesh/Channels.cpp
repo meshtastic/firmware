@@ -584,3 +584,12 @@ int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
 {
     return setCrypto(channelIndex);
 }
+
+bool isMutedForPacket(const meshtastic_MeshPacket &mp)
+{
+    if (!isBroadcast(mp.to) && isToUs(&mp))
+        return nodeInfoLiteIsMuted(nodeDB->getMeshNode(mp.from));
+
+    const meshtastic_Channel &ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+    return ch.settings.has_module_settings && ch.settings.module_settings.is_muted;
+}
