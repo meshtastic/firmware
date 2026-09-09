@@ -21,7 +21,7 @@ NodeInfoModule *nodeInfoModule;
 static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
 static constexpr uint32_t TransitionReplyAllowanceSeconds = 5 * 60;
 static constexpr uint32_t OwnerSyncRetryMs = 5 * 1000;
-static constexpr uint8_t TransitionReplyAttempts = 2;
+static constexpr uint8_t TransitionReplyAttempts = 1;
 static constexpr uint8_t OwnerSyncAttempts = 3;
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
@@ -294,7 +294,8 @@ int32_t NodeInfoModule::runOnce()
         (ownerSyncPending || config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN)) {
         // If we changed channels, ask everyone else for their latest info
         const bool requestOwnerRefresh = ownerSyncPending;
-        bool requestReplies = requestOwnerRefresh || currentGeneration != radioGeneration;
+        const bool firstOwnerSyncAttempt = requestOwnerRefresh && ownerSyncAttemptsRemaining == OwnerSyncAttempts;
+        bool requestReplies = firstOwnerSyncAttempt || currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
         if (sendOurNodeInfoWithOptions(NODENUM_BROADCAST, requestReplies, 0, false, requestOwnerRefresh)) {
             currentGeneration = radioGeneration; // only a send that went out consumes the channel change

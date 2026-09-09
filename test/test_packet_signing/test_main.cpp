@@ -164,6 +164,13 @@ class AuthPipelineRadio : public RadioInterface
 class AuthPipelineRouter : public ReliableRouter
 {
   public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_NODEINFO_APP)
+            nodeInfoWantResponses.push_back(p->decoded.want_response);
+        return ReliableRouter::send(p);
+    }
     bool filter(meshtastic_MeshPacket *p) { return ReliableRouter::shouldFilterReceived(p); }
     bool historyContains(const meshtastic_MeshPacket *p) { return wasSeenRecently(p, false); }
     void remember(const meshtastic_MeshPacket *p) { wasSeenRecently(p, true); }
@@ -194,6 +201,7 @@ class AuthPipelineRouter : public ReliableRouter
             packetPool.release(entry.second.packet);
         pending.clear();
     }
+    std::vector<bool> nodeInfoWantResponses;
 };
 
 class AuthPipelineRoutingModule : public RoutingModule
@@ -421,6 +429,7 @@ void setUp(void)
     channels.onConfigChanged();
 
     pipelineRouter->clearPending();
+    pipelineRouter->nodeInfoWantResponses.clear();
     pipelineRouter->rxDupe = 0;
     pipelineRouter->txRelayCanceled = 0;
     pipelineRadio->reset();
@@ -1109,6 +1118,7 @@ class NodeInfoTestShim : public NodeInfoModule
     using MeshModule::currentRequest; // allocReply() only suppresses while a request is in flight
     using NodeInfoModule::allocReply;
     using NodeInfoModule::handleReceivedProtobuf;
+    using NodeInfoModule::runOnce;
 };
 
 static meshtastic_MeshPacket makeNodeInfoPacket(bool signed_)
@@ -1789,7 +1799,7 @@ void test_N11_window_still_applies_across_the_wrap(void)
                              "and must still release once 12h have passed across the wrap");
 }
 
-static void assertLicenseTransitionGetsTwoBoundedReplyAttempts(bool localLicensed)
+static void assertLicenseTransitionGetsOneBoundedReplyAttempt(bool localLicensed)
 {
     owner.is_licensed = localLicensed;
     mockNodeDB->addNode(REMOTE_NODE);
@@ -1800,20 +1810,33 @@ static void assertLicenseTransitionGetsTwoBoundedReplyAttempts(bool localLicense
     NodeInfoTestShim shim;
     TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
     advanceUptime(60 * 1000);
-    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "one dropped transition reply may be retried");
-    advanceUptime(60 * 1000);
     TEST_ASSERT_FALSE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
-                              "the transition exception must be consumed after two replies");
+                              "the transition exception must be consumed after one reply");
 }
 
-void test_N12_entering_license_transition_gets_two_bounded_reply_attempts(void)
+void test_N12_entering_license_transition_gets_one_bounded_reply_attempt(void)
 {
-    assertLicenseTransitionGetsTwoBoundedReplyAttempts(true);
+    assertLicenseTransitionGetsOneBoundedReplyAttempt(true);
 }
 
-void test_N13_leaving_license_transition_gets_two_bounded_reply_attempts(void)
+void test_N13_leaving_license_transition_gets_one_bounded_reply_attempt(void)
 {
-    assertLicenseTransitionGetsTwoBoundedReplyAttempts(false);
+    assertLicenseTransitionGetsOneBoundedReplyAttempt(false);
+}
+
+void test_N16_owner_sync_only_first_announcement_requests_replies(void)
+{
+    NodeInfoTestShim shim;
+    shim.requestOwnerSync();
+
+    shim.runOnce();
+    shim.runOnce();
+    shim.runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32(3, pipelineRouter->nodeInfoWantResponses.size());
+    TEST_ASSERT_TRUE(pipelineRouter->nodeInfoWantResponses[0]);
+    TEST_ASSERT_FALSE(pipelineRouter->nodeInfoWantResponses[1]);
+    TEST_ASSERT_FALSE(pipelineRouter->nodeInfoWantResponses[2]);
 }
 
 void test_N14_rejected_transition_does_not_bypass_suppression(void)
@@ -2292,10 +2315,11 @@ void setup()
     RUN_TEST(test_N9_request_after_the_window_is_answered);
     RUN_TEST(test_N10_stale_stamp_does_not_alias_after_a_full_wrap);
     RUN_TEST(test_N11_window_still_applies_across_the_wrap);
-    RUN_TEST(test_N12_entering_license_transition_gets_two_bounded_reply_attempts);
-    RUN_TEST(test_N13_leaving_license_transition_gets_two_bounded_reply_attempts);
+    RUN_TEST(test_N12_entering_license_transition_gets_one_bounded_reply_attempt);
+    RUN_TEST(test_N13_leaving_license_transition_gets_one_bounded_reply_attempt);
     RUN_TEST(test_N14_rejected_transition_does_not_bypass_suppression);
     RUN_TEST(test_N15_overheard_transition_does_not_bypass_a_later_request);
+    RUN_TEST(test_N16_owner_sync_only_first_announcement_requests_replies);
 
     printf("\n=== Group L: licensed identity and plaintext signing ===\n");
     RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);
