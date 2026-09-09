@@ -4159,7 +4159,8 @@ static void bothChannelsByValue(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, 
 }
 
 // Sweeps the message length for a config landing in the band between the two bounds - fits the
-// decoded cap, exceeds what survives encryption. Fails the test if the schema no longer reaches it.
+// decoded cap, exceeds what survives the frame once the PKC overhead and the Data framing are
+// charged. Fails the test if the schema no longer reaches it.
 static size_t messageLenInPkcBand(const uint8_t *psk, size_t pskLen)
 {
     meshtastic_ModuleConfig_MeshBeaconConfig probe;
@@ -4179,9 +4180,9 @@ static size_t messageLenInPkcBand(const uint8_t *psk, size_t pskLen)
 }
 
 /**
- * A config sized into the band the PKC overhead reclaims: it fits the decoded payload cap, so the
- * gate stored it while that was the bound, and is refused now the bound is what survives
- * encryption. Remote admin is always PKC, so this is the write that reaches a real node.
+ * A config sized into the band the frame overheads reclaim: it fits the decoded payload cap, so the
+ * gate stored it while that was the bound, and is refused now the bound is what survives one
+ * PKC-encrypted frame. Remote admin is always PKC, so this is the write that reaches a real node.
  */
 static void test_byValue_sizedBetweenTheBounds_isRejectedTooLarge(void)
 {
@@ -4194,7 +4195,7 @@ static void test_byValue_sizedBetweenTheBounds_isRejectedTooLarge(void)
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
     bothChannelsByValue(bcfg, bigPsk, sizeof(bigPsk), messageLenInPkcBand(bigPsk, sizeof(bigPsk)));
 
-    // Pins the fix rather than the fixture: over the decoded cap too and either bound would refuse.
+    // Pins the fix rather than the fixture: under the decoded cap, so only the tighter bound refuses.
     TEST_ASSERT_LESS_OR_EQUAL_MESSAGE((size_t)meshtastic_Constants_DATA_PAYLOAD_LEN, MeshBeaconModule::remoteAdminSize(bcfg),
                                       "the fixture must still fit the decoded cap, or it proves nothing");
     TEST_ASSERT_FALSE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
@@ -4209,7 +4210,7 @@ static void test_byValue_sizedBetweenTheBounds_isRejectedTooLarge(void)
 
 /**
  * The same config from a local client is accepted: BLE carries it whole, and the operator is at the
- * node to read it back.
+ * node to read it back. Warned but stored - the warning itself is covered below.
  */
 static void test_byValue_sizedBetweenTheBounds_fromLocalClient_isAccepted(void)
 {
@@ -4228,6 +4229,61 @@ static void test_byValue_sizedBetweenTheBounds_fromLocalClient_isAccepted(void)
     TEST_ASSERT_TRUE_MESSAGE(testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), false, &err),
                              "the size gate is a remote-admin bound only");
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
+}
+
+/**
+ * Accepting the local write silently would leave the user to discover the limit as a read-back that
+ * never arrives, so the config is stored and the client is warned in the same breath.
+ */
+static void test_byValue_sizedBetweenTheBounds_fromLocalClient_warnsTheClient(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    uint8_t bigPsk[32];
+    memset(bigPsk, 0x5A, sizeof(bigPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
+    bothChannelsByValue(bcfg, bigPsk, sizeof(bigPsk), messageLenInPkcBand(bigPsk, sizeof(bigPsk)));
+
+    mockSvc->notificationCount = 0;
+    mockSvc->lastNotification[0] = '\0';
+
+    testAdmin->deferSaves();
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE(testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), false, &err));
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_on_channel, "the warning must not cost the write");
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockSvc->notificationCount, "a local client that oversizes the config is told once");
+    // Both numbers, so the user can see how far over they are rather than only that they are over.
+    char expected[64];
+    snprintf(expected, sizeof(expected), "%u bytes", (unsigned)MeshBeaconModule::remoteAdminSize(bcfg));
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockSvc->lastNotification, expected), mockSvc->lastNotification);
+    snprintf(expected, sizeof(expected), "over %u", (unsigned)MeshBeaconModule::remoteAdminCeiling());
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockSvc->lastNotification, expected), mockSvc->lastNotification);
+}
+
+/**
+ * The warning is for the shape that cannot be read back. A config with headroom must not nag.
+ */
+static void test_byValue_configWithHeadroom_fromLocalClient_isSilent(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    uint8_t bigPsk[32];
+    memset(bigPsk, 0x5A, sizeof(bigPsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
+    offerPlusFullIndexedList(bcfg, bigPsk, sizeof(bigPsk), sizeof(bcfg.broadcast_message) - 1);
+    TEST_ASSERT_TRUE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
+
+    mockSvc->notificationCount = 0;
+
+    testAdmin->deferSaves();
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE(testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), false, &err));
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockSvc->notificationCount, "a config that fits must not warn");
 }
 
 /**
@@ -4263,7 +4319,25 @@ static void test_byValue_bothChannelsPrivate_exceedsTheRemoteAdminBound(void)
                               "re-measure before adding a field or widening max_count");
     TEST_ASSERT_FALSE(MeshBeaconModule::fitsRemoteAdmin(bcfg));
     TEST_ASSERT_LESS_OR_EQUAL_MESSAGE((size_t)meshtastic_Constants_DATA_PAYLOAD_LEN, MeshBeaconModule::remoteAdminSize(bcfg),
-                                      "it is the PKC overhead that refuses this, not the decoded cap");
+                                      "it is the frame overheads that refuse this, not the decoded cap");
+}
+
+/**
+ * The gate has to agree with the router or it is not a gate. perhapsEncode() bounds the encoded
+ * Data submessage against MAX_LORA_PAYLOAD_LEN, so a config the gate passes must still leave room
+ * for the header, the PKC overhead and the framing once it is wrapped for transmission.
+ */
+static void test_remoteAdminCeiling_agreesWithThePerhapsEncodeBound(void)
+{
+    const size_t onTheWire = MeshBeaconModule::remoteAdminCeiling() + MeshBeaconModule::kAdminDataFraming +
+                             MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD;
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE((size_t)MAX_LORA_PAYLOAD_LEN, onTheWire,
+                                      "a config at the ceiling must still fit the frame perhapsEncode() builds");
+
+    // Below the decoded cap by more than the PKC overhead alone: the framing is charged too.
+    TEST_ASSERT_LESS_THAN_MESSAGE((size_t)meshtastic_Constants_DATA_PAYLOAD_LEN - MESHTASTIC_PKC_OVERHEAD,
+                                  MeshBeaconModule::remoteAdminCeiling(),
+                                  "DATA_PAYLOAD_LEN - PKC_OVERHEAD is the decoded cap, not what survives the frame");
 }
 
 /**
@@ -4724,8 +4798,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_sizedBetweenTheBounds_isRejectedTooLarge);
     RUN_TEST(test_byValue_sizedBetweenTheBounds_fromLocalClient_isAccepted);
+    RUN_TEST(test_byValue_sizedBetweenTheBounds_fromLocalClient_warnsTheClient);
+    RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);
     RUN_TEST(test_byValue_widestIndexedList_hasRemoteAdminHeadroom);
     RUN_TEST(test_byValue_bothChannelsPrivate_exceedsTheRemoteAdminBound);
+    RUN_TEST(test_remoteAdminCeiling_agreesWithThePerhapsEncodeBound);
     RUN_TEST(test_broadcaster_byValueTarget_sendsOnThatChannel);
     RUN_TEST(test_broadcaster_blankEntry_inheritsTheDefaultChannel);
     RUN_TEST(test_broadcaster_entryIndex_overridesTheDefaultChannel);

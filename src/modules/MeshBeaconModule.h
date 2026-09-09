@@ -100,16 +100,24 @@ class MeshBeaconModule
     // not encode at all.
     static size_t remoteAdminSize(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
-    // Remote admin is always PKC encrypted, so the ciphertext gives up MESHTASTIC_PKC_OVERHEAD
-    // bytes that DATA_PAYLOAD_LEN - the decoded cap, which is what BLE gets - does not know about.
+    // Data framing charged above the payload, sized on the response because that is the direction
+    // this bound protects: portnum 2, the payload tag and its two-byte length 3, the bitfield
+    // perhapsEncode() always sets 3 (uint8_t, two varint bytes once bit 7 is used), and the
+    // fixed32 request_id setReplyTo() stamps 5. A write costs less - it carries want_response (2)
+    // instead of request_id - so the response is the binding case.
+    static constexpr size_t kAdminDataFraming = 13;
+
+    // What survives one PKC-encrypted frame. perhapsEncode() bounds the encoded Data submessage,
+    // not the payload, so charge the framing too; DATA_PAYLOAD_LEN is the decoded cap a BLE client
+    // gets and is seven bytes too generous here.
     static constexpr size_t remoteAdminCeiling()
     {
-        return (size_t)meshtastic_Constants_DATA_PAYLOAD_LEN - MESHTASTIC_PKC_OVERHEAD;
+        return (size_t)MAX_LORA_PAYLOAD_LEN - MESHTASTIC_HEADER_LENGTH - MESHTASTIC_PKC_OVERHEAD - kAdminDataFraming;
     }
 
     // False when a remote admin write of this config would not survive one PKC-encrypted LoRa
-    // frame. Such a config can be written locally over BLE but never read back: the response
-    // truncates to an empty payload and the remote client sees a silent no-op.
+    // frame. A remote write is refused; a local one is stored but warns, because perhapsEncode()
+    // would refuse the response and NAK our own client, leaving the administrator only silence.
     static bool fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     // Place the by-value offer and target channels in the channel table, so the TX path can find

@@ -1401,13 +1401,20 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
         // object is ever passed); the validated copy is assigned into moduleConfig below.
         auto beaconCfg = c.payload_variant.mesh_beacon;
         MeshBeaconModule::sanitiseConfig(beaconCfg);
-        // Refused rather than stored: a config this large is writable over BLE but its read-back
-        // truncates to an empty payload, so a remote administrator could never see what it set.
-        if (fromOthers && !MeshBeaconModule::fitsRemoteAdmin(beaconCfg)) {
-            LOG_WARN("Beacon: config too large to read back over remote admin, rejecting the write");
-            if (err)
-                *err = meshtastic_Routing_Error_TOO_LARGE;
-            return false;
+        if (!MeshBeaconModule::fitsRemoteAdmin(beaconCfg)) {
+            // Refused rather than stored: the response would not survive the frame, so a remote
+            // administrator could never read back what it set.
+            if (fromOthers) {
+                LOG_WARN("Beacon: config too large to read back over remote admin, rejecting the write");
+                if (err)
+                    *err = meshtastic_Routing_Error_TOO_LARGE;
+                return false;
+            }
+            // A local client may hold a config no remote administrator can read, but it is told so
+            // now rather than discovering it as a silent read-back later.
+            sendWarningAndLog("Beacon config is %u bytes; over %u no remote administrator can read it back",
+                              (unsigned)MeshBeaconModule::remoteAdminSize(beaconCfg),
+                              (unsigned)MeshBeaconModule::remoteAdminCeiling());
         }
         // The by-value channels need to be in the table for the TX path to find their keys.
         if (MeshBeaconModule::upsertByValueChannels(beaconCfg))
