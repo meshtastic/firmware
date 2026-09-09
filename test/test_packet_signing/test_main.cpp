@@ -95,6 +95,14 @@ class MockNodeDB : public NodeDB
         nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, value);
     }
 
+    void setLicensed(NodeNum num, bool value)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
+        nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_LICENSED_MASK, value);
+    }
+
     void setLongName(NodeNum num, const char *name)
     {
         meshtastic_NodeInfoLite *n = getMeshNode(num);
@@ -1781,6 +1789,87 @@ void test_N11_window_still_applies_across_the_wrap(void)
                              "and must still release once 12h have passed across the wrap");
 }
 
+static void assertLicenseTransitionGetsTwoBoundedReplyAttempts(bool localLicensed)
+{
+    owner.is_licensed = localLicensed;
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setLicensed(REMOTE_NODE, !localLicensed);
+    Time::setTestMillis(60 * 1000);
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+    advanceUptime(60 * 1000);
+    TEST_ASSERT_TRUE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE), "one dropped transition reply may be retried");
+    advanceUptime(60 * 1000);
+    TEST_ASSERT_FALSE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                              "the transition exception must be consumed after two replies");
+}
+
+void test_N12_entering_license_transition_gets_two_bounded_reply_attempts(void)
+{
+    assertLicenseTransitionGetsTwoBoundedReplyAttempts(true);
+}
+
+void test_N13_leaving_license_transition_gets_two_bounded_reply_attempts(void)
+{
+    assertLicenseTransitionGetsTwoBoundedReplyAttempts(false);
+}
+
+void test_N14_rejected_transition_does_not_bypass_suppression(void)
+{
+    owner.is_licensed = true;
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setLicensed(REMOTE_NODE, true);
+    uint8_t storedKey[32] = {0x11};
+    mockNodeDB->setPublicKey(REMOTE_NODE, storedKey);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    Time::setTestMillis(60 * 1000);
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+    mockNodeDB->setLicensed(REMOTE_NODE, false);
+    advanceUptime(60 * 1000);
+
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.decoded.want_response = true;
+    mp.xeddsa_signed = true;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = true;
+    user.public_key.size = 32;
+    memset(user.public_key.bytes, 0x22, user.public_key.size);
+    shim.handleReceivedProtobuf(mp, &user);
+
+    NodeInfoTestShim::currentRequest = &mp;
+    meshtastic_MeshPacket *reply = shim.allocReply();
+    NodeInfoTestShim::currentRequest = nullptr;
+    TEST_ASSERT_NULL_MESSAGE(reply, "a rejected identity update must not open a transition reply allowance");
+}
+
+void test_N15_overheard_transition_does_not_bypass_a_later_request(void)
+{
+    owner.is_licensed = true;
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setLicensed(REMOTE_NODE, true);
+    Time::setTestMillis(60 * 1000);
+    Time::serviceMonotonic();
+
+    NodeInfoTestShim shim;
+    TEST_ASSERT_TRUE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE));
+    mockNodeDB->setLicensed(REMOTE_NODE, false);
+    advanceUptime(60 * 1000);
+
+    meshtastic_MeshPacket overheard = makeDecoded(REMOTE_NODE, 0x0C0C0C0C, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    overheard.decoded.want_response = true;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = true;
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(overheard, &user));
+
+    TEST_ASSERT_FALSE_MESSAGE(wouldReplyToNodeInfoRequest(shim, REMOTE_NODE),
+                              "an overheard unicast must not arm a transition reply allowance");
+}
+
 void test_L1_licensed_nodeinfo_publishes_public_key(void)
 {
     owner.is_licensed = true;
@@ -2203,6 +2292,10 @@ void setup()
     RUN_TEST(test_N9_request_after_the_window_is_answered);
     RUN_TEST(test_N10_stale_stamp_does_not_alias_after_a_full_wrap);
     RUN_TEST(test_N11_window_still_applies_across_the_wrap);
+    RUN_TEST(test_N12_entering_license_transition_gets_two_bounded_reply_attempts);
+    RUN_TEST(test_N13_leaving_license_transition_gets_two_bounded_reply_attempts);
+    RUN_TEST(test_N14_rejected_transition_does_not_bypass_suppression);
+    RUN_TEST(test_N15_overheard_transition_does_not_bypass_a_later_request);
 
     printf("\n=== Group L: licensed identity and plaintext signing ===\n");
     RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);

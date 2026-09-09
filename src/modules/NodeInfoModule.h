@@ -24,6 +24,9 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     bool sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
                          bool _shorterTimeout = false);
 
+    /** Promptly announce an owner/license transition and ask peers to refresh their NodeInfo. */
+    void requestOwnerSync();
+
     /**
      * Schedule an immediate NodeInfo periodic check.
      * Used when external conditions change (for example time source quality).
@@ -48,13 +51,23 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     virtual int32_t runOnce() override;
 
   private:
+    struct TransitionReplyAllowance {
+        uint32_t startedAt;
+        uint8_t remaining;
+    };
+
     bool shorterTimeout = false;
+    bool ownerSyncPending = false;
+    uint8_t ownerSyncAttemptsRemaining = 0;
     bool suppressReplyForCurrentRequest = false;
     /// Sender -> uptime seconds (Time::getUptimeSecs()) at our last reply. Seconds, not millis:
     /// the suppression window is hours wide. See handleReceivedProtobuf().
     std::map<NodeNum, uint32_t> lastNodeInfoSeen;
+    std::map<NodeNum, TransitionReplyAllowance> transitionReplyAllowances;
 
     void pruneLastNodeInfoCache();
+    meshtastic_MeshPacket *allocReplyWithOptions(bool bypassCadenceThrottle);
+    bool sendOurNodeInfoWithOptions(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout, bool ownerSync);
 };
 
 extern NodeInfoModule *nodeInfoModule;

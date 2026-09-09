@@ -30,6 +30,7 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
+#include "modules/NodeInfoModule.h"
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
@@ -445,6 +446,8 @@ void menuHandler::licensedToNormalConfirmMenu()
             service->reloadOwner(false);
         }
         applyLoraRegion(pendingRegion, false);
+        if (selected == 1 && nodeInfoModule)
+            nodeInfoModule->requestOwnerSync();
     };
     screen->showOverlayBanner(confirmBanner);
 }
