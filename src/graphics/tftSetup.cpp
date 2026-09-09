@@ -9,11 +9,10 @@
 #include "comms/PacketServer.h"
 #include "graphics/DeviceScreen.h"
 #include "graphics/ScreenMirror.h"
-#include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverConfig.h"
 #include "input/InputBroker.h"
 #if HAS_MUI_MIRROR
-#include "input/InputDriver.h"
+#include "graphics/DisplayMirror.h"
 #endif
 #include "util/ISpiLock.h"
 
@@ -355,33 +354,33 @@ bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, u
     // group; horizontal becomes the slider keys, deliberately inverted there.
     switch (eventCode) {
     case INPUT_BROKER_UP:
-        InputDriver::injectEncoder(-1);
+        DisplayMirror::injectEncoder(-1);
         break;
     case INPUT_BROKER_DOWN:
-        InputDriver::injectEncoder(1);
+        DisplayMirror::injectEncoder(1);
         break;
     case INPUT_BROKER_LEFT:
-        InputDriver::injectKey(LV_KEY_DOWN);
+        DisplayMirror::injectKey(LV_KEY_DOWN);
         break;
     case INPUT_BROKER_RIGHT:
-        InputDriver::injectKey(LV_KEY_UP);
+        DisplayMirror::injectKey(LV_KEY_UP);
         break;
     case INPUT_BROKER_SELECT:
         if (touchX || touchY)
-            InputDriver::injectTouch(touchX, touchY, longPressHoldMs);
+            DisplayMirror::injectTouch(touchX, touchY, longPressHoldMs);
         else
-            InputDriver::injectKey(LV_KEY_ENTER);
+            DisplayMirror::injectKey(LV_KEY_ENTER);
         break;
     case INPUT_BROKER_USER_PRESS:
-        InputDriver::injectTouch(touchX, touchY);
+        DisplayMirror::injectTouch(touchX, touchY);
         break;
     case INPUT_BROKER_BACK:
     case INPUT_BROKER_CANCEL:
-        InputDriver::injectKey(LV_KEY_ESC);
+        DisplayMirror::injectKey(LV_KEY_ESC);
         break;
     default:
         if (kbChar)
-            InputDriver::injectKey(kbChar);
+            DisplayMirror::injectKey(kbChar);
         else
             return false;
         break;
@@ -409,25 +408,22 @@ void tftSetup(void)
     I2CKeyboardScanner::setSecondaryBus(i2cProxy);
 #endif
 #ifndef ARCH_PORTDUINO
-#if HAS_MUI_MIRROR
-    // Must precede DeviceScreen::init: device-ui only builds its virtual input
-    // devices (and the default focus group they need) when injection is asked for.
-    InputDriver::enableInjection();
-#endif
     deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
 #if HAS_MUI_MIRROR
     // Stream MUI's dirty rects to local clients (see graphics::ScreenMirror).
-    // Gated on MESHTASTIC_MUI_MIRROR until the device-ui flush observer merges
-    // (jamesarich/device-ui screen-mirror-poc); the vendored pin lacks it.
+    // Gated on MESHTASTIC_MUI_MIRROR until DisplayMirror merges (jamesarich/device-ui
+    // screen-mirror-poc); the vendored pin lacks it. Armed here because LVGL is up by
+    // now, and the view has not built its widgets yet - see DisplayMirror::start.
+    DisplayMirror::start(deviceScreen->getDisplayDriver());
     {
         lv_display_t *disp = lv_display_get_default();
-        graphics::screenMirror.setMuiSource([]() { DisplayDriver::requestFullRefresh(); },
+        graphics::screenMirror.setMuiSource([]() { DisplayMirror::requestFullRefresh(); },
                                             disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
                                             disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0);
     }
-    DisplayDriver::setFlushObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px) {
+    DisplayMirror::setFrameObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px) {
         graphics::screenMirror.onMuiRect(x, y, w, h, px);
     });
 #endif
