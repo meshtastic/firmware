@@ -156,24 +156,25 @@ RTCSetResult readFromRTC()
         LOG_WARN("RTC read: not found (addr 0x%02X)", rtc_found.address);
     }
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
-#if defined(PCF8563_RTC)
-    if (rtc_found.address == PCF8563_RTC) {
-        SensorPCF8563 rtc;
-#elif defined(PCF85063_RTC)
-    if (rtc_found.address == PCF85063_RTC) {
-        SensorPCF85063 rtc;
-
-#endif
+    if (rtc_found.address == PCF_RTC_ADDRESS) {
+        PCF8xRTC rtc;
         const uint64_t now = Time::getMillisMonotonic();
 
 #if WIRE_INTERFACES_COUNT == 2
-        rtc.begin(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
+        TwoWire &rtcBus = *ScanI2CTwoWire::fetchI2CBus(rtc_found);
 #else
-        rtc.begin(Wire);
+        TwoWire &rtcBus = Wire;
 #endif
-
-        RTC_DateTime datetime = rtc.getDateTime();
-        tm t = datetime.toUnixTime();
+        tm t;
+        if (!rtc.begin(rtcBus, PCF_RTC_ADDRESS, PCF_RTC_CHIP)) {
+            LOG_WARN("%s not responding at 0x%02X", rtc.chipName(), PCF_RTC_ADDRESS);
+            return RTCSetResultInvalidTime;
+        }
+        if (!rtc.getTime(t)) {
+            // Only the chip itself can tell us the oscillator stopped, so ask after begin() worked.
+            LOG_WARN("%s read failed%s", rtc.chipName(), rtc.lostPower() ? " (oscillator stopped)" : "");
+            return RTCSetResultInvalidTime;
+        }
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
@@ -188,7 +189,7 @@ RTCSetResult readFromRTC()
         }
 #endif
 
-        LOG_DEBUG_GPS("RTC time from %s getDateTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900,
+        LOG_DEBUG_GPS("RTC time from %s getTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.chipName(), t.tm_year + 1900,
                       t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
@@ -357,27 +358,23 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             LOG_WARN("RTC set: not found (addr 0x%02X)", rtc_found.address);
         }
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
-#if defined(PCF8563_RTC)
-        if (rtc_found.address == PCF8563_RTC) {
-            SensorPCF8563 rtc;
-#elif defined(PCF85063_RTC)
-        if (rtc_found.address == PCF85063_RTC) {
-            SensorPCF85063 rtc;
-
-#endif
-
+        if (rtc_found.address == PCF_RTC_ADDRESS) {
+            PCF8xRTC rtc;
 #if WIRE_INTERFACES_COUNT == 2
-            rtc.begin(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
+            TwoWire &rtcBus = *ScanI2CTwoWire::fetchI2CBus(rtc_found);
 #else
-            rtc.begin(Wire);
+            TwoWire &rtcBus = Wire;
 #endif
             // tv_sec is a long, which is not time_t everywhere: on Windows
             // time_t is 64-bit while long is 32-bit. Copy before taking &.
             time_t setSecs = tv->tv_sec;
             const tm *t = gmtime(&setSecs);
-            rtc.setDateTime(*t);
-            LOG_DEBUG_GPS("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900,
-                          t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            if (rtc.begin(rtcBus, PCF_RTC_ADDRESS, PCF_RTC_CHIP) && rtc.setTime(*t)) {
+                LOG_DEBUG_GPS("%s setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.chipName(), t->tm_year + 1900, t->tm_mon + 1,
+                              t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            } else {
+                LOG_WARN("%s set time failed", rtc.chipName());
+            }
         } else {
             LOG_WARN("RTC set: not found (addr 0x%02X)", rtc_found.address);
         }
