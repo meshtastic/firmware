@@ -200,6 +200,7 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
 {
   public:
     using TrafficManagementModule::alterReceived;
+    using TrafficManagementModule::dropAntispamCacheForTest;
     using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
@@ -3968,6 +3969,25 @@ static void test_tm_relayHopCap_untrackedIsProbation(void)
     TrafficManagementModule::s_testNowMs = baseNowMs;
 }
 
+/// A missing antispam table is untrackable, not untracked: do not hop-cap every sender.
+static void test_tm_relayHopCap_noTableDoesNotCap(void)
+{
+    const uint32_t baseNowMs = TrafficManagementModule::s_testNowMs;
+    TrafficManagementModule::s_testNowMs = baseNowMs + 300'000;
+
+    TrafficManagementModuleTestShim module;
+    moduleConfig.traffic_management.probation_window_secs = 300;
+    moduleConfig.traffic_management.probation_max_hop_limit = 2;
+
+    meshtastic_MeshPacket pkt = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    pkt.hop_limit = 3;
+    TEST_ASSERT_EQUAL_UINT8(2, module.relayHopCap(pkt));
+
+    module.dropAntispamCacheForTest();
+    TEST_ASSERT_EQUAL_UINT8(3, module.relayHopCap(pkt));
+    TrafficManagementModule::s_testNowMs = baseNowMs;
+}
+
 /// Table-full eviction forgets the oldest greylist row.
 static void test_tm_tableFull_evictionDropsOldest(void)
 {
@@ -4249,6 +4269,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_oldConfig_loadsClean);
     RUN_TEST(test_tm_relayHopCap_probationOnly);
     RUN_TEST(test_tm_relayHopCap_untrackedIsProbation);
+    RUN_TEST(test_tm_relayHopCap_noTableDoesNotCap);
     RUN_TEST(test_tm_tickZero_firstSeen);
     RUN_TEST(test_tm_probation_survivesSweepAfterWindow);
     RUN_TEST(test_tm_viaMqtt_loraStillTracked);

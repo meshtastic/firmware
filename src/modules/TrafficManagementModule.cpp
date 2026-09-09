@@ -2241,7 +2241,8 @@ uint8_t TrafficManagementModule::relayHopCap(const meshtastic_MeshPacket &mp) co
     {
         concurrency::LockGuard guard(&cacheLock);
         const uint8_t probationCap = cfg.probation_max_hop_limit;
-        if (cfg.probation_window_secs > 0 && probationCap > 0 && probationCap < cap) {
+        // No table means untrackable, not untracked: do not hop-cap every sender.
+        if (antispam && cfg.probation_window_secs > 0 && probationCap > 0 && probationCap < cap) {
             const AntispamEntry *entry = findAntispamEntry(from);
             const bool senderInProbation = !entry || !entry->hasFirstSeen || inProbationLocked(entry);
             if (senderInProbation) {
@@ -2376,8 +2377,23 @@ void TrafficManagementModule::initAntispamCache()
     memaudit::set("tmm_antispam", antispam ? size * sizeof(AntispamEntry) : 0);
     TM_LOG_DEBUG("Antispam cache: %u entries (%u bytes)", (unsigned)size, (unsigned)(size * sizeof(AntispamEntry)));
 }
+
+void TrafficManagementModule::dropAntispamCacheForTest()
+{
+    concurrency::LockGuard guard(&cacheLock);
+    if (!antispam)
+        return;
+    if (antispamFromPsram)
+        free(antispam);
+    else
+        delete[] antispam;
+    antispam = nullptr;
+    antispamFromPsram = false;
+    memaudit::set("tmm_antispam", 0);
+}
 #else
 void TrafficManagementModule::initAntispamCache() {}
+void TrafficManagementModule::dropAntispamCacheForTest() {}
 #endif
 
 void TrafficManagementModule::maintainAntispamLocked()

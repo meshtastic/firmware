@@ -161,6 +161,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// builds where the cache is compiled in. No-op when already absent.
     void dropNodeInfoCacheForTest();
 
+    /// Test hook: free the antispam table so hop-cap fail-closed can be checked without it.
+    void dropAntispamCacheForTest();
+
     /// Test introspection: NodeInfo flag bits for `node` (-1 if absent): bit0 hasObserved,
     /// bit1 isMember, bit2 hasFullUser, bit3 keyProven (keyXeddsaSigned | keyManuallyVerified).
     int peekNodeInfoFlagsForTest(NodeNum node);
