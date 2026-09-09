@@ -837,6 +837,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         ownerSyncPending = ownerSyncPending || licenseChanged;
+        // A license change can also change the radio config, so announce only after that config commits.
         service->reloadOwner(!hasOpenEditTransaction && !licenseChanged);
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
                     (channelsSanitized ? SEGMENT_CHANNELS : 0));
@@ -1914,8 +1915,6 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
-        if (ownerSyncPending)
-            shouldReboot = false;
         flushPendingOwnerSync();
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
@@ -1930,7 +1929,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 void AdminModule::flushPendingOwnerSync()
 {
     if (ownerSyncPending && nodeInfoModule) {
-        nodeInfoModule->requestOwnerSync();
+        nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, true, true);
         ownerSyncPending = false;
     }
 }

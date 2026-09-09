@@ -19,10 +19,6 @@
 NodeInfoModule *nodeInfoModule;
 
 static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
-static constexpr uint32_t TransitionReplyAllowanceSeconds = 5 * 60;
-static constexpr uint32_t OwnerSyncRetryMs = 5 * 1000;
-static constexpr uint8_t TransitionReplyAttempts = 1;
-static constexpr uint8_t OwnerSyncAttempts = 3;
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
@@ -54,7 +50,6 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         return true;
     }
     NodeNum sourceNum = getFrom(&mp);
-    const UserLicenseStatus previousLicense = nodeDB->getLicenseStatus(sourceNum);
     // Broadcasts only: unicast NodeInfo is unsigned off ham, so updateUser refuses the identity
     // write instead. isKnownXeddsaSigner also covers the warm tier.
     if (nodeDB->isKnownXeddsaSigner(sourceNum) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
@@ -68,11 +63,6 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // updateUser() refuses the identity write for a known signer sending unsigned (all unicast
     // NodeInfo), so the exchange above still proceeds but cannot spoof the stored name.
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel, mp.xeddsa_signed);
-    const bool canReply = mp.decoded.want_response && !isFromUs(&mp) && (isBroadcast(mp.to) || isToUs(&mp));
-    if (canReply && hasChanged && previousLicense != UserLicenseStatus::NotKnown &&
-        (previousLicense == UserLicenseStatus::Licensed) != p.is_licensed) {
-        transitionReplyAllowances[sourceNum] = {Time::getUptimeSecs(), TransitionReplyAttempts};
-    }
 
     bool wasBroadcast = isBroadcast(mp.to);
 
@@ -105,28 +95,22 @@ void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
         pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
 }
 
-bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
-{
-    return sendOurNodeInfoWithOptions(dest, wantReplies, channel, _shorterTimeout, false);
-}
-
-bool NodeInfoModule::sendOurNodeInfoWithOptions(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout,
-                                                bool ownerSync)
+bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout,
+                                     bool bypassCadenceThrottle)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
     DEBUG_HEAP_BEFORE;
-    meshtastic_MeshPacket *p = allocReplyWithOptions(ownerSync);
+    meshtastic_MeshPacket *p = allocNodeInfo(bypassCadenceThrottle);
     DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
-    shorterTimeout = false;
 
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
-        bool requestWantResponse =
-            wantReplies && (ownerSync || (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-                                          config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR));
+        bool requestWantResponse = (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
+                                    config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                                   wantReplies;
 
         p->decoded.want_response = requestWantResponse;
         if (_shorterTimeout)
@@ -138,22 +122,13 @@ bool NodeInfoModule::sendOurNodeInfoWithOptions(NodeNum dest, bool wantReplies, 
             p->channel = channel;
         }
 
-        const PacketId packetId = p->id;
-        const ErrorCode result = service->sendToMesh(p);
-        if (result == ERRNO_OK) {
-            prevPacketId = packetId;
-            return true;
-        }
-        prevPacketId = 0;
+        prevPacketId = p->id;
+
+        service->sendToMesh(p);
+        shorterTimeout = false;
+        return true;
     }
     return false;
-}
-
-void NodeInfoModule::requestOwnerSync()
-{
-    ownerSyncPending = true;
-    ownerSyncAttemptsRemaining = OwnerSyncAttempts;
-    setIntervalFromNow(0);
 }
 
 void NodeInfoModule::triggerImmediateNodeInfoCheck()
@@ -164,41 +139,18 @@ void NodeInfoModule::triggerImmediateNodeInfoCheck()
 
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
+    return allocNodeInfo(false);
+}
+
+meshtastic_MeshPacket *NodeInfoModule::allocNodeInfo(bool bypassCadenceThrottle)
+{
     // Only apply suppression when actually replying to someone else's request, not for periodic broadcasts.
     const bool isReplyingToExternalRequest = currentRequest &&
                                              currentRequest->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
                                              currentRequest->decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
                                              currentRequest->decoded.want_response && !isFromUs(currentRequest);
 
-    bool bypassCadenceThrottle = false;
-    auto allowance = transitionReplyAllowances.end();
-    if (isReplyingToExternalRequest) {
-        allowance = transitionReplyAllowances.find(getFrom(currentRequest));
-        if (allowance != transitionReplyAllowances.end()) {
-            if ((uint32_t)(Time::getUptimeSecs() - allowance->second.startedAt) < TransitionReplyAllowanceSeconds &&
-                allowance->second.remaining > 0) {
-                bypassCadenceThrottle = true;
-            } else {
-                transitionReplyAllowances.erase(allowance);
-                allowance = transitionReplyAllowances.end();
-            }
-        }
-    }
-
-    meshtastic_MeshPacket *reply = allocReplyWithOptions(bypassCadenceThrottle);
-    if (reply && allowance != transitionReplyAllowances.end() && --allowance->second.remaining == 0)
-        transitionReplyAllowances.erase(allowance);
-    return reply;
-}
-
-meshtastic_MeshPacket *NodeInfoModule::allocReplyWithOptions(bool bypassCadenceThrottle)
-{
-    const bool isReplyingToExternalRequest = currentRequest &&
-                                             currentRequest->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-                                             currentRequest->decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
-                                             currentRequest->decoded.want_response && !isFromUs(currentRequest);
-
-    if (!bypassCadenceThrottle && suppressReplyForCurrentRequest && isReplyingToExternalRequest) {
+    if (suppressReplyForCurrentRequest && isReplyingToExternalRequest) {
         LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
         ignoreRequest = true;
         suppressReplyForCurrentRequest = false;
@@ -259,14 +211,6 @@ void NodeInfoModule::pruneLastNodeInfoCache()
         }
     }
 
-    for (auto it = transitionReplyAllowances.begin(); it != transitionReplyAllowances.end();) {
-        if (!nodeDB->getMeshNode(it->first) || (uint32_t)(nowSecs - it->second.startedAt) >= TransitionReplyAllowanceSeconds) {
-            it = transitionReplyAllowances.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
     // Evict by largest elapsed time rather than smallest stamp, so the victim is still the oldest
     // entry if the uptime counter ever wraps underneath us.
     while (!lastNodeInfoSeen.empty() && lastNodeInfoSeen.size() > maxEntries) {
@@ -290,20 +234,12 @@ NodeInfoModule::NodeInfoModule()
 
 int32_t NodeInfoModule::runOnce()
 {
-    if (airTime->isTxAllowedAirUtil() &&
-        (ownerSyncPending || config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN)) {
+    if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         // If we changed channels, ask everyone else for their latest info
-        const bool requestOwnerRefresh = ownerSyncPending;
-        const bool firstOwnerSyncAttempt = requestOwnerRefresh && ownerSyncAttemptsRemaining == OwnerSyncAttempts;
-        bool requestReplies = firstOwnerSyncAttempt || currentGeneration != radioGeneration;
+        bool requestReplies = currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
-        if (sendOurNodeInfoWithOptions(NODENUM_BROADCAST, requestReplies, 0, false, requestOwnerRefresh)) {
+        if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies))
             currentGeneration = radioGeneration; // only a send that went out consumes the channel change
-            if (ownerSyncPending && --ownerSyncAttemptsRemaining == 0)
-                ownerSyncPending = false;
-        }
     }
-    if (ownerSyncPending)
-        return OwnerSyncRetryMs;
     return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }
