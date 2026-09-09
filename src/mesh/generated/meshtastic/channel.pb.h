@@ -97,6 +97,12 @@ typedef struct _meshtastic_ChannelSettings {
     /* Per-channel module settings. */
     bool has_module_settings;
     meshtastic_ModuleSettings module_settings;
+    /* Enable authenticated encryption (AES-CCM) for this channel.
+ When true, messages include a 12-byte authentication tag that prevents
+ forgery and bit-flipping attacks. All nodes on the channel must have
+ this enabled - unauthenticated (AES-CTR) packets are rejected.
+ Experimental. Default: false (standard AES-CTR encryption). */
+    bool use_aead;
 } meshtastic_ChannelSettings;
 
 /* A pair of a channel number, mode and the (sharable) settings for that channel */
@@ -111,6 +117,20 @@ typedef struct _meshtastic_Channel {
     /* TODO: REPLACE */
     meshtastic_Channel_Role role;
 } meshtastic_Channel;
+
+typedef PB_BYTES_ARRAY_T(32) meshtastic_ChannelIdentity_psk_t;
+/* The identity half of a ChannelSettings: the only fields needed to name a channel and decrypt it.
+ Tag numbers deliberately match ChannelSettings (psk = 2, name = 3), so the two are wire
+ compatible in both directions: a ChannelSettings decodes as a ChannelIdentity with the remaining
+ fields skipped as unknown, and a ChannelIdentity decodes as a ChannelSettings with only these
+ two set. Used where a channel must be named by value rather than by table index - a remote
+ administrator cannot read the channel table, so an index means nothing to it. */
+typedef struct _meshtastic_ChannelIdentity {
+    /* Pre-shared key, same encoding as ChannelSettings.psk, including the 1-byte shorthands. */
+    meshtastic_ChannelIdentity_psk_t psk;
+    /* Channel name. Blank means the modem preset's display name, as everywhere else. */
+    char name[12];
+} meshtastic_ChannelIdentity;
 
 
 #ifdef __cplusplus
@@ -127,13 +147,16 @@ extern "C" {
 #define meshtastic_Channel_role_ENUMTYPE meshtastic_Channel_Role
 
 
+
 /* Initializer values for message structs */
-#define meshtastic_ChannelSettings_init_default  {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default}
+#define meshtastic_ChannelSettings_init_default  {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default, 0}
 #define meshtastic_ModuleSettings_init_default   {0, 0}
 #define meshtastic_Channel_init_default          {0, false, meshtastic_ChannelSettings_init_default, _meshtastic_Channel_Role_MIN}
-#define meshtastic_ChannelSettings_init_zero     {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero}
+#define meshtastic_ChannelIdentity_init_default  {{0, {0}}, ""}
+#define meshtastic_ChannelSettings_init_zero     {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero, 0}
 #define meshtastic_ModuleSettings_init_zero      {0, 0}
 #define meshtastic_Channel_init_zero             {0, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Channel_Role_MIN}
+#define meshtastic_ChannelIdentity_init_zero     {{0, {0}}, ""}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_ModuleSettings_position_precision_tag 1
@@ -145,9 +168,12 @@ extern "C" {
 #define meshtastic_ChannelSettings_uplink_enabled_tag 5
 #define meshtastic_ChannelSettings_downlink_enabled_tag 6
 #define meshtastic_ChannelSettings_module_settings_tag 7
+#define meshtastic_ChannelSettings_use_aead_tag  8
 #define meshtastic_Channel_index_tag             1
 #define meshtastic_Channel_settings_tag          2
 #define meshtastic_Channel_role_tag              3
+#define meshtastic_ChannelIdentity_psk_tag       2
+#define meshtastic_ChannelIdentity_name_tag      3
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ChannelSettings_FIELDLIST(X, a) \
@@ -157,7 +183,8 @@ X(a, STATIC,   SINGULAR, STRING,   name,              3) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                4) \
 X(a, STATIC,   SINGULAR, BOOL,     uplink_enabled,    5) \
 X(a, STATIC,   SINGULAR, BOOL,     downlink_enabled,   6) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  module_settings,   7)
+X(a, STATIC,   OPTIONAL, MESSAGE,  module_settings,   7) \
+X(a, STATIC,   SINGULAR, BOOL,     use_aead,          8)
 #define meshtastic_ChannelSettings_CALLBACK NULL
 #define meshtastic_ChannelSettings_DEFAULT NULL
 #define meshtastic_ChannelSettings_module_settings_MSGTYPE meshtastic_ModuleSettings
@@ -176,19 +203,28 @@ X(a, STATIC,   SINGULAR, UENUM,    role,              3)
 #define meshtastic_Channel_DEFAULT NULL
 #define meshtastic_Channel_settings_MSGTYPE meshtastic_ChannelSettings
 
+#define meshtastic_ChannelIdentity_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BYTES,    psk,               2) \
+X(a, STATIC,   SINGULAR, STRING,   name,              3)
+#define meshtastic_ChannelIdentity_CALLBACK NULL
+#define meshtastic_ChannelIdentity_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_ChannelSettings_msg;
 extern const pb_msgdesc_t meshtastic_ModuleSettings_msg;
 extern const pb_msgdesc_t meshtastic_Channel_msg;
+extern const pb_msgdesc_t meshtastic_ChannelIdentity_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_ChannelSettings_fields &meshtastic_ChannelSettings_msg
 #define meshtastic_ModuleSettings_fields &meshtastic_ModuleSettings_msg
 #define meshtastic_Channel_fields &meshtastic_Channel_msg
+#define meshtastic_ChannelIdentity_fields &meshtastic_ChannelIdentity_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CHANNEL_PB_H_MAX_SIZE meshtastic_Channel_size
-#define meshtastic_ChannelSettings_size          72
-#define meshtastic_Channel_size                  87
+#define meshtastic_ChannelIdentity_size          47
+#define meshtastic_ChannelSettings_size          74
+#define meshtastic_Channel_size                  89
 #define meshtastic_ModuleSettings_size           8
 
 #ifdef __cplusplus

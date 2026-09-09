@@ -118,7 +118,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_DS248X = 51,
     /* MMC5983MA 3-Axis Digital Magnetic Sensor */
     meshtastic_TelemetrySensorType_MMC5983MA = 52,
-    /* ICM-42607-P 6‑Axis IMU */
+    /* ICM-42607-P 6-Axis IMU */
     meshtastic_TelemetrySensorType_ICM42607P = 53,
     /* SPA06 pressure and temperature */
     meshtastic_TelemetrySensorType_SPA06 = 54,
