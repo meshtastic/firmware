@@ -294,7 +294,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     case meshtastic_NodeDatabase_positions_tag: {
         if (ostream) {
             const auto *vec = static_cast<const std::vector<meshtastic_NodePositionEntry> *>(iter->pData);
-            for (auto item : *vec) {
+            for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodePositionEntry_fields, &item))
@@ -320,7 +320,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     case meshtastic_NodeDatabase_telemetry_tag: {
         if (ostream) {
             const auto *vec = static_cast<const std::vector<meshtastic_NodeTelemetryEntry> *>(iter->pData);
-            for (auto item : *vec) {
+            for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeTelemetryEntry_fields, &item))
@@ -346,7 +346,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     case meshtastic_NodeDatabase_status_tag: {
         if (ostream) {
             const auto *vec = static_cast<const std::vector<meshtastic_NodeStatusEntry> *>(iter->pData);
-            for (auto item : *vec) {
+            for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeStatusEntry_fields, &item))
@@ -372,7 +372,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     case meshtastic_NodeDatabase_environment_tag: {
         if (ostream) {
             const auto *vec = static_cast<const std::vector<meshtastic_NodeEnvironmentEntry> *>(iter->pData);
-            for (auto item : *vec) {
+            for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeEnvironmentEntry_fields, &item))
