@@ -33,6 +33,7 @@ namespace
 
 constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interval
 
+#if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 // NodeInfo direct response: role-enforced hop ceilings (respond when hopsAway <= threshold);
 // config can only tighten them. nodeinfo_direct_response must also be enabled.
 constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
@@ -42,6 +43,8 @@ constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot in
 // entry would be served indefinitely for a long-gone node while the genuine request is
 // suppressed. The cache path enforces the same 6 h in ticks (kNodeInfoMaxServeAgeTicks, header).
 constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL; // 6 h (NodeDB fallback path)
+
+#endif // MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 
 /// Convert seconds to milliseconds with overflow protection.
 uint32_t secsToMs(uint32_t secs)
@@ -1114,6 +1117,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         updateCachedRoleFromNodeInfo(mp);
     }
 
+#if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
     // -------------------------------------------------------------------------
     // NodeInfo Direct Response
     // -------------------------------------------------------------------------
@@ -1139,6 +1143,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             return ProcessMessage::STOP; // Consumed - request will not be forwarded
         }
     }
+#endif // MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 
     // -------------------------------------------------------------------------
     // Position Deduplication
@@ -1420,6 +1425,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
 #endif
 }
 
+#if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse)
 {
     // Caller already verified: nodeinfo_direct_response, portnum, want_response,
@@ -1665,6 +1671,7 @@ bool TrafficManagementModule::isWithinMaxHopsOfRequestor(const meshtastic_MeshPa
                  isRouter, result ? "respond" : "skip");
     return result;
 }
+#endif // MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 
 bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
 {
