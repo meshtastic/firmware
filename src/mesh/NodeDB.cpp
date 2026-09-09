@@ -2598,6 +2598,19 @@ void NodeDB::loadFromDisk()
     }
     configLoadComplete = true;
 
+    state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
+                      &channelFile);
+    if (state != LoadFileResult::LOAD_SUCCESS) {
+        installDefaultChannels(); // Our in RAM copy might now be corrupt
+    } else {
+        if (channelFile.version < DEVICESTATE_MIN_VER) {
+            LOG_WARN("channelFile %d is old, discard", channelFile.version);
+            installDefaultChannels();
+        } else {
+            LOG_INFO("Loaded saved channelFile v%d", channelFile.version);
+        }
+    }
+
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
     if (config.has_lora && config.lora.use_preset) {
@@ -2725,19 +2738,6 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Traffic management never configured, installing always-on defaults");
         installTrafficManagementDefaults(moduleConfig);
         saveToDisk(SEGMENT_MODULECONFIG);
-    }
-
-    state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
-                      &channelFile);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
-        installDefaultChannels(); // Our in RAM copy might now be corrupt
-    } else {
-        if (channelFile.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("channelFile %d is old, discard", channelFile.version);
-            installDefaultChannels();
-        } else {
-            LOG_INFO("Loaded saved channelFile v%d", channelFile.version);
-        }
     }
 
     state = loadProto(uiconfigFileName, meshtastic_DeviceUIConfig_size, sizeof(meshtastic_DeviceUIConfig),

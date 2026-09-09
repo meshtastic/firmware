@@ -17,6 +17,7 @@
 #if defined(FSCom) && !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 
 #include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
 #include "mesh/TypeConversions.h"
 #include <ErriezCRC32.h>
 #include <cstdio>
@@ -173,6 +174,32 @@ static void test_healthyReboot_preservesIdentity(void)
     TEST_ASSERT_EQUAL_STRING(baseLongName, owner.long_name);
     // A healthy boot has nothing to persist for config: the on-disk file is already the fixpoint.
     TEST_ASSERT_EQUAL_UINT64(fpBefore, fileFingerprint(configFileName));
+}
+
+static void test_invalidChannelSlot_usesPersistedCustomChannelName(void)
+{
+    const meshtastic_LocalConfig savedConfig = config;
+    const meshtastic_ChannelFile savedChannels = channelFile;
+    TEST_ASSERT_GREATER_THAN_UINT32(0, channelFile.channels_count);
+
+    strncpy(channelFile.channels[0].settings.name, "Boot Slot Test", sizeof(channelFile.channels[0].settings.name) - 1);
+    config.lora.channel_num = UINT32_MAX;
+
+    meshtastic_Config_LoRaConfig expected = config.lora;
+    RadioInterface::clampConfigLora(expected);
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_CHANNELS));
+
+    channelFile = meshtastic_ChannelFile_init_zero;
+    rebootNodeDB();
+
+    const uint32_t actualChannelNum = config.lora.channel_num;
+
+    config = savedConfig;
+    channelFile = savedChannels;
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_CHANNELS));
+    rebootNodeDB();
+
+    TEST_ASSERT_EQUAL_UINT32(expected.channel_num, actualChannelNum);
 }
 
 // --- Degraded boot: present-but-undecodable config ---
@@ -387,6 +414,7 @@ NBR_TEST_ENTRY void setup()
     printf("\n=== Healthy-boot identity ===\n");
     RUN_TEST(test_firstBoot_establishesKeyedIdentity);
     RUN_TEST(test_healthyReboot_preservesIdentity);
+    RUN_TEST(test_invalidChannelSlot_usesPersistedCustomChannelName);
 
     printf("\n=== Degraded boot (corrupt config) ===\n");
     RUN_TEST(test_corruptConfig_freezesIdentity_leavesFileUntouched);
