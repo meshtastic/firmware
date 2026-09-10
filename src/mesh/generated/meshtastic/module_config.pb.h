@@ -1138,7 +1138,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_size 10
-#define meshtastic_ModuleConfig_MeshBeaconConfig_size 240
+#define meshtastic_ModuleConfig_MeshBeaconConfig_size 242
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
@@ -1149,7 +1149,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 30
-#define meshtastic_ModuleConfig_size             244
+#define meshtastic_ModuleConfig_size             246
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus

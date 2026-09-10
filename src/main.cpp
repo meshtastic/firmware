@@ -44,6 +44,7 @@
 #endif
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -1374,6 +1375,52 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     deviceMetadata.has_xeddsa = true;
+#endif
+
+#if HAS_MUI_MIRROR
+    // MUI owns the panel and leaves `screen` null, so ask LVGL instead.
+    uint16_t muiW = 0, muiH = 0;
+    bool muiTouch = false;
+    if (graphics::muiDisplayInfo(muiW, muiH, muiTouch)) {
+        deviceMetadata.has_display = true;
+        deviceMetadata.display.width = muiW;
+        deviceMetadata.display.height = muiH;
+        deviceMetadata.display.format = meshtastic_DisplayFrame_Format_RGB565;
+        deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+        deviceMetadata.display.has_touch = muiTouch;
+    } else
+#endif
+#if HAS_SCREEN
+        if (screen) {
+        OLEDDisplay *dispdev = screen->getDisplayDevice();
+        if (dispdev && dispdev->getWidth() > 0) {
+            deviceMetadata.has_display = true;
+            deviceMetadata.display.width = dispdev->getWidth();
+            deviceMetadata.display.height = dispdev->getHeight();
+            deviceMetadata.display.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
+#if defined(ARCH_PORTDUINO)
+            // The native panel is selected at runtime; UNSPECIFIED is honest until derived from portduino_config.
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED;
+#elif defined(USE_EINK)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
+#elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_HUB75;
+// USE_TFTDISPLAY is value-tested, not defined()-tested: configuration.h
+// defaults it to 0, so it is always defined and every screen build would
+// otherwise report itself as a TFT.
+#elif USE_TFTDISPLAY || defined(HAS_SPI_TFT) || defined(USE_ST7789) || defined(USE_ST7796) || defined(ILI9341_DRIVER) ||         \
+    defined(ILI9342_DRIVER)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+#elif defined(USE_ST7567)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_LCD;
+#else
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_OLED;
+#endif
+#if HAS_TOUCHSCREEN
+            deviceMetadata.display.has_touch = true;
+#endif
+        }
+    }
 #endif
     return deviceMetadata;
 }

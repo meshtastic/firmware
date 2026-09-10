@@ -23,6 +23,7 @@
 #include "SPILock.h"
 #include "TypeConversions.h"
 #include "concurrency/LockGuard.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
 #include "xmodem.h"
@@ -273,6 +274,9 @@ void PhoneAPI::handleStartConfig()
 #ifdef FSCom
         observe(&xModem.packetReady);
 #endif
+#if HAS_SCREEN_MIRROR
+        observe(&graphics::screenMirror.frameReady);
+#endif
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         // New physical connection: clear this PhoneAPI's auth slot so the new
         // client must present a passphrase or PKC admin signature before
@@ -376,6 +380,17 @@ void PhoneAPI::close()
         unobserve(&service->fromNumChanged);
 #ifdef FSCom
         unobserve(&xModem.packetReady);
+#endif
+#if HAS_SCREEN_MIRROR
+        unobserve(&graphics::screenMirror.frameReady);
+        // This client is gone; PoC keeps one arming flag, so disarm and free
+        // the snapshot rather than stream to nobody. A surviving client
+        // re-arms with another set_display_mirror.
+        graphics::screenMirror.setMirror(false);
+        mirrorFrameId = 0;
+        mirrorOffset = 0;
+        mirrorPaletteSig = 0;
+        mirrorPaletteOffset = 0;
 #endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
@@ -1092,6 +1107,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
                 fromRadioScratch.packet = replayPkt;
             }
+#if HAS_SCREEN_MIRROR
+        } else if (screenMirrorAuthorized() && graphics::screenMirror.copyPaletteChunk(mirrorPaletteSig, mirrorPaletteOffset,
+                                                                                       fromRadioScratch.display_palette)) {
+            // Palette before frames so the client can colorize the first frame it renders.
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
+        } else if (screenMirrorAuthorized() &&
+                   graphics::screenMirror.copyChunk(this, mirrorFrameId, mirrorOffset, fromRadioScratch.display_frame)) {
+            // Lowest priority: mesh traffic and notifications outrank pixels.
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
+#endif
         }
         break;
 
@@ -1727,7 +1752,15 @@ bool PhoneAPI::available()
             return true;
         // Trailing replay drain - feeds cached satellite-DB packets alongside
         // (lower priority than) live traffic.
-        return replayPending();
+        if (replayPending())
+            return true;
+
+#if HAS_SCREEN_MIRROR
+        return screenMirrorAuthorized() && (graphics::screenMirror.hasPaletteChunkFor(mirrorPaletteSig, mirrorPaletteOffset) ||
+                                            graphics::screenMirror.hasChunkFor(this, mirrorFrameId, mirrorOffset));
+#else
+        return false;
+#endif
     }
     default:
         LOG_ERROR("PhoneAPI::available unexpected state %d", state);
@@ -1914,7 +1947,9 @@ int PhoneAPI::onNotify(uint32_t newValue)
         // Consumed by every connected client in this one notify pass, so no per-connection bookkeeping.
         if (service->identityMovePending())
             state = STATE_RESEND_MY_INFO;
-        LOG_INFO("Tell client new packets %u", newValue);
+        // TRACE, not INFO: with display mirroring active this fires once per
+        // captured frame per client, at screen-change rate.
+        LOG_TRACE("Tell client new packets %u", newValue);
         onNowHasData(newValue);
     } else if (service->identityMovePending() && state != STATE_SEND_NOTHING && state != STATE_SEND_MY_INFO) {
         // Mid-sync, so this dump is already carrying the old number in its my_info, its self record or
