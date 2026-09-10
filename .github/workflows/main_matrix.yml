@@ -782,6 +782,13 @@ jobs:
             exit 1
           fi
 
+      - name: Generate nightly html index
+        env:
+          VERSION: ${{ needs.version.outputs.long }}
+        working-directory: ./stage
+        run: |
+          tree -H "." -T "Meshtastic Nightly $VERSION" --noreport -I "index.html" --charset utf-8 > index.html
+
       # Mirror the staged directory to Cloudflare R2. --delete at the bucket root
       # clears stale nightly binaries, and is in scope for the whole bucket because
       # this bucket holds nothing but the nightly build. release_notes.md lives only
@@ -810,11 +817,16 @@ jobs:
             --delete \
             --exclude 'release_notes.md' \
             --exclude 'index.json' \
+            --exclude 'index.html' \
             --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
             --cache-control 'public, max-age=3600, s-maxage=86400'
-          # index.json is the pointer to the current nightly, don't cache it so hard (5 minutes).
-          aws s3 cp ./stage/index.json "s3://${r2_bucket}/index.json" \
-            --endpoint-url "$R2_ENDPOINT" \
-            --no-progress \
-            --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
-            --cache-control 'public, max-age=300'
+          # The indices point at whatever the current nightly is - index.json for
+          # clients, index.html for browsers - so they are excluded from the sync
+          # above and uploaded here with a 5 minute cache instead.
+          for index in index.json index.html; do
+            aws s3 cp "./stage/$index" "s3://${r2_bucket}/$index" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --no-progress \
+              --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
+              --cache-control 'public, max-age=300'
+          done
