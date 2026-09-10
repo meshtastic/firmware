@@ -586,7 +586,8 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
 
     // Membership refresh (this hourly pass owns it): clear every isMember bit, then re-mark from
     // both NodeDB tiers. Runs AFTER seeding so the upsert still sees last pass's bits (spareMembers).
-    // Cost/lag rationale in docs/node_info_stores.md "Consistency with NodeDB (anti-entropy)".
+    // Cost/lag rationale in https://meshtastic.org/docs/development/reference/node-info-stores "Consistency with NodeDB
+    // (anti-entropy)".
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++)
         nodeInfoPayload[i].isMember = false;
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
@@ -729,7 +730,8 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
 {
     // Same enable gate as the write-through hooks and maintenance: a disabled module stops
     // updating and sweeping the cache, so its frozen contents must not keep feeding PKI key
-    // resolution either. Enforces the "superset only while enabled" corollary (node_info_stores.md).
+    // resolution either. Enforces the "superset only while enabled" corollary
+    // (https://meshtastic.org/docs/development/reference/node-info-stores).
     if (!moduleConfig.has_traffic_management)
         return false;
     if (!nodeInfoPayload || node == 0 || !out)
@@ -1360,7 +1362,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lat_truncated = truncateCoordinate(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateCoordinate(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 12 h default
+    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 5 h default
     // is only for TTL sizing - feeding it here would silently defeat that contract.
     uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
 
@@ -1404,12 +1406,17 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     TM_LOG_TRACE("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
                  entry->pos_fingerprint, samePosition, withinInterval, isNew);
 
-    // Update cache entry (raw tick; 0 is a valid tick value)
-    entry->pos_fingerprint = fingerprint;
-    entry->pos_time = nowPosTick;
-
     // Drop only if same position AND within the minimum interval
-    return samePosition && withinInterval;
+    const bool drop = samePosition && withinInterval;
+
+    // Stamp only what we let through: re-stamping a dropped duplicate slides the window forward on
+    // every repeat, muting a node that broadcasts faster than the window instead of refreshing it.
+    if (!drop) {
+        entry->pos_fingerprint = fingerprint;
+        entry->pos_time = nowPosTick;
+    }
+
+    return drop;
 #endif
 }
 
@@ -1514,7 +1521,8 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     // Throttle the spoofed reply (per requester + per target + 1 s global floor; checked here so a
     // request declined above never spends the budget). false forwards the request instead of consuming
-    // it. Rationale in docs/traffic_management_module.md "Throttling direct responses".
+    // it. Rationale in https://meshtastic.org/docs/development/reference/traffic-management-internals "Throttling direct
+    // responses".
     if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request", getFrom(p));
         return false;

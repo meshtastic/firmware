@@ -277,6 +277,10 @@ void test_trafficType_overflowSaturates()
     TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), res);
 }
 
+// Required by Unity: PlatformIO's weak defaults do not link on MinGW (PE-COFF weak externals).
+void setUp(void) {}
+void tearDown(void) {}
+
 void setup()
 {
     // Small delay to match other test mains

@@ -3,6 +3,7 @@
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
+#include "mesh/Throttle.h"
 #ifdef ARCH_ESP32
 #include "sleep.h"
 #endif
@@ -66,7 +67,7 @@ void RotaryEncoderImpl::pollOnce()
 
     static uint32_t lastPressed = millis();
     if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
-        if (lastPressed + 200 < millis()) {
+        if (Throttle::hasElapsed(lastPressed, 200)) {
             LOG_DEBUG("Rotary event Press");
             lastPressed = millis();
             e.inputEvent = this->eventPressed;

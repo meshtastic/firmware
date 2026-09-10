@@ -17,6 +17,8 @@ class SFA30Sensor : public TelemetrySensor
   private:
     enum class State { IDLE, ACTIVE };
     State state = State::IDLE;
+    // millis()-based, not wall-clock: this only measures in-session warmup elapsed time,
+    // and getTime() can jump discontinuously when RTC quality improves mid-session.
     uint32_t measureStarted = 0;
 
     SensirionI2cSfa3x sfa30;

@@ -27,6 +27,7 @@ static constexpr uint16_t TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY = 0x8004;
 #include "Sensor/AddI2CSensorTemplate.h"
 #include "Sensor/PMSA003ISensor.h"
 #include "Sensor/SEN5XSensor.h"
+#include "Sensor/SEN6XSensor.h"
 #if __has_include(<SensirionI2cScd4x.h>)
 #include "Sensor/SCD4XSensor.h"
 #endif
@@ -66,6 +67,8 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
         supportedSensors[PMSA003I_ADDR] = ScanI2C::DeviceType::PMSA003I;
     if (!supportedSensors.count(SEN5X_ADDR))
         supportedSensors[SEN5X_ADDR] = ScanI2C::DeviceType::SEN5X;
+    if (!supportedSensors.count(SEN6X_ADDR))
+        supportedSensors[SEN6X_ADDR] = ScanI2C::DeviceType::SEN6X;
 #if __has_include(<SensirionI2cScd4x.h>)
     if (!supportedSensors.count(SCD4X_ADDR))
         supportedSensors[SCD4X_ADDR] = ScanI2C::DeviceType::SCD4X;
@@ -108,6 +111,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // order by priority of metrics/values (low top, high bottom)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
     addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
+    addSensor<SEN6XSensor>(i2cScanner, ScanI2C::DeviceType::SEN6X);
 #if __has_include(<SensirionI2cScd4x.h>)
     addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SCD4X);
 #endif

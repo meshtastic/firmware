@@ -25,9 +25,11 @@ class NodeDBTestShim : public NodeDB
   public:
     void runDemote() { demoteOldestHotNodesToWarm(); }
     void runCleanup() { cleanupMeshDB(); }
+    void stampUntrusted(NodeNum num, uint32_t uptimeSecs) { recordHeardWhileClockUntrusted(num, uptimeSecs); }
 
     // Read back the role + protected category the warm tier cached for a node.
     bool warmMeta(NodeNum n, uint8_t &role, uint8_t &prot) { return warmStore.lookupMeta(n, role, prot); }
+    bool warmTake(NodeNum n, WarmNodeEntry &out) { return warmStore.take(n, out); }
 
     void clearHot()
     {
@@ -35,8 +37,13 @@ class NodeDBTestShim : public NodeDB
         numMeshNodes = 0;
     }
 
+    // The warm tier outlives setUp() (and a prior run's warm.dat), so a test that
+    // asserts on a warm row has to start from an empty one.
+    void clearWarm() { warmStore.clear(); }
+
+    // keySize < 32 seeds a partial key, as a truncated/short NodeInfo would leave behind.
     void push(NodeNum num, uint32_t lastHeard, bool favorite, bool ignored, bool withUser, bool withKey,
-              meshtastic_Config_DeviceConfig_Role role = meshtastic_Config_DeviceConfig_Role_CLIENT)
+              meshtastic_Config_DeviceConfig_Role role = meshtastic_Config_DeviceConfig_Role_CLIENT, pb_size_t keySize = 32)
     {
         meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
         n.num = num;
@@ -49,8 +56,8 @@ class NodeDBTestShim : public NodeDB
         if (withUser)
             nodeInfoLiteSetBit(&n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
         if (withKey) {
-            n.public_key.size = 32;
-            memset(n.public_key.bytes, static_cast<uint8_t>(num & 0xff), 32);
+            n.public_key.size = keySize;
+            memset(n.public_key.bytes, static_cast<uint8_t>(num & 0xff), keySize);
             n.public_key.bytes[0] = 0x01; // ensure non-zero (all-zero == "no key")
         }
         meshNodes->push_back(n);
@@ -160,6 +167,38 @@ static void test_migration_carriesSignerBitThroughWarm(void)
     TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasXeddsaSigned(plainBack), "re-admission must not invent the signer bit");
 }
 
+// A warm record stores 32 raw key bytes with no length, so a partial hot-store key would be
+// indistinguishable from a real one once demoted. It must land as a keyless placeholder instead.
+static void test_migration_dropsShortKeyOnDemotion(void)
+{
+    db->clearWarm();
+    db->seedSelf();
+    const NodeNum shortKeyNum = 2000 + 3;
+    const NodeNum fullKeyNum = 2000 + 4;
+    const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected are demoted
+    // Warm entries steal the low 7 bits of last_heard for role and protected-category metadata
+    // (WARM_TIME_MASK), so seed multiples of 128 to keep the values representable once demoted.
+    for (int i = 1; i <= extra; i++)
+        db->push(2000 + i, /*last_heard=*/(uint32_t)i * 128, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true,
+                 /*withKey=*/true, meshtastic_Config_DeviceConfig_Role_CLIENT,
+                 /*keySize=*/(NodeNum)(2000 + i) == shortKeyNum ? 31 : 32);
+
+    db->runDemote();
+
+    // Both left the hot store; only the full key is allowed through to the warm tier.
+    TEST_ASSERT_NULL(db->getMeshNode(shortKeyNum));
+    TEST_ASSERT_NULL(db->getMeshNode(fullKeyNum));
+    TEST_ASSERT_FALSE_MESSAGE(warmHasKey(shortKeyNum), "a 31-byte key must not be demoted as if it were a full key");
+    TEST_ASSERT_TRUE_MESSAGE(warmHasKey(fullKeyNum), "a full 32-byte key still survives demotion");
+
+    // The short-key node is still held, just keyless, so re-admission restores its last_heard.
+    uint8_t role = 0xFF, prot = 0xFF;
+    TEST_ASSERT_TRUE_MESSAGE(db->warmMeta(shortKeyNum, role, prot), "keyless placeholder row must still be present");
+    WarmNodeEntry placeholder = {};
+    TEST_ASSERT_TRUE_MESSAGE(db->warmTake(shortKeyNum, placeholder), "placeholder must be readable from the warm tier");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(3u * 128, warmTimeOf(placeholder), "the keyless placeholder must carry last_heard");
+}
+
 // Favourite handling: a favourite is never the eviction victim, even when it is
 // the oldest node in a full hot store.
 static void test_eviction_preservesFavorite(void)
@@ -176,6 +215,27 @@ static void test_eviction_preservesFavorite(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(3000 + 1)); // favourite survived despite being oldest
     TEST_ASSERT_NULL(db->getMeshNode(3000 + 2));     // oldest non-favourite evicted
     TEST_ASSERT_NOT_NULL(db->getMeshNode(0x99990000));
+}
+
+// A node heard during this boot is newer than every persisted epoch, including valid epochs after
+// 2038. Ranking both domains in one uint32_t incorrectly evicts the current-boot node first.
+static void test_eviction_prefersCurrentBootStampOverPost2038Epoch(void)
+{
+    constexpr NodeNum futureDated = 0x70000001;
+    constexpr NodeNum heardThisBoot = 0x70000002;
+
+    db->seedSelf();
+    db->push(futureDated, 0xB5000000u, false, false, /*withUser=*/true, /*withKey=*/true);
+    db->push(heardThisBoot, 0, false, false, /*withUser=*/true, /*withKey=*/true);
+    db->stampUntrusted(heardThisBoot, 10);
+    for (int i = 3; i < MAX_NUM_NODES; i++)
+        db->push(0x70000000u + i, UINT32_MAX, false, false, /*withUser=*/true, /*withKey=*/true);
+
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes());
+    TEST_ASSERT_NOT_NULL(db->getOrCreateMeshNode(0x79999999));
+
+    TEST_ASSERT_NULL(db->getMeshNode(futureDated));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(heardThisBoot));
 }
 
 // Ignored handling: an ignored node survives eviction (like a favourite), and is
@@ -268,7 +328,9 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_migration_demotesOldestKeepsKeepersAndSelf);
     RUN_TEST(test_migration_carriesRoleAndProtectedIntoWarm);
     RUN_TEST(test_migration_carriesSignerBitThroughWarm);
+    RUN_TEST(test_migration_dropsShortKeyOnDemotion);
     RUN_TEST(test_eviction_preservesFavorite);
+    RUN_TEST(test_eviction_prefersCurrentBootStampOverPost2038Epoch);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
     RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);

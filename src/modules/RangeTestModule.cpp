@@ -310,9 +310,10 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("%d,", mp.hop_limit); // Packet Hop Limit
 
     // TODO: If quotes are found in the payload, it has to be escaped.
-    fileToAppend.printf("\"%.*s\"\n", (int)p.payload.size, p.payload.bytes);
-    fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
+    fileToAppend.printf("\"%.*s\",", (int)p.payload.size, p.payload.bytes);
+    fileToAppend.printf("%i", mp.rx_rssi); // RX RSSI
 
+    fileToAppend.printf("\n");
     fileToAppend.flush();
     fileToAppend.close();
 

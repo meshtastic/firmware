@@ -15,25 +15,33 @@
 #include "TCA8418Keyboard.h"
 #endif
 
+#if defined(ELECROW_ThinkNode_M9)
+#include "STC8HKeyboard.h"
+#include "graphics/Screen.h"                    // for the global `screen` + FrameFocus
+#include "graphics/draw/NotificationRenderer.h" // for resetBanner()
+#endif
+
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
 #if defined(T_DECK_PRO)
-      TCAKeyboard(*(new TDeckProKeyboard()))
+      TCAKeyboard(new TDeckProKeyboard())
 #elif defined(T_LORA_PAGER)
-      TCAKeyboard(*(new TLoraPagerKeyboard()))
+      TCAKeyboard(new TLoraPagerKeyboard())
 #elif defined(M5STACK_CARDPUTER_ADV)
-      TCAKeyboard(*(new CardputerKeyboard()))
+      TCAKeyboard(new CardputerKeyboard())
 #elif defined(HACKADAY_COMMUNICATOR)
-      TCAKeyboard(*(new HackadayCommunicatorKeyboard()))
+      TCAKeyboard(new HackadayCommunicatorKeyboard())
 #else
-      TCAKeyboard(*(new TCA8418Keyboard()))
+      TCAKeyboard(new TCA8418Keyboard())
 #endif
 {
     this->_originName = name;
 }
+
+KbI2cBase::~KbI2cBase() = default;
 
 uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t length)
 {
@@ -62,6 +70,11 @@ int32_t KbI2cBase::runOnce()
             // resolved via the scanner: WIRE1 may be a bridged bus rather
             // than the local Wire1 (e.g. SenseCAP Indicator)
             i2cBus = ScanI2CTwoWire::fetchI2CBus(cardkb_found);
+#if defined(ELECROW_ThinkNode_M9)
+            if (cardkb_found.address == TSTC8_KB_ADDR) {
+                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire1);
+            }
+#endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, i2cBus);
                 Q10keyboard.setBacklight(0);
@@ -70,13 +83,18 @@ int32_t KbI2cBase::runOnce()
                 MPRkeyboard.begin(MPR121_KB_ADDR, i2cBus);
             }
             if (cardkb_found.address == TCA8418_KB_ADDR) {
-                TCAKeyboard.begin(TCA8418_KB_ADDR, i2cBus);
+                TCAKeyboard->begin(TCA8418_KB_ADDR, i2cBus);
             }
             break;
 #endif
         case ScanI2C::WIRE:
             LOG_DEBUG("Use I2C Bus 0 (the first one)");
             i2cBus = &Wire;
+#if defined(ELECROW_ThinkNode_M9)
+            if (cardkb_found.address == TSTC8_KB_ADDR) {
+                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire);
+            }
+#endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
                 Q10keyboard.setBacklight(0);
@@ -85,7 +103,7 @@ int32_t KbI2cBase::runOnce()
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
             }
             if (cardkb_found.address == TCA8418_KB_ADDR) {
-                TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire);
+                TCAKeyboard->begin(TCA8418_KB_ADDR, &Wire);
             }
             break;
         case ScanI2C::NO_I2C:
@@ -259,10 +277,10 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     case 0x84: { // Adafruit TCA8418
-        TCAKeyboard.trigger();
+        TCAKeyboard->trigger();
         InputEvent e = {};
-        while (TCAKeyboard.hasEvent()) {
-            char nextEvent = TCAKeyboard.dequeueEvent();
+        while (TCAKeyboard->hasEvent()) {
+            char nextEvent = TCAKeyboard->dequeueEvent();
             e.inputEvent = INPUT_BROKER_ANYKEY;
             e.kbchar = 0x00;
             e.source = this->_originName;
@@ -361,9 +379,9 @@ int32_t KbI2cBase::runOnce()
                 // LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
-            TCAKeyboard.trigger();
+            TCAKeyboard->trigger();
         }
-        TCAKeyboard.clearInt();
+        TCAKeyboard->clearInt();
         break;
     }
     case 0x02: {
@@ -544,6 +562,104 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
+#if defined(ELECROW_ThinkNode_M9)
+    case 0x12: { // STC8H companion-MCU keypad (ThinkNode-M9)
+        Stc8HKeyBoard.key_event = false;
+        InputEvent e = {};
+        e.inputEvent = INPUT_BROKER_NONE;
+        e.source = this->_originName;
+        uint8_t c = Stc8HKeyBoard.bsp_get_key_value(); // unsigned so the 0x8x/0xbx codes match
+        switch (c) {
+        case 0x81: // Mute
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = INPUT_BROKER_MSG_MUTE_TOGGLE;
+            break;
+        case 0x82: // Home
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            graphics::NotificationRenderer::resetBanner();
+            // TODO(M9): also reset CannedMessage/PresetMessage state once those modules are ported
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_FAULT);
+            break;
+        case 0x83: // Time
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            graphics::NotificationRenderer::resetBanner();
+            // TODO(M9): also reset CannedMessage/PresetMessage state once those modules are ported
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_CLOCK);
+            break;
+        case 0x84:
+            e.inputEvent = INPUT_BROKER_GPS_TOGGLE;
+            Stc8HKeyBoard.switch_flashlight();
+            break;
+        case 0x85: // FM
+            e.inputEvent = INPUT_BROKER_SEND_PING;
+            e.kbchar = 0;
+            break;
+        case 0x86: // FM (long press)
+            e.inputEvent = INPUT_BROKER_CANCEL;
+            e.kbchar = 0;
+            break;
+        case 0x87: // Preset
+            graphics::NotificationRenderer::resetBanner();
+            // TODO(M9): also reset CannedMessage state once that module is ported
+            e.inputEvent = INPUT_BROKER_SELECT_LONG;
+            e.kbchar = 0;
+            break;
+        case 0xb5: // Up
+            e.inputEvent = INPUT_BROKER_UP;
+            e.kbchar = 0;
+            break;
+        case 0xb4: // Left
+            e.inputEvent = INPUT_BROKER_LEFT;
+            e.kbchar = 0;
+            break;
+        case 0xb6: // Down
+            e.inputEvent = INPUT_BROKER_DOWN;
+            e.kbchar = 0;
+            break;
+        case 0xb7: // Right
+            e.inputEvent = INPUT_BROKER_RIGHT;
+            e.kbchar = 0;
+            break;
+        case 0x20: // Space
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = 0x20;
+            break;
+        case 0x0d: // Enter
+            e.inputEvent = INPUT_BROKER_SELECT;
+            e.kbchar = 0;
+            break;
+        case 0x08: // Del
+            e.inputEvent = INPUT_BROKER_BACK;
+            e.kbchar = 0;
+            break;
+        case 0x89: // Del (long press)
+            e.inputEvent = INPUT_BROKER_BACK;
+            e.kbchar = 0;
+            break;
+        case 0x88: // Invalid key value
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = 0;
+            break;
+        default: // all other keys (printable ASCII)
+            if ((c >= 0x20) && (c <= 0x7F)) {
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = c;
+            } else {
+                e.inputEvent = INPUT_BROKER_NONE;
+                e.kbchar = 0;
+            }
+            break;
+        }
+        if (e.inputEvent != INPUT_BROKER_NONE) {
+            // LOG_DEBUG("STC8H companion-MCU keypad key event: 0x%02x", c);
+            this->notifyObservers(&e);
+        }
+
+        break;
+    }
+#endif
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
@@ -553,6 +669,6 @@ int32_t KbI2cBase::runOnce()
 void KbI2cBase::toggleBacklight(bool on)
 {
 #if defined(T_LORA_PAGER)
-    TCAKeyboard.setBacklight(on);
+    TCAKeyboard->setBacklight(on);
 #endif
 }

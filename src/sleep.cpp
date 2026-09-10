@@ -31,9 +31,9 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 #include "Throttle.h"
 
-#ifdef USE_XL9555
-#include "ExtensionIOXL9555.hpp"
-extern ExtensionIOXL9555 io;
+#ifdef USE_PCA95X5
+#include PCA95X5_INC
+extern PCA95X5_CLS io;
 #endif
 
 #ifdef HAS_PPM
@@ -370,7 +370,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
                 // t-beam v1.2 radio power channel
                 PMU->disablePowerOutput(XPOWERS_ALDO2); // lora radio power channel
             } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
-                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3 || HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA) {
                 PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
             }
         } else if (model == XPOWERS_AXP192) {
@@ -453,8 +453,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef KB_INT
+#if KB_INT_WAKE_ON_HIGH
+    gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_HIGH_LEVEL);
+#else
     gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_LOW_LEVEL);
-#endif
+#endif // KB_INT_WAKE_ON_HIGH
+#endif // KB_INT
 #ifdef BOARD_PCA9535_INT
     // Side-key interrupt line from PCA9535 expander (active low).
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
@@ -473,6 +477,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
+#endif
+#ifdef MOTION_WAKE_INT_PIN
+    // Only arm motion wake when the user asked for it, otherwise every tilt costs a wakeup.
+    if (config.display.wake_on_tap_or_motion)
+        gpio_wakeup_enable((gpio_num_t)MOTION_WAKE_INT_PIN,
+                           MOTION_WAKE_INT_ACTIVE_HIGH ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
 #endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
@@ -519,6 +529,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
+#endif
+#ifdef MOTION_WAKE_INT_PIN
+    // Unconditional: the config can have changed while we were asleep.
+    gpio_wakeup_disable((gpio_num_t)MOTION_WAKE_INT_PIN);
 #endif
 #if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {
