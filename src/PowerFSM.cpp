@@ -167,6 +167,13 @@ static void lsIdle()
                 if (pressed) {
                     powerFSM.trigger(EVENT_PRESS);
                 }
+#ifdef MOTION_WAKE_INT_PIN
+                // Not the button: the accelerometer can have raised the line instead.
+                else if (config.display.wake_on_tap_or_motion &&
+                         digitalRead(MOTION_WAKE_INT_PIN) == (MOTION_WAKE_INT_ACTIVE_HIGH ? HIGH : LOW)) {
+                    powerFSM.trigger(EVENT_INPUT);
+                }
+#endif
                 break;
             }
             default:

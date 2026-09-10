@@ -478,6 +478,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
 #endif
+#ifdef MOTION_WAKE_INT_PIN
+    // Only arm motion wake when the user asked for it, otherwise every tilt costs a wakeup.
+    if (config.display.wake_on_tap_or_motion)
+        gpio_wakeup_enable((gpio_num_t)MOTION_WAKE_INT_PIN,
+                           MOTION_WAKE_INT_ACTIVE_HIGH ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
+#endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
@@ -523,6 +529,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
+#endif
+#ifdef MOTION_WAKE_INT_PIN
+    // Unconditional: the config can have changed while we were asleep.
+    gpio_wakeup_disable((gpio_num_t)MOTION_WAKE_INT_PIN);
 #endif
 #if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {

@@ -3,6 +3,8 @@
 #define _MOTION_SENSOR_H_
 
 #define MOTION_SENSOR_CHECK_INTERVAL_MS 50
+// Safety-net drain for the interrupt-driven drivers: a dead INT pin degrades to polling.
+#define MOTION_SENSOR_IRQ_KEEPALIVE_MS 1000
 #define MOTION_SENSOR_CLICK_THRESHOLD 40
 
 #include "../configuration.h"
