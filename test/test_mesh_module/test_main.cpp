@@ -309,6 +309,57 @@ static void dispatchTrigger(meshtastic_PortNum port, uint32_t requestId = 0)
     service->sendToMesh(packetPool.allocCopy(trigger), RX_SRC_USER);
 }
 
+// MeshService::sendRoutingErrorResponse() runs before handleToRadio() normalises `from`, so a phone
+// request that left it unset must still address the NAK back to us. Addressing node 0 means
+// isToUs() is false, sendLocal() does not deliver it, and the client gets no verdict at all while
+// the NAK goes out over LoRa instead.
+static void test_routingErrorResponse_unsetFromAddressesUs()
+{
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = 0; // the client left it unset; handleToRadio has not stamped it yet
+    request.to = LOCAL_NODE;
+    request.id = 0x5EED0101;
+    request.channel = 3;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &request);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRoutingModule->ackNaks.size(), "exactly one NAK must be generated");
+    const auto &nak = mockRoutingModule->ackNaks[0];
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOCAL_NODE, nak.to, "an unset from must address the NAK to us, not to node 0");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, nak.error, "the NAK must carry the rate-limit error");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0x5EED0101, nak.requestId, "the NAK must reference the rejected request");
+    TEST_ASSERT_EQUAL_MESSAGE(3, nak.channel, "the NAK must stay on the request's channel");
+}
+
+// The other half of the contract: getFrom() only rewrites 0, so a request that already carries a
+// sender is passed through untouched.
+static void test_routingErrorResponse_setFromIsPassedThrough()
+{
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = REMOTE_NODE;
+    request.to = LOCAL_NODE;
+    request.id = 0x5EED0102;
+    request.channel = 1;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &request);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(REMOTE_NODE, mockRoutingModule->ackNaks[0].to,
+                                     "a sender that is already set must be left alone");
+}
+
+// A null packet is the other caller-side mistake available here; it must not reach the routing
+// module at all rather than producing a NAK addressed to nothing.
+static void test_routingErrorResponse_nullPacketGeneratesNothing()
+{
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, nullptr);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRoutingModule->ackNaks.size(), "a null packet must not generate a NAK");
+}
+
 } // namespace
 
 void setUp(void)
@@ -740,6 +791,9 @@ void setup()
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
     RUN_TEST(test_deferredQueueOverflow_dropsGracefully);
+    RUN_TEST(test_routingErrorResponse_unsetFromAddressesUs);
+    RUN_TEST(test_routingErrorResponse_setFromIsPassedThrough);
+    RUN_TEST(test_routingErrorResponse_nullPacketGeneratesNothing);
     exit(UNITY_END());
 }
 
