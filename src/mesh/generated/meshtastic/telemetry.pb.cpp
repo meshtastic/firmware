@@ -30,7 +30,7 @@ PB_BIND(meshtastic_TrafficManagementStats, meshtastic_TrafficManagementStats, AU
 PB_BIND(meshtastic_HealthMetrics, meshtastic_HealthMetrics, AUTO)
 
 
-PB_BIND(meshtastic_HostMetrics, meshtastic_HostMetrics, 2)
+PB_BIND(meshtastic_HostMetrics, meshtastic_HostMetrics, AUTO)
 
 
 PB_BIND(meshtastic_Telemetry, meshtastic_Telemetry, 2)
