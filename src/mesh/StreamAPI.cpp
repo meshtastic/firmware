@@ -1,8 +1,11 @@
-#include "StreamAPI.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "PowerFSM.h"
+#include "StreamAPI.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #include "gps/RTC.h"
 
 #define START1 0x94
@@ -28,6 +31,12 @@ int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
         result = 0;
     checkConnectionTimeout();
     return result;
+}
+
+/// Report undelivered output so idle-sleep decisions keep the drain alive.
+bool StreamAPI::hasPendingOutput()
+{
+    return canWrite && (hasRetainedFrame() || available());
 }
 
 /**
@@ -77,12 +86,9 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
     while (bufLen > index) { // Currently we never want to block
-        int cInt = buf[index++];
-        if (cInt < 0)
-            break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit
-                   // arduino
-
-        uint8_t c = (uint8_t)cInt;
+        // Unlike stream->read(), a buffer byte has no EOF sentinel: bufLen already bounds the loop,
+        // and a signed-char comparison would treat any byte >= 0x80 (START1 included) as EOF.
+        uint8_t c = (uint8_t)buf[index++];
 
         // Use the read pointer for a little state machine, first look for framing, then length bytes, then payload
         size_t ptr = rxPtr;
@@ -96,8 +102,10 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
             if (c != START1)
                 rxPtr = 0;     // failed to find framing
         } else if (ptr == 1) { // looking for START2
+            // A byte that fails START2 can itself be the START1 of the real frame (0x94 0x94 0xc3
+            // ...), so re-test it here: discarding it drops the frame behind a single stray marker.
             if (c != START2)
-                rxPtr = 0;                             // failed to find framing
+                rxPtr = (c == START1) ? 1 : 0;
         } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
             uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
 
@@ -152,8 +160,10 @@ int32_t StreamAPI::readStream()
                 if (c != START1)
                     rxPtr = 0;     // failed to find framing
             } else if (ptr == 1) { // looking for START2
+                // A byte that fails START2 can itself be the START1 of the real frame (0x94 0x94
+                // 0xc3 ...): discarding it drops the frame behind a single stray marker.
                 if (c != START2)
-                    rxPtr = 0;                             // failed to find framing
+                    rxPtr = (c == START1) ? 1 : 0;
             } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
                 uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
 

@@ -31,10 +31,17 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     PositionModule();
 
     /**
-     * Send our position into the mesh
+     * Send our position into the mesh. True only when the router took the packet.
      */
-    void sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
-    void sendOurPosition();
+    bool sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
+    bool sendOurPosition();
+
+    /**
+     * Answer a position request that arrived on a channel we never share position on (the event channel):
+     * the reply goes out on the position channel at that channel's precision, tagged as a reply to req.
+     * Subject to the same reply throttle as allocReply(). No-op when no channel carries positions.
+     */
+    void replyOnPositionChannel(const meshtastic_MeshPacket &req);
 
     void handleNewPosition();
 
@@ -78,6 +85,9 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     uint32_t lastPhoneSendMs = 0;
     static constexpr uint32_t sendToPhoneIntervalMs = 60 * 1000; // Matches telemetry's local cadence
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
+    // Broadcast early when we have moved far enough since the last send, subject to the minimum
+    // interval. Stamps the cadence and the last-sent coords only on a send that went out.
+    void trySmartBroadcast(const meshtastic_PositionLite &selfPos, uint32_t nowMs);
     // True when our position is unchanged since the last broadcast: it truncates to the same
     // precision grid cell, so re-sending would be a duplicate that traffic management dedups
     // downstream anyway. Used to hold stationary broadcasts to a 12h floor. useConfiguredPrecision

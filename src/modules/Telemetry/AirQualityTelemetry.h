@@ -66,6 +66,8 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
 
   private:
     bool firstTime = true;
+    int32_t awakeAheadOfTimeMs = 0;
+    int32_t startAirQualityTelemetryCycle = 0;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     // uint32_t sendToPhoneIntervalMs = 1000; // Send to phone every minute

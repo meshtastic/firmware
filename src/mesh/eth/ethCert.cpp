@@ -270,7 +270,7 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
                          (unsigned)out.keyDer.size(), ipStr.c_str());
                 return true;
             }
-            LOG_WARN("ETH CERT: cached cert/key failed to parse (partial write?), regenerating");
+            LOG_WARN("ETH CERT: cached cert/key parse failed (partial write?), regen");
             out.certDer.clear();
             out.keyDer.clear();
         }
@@ -279,7 +279,7 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
         }
     }
 
-    LOG_INFO("ETH CERT: generating ECDSA P-256 self-signed cert for IP %s...", ipStr.c_str());
+    LOG_INFO("ETH CERT: gen ECDSA P-256 self-signed cert for IP %s", ipStr.c_str());
     uint32_t t0 = millis();
     if (!generateCert(ip, out)) {
         LOG_ERROR("ETH CERT: generation failed");
@@ -299,7 +299,7 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
     writeText(IP_PATH, "");
     if (!writeBinary(CERT_PATH, out.certDer.data(), out.certDer.size()) ||
         !writeBinary(KEY_PATH, out.keyDer.data(), out.keyDer.size()) || !writeText(IP_PATH, ipStr)) {
-        LOG_WARN("ETH CERT: persist failed - will regenerate next boot");
+        LOG_WARN("ETH CERT: persist failed, regen next boot");
     } else {
         LOG_INFO("ETH CERT: persisted to LittleFS");
     }
@@ -337,7 +337,7 @@ class EthCertThread : public concurrency::OSThread
         // regenerates whenever its saved IP != ip, so the cert SAN follows.
         bool ok = ensureCertForIp(ip, material_);
         if (!ok) {
-            LOG_ERROR("ETH CERT: pipeline FAILED - TLS server will not start");
+            LOG_ERROR("ETH CERT: pipeline FAILED, no TLS server");
             // Don't leave isReady() reporting true with empty material: a later TLS
             // teardown (e.g. a W5500 reset) would then fail initTlsContext() and stay
             // disabled. Clear readiness so the TLS worker waits and the next poll
@@ -375,7 +375,7 @@ void initEthCertThread()
     if (certThread)
         return;
     certThread = new EthCertThread();
-    LOG_INFO("ETH CERT: deferred worker scheduled (waits for DHCP, runs once)");
+    LOG_INFO("ETH CERT: deferred worker scheduled (awaits DHCP)");
 }
 
 bool isEthCertReady()

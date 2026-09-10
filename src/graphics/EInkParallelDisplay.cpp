@@ -183,8 +183,10 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
     self->resetGhostPixelTracking();
 #endif
 
-    self->asyncFullRunning.store(false);
+    // Handle first: once asyncFullRunning reads false, the destructor may act on the handle, so
+    // it must already be null by then (same ordering fix as eink/Drivers/EInkParallel.cpp).
     self->asyncTaskHandle = nullptr;
+    self->asyncFullRunning.store(false);
 
     // delete this task
     vTaskDelete(nullptr);

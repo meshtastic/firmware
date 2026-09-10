@@ -416,7 +416,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             break;
         }
     } else if (shouldLog) {
-        LOG_WARN("Couldn't convert encrypted payload of MeshPacket to JSON");
+        LOG_WARN("Can't convert encrypted payload of MeshPacket to JSON");
     }
 
     jsonObj["id"] = (Json::UInt)mp->id;

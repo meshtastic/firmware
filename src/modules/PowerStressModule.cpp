@@ -125,7 +125,7 @@ int32_t PowerStressModule::runOnce()
                 // FIXME - implement
                 break;
             default:
-                LOG_ERROR("PowerStress operation %d not yet implemented!", p.cmd);
+                LOG_ERROR("PowerStress operation %d not yet implemented", p.cmd);
                 sleep_msec = 0; // Don't do whatever sleep was requested...
                 break;
             }

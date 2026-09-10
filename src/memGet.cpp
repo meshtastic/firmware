@@ -80,6 +80,32 @@ uint32_t MemGet::getHeapSize()
 }
 
 /**
+ * Returns the lowest the free heap has ever been since boot.
+ * @return uint32_t Low watermark in bytes, or 0 if the platform can't report it.
+ */
+uint32_t MemGet::getMinFreeHeap()
+{
+#ifdef ARCH_ESP32
+    return ESP.getMinFreeHeap();
+#else
+    return 0;
+#endif
+}
+
+/**
+ * Returns the largest contiguous block malloc() could still return.
+ * @return uint32_t Block size in bytes, or 0 if the platform can't report it.
+ */
+uint32_t MemGet::getMaxAllocHeap()
+{
+#ifdef ARCH_ESP32
+    return ESP.getMaxAllocHeap();
+#else
+    return 0;
+#endif
+}
+
+/**
  * Returns the amount of free psram memory in bytes.
  *
  * @return The amount of free psram memory in bytes.

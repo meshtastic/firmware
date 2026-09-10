@@ -116,7 +116,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
-            LOG_INFO("Hash1 matches!");
+            LOG_INFO("Hash1 matches");
             static const char *optionsArray[] = {"Reject", "Accept"};
             // Don't try to put the array definition in the macro. Does not work with curly braces.
             IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;

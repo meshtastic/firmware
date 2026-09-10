@@ -494,7 +494,7 @@ void WarmNodeStore::load()
 bool WarmNodeStore::save()
 {
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to save WarmStore on unsafe device power level.");
+        LOG_ERROR("Trying to save WarmStore on unsafe device power level");
         return false;
     }
     concurrency::LockGuard g(spiLock);
@@ -605,7 +605,7 @@ bool WarmNodeStore::save()
     if (!entries)
         return false;
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to save WarmStore on unsafe device power level.");
+        LOG_ERROR("Trying to save WarmStore on unsafe device power level");
         return false;
     }
 

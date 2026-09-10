@@ -69,7 +69,7 @@ static bool shouldReleaseBluetoothMemory()
     // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
     // ESP32 BLE controller memory for scanning.
     if (isPaxcounterActiveForBoot()) {
-        LOG_DEBUG("Skipping Bluetooth memory release because Paxcounter is active");
+        LOG_DEBUG("Skip BT memory release: Paxcounter active");
         return false;
     }
 
@@ -96,7 +96,7 @@ void setBluetoothEnable(bool enable)
     if (enable && bluetoothMemoryReleased) {
         if (!shouldReleaseBluetoothMemory() && !bluetoothMemoryReleaseWarned) {
             bluetoothMemoryReleaseWarned = true;
-            LOG_WARN("Bluetooth memory has been released; reboot to re-enable Bluetooth");
+            LOG_WARN("BT memory released; reboot to re-enable");
         }
         return;
     }
@@ -205,7 +205,7 @@ void enableSlowCLK()
         LOG_DEBUG("32k XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switch RTC Source to 32.768kHz succeeded, using 32k XTAL");
+        LOG_DEBUG("RTC source now 32k XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
@@ -285,14 +285,14 @@ void esp32Setup()
     };
     res = esp_task_wdt_init(&wdt_config);
     if (res == ESP_ERR_INVALID_STATE) {
-        LOG_WARN("Task watchdog already initialized, reconfiguring existing instance");
+        LOG_WARN("Task watchdog already init, reconfiguring");
         res = esp_task_wdt_reconfigure(&wdt_config);
     }
     assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     if (res == ESP_ERR_INVALID_STATE) {
-        LOG_WARN("Task watchdog already initialized, reusing existing instance");
+        LOG_WARN("Task watchdog already init, reusing");
         res = ESP_OK;
     }
     assert(res == ESP_OK);

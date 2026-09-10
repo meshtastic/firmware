@@ -52,6 +52,10 @@ class UIRenderer
     // though drawNavigationBar itself never ran while the screen (and its OSThread) was off.
     static void notifyScreenWoke();
 
+    // screen frames
+    // First two pointers are self explanatory
+    // x and y are the offset everything should be drawn at, to support sliding transitions between frames.
+
     static void drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     // Compact panels: toggle between compass+distance view and status/telemetry view
     static void scrollFavoriteDown();

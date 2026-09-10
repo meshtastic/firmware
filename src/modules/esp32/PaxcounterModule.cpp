@@ -24,7 +24,7 @@ static void startWifiChannelTimer(uint16_t wifi_channel_switch_interval)
     WifiChanTimer =
         xTimerCreate("WifiChannelTimer", pdMS_TO_TICKS(wifi_channel_switch_interval * 10), pdTRUE, (void *)0, switchWifiChannel);
     if (!WifiChanTimer) {
-        LOG_WARN("Paxcounter could not create WiFi channel switch timer");
+        LOG_WARN("Paxcounter can't create WiFi channel switch timer");
         return;
     }
     xTimerStart(WifiChanTimer, 0);
@@ -34,7 +34,7 @@ static void ensureDefaultEventLoop()
 {
     esp_err_t result = esp_event_loop_create_default();
     if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
-        LOG_WARN("Paxcounter could not create ESP event loop: %d", result);
+        LOG_WARN("Paxcounter can't create ESP event loop: %d", result);
     }
 }
 

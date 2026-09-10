@@ -26,7 +26,7 @@ bool meshtastic_NodeDatabase_Legacy_callback(pb_istream_t *istream, pb_ostream_t
     const auto *iter = reinterpret_cast<const pb_field_iter_t *>(field);
     if (ostream) {
         const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite_Legacy> *>(iter->pData);
-        for (auto item : *vec) {
+        for (const auto &item : *vec) {
             if (!pb_encode_tag_for_field(ostream, iter))
                 return false;
             if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_Legacy_fields, &item))

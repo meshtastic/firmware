@@ -99,7 +99,6 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     // End the update process
     endUpdate();
 
-    LOG_DEBUG("done");
     return true;
 }
 
@@ -144,27 +143,22 @@ bool EInkDisplay::connect()
 {
     LOG_INFO("Do EInk init");
 
-#ifdef PIN_EINK_EN
-    // backlight power, HIGH is backlight on, LOW is off
-    pinMode(PIN_EINK_EN, OUTPUT);
-#ifdef ELECROW_ThinkNode_M1
-    // ThinkNode M1 has a hardware dimmable backlight. Start enabled
-    digitalWrite(PIN_EINK_EN, HIGH);
-#elif defined(MINI_EPAPER_S3)
+#if HAS_GPIO_BACKLIGHT
+    // Frontlight rail, level comes from uiconfig and is defaulted per variant
+    graphics::backlightInit();
+#elif defined(PIN_EINK_EN)
     // T-Mini Epaper S3 requires panel power rail enabled before SPI transfer.
+    pinMode(PIN_EINK_EN, OUTPUT);
     digitalWrite(PIN_EINK_EN, HIGH);
     delay(10);
-#else
-    digitalWrite(PIN_EINK_EN, LOW);
-#endif
 #endif
 
 #if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS) ||                \
     defined(ELECROW_ThinkNode_M8)
     {
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
-
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1));
         adafruitDisplay->init();
 #if defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(ELECROW_ThinkNode_M8)
         adafruitDisplay->setRotation(4);
@@ -179,9 +173,9 @@ bool EInkDisplay::connect()
         hspi = new SPIClass(HSPI);
         hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
 
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
-
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi));
         adafruitDisplay->init();
 
         adafruitDisplay->setRotation(4);
@@ -190,9 +184,9 @@ bool EInkDisplay::connect()
     }
 #elif defined(MESHLINK)
     {
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
-
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1));
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
@@ -200,8 +194,9 @@ bool EInkDisplay::connect()
 #elif defined(RAK4630) || defined(MAKERPYTHON)
     {
         if (eink_found) {
-            auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
-            adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+            // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
+            adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+                EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY));
             adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
             // RAK14000 2.13 inch b/w 250x122 does actually now support fast refresh
             adafruitDisplay->setRotation(3);
@@ -237,9 +232,9 @@ bool EInkDisplay::connect()
         // VExt already enabled in setup()
         // RTC GPIO hold disabled in setup()
 
-        // Create GxEPD2 objects
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // Create GxEPD2 objects (GxEPD2_BW stores a copy of the driver, so pass a temporary)
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi));
 
         // Init GxEPD2
         adafruitDisplay->init();
@@ -254,22 +249,25 @@ bool EInkDisplay::connect()
     }
 #elif defined(PCA10059) || defined(ME25LS01)
     {
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY));
         adafruitDisplay->init(115200, true, 40, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
         adafruitDisplay->setRotation(0);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
 #elif defined(M5_COREINK) || defined(T_DECK_PRO)
-    auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
-    adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+    // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
+    adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+        EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY));
     adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
     adafruitDisplay->setRotation(0);
     adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
 #elif defined(my) || defined(ESP32_S3_PICO)
     {
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY));
         adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
@@ -281,9 +279,9 @@ bool EInkDisplay::connect()
         // VExt already enabled in setup()
         // RTC GPIO hold disabled in setup()
 
-        // Create GxEPD2 objects
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *spi1);
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // Create GxEPD2 objects (GxEPD2_BW stores a copy of the driver, so pass a temporary)
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *spi1));
 
         // Init GxEPD2
         adafruitDisplay->init();

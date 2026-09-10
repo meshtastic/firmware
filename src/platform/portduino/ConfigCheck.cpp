@@ -23,6 +23,11 @@
 namespace
 {
 
+// Largest General.MaxNodes we accept - artificial, not derived: nothing fails at 16001. Catches a
+// typo that would otherwise size the node DB into a boot-time allocation failure. Sits under the
+// 16384 (128 x 128) where HopScalingModule saturates and drops nodes. Raise it if a host needs more.
+constexpr int MAX_NODES_SANITY_CEILING = 16000;
+
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -964,6 +969,13 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         findings.push_back({kError, merged, 0,
                             "General.MaxNodes is " + std::to_string(portduino_config.MaxNodes) +
                                 ", which leaves no room for even this node's own entry"});
+    // Upper bound too: MAX_NUM_NODES scales the node DB and the nodes.proto decode ceiling
+    // (NodeDB::getMaxNodesAllocatedSize()), so a typo'd value is a boot-time memory failure with no
+    // obvious cause. A sanity bound, not a capability limit - raise it if a host genuinely needs more.
+    else if (portduino_config.MaxNodes > MAX_NODES_SANITY_CEILING)
+        findings.push_back({kError, merged, 0,
+                            "General.MaxNodes is " + std::to_string(portduino_config.MaxNodes) + ", above the " +
+                                std::to_string(MAX_NODES_SANITY_CEILING) + " sanity ceiling"});
 
 #if !defined(HAS_HUB75_NATIVE)
     // A build-time gap rather than a config error: the same file is valid on a

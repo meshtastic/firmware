@@ -67,4 +67,5 @@
 
 // PMU
 #define HAS_AXP2101
-// #define PMU_IRQ 4 // Leave disabled for now
+#define PMU_IRQ 4
+#define PMU_POWER_BUTTON_IS_CANCEL // maps a short click of the power button to a cancel action (turning off the screen)

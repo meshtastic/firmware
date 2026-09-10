@@ -442,7 +442,7 @@ static void security_changed_cb(struct bt_conn *conn, bt_security_t level, enum 
     if (err == BT_SECURITY_ERR_PIN_OR_KEY_MISSING) {
         // Phone has a stale bond (device was wiped/reflashed).  Unpair the stale
         // entry so the phone re-pairs cleanly on the next connection attempt.
-        LOG_WARN("BLE stale bond detected (key missing) - unpairing");
+        LOG_WARN("BLE stale bond (key missing) - unpairing");
         bt_unpair(BT_ID_DEFAULT, bt_conn_get_dst(conn));
         bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
     } else if (err) {
@@ -691,7 +691,7 @@ static bool nrf54l15_bt_init_common()
     // instead of leaving BLE silently broken.
     if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         LOG_WARN("BLE: NO_PIN not supported on nRF54L15-DK (MITM-only build); "
-                 "treating as RANDOM_PIN");
+                 "treat as RANDOM_PIN");
     }
 
     bt_conn_auth_cb_register(&auth_cb);
@@ -759,7 +759,7 @@ void NRF54L15Bluetooth::startDisabled()
         return;
     }
     ble_enabled = false;
-    LOG_INFO("BLE initialized, advertising stopped (startDisabled)");
+    LOG_INFO("BLE initialized, adv stopped (startDisabled)");
 }
 
 void NRF54L15Bluetooth::resumeAdvertising()

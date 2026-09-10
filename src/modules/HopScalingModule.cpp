@@ -182,7 +182,7 @@ void HopScalingModule::samplePacketForHistogram(uint32_t nodeId, uint8_t hopCoun
         this->count++;
     } else {
         LOG_WARN("[HOPSCALE] Histogram full at samp=1/%u (DENOM_MAX=%u); dropping node hash=0x%04x; hop recommendation may be "
-                 "skewed!!!",
+                 "skewed!!",
                  samplingDenominator, DENOM_MAX, hash);
     }
 }

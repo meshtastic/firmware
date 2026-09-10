@@ -42,6 +42,9 @@ struct CompassAccelSample {
 
 concurrency::Lock latestCompassAccelLock;
 CompassAccelSample latestCompassAccelSample;
+
+concurrency::Lock latestCompassMagLock;
+CompassAccelSample latestCompassMagSample;
 } // namespace
 
 // screen is defined in main.cpp
@@ -245,6 +248,35 @@ bool MotionSensor::getLatestCompassAccelSample(float &x, float &y, float &z, uin
     return true;
 }
 
+void MotionSensor::publishCompassMagSample(float x, float y, float z)
+{
+    concurrency::LockGuard guard(&latestCompassMagLock);
+    latestCompassMagSample.x = x;
+    latestCompassMagSample.y = y;
+    latestCompassMagSample.z = z;
+    latestCompassMagSample.sampledAtMs = millis();
+    latestCompassMagSample.valid = true;
+}
+
+bool MotionSensor::getLatestCompassMagSample(float &x, float &y, float &z, uint32_t &ageMs)
+{
+    uint32_t sampledAtMs = 0;
+    {
+        concurrency::LockGuard guard(&latestCompassMagLock);
+        if (!latestCompassMagSample.valid) {
+            return false;
+        }
+
+        x = latestCompassMagSample.x;
+        y = latestCompassMagSample.y;
+        z = latestCompassMagSample.z;
+        sampledAtMs = latestCompassMagSample.sampledAtMs;
+    }
+
+    ageMs = millis() - sampledAtMs;
+    return true;
+}
+
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
 void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -259,8 +291,11 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     const uint32_t now = millis();
     const uint32_t endCalibrationAt = screen->getEndCalibration();
     uint32_t timeRemaining = 0;
-    if (endCalibrationAt > now) {
-        timeRemaining = (endCalibrationAt - now + 999) / 1000;
+    // Signed delta, as in finishCalibrationIfExpired(): this needs the remaining magnitude, not
+    // just whether the deadline passed, so it cannot use Throttle::deadlinePassed().
+    const int32_t remainingMs = (int32_t)(endCalibrationAt - now);
+    if (remainingMs > 0) {
+        timeRemaining = ((uint32_t)remainingMs + 999) / 1000;
     }
 
     int16_t compassX = 0, compassY = 0;

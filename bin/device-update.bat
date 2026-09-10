@@ -90,7 +90,7 @@ IF NOT "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
-    SET "ESPTOOL_CMD=""!PYTHON!"" -m esptool"
+    SET "ESPTOOL_CMD="!PYTHON!" -m esptool"
     CALL :LOG_MESSAGE DEBUG "Python interpreter supplied."
 ) ELSE (
     CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool..."
@@ -105,13 +105,32 @@ IF NOT "__%PYTHON%__"=="____" (
 )
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
-!ESPTOOL_CMD! >nul 2>&1
-CALL :LOG_MESSAGE DEBUG "esptool exit code: %ERRORLEVEL%"
-IF %ERRORLEVEL% EQU 9009 (
-    @REM 9009 = command not found on Windows
+@REM %VAR% not !VAR!: cmd will not split a delayed-expanded command token that
+@REM carries a path, so the "python -m esptool" form never starts.
+%ESPTOOL_CMD% >nul 2>&1
+SET "ESPTOOL_EXIT=!ERRORLEVEL!"
+CALL :LOG_MESSAGE DEBUG "esptool exit code: !ESPTOOL_EXIT!"
+@REM 9009 = command not found, 3 = bad path from -P. Both mean unusable.
+IF !ESPTOOL_EXIT! EQU 3 SET "ESPTOOL_EXIT=9009"
+IF !ESPTOOL_EXIT! EQU 9009 (
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
 )
+
+@REM esptool v5 renamed subcommands to dashes; older versions only take underscores.
+@REM Probe here: the --debug and --port rewrites below leave ESPTOOL_CMD unusable.
+SET "ESPTOOL_WRITE_FLASH=write_flash"
+SET "ESPTOOL_ERASE_FLASH=erase_flash"
+SET "ESPTOOL_READ_FLASH_STATUS=read_flash_status"
+%ESPTOOL_CMD% 2>&1 | findstr /C:"write-flash" >nul
+IF !ERRORLEVEL! EQU 0 (
+    SET "ESPTOOL_WRITE_FLASH=write-flash"
+    SET "ESPTOOL_ERASE_FLASH=erase-flash"
+    SET "ESPTOOL_READ_FLASH_STATUS=read-flash-status"
+)
+CALL :RESET_ERROR
+CALL :LOG_MESSAGE DEBUG "Using esptool write command: !ESPTOOL_WRITE_FLASH!"
+
 IF %DEBUG% EQU 1 (
     CALL :LOG_MESSAGE DEBUG "Skipping ESPTOOL_CMD steps."
     SET "ESPTOOL_CMD=REM !ESPTOOL_CMD!"
@@ -128,13 +147,13 @@ CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
 IF %CHANGE_MODE% EQU 1 (
     @REM Attempt to change mode via 1200bps Reset.
-    CALL :RUN_ESPTOOL !RESET_BAUD! --after no_reset read_flash_status
+    CALL :RUN_ESPTOOL !RESET_BAUD! --after no_reset !ESPTOOL_READ_FLASH_STATUS!
     GOTO eof
 )
 
 @REM Flashing operations.
 CALL :LOG_MESSAGE INFO "Trying to flash update "!FILENAME!" at OFFSET !UPDATE_OFFSET!..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash !UPDATE_OFFSET! "!FILENAME!" || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! !ESPTOOL_WRITE_FLASH! !UPDATE_OFFSET! "!FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Script complete!."
 
@@ -151,7 +170,7 @@ EXIT /B %ERRORLEVEL%
 @REM Example:: CALL :RUN_ESPTOOL 115200 write-flash 0x10000 "firmwarefile.bin"
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
-!ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4
+%ESPTOOL_CMD% --baud %~1 %~2 %~3 %~4
 IF %CHANGE_MODE% EQU 1 GOTO :eof
 IF %ERRORLEVEL% NEQ 0 (
     CALL :LOG_MESSAGE ERROR "Error running command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"

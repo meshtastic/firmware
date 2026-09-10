@@ -1,9 +1,13 @@
 #ifdef USE_PACKET_API
 
-#include "api/PacketAPI.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "MeshService.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "api/PacketAPI.h"
 #include "modules/NodeInfoModule.h"
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
@@ -88,7 +92,7 @@ bool PacketAPI::receivePacket(void)
             }
             break;
         default:
-            LOG_ERROR("Error: unhandled meshtastic_ToRadio variant: %d", mr->which_payload_variant);
+            LOG_ERROR("Unhandled meshtastic_ToRadio variant: %d", mr->which_payload_variant);
             break;
         }
     }

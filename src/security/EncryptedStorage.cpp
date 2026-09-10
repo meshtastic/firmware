@@ -204,7 +204,7 @@ static void writeBackoff(uint8_t attempts, uint8_t bootsSinceFail, uint32_t last
     bool ok = computeBackoffHmac(buf.data(), mac);
     nRFCrypto.end();
     if (!ok) {
-        LOG_ERROR("EncryptedStorage: backoff HMAC compute failed");
+        LOG_ERROR("EncryptedStorage: backoff HMAC failed");
         return;
     }
     memcpy(buf.data() + BACKOFF_BODY_SIZE, mac, HMAC_SIZE);
@@ -489,7 +489,7 @@ static bool loadDEK()
 
     const uint8_t *storedHmac = buf + DEK_SIZE - HMAC_SIZE;
     if (!constTimeEq(expectedHmac.data(), storedHmac, HMAC_SIZE)) {
-        LOG_ERROR("EncryptedStorage: DEK HMAC mismatch - wrong passphrase or tampered file");
+        LOG_ERROR("EncryptedStorage: DEK HMAC mismatch - wrong passphrase or tampered");
         return false;
     }
 
@@ -791,7 +791,7 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
     // greater than the persisted value); readAndConsumeToken will
     // promote .tokmono on the next read.
     if (!writeMonoCounter(newMonoCounter)) {
-        LOG_WARN("EncryptedStorage: mono-counter persist failed (will self-heal on next read)");
+        LOG_WARN("EncryptedStorage: mono-counter persist failed (self-heals on next read)");
     }
 
     LOG_INFO("EncryptedStorage: Unlock token written (boots=%d, epoch=%u, mono=%u)", bootsRemaining, validUntilEpoch,
@@ -893,7 +893,7 @@ static bool readAndConsumeToken()
     // current value. Equal is the normal case post-write.
     uint32_t maxSeenCounter = readMonoCounter();
     if (tokenMonoCounter < maxSeenCounter) {
-        LOG_ERROR("EncryptedStorage: Token rollback detected (counter=%u, max-seen=%u), deleting", (unsigned)tokenMonoCounter,
+        LOG_ERROR("EncryptedStorage: Token rollback (counter=%u, max-seen=%u), deleting", (unsigned)tokenMonoCounter,
                   (unsigned)maxSeenCounter);
         concurrency::LockGuard g(spiLock);
         FSCom.remove(TOKEN_FILENAME);
@@ -931,8 +931,7 @@ static bool readAndConsumeToken()
     if (validUntilEpoch != 0) {
         uint32_t now = getValidTime(RTCQualityDevice);
         if (now == 0) {
-            LOG_WARN("EncryptedStorage: Token wall-clock TTL unverifiable (no RTC), falling back to boot count (%u left)",
-                     bootsRemaining);
+            LOG_WARN("EncryptedStorage: Token wall-clock TTL unverifiable (no RTC), using boot count (%u left)", bootsRemaining);
         } else if (now > validUntilEpoch) {
             LOG_WARN("EncryptedStorage: Token expired (now=%u, until=%u), deleting", now, validUntilEpoch);
             concurrency::LockGuard g(spiLock);
@@ -1041,7 +1040,7 @@ void initLocked()
     if (isProvisioned()) {
         LOG_WARN("EncryptedStorage: Device LOCKED - reason: %s", lockReason);
     } else {
-        LOG_WARN("EncryptedStorage: Device NOT PROVISIONED - operator must set passphrase");
+        LOG_WARN("EncryptedStorage: Device NOT PROVISIONED - set passphrase");
     }
 }
 
@@ -1145,7 +1144,7 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
 
     // Create unlock token (validUntilEpoch is an absolute Unix timestamp from the client; 0 = no limit)
     if (!writeUnlockToken(bootsRemaining, validUntilEpoch, sessionMaxSeconds)) {
-        LOG_WARN("EncryptedStorage: Token write failed after provision (continuing unlocked)");
+        LOG_WARN("EncryptedStorage: Token write failed after provision (still unlocked)");
     }
 
     // H4 (audit): seed an attempts=0 backoff sentinel so the file is
@@ -1234,7 +1233,7 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
 
             if (maxRemaining > 0) {
                 s_backoffSecondsRemaining = maxRemaining;
-                LOG_WARN("EncryptedStorage: Passphrase attempt blocked by backoff (~%us remaining)", s_backoffSecondsRemaining);
+                LOG_WARN("EncryptedStorage: Passphrase blocked by backoff (~%us left)", s_backoffSecondsRemaining);
                 return false;
             }
         }
@@ -1296,7 +1295,7 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
 
     // Create fresh unlock token (validUntilEpoch is an absolute Unix timestamp from the client; 0 = no limit)
     if (!writeUnlockToken(bootsRemaining, validUntilEpoch, sessionMaxSeconds)) {
-        LOG_WARN("EncryptedStorage: Token write failed after unlock (continuing unlocked this boot)");
+        LOG_WARN("EncryptedStorage: Token write failed after unlock (unlocked this boot)");
     }
 
     dekLoaded = true;
@@ -1318,7 +1317,7 @@ void lockNow()
     secureWipeKeys();
     s_sessionMaxMs = 0;
     s_sessionStartedMs = 0;
-    LOG_INFO("EncryptedStorage: Device locked - token deleted, DEK and KEK material zeroed");
+    LOG_INFO("EncryptedStorage: Device locked - token deleted, DEK/KEK zeroed");
 }
 
 void secureWipeKeys()
@@ -1433,8 +1432,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         // MAX_NUM_NODES pushes the serialised protobuf past that limit.
         const size_t maxAcceptedFileSize = outBufSize + OVERHEAD;
         if (fileSize > maxAcceptedFileSize) {
-            LOG_ERROR("EncryptedStorage: File %s too large (%d bytes, max %d), refusing", filename, fileSize,
-                      maxAcceptedFileSize);
+            LOG_ERROR("EncryptedStorage: File %s too large (%d bytes, max %d)", filename, fileSize, maxAcceptedFileSize);
             f.close();
             meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
             return false;
@@ -1512,7 +1510,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     hmacData.reset();
 
     if (!hmacOk || !constTimeEq(computedHmac, storedHmac, HMAC_SIZE)) {
-        LOG_ERROR("EncryptedStorage: HMAC verification failed for %s", filename);
+        LOG_ERROR("EncryptedStorage: HMAC verify failed for %s", filename);
         meshtastic_security::secure_zero(computedHmac, sizeof(computedHmac));
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
@@ -1620,7 +1618,7 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
     hmacData.reset();
 
     if (!hmacOk) {
-        LOG_ERROR("EncryptedStorage: HMAC computation failed for %s", filename);
+        LOG_ERROR("EncryptedStorage: HMAC compute failed for %s", filename);
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
@@ -1688,7 +1686,7 @@ bool migrateFile(const char *filename)
         // the device.
         constexpr size_t kMigrateMaxFileSize = 64 * 1024;
         if (fileSize > kMigrateMaxFileSize) {
-            LOG_ERROR("EncryptedStorage: refusing to migrate %s - size %u exceeds %u-byte cap", filename, (unsigned)fileSize,
+            LOG_ERROR("EncryptedStorage: won't migrate %s - size %u > %u-byte cap", filename, (unsigned)fileSize,
                       (unsigned)kMigrateMaxFileSize);
             f.close();
             return false;
@@ -1733,7 +1731,7 @@ bool migrateFileToPlaintext(const char *filename)
         return true;
     }
     if (!dekLoaded) {
-        LOG_ERROR("EncryptedStorage: cannot revert %s - not unlocked", filename);
+        LOG_ERROR("EncryptedStorage: can't revert %s - not unlocked", filename);
         return false;
     }
 
@@ -1797,7 +1795,7 @@ void removeLockdownArtifacts()
     secureWipeKeys();
     s_sessionMaxMs = 0;
     s_sessionStartedMs = 0;
-    LOG_INFO("EncryptedStorage: lockdown artifacts removed - device is no longer in lockdown");
+    LOG_INFO("EncryptedStorage: lockdown artifacts removed - lockdown off");
 }
 
 } // namespace EncryptedStorage
