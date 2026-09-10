@@ -39,6 +39,9 @@ PB_BIND(meshtastic_Waypoint, meshtastic_Waypoint, AUTO)
 PB_BIND(meshtastic_StatusMessage, meshtastic_StatusMessage, AUTO)
 
 
+PB_BIND(meshtastic_IdAttestation, meshtastic_IdAttestation, AUTO)
+
+
 PB_BIND(meshtastic_MqttClientProxyMessage, meshtastic_MqttClientProxyMessage, 2)
 
 
@@ -121,6 +124,8 @@ PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
 
 
 PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
+
+
 
 
 

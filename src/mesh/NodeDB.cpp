@@ -1282,7 +1282,38 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+    installAntispamDefaults(mc.traffic_management);
 #endif
+}
+
+/// True when every antispam knob is still protobuf-zero.
+bool antispamKnobsUnconfigured(const meshtastic_ModuleConfig_TrafficManagementConfig &cfg)
+{
+    return cfg.probation_window_secs == 0 && cfg.attestation_min_tenure_secs == 0 && cfg.probation_max_hop_limit == 0 &&
+           cfg.budget_gossip_enabled == 0 && cfg.group_budget_enabled == 0 && cfg.relay_budget_max_packets == 0 &&
+           cfg.congestion_hop_cap_pct == 0 && cfg.no_relay_requires_local_exhaustion == 0 &&
+           cfg.no_relay_max_subjects_per_window == 0 && cfg.no_relay_ttl_secs == 0 && cfg.attestation_min_observed_secs == 0 &&
+           cfg.vouch_max_per_subject_per_window == 0 && cfg.vouch_max_subjects_per_window == 0 &&
+           cfg.attestation_min_distinct_attesters == 0 && cfg.attestation_promotion_ttl_secs == 0 &&
+           cfg.attestation_l2_min_tenure_secs == 0 && cfg.no_relay_min_claimers == 0;
+}
+
+/// Write shipped antispam defaults without touching position/rate-limit fields.
+void installAntispamDefaults(meshtastic_ModuleConfig_TrafficManagementConfig &cfg)
+{
+    cfg.probation_window_secs = default_traffic_mgmt_probation_window_secs;
+    cfg.attestation_min_tenure_secs = default_traffic_mgmt_attestation_min_tenure_secs;
+    cfg.probation_max_hop_limit = default_traffic_mgmt_probation_max_hop_limit;
+    cfg.no_relay_requires_local_exhaustion = default_traffic_mgmt_no_relay_requires_local_exhaustion;
+    cfg.no_relay_max_subjects_per_window = default_traffic_mgmt_no_relay_max_subjects_per_window;
+    cfg.no_relay_ttl_secs = default_traffic_mgmt_no_relay_ttl_secs;
+    cfg.no_relay_min_claimers = default_traffic_mgmt_no_relay_min_claimers;
+    cfg.attestation_min_observed_secs = default_traffic_mgmt_attestation_min_observed_secs;
+    cfg.vouch_max_per_subject_per_window = default_traffic_mgmt_vouch_max_per_subject_per_window;
+    cfg.vouch_max_subjects_per_window = default_traffic_mgmt_vouch_max_subjects_per_window;
+    cfg.attestation_min_distinct_attesters = default_traffic_mgmt_attestation_min_distinct_attesters;
+    cfg.attestation_promotion_ttl_secs = default_traffic_mgmt_attestation_promotion_ttl_secs;
+    cfg.attestation_l2_min_tenure_secs = default_traffic_mgmt_attestation_l2_min_tenure_secs;
 }
 
 // --- 2.8 position/telemetry opt-in migration helpers -------------------------------------------------
@@ -2724,6 +2755,10 @@ void NodeDB::loadFromDisk()
     if (!moduleConfig.has_traffic_management) {
         LOG_INFO("Traffic management never configured, installing always-on defaults");
         installTrafficManagementDefaults(moduleConfig);
+        saveToDisk(SEGMENT_MODULECONFIG);
+    } else if (antispamKnobsUnconfigured(moduleConfig.traffic_management)) {
+        LOG_INFO("Traffic management antispam knobs unset, installing shipped defaults");
+        installAntispamDefaults(moduleConfig.traffic_management);
         saveToDisk(SEGMENT_MODULECONFIG);
     }
 

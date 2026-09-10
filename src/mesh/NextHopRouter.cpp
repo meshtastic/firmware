@@ -277,6 +277,16 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 #if USERPREFS_EVENT_MODE
                     capEventRelayHops(tosend);
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+                    if (trafficManagementModule) {
+                        const uint8_t capped = trafficManagementModule->relayHopCap(*p);
+                        if (capped < tosend->hop_limit) {
+                            const uint8_t reduction = tosend->hop_limit - capped;
+                            tosend->hop_start = reduction <= tosend->hop_start ? tosend->hop_start - reduction : 0;
+                            tosend->hop_limit = capped;
+                        }
+                    }
+#endif
 
                     ErrorCode res =
                         (p->next_hop == NO_NEXT_HOP_PREFERENCE) ? FloodingRouter::send(tosend) : NextHopRouter::send(tosend);

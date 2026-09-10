@@ -274,6 +274,40 @@ typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
  is dropped. A non-zero value implicitly enables unknown-packet filtering;
  0 disables it. */
     uint32_t unknown_packet_threshold;
+    /* First-seen probation window in seconds. 0 disables. Default: 300. */
+    uint32_t probation_window_secs;
+    /* Self-reported attester uptime floor for KNOWN_SINCE. Default: 86400. */
+    uint32_t attestation_min_tenure_secs;
+    /* hop_limit on rebroadcasts from a node still in probation. Default: 2. */
+    uint32_t probation_max_hop_limit;
+    /* Honor neighbor top_senders as a rate-budget median. 0 disables. */
+    uint32_t budget_gossip_enabled;
+    /* Fresh IDs in one channel×RSSI cell that share a split budget. 0 disables. */
+    uint32_t group_budget_enabled;
+    /* Per-sender relayed-packet budget per window. 0 disables. Default: 0. */
+    uint32_t relay_budget_max_packets;
+    /* Channel-util percent that caps probation broadcasts at 1 hop. 0 disables. */
+    uint32_t congestion_hop_cap_pct;
+    /* Honor gossiped NO_RELAY only after local over-relay. Default: 1. */
+    uint32_t no_relay_requires_local_exhaustion;
+    /* Distinct NO_RELAY subjects one attester may mark per window. Default: 3. */
+    uint32_t no_relay_max_subjects_per_window;
+    /* Lifetime of one gossiped NO_RELAY claim in seconds. Default: 120. */
+    uint32_t no_relay_ttl_secs;
+    /* Locally observed attester age before a vouch is accepted. Default: 86400. */
+    uint32_t attestation_min_observed_secs;
+    /* Times per window one attester may vouch for one subject. Default: 1. */
+    uint32_t vouch_max_per_subject_per_window;
+    /* Distinct subjects one attester may vouch for per window. Default: 3. */
+    uint32_t vouch_max_subjects_per_window;
+    /* Distinct attesters required to end probation. Default: 2. */
+    uint32_t attestation_min_distinct_attesters;
+    /* Seconds a promotion lasts without a renewing vouch. 0 = permanent. */
+    uint32_t attestation_promotion_ttl_secs;
+    /* Observed attester age for a signed L2 upgrade. Default: 2592000. */
+    uint32_t attestation_l2_min_tenure_secs;
+    /* Distinct NO_RELAY claimers required (or local exhaustion). Default: 2. */
+    uint32_t no_relay_min_claimers;
 } meshtastic_ModuleConfig_TrafficManagementConfig;
 
 /* Serial Config */
@@ -658,7 +692,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
@@ -679,7 +713,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
@@ -735,6 +769,23 @@ extern "C" {
 #define meshtastic_ModuleConfig_TrafficManagementConfig_rate_limit_window_secs_tag 8
 #define meshtastic_ModuleConfig_TrafficManagementConfig_rate_limit_max_packets_tag 9
 #define meshtastic_ModuleConfig_TrafficManagementConfig_unknown_packet_threshold_tag 11
+#define meshtastic_ModuleConfig_TrafficManagementConfig_probation_window_secs_tag 15
+#define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_min_tenure_secs_tag 16
+#define meshtastic_ModuleConfig_TrafficManagementConfig_probation_max_hop_limit_tag 17
+#define meshtastic_ModuleConfig_TrafficManagementConfig_budget_gossip_enabled_tag 18
+#define meshtastic_ModuleConfig_TrafficManagementConfig_group_budget_enabled_tag 19
+#define meshtastic_ModuleConfig_TrafficManagementConfig_relay_budget_max_packets_tag 20
+#define meshtastic_ModuleConfig_TrafficManagementConfig_congestion_hop_cap_pct_tag 21
+#define meshtastic_ModuleConfig_TrafficManagementConfig_no_relay_requires_local_exhaustion_tag 22
+#define meshtastic_ModuleConfig_TrafficManagementConfig_no_relay_max_subjects_per_window_tag 23
+#define meshtastic_ModuleConfig_TrafficManagementConfig_no_relay_ttl_secs_tag 24
+#define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_min_observed_secs_tag 25
+#define meshtastic_ModuleConfig_TrafficManagementConfig_vouch_max_per_subject_per_window_tag 26
+#define meshtastic_ModuleConfig_TrafficManagementConfig_vouch_max_subjects_per_window_tag 27
+#define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_min_distinct_attesters_tag 28
+#define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_promotion_ttl_secs_tag 29
+#define meshtastic_ModuleConfig_TrafficManagementConfig_attestation_l2_min_tenure_secs_tag 30
+#define meshtastic_ModuleConfig_TrafficManagementConfig_no_relay_min_claimers_tag 31
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -949,7 +1000,24 @@ X(a, STATIC,   SINGULAR, UINT32,   position_min_interval_secs,   4) \
 X(a, STATIC,   SINGULAR, UINT32,   nodeinfo_direct_response_max_hops,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   rate_limit_window_secs,   8) \
 X(a, STATIC,   SINGULAR, UINT32,   rate_limit_max_packets,   9) \
-X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_threshold,  11)
+X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_threshold,  11) \
+X(a, STATIC,   SINGULAR, UINT32,   probation_window_secs,  15) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_min_tenure_secs,  16) \
+X(a, STATIC,   SINGULAR, UINT32,   probation_max_hop_limit,  17) \
+X(a, STATIC,   SINGULAR, UINT32,   budget_gossip_enabled,  18) \
+X(a, STATIC,   SINGULAR, UINT32,   group_budget_enabled,  19) \
+X(a, STATIC,   SINGULAR, UINT32,   relay_budget_max_packets,  20) \
+X(a, STATIC,   SINGULAR, UINT32,   congestion_hop_cap_pct,  21) \
+X(a, STATIC,   SINGULAR, UINT32,   no_relay_requires_local_exhaustion,  22) \
+X(a, STATIC,   SINGULAR, UINT32,   no_relay_max_subjects_per_window,  23) \
+X(a, STATIC,   SINGULAR, UINT32,   no_relay_ttl_secs,  24) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_min_observed_secs,  25) \
+X(a, STATIC,   SINGULAR, UINT32,   vouch_max_per_subject_per_window,  26) \
+X(a, STATIC,   SINGULAR, UINT32,   vouch_max_subjects_per_window,  27) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_min_distinct_attesters,  28) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_promotion_ttl_secs,  29) \
+X(a, STATIC,   SINGULAR, UINT32,   attestation_l2_min_tenure_secs,  30) \
+X(a, STATIC,   SINGULAR, UINT32,   no_relay_min_claimers,  31)
 #define meshtastic_ModuleConfig_TrafficManagementConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TrafficManagementConfig_DEFAULT NULL
 
@@ -1148,7 +1216,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
-#define meshtastic_ModuleConfig_TrafficManagementConfig_size 30
+#define meshtastic_ModuleConfig_TrafficManagementConfig_size 148
 #define meshtastic_ModuleConfig_size             244
 #define meshtastic_RemoteHardwarePin_size        21
 
