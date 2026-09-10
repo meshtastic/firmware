@@ -239,6 +239,12 @@ static_assert((uint32_t)TRAFFIC_MANAGEMENT_CACHE_SIZE * 10u + (uint32_t)WARM_NOD
               "MESHTASTIC_BOOT_CACHE_BUDGET in memory/MemClass.h");
 #endif
 
+// Telemetry goes out in a 233 B packet payload, and an oversized encode is not loud:
+// pb_encode_to_bytes() returns 0 and allocDataProtobuf() ships a well-formed packet carrying
+// nothing. Fail the build instead (#11797).
+static_assert(meshtastic_Telemetry_size <= meshtastic_Constants_DATA_PAYLOAD_LEN,
+              "Telemetry no longer fits DATA_PAYLOAD_LEN - shrink a variant in the protobufs repo");
+
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size
 size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc_t *fields, const void *src_struct);
