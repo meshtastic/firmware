@@ -19,9 +19,9 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     NodeInfoModule();
 
     /**
-     * Send our NodeInfo into the mesh
+     * Send our NodeInfo into the mesh. True only when a packet was handed to the router.
      */
-    void sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
+    bool sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
                          bool _shorterTimeout = false);
 
     /**
@@ -50,6 +50,8 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
   private:
     bool shorterTimeout = false;
     bool suppressReplyForCurrentRequest = false;
+    /// Sender -> uptime seconds (Time::getUptimeSecs()) at our last reply. Seconds, not millis:
+    /// the suppression window is hours wide. See handleReceivedProtobuf().
     std::map<NodeNum, uint32_t> lastNodeInfoSeen;
 
     void pruneLastNodeInfoCache();

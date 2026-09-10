@@ -1,0 +1,9 @@
+# FAULT: MACAddress and MACAddressSource are mutually exclusive; meshtasticd exits
+# rather than pick one. That exit is inside loadConfig(), so --check has to report it
+# without letting the exit kill the report. Also run without --check, where
+# meshtasticd must refuse to start.
+General:
+  MACAddress: AA:BB:CC:DD:EE:FF
+  MACAddressSource: eth0
+Lora:
+  Module: sx1262

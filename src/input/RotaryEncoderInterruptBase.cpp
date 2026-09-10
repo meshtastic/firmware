@@ -56,24 +56,50 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         if (!pressDetected && buttonPressed) {
             pressDetected = true;
             pressStartTime = now;
+            pressAndTurnFired = false;
         }
 
         if (pressDetected) {
+            // Press-and-turn takes precedence over the press itself.
+            if (pressAndTurnEnabled() && pressAndTurnDelta.load(std::memory_order_relaxed) != 0) {
+                // Drain in one pass: releasing the button would discard anything left over.
+                // Exchange, so a detent arriving from the ISR mid-drain is not lost.
+                int32_t pending = pressAndTurnDelta.exchange(0, std::memory_order_relaxed);
+                LOG_DEBUG("Rotary event Press %s (%d detents)", pending > 0 ? "CW" : "CCW", pending);
+                while (pending != 0) {
+                    bool cw = pending > 0;
+                    InputEvent turn = {};
+                    turn.source = this->_originName;
+                    turn.inputEvent = INPUT_BROKER_NONE;
+                    turn.kbchar = cw ? _pressAndTurnCw : _pressAndTurnCcw;
+                    pending -= cw ? 1 : -1;
+                    this->notifyObservers(&turn);
+                }
+                pressAndTurnFired = true;
+            }
+
             uint32_t duration = now - pressStartTime;
             if (!buttonPressed) {
                 // released -> if short press, send short, else already sent long
-                if (duration < LONG_PRESS_DURATION && now - lastPressKeyTime >= pressDebounceMs) {
+                if (!pressAndTurnFired && duration < LONG_PRESS_DURATION && now - lastPressKeyTime >= pressDebounceMs) {
                     lastPressKeyTime = now;
                     LOG_DEBUG("Rotary event Press short");
                     e.inputEvent = this->_eventPressed;
+                } else if (pressAndTurnEnabled() && !pressAndTurnFired && duration >= LONG_PRESS_DURATION &&
+                           this->_eventPressedLong != INPUT_BROKER_NONE) {
+                    // Held long enough and no turn came, so the long press stands
+                    LOG_DEBUG("Rotary event Press long");
+                    e.inputEvent = this->_eventPressedLong;
                 }
                 pressDetected = false;
                 pressStartTime = 0;
                 lastPressLongEventTime = 0;
+                pressAndTurnDelta.store(0, std::memory_order_relaxed);
+                pressAndTurnFired = false;
                 this->action = ROTARY_ACTION_NONE;
-            } else if (duration >= LONG_PRESS_DURATION && this->_eventPressedLong != INPUT_BROKER_NONE &&
-                       lastPressLongEventTime == 0) {
-                // fire single-shot long press
+            } else if (!pressAndTurnEnabled() && duration >= LONG_PRESS_DURATION &&
+                       this->_eventPressedLong != INPUT_BROKER_NONE && lastPressLongEventTime == 0) {
+                // fire single-shot long press; press-and-turn encoders defer this to release
                 lastPressLongEventTime = now;
                 LOG_DEBUG("Rotary event Press long");
                 e.inputEvent = this->_eventPressedLong;
@@ -87,7 +113,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         e.inputEvent = this->_eventCcw;
     }
 
-    if (e.inputEvent != INPUT_BROKER_NONE) {
+    if (e.inputEvent != INPUT_BROKER_NONE || e.kbchar != 0) {
         this->notifyObservers(&e);
     }
 
@@ -95,9 +121,18 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         this->action = ROTARY_ACTION_NONE;
     } else if (now - pressStartTime < LONG_PRESS_DURATION) {
         return (20); // keep checking for long/short until time expires
+    } else if (pressAndTurnEnabled()) {
+        // Keep polling while held, rather than relying on intHandler()'s reschedule from ISR.
+        return (20);
     }
 
     return INT32_MAX;
+}
+
+void RotaryEncoderInterruptBase::setPressAndTurnChars(unsigned char cw, unsigned char ccw)
+{
+    this->_pressAndTurnCw = cw;
+    this->_pressAndTurnCcw = ccw;
 }
 
 void RotaryEncoderInterruptBase::intPressHandler()
@@ -145,7 +180,10 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
     if (actualPinRaising && (otherPinLevel == LOW)) {
         if (state == ROTARY_EVENT_CLEARED) {
             newState = ROTARY_EVENT_OCCURRED;
-            if ((this->action != ROTARY_ACTION_PRESSED) && (this->action != action)) {
+            if (this->action == ROTARY_ACTION_PRESSED) {
+                // Turning while held; runOnce() ignores this unless press-and-turn is enabled.
+                pressAndTurnDelta.fetch_add((action == ROTARY_ACTION_CW) ? 1 : -1, std::memory_order_relaxed);
+            } else {
                 this->action = action;
             }
         }

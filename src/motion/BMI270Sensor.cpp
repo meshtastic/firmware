@@ -2,6 +2,7 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BMI270)
 
+#include "detect/ScanI2CTwoWire.h"
 #include <pgmspace.h>
 
 // BMI270 registers used
@@ -426,11 +427,9 @@ static const uint8_t bmi270_config_file[] PROGMEM = {
 BMI270Sensor::BMI270Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice)
 {
     if (foundDevice.address.port == ScanI2C::I2CPort::WIRE1) {
-#ifdef I2C_SDA1
-        wire = &Wire1;
-#else
-        wire = &Wire;
-#endif
+        // resolved via the scanner: WIRE1 may be a bridged bus rather than
+        // the local Wire1 (e.g. SenseCAP Indicator)
+        wire = ScanI2CTwoWire::fetchI2CBus(foundDevice.address);
     } else {
         wire = &Wire;
     }
@@ -441,16 +440,6 @@ bool BMI270Sensor::writeRegister(uint8_t reg, uint8_t value)
     wire->beginTransmission(deviceAddress());
     wire->write(reg);
     wire->write(value);
-    return wire->endTransmission() == 0;
-}
-
-bool BMI270Sensor::writeRegisters(uint8_t reg, const uint8_t *data, size_t len)
-{
-    wire->beginTransmission(deviceAddress());
-    wire->write(reg);
-    for (size_t i = 0; i < len; i++) {
-        wire->write(data[i]);
-    }
     return wire->endTransmission() == 0;
 }
 

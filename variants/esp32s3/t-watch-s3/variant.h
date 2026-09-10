@@ -1,4 +1,5 @@
 // ST7789 TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7789_CS 12
 #define ST7789_RS 38  // DC
 #define ST7789_SDA 13 // MOSI

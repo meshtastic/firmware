@@ -2,6 +2,7 @@
 
 #include "./FavoritesMapApplet.h"
 #include "NodeDB.h"
+#include "configuration.h"
 
 using namespace NicheGraphics;
 
@@ -9,6 +10,15 @@ bool InkHUD::FavoritesMapApplet::shouldDrawNode(meshtastic_NodeInfoLite *node)
 {
     // Keep our own node available as map anchor/center; all others must be favorited.
     return node && (node->num == nodeDB->getNodeNum() || nodeInfoLiteIsFavorite(node));
+}
+
+// Show map as long as our own node has a position, even with no favorites yet.
+bool InkHUD::FavoritesMapApplet::enoughMarkers()
+{
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (ourNode && nodeDB->hasValidPosition(ourNode))
+        return true;
+    return MapApplet::enoughMarkers();
 }
 
 void InkHUD::FavoritesMapApplet::onRender(bool full)

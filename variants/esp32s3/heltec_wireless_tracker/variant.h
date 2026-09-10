@@ -8,6 +8,7 @@
 #define I2C_SCL SCL
 
 // ST7735S TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7735S 1 // there are different (sub-)versions of ST7735
 #define ST7735_CS 38
 #define ST7735_RS 40  // DC

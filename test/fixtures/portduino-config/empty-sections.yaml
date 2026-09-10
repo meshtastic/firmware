@@ -1,0 +1,5 @@
+# CLEAN, and deliberately so. A section with no body is a null node, not a map.
+# loadConfig() tests the section node before reading it, so this is harmless -- the
+# checker must not report it. Regression guard for the null-vs-non-map distinction.
+Lora:
+Display:

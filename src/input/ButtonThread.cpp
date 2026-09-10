@@ -6,13 +6,13 @@
 #include "GPS.h"
 #endif
 #include "MeshService.h"
+#include "Power.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
 #include "input/InputBroker.h"
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -102,7 +102,9 @@ bool ButtonThread::initButton(const ButtonConfig &config)
 #endif
     userButton.setPressMs(_longPressTime);
 
-    if (screen) {
+    // The 20ms window a screen normally gets closes before a second click can land, so boards
+    // binding double or multi click need the full one.
+    if (screen && _doublePress == INPUT_BROKER_NONE && _triplePress == INPUT_BROKER_NONE) {
         userButton.setClickMs(20);
     } else {
         userButton.setClickMs(BUTTON_CLICK_MS);
@@ -225,9 +227,8 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
-        case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
-            LOG_INFO("Double press!");
-
+        case BUTTON_EVENT_DOUBLE_PRESSED: { // only on boards binding ButtonConfig::doublePress
+            LOG_INFO("Double press");
             // Reset combination tracking
             waitingForLongPress = false;
 

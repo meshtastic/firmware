@@ -5,7 +5,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 // Debugging
-// #define GPS_DEBUG
+// #define GPS_DEBUG 1
 
 // Lora
 #define USE_LLCC68 // Original Chatter2 with LLCC68 module
@@ -43,6 +43,7 @@
 #define HAS_SCREEN 1 // Assume no screen present by default to prevent crash...
 
 // ST7735S TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7735S 1 // there are different (sub-)versions of ST7735
 #define ST7735_CS -1
 #define ST7735_RS 33  // DC

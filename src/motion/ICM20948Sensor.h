@@ -24,10 +24,8 @@
 #define ICM_20948_WOM_THRESHOLD 16U
 #endif
 
-// Define a pin in variant.h to use interrupts to read the ICM-20948
-#ifndef ICM_20948_WOM_THRESHOLD
-#define ICM_20948_INT_PIN 255
-#endif
+// Define ICM_20948_INT_PIN in variant.h to drive wake-on-motion from the INT pin
+// instead of polling. The driver configures it active-low.
 
 // Uncomment this line to enable helpful debug messages on Serial
 // #define ICM_20948_DEBUG 1
@@ -83,6 +81,10 @@ class ICM20948Sensor : public MotionSensor
     ICM20948Singleton *sensor = nullptr;
     bool showingScreen = false;
     bool isAsleep = false;
+#ifdef ICM_20948_INT_PIN
+    uint32_t lastWomPollMs = 0;
+    bool intPinProven = false;
+#endif
     static constexpr const char *compassCalibrationFileName = "/prefs/compass_icm20948.dat";
 #ifdef MUZI_BASE
     float highestX = 449.000000, lowestX = -140.000000, highestY = 422.000000, lowestY = -232.000000, highestZ = 749.000000,
@@ -100,6 +102,7 @@ class ICM20948Sensor : public MotionSensor
     // Called each time our sensor gets a chance to run
     virtual int32_t runOnce() override;
     virtual void calibrate(uint16_t forSeconds) override;
+    virtual bool providesHeading() const override { return true; }
 };
 
 #endif

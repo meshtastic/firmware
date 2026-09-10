@@ -50,6 +50,7 @@ class BMM150Sensor : public MotionSensor
 
     // Called each time our sensor gets a chance to run
     virtual int32_t runOnce() override;
+    virtual bool providesHeading() const override { return true; }
 };
 
 #endif

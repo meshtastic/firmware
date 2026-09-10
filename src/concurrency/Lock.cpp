@@ -26,6 +26,11 @@ void Lock::lock()
     }
 }
 
+bool Lock::lock(uint32_t timeout)
+{
+    return xSemaphoreTake(handle, pdMS_TO_TICKS(timeout)) == pdTRUE;
+}
+
 void Lock::unlock()
 {
     if (xSemaphoreGive(handle) == false) {
@@ -38,6 +43,11 @@ Lock::Lock() {}
 Lock::~Lock() {}
 
 void Lock::lock() {}
+
+bool Lock::lock(uint32_t)
+{
+    return true;
+}
 
 void Lock::unlock() {}
 #endif

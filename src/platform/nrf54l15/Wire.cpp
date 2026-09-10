@@ -1,4 +1,4 @@
-// Wire.cpp — Arduino TwoWire backed by Zephyr i2c30 (TWIM30 hardware).
+// Wire.cpp - Arduino TwoWire backed by Zephyr i2c30 (TWIM30 hardware).
 //
 // The pinctrl + clock-frequency are configured in
 // zephyr/boards/nrf54l15dk_nrf54l15_cpuapp.overlay. Runtime begin()/setClock()
@@ -15,7 +15,7 @@
 
 // Resolve the i2c30 node at compile time. If the overlay has not enabled
 // i2c30, this evaluates to a NULL device pointer and every call short-circuits
-// to a NACK return code — matching the prior compile-only stub behavior.
+// to a NACK return code - matching the prior compile-only stub behavior.
 #define I2C_NODE DT_NODELABEL(i2c30)
 
 static const struct device *getI2CDevice()
@@ -49,7 +49,7 @@ void TwoWire::begin()
 
 void TwoWire::begin(uint8_t /*sda*/, uint8_t /*scl*/)
 {
-    // SDA/SCL fixed by overlay pinctrl — pin args ignored.
+    // SDA/SCL fixed by overlay pinctrl - pin args ignored.
     begin();
 }
 
@@ -98,7 +98,7 @@ void TwoWire::beginTransmission(uint8_t addr)
 size_t TwoWire::write(uint8_t data)
 {
     if (txLen >= WIRE_BUFFER_LENGTH) {
-        return 0; // overflow — endTransmission() will return 1
+        return 0; // overflow - endTransmission() will return 1
     }
     txBuf[txLen++] = data;
     return 1;

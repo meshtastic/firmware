@@ -1,0 +1,7 @@
+# FAULT: StatusMessage is copied into a char[80] and hard null-terminated, so it is
+# safe but silently shortened to 79 characters. The operator never sees the message
+# they configured. Expect a WARNING.
+Lora:
+  Module: sx1262
+Config:
+  StatusMessage: "This status message is comfortably longer than the eighty character buffer it is copied into, so it gets cut off"

@@ -27,7 +27,6 @@ class VirtualKeyboard
 
     void draw(OLEDDisplay *display, int16_t offsetX, int16_t offsetY);
     void setInputText(const std::string &text);
-    std::string getInputText() const;
     void setHeader(const std::string &header);
     void setCallback(std::function<void(const std::string &)> callback);
 

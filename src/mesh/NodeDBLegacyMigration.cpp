@@ -14,6 +14,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
+#include "meshUtils.h"
 
 #include <algorithm>
 #include <cstring>
@@ -25,7 +26,7 @@ bool meshtastic_NodeDatabase_Legacy_callback(pb_istream_t *istream, pb_ostream_t
     const auto *iter = reinterpret_cast<const pb_field_iter_t *>(field);
     if (ostream) {
         const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite_Legacy> *>(iter->pData);
-        for (auto item : *vec) {
+        for (const auto &item : *vec) {
             if (!pb_encode_tag_for_field(ostream, iter))
                 return false;
             if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_Legacy_fields, &item))
@@ -88,8 +89,10 @@ bool NodeDB::migrateLegacyNodeDatabase()
                 slim.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
                 strncpy(slim.long_name, legacy.user.long_name, sizeof(slim.long_name));
                 slim.long_name[sizeof(slim.long_name) - 1] = '\0';
+                sanitizeUtf8(slim.long_name, sizeof(slim.long_name)); // replace bad bytes so nanopb encode never fails
                 strncpy(slim.short_name, legacy.user.short_name, sizeof(slim.short_name));
                 slim.short_name[sizeof(slim.short_name) - 1] = '\0';
+                sanitizeUtf8(slim.short_name, sizeof(slim.short_name)); // same - v24 names may contain non-UTF-8 bytes
                 slim.hw_model = legacy.user.hw_model;
                 slim.role = legacy.user.role;
                 if (legacy.user.is_licensed)

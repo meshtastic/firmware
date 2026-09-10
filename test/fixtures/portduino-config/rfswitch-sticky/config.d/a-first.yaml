@@ -1,0 +1,6 @@
+# Loaded first. Sets MODE_RX HIGH on both pins.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_RX: [HIGH, HIGH]

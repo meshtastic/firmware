@@ -1,0 +1,7 @@
+# FAULT: names a network interface that does not exist, so /sys/class/net/<n>/address
+# reads back empty and no MAC is set. A WARNING rather than an ERROR: which interfaces
+# exist is a property of the machine, and a config is often checked on another host.
+General:
+  MACAddressSource: nosuchiface99
+Lora:
+  Module: sx1262

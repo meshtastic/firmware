@@ -1,6 +1,8 @@
 #include "StatusLEDModule.h"
 #include "MeshService.h"
 #include "configuration.h"
+#include "mesh/RadioInterface.h"
+#include "mesh/Throttle.h"
 #include <Arduino.h>
 
 /*
@@ -16,6 +18,9 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputObserver.observe(inputBroker);
+#endif
+#ifdef LED_LORA
+    loraRxObserver.observe(&RadioInterface::loraRxPacketObservable);
 #endif
 #ifdef NEOPIXEL_STATUS_POWER_PIN
     powerPixel.begin();
@@ -90,6 +95,18 @@ int StatusLEDModule::handleInputEvent(const InputEvent *event)
     return 0;
 }
 #endif
+#ifdef LED_LORA
+int StatusLEDModule::handleLoRaRx(uint32_t)
+{
+    // Briefly flash LED_LORA on each received packet. Turn it on now (we share the main thread with
+    // the radio's receive handler, so this is safe) and wake runOnce() at flash end to turn it off.
+    digitalWrite(LED_LORA, LED_STATE_ON);
+    LORA_LED_state = LED_STATE_ON;
+    LORA_LED_starttime = millis();
+    setIntervalFromNow(LORA_RX_LED_FLASH_MS);
+    return 0;
+}
+#endif
 
 int32_t StatusLEDModule::runOnce()
 {
@@ -102,7 +119,7 @@ int32_t StatusLEDModule::runOnce()
     } else if (power_state == charged) {
         CHARGE_LED_state = LED_STATE_ON;
     } else if (power_state == critical) {
-        if (POWER_LED_starttime + 30000 < millis() && !doing_fast_blink) {
+        if (Throttle::hasElapsed(POWER_LED_starttime, 30000) && !doing_fast_blink) {
             doing_fast_blink = true;
             POWER_LED_starttime = millis();
         }
@@ -110,11 +127,17 @@ int32_t StatusLEDModule::runOnce()
             PAIRING_LED_state = LED_STATE_OFF;
             CHARGE_LED_state = !CHARGE_LED_state;
             my_interval = 250;
-            if (POWER_LED_starttime + 2000 < millis()) {
+            if (Throttle::hasElapsed(POWER_LED_starttime, 2000)) {
                 doing_fast_blink = false;
                 CHARGE_LED_state = LED_STATE_OFF;
             }
         }
+    } else {
+#if defined(LED_HEARTBEAT)
+        // If we are using the heartbeat, as in the Thinknode M4, we need to explicitly turn off the charge LED
+        // This probably implies that in the future we need to stop re-using this bool for multiple purposes.
+        CHARGE_LED_state = LED_STATE_OFF;
+#endif
     }
 // If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
 #if defined(LED_HEARTBEAT)
@@ -142,7 +165,8 @@ int32_t StatusLEDModule::runOnce()
         }
     }
 #endif
-    if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
+#ifdef LED_PAIRING
+    if (!config.bluetooth.enabled || Throttle::hasElapsed(PAIRING_LED_starttime, 30 * 1000) || doing_fast_blink) {
         PAIRING_LED_state = LED_STATE_OFF;
     } else if (ble_state == unpaired) {
         if (slowTrack) {
@@ -156,6 +180,7 @@ int32_t StatusLEDModule::runOnce()
     } else {
         PAIRING_LED_state = LED_STATE_ON;
     }
+#endif
 
     // Override if disabled in config
     if (config.device.led_heartbeat_disabled) {
@@ -166,7 +191,7 @@ int32_t StatusLEDModule::runOnce()
     bool chargeIndicatorLED2 = LED_STATE_OFF;
     bool chargeIndicatorLED3 = LED_STATE_OFF;
     bool chargeIndicatorLED4 = LED_STATE_OFF;
-    if (lastUserbuttonTime + 10 * 1000 > millis() || CHARGE_LED_state == LED_STATE_ON) {
+    if (Throttle::isWithinTimespanMs(lastUserbuttonTime, 10 * 1000) || CHARGE_LED_state == LED_STATE_ON) {
         // should this be off at very low percentages?
         chargeIndicatorLED1 = LED_STATE_ON;
         if (powerStatus && powerStatus->getBatteryChargePercent() >= 25)
@@ -191,9 +216,25 @@ int32_t StatusLEDModule::runOnce()
 #ifdef PCA_LED_ENABLE
     io.digitalWrite(PCA_LED_ENABLE, CHARGE_LED_state);
 #endif
+
 #ifdef LED_POWER
+#ifdef LED_POWER_CRITICAL
+    if (LED_POWER != LED_POWER_CRITICAL) {
+        if (power_state == critical) {
+            digitalWrite(LED_POWER, 0);
+            digitalWrite(LED_POWER_CRITICAL, CHARGE_LED_state);
+        } else {
+            digitalWrite(LED_POWER, CHARGE_LED_state);
+            digitalWrite(LED_POWER_CRITICAL, 0);
+        }
+    } else {
+        digitalWrite(LED_POWER, CHARGE_LED_state);
+    }
+#else
     digitalWrite(LED_POWER, CHARGE_LED_state);
 #endif
+#endif
+
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
@@ -225,6 +266,20 @@ int32_t StatusLEDModule::runOnce()
 #endif
 #ifdef Battery_LED_4
     digitalWrite(Battery_LED_4, chargeIndicatorLED4);
+#endif
+
+#ifdef LED_LORA
+    // End the LoRa-RX flash once its duration has elapsed; otherwise make sure we come back
+    // exactly at flash end (only ever clamp my_interval down, so other LED timing is preserved).
+    if (LORA_LED_state == LED_STATE_ON) {
+        uint32_t elapsed = millis() - LORA_LED_starttime;
+        if (elapsed >= LORA_RX_LED_FLASH_MS) {
+            digitalWrite(LED_LORA, LED_STATE_OFF);
+            LORA_LED_state = LED_STATE_OFF;
+        } else if ((uint32_t)my_interval > LORA_RX_LED_FLASH_MS - elapsed) {
+            my_interval = LORA_RX_LED_FLASH_MS - elapsed;
+        }
+    }
 #endif
 
     return (my_interval);

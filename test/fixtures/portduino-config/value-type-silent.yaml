@@ -1,0 +1,10 @@
+# FAULT: values of the wrong type where loadConfig() reads .as<T>(default). yaml-cpp
+# hands back the default on a failed conversion, so meshtasticd starts happily and
+# every one of these settings silently does nothing. Expect a WARNING each.
+Lora:
+  Module: sx1262
+  spiSpeed: fast
+  SX126X_MAX_POWER: high
+  DIO2_AS_RF_SWITCH: maybe
+General:
+  MaxNodes: lots

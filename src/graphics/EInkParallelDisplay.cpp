@@ -77,12 +77,13 @@ EInkParallelDisplay::~EInkParallelDisplay()
 bool EInkParallelDisplay::connect()
 {
     LOG_INFO("Do EPD init");
+    int initRc = BBEP_SUCCESS;
     if (!epaper) {
         epaper = new FASTEPD;
 #if defined(T5_S3_EPAPER_PRO_V1)
-        epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
+        initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
 #elif defined(T5_S3_EPAPER_PRO_V2)
-        epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 28000000);
+        initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 28000000);
         // initialize all port 0 pins (0-7) as outputs / HIGH
         for (int i = 0; i < 8; i++) {
             epaper->ioPinMode(i, OUTPUT);
@@ -91,6 +92,16 @@ bool EInkParallelDisplay::connect()
 #else
 #error "unsupported EPD device!"
 #endif
+    }
+
+    // FastEPD allocates its framebuffer only from PSRAM; if PSRAM init failed the alloc returns
+    // NULL and initPanel() returns an error, so clearWhite() below would memset(NULL). Skip EInk
+    // bring-up but return true so OLEDDisplay still allocates its base buffer (base draw ops stay
+    // safe); displayReady stays false so the FastEPD push paths no-op -> node runs headless.
+    if (initRc != BBEP_SUCCESS || epaper->currentBuffer() == nullptr) {
+        LOG_ERROR("EPD framebuffer unavailable (initPanel rc=%d, PSRAM=%u); running headless", initRc,
+                  (unsigned)ESP.getPsramSize());
+        return true;
     }
 
     // epaper->setRotation(rotation); // does not work, messes up width/height
@@ -103,6 +114,7 @@ bool EInkParallelDisplay::connect()
     resetGhostPixelTracking();
 #endif
 
+    displayReady = true;
     return true;
 }
 
@@ -171,8 +183,10 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
     self->resetGhostPixelTracking();
 #endif
 
-    self->asyncFullRunning.store(false);
+    // Handle first: once asyncFullRunning reads false, the destructor may act on the handle, so
+    // it must already be null by then (same ordering fix as eink/Drivers/EInkParallel.cpp).
     self->asyncTaskHandle = nullptr;
+    self->asyncFullRunning.store(false);
 
     // delete this task
     vTaskDelete(nullptr);
@@ -187,6 +201,9 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
  */
 void EInkParallelDisplay::display(void)
 {
+    if (!displayReady) // no framebuffer (PSRAM absent / init failed) -> nothing to push
+        return;
+
     const uint16_t w = this->displayWidth;
     const uint16_t h = this->displayHeight;
 
@@ -400,6 +417,9 @@ void EInkParallelDisplay::resetGhostPixelTracking()
  */
 bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
 {
+    if (!displayReady)
+        return false;
+
     uint32_t now = millis();
     if (lastDrawMsec == 0 || (now - lastDrawMsec) > msecLimit) {
         display();
@@ -410,6 +430,8 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
 
 void EInkParallelDisplay::endUpdate()
 {
+    if (!displayReady)
+        return;
     {
         // ensure any async full update is started/completed
         if (asyncFullRunning.load()) {

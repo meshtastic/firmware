@@ -46,6 +46,14 @@ void initVariant()
 }
 
 #ifdef LOW_VDD_SYSTEMOFF_DELAY_MS
+static bool lowVddSystemOff = false; // Set when brownout forces System OFF (enables LPCOMP wake).
+
+// Strong override; must be noinline (see main-nrf52.cpp weak default).
+__attribute__((noinline)) bool variant_enableBatteryLpcompWake()
+{
+    return lowVddSystemOff;
+}
+
 void variant_nrf52LoopHook(void)
 {
     // If VDD stays unsafe for a while (brownout), force System OFF.
@@ -72,6 +80,7 @@ void variant_nrf52LoopHook(void)
                 low_vdd_timer_armed = true;
             }
             if ((uint32_t)(now - low_vdd_since_ms) >= (uint32_t)LOW_VDD_SYSTEMOFF_DELAY_MS) {
+                lowVddSystemOff = true;
                 cpuDeepSleep(portMAX_DELAY);
             }
         } else {

@@ -1,0 +1,10 @@
+# CLEAN. Valid SX128x config -- must report no findings AND must resolve to this
+# module in the effective configuration, so a silent fallback to sim cannot pass.
+Lora:
+  Module: sx1280
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  SX128X_MAX_POWER: 13

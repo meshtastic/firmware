@@ -272,8 +272,8 @@ const char *dbg_strerr_lfs(int32_t err)
         return "LFS_ERR_NOMEM";
 
     default:
-        static char errcode[10];
-        sprintf(errcode, "%ld", err);
+        static char errcode[13];
+        snprintf(errcode, sizeof(errcode), "%ld", (long)err);
         return errcode;
     }
 

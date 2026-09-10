@@ -15,7 +15,7 @@ The save / load mechanism is a shared NicheGraphics feature.
 #include "configuration.h"
 
 #include "./InkHUD.h"
-#include "graphics/niche/InkHUD/MessageStore.h"
+#include "MessageStore.h"
 #include "graphics/niche/Utils/FlashData.h"
 
 namespace NicheGraphics::InkHUD
@@ -120,12 +120,12 @@ class Persistence
     };
 
     // Most recently received text message
-    // Value is updated by InkHUD::WindowManager, as a courtesy to applets
-    // InkHUD keeps its own latest-message cache for applets.
+    // Value is updated by InkHUD::Events, as a courtesy to applets.
+    // Populated at boot from the global messageStore, then updated live on receive.
     struct LatestMessage {
-        MessageStore::Message broadcast; // Most recent message received broadcast
-        MessageStore::Message dm;        // Most recent received DM
-        bool wasBroadcast;               // True if most recent broadcast is newer than most recent dm
+        StoredMessage broadcast; // Most recent broadcast message received
+        StoredMessage dm;        // Most recent DM received
+        bool wasBroadcast;       // True if most recent broadcast is newer than most recent dm
     };
 
     void loadSettings();

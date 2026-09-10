@@ -2,9 +2,10 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cSfa3x.h>)
 
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "RTC.h"
 #include "TelemetrySensor.h"
+#include "gps/RTC.h"
 #include <SensirionI2cSfa3x.h>
 
 #define SFA30_I2C_CLOCK_SPEED 100000
@@ -16,11 +17,15 @@ class SFA30Sensor : public TelemetrySensor
   private:
     enum class State { IDLE, ACTIVE };
     State state = State::IDLE;
+    // millis()-based, not wall-clock: this only measures in-session warmup elapsed time,
+    // and getTime() can jump discontinuously when RTC quality improves mid-session.
     uint32_t measureStarted = 0;
 
     SensirionI2cSfa3x sfa30;
-    TwoWire *_bus{};
-    uint8_t _address{};
+#ifdef SFA30_I2C_CLOCK_SPEED
+    ReClockI2C reClockI2C;
+#endif
+
     bool isError(uint16_t response);
 
   public:

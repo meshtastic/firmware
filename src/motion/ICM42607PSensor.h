@@ -14,7 +14,6 @@ class ICM42607PSensor : public MotionSensor
 {
   private:
     std::unique_ptr<ICM42670> sensor;
-    TwoWire *wire = nullptr;
 
   public:
     explicit ICM42607PSensor(ScanI2C::FoundDevice foundDevice);

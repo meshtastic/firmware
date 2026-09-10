@@ -31,12 +31,33 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     PositionModule();
 
     /**
-     * Send our position into the mesh
+     * Send our position into the mesh. True only when the router took the packet.
      */
-    void sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
-    void sendOurPosition();
+    bool sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
+    bool sendOurPosition();
+
+    /**
+     * Answer a position request that arrived on a channel we never share position on (the event channel):
+     * the reply goes out on the position channel at that channel's precision, tagged as a reply to req.
+     * Subject to the same reply throttle as allocReply(). No-op when no channel carries positions.
+     */
+    void replyOnPositionChannel(const meshtastic_MeshPacket &req);
 
     void handleNewPosition();
+
+    // Pure broadcast-policy helpers, split out so they're unit-testable without the module.
+    // True when two coordinates truncate to the same precision cell (so a re-broadcast would be a
+    // duplicate). precision 0 or >=32 returns false: no coarse cell to hold within, never suppress.
+    static bool positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int32_t bLat, int32_t bLon, uint32_t precision);
+    // Effective min interval: stationary positions are held to stationaryFloorMs (when that is the
+    // longer of the two); otherwise the normal configured interval.
+    static uint32_t effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs);
+    // Pure local-play policy: stream our own position to the phone/UI when we have a valid
+    // position, the phone queue is idle, and the cadence has elapsed. everSentToPhone (rather
+    // than a lastSentMs sentinel) marks the never-sent state, so a send stamped at millis()==0
+    // still honors the cadence.
+    static bool shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, bool everSentToPhone, uint32_t nowMs,
+                                          uint32_t lastSentMs, uint32_t intervalMs);
 
   protected:
     /** Called to handle a particular incoming message
@@ -55,8 +76,24 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     virtual int32_t runOnce() override;
 
   private:
-    meshtastic_MeshPacket *allocPositionPacket();
+    meshtastic_MeshPacket *allocPositionPacket(uint32_t atPrecision);
+    // Streams our own position to the connected phone/UI at full precision without touching the
+    // mesh. Keeps the local view alive now that mesh position sharing is opt-in. Returns true
+    // only when a packet was handed to the phone queue.
+    bool sendOurPositionToPhone();
+    bool hasSentPositionToPhone = false;
+    uint32_t lastPhoneSendMs = 0;
+    static constexpr uint32_t sendToPhoneIntervalMs = 60 * 1000; // Matches telemetry's local cadence
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
+    // Broadcast early when we have moved far enough since the last send, subject to the minimum
+    // interval. Stamps the cadence and the last-sent coords only on a send that went out.
+    void trySmartBroadcast(const meshtastic_PositionLite &selfPos, uint32_t nowMs);
+    // True when our position is unchanged since the last broadcast: it truncates to the same
+    // precision grid cell, so re-sending would be a duplicate that traffic management dedups
+    // downstream anyway. Used to hold stationary broadcasts to a 12h floor. useConfiguredPrecision
+    // gauges movement at our own configured (unclamped) precision rather than the on-wire
+    // (public-clamped) precision - trackers report finer movement.
+    bool positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision);
     meshtastic_MeshPacket *allocAtakPli();
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;

@@ -31,6 +31,8 @@ Lora:
     - pin: 103 # GPIO3_A7 (physical 16)
       gpiochip: 3
       line: 7
+  DIO3_TCXO_VOLTAGE: true
+  DIO2_AS_RF_SWITCH: true
   spidev: spidev0.1
   # CS: # GPIO0_B7 (SPI0_CSN1, physical 26)
   #   pin: 15

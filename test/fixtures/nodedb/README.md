@@ -5,7 +5,7 @@ plus tooling that compiles them to binary `.proto` files and pushes them
 onto a device for testing.
 
 Centered on Truth or Consequences, NM (33.1284°N, 107.2528°W) with a 60 km
-spread — change via `--centroid` and `--spread-km` if you want a different
+spread - change via `--centroid` and `--spread-km` if you want a different
 geography.
 
 ## Pipeline
@@ -20,7 +20,7 @@ geography.
    build/fixtures/nodedb/nodes_v25_<N>.proto  ← .gitignored, fresh timestamps
               ↓
    - Portduino: cp to ~/.portduino/<config>/prefs/nodes.proto
-   - Hardware: XModem upload via mcp-server's push_fake_nodedb tool
+   - Hardware: XModem upload via the meshtastic-mcp push_fake_nodedb tool
 ```
 
 ## What's committed
@@ -52,7 +52,7 @@ the compile step to pin it for byte-identical CI artifacts.
 1. Variants with `custom_meshtastic_support_level = 1` in `variants/*/*/platformio.ini`
 2. Values present in the `HardwareModel` enum in `mesh.proto`
 
-This excludes legacy/deprecated boards (Heltec V1–V2, TLORA V1–V2, classic
+This excludes legacy/deprecated boards (Heltec V1-V2, TLORA V1-V2, classic
 TBEAM (4) and TBEAM_V0P7 (6), Nano G1, Station G1/G2, etc.) and fuzzer-only
 sentinels (PORTDUINO, ANDROID_SIM, DIY_V1, LORA_RELAY_V1, etc.).
 
@@ -121,10 +121,11 @@ cp build/fixtures/nodedb/nodes_v25_1000.proto ~/.portduino/default/prefs/nodes.p
 # Run the native binary; loadFromDisk picks it up at boot.
 ```
 
-### Push to USB-attached hardware via mcp-server
+### Push to USB-attached hardware via meshtastic-mcp
 
 ```python
-# From within the mcp-server tool surface:
+# From within the meshtastic-mcp tool surface
+# (https://github.com/meshtastic/meshtastic-mcp):
 push_fake_nodedb(
     size=500,
     target="hardware",

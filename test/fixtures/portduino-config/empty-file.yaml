@@ -1,0 +1,2 @@
+# FAULT: a zero-content file. Only comments here, which yaml-cpp parses to a null
+# document -- the same as truly empty. Expect a WARNING, not an ERROR.

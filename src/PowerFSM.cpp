@@ -148,7 +148,7 @@ static void lsIdle()
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
-                // LOG_INFO("Sleep, flash led!");
+                // LOG_INFO("Sleep, flash led");
                 break;
 
             case ESP_SLEEP_WAKEUP_UART:
@@ -156,21 +156,30 @@ static void lsIdle()
                 powerFSM.trigger(EVENT_SERIAL_CONNECTED);
                 break;
 
-            default:
-                // We woke for some other reason (button press, device IRQ interrupt)
-
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#else
+            case ESP_SLEEP_WAKEUP_GPIO: {
                 bool pressed = false;
+#if defined(BUTTON_PIN)
+                pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#elif defined(KB_INT)
+                // keyboard press (probably) triggered GPIO interrupt
+                pressed = true;
 #endif
-                if (pressed) { // If we woke because of press, instead generate a PRESS event.
+                if (pressed) {
                     powerFSM.trigger(EVENT_PRESS);
-                } else {
-                    // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
-                    // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
-                    powerFSM.trigger(EVENT_WAKE_TIMER);
                 }
+#ifdef MOTION_WAKE_INT_PIN
+                // Not the button: the accelerometer can have raised the line instead.
+                else if (config.display.wake_on_tap_or_motion &&
+                         digitalRead(MOTION_WAKE_INT_PIN) == (MOTION_WAKE_INT_ACTIVE_HIGH ? HIGH : LOW)) {
+                    powerFSM.trigger(EVENT_INPUT);
+                }
+#endif
+                break;
+            }
+            default:
+                // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
+                // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
+                powerFSM.trigger(EVENT_WAKE_TIMER);
                 break;
             }
         } else {
@@ -193,6 +202,17 @@ static void lsExit()
     t5BacklightWakeFromSleep();
 }
 
+/// Skip the BLE re-enable while a reboot/shutdown is armed: AdminModule tears BLE down before
+/// scheduling the restart, and a state transition in that window would otherwise bring it back up.
+static void setBluetoothEnableUnlessRestarting()
+{
+    if (rebootAtMsec || shutdownAtMsec) {
+        LOG_POWERFSM("Skip BLE enable, restart pending");
+        return;
+    }
+    setBluetoothEnable(true);
+}
+
 static void nbEnter()
 {
     LOG_POWERFSM("State: nbEnter");
@@ -209,7 +229,7 @@ static void nbEnter()
 static void darkEnter()
 {
     LOG_POWERFSM("State: darkEnter");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
     if (screen)
         screen->setOn(false);
     // Screen timeout enters DARK; ensure backlight also turns off.
@@ -219,7 +239,11 @@ static void darkEnter()
 static void serialEnter()
 {
     LOG_POWERFSM("State: serialEnter");
+#ifndef ARCH_NRF52
+    // nRF52 runs BLE on SoftDevice independently of USB serial - no need to disable it.
+    // (Same rationale as nbEnter() which already guards this with #ifdef ARCH_ESP32)
     setBluetoothEnable(false);
+#endif
     if (screen) {
         screen->setOn(true);
     }
@@ -229,7 +253,7 @@ static void serialExit()
 {
     LOG_POWERFSM("State: serialExit");
     // Turn bluetooth back on when we leave serial stream API
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void powerEnter()
@@ -242,7 +266,7 @@ static void powerEnter()
     } else {
         if (screen)
             screen->setOn(true);
-        setBluetoothEnable(true);
+        setBluetoothEnableUnlessRestarting();
         // within enter() the function getState() returns the state we came from
     }
 }
@@ -260,7 +284,7 @@ static void powerIdle()
 static void powerExit()
 {
     LOG_POWERFSM("State: powerExit");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onEnter()
@@ -268,7 +292,7 @@ static void onEnter()
     LOG_POWERFSM("State: onEnter");
     if (screen)
         screen->setOn(true);
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onIdle()

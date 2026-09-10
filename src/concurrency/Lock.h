@@ -22,6 +22,11 @@ class Lock
     // Must not be called from an ISR.
     void lock();
 
+    /// Locks the lock with timeout.
+    //
+    // Must not be called from an ISR.
+    bool lock(uint32_t timeout);
+
     // Unlocks the lock.
     //
     // Must not be called from an ISR.

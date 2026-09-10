@@ -1,0 +1,15 @@
+# CLEAN. A CH341 USB-SPI adapter, the meshstick/pinedio shape. The pin numbers here are
+# indexes on the adapter, not gpiochip lines: portduinoSetup() skips initGPIOPin() for
+# every Lora pin when spidev is ch341 and hands the raw numbers to Ch341Hal. Expect the
+# report to say so and to stop citing 'gpiodetect'/'gpioinfo', which do not exist on the
+# Windows and macOS hosts where this is the only shape that works.
+Lora:
+  Module: sx1262
+  CS: 0
+  IRQ: 6
+  Reset: 2
+  Busy: 4
+  spidev: ch341
+  DIO3_TCXO_VOLTAGE: true
+  USB_PID: 0x5512
+  USB_VID: 0x1A86

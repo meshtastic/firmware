@@ -1,0 +1,5 @@
+# FAULT: the other no-fallback read. Each TX_GAIN_LORA entry is .as<int>() with no
+# default, so one non-numeric entry throws and stops meshtasticd starting.
+Lora:
+  Module: sx1262
+  TX_GAIN_LORA: [0, high, 3]

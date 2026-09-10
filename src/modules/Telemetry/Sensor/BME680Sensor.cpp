@@ -1,56 +1,25 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && (__has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>))
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_BME680.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "BME680Sensor.h"
 #include "FSCommon.h"
 #include "SPILock.h"
+#include "SafeFile.h"
 #include "TelemetrySensor.h"
+#include "UptimeClock.h"
+#include "gps/RTC.h"
+#include "mesh/Throttle.h"
 
-#if __has_include(<Adafruit_BME680.h>)
-#include <cmath>
-#endif
+#include <math.h>
 
 BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
-
-#if __has_include(<bsec2.h>)
-int32_t BME680Sensor::runOnce()
-{
-    if (!bme680.run()) {
-        checkStatus("runTrigger");
-    }
-    return 35;
-}
-#endif
 
 bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     status = 0;
 
-#if __has_include(<bsec2.h>)
-    if (!bme680.begin(dev->address.address, *bus))
-        checkStatus("begin");
-
-    if (bme680.status == BSEC_OK) {
-        status = 1;
-        if (!bme680.setConfig(bsec_config)) {
-            checkStatus("setConfig");
-            status = 0;
-        }
-        loadState();
-        if (!bme680.updateSubscription(sensorList, ARRAY_LEN(sensorList), BSEC_SAMPLE_RATE_LP)) {
-            checkStatus("updateSubscription");
-            status = 0;
-        }
-        LOG_INFO("Init sensor: %s with the BSEC Library version %d.%d.%d.%d ", sensorName, bme680.version.major,
-                 bme680.version.minor, bme680.version.major_bugfix, bme680.version.minor_bugfix);
-    }
-
-    if (status == 0)
-        LOG_DEBUG("BME680Sensor::runOnce: bme680.status %d", bme680.status);
-
-#else
     bme680 = makeBME680(bus);
 
     if (!bme680->begin(dev->address.address)) {
@@ -58,151 +27,204 @@ bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         return status;
     }
 
-    status = 1;
+    // Acquisition profile, stated explicitly (these match the library defaults):
+    // the heater setting determines power draw, ~0.25% duty at one sample/min
+    bme680->setTemperatureOversampling(BME680_OS_8X);
+    bme680->setHumidityOversampling(BME680_OS_2X);
+    bme680->setPressureOversampling(BME680_OS_4X);
+    bme680->setIIRFilterSize(BME680_FILTER_SIZE_3);
+    bme680->setGasHeater(320, 150); // 320 degC for 150 ms
 
-#endif
+    status = 1;
+    loadState();
+    LOG_INFO("Init sensor: %s (open IAQ estimator)", sensorName);
 
     initI2CSensor();
     return status;
 }
 
+int32_t BME680Sensor::runOnce()
+{
+    uint32_t now = Time::getMillis();
+
+    if (readingInFlight) {
+        if (!Throttle::deadlinePassedAt(now, readingDoneAtMs))
+            return readingDoneAtMs - now;
+        captureSample();
+        return SAMPLE_INTERVAL_MS;
+    }
+
+    if (haveSample && Throttle::isWithinTimespanMs(lastSampleMs, SAMPLE_INTERVAL_MS))
+        return SAMPLE_INTERVAL_MS - (now - lastSampleMs);
+
+    uint32_t doneAt = bme680->beginReading();
+    if (doneAt == 0) {
+        LOG_WARN("%s beginReading() failed", sensorName);
+        return SAMPLE_INTERVAL_MS;
+    }
+    readingInFlight = true;
+    readingDoneAtMs = doneAt;
+    return Throttle::deadlinePassedAt(now, doneAt) ? 1 : (int32_t)(doneAt - now);
+}
+
+/// Complete the reading (in flight or synchronous), feed the estimator, refresh the cache
+void BME680Sensor::captureSample()
+{
+    readingInFlight = false;
+    // endReading() completes the in-flight conversion, or starts and finishes
+    // a fresh one when none is pending (performReading() is an alias for it in
+    // Adafruit_BME680; a failed first call resets the conversion, so the second
+    // call is a genuine one-shot retry). Worst case each call waits ~2x the
+    // remaining TPHG cycle, so a synchronous read costs a few hundred ms.
+    if (!bme680->endReading() && !bme680->performReading()) {
+        LOG_WARN("%s reading failed", sensorName);
+        return;
+    }
+
+    lastTemperature = bme680->temperature;
+    lastHumidity = bme680->humidity;
+    lastPressureHPa = bme680->pressure / 100.0F;
+    lastGasOhms = (float)bme680->gas_resistance;
+    haveSample = true;
+    lastSampleMs = Time::getMillis();
+
+    uint16_t iaq;
+    if (iaqEstimator.update(lastGasOhms, lastHumidity, &iaq)) {
+        lastIaq = iaq;
+        lastIaqValid = true;
+        lastIaqMs = lastSampleMs;
+    } else if (isfinite(lastGasOhms) && lastGasOhms > 0.0f) {
+        // Valid gas sample but the estimator has no output yet (warm-up/burn-in)
+        lastIaqValid = false;
+    } else if (lastIaqValid && !Throttle::isWithinTimespanMs(lastIaqMs, IAQ_CARRY_MS)) {
+        // Heater-unstable cycles (gas reported as 0) may ride on the previous
+        // IAQ briefly, but a persistently gasless sensor stops reporting IAQ
+        lastIaqValid = false;
+    }
+
+    maybeSaveState();
+}
+
 bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-#if __has_include(<bsec2.h>)
-    if (bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal == 0)
+    if (!haveSample || !Throttle::isWithinTimespanMs(lastSampleMs, SAMPLE_FRESH_MS))
+        captureSample();
+    // A failed refresh must not freeze the last reading on the wire: publish
+    // only while the cache is genuinely fresh
+    if (!haveSample || !Throttle::isWithinTimespanMs(lastSampleMs, SAMPLE_FRESH_MS))
         return false;
 
     measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.environment_metrics.has_relative_humidity = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
-    measurement->variant.environment_metrics.has_gas_resistance = true;
-    measurement->variant.environment_metrics.has_iaq = true;
 
-    measurement->variant.environment_metrics.temperature = bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE).signal;
-    measurement->variant.environment_metrics.relative_humidity =
-        bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal;
-    measurement->variant.environment_metrics.barometric_pressure = bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal;
-    measurement->variant.environment_metrics.gas_resistance = bme680.getData(BSEC_OUTPUT_RAW_GAS).signal / 1000.0;
-    // Check if we need to save state to filesystem (every STATE_SAVE_PERIOD ms)
-    measurement->variant.environment_metrics.iaq = bme680.getData(BSEC_OUTPUT_IAQ).signal;
-    updateState();
-#else
-    if (!bme680->performReading()) {
-        LOG_ERROR("BME680Sensor::getMetrics: performReading failed");
-        return false;
+    measurement->variant.environment_metrics.temperature = lastTemperature;
+    measurement->variant.environment_metrics.relative_humidity = lastHumidity;
+    measurement->variant.environment_metrics.barometric_pressure = lastPressureHPa;
+
+    // A heater-unstable cycle reports gas_resistance 0; suppress the field
+    // rather than broadcasting a bogus 0 kOhm point
+    if (isfinite(lastGasOhms) && lastGasOhms > 0.0f) {
+        measurement->variant.environment_metrics.has_gas_resistance = true;
+        // Fleet convention is kOhm on the wire (despite the proto comment saying MOhm)
+        measurement->variant.environment_metrics.gas_resistance = lastGasOhms / 1000.0f;
     }
 
-    measurement->variant.environment_metrics.has_temperature = true;
-    measurement->variant.environment_metrics.has_relative_humidity = true;
-    measurement->variant.environment_metrics.has_barometric_pressure = true;
-    measurement->variant.environment_metrics.has_gas_resistance = true;
-
-    measurement->variant.environment_metrics.temperature = bme680->readTemperature();
-    measurement->variant.environment_metrics.relative_humidity = bme680->readHumidity();
-    measurement->variant.environment_metrics.barometric_pressure = bme680->readPressure() / 100.0F;
-
-    float gasRaw = bme680->readGas();
-    measurement->variant.environment_metrics.gas_resistance = gasRaw / 1000.0;
-
-    // IAQ approximation: humidity-compensated logarithmic mapping of gas resistance
-    // Gas sensor resistance drops with humidity; compensate to a 40% RH reference baseline
-    // Map compensated gas resistance (Ohms) to IAQ 0-500 using log-linear interpolation
-    // Clean air reference ~400 kOhm, polluted reference ~5 kOhm
-    if (gasRaw > 0.0f && !isfinite(gasRaw)) {
-
-        static constexpr float LOG_UPPER = 12.899219f;                          // log(400k)
-        static constexpr float LOG_RANGE_INV = 1.0f / (12.899219f - 8.517193f); // 1 / (log(400k) - log(5k))
+    if (lastIaqValid) {
         measurement->variant.environment_metrics.has_iaq = true;
-        measurement->variant.environment_metrics.iaq = (uint16_t)(fminf(
-            fmaxf(((LOG_UPPER -
-                    logf(fmaxf(gasRaw * expf(0.035f * (measurement->variant.environment_metrics.relative_humidity - 40.0f)),
-                               1.0f))) *
-                   LOG_RANGE_INV) *
-                      500.0f,
-                  0.0f),
-            500.0f));
+        measurement->variant.environment_metrics.iaq = lastIaq;
     }
-#endif
     return true;
 }
 
-#if __has_include(<bsec2.h>)
 void BME680Sensor::loadState()
 {
 #ifdef FSCom
+    BME680IaqState state;
+    bool haveBlob = false;
+
     spiLock->lock();
-    auto file = FSCom.open(bsecConfigFileName, FILE_O_READ);
+    auto file = FSCom.open(stateFileName, FILE_O_READ);
     if (file) {
-        file.read((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
+        haveBlob = file.read((uint8_t *)&state, sizeof(state)) == sizeof(state);
         file.close();
-        bme680.setState(bsecState);
-        LOG_INFO("%s state read from %s", sensorName, bsecConfigFileName);
-    } else {
-        LOG_INFO("No %s state found (File: %s)", sensorName, bsecConfigFileName);
     }
+    // One-time cleanup of the proprietary-BSEC calibration blob from older firmware
+    if (FSCom.exists(legacyBsecStateFileName) && FSCom.remove(legacyBsecStateFileName))
+        LOG_INFO("%s removed legacy state file %s", sensorName, legacyBsecStateFileName);
     spiLock->unlock();
+
+    if (!haveBlob) {
+        LOG_INFO("No %s state found (File: %s)", sensorName, stateFileName);
+        return;
+    }
+    if (iaqEstimator.restore(state, getValidTime(RTCQuality::RTCQualityDevice))) {
+        lastPersistedSampleCount = iaqEstimator.samplesFed();
+        lastPersistedWarmup = iaqEstimator.warmupLeft();
+        lastSaveEpochSecs = state.savedAtSecs;
+        LOG_INFO("%s IAQ state restored from %s (%u samples)", sensorName, stateFileName, iaqEstimator.samplesFed());
+    } else {
+        LOG_INFO("%s IAQ state in %s rejected (stale or invalid), starting fresh", sensorName, stateFileName);
+    }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
 }
 
-void BME680Sensor::updateState()
+void BME680Sensor::maybeSaveState()
+{
+    if (!iaqEstimator.ready()) {
+        // Persist warm-up/burn-in progress whenever it advances, so a
+        // deep-sleeping SENSOR node (one sample per wake, RAM wiped between)
+        // still converges. Bounded to ~33 writes over the sensor's lifetime.
+        if (iaqEstimator.samplesFed() != lastPersistedSampleCount || iaqEstimator.warmupLeft() != lastPersistedWarmup)
+            saveState();
+        return;
+    }
+
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice);
+    if (nowSecs != 0 && lastSaveEpochSecs != 0) {
+        // RTC available: gate on wall-clock age so short deep-sleep wakes don't
+        // rewrite flash every time
+        if (nowSecs >= lastSaveEpochSecs && (nowSecs - lastSaveEpochSecs) < STATE_SAVE_PERIOD_SECS)
+            return;
+    } else {
+        // No RTC: gate on the persisted sample count (it survives reboots, so
+        // deep-sleeping RTC-less nodes still refresh their baseline every
+        // ~STATE_SAVE_PERIOD_MS worth of samples) with an uptime cadence as a
+        // secondary trigger for always-on nodes
+        if (iaqEstimator.samplesFed() - lastPersistedSampleCount < STATE_SAVE_PERIOD_MS / SAMPLE_INTERVAL_MS &&
+            !Throttle::hasElapsed(lastStateSaveMs, STATE_SAVE_PERIOD_MS))
+            return;
+    }
+    saveState();
+}
+
+void BME680Sensor::saveState()
 {
 #ifdef FSCom
-    spiLock->lock();
-    bool update = false;
-    if (stateUpdateCounter == 0) {
-        /* First state update when IAQ accuracy is >= 3 */
-        accuracy = bme680.getData(BSEC_OUTPUT_IAQ).accuracy;
-        if (accuracy >= 2) {
-            LOG_DEBUG("%s state update IAQ accuracy %u >= 2", sensorName, accuracy);
-            update = true;
-            stateUpdateCounter++;
-        } else {
-            LOG_DEBUG("%s not updated, IAQ accuracy is %u < 2", sensorName, accuracy);
-        }
+    BME680IaqState state;
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice);
+    iaqEstimator.serialize(&state, nowSecs);
+
+    // SafeFile takes the SPI lock itself; fullAtomic keeps the old state file
+    // in place until the verified replacement is renamed over it, so a power
+    // loss mid-save can't lose the banked burn-in progress (the blob is 24
+    // bytes, so the atomic path costs nothing)
+    auto file = SafeFile(stateFileName, true);
+    file.write((uint8_t *)&state, sizeof(state));
+    if (file.close()) {
+        lastPersistedSampleCount = iaqEstimator.samplesFed();
+        lastPersistedWarmup = iaqEstimator.warmupLeft();
+        lastSaveEpochSecs = nowSecs;
+        lastStateSaveMs = Time::getMillis();
+        LOG_DEBUG("%s state write to %s", sensorName, stateFileName);
     } else {
-        /* Update every STATE_SAVE_PERIOD minutes */
-        if ((stateUpdateCounter * STATE_SAVE_PERIOD) < millis()) {
-            LOG_DEBUG("%s state update every %d minutes", sensorName, STATE_SAVE_PERIOD / 60000);
-            update = true;
-            stateUpdateCounter++;
-        }
+        LOG_WARN("Can't write %s state (File: %s)", sensorName, stateFileName);
     }
-
-    if (update) {
-        bme680.getState(bsecState);
-        if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
-            LOG_WARN("Can't remove old state file");
-        }
-        auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
-        if (file) {
-            LOG_INFO("%s state write to %s", sensorName, bsecConfigFileName);
-            file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
-            file.flush();
-            file.close();
-        } else {
-            LOG_INFO("Can't write %s state (File: %s)", sensorName, bsecConfigFileName);
-        }
-    }
-    spiLock->unlock();
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
 }
-
-void BME680Sensor::checkStatus(const char *functionName)
-{
-    if (bme680.status < BSEC_OK)
-        LOG_ERROR("%s BSEC2 code: %d", functionName, bme680.status);
-    else if (bme680.status > BSEC_OK)
-        LOG_WARN("%s BSEC2 code: %d", functionName, bme680.status);
-
-    if (bme680.sensor.status < BME68X_OK)
-        LOG_ERROR("%s BME68X code: %d", functionName, bme680.sensor.status);
-    else if (bme680.sensor.status > BME68X_OK)
-        LOG_WARN("%s BME68X code: %d", functionName, bme680.sensor.status);
-}
-#endif
 
 #endif

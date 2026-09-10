@@ -1,0 +1,18 @@
+# CLEAN. Valid LR11xx config -- must report no findings AND must resolve to this
+# module in the effective configuration, so a silent fallback to sim cannot pass.
+Lora:
+  Module: lr1110
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, LOW, LOW]
+    MODE_TX: [HIGH, HIGH, LOW, LOW]
+    MODE_TX_HP: [LOW, HIGH, LOW, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW, LOW]
+    MODE_GNSS: [LOW, LOW, HIGH, LOW]
+    MODE_WIFI: [LOW, LOW, LOW, HIGH]

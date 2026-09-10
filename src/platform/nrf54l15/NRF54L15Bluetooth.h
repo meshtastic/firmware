@@ -1,4 +1,4 @@
-// NRF54L15Bluetooth.h — Zephyr BLE backend for nRF54L15
+// NRF54L15Bluetooth.h - Zephyr BLE backend for nRF54L15
 //
 // Implements the same interface as NRF52Bluetooth (same method names and
 // signatures) so main.cpp and AdminModule can use nrf52Bluetooth pointer

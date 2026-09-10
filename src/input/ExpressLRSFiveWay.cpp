@@ -1,5 +1,6 @@
 #include "ExpressLRSFiveWay.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
 
@@ -79,7 +80,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
     if (keyInProcess == NO_PRESS) {
         // New key down
         if (newKey != NO_PRESS) {
-            keyDownStart = millis();
+            keyDownStart = Time::getMillis();
             // DBGLN("down=%u", newKey);
         }
     } else {
@@ -114,11 +115,10 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
 // Meshtastic: runs at regular intervals
 int32_t ExpressLRSFiveWay::runOnce()
 {
-    uint32_t now = millis();
-
     // Dismiss any alert frames after 2 seconds
     // Feedback for GPS toggle / adhoc ping
-    if (alerting && now > alertingSinceMs + 2000) {
+    // `alerting` is the armed flag, so alertingSinceMs never reaches the comparison unarmed.
+    if (alerting && Throttle::hasElapsed(alertingSinceMs, 2000)) {
         alerting = false;
         screen->endAlert();
     }
@@ -131,8 +131,9 @@ int32_t ExpressLRSFiveWay::runOnce()
     // Do something about this key press
     determineAction((KeyType)keyValue, longPressed ? LONG : SHORT);
 
-    // If there has been recent key activity, poll the joystick slightly more frequently
-    if (now < keyDownStart + (20 * 1000UL)) // Within last 20 seconds
+    // If there has been recent key activity, poll the joystick slightly more frequently. keyDownStart
+    // is 0 until the first press of a boot, which is no activity rather than activity at time zero.
+    if (keyDownStart != 0 && Throttle::isWithinTimespanMs(keyDownStart, 20 * 1000UL)) // Within last 20 seconds
         return 100;
 
     // Otherwise, poll slightly less often
@@ -203,7 +204,7 @@ void ExpressLRSFiveWay::toggleGPS()
         gps->toggleGpsMode();
         screen->startAlert("GPS Toggled");
         alerting = true;
-        alertingSinceMs = millis();
+        alertingSinceMs = Time::getMillis();
     }
 #endif
 }
@@ -226,7 +227,7 @@ void ExpressLRSFiveWay::sendAdhocPing()
     });
 
     alerting = true;
-    alertingSinceMs = millis();
+    alertingSinceMs = Time::getMillis();
 }
 
 // Shutdown the node (enter deep-sleep)
