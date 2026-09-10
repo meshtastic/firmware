@@ -163,6 +163,11 @@ void MeshService::reloadConfig(int saveWhat)
         nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
         configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+
+        // The single funnel for every path that can move the radio. saveWhat never carries the node
+        // database here, so add it - a LoRa config change reboots, and an unpersisted clear is lost.
+        if (nodeDB->clearHeardOnCurrentLoraIfSlotChanged())
+            saveWhat |= SEGMENT_NODEDATABASE;
     }
     nodeDB->saveToDisk(saveWhat);
 }

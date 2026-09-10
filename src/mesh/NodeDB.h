@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
+#include <cstring>
 #include <map>
 #include <pb_encode.h>
 #include <string>
@@ -273,6 +274,34 @@ struct NodeHeardAt {
     uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard
 };
 
+/// What decides which LoRa slot this radio listens on; a difference means the whole node DB may now
+/// be out of reach. RAM-only, re-seeded from the running config at boot, so it needs no schema.
+struct LoraSlotSnapshot {
+    meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    bool use_preset = false;
+    /// Only the modem fields actually in force are populated - see loraSlotSnapshotFrom().
+    meshtastic_Config_LoRaConfig_ModemPreset modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    uint16_t bandwidth = 0;
+    uint32_t spread_factor = 0;
+    uint8_t coding_rate = 0;
+    float override_frequency = 0;
+    uint16_t channel_num = 0;
+    /// Channels::getName(); 16 covers name[12] and the preset name it substitutes for an empty one.
+    char primary_channel_name[16] = {0};
+
+    bool operator==(const LoraSlotSnapshot &o) const
+    {
+        return region == o.region && use_preset == o.use_preset && modem_preset == o.modem_preset && bandwidth == o.bandwidth &&
+               spread_factor == o.spread_factor && coding_rate == o.coding_rate && override_frequency == o.override_frequency &&
+               channel_num == o.channel_num &&
+               strncmp(primary_channel_name, o.primary_channel_name, sizeof(primary_channel_name)) == 0;
+    }
+    bool operator!=(const LoraSlotSnapshot &o) const { return !(*this == o); }
+};
+
+/// Normalises to the modem fields actually in force, so editing a dormant one is not a slot change.
+LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName);
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
@@ -330,6 +359,13 @@ class NodeDB
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const meshtastic_MeshPacket &p);
+
+    /// Adopt the running config as the slot the heard bits refer to, without touching any node.
+    void seedLoraSlotSnapshot() { lastLoraSlot = currentLoraSlot(); }
+
+    /// Clear NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA_MASK on every node if the slot moved, else no-op.
+    /// @return true iff bits were cleared, in which case the caller must persist SEGMENT_NODEDATABASE.
+    bool clearHeardOnCurrentLoraIfSlotChanged();
 
     void addFromContact(const meshtastic_SharedContact);
 
@@ -700,6 +736,10 @@ class NodeDB
     EvictionRecency evictionRecency(const meshtastic_NodeInfoLite *n) const;
     static bool evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent);
 
+    /// The LoRa slot the heard-on-current-LoRa bits currently refer to; see seedLoraSlotSnapshot().
+    LoraSlotSnapshot lastLoraSlot;
+    LoraSlotSnapshot currentLoraSlot() const;
+
     /*
      * Internal boolean to track sorting paused
      */
@@ -821,7 +861,11 @@ extern uint32_t error_address;
 // Use this instead of `if (snr_q4)`. Legacy records (bit clear) are unambiguously "unknown".
 #define NODEINFO_BITFIELD_HAS_SNR_SHIFT 10
 #define NODEINFO_BITFIELD_HAS_SNR_MASK (1u << NODEINFO_BITFIELD_HAS_SNR_SHIFT)
-// Bits 11..31 reserved for future single-bit flags.
+// Set on a genuine RF hear, cleared for every node when the LoRa slot config changes. Clear means
+// "not heard since the settings changed", not "offline". Wire mirror: NodeInfo.heard_on_current_lora.
+#define NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA_SHIFT 11
+#define NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA_MASK (1u << NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA_SHIFT)
+// Bits 12..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
@@ -869,6 +913,11 @@ inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteHasSnr(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK);
+}
+
+inline bool nodeInfoLiteHeardOnCurrentLora(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA_MASK);
 }
 /// A node that the eviction/migration paths must not drop: a favourite, an
 /// ignored (blocked) node, or a manually-verified key.

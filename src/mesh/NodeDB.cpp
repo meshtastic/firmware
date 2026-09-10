@@ -717,6 +717,8 @@ NodeDB::NodeDB()
     }
 #endif
     sortMeshDB();
+    // resetRadioConfig() above loaded config and channels, so this records the slot we booted on.
+    seedLoraSlotSnapshot();
     saveToDisk(saveWhat);
     bootInitializationInProgress = false;
 }
@@ -823,6 +825,46 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 
     // Update the global myRegion
     initRegion();
+}
+
+LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName)
+{
+    LoraSlotSnapshot snap;
+    snap.region = lora.region;
+    snap.use_preset = lora.use_preset;
+    // Record only the modem fields the radio is actually using. The unused half of the pair keeps
+    // whatever the client last wrote into it, and editing a dormant field moves nothing on air.
+    if (lora.use_preset) {
+        snap.modem_preset = lora.modem_preset;
+    } else {
+        snap.bandwidth = lora.bandwidth;
+        snap.spread_factor = lora.spread_factor;
+        snap.coding_rate = lora.coding_rate;
+    }
+    snap.override_frequency = lora.override_frequency;
+    snap.channel_num = lora.channel_num;
+    strncpy(snap.primary_channel_name, primaryChannelName, sizeof(snap.primary_channel_name) - 1);
+    return snap;
+}
+
+LoraSlotSnapshot NodeDB::currentLoraSlot() const
+{
+    return loraSlotSnapshotFrom(config.lora, channels.getName(channels.getPrimaryIndex()));
+}
+
+bool NodeDB::clearHeardOnCurrentLoraIfSlotChanged()
+{
+    const LoraSlotSnapshot now = currentLoraSlot();
+    if (now == lastLoraSlot)
+        return false;
+
+    LOG_INFO("LoRa slot config changed, mark all %u nodes unheard on the new config", (unsigned)numMeshNodes);
+    lastLoraSlot = now;
+    for (pb_size_t i = 0; i < numMeshNodes; i++)
+        nodeInfoLiteSetBit(&meshNodes->at(i), NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA_MASK, false);
+    // The warm tier needs no pass: entries there are re-admitted with the bit clear, which is the
+    // correct answer for a node we have not heard since the change either way.
+    return true;
 }
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
@@ -2962,6 +3004,9 @@ bool NodeDB::reloadFromDisk()
         channels.onConfigChanged();
         rIface->reconfigure();
     }
+    // The unlock replaced the locked-default config with the operator's, so the boot snapshot
+    // describes a slot we were never on. Re-seed rather than let the next save read as a change.
+    seedLoraSlotSnapshot();
     return true;
 }
 
@@ -3809,6 +3854,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
+
+        // RF-origin only, same gate as the hop histogram below: a via_mqtt rebroadcast proves the
+        // gateway is in earshot, not the node. Not has_rx_rssi-gated - the portduino SimRadio omits it.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt)
+            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA_MASK, true);
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
@@ -4691,6 +4741,11 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             }
             if (restoreWhat & SEGMENT_CHANNELS)
                 channels.onConfigChanged();
+
+            // Restore reboots without going through MeshService::reloadConfig(), so the slot check
+            // that hangs off that funnel never runs here.
+            if (clearHeardOnCurrentLoraIfSlotChanged())
+                restoreWhat |= SEGMENT_NODEDATABASE;
 
             success = saveToDisk(restoreWhat);
             if (success) {
