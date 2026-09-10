@@ -618,9 +618,12 @@ static void test_bootHeal_unownedSatellitesDropped(void)
     meshtastic_NodeDatabase reloaded{};
     decodeNodesFile(reloaded);
     size_t persisted = 0;
-    for (const auto &e : reloaded.positions)
-        if (e.has_position && e.num >= ownedBase)
-            persisted++;
+    for (const auto &e : reloaded.positions) {
+        if (!e.has_position)
+            continue;
+        TEST_ASSERT_TRUE_MESSAGE(e.num >= ownedBase && e.num < ownedBase + owned, "healed store must contain only owned entries");
+        persisted++;
+    }
     TEST_ASSERT_EQUAL_UINT_MESSAGE((unsigned)owned, (unsigned)persisted, "boot must rewrite the store without the orphans");
 }
 #endif // !MESHTASTIC_EXCLUDE_POSITIONDB
