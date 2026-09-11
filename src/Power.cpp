@@ -782,7 +782,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
                     sum += _ads.computeVolts(raw);
                 }
                 // Piggyback a toggle-engine watchdog on this same throttle interval.
-                // Only re-arm when VBUS is absent — calling this while attached
+                // Only re-arm when VBUS is absent - calling this while attached
                 // would restart CC toggling and could glitch an active sink attach.
                 if (_aw35615.isReady() && !_aw35615.isVbusPresent()) {
                     _aw35615.rearmToggle();
@@ -810,7 +810,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
             bool vbus = _aw35615.isVbusPresent();
             if (!vbus) {
-                // VBUS just went away (or has been away) — make sure the CC
+                // VBUS just went away (or has been away) - make sure the CC
                 // toggle engine is re-armed so the next attach gets detected.
                 _aw35615.rearmToggle();
             }
@@ -828,7 +828,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
             // Charging == VBUS present AND we're attached as a sink.
-            // (isSinkAttached() is a latched result — safe to trust here since
+            // (isSinkAttached() is a latched result - safe to trust here since
             // isVbusIn() above keeps re-arming toggle on every detach.)
             return _aw35615.isVbusPresent() && _aw35615.isSinkAttached();
         }
@@ -1095,6 +1095,20 @@ void Power::shutdown()
 #endif
 }
 
+// Consecutive readings only: a battery-less board's floating divider drifts in and out of the
+// "battery present" window, and a count that survived the gaps would deep-sleep a USB-powered node.
+bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv)
+{
+    if (!hasBattery || hasUsb || battMv >= cutoffMv) {
+        counter = 0;
+        return false;
+    }
+
+    if (counter < UINT8_MAX)
+        counter++;
+    return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
+}
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -1227,16 +1241,16 @@ void Power::readPowerStatus()
     // is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
     //
 
-    if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
-            low_voltage_counter++;
-            LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
-            if (low_voltage_counter > 10) {
-                LOG_INFO("Low voltage detected, trigger deep sleep");
-                powerFSM.trigger(EVENT_LOW_BATTERY);
-            }
-        } else {
-            low_voltage_counter = 0;
+    if (batteryLevel) {
+        // getBattVoltage() reports pack voltage; the OCV table is per cell.
+        const bool shutdownNow =
+            updateLowVoltageCounter(low_voltage_counter, powerStatus2.getHasBattery(), powerStatus2.getHasUSB(),
+                                    batteryLevel->getBattVoltage(), OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+        if (low_voltage_counter)
+            LOG_DEBUG("Low voltage counter: %d/%d", low_voltage_counter, LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN);
+        if (shutdownNow) {
+            LOG_INFO("Low voltage detected, trigger deep sleep");
+            powerFSM.trigger(EVENT_LOW_BATTERY);
         }
     }
 }
