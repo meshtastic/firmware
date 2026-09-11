@@ -14,6 +14,9 @@
 
 #if HAS_ETHERNET && defined(ARCH_ESP32)
 #include <ETH.h>
+#if HAS_ETHERNET && defined(ETH_SHARED_SPI)
+#include "platform/esp32/SharedBusEthernet.h"
+#endif
 #endif // HAS_ETHERNET
 
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
