@@ -142,6 +142,71 @@ run_case "non-sentinel deadline" "" 'void f() {
     const uint32_t deadline = millis() + BODY_TIMEOUT_MS;
 }'
 
+# --- opt-out comments --------------------------------------------------------
+
+run_case "opt-out on the same line" "" 'void f() {
+    lastSort = millis(); // unset-sentinel-ok: sortingIsPaused gates it, 0 is legal
+}'
+
+run_case "opt-out on the line above" "" 'void f() {
+    // unset-sentinel-ok: busyTx carries the armed state
+    tx_after = millis() + d;
+}'
+
+run_case "opt-out above, separated by more comment lines" "" 'void f() {
+    // unset-sentinel-ok: a separate flag carries the armed state
+    // and here is some more explanation spilling onto another line
+    // and another
+    tx_after = millis() + d;
+}'
+
+run_case "opt-out in a block comment" "" 'void f() {
+    /* unset-sentinel-ok: a separate flag carries the armed state */
+    tx_after = millis() + d;
+}'
+
+run_case "opt-out in a multi-line block comment" "" 'void f() {
+    /*
+     * unset-sentinel-ok: a separate flag carries the armed state
+     */
+    tx_after = millis() + d;
+}'
+
+# A bare marker is reported rather than honoured, so nothing can be muted silently.
+run_case "bare opt-out with no reason" "2" 'void f() {
+    rebootAtMsec = millis() + 5000; // unset-sentinel-ok
+}'
+
+run_case "bare opt-out with a colon but nothing after it" "2" 'void f() {
+    rebootAtMsec = millis() + 5000; // unset-sentinel-ok:
+}'
+
+# Must not be mutable from data. A marker inside a string literal is not a comment.
+run_case "marker inside a string literal does not mute" "3" 'void f() {
+    LOG_DEBUG("unset-sentinel-ok: pretend this counts");
+    rebootAtMsec = millis() + 5000;
+}'
+
+run_case "marker in a trailing string on the same line does not mute" "2" 'void f() {
+    rebootAtMsec = millis() + 5000; LOG_DEBUG("unset-sentinel-ok: nope");
+}'
+
+# The opt-out is consumed by the statement it was written for and must not leak onward.
+run_case "opt-out does not leak to the next write" "3" 'void f() {
+    lastSort = millis(); // unset-sentinel-ok: legal here
+    rebootAtMsec = millis() + 5000;
+}'
+
+run_case "opt-out attached to an unrelated statement does not leak" "3" 'void f() {
+    int x = 1; // unset-sentinel-ok: nothing to do with the line below
+    rebootAtMsec = millis() + 5000;
+}'
+
+run_case "opt-out covers both writes on its own line only" "3" 'void f() {
+    tx_after = millis() + 1; lastSort = millis(); // unset-sentinel-ok: both legal
+    rebootAtMsec = millis() + 5000;
+}'
+
 # --- scope -------------------------------------------------------------------
 
 # test/ builds raw wrap values on purpose, so the rule must not reach into it.

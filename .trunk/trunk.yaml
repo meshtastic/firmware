@@ -97,8 +97,10 @@ lint:
     # a pending reboot, shutdown, DFU jump or banner expiry is silently dropped. The fix is
     # Time::timerEndsAtMillis() / Time::skipZero() from src/UptimeClock.h. Unlike its neighbours
     # this one is blocking: nothing catches it at run time, because the window is one tick in seven
-    # weeks. The field list lives in bin/lint-unset-sentinel-millis.sh; read the header there before
-    # adding to it, and re-run bin/test-lint-unset-sentinel-millis.sh after any change to the rule.
+    # weeks. A site where 0 really is legal opts out with an `unset-sentinel-ok: <reason>` comment on
+    # the write or the line above it; the reason is mandatory, so nothing can be muted silently. The
+    # field list lives in bin/lint-unset-sentinel-millis.sh; read the header there before adding to
+    # it, and re-run bin/test-lint-unset-sentinel-millis.sh after any change to the rule.
     - name: unset-sentinel-millis
       files: [cpp-sources]
       commands:

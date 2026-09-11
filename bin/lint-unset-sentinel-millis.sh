@@ -18,24 +18,37 @@
 # 0 for anything to misread, and src/ has nine such sites that are all correct. The 0 contract is
 # also declared in one file and enforced in six others - rebootAtMsec is written in AdminModule.cpp
 # and tested in Power.cpp, PowerFSM.cpp, main.cpp, Screen.cpp and portduino/USBHal.h - so no
-# single-file scan can infer it. The list below is therefore explicit, and each entry was verified
-# to actually test against 0 before being added - either `if (field)` / `field != 0` ahead of the
-# deadline check, or an explicit `field = 0` disarm.
+# single-file scan can infer it. The list below is therefore explicit.
 #
-# Deliberately absent, because their unset state is a separate flag rather than the timestamp:
-# nagCycleCutoff (isNagging), LinuxJoystick's nextRepeatX/nextRepeatY (heldX/heldY), lastTxStart
-# (busyTx), last_format_ms (formatted_this_boot), lastHeartbeat (heartbeat), lastAveraged (gotwind),
-# lastSampleMs (haveSample) and lastIaqMs (lastIaqValid). Those may hold 0 safely, and flagging them
-# would push someone to "fix" working code. Also absent: locals such as NodeInfoModule's lastNodeInfo,
-# which is derived per call from TransmitHistory rather than stored.
+# Two kinds of field are on it:
 #
-# Adding a field: append it to SENTINELS, but only after checking the field really is read as
-# 0-means-unset. A name on this list that does not have the contract is a false positive forever.
+#   * Fields whose 0 IS the unset state. These must be armed through the helpers.
+#   * Fields whose unset state is a separate flag, so 0 is a value they may legally hold. These are
+#     listed so that the rule notices them, and each arm site carries an opt-out comment naming the
+#     flag that actually carries the armed state. Listing-plus-opt-out beats silent omission: if
+#     someone later rewrites `if (isNagging && deadlinePassed(nagCycleCutoff))` into
+#     `if (nagCycleCutoff && ...)`, the field has quietly acquired the contract, and the opt-out
+#     comment is sitting right there at the write to be reconsidered.
+#
+# OPTING OUT. Put `unset-sentinel-ok: <reason>` in a comment, either on the line of the write or on
+# a comment line above it:
+#
+#   // unset-sentinel-ok: busyTx carries the armed state, so 0 is a legal timestamp here
+#   lastTxStart = Time::getMillis();
+#
+# The reason is mandatory - a bare `unset-sentinel-ok` with nothing after the colon is reported
+# rather than honoured, so a site cannot be muted without saying why. trunk-ignore works too, but
+# prefer this: it states the justification at the write, and it also applies when the script is run
+# directly rather than through trunk.
+#
+# Adding a field: append it to SENTINELS. If its 0 is the unset state, fix the arm sites; if a
+# separate flag carries the armed state, add an opt-out comment at each write. Verify which of the
+# two it is by reading every site that READS the field - one missed read is what makes this wrong.
 #
 # Emitted at "error" rather than the "note" its neighbours use, because nothing catches this at run
 # time: the window is one tick in seven weeks, so a test run, a soak and a bench session all pass.
-# The tree has zero violations today, so blocking costs nothing and is the only thing that actually
-# prevents the next one.
+# The tree has zero unexplained violations, so blocking costs nothing and is the only thing that
+# actually prevents the next one.
 #
 # Not handled: a write through an alias (`uint32_t &d = rebootAtMsec; d = millis() + 5;`) or through
 # a pointer, and a sentinel armed by a helper that takes it by reference. None occur, and tracking
@@ -51,7 +64,7 @@
 
 set -uo pipefail
 
-# Fields whose 0 means "unarmed". See the note above before editing.
+# Millisecond fields this rule watches. See the notes above before editing.
 SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort'
 
 for target in "$@"; do
@@ -72,19 +85,25 @@ for target in "$@"; do
 	# bin/lint-unity-exit.sh: a /* inside a string literal flips comment state and hides real code,
 	# and an assignment quoted inside a log string reads as one. Literals collapse to a space so two
 	# tokens cannot be glued together.
+	#
+	# Also sets CMT to this line s comment text, which is where an opt-out has to live. Collecting
+	# it here rather than re-scanning the raw line is what stops `LOG_DEBUG("unset-sentinel-ok: x")`
+	# from muting anything: a string literal is not a comment.
 	function strip_noncode(s,   out, i, n, c, two, q) {
 		n = length(s); i = 1; out = ""
 		delete colmap
+		CMT = ""
 		while (i <= n) {
 			if (in_block) {
-				if (substr(s, i, 2) == "*/") { in_block = 0; i += 2 } else { i++ }
+				if (substr(s, i, 2) == "*/") { in_block = 0; i += 2 }
+				else { CMT = CMT substr(s, i, 1); i++ }
 				continue
 			}
 			two = substr(s, i, 2)
-			if (two == "//") return out	# rest of the line is a comment
+			if (two == "//") { CMT = CMT " " substr(s, i + 2); return out }
 			if (two == "/*") { in_block = 1; i += 2; continue }
 			c = substr(s, i, 1)
-			if (c == "\"" || c == "'"'"'") {
+			if (c == "\"" || c == "'"'"'") {	# skip a whole literal, honouring backslash escapes
 				q = c
 				out = out " "; colmap[length(out)] = i
 				i++
@@ -100,6 +119,11 @@ for target in "$@"; do
 		}
 		return out
 	}
+
+	# An opt-out only counts with something after the colon. A bare marker is reported instead of
+	# honoured, so "shut this up" is not available without writing down why.
+	function has_reasoned_ok(t) { return (t ~ /unset-sentinel-ok:[ \t]*[^ \t]/) }
+	function has_bare_ok(t)     { return (t ~ /unset-sentinel-ok/) && !has_reasoned_ok(t) }
 
 	# Is the character before position `at` part of an identifier? Used to require a token boundary,
 	# so myRebootAtMsec is not mistaken for rebootAtMsec. A `.`, `->` or `::` qualifier is a
@@ -125,6 +149,12 @@ for target in "$@"; do
 
 	{
 		code = strip_noncode($0)
+
+		# An opt-out is sticky until the next statement that actually contains code is judged. That
+		# is what lets it sit on its own line above the write, however many comment lines intervene,
+		# without leaking past the statement it was written for.
+		if (has_reasoned_ok(CMT)) pending_ok = 1
+		if (has_bare_ok(CMT))     pending_bare = 1
 
 		if (stmt == "") { start = NR; nhits = 0 }
 		base = length(stmt) + 1	# the leading space added below shifts everything by one
@@ -162,12 +192,22 @@ for target in "$@"; do
 				# variable inherits whatever that one did, and anything already routed through
 				# the helpers is the fix rather than the defect. Matching `millis` loosely
 				# covers millis(), Time::getMillis() and any wrapper ending in millis.
-				if (rhs ~ /[Mm]illis[ \t]*\(/ &&
-				    rhs !~ /skipZero/ && rhs !~ /timerEndsAtMillis/)
+				if (rhs !~ /[Mm]illis[ \t]*\(/ || rhs ~ /skipZero/ || rhs ~ /timerEndsAtMillis/)
+					continue
+				if (pending_ok)
+					continue	# opted out, with a reason, at the write
+				if (pending_bare)
+					printf "%s:%d:%d:%s:%s:%s\n", path, hit_line[k], hit_col[k], "error",
+					       "unset-sentinel-ok needs a reason after the colon saying why 0 is legal for " hit_name[k] " (see bin/lint-unset-sentinel-millis.sh)",
+					       "unset-sentinel-millis"
+				else
 					printf "%s:%d:%d:%s:%s:%s\n", path, hit_line[k], hit_col[k], "error",
 					       hit_name[k] " is 0-means-unset - arm it with Time::timerEndsAtMillis(delay), or Time::skipZero(Time::getMillis()) for a stamp (see src/UptimeClock.h)",
 					       "unset-sentinel-millis"
 			}
+			# Comment-only lines carry an opt-out toward the write below them, so they must not
+			# clear it; a statement with real code in it consumes it.
+			if (stmt ~ /[^ \t]/) { pending_ok = 0; pending_bare = 0 }
 			stmt = ""
 			nhits = 0
 		}
