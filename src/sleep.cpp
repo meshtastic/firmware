@@ -317,7 +317,9 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #else
         pinMode(BUTTON_PIN, INPUT);
 #endif
-        gpio_hold_en((gpio_num_t)BUTTON_PIN);
+        // A held pad ignores ext1_wakeup_prepare()'s re-route to RTC, so never hold the pin we wake on.
+        if (config.device.button_gpio && config.device.button_gpio != BUTTON_PIN)
+            gpio_hold_en((gpio_num_t)BUTTON_PIN);
     }
 #endif
 #ifdef SENSECAP_INDICATOR
