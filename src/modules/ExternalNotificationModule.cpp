@@ -88,12 +88,13 @@ int32_t ExternalNotificationModule::runOnce()
 #if defined(HAS_I2S_SPEAKER_NRF52)
         isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
-        // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
-        // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
+        // isNagging is the armed flag, and nagCycleCutoff is only a deadline while it is set, so
+        // short-circuit before the comparison rather than giving the timestamp a magic value of its
+        // own. armNagCycle() computes `millis() + durationMs`, which can land on any value at all
+        // including UINT32_MAX, so no value is available to reserve as "unarmed".
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
         if (nagWindowExpired && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
-            nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
             isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
@@ -309,9 +310,10 @@ void ExternalNotificationModule::stopNow()
 #endif
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
+    // Clearing isNagging is what disarms the cycle; nagCycleCutoff is left as it is because no read
+    // consults it without checking isNagging first.
     isNagging = false;
     buzzerShouldAlert = false;
-    nagCycleCutoff = UINT32_MAX;
 
 #ifdef HAS_I2S
     // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
@@ -624,7 +626,16 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 {
-    if (nagCycleCutoff != UINT32_MAX) {
+    // isNagging is the armed flag, the same one every other read here uses. This used to test
+    // `nagCycleCutoff != UINT32_MAX` instead, which made the timestamp its own second armed flag -
+    // true at boot, because the field started at 1, so the first input event of every boot was
+    // answered with stopNow() and a non-zero return. A non-zero return aborts the rest of the
+    // observer chain (Observable::notifyObservers in src/Observer.h returns on the first one), so
+    // that event was swallowed from every later observer.
+    //
+    // Note InputBroker::handleInputEvent already stops a nag on input, before it notifies observers
+    // at all, so in practice this is belt and braces rather than the path that silences a device.
+    if (isNagging) {
         stopNow();
         return 1;
     }

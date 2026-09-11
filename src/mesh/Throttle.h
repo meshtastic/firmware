@@ -32,7 +32,7 @@ class Throttle
     /// Deadline::in(ms) / .armed() / .passed() / .disarm(). A hand-built `now + interval` could then
     /// no longer land on the sentinel by accident, and "armed" would stay a question separate from
     /// "passed" - the split that has to survive, because which way "inactive" falls is the caller's
-    /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the four
+    /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the three
     /// meanings they give the sentinel today:
     ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec, GPS.cpp fixHoldEnds, AdminModule.cpp
     ///                 enterDfuAtMsec and the other timerEndsAtMillis()/skipZero() arm sites dodge
@@ -41,8 +41,11 @@ class Throttle
     ///                 guard, so this third state wants naming rather than repeating.
     ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up. A computed renewal now dodges 0,
     ///                 so only a deliberate write still means "due now".
-    ///   UINT32_MAX  - ExternalNotificationModule.cpp nagCycleCutoff, whose armed() also lives in a
-    ///                 second variable (isNagging) and whose arm site can land on the sentinel.
+    /// ExternalNotificationModule.cpp nagCycleCutoff used to be a fourth case, reserving UINT32_MAX
+    /// for "unarmed" while ALSO keeping an isNagging flag. It no longer reserves any value: isNagging
+    /// is the only armed flag and the deadline is read only while it is set. That is the shape this
+    /// TODO is aiming at, minus the type - a deadline whose arm site is `millis() + interval` cannot
+    /// safely reserve any value, because the sum can land on all of them.
     static bool deadlinePassed(uint32_t deadlineMs);
 
     /// deadlinePassed() against a caller-supplied "now", for a loop that snapshots the time once and
