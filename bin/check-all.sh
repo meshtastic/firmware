@@ -50,7 +50,8 @@ trap 'rm -f "$LOG"' EXIT
 
 # Keep streaming to the console so the CI log reads exactly as it did before; tee a copy for the
 # post-mortem classification below.
-pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt --inline-suppr" "${CHECK[@]}" --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high 2>&1 | tee "$LOG"
+# define PROGMEM to avoid cppcheck reporting unknownMacro (--skip-packages excludes Arduino.h)
+pio check --flags "-DAPP_VERSION=${APP_VERSION} -DPROGMEM= --suppressions-list=suppressions.txt --inline-suppr" "${CHECK[@]}" --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high 2>&1 | tee "$LOG"
 STATUS=${PIPESTATUS[0]}
 
 if [[ $STATUS -eq 0 ]]; then
