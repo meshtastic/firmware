@@ -29,17 +29,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#if __has_include("SensorRtcHelper.hpp")
-#include "SensorRtcHelper.hpp"
-// SensorLib defines isBitSet as a macro; undefine it here to avoid conflicts
-// with the SparkFun MMC5983MA library, which has a class method of the same name.
-#ifdef isBitSet
-#undef isBitSet
-#endif
+#if __has_include(<PCF8xRTC.h>)
+#include <PCF8xRTC.h>
 #endif
 
 /* Offer chance for variant-specific defines */
 #include "variant.h"
+
+// Both PCF parts answer at the same address and differ only in register layout, so a variant
+// picks one by defining PCF8563_RTC or PCF85063_RTC to it.
+#if defined(PCF8563_RTC)
+#define PCF_RTC_ADDRESS PCF8563_RTC
+#define PCF_RTC_CHIP PCF8xRTC::PCF8563
+#elif defined(PCF85063_RTC)
+#define PCF_RTC_ADDRESS PCF85063_RTC
+#define PCF_RTC_CHIP PCF8xRTC::PCF85063
+#endif
 
 // -----------------------------------------------------------------------------
 // Display feature overrides
@@ -635,6 +640,33 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef MESHTASTIC_EXCLUDE_SCREEN
 #undef HAS_SCREEN
 #define HAS_SCREEN 0
+#endif
+
+// -----------------------------------------------------------------------------
+// Motion sensor wake
+// -----------------------------------------------------------------------------
+
+/* The motion driver that owns this pin attaches the ISR. sleep.cpp reuses it as a
+   light-sleep wake source and PowerFSM attributes the resulting GPIO wake to motion.
+   Must stay below the exclusion cascade: MESHTASTIC_MINIMIZE_BUILD derives
+   MESHTASTIC_EXCLUDE_I2C above, and no motion driver is built when it is set. */
+#if !MESHTASTIC_EXCLUDE_I2C
+#if defined(BMA4XX_INT) && defined(HAS_BMA423)
+#define MOTION_WAKE_INT_PIN BMA4XX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(BHI260AP_INT) && defined(HAS_BHI260AP)
+#define MOTION_WAKE_INT_PIN BHI260AP_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(STK8XXX_INT) && defined(HAS_STK8XXX)
+#define MOTION_WAKE_INT_PIN STK8XXX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(ICM_20948_INT_PIN) && defined(HAS_ICM20948)
+#define MOTION_WAKE_INT_PIN ICM_20948_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#elif defined(QMA_6100P_INT_PIN) && defined(HAS_QMA6100P)
+#define MOTION_WAKE_INT_PIN QMA_6100P_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#endif
 #endif
 
 #ifndef USE_ETHERNET_DEFAULT
