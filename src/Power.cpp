@@ -784,7 +784,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
                     sum += _ads.computeVolts(raw);
                 }
                 // Piggyback a toggle-engine watchdog on this same throttle interval.
-                // Only re-arm when VBUS is absent — calling this while attached
+                // Only re-arm when VBUS is absent - calling this while attached
                 // would restart CC toggling and could glitch an active sink attach.
                 if (_aw35615.isReady() && !_aw35615.isVbusPresent()) {
                     _aw35615.rearmToggle();
@@ -812,7 +812,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
             bool vbus = _aw35615.isVbusPresent();
             if (!vbus) {
-                // VBUS just went away (or has been away) — make sure the CC
+                // VBUS just went away (or has been away) - make sure the CC
                 // toggle engine is re-armed so the next attach gets detected.
                 _aw35615.rearmToggle();
             }
@@ -830,7 +830,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
             // Charging == VBUS present AND we're attached as a sink.
-            // (isSinkAttached() is a latched result — safe to trust here since
+            // (isSinkAttached() is a latched result - safe to trust here since
             // isVbusIn() above keeps re-arming toggle on every detach.)
             return _aw35615.isVbusPresent() && _aw35615.isSinkAttached();
         }

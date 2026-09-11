@@ -67,7 +67,7 @@ void test_a_healthy_reading_clears_the_run(void)
 // #11796: the battery-less board. Its floating divider reads "no battery" as often as it reads a
 // phantom one, and it is never on a detectable USB rail, so the gaps are the only thing that can
 // save it. Interleaving them must hold the counter at zero however long this runs.
-void test_a_no_battery_reading_clears_the_run(void)
+void test_no_battery_reading_clears_the_run(void)
 {
     uint8_t counter = 0;
 
@@ -135,7 +135,7 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_an_unbroken_run_of_low_readings_shuts_down);
     RUN_TEST(test_a_healthy_reading_clears_the_run);
-    RUN_TEST(test_a_no_battery_reading_clears_the_run);
+    RUN_TEST(test_no_battery_reading_clears_the_run);
     RUN_TEST(test_usb_power_clears_the_run);
     RUN_TEST(test_the_cutoff_is_exclusive);
     RUN_TEST(test_the_cutoff_is_a_pack_voltage);
