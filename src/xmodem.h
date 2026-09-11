@@ -49,7 +49,7 @@ class XModemAdapter
     XModemAdapter();
 
     void handlePacket(meshtastic_XModem xmodemPacket);
-    meshtastic_XModem getForPhone();
+    const meshtastic_XModem &getForPhone() const;
     void resetForPhone();
 
     // True while a file transfer is in flight; lets callers avoid racing our `file` handle.

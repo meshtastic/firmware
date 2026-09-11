@@ -417,22 +417,6 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const auto stampPacket = [&](meshtastic_MeshPacket *p) {
         p->to = NODENUM_BROADCAST;
         p->from = nodeDB->getNodeNum();
-        // broadcast_send_as_node: commented out pending further review.
-        // Spoof notes preserved for when this is re-enabled:
-        //   broadcast_send_as_node overrides the source NodeNum. NOTE: this is a *node-ID* spoof
-        //   only - it rewrites the 'from' field but does NOT forge any signature. Once 'from' is
-        //   not us, the packet is no longer isFromUs(), so Router::perhapsEncode() skips XEdDSA
-        //   signing and receivers get an unsigned packet attributed to another node.
-        //   When broadcast_send_as_node == 0 the beacon is genuinely from us and Router::perhapsEncode()
-        //   signs it under the same XEdDSA broadcast policy as normal channel messages.
-        //   When broadcast_send_as_node rewrites p->from, perhapsEncode() sees isFromUs()=false and
-        //   skips setting has_bitfield - must be set explicitly so receivers can classify hop_start
-        //   correctly and so ok_to_mqtt is honoured on the spoofed packet.
-        // if (bcfg.broadcast_send_as_node != 0) {
-        //     p->from = bcfg.broadcast_send_as_node;
-        //     p->decoded.has_bitfield = true;
-        //     p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
-        // }
         p->hop_limit = 0; // all beacon packets are zero hopped to limit spamming.
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         p->want_ack = false;
@@ -476,10 +460,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
     // ── Per-target loop ──────────────────────────────────────────────────────
     //
-    // If broadcast_targets is populated, iterate over those. Otherwise use the single-target
-    // broadcast_on_preset / broadcast_on_region / broadcast_on_channel fields. The two paths are
-    // equal options; they differ only in how the TX channel is named (single-target embeds a
-    // ChannelSettings inline; a target references a channel-table slot by channel_index).
+    // Every destination comes from broadcast_targets. An entry names its TX channel by
+    // channel_index, a slot in the device's channel table, so the channel must already be
+    // configured on the node - its key is needed to encrypt.
     struct EffTarget {
         meshtastic_Config_LoRaConfig_ModemPreset preset;
         uint16_t slot;
@@ -488,8 +471,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
         meshtastic_ChannelSettings channel;
     };
 
-    const bool useTargetList = bcfg.broadcast_targets_count > 0;
-    const int targetCount = useTargetList ? (int)bcfg.broadcast_targets_count : 1;
+    // An empty list still beacons once, on the node's running preset and region over the primary
+    // channel. Each entry below overrides only what it sets.
+    const int targetCount = bcfg.broadcast_targets_count > 0 ? (int)bcfg.broadcast_targets_count : 1;
 
     // Dedup state: the beacon payload is identical across targets, so two targets that resolve to
     // the same effective radio config (preset + resolved region + channel) would just re-broadcast
@@ -510,17 +494,19 @@ void MeshBeaconBroadcastModule::sendBeacon()
     };
 
     for (int ti = 0; ti < targetCount; ti++) {
+        // Defaults: running radio config, primary channel. A target entry overrides from here.
         EffTarget tgt = {};
-        if (useTargetList) {
+        tgt.preset = config.lora.modem_preset;
+        tgt.slot = config.lora.channel_num;
+        if (ti < (int)bcfg.broadcast_targets_count) {
             const auto &bt = bcfg.broadcast_targets[ti];
-            tgt.preset = bt.has_preset ? bt.preset : config.lora.modem_preset;
+            if (bt.has_preset)
+                tgt.preset = bt.preset;
             tgt.region = bt.region;
             // Resolve the channel from the device's channel table by index. A slot is only usable
             // if it is actually configured (has a name or PSK - its key is needed to encrypt). An
             // out-of-range index, or a blank slot, falls back to the default channel for the target
             // preset (see beaconChannelSettings), exactly as an unset channel_index would.
-            tgt.has_channel = false;
-            tgt.slot = config.lora.channel_num;
             if (bt.has_channel_index) {
                 if (bt.channel_index >= (uint32_t)channels.getNumChannels()) {
                     LOG_WARN("Beacon: target %d channel_index %u out of range, use preset default", ti, bt.channel_index);
@@ -535,13 +521,6 @@ void MeshBeaconBroadcastModule::sendBeacon()
                     }
                 }
             }
-        } else {
-            tgt.preset = bcfg.has_broadcast_on_preset ? bcfg.broadcast_on_preset : config.lora.modem_preset;
-            tgt.region = bcfg.broadcast_on_region;
-            tgt.has_channel = bcfg.has_broadcast_on_channel;
-            if (tgt.has_channel)
-                tgt.channel = bcfg.broadcast_on_channel;
-            tgt.slot = tgt.has_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
         }
 
         // Skip a target whose effective radio config duplicates one already sent this cycle.
