@@ -398,9 +398,15 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
         }
 
 #ifdef LR2021_CUSTOM_PA_TABLE
+        // Same as init(): log a calibration miss, keep the begin() PA config.
         if (!isLr20x0HighBand(freq)) {
             lora.setPaTable(lr2021_pa_table_lf, false);
-            (void)lora.setOutputPower(power);
+            int16_t paRes = lora.setOutputPower(power);
+            if (paRes != RADIOLIB_ERR_NONE) {
+                LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
+            } else {
+                LOG_DEBUG("LR2021 custom LF PA table installed");
+            }
         }
 #endif
 
