@@ -829,6 +829,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits
             enableInterrupt(isrTxLevel0);
+            // unset-sentinel-ok: busyTx/sendingPacket is the armed flag, so 0 is a legal stamp
             lastTxStart = Time::getMillis();
             printPacket("Started Tx", txp);
 #ifdef LED_LORA

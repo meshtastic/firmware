@@ -26,9 +26,9 @@
 #   * Fields whose unset state is a separate flag, so 0 is a value they may legally hold. These are
 #     listed so that the rule notices them, and each arm site carries an opt-out comment naming the
 #     flag that actually carries the armed state. Listing-plus-opt-out beats silent omission: if
-#     someone later rewrites `if (isNagging && deadlinePassed(nagCycleCutoff))` into
-#     `if (nagCycleCutoff && ...)`, the field has quietly acquired the contract, and the opt-out
-#     comment is sitting right there at the write to be reconsidered.
+#     someone later rewrites `if (haveSample && ...)` into `if (lastSampleMs && ...)`, the field has
+#     quietly acquired the contract, and the opt-out comment is sitting right there at the write to
+#     be reconsidered.
 #
 # OPTING OUT. Put `unset-sentinel-ok: <reason>` in a comment, either on the line of the write or on
 # a comment line above it:
@@ -44,6 +44,26 @@
 # Adding a field: append it to SENTINELS. If its 0 is the unset state, fix the arm sites; if a
 # separate flag carries the armed state, add an opt-out comment at each write. Verify which of the
 # two it is by reading every site that READS the field - one missed read is what makes this wrong.
+#
+# Three fields are absent on purpose, and NOT because 0 is safe there. Each was examined and came
+# back unresolved rather than exempt, so listing one would mean stamping an opt-out over a claim
+# that does not hold:
+#
+#   * nagCycleCutoff. ExternalNotificationModule::handleInputEvent reads
+#     `if (nagCycleCutoff != UINT32_MAX)` without consulting isNagging, so at that read the field is
+#     its own armed flag with UINT32_MAX - not 0 - as the sentinel, and the arm site can land there.
+#     skipZero() would not help: it lifts 0 to 1 and leaves UINT32_MAX alone, by design. The fix is
+#     to gate that read on isNagging, a behaviour change that belongs in its own PR.
+#   * TouchScreenBase::_start. Overloaded as both an event stamp and a `+ 30000` suppression
+#     deadline compared by signed subtraction, so a near-zero value reads as "long ago" rather than
+#     "armed 30s out", and LONG_PRESS re-fires. skipZero() does not fix that either - 1 reads as
+#     long-ago exactly as 0 does. It needs the stamp and the deadline held separately.
+#   * StoreForwardModule::retry_delay. Has no reads at all today, so nothing misbehaves yet;
+#     exempting it now would pre-approve the raw arm for whoever implements the retry its own
+#     comment promises.
+#
+# Also absent, for the ordinary reason that 0 carries no meaning there: locals such as
+# NodeInfoModule's lastNodeInfo, derived per call from TransmitHistory rather than stored.
 #
 # Emitted at "error" rather than the "note" its neighbours use, because nothing catches this at run
 # time: the window is one tick in seven weeks, so a test run, a soak and a bench session all pass.
@@ -65,7 +85,7 @@
 set -uo pipefail
 
 # Millisecond fields this rule watches. See the notes above before editing.
-SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort'
+SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort|lastTxStart|lastHeartbeat|lastAveraged|lastSampleMs|lastIaqMs|last_format_ms|nextRepeatX|nextRepeatY|_cached_next_run'
 
 for target in "$@"; do
 	[[ -f $target ]] || continue

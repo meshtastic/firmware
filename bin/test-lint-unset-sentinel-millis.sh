@@ -136,9 +136,11 @@ run_case "compound assignment" "" 'void f() {
     rebootAtMsec += millis();
 }'
 
-# A field whose unset state is a separate bool, deliberately off the list.
-run_case "non-sentinel deadline" "" 'void f() {
-    nagCycleCutoff = millis() + durationMs;
+# A field that is simply not on the list, and a local that never persists. nagCycleCutoff is NOT
+# used as the example here: it is off the list because its exemption was rejected, not because 0 is
+# safe for it, so pinning it as a negative fixture would encode the opposite of what the header says.
+run_case "unlisted field and a local deadline" "" 'void f() {
+    someUnrelatedDeadline = millis() + durationMs;
     const uint32_t deadline = millis() + BODY_TIMEOUT_MS;
 }'
 
