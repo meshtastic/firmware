@@ -147,6 +147,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
 #elif defined(HELTEC_MESH_TOWER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2
+#elif defined(HELTEC_MESH_NODE_T096)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T096
+#elif defined(HELTEC_RC52)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RC52
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif

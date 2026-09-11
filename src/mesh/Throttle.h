@@ -34,8 +34,8 @@ class Throttle
     /// "passed" - the split that has to survive, because which way "inactive" falls is the caller's
     /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the four
     /// meanings they give the sentinel today:
-    ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec (the cheapest pair to convert), and
-    ///                 GPS.cpp fixHoldEnds, whose arm site remaps a 0 result to 1 by hand.
+    ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec, GPS.cpp fixHoldEnds, AdminModule.cpp
+    ///                 enterDfuAtMsec - the last two remap a 0 result to 1 at the arm site by hand.
     ///   0 = forever - NotificationRenderer.cpp alertBannerUntil. Every read spells its own `> 0`
     ///                 guard, so this third state wants naming rather than repeating.
     ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up.

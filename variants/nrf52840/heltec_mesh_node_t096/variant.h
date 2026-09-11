@@ -161,8 +161,8 @@ No longer populated on PCB
 #define GPS_EN_ACTIVE LOW
 #define PERIPHERAL_WARMUP_MS 1000 // Make sure I2C QuickLink has stable power before continuing
 #define PIN_GPS_PPS (32 + 11)
-#define GPS_TX_PIN (0 + 25) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (0 + 23) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (0 + 25) // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (0 + 23) // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 

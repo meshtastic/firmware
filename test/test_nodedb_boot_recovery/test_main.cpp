@@ -350,6 +350,33 @@ static void test_loadProto_classifiesFailuresDistinctly(void)
     FSCom.remove(scratchPath); // leave nothing behind
 }
 
+// installDefaultModuleConfig() sized its memset to meshtastic_ModuleConfig (the 368-byte oneof)
+// instead of the 1092-byte LocalModuleConfig, so submessages it never assigns kept their old values.
+static void test_oldModuleConfig_discardClearsTailSubmessages(void)
+{
+    // statusmessage sits at offset 609, past the old 368-byte clear, and the defaults installer
+    // never assigns it - so only the full-struct memset can drop this marker.
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+    moduleConfig.version = DEVICESTATE_MIN_VER - 1;
+    moduleConfig.has_statusmessage = true;
+    strncpy(moduleConfig.statusmessage.node_status, "STALE-TAIL", sizeof(moduleConfig.statusmessage.node_status) - 1);
+
+    uint8_t buf[meshtastic_LocalModuleConfig_size];
+    size_t len = pb_encode_to_bytes(buf, sizeof(buf), &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+    TEST_ASSERT_GREATER_THAN_size_t(0, len);
+    writeFileBytes(moduleConfigFileName, buf, len);
+
+    rebootNodeDB(); // decodes, sees version < DEVICESTATE_MIN_VER, discards
+
+    // The opt-in migration re-stamps the version after the discard, so assert the floor, not equality.
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(DEVICESTATE_CUR_VER, moduleConfig.version, "discard did not reinstall defaults");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("", moduleConfig.statusmessage.node_status,
+                                     "statusmessage survived the moduleConfig discard");
+
+    FSCom.remove(moduleConfigFileName); // leave the sandbox as we found it
+    rebootNodeDB();
+}
+
 NBR_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -373,6 +400,9 @@ NBR_TEST_ENTRY void setup()
     printf("\n=== Devicestate recovery + loadProto classification ===\n");
     RUN_TEST(test_oldDevicestate_recoversOwnerFromNodeDb);
     RUN_TEST(test_loadProto_classifiesFailuresDistinctly);
+
+    printf("\n=== ModuleConfig discard completeness ===\n");
+    RUN_TEST(test_oldModuleConfig_discardClearsTailSubmessages);
 
     exit(UNITY_END());
 }
