@@ -115,6 +115,17 @@ class HopScalingModule : private concurrency::OSThread
     // Scheduling: number of 5-minute runOnce() ticks that make up one hourly rollover
     static constexpr uint8_t RUNS_PER_HOUR = 12;
 
+    // Congestion gate.  Scaling is applied only while the smoothed channel utilization says the
+    // channel is busy; below the release threshold the recommendation is not applied at all.
+    static constexpr uint8_t CONGESTION_ENGAGE_PCT = default_hop_scaling_congestion_engage_pct;
+    static constexpr uint8_t CONGESTION_RELEASE_PCT = default_hop_scaling_congestion_release_pct;
+    static constexpr uint8_t CONGESTION_CONFIRM_RUNS = default_hop_scaling_congestion_confirm_runs;
+    // EMA weight for each 5-minute utilization sample (1/4 -> ~20 min time constant).
+    static constexpr float CONGESTION_EMA_ALPHA = 0.25f;
+
+    // Hop floor for router-class roles, so a remote router's own telemetry still reaches operators.
+    static constexpr uint8_t ROUTER_HOP_FLOOR = default_hop_scaling_router_hop_floor;
+
     // -----------------------------------------------------------------------
     // Types
     // -----------------------------------------------------------------------
@@ -179,6 +190,8 @@ class HopScalingModule : private concurrency::OSThread
     const PerHopCounts &getLastPerHopCounts() const { return lastPerHopCounts; }
     uint8_t getLastSuggestedHop() const { return lastSuggestedHop; }
     const MeshTrendStats &getLastTrendStats() const { return lastTrendStats; }
+    bool isCongested() const { return congested; }
+    float getSmoothedChannelUtilization() const { return utilizationAvg; }
 
     // Compatibility accessors used by tests
     uint8_t getCompactHistogramEntryCount() const { return getEntryCount(); }
@@ -200,6 +213,8 @@ class HopScalingModule : private concurrency::OSThread
     // Writable from tests as HopScalingModule::s_testNowMs; drives nowMs() in PIO_UNIT_TESTING builds.
     inline static uint32_t s_testNowMs = 0;
     /// Override the per-session hash seed. Use in tests that need a specific sampling distribution.
+    // Drives channelUtilizationPercent() in PIO_UNIT_TESTING builds, as s_testNowMs drives nowMs().
+    inline static float s_testChannelUtil = 0.0f;
     void setHashSeed(uint16_t seed) { hashSeed = seed; }
     uint16_t getHashSeed() const { return hashSeed; }
     /// Expose hashNodeId for tests that need to compute which node IDs pass a given denominator.
@@ -223,6 +238,13 @@ class HopScalingModule : private concurrency::OSThread
     ///    filteringDenominator once toward samplingDenominator per rollHour() call.
     /// 6. Shifts all seen bitmaps left by one hour slot.
     void rollHour();
+
+    /// Sample channel utilization into the EMA and flip the congestion state once the engage or
+    /// release threshold has held for CONGESTION_CONFIRM_RUNS consecutive runOnce() ticks.
+    void updateCongestion();
+
+    /// Current channel utilization percent, or 0 when AirTime is not up yet.
+    static float channelUtil();
     // -----------------------------------------------------------------------
     // Persistence
     // -----------------------------------------------------------------------
@@ -308,6 +330,14 @@ class HopScalingModule : private concurrency::OSThread
     // -----------------------------------------------------------------------
     uint8_t lastRequiredHop = HOP_MAX;
     uint8_t histogramRollCount = 0;
+
+    // -----------------------------------------------------------------------
+    // Congestion state
+    // -----------------------------------------------------------------------
+    float utilizationAvg = 0.0f;
+    bool hasUtilizationSample = false;
+    bool congested = false;
+    uint8_t congestionConfirmRuns = 0;
 
     // -----------------------------------------------------------------------
     // Scheduler state
