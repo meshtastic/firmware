@@ -1097,6 +1097,20 @@ void Power::shutdown()
 #endif
 }
 
+// Consecutive readings only: a battery-less board's floating divider drifts in and out of the
+// "battery present" window, and a count that survived the gaps would deep-sleep a USB-powered node.
+bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv)
+{
+    if (!hasBattery || hasUsb || battMv >= cutoffMv) {
+        counter = 0;
+        return false;
+    }
+
+    if (counter < UINT8_MAX)
+        counter++;
+    return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
+}
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -1229,16 +1243,16 @@ void Power::readPowerStatus()
     // is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
     //
 
-    if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
-            low_voltage_counter++;
-            LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
-            if (low_voltage_counter > 10) {
-                LOG_INFO("Low voltage detected, trigger deep sleep");
-                powerFSM.trigger(EVENT_LOW_BATTERY);
-            }
-        } else {
-            low_voltage_counter = 0;
+    if (batteryLevel) {
+        // getBattVoltage() reports pack voltage; the OCV table is per cell.
+        const bool shutdownNow =
+            updateLowVoltageCounter(low_voltage_counter, powerStatus2.getHasBattery(), powerStatus2.getHasUSB(),
+                                    batteryLevel->getBattVoltage(), OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+        if (low_voltage_counter)
+            LOG_DEBUG("Low voltage counter: %d/%d", low_voltage_counter, LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN);
+        if (shutdownNow) {
+            LOG_INFO("Low voltage detected, trigger deep sleep");
+            powerFSM.trigger(EVENT_LOW_BATTERY);
         }
     }
 }
