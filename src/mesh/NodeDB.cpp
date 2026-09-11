@@ -710,9 +710,16 @@ NodeDB::NodeDB()
             concurrency::LockGuard guard(&satelliteMutex);
             nodePositions[getNodeNum()] = TypeConversions::ConvertToPositionLite(fixedGPS);
         }
+        // nodePositions is a member map, so the nodeDatabase CRC compare above cannot see this write -
+        // and it has already run. Flag the segment or the fixed position is only persisted by chance.
+        saveWhat |= SEGMENT_NODEDATABASE;
 #endif
         setLocalPosition(fixedGPS);
         config.position.fixed_position = true;
+        // Same for config, whose CRC compare also ran before this block. Keep that compare's
+        // degraded-boot guard so an unreadable config is never overwritten with UNSET defaults.
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
 #endif
     }
 #endif
