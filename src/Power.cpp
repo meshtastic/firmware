@@ -1106,7 +1106,7 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
 
     if (counter < UINT8_MAX)
         counter++;
-    return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
+    return counter >= LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
 /// Reads power status to powerStatus singleton.

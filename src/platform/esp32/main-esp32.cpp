@@ -346,7 +346,11 @@ void cpuDeepSleep(uint32_t msecToWake)
         34, 35, 37};
 
 #ifdef BUTTON_PIN
-    const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+    const int configuredWakeButton = config.device.button_gpio;
+    const int wakeButton =
+        configuredWakeButton && configuredWakeButton < 64 && rtc_gpio_is_valid_gpio((gpio_num_t)configuredWakeButton)
+            ? configuredWakeButton
+            : BUTTON_PIN;
 #else
     const int wakeButton = -1;
 #endif
