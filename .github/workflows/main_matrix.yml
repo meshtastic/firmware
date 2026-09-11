@@ -731,7 +731,7 @@ jobs:
   # Nightly publish: refresh the root of the meshtastic-firmware-nightly R2
   # bucket with the current develop build. Runs on the cron schedule (or a manual
   # nightly=true dispatch) and never creates a GitHub release. The bucket's
-  # release_notes.md is maintained by hand and deliberately left untouched.
+  # release_notes.md is published from .github/nightly/ in this repo.
   publish-nightly:
     runs-on: ubuntu-24.04
     if: github.repository_owner == 'meshtastic' && (github.event_name == 'schedule' || github.event.inputs.nightly == 'true')
@@ -741,6 +741,11 @@ jobs:
         esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
       r2_bucket: meshtastic-firmware-nightly
     steps:
+      # Only the index templates and release notes are needed here.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/nightly
+
       - name: Get firmware artifacts
         uses: actions/download-artifact@v8
         with:
@@ -763,6 +768,10 @@ jobs:
             '{version: $ver, id: ("v" + $ver), title: ("Meshtastic Firmware " + $ver + " Nightly"), commit: $sha}' \
             > ./stage/index.json
 
+      # The notes are maintained in-tree and published to the bucket root.
+      - name: Stage the nightly release notes
+        run: cp .github/nightly/release_notes.md ./stage/release_notes.md
+
       # For diagnostics
       - name: Display structure of files to publish
         run: ls -lR ./stage
@@ -782,11 +791,35 @@ jobs:
             exit 1
           fi
 
+      # tree renders the file listing; .github/nightly wraps it in the page
+      # chrome. tree silently skips an --hintro/--houtro file it cannot open, so
+      # the rendered page is checked for both markers below.
+      - name: Generate nightly html index
+        env:
+          VERSION: ${{ needs.version.outputs.long }}
+          COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        working-directory: ./stage
+        run: |
+          set -euo pipefail
+          # Substitute placeholders in the nightly index header template.
+          sed -e "s|%%VERSION%%|$VERSION|g" \
+              -e "s|%%COMMIT%%|$COMMIT|g" \
+              -e "s|%%COMMIT_SHORT%%|${COMMIT:0:7}|g" \
+              -e "s|%%BUILD_DATE%%|$(date -u +'%Y-%m-%d %H:%M UTC')|g" \
+              -e "s|%%RUN_ID%%|$RUN_ID|g" \
+              -e "s|%%RUN_URL%%|$RUN_URL|g" \
+              "$GITHUB_WORKSPACE/.github/nightly/hintro.html" > "$RUNNER_TEMP/hintro.html"
+          # Render the html index using tree, with custom header and footer templates.
+          tree -H "." -h --noreport -I "index.html" --charset utf-8 \
+            --hintro "$RUNNER_TEMP/hintro.html" \
+            --houtro "$GITHUB_WORKSPACE/.github/nightly/houtro.html" \
+            > index.html
+
       # Mirror the staged directory to Cloudflare R2. --delete at the bucket root
       # clears stale nightly binaries, and is in scope for the whole bucket because
-      # this bucket holds nothing but the nightly build. release_notes.md lives only
-      # in the bucket and is never staged, so it is excluded from the sync to keep
-      # --delete from removing it.
+      # this bucket holds nothing but the nightly build.
       - name: Publish nightly to Cloudflare R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -803,18 +836,21 @@ jobs:
           set -euo pipefail
           aws --version
           # Cache for 1 hour in browser, 1 day on CDN.
-          # Preserve the release_notes.md (manually maintained)
           aws s3 sync ./stage "s3://${r2_bucket}/" \
             --endpoint-url "$R2_ENDPOINT" \
             --no-progress \
             --delete \
-            --exclude 'release_notes.md' \
             --exclude 'index.json' \
+            --exclude 'index.html' \
             --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
             --cache-control 'public, max-age=3600, s-maxage=86400'
-          # index.json is the pointer to the current nightly, don't cache it so hard (5 minutes).
-          aws s3 cp ./stage/index.json "s3://${r2_bucket}/index.json" \
-            --endpoint-url "$R2_ENDPOINT" \
-            --no-progress \
-            --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
-            --cache-control 'public, max-age=300'
+          # The indices point at whatever the current nightly is - index.json for
+          # clients, index.html for browsers - so they are excluded from the sync
+          # above and uploaded here with a 5 minute cache instead.
+          for index in index.json index.html; do
+            aws s3 cp "./stage/$index" "s3://${r2_bucket}/$index" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --no-progress \
+              --metadata "commit=${{ github.sha }},run=${{ github.run_id }}" \
+              --cache-control 'public, max-age=300'
+          done
