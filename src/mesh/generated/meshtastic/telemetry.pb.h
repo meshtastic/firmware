@@ -556,7 +556,7 @@ typedef struct _meshtastic_HostMetrics {
     /* Optional User-provided string for arbitrary host system information
  that doesn't make sense as a dedicated entry. */
     bool has_user_string;
-    char user_string[200];
+    char user_string[161];
 } meshtastic_HostMetrics;
 
 /* Types of Measurements the telemetry module is equipped to handle */
@@ -1122,14 +1122,14 @@ extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       222
 #define meshtastic_HealthMetrics_size            11
-#define meshtastic_HostMetrics_size              264
+#define meshtastic_HostMetrics_size              225
 #define meshtastic_LocalStats_size               87
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             81
 #define meshtastic_SEN5XState_size               27
 #define meshtastic_SEN6XState_size               27
 #define meshtastic_SoilWaterMetrics_size         75
-#define meshtastic_Telemetry_size                272
+#define meshtastic_Telemetry_size                233
 #define meshtastic_TrafficManagementStats_size   42
 
 #ifdef __cplusplus

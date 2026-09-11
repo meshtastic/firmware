@@ -161,6 +161,12 @@ lint:
         - test/test_airtime/test_main.cpp
         - test/test_throttle/test_main.cpp
         - test/test_uptime_clock/test_main.cpp
+    # The nightly index templates are halves of one page, not whole documents:
+    # hintro.html stops mid-<div> and houtro.html starts with closing tags, so
+    # that `tree --hintro/--houtro` can splice the file listing between them.
+    - linters: [ALL]
+      paths:
+        - .github/nightly/*.html
 runtimes:
   enabled:
     - python@3.14.4

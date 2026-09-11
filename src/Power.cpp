@@ -781,6 +781,12 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
                     int16_t raw = _ads.readADC_SingleEnded(0);
                     sum += _ads.computeVolts(raw);
                 }
+                // Piggyback a toggle-engine watchdog on this same throttle interval.
+                // Only re-arm when VBUS is absent — calling this while attached
+                // would restart CC toggling and could glitch an active sink attach.
+                if (_aw35615.isReady() && !_aw35615.isVbusPresent()) {
+                    _aw35615.rearmToggle();
+                }
             }
 
             // Voltage divider scales by 2.0; convert volts to millivolts
@@ -801,7 +807,14 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
     {
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isVbusPresent();
+
+            bool vbus = _aw35615.isVbusPresent();
+            if (!vbus) {
+                // VBUS just went away (or has been away) — make sure the CC
+                // toggle engine is re-armed so the next attach gets detected.
+                _aw35615.rearmToggle();
+            }
+            return vbus;
         }
         // Fallback to base GPIO/board checks (or false) if CC chip is absent
         return false;
@@ -814,7 +827,10 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isSinkAttached();
+            // Charging == VBUS present AND we're attached as a sink.
+            // (isSinkAttached() is a latched result — safe to trust here since
+            // isVbusIn() above keeps re-arming toggle on every detach.)
+            return _aw35615.isVbusPresent() && _aw35615.isSinkAttached();
         }
         return isVbusIn();
     }
