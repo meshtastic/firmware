@@ -253,6 +253,12 @@ std::map<NodeNum, meshtastic_EnvironmentMetrics> *s_decodeEnvironmentTarget = nu
 #if !MESHTASTIC_EXCLUDE_STATUSDB
 std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
 #endif
+
+// Keys that can never name a real node.
+[[maybe_unused]] inline bool isUsableSatelliteKey(NodeNum n)
+{
+    return n != 0 && !isBroadcast(n);
+}
 } // namespace
 
 bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
@@ -306,7 +312,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodePositionEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
                 if (s_decodePositionsTarget) {
-                    if (entry.has_position)
+                    if (entry.has_position && isUsableSatelliteKey(entry.num))
                         (*s_decodePositionsTarget)[entry.num] = entry.position;
                     return true;
                 }
@@ -332,7 +338,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeTelemetryEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
                 if (s_decodeTelemetryTarget) {
-                    if (entry.has_device_metrics)
+                    if (entry.has_device_metrics && isUsableSatelliteKey(entry.num))
                         (*s_decodeTelemetryTarget)[entry.num] = entry.device_metrics;
                     return true;
                 }
@@ -358,7 +364,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeStatusEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_STATUSDB
                 if (s_decodeStatusTarget) {
-                    if (entry.has_status)
+                    if (entry.has_status && isUsableSatelliteKey(entry.num))
                         (*s_decodeStatusTarget)[entry.num] = entry.status;
                     return true;
                 }
@@ -384,7 +390,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeEnvironmentEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
                 if (s_decodeEnvironmentTarget) {
-                    if (entry.has_environment_metrics)
+                    if (entry.has_environment_metrics && isUsableSatelliteKey(entry.num))
                         (*s_decodeEnvironmentTarget)[entry.num] = entry.environment_metrics;
                     return true;
                 }
@@ -1936,16 +1942,35 @@ bool NodeDB::enforceSatelliteCaps()
 {
     concurrency::LockGuard guard(&satelliteMutex);
     bool trimmedAny = false;
-    auto trim = [this, &trimmedAny](auto &map, const char *name) {
+    const NodeNum self = getNodeNum();
+    // One sorted snapshot of the hot keys serves all four maps; the orphan test is a binary search.
+    std::vector<NodeNum> hotNums;
+    hotNums.reserve(numMeshNodes);
+    for (int i = 0; i < numMeshNodes; i++)
+        hotNums.push_back(meshNodes->at(i).num);
+    std::sort(hotNums.begin(), hotNums.end());
+
+    auto trim = [this, &trimmedAny, &hotNums, self](auto &map, const char *name) {
         const size_t before = map.size();
+        // Orphans (key with no hot-table owner) only ever arrive from disk, and the
+        // cap paths never reclaim them because they fire above the cap, not at it.
+        size_t orphans = 0;
+        for (auto it = map.begin(); it != map.end();) {
+            if (it->first != self && !std::binary_search(hotNums.begin(), hotNums.end(), it->first)) {
+                it = map.erase(it);
+                orphans++;
+            } else {
+                ++it;
+            }
+        }
         while (map.size() > MAX_SATELLITE_NODES) {
             if (!evictStalestSatellite(*this, map))
                 break;
         }
         if (map.size() != before) {
             trimmedAny = true;
-            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
-                          MAX_SATELLITE_NODES);
+            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d, %u orphaned)", name, (unsigned)before, (unsigned)map.size(),
+                          MAX_SATELLITE_NODES, (unsigned)orphans);
         }
     };
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
