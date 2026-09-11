@@ -286,10 +286,10 @@ static int32_t onewireRxHandle()
             break;
         }
 
-        // Length is stored as lbyte then hbyte, and the protocol interprets it as
-        // (lbyte<<8) + hbyte
+        // Length is lbyte/hbyte as (lbyte<<8)+hbyte; use 32-bit so 6+payload_len
+        // cannot wrap to 0.
         const uint16_t payload_len = ((uint16_t)buff[1] << 8) | buff[2];
-        const uint16_t total_needed = 6 + payload_len; // 1(start)+2(len)+1(type)+1(flag)+payload_len+1(checksum)
+        const uint32_t total_needed = 6u + (uint32_t)payload_len; // start+len+type+flag+payload+checksum
 
         if (payload_len == 0 || total_needed > sizeof(buff)) {
             // Bad length -> discard one byte and resync
@@ -348,7 +348,7 @@ static int32_t onewireRxHandle()
         const uint16_t prev_len = bufflen;
         processing_frame = true;
         frame_error_during_process = false;
-        RakSNHub_Protocl_API.process(buff, total_needed);
+        RakSNHub_Protocl_API.process(buff, (uint16_t)total_needed);
         processing_frame = false;
 
         if (frame_error_during_process) {
@@ -365,10 +365,11 @@ static int32_t onewireRxHandle()
             continue;
         }
 
-        // Success path: drop exactly this frame.
-        const uint16_t remaining = (prev_len > total_needed) ? (uint16_t)(prev_len - total_needed) : 0;
+        // Success path: drop exactly this frame (total_needed fits in uint16 after
+        // the sizeof check).
+        const uint16_t remaining = (prev_len > total_needed) ? (uint16_t)(prev_len - (uint16_t)total_needed) : 0;
         if (remaining > 0) {
-            memmove(buff, buff + total_needed, remaining);
+            memmove(buff, buff + (uint16_t)total_needed, remaining);
         }
         bufflen = remaining;
     }

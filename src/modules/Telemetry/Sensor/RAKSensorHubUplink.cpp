@@ -31,6 +31,7 @@ struct HubPower {
     uint16_t volMv = 0;  // 0xBA
     int16_t curMa = 0;   // 0xB9
     uint8_t percent = 0; // 0xB8
+    uint32_t lastUpdateMs = 0;
 };
 
 struct EnvCache {
@@ -238,6 +239,16 @@ static inline bool scalarFresh(const ScalarReading &r, uint32_t nowMs, uint32_t 
     return r.valid && r.lastUpdateMs != 0 && (nowMs - r.lastUpdateMs) <= maxAgeMs;
 }
 
+static inline bool powerFresh(uint32_t nowMs, uint32_t maxAgeMs)
+{
+    return power.volMv > 0 && power.lastUpdateMs != 0 && (nowMs - power.lastUpdateMs) <= maxAgeMs;
+}
+
+static inline void touchPower(uint32_t nowMs)
+{
+    power.lastUpdateMs = nowMs;
+}
+
 #if defined(RAK_SENSORHUB_EXTENDED_ENV_METRICS) && RAK_SENSORHUB_EXTENDED_ENV_METRICS
 
 /** Optional on-air export of soil/water chemistry + solar irradiance.
@@ -345,7 +356,7 @@ static inline bool isAllZero(const uint8_t *p, uint16_t n)
 
 /** IPSO 0xF1 (MODBUS): RS485 Generic Engine soil/water probe payloads from ProbeIO.
  * Not a scalar IPSO - taskId selects which register block was read. Maps GE tasks to
- * EnvCache (water content → 0x70 path, temp, salinity, EC). Ignores all-zero padding
+ * EnvCache (water content -> 0x70 path, temp, salinity, EC). Ignores all-zero padding
  * slots in periodic get.data() responses. sid is the IOC task id when layout B is used. */
 static bool parseConfiguredModbusReading(uint8_t pid, uint8_t taskId, uint8_t *msg, uint16_t len)
 {
@@ -370,30 +381,26 @@ static bool parseConfiguredModbusReading(uint8_t pid, uint8_t taskId, uint8_t *m
         modbusLen = msg[3];
         modbus = &msg[4];
         taskId = msg[1];
-        LOG_DEBUG("GE MODBUS raw task=%u len=%u head=%02x %02x %02x %02x %02x %02x %02x", (unsigned)taskId, (unsigned)modbusLen,
-                  (unsigned)modbus[0], (unsigned)modbus[1], (unsigned)modbus[2], (unsigned)modbus[3], (unsigned)modbus[4],
-                  (unsigned)modbus[5], (unsigned)modbus[6]);
     } else if (len >= 3 && msg[1] <= (len - 2)) {
         modbusLen = msg[1];
         modbus = &msg[2];
-        LOG_DEBUG("GE MODBUS raw task=%u len=%u head=%02x %02x %02x %02x %02x %02x %02x", (unsigned)taskId, (unsigned)modbusLen,
-                  (unsigned)modbus[0], (unsigned)modbus[1], (unsigned)modbus[2], (unsigned)modbus[3], (unsigned)modbus[4],
-                  (unsigned)modbus[5], (unsigned)modbus[6]);
     } else {
         modbusLen = (uint8_t)(len - 1);
         modbus = &msg[1];
     }
 
-    // If the "slot" is present but empty, skip quietly (avoid log spam during
-    // periodic get.data polls).
+    // Empty slot or short/corrupt response: validate before any head[] access.
     if (modbusLen == 0) {
         return false;
     }
-
     if (modbusLen < 7 || modbus[1] != 0x03 || modbus[2] < 2) {
         LOG_INFO("GE MODBUS task=%u invalid response len=%u", (unsigned)taskId, (unsigned)modbusLen);
         return false;
     }
+
+    LOG_DEBUG("GE MODBUS raw task=%u len=%u head=%02x %02x %02x %02x %02x %02x %02x", (unsigned)taskId, (unsigned)modbusLen,
+              (unsigned)modbus[0], (unsigned)modbus[1], (unsigned)modbus[2], (unsigned)modbus[3], (unsigned)modbus[4],
+              (unsigned)modbus[5], (unsigned)modbus[6]);
 
     uint16_t raw = ((uint16_t)modbus[3] << 8) | modbus[4];
     uint32_t now = millis();
@@ -618,6 +625,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
         power.percent = msg[1];
         if (power.percent > 100)
             power.percent = 100;
+        touchPower(now);
         LOG_INFO("Battery capacity: %u %%", (unsigned)power.percent);
         return true;
     case RAK_IPSO_DC_CURRENT: {
@@ -630,6 +638,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             return false;
         }
         power.curMa = (int16_t)(amps * 1000.0f);
+        touchPower(now);
         LOG_INFO("Battery current: %.3f A", (float)power.curMa / 1000.0f);
         return true;
     }
@@ -643,6 +652,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             return false;
         }
         power.volMv = (uint16_t)(volts * 1000.0f);
+        touchPower(now);
         LOG_INFO("Battery voltage: %.2f V", volts);
         return true;
     }
@@ -894,7 +904,7 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    if (power.volMv > 0) {
+    if (powerFresh(now, maxAgeMs)) {
         measurement->variant.environment_metrics.has_voltage = true; // Voltage in V (IPSO 0xBA).
         measurement->variant.environment_metrics.has_current = true; // Current in A (IPSO 0xB9).
         measurement->variant.environment_metrics.voltage = (float)power.volMv / 1000;
@@ -979,25 +989,29 @@ bool getMetrics(meshtastic_Telemetry *measurement)
 /** Bus voltage in mV from RAK power module (IPSO 0xBA DC_VOLTAGE). */
 uint16_t getBusVoltageMv()
 {
-    return power.volMv;
+    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    return powerFresh(millis(), maxAgeMs) ? power.volMv : 0;
 }
 
 /** Bus current in mA from RAK power module (IPSO 0xB9 DC_CURRENT). */
 int16_t getCurrentMa()
 {
-    return power.curMa;
+    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    return powerFresh(millis(), maxAgeMs) ? power.curMa : 0;
 }
 
 /** Battery capacity 0..100 % from RAK power module (IPSO 0xB8 CAPACITY). */
 int getBusBatteryPercent()
 {
-    return (int)power.percent;
+    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    return powerFresh(millis(), maxAgeMs) ? (int)power.percent : -1;
 }
 
 /** True if current > 0 (charging). */
 bool isCharging()
 {
-    return (power.curMa > 0) ? true : false;
+    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    return powerFresh(millis(), maxAgeMs) && (power.curMa > 0);
 }
 
 } // namespace RAKSensorHubUplink
