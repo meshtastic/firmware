@@ -345,16 +345,24 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
         34, 35, 37};
 
-    for (int i = 0; i < sizeof(rtcGpios); i++)
-        rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
+#ifdef BUTTON_PIN
+    const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#else
+    const int wakeButton = -1;
+#endif
+    // Isolating a pad holds it, and ext1 cannot re-arm a held pad - skip the pin we wake on.
+    for (int i = 0; i < sizeof(rtcGpios); i++) {
+        if (rtcGpios[i] != wakeButton)
+            rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
+    }
 #endif
 
-        // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
-        // to detect wake and in normal operation the external part drives them hard.
+    // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
+    // to detect wake and in normal operation the external part drives them hard.
 #ifdef BUTTON_PIN
-        // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
+    // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
-    uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
+    uint64_t gpioMask = (1ULL << wakeButton);
 #endif
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
