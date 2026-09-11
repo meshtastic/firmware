@@ -573,6 +573,9 @@ void test_congestion_gate_scales_on_busy_channel()
     shim->forceCongestion(false);
     HopScalingModule::s_testChannelUtil = 0.0f;
     TEST_ASSERT_FALSE(shim->isCongested());
+    // Pin the precondition: injectSampleTraffic() drives rollHour() directly and never runOnce(),
+    // so nothing has been applied yet. Without this the final assertion could pass vacuously.
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, shim->getLastRequiredHop());
 
     pumpRuns(*shim, 45.0f, HopScalingModule::RUNS_PER_HOUR * 2);
 
