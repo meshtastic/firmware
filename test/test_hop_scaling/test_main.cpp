@@ -559,7 +559,7 @@ void test_congestion_gate_idle_channel_does_not_scale()
 
 // The complement of the test above: the gate must still engage on a genuinely busy channel, driven
 // through the real EMA and confirm counter rather than forced, or the scaler is dead code.
-void test_congestion_gate_busy_channel_scales()
+void test_congestion_gate_scales_on_busy_channel()
 {
     TEST_MESSAGE("=== Congestion gate: dense mesh, busy channel ===");
     TEST_MESSAGE("Expectation: a sustained 45% channel reading engages the gate and applies the hop walk.");
@@ -965,7 +965,7 @@ void setup()
 
     printf("\n=== Congestion gate ===\n");
     RUN_TEST(test_congestion_gate_idle_channel_does_not_scale);
-    RUN_TEST(test_congestion_gate_busy_channel_scales);
+    RUN_TEST(test_congestion_gate_scales_on_busy_channel);
     RUN_TEST(test_congestion_gate_does_not_flap_at_threshold);
     RUN_TEST(test_congestion_release_ramps_one_hop_per_roll);
     RUN_TEST(test_router_role_floor_applies_when_congested);
