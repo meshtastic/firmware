@@ -7,6 +7,7 @@
 #include "FSCommon.h"
 #include "NodeDB.h"
 #include "SPILock.h"
+#include "airtime.h"
 #include "concurrency/LockGuard.h"
 #include "mesh-pb-constants.h"
 #include <algorithm>
@@ -318,9 +319,10 @@ void HopScalingModule::rollHour()
         }
         const uint32_t scaledTotal = static_cast<uint32_t>(counts.total) * filteringDenominator;
         memcpy(lastScaledPerHop, scaled, sizeof(lastScaledPerHop));
-        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%u/4", count,
-                 samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
-                 lastPoliteNumer);
+        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%u/4 "
+                 "congested=%u chanUtil=%u%%",
+                 count, samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
+                 lastPoliteNumer, congested ? 1u : 0u, static_cast<unsigned>(utilizationAvg));
 
         const auto &ts = lastTrendStats;
         LOG_INFO("[HOPSCALE] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", ts.scaledPerHour[0],
@@ -424,6 +426,35 @@ void HopScalingModule::trimIfNeeded()
     }
 }
 
+float HopScalingModule::channelUtil()
+{
+#ifdef PIO_UNIT_TESTING
+    return s_testChannelUtil;
+#else
+    return airTime ? airTime->channelUtilizationPercent() : 0.0f;
+#endif
+}
+
+void HopScalingModule::updateCongestion()
+{
+    const float util = channelUtil();
+    // channelUtilizationPercent() covers only the 60 s before each 5-minute tick, so smooth it:
+    // one quiet or one busy minute must not move the gate on its own.
+    utilizationAvg = hasUtilizationSample ? utilizationAvg + (util - utilizationAvg) * CONGESTION_EMA_ALPHA : util;
+    hasUtilizationSample = true;
+
+    // Separate engage/release thresholds, each confirmed over several ticks, so a mesh sitting
+    // near a threshold does not flap the hop limit between rolls.
+    const bool wantsFlip = congested ? (utilizationAvg < CONGESTION_RELEASE_PCT) : (utilizationAvg >= CONGESTION_ENGAGE_PCT);
+    congestionConfirmRuns = wantsFlip ? static_cast<uint8_t>(congestionConfirmRuns + 1u) : 0u;
+    if (congestionConfirmRuns >= CONGESTION_CONFIRM_RUNS) {
+        congested = !congested;
+        congestionConfirmRuns = 0;
+        LOG_INFO("[HOPSCALE] Congestion %s at chanUtil=%u%%", congested ? "engaged" : "released",
+                 static_cast<unsigned>(utilizationAvg));
+    }
+}
+
 void HopScalingModule::logStatusReport(bool didHourlyUpdate) const
 {
     const bool histActive = (histogramRollCount > 0 && count > 0);
@@ -431,10 +462,11 @@ void HopScalingModule::logStatusReport(bool didHourlyUpdate) const
     const uint8_t runsRemaining = didHourlyUpdate ? RUNS_PER_HOUR : (RUNS_PER_HOUR - runsSinceLastHourlyUpdate);
     const uint8_t minsUntilRollover = runsRemaining * (RUN_INTERVAL_MS / (60 * 1000UL));
 
-    LOG_INFO("[HOPSCALE] hop=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u lastCounted=%u polite=%u/4 "
-             "nextRoll=%umin",
-             lastRequiredHop, histActive ? 1u : 0u, getFillPercentage(), samplingDenominator, filteringDenominator, count,
-             histCounts.total, lastPoliteNumer, minsUntilRollover);
+    LOG_INFO("[HOPSCALE] hop=%u congested=%u chanUtil=%u%% histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u "
+             "lastCounted=%u polite=%u/4 nextRoll=%umin",
+             lastRequiredHop, congested ? 1u : 0u, static_cast<unsigned>(utilizationAvg), histActive ? 1u : 0u,
+             getFillPercentage(), samplingDenominator, filteringDenominator, count, histCounts.total, lastPoliteNumer,
+             minsUntilRollover);
 
     LOG_INFO("[HOPSCALE] nodes perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
              histCounts.perHop[2], histCounts.perHop[3], histCounts.perHop[4], histCounts.perHop[5], histCounts.perHop[6],
@@ -448,6 +480,9 @@ int32_t HopScalingModule::runOnce()
 {
     const bool isFirstRun = !hasCompletedInitialRun;
     bool didHourlyUpdate = false;
+
+    // Sampled every tick, not only on a roll, so the gate reacts within minutes of a change.
+    updateCongestion();
 
     if (isFirstRun) {
         hasCompletedInitialRun = true;
@@ -466,23 +501,35 @@ int32_t HopScalingModule::runOnce()
     }
 
     if (didHourlyUpdate) {
-        uint8_t suggested = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
-        // Role-based hop floor: TRACKER/TAK_TRACKER always reach at least 2 hops,
-        // SENSOR reaches at least 1, so these reporting roles remain reachable even
-        // on a dense mesh where the histogram recommends a lower hop count.
-        uint8_t roleFloor = 0;
-        switch (config.device.role) {
-        case meshtastic_Config_DeviceConfig_Role_TRACKER:
-        case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
-            roleFloor = 2;
-            break;
-        case meshtastic_Config_DeviceConfig_Role_SENSOR:
-            roleFloor = 1;
-            break;
-        default:
-            break;
+        if (!congested) {
+            // Density alone is not a reason to throttle.  Hand a hop back per roll rather than
+            // jumping to HOP_MAX, so a mesh that just quietened does not un-throttle all at once.
+            if (lastRequiredHop < HOP_MAX)
+                lastRequiredHop++;
+        } else {
+            uint8_t suggested = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
+            // Role-based hop floor: TRACKER/TAK_TRACKER always reach at least 2 hops,
+            // SENSOR reaches at least 1, router-class roles reach ROUTER_HOP_FLOOR, so these
+            // reporting roles remain reachable even on a dense mesh recommending fewer hops.
+            uint8_t roleFloor = 0;
+            switch (config.device.role) {
+            case meshtastic_Config_DeviceConfig_Role_ROUTER:
+            case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
+            case meshtastic_Config_DeviceConfig_Role_REPEATER:
+                roleFloor = ROUTER_HOP_FLOOR;
+                break;
+            case meshtastic_Config_DeviceConfig_Role_TRACKER:
+            case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
+                roleFloor = 2;
+                break;
+            case meshtastic_Config_DeviceConfig_Role_SENSOR:
+                roleFloor = 1;
+                break;
+            default:
+                break;
+            }
+            lastRequiredHop = std::max(suggested, roleFloor);
         }
-        lastRequiredHop = std::max(suggested, roleFloor);
     }
 
     logStatusReport(didHourlyUpdate);
