@@ -28,10 +28,12 @@ struct AccelReading {
 };
 
 struct HubPower {
-    uint16_t volMv = 0;  // 0xBA
-    int16_t curMa = 0;   // 0xB9
+    uint16_t volMv = 0; // 0xBA
+    uint32_t volMs = 0;
+    int16_t curMa = 0; // 0xB9
+    uint32_t curMs = 0;
     uint8_t percent = 0; // 0xB8
-    uint32_t lastUpdateMs = 0;
+    uint32_t percentMs = 0;
 };
 
 struct EnvCache {
@@ -239,14 +241,9 @@ static inline bool scalarFresh(const ScalarReading &r, uint32_t nowMs, uint32_t 
     return r.valid && r.lastUpdateMs != 0 && (nowMs - r.lastUpdateMs) <= maxAgeMs;
 }
 
-static inline bool powerFresh(uint32_t nowMs, uint32_t maxAgeMs)
+static inline bool powerFieldFresh(uint32_t lastMs, uint32_t nowMs, uint32_t maxAgeMs)
 {
-    return power.volMv > 0 && power.lastUpdateMs != 0 && (nowMs - power.lastUpdateMs) <= maxAgeMs;
-}
-
-static inline void touchPower(uint32_t nowMs)
-{
-    power.lastUpdateMs = nowMs;
+    return lastMs != 0 && (nowMs - lastMs) <= maxAgeMs;
 }
 
 #if defined(RAK_SENSORHUB_EXTENDED_ENV_METRICS) && RAK_SENSORHUB_EXTENDED_ENV_METRICS
@@ -625,7 +622,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
         power.percent = msg[1];
         if (power.percent > 100)
             power.percent = 100;
-        touchPower(now);
+        power.percentMs = now;
         LOG_INFO("Battery capacity: %u %%", (unsigned)power.percent);
         return true;
     case RAK_IPSO_DC_CURRENT: {
@@ -638,7 +635,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             return false;
         }
         power.curMa = (int16_t)(amps * 1000.0f);
-        touchPower(now);
+        power.curMs = now;
         LOG_INFO("Battery current: %.3f A", (float)power.curMa / 1000.0f);
         return true;
     }
@@ -652,7 +649,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             return false;
         }
         power.volMv = (uint16_t)(volts * 1000.0f);
-        touchPower(now);
+        power.volMs = now;
         LOG_INFO("Battery voltage: %.2f V", volts);
         return true;
     }
@@ -904,10 +901,13 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    if (powerFresh(now, maxAgeMs)) {
+    if (powerFieldFresh(power.volMs, now, maxAgeMs) && power.volMv > 0) {
         measurement->variant.environment_metrics.has_voltage = true; // Voltage in V (IPSO 0xBA).
-        measurement->variant.environment_metrics.has_current = true; // Current in A (IPSO 0xB9).
         measurement->variant.environment_metrics.voltage = (float)power.volMv / 1000;
+        any = true;
+    }
+    if (powerFieldFresh(power.curMs, now, maxAgeMs)) {
+        measurement->variant.environment_metrics.has_current = true; // Current in A (IPSO 0xB9).
         measurement->variant.environment_metrics.current = (float)power.curMa / 1000;
         any = true;
     }
@@ -990,28 +990,29 @@ bool getMetrics(meshtastic_Telemetry *measurement)
 uint16_t getBusVoltageMv()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    return powerFresh(millis(), maxAgeMs) ? power.volMv : 0;
+    const uint32_t now = millis();
+    return (powerFieldFresh(power.volMs, now, maxAgeMs) && power.volMv > 0) ? power.volMv : 0;
 }
 
 /** Bus current in mA from RAK power module (IPSO 0xB9 DC_CURRENT). */
 int16_t getCurrentMa()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    return powerFresh(millis(), maxAgeMs) ? power.curMa : 0;
+    return powerFieldFresh(power.curMs, millis(), maxAgeMs) ? power.curMa : 0;
 }
 
 /** Battery capacity 0..100 % from RAK power module (IPSO 0xB8 CAPACITY). */
 int getBusBatteryPercent()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    return powerFresh(millis(), maxAgeMs) ? (int)power.percent : -1;
+    return powerFieldFresh(power.percentMs, millis(), maxAgeMs) ? (int)power.percent : -1;
 }
 
 /** True if current > 0 (charging). */
 bool isCharging()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    return powerFresh(millis(), maxAgeMs) && (power.curMa > 0);
+    return powerFieldFresh(power.curMs, millis(), maxAgeMs) && (power.curMa > 0);
 }
 
 } // namespace RAKSensorHubUplink
