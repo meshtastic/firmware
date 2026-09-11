@@ -34,7 +34,7 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/EInk/ED047TC1.h"
+#include "T5S3ED047TC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 void setupNicheGraphics()

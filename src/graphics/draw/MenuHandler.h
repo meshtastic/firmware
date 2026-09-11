@@ -11,9 +11,7 @@ class menuHandler
         MenuNone,
         LoraMenu,
         LoraPicker,
-#if defined(_VARIANT_T_DECK_MAX)
         AntennaPicker,
-#endif
         DeviceRolePicker,
         RadioPresetPicker,
         TXEnabledMenu,
@@ -33,13 +31,8 @@ class menuHandler
         CompassPointNorthMenu,
         ResetNodeDbMenu,
         BuzzerModeMenuPicker,
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-        A7682AudioVolumeMenu,
-#endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+        NotificationAudioVolumeMenu,
         HapticToggleMenu,
-#endif
         MuiPicker,
         BrightnessPicker,
         RebootMenu,
@@ -82,9 +75,7 @@ class menuHandler
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
-#if defined(_VARIANT_T_DECK_MAX)
     static void antennaPicker();
-#endif
     static void deviceRolePicker();
     static void radioPresetPicker();
     static void txEnabledMenu();
@@ -111,13 +102,8 @@ class menuHandler
     static void GPSUpdateIntervalMenu();
     static void GPSPositionBroadcastMenu();
     static void BuzzerModeMenu();
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-    static void a7682AudioVolumeMenu();
-#endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
+    static void notificationAudioVolumeMenu();
     static void hapticToggleMenu();
-#endif
     static void switchToMUIMenu();
     static void nodeListMenu();
     static void resetNodeDBMenu();

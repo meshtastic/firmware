@@ -12,7 +12,7 @@
 #include "airtime.h"
 #include "gps/RTC.h"
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
-#include "graphics/niche/Utils/FlashData.h"
+#include "graphics/DeviceUiPolicy.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include <RadioLibInterface.h>
@@ -136,43 +136,6 @@ static uint16_t getMenuItemHeightPx(const InkHUD::InkHUD *inkhud)
     return itemH;
 }
 
-#if defined(T5_S3_EPAPER_PRO)
-namespace
-{
-static constexpr uint32_t T5_BACKLIGHT_PREFS_VERSION = 1;
-
-struct T5BacklightPrefs {
-    uint32_t version = T5_BACKLIGHT_PREFS_VERSION;
-    bool keepOn = true;
-};
-
-T5BacklightPrefs t5BacklightPrefs;
-bool t5BacklightPrefsLoaded = false;
-
-bool loadT5BacklightKeepOn()
-{
-    if (!t5BacklightPrefsLoaded) {
-        T5BacklightPrefs loaded;
-        const bool ok = FlashData<T5BacklightPrefs>::load(&loaded, "t5_backlight");
-        if (ok && loaded.version == T5_BACKLIGHT_PREFS_VERSION) {
-            t5BacklightPrefs = loaded;
-        }
-        t5BacklightPrefsLoaded = true;
-    }
-
-    return t5BacklightPrefs.keepOn;
-}
-
-void saveT5BacklightKeepOn(bool keepOn)
-{
-    loadT5BacklightKeepOn();
-    t5BacklightPrefs.version = T5_BACKLIGHT_PREFS_VERSION;
-    t5BacklightPrefs.keepOn = keepOn;
-    FlashData<T5BacklightPrefs>::save(&t5BacklightPrefs, "t5_backlight");
-}
-} // namespace
-#endif
-
 InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
@@ -181,11 +144,10 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     // Note: don't get instance if we're not actually using the backlight,
     // or else you will unintentionally instantiate it
     if (settings->optionalMenuItems.backlight) {
-#if defined(T5_S3_EPAPER_PRO)
-        t5BacklightSetUserEnabled(loadT5BacklightKeepOn());
-#else
-        backlight = Drivers::LatchingBacklight::getInstance();
-#endif
+        if (getDeviceUiPolicy()->supportsUserBacklightControl())
+            getDeviceUiPolicy()->initializeUserBacklightControl();
+        else
+            backlight = Drivers::LatchingBacklight::getInstance();
     }
 
     // Initialize the Canned Message store
@@ -214,11 +176,11 @@ void InkHUD::MenuApplet::onForeground()
     // backlight on always when menu opens.
     // Courtesy to T-Echo users who removed the capacitive touch button
     if (settings->optionalMenuItems.backlight) {
-#if !defined(T5_S3_EPAPER_PRO)
-        assert(backlight);
-        if (!backlight->isOn())
-            backlight->peek();
-#endif
+        if (!getDeviceUiPolicy()->supportsUserBacklightControl()) {
+            assert(backlight);
+            if (!backlight->isOn())
+                backlight->peek();
+        }
     }
 
     // Prevent user applets requesting update while menu is open
@@ -246,11 +208,11 @@ void InkHUD::MenuApplet::onBackground()
     // Item in options submenu allows keeping backlight on after menu is closed
     // If this item is deselected we will turn backlight off again, now that menu is closing
     if (settings->optionalMenuItems.backlight) {
-#if !defined(T5_S3_EPAPER_PRO)
-        assert(backlight);
-        if (!backlight->isLatched())
-            backlight->off();
-#endif
+        if (!getDeviceUiPolicy()->supportsUserBacklightControl()) {
+            assert(backlight);
+            if (!backlight->isLatched())
+                backlight->off();
+        }
     }
 
     // Stop the auto-timeout
@@ -580,24 +542,21 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_BACKLIGHT:
         // Note: backlight is already on in this situation.
         // This toggle controls whether it should remain on when menu closes.
-#if defined(T5_S3_EPAPER_PRO)
-    {
-        const bool keepOn = !t5BacklightIsUserEnabled();
-        t5BacklightSetUserEnabled(keepOn);
-        saveT5BacklightKeepOn(keepOn);
-        if (item.checkState)
-            *(item.checkState) = keepOn;
-    }
-#else
-        if (!backlight)
-            backlight = Drivers::LatchingBacklight::getInstance();
-        if (backlight->isLatched())
-            backlight->off();
-        else
-            backlight->latch();
-        if (item.checkState)
-            *(item.checkState) = backlight->isLatched();
-#endif
+        if (getDeviceUiPolicy()->supportsUserBacklightControl()) {
+            const bool keepOn = !getDeviceUiPolicy()->userBacklightEnabled();
+            getDeviceUiPolicy()->setUserBacklightEnabled(keepOn);
+            if (item.checkState)
+                *(item.checkState) = keepOn;
+        } else {
+            if (!backlight)
+                backlight = Drivers::LatchingBacklight::getInstance();
+            if (backlight->isLatched())
+                backlight->off();
+            else
+                backlight->latch();
+            if (item.checkState)
+                *(item.checkState) = backlight->isLatched();
+        }
     break;
 
     case TOGGLE_12H_CLOCK:
@@ -1218,13 +1177,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Back", previousPage));
         // Optional: backlight
         if (settings->optionalMenuItems.backlight) {
-#if defined(T5_S3_EPAPER_PRO)
-            keepBacklightOn = t5BacklightIsUserEnabled();
-#else
-            if (!backlight)
-                backlight = Drivers::LatchingBacklight::getInstance();
-            keepBacklightOn = backlight->isLatched();
-#endif
+            if (getDeviceUiPolicy()->supportsUserBacklightControl())
+                keepBacklightOn = getDeviceUiPolicy()->userBacklightEnabled();
+            else {
+                if (!backlight)
+                    backlight = Drivers::LatchingBacklight::getInstance();
+                keepBacklightOn = backlight->isLatched();
+            }
             items.push_back(MenuItem("Keep Backlight On", MenuAction::TOGGLE_BACKLIGHT, MenuPage::OPTIONS, &keepBacklightOn));
         }
 

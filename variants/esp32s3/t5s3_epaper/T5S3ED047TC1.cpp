@@ -13,9 +13,8 @@
 */
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-#ifdef T5_S3_EPAPER_PRO
 
-#include "./ED047TC1.h"
+#include "./T5S3ED047TC1.h"
 
 #include "FastEPD.h"
 #include "configuration.h"
@@ -219,5 +218,4 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
     }
 }
 
-#endif // T5_S3_EPAPER_PRO
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

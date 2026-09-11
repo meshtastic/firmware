@@ -43,6 +43,8 @@ void toggleTouchInputEnabled();
 // Backlight control helpers for this variant (non-latching behavior)
 void t5BacklightSetUserEnabled(bool enabled);
 bool t5BacklightIsUserEnabled();
+void t5BacklightLoadUserPreference();
+void t5BacklightSaveUserPreference(bool enabled);
 void t5BacklightToggleUser();
 void t5BacklightSetForcedByTimeout(bool forced);
 void t5BacklightSetForcedBySleep(bool forced);

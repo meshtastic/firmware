@@ -2,6 +2,7 @@
 
 #include "./TipsApplet.h"
 
+#include "graphics/DeviceUiPolicy.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 
 #include "main.h"
@@ -136,9 +137,11 @@ void InkHUD::TipsApplet::onRender(bool full)
     } break;
 
     case Tip::BUTTONS: {
-#if defined(T5_S3_EPAPER_PRO)
-        renderT5S3ButtonsTip();
-#else
+        if (getDeviceUiPolicy()->isT5S3()) {
+            renderT5S3ButtonsTip();
+            break;
+        }
+
         setFont(fontMedium);
 
         const char *title = "Tip: Buttons";
@@ -171,7 +174,6 @@ void InkHUD::TipsApplet::onRender(bool full)
         }
 
         printAt(0, Y(1.0), continuePrompt, LEFT, BOTTOM);
-#endif
     } break;
 
     case Tip::ROTATION: {
@@ -205,7 +207,6 @@ void InkHUD::TipsApplet::onRender(bool full)
     }
 }
 
-#if defined(T5_S3_EPAPER_PRO)
 void InkHUD::TipsApplet::renderT5S3ButtonsTip()
 {
     setFont(fontMedium);
@@ -239,7 +240,6 @@ void InkHUD::TipsApplet::renderT5S3ButtonsTip()
 
     printAt(0, Y(1.0), "Tap screen to continue", LEFT, BOTTOM);
 }
-#endif
 
 // This tip has its own render method, only because it's a big block of code
 // Didn't want to clutter up the switch in onRender too much

@@ -7,6 +7,7 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/DeviceUiPolicy.h"
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/draw/UIRenderer.h"
@@ -81,7 +82,6 @@ static inline bool useClockHeaderAccentTheme(uint32_t themeId)
            themeId == ThemeID::ClassicRed || themeId == ThemeID::MonochromeWhite;
 }
 
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 static void drawScaledXbm(OLEDDisplay *display, int x, int y, int width, int height, int scale, const uint8_t *bitmap)
 {
     if (scale <= 0)
@@ -96,7 +96,6 @@ static void drawScaledXbm(OLEDDisplay *display, int x, int y, int width, int hei
         }
     }
 }
-#endif
 
 // *********************************
 // * Rounded Header when inverted *
@@ -309,51 +308,51 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #ifdef USE_EINK
             batteryY += 2;
 #endif
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-            constexpr int batteryScale = T5S3_EPD_UI_BATTERY_SCALE;
-            constexpr int batteryWidth = 7 * batteryScale;
-            drawScaledXbm(display, batteryX, batteryY, 7, 11, batteryScale, batteryBitmap_v);
-            if (isCharging && isBoltVisibleShared) {
-                drawScaledXbm(display, batteryX + batteryScale, batteryY + 3 * batteryScale, 5, 5, batteryScale,
-                              lightning_bolt_v);
+            const uint16_t batteryScale = deviceUiMetrics().batteryScale;
+            if (batteryScale > 1) {
+                const int batteryWidth = 7 * batteryScale;
+                drawScaledXbm(display, batteryX, batteryY, 7, 11, batteryScale, batteryBitmap_v);
+                if (isCharging && isBoltVisibleShared) {
+                    drawScaledXbm(display, batteryX + batteryScale, batteryY + 3 * batteryScale, 5, 5, batteryScale,
+                                  lightning_bolt_v);
+                } else {
+                    drawScaledXbm(display, batteryX - batteryScale, batteryY + 4 * batteryScale, 8, 3, batteryScale,
+                                  batteryBitmap_sidegaps_v);
+                    const int fillHeight = 8 * batteryScale * chargePercent / 100;
+                    const int fillY = batteryY + 10 * batteryScale - fillHeight;
+                    display->fillRect(batteryX + batteryScale, fillY, 5 * batteryScale, fillHeight);
+#if GRAPHICS_TFT_COLORING_ENABLED
+                    if (fillHeight > 0) {
+                        hasBatteryFillRegion = true;
+                        batteryFillRegionX = batteryX + batteryScale;
+                        batteryFillRegionY = fillY;
+                        batteryFillRegionW = 5 * batteryScale;
+                        batteryFillRegionH = fillHeight;
+                    }
+#endif
+                }
+                batteryX += batteryWidth + 2;
             } else {
-                drawScaledXbm(display, batteryX - batteryScale, batteryY + 4 * batteryScale, 8, 3, batteryScale,
-                              batteryBitmap_sidegaps_v);
-                const int fillHeight = 8 * batteryScale * chargePercent / 100;
-                const int fillY = batteryY + 10 * batteryScale - fillHeight;
-                display->fillRect(batteryX + batteryScale, fillY, 5 * batteryScale, fillHeight);
+                display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
+                if (isCharging && isBoltVisibleShared)
+                    display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
+                else {
+                    display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
+                    int fillHeight = 8 * chargePercent / 100;
+                    int fillY = batteryY - fillHeight;
+                    display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
 #if GRAPHICS_TFT_COLORING_ENABLED
-                if (fillHeight > 0) {
-                    hasBatteryFillRegion = true;
-                    batteryFillRegionX = batteryX + batteryScale;
-                    batteryFillRegionY = fillY;
-                    batteryFillRegionW = 5 * batteryScale;
-                    batteryFillRegionH = fillHeight;
+                    if (fillHeight > 0) {
+                        hasBatteryFillRegion = true;
+                        batteryFillRegionX = batteryX + 1;
+                        batteryFillRegionY = fillY + 10;
+                        batteryFillRegionW = 5;
+                        batteryFillRegionH = fillHeight;
+                    }
+#endif
                 }
-#endif
+                batteryX += 9; // Icon + 2 pixels
             }
-            batteryX += batteryWidth + 2;
-#else
-            display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
-            if (isCharging && isBoltVisibleShared)
-                display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
-            else {
-                display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
-                int fillHeight = 8 * chargePercent / 100;
-                int fillY = batteryY - fillHeight;
-                display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
-#if GRAPHICS_TFT_COLORING_ENABLED
-                if (fillHeight > 0) {
-                    hasBatteryFillRegion = true;
-                    batteryFillRegionX = batteryX + 1;
-                    batteryFillRegionY = fillY + 10;
-                    batteryFillRegionW = 5;
-                    batteryFillRegionH = fillHeight;
-                }
-#endif
-            }
-            batteryX += 9; // Icon + 2 pixels
-#endif
         }
     }
 #if GRAPHICS_TFT_COLORING_ENABLED

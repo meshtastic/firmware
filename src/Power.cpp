@@ -25,6 +25,8 @@
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
+#include "platform/DevicePowerController.h"
+#include "platform/DeviceVariant.h"
 #include "sleep.h"
 #include <cstring>
 #ifdef ARCH_ESP32
@@ -898,15 +900,15 @@ void Power::shutdown()
 
 #if HAS_SCREEN
     if (screen) {
-#ifdef T_DECK_PRO
-        screen->showSimpleBanner("Device is powered off.\nConnect USB to start!",
-                                 0); // T-Deck Pro has no power button
-#elif defined(USE_EINK)
-        screen->showSimpleBanner("Shutting Down...",
-                                 2250); // dismiss after 3 seconds to avoid the
-                                        // banner on the sleep screen
+        auto *controller = getDevicePowerController();
+        if (controller && controller->showUsbOnlyShutdownBanner())
+            screen->showSimpleBanner("Device is powered off.\nConnect USB to start!", 0);
+#ifdef USE_EINK
+        else
+            screen->showSimpleBanner("Shutting Down...", 2250);
 #else
-        screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
+        else
+            screen->showSimpleBanner("Shutting Down...", 0);
 #endif
     }
 #endif
@@ -1784,7 +1786,7 @@ bool Power::cw2015Init()
 #define BQ27220_INIT_ATTEMPTS 3
 #define BQ27220_RETRY_INTERVAL_MS (60 * 1000)
 
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_BQ27220)
+#if defined(HAS_BQ27220)
 namespace
 {
 bool writeBq27220Register(uint8_t command, const uint8_t *data, size_t length)
@@ -2239,19 +2241,12 @@ class LipoCharger : public HasBatteryLevel
     {
         if (PPM == nullptr) {
             PPM = new XPowersPPM;
-            const uint8_t chargerAddress =
-#ifdef T_DECK_MAX
-                T_DECK_MAX_CHARGER_ADDR;
-#else
-                BQ25896_ADDR;
-#endif
+            auto *devicePower = getDevicePowerController();
+            const uint8_t chargerAddress = devicePower ? devicePower->chargerAddress(BQ25896_ADDR) : BQ25896_ADDR;
             bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, chargerAddress);
             if (result) {
-#ifdef T_DECK_MAX
-                LOG_INFO("PPM SY6970 init succeeded");
-#else
-                LOG_INFO("PPM BQ25896 init succeeded");
-#endif
+                LOG_INFO("PPM %s init succeeded", devicePower && devicePower->chargerName() ? devicePower->chargerName()
+                                                                                               : "BQ25896");
                 // Set the minimum operating voltage. Below this voltage, the PPM will
                 // protect PPM->setSysPowerDownVoltage(3100);
 
@@ -2280,11 +2275,8 @@ class LipoCharger : public HasBatteryLevel
                 // function
                 PPM->enableCharge();
             } else {
-#ifdef T_DECK_MAX
-                LOG_WARN("PPM SY6970 init failed");
-#else
-                LOG_WARN("PPM BQ25896 init failed");
-#endif
+                LOG_WARN("PPM %s init failed", devicePower && devicePower->chargerName() ? devicePower->chargerName()
+                                                                                             : "BQ25896");
                 delete PPM;
                 PPM = nullptr;
                 return false;
@@ -2307,10 +2299,16 @@ class LipoCharger : public HasBatteryLevel
         lastGaugeAttemptMs = millis();
         gaugeAttemptsLeft--;
 
+        auto *devicePower = getDevicePowerController();
+        const bool useCustomBq27220Initialization =
+            devicePower && devicePower->usesCustomBq27220Initialization();
+
         // Cheap probe first: a silent gauge costs one transaction instead of the
         // multi-second unseal/reset/provision sequence inside init().
         Wire.beginTransmission(BQ27220_I2C_ADDRESS);
         if (Wire.endTransmission() != 0) {
+            if (useCustomBq27220Initialization)
+                recoverI2CBus();
             LOG_WARN("BQ27220 not responding at 0x%x", BQ27220_I2C_ADDRESS);
             return;
         }
@@ -2318,16 +2316,11 @@ class LipoCharger : public HasBatteryLevel
         bq = new BQ27220;
         bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
 
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_BQ27220)
-        const bool initialized = initializeBq27220();
-#else
-        const bool initialized = bq->init();
-#endif
+        const bool initialized = useCustomBq27220Initialization ? initializeBq27220() : bq->init();
 
         if (initialized) {
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_BQ27220)
-            LOG_INFO("BQ27220 initialized");
-#endif
+            if (useCustomBq27220Initialization)
+                LOG_INFO("BQ27220 initialized");
             LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
             LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
             LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());

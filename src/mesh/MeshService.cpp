@@ -23,9 +23,8 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-#include "audio/A7682Audio.h"
-#endif
+#include "audio/NotificationAudio.h"
+#include "platform/DeviceVariant.h"
 #include <assert.h>
 #include <string>
 
@@ -384,18 +383,14 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
 
     // Capture this before sendLocal() because failed sends may release p. The cue only needs
     // the packet type; it must never inspect p after ownership moves to Router.
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
     const uint32_t outgoingPortnum =
         p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? static_cast<uint32_t>(p->decoded.portnum) : 0;
-#endif
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     ErrorCode res = router->sendLocal(p, src);
 
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-    if (a7682Audio && shouldPlayA7682TxCue(outgoingPortnum, src, res))
-        a7682Audio->queueCue(A7682AudioCue::TX_TEXT);
-#endif
+    if (auto *audio = getNotificationAudio(); audio && shouldPlayNotificationTxCue(outgoingPortnum, src, res))
+        audio->queueCue(NotificationAudioCue::TX_TEXT);
 
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */

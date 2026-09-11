@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 class GpioPin;
+class HardwareSerial;
 
 namespace t_deck_max
 {
@@ -157,11 +158,12 @@ class AudioPolicy
 };
 } // namespace t_deck_max
 
-void initVariantAfterI2C();
 void tDeckMaxInit();
 bool tDeckMaxRecoverI2C();
 void tDeckMaxSetModemPower(bool on);
 void tDeckMaxSetModemPwrKey(bool high);
+void tDeckMaxSetModemReset(bool high);
+void tDeckMaxSetModemDtr(bool low);
 void tDeckMaxSetAudioRoute(bool a7682e);
 void tDeckMaxSetAmplifier(bool on);
 void tDeckMaxSetLoRaPower(bool on);

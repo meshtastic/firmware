@@ -1,7 +1,5 @@
 #include "configuration.h"
 
-#if defined(T_DECK_MAX)
-
 #include "TDeckMaxXL9555.hpp"
 #include "concurrency/LockGuard.h"
 
@@ -139,5 +137,3 @@ void XL9555GpioPin::set(bool value)
 {
     owner->digitalWrite(pin, value ? HIGH : LOW);
 }
-
-#endif // T_DECK_MAX

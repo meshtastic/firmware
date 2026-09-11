@@ -23,6 +23,8 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     virtual int32_t runOnce() override;
 
   private:
+    void resolveVariantKeyboard();
+
     const char *_originName;
 
     TwoWire *i2cBus = 0;
@@ -30,5 +32,7 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     BBQ10Keyboard Q10keyboard;
     MPR121Keyboard MPRkeyboard;
     std::unique_ptr<TCA8418KeyboardBase> TCAKeyboard;
+    bool _variantKeyboardResolved = false;
+    uint8_t _tca8418Address = 0x34;
     bool is_sym = false;
 };

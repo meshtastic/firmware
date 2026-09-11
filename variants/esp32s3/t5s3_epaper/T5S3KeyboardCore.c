@@ -22,7 +22,9 @@ static const char number_row2[] = ".,?!'+=_%*";
 static const char special_row0[] = "~`|\\^[]{}*";
 static const char special_row1[] = "#@&%$+-=_<>";
 static const char special_row2[] = ".,?!'\":;/?";
-static char symbol_label[2] = {0, 0};
+static char text_symbol_labels[128][2] = {{0}};
+static char number_symbol_labels[32][2] = {{0}};
+static char special_symbol_labels[32][2] = {{0}};
 
 static uint16_t bounded_max_length(uint16_t capacity, uint16_t max_length)
 {
@@ -106,8 +108,9 @@ static uint16_t add_character_key(T5KeyboardKey *key, uint16_t index, uint8_t ro
     } else {
         key->id = T5_KB_KEY_SPECIAL_BASE + (uint16_t)(unsigned char)character;
         key->character = character;
-        symbol_label[0] = character;
-        key->label = symbol_label;
+        text_symbol_labels[(uint8_t)character][0] = character;
+        text_symbol_labels[(uint8_t)character][1] = '\0';
+        key->label = text_symbol_labels[(uint8_t)character];
     }
     return 1;
 }
@@ -137,15 +140,16 @@ static uint16_t add_digit_key(T5KeyboardKey *key, uint16_t index, uint8_t row, u
 }
 
 static uint16_t add_symbol_key(T5KeyboardKey *key, uint16_t id_index, uint16_t character_index, uint8_t row,
-                               const char *row_text, uint8_t width_weight)
+                               const char *row_text, uint8_t width_weight, char labels[32][2])
 {
     key->id = T5_KB_KEY_SPECIAL_BASE + id_index;
     key->action = T5_KB_ACTION_CHARACTER;
     key->row = row;
     key->width_weight = width_weight;
     key->character = row_text[character_index];
-    symbol_label[0] = key->character;
-    key->label = symbol_label;
+    labels[id_index][0] = key->character;
+    labels[id_index][1] = '\0';
+    key->label = labels[id_index];
     return 1;
 }
 
@@ -229,12 +233,14 @@ bool t5_kb_get_key(T5KeyboardMode mode, uint16_t index, T5KeyboardKey *key)
         }
         cursor++;
         if (index < cursor + 11) {
-            add_symbol_key(key, (uint16_t)(10 + index - cursor), (uint16_t)(index - cursor), 1, number_row1, 1);
+            add_symbol_key(key, (uint16_t)(10 + index - cursor), (uint16_t)(index - cursor), 1, number_row1, 1,
+                           number_symbol_labels);
             return true;
         }
         cursor += 11;
         if (index < cursor + 10) {
-            add_symbol_key(key, (uint16_t)(21 + index - cursor), (uint16_t)(index - cursor), 2, number_row2, 1);
+            add_symbol_key(key, (uint16_t)(21 + index - cursor), (uint16_t)(index - cursor), 2, number_row2, 1,
+                           number_symbol_labels);
             return true;
         }
         cursor += 10;
@@ -259,7 +265,7 @@ bool t5_kb_get_key(T5KeyboardMode mode, uint16_t index, T5KeyboardKey *key)
     }
 
     if (index < 10) {
-        add_symbol_key(key, index, index, 0, special_row0, 1);
+        add_symbol_key(key, index, index, 0, special_row0, 1, special_symbol_labels);
         return true;
     }
     cursor = 10;
@@ -269,12 +275,14 @@ bool t5_kb_get_key(T5KeyboardMode mode, uint16_t index, T5KeyboardKey *key)
     }
     cursor++;
     if (index < cursor + 11) {
-        add_symbol_key(key, (uint16_t)(10 + index - cursor), (uint16_t)(index - cursor), 1, special_row1, 1);
+        add_symbol_key(key, (uint16_t)(10 + index - cursor), (uint16_t)(index - cursor), 1, special_row1, 1,
+                       special_symbol_labels);
         return true;
     }
     cursor += 11;
     if (index < cursor + 10) {
-        add_symbol_key(key, (uint16_t)(21 + index - cursor), (uint16_t)(index - cursor), 2, special_row2, 1);
+        add_symbol_key(key, (uint16_t)(21 + index - cursor), (uint16_t)(index - cursor), 2, special_row2, 1,
+                       special_symbol_labels);
         return true;
     }
     cursor += 10;
@@ -325,6 +333,8 @@ bool t5_kb_set_text(T5KeyboardState *keyboard, const char *text)
     if (text == NULL)
         text = "";
 
+    keyboard->length = 0;
+    keyboard->cursor = 0;
     while (text[length] != '\0' && length < keyboard->max_length) {
         if (is_allowed(keyboard, text[length])) {
             keyboard->text[keyboard->length++] = text[length];

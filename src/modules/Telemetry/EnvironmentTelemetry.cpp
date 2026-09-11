@@ -18,6 +18,8 @@
 #include "graphics/images.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
+#include "platform/DeviceSensorProvider.h"
+#include "platform/DeviceVariant.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
@@ -28,9 +30,6 @@
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_LTR553ALS) && __has_include(<SensorLTR553.hpp>)
-#include "Sensor/LTR553ALSSensor.h"
-#endif
 
 namespace graphics
 {
@@ -370,9 +369,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // TODO Can we scan for multiple sensors connected on the same bus?
     addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
 #endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_LTR553ALS) && __has_include(<SensorLTR553.hpp>)
-    addSensor<LTR553ALSSensor>(i2cScanner, ScanI2C::DeviceType::LTR553ALS);
-#endif
+    if (auto *provider = getDeviceSensorProvider()) {
+        addSensorInstance(i2cScanner, ScanI2C::DeviceType::LTR553ALS,
+                          provider->createEnvironmentalSensor(ScanI2C::DeviceType::LTR553ALS));
+    }
 #if __has_include(<Adafruit_DS248x.h>)
     addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
 #endif

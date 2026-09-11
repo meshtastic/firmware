@@ -6,14 +6,11 @@
 #include "variant.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
+#include "graphics/DeviceUiPolicy.h"
 #include <Arduino.h>
 #include <atomic>
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-#include "graphics/T5S3EpaperRotation.h"
-#endif
 
 #include "FastEPD.h"
 
@@ -24,21 +21,6 @@
 #ifndef EPD_FULLSLOW_PERIOD
 #define EPD_FULLSLOW_PERIOD 100 // every N full updates do a slow (CLEAR_SLOW) full refresh
 #endif
-#ifndef EPD_RESPONSIVE_MIN_MS
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-#define EPD_RESPONSIVE_MIN_MS EINK_FORCE_DISPLAY_THROTTLE_MS
-#else
-#define EPD_RESPONSIVE_MIN_MS 1000 // simple rate-limit (ms) for responsive updates
-#endif
-#endif
-
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-#ifndef EPD_BACKGROUND_UPDATE_MS
-#define EPD_BACKGROUND_UPDATE_MS (5 * 60 * 1000)
-#endif
-#endif
-
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rot)
     : EInkParallelDisplay(width, height, width, height, rot)
 {
@@ -53,53 +35,23 @@ EInkParallelDisplay::EInkParallelDisplay(uint16_t logicalWidth, uint16_t logical
     this->geometry = GEOMETRY_RAWMODE;
     this->displayWidth = logicalWidth;
     this->displayHeight = logicalHeight;
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-    this->displayBufferSize = static_cast<uint32_t>(logicalWidth) * ((logicalHeight + 7) / 8);
-#else
-    uint16_t shortSide = min(logicalWidth, logicalHeight);
-    uint16_t longSide = max(logicalWidth, logicalHeight);
-    if (shortSide % 8 != 0)
-        shortSide = (shortSide | 7) + 1;
-    this->displayBufferSize = static_cast<uint32_t>(longSide) * (shortSide / 8);
-#endif
+    if (getDeviceUiPolicy()->usesPanelCoordinateMapping()) {
+        this->displayBufferSize = static_cast<uint32_t>(logicalWidth) * ((logicalHeight + 7) / 8);
+    } else {
+        uint16_t shortSide = min(logicalWidth, logicalHeight);
+        uint16_t longSide = max(logicalWidth, logicalHeight);
+        if (shortSide % 8 != 0)
+            shortSide = (shortSide | 7) + 1;
+        this->displayBufferSize = static_cast<uint32_t>(longSide) * (shortSide / 8);
+    }
 
 #ifdef EINK_LIMIT_GHOSTING_PX
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-    dirtyPixelsSize = panelBufferSize;
-#else
-    const size_t rowBytes = (this->displayWidth + 7) / 8;
-    dirtyPixelsSize = rowBytes * this->displayHeight;
-#endif
+    const size_t rowBytes = getDeviceUiPolicy()->usesPanelCoordinateMapping() ? panelRowBytes : (this->displayWidth + 7) / 8;
+    dirtyPixelsSize = rowBytes * (getDeviceUiPolicy()->usesPanelCoordinateMapping() ? panelHeight : this->displayHeight);
     dirtyPixels = (uint8_t *)calloc(dirtyPixelsSize, 1);
     ghostPixelCount = 0;
 #endif
 }
-#else
-EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rot) : epaper(nullptr), rotation(rot)
-{
-    LOG_INFO("init EInkParallelDisplay");
-    // Set dimensions in OLEDDisplay base class
-    this->geometry = GEOMETRY_RAWMODE;
-    this->displayWidth = width;
-    this->displayHeight = height;
-
-    // Round shortest side up to nearest byte, to prevent truncation causing an undersized buffer
-    uint16_t shortSide = min(width, height);
-    uint16_t longSide = max(width, height);
-    if (shortSide % 8 != 0)
-        shortSide = (shortSide | 7) + 1;
-
-    this->displayBufferSize = longSide * (shortSide / 8);
-
-#ifdef EINK_LIMIT_GHOSTING_PX
-    // allocate dirty pixel buffer same size as epaper buffers (rowBytes * height)
-    size_t rowBytes = (this->displayWidth + 7) / 8;
-    dirtyPixelsSize = rowBytes * this->displayHeight;
-    dirtyPixels = (uint8_t *)calloc(dirtyPixelsSize, 1);
-    ghostPixelCount = 0;
-#endif
-}
-#endif
 
 EInkParallelDisplay::~EInkParallelDisplay()
 {
@@ -131,25 +83,27 @@ EInkParallelDisplay::~EInkParallelDisplay()
 bool EInkParallelDisplay::connect()
 {
     LOG_INFO("Do EPD init");
-    int initRc = BBEP_SUCCESS;
+    int initRc = epaper ? BBEP_SUCCESS : -1;
     if (!epaper) {
         epaper = new FASTEPD;
-#if defined(T5_S3_EPAPER_PRO_V1)
-        initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
-#elif defined(T5_S3_EPAPER_PRO_V2)
-        initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 28000000);
-        // initialize all port 0 pins (0-7) as outputs / HIGH
-        for (int i = 0; i < 8; i++) {
-            epaper->ioPinMode(i, OUTPUT);
-            epaper->ioWrite(i, HIGH);
+        switch (getDeviceUiPolicy()->parallelPanel()) {
+        case DeviceParallelPanel::T5S3V1:
+            initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
+            break;
+        case DeviceParallelPanel::T5S3V2:
+            initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 28000000);
+            // Initialize all port 0 pins (0-7) as outputs / HIGH.
+            for (int i = 0; i < 8; i++) {
+                epaper->ioPinMode(i, OUTPUT);
+                epaper->ioWrite(i, HIGH);
+            }
+            // FastEPD initializes PCA9535 port-1 display pins as outputs; IO12 is the side key.
+            epaper->ioPinMode(10, INPUT);
+            break;
+        case DeviceParallelPanel::None:
+            LOG_ERROR("No parallel E-Ink panel policy selected");
+            break;
         }
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        // FastEPD initializes PCA9535 port-1 display pins as outputs; IO12 is the side key.
-        epaper->ioPinMode(10, INPUT);
-#endif
-#else
-#error "unsupported EPD device!"
-#endif
     }
 
     // FastEPD allocates its framebuffer only from PSRAM; if PSRAM init failed the alloc returns
@@ -250,22 +204,17 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
     vTaskDelete(nullptr);
 }
 
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 void EInkParallelDisplay::mapLogicalToPanel(uint16_t logicalX, uint16_t logicalY, uint16_t &panelX,
                                             uint16_t &panelY) const
 {
-    const auto mapped = t5s3_epaper::logicalToPanel({logicalX, logicalY});
-    panelX = mapped.x;
-    panelY = mapped.y;
+    getDeviceUiPolicy()->mapLogicalToPanel(logicalX, logicalY, panelX, panelY);
 }
-#endif
 
 /*
  * Convert the OLEDDisplay buffer (vertical byte layout) into the 1bpp horizontal-bytes
- * buffer used by the FASTEPD library. T5S3 V2 follows the T-Deck policy: responsive
- * frames use the panel's FAST partial waveform, while background frames are rate-limited.
+ * buffer used by the FASTEPD library. Mapped panels use the responsive partial-refresh
+ * policy supplied by their device UI implementation.
  */
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 bool EInkParallelDisplay::updateFrame(uint32_t msecLimit)
 {
     if (!displayReady) // no framebuffer (PSRAM absent / init failed) -> nothing to push
@@ -278,7 +227,9 @@ bool EInkParallelDisplay::updateFrame(uint32_t msecLimit)
 
     const bool requestedFullRefresh = fullRefreshRequested;
     const bool requestedResponsiveUpdate = responsiveUpdateRequested;
-    const uint32_t refreshLimit = (requestedFullRefresh || requestedResponsiveUpdate) ? EPD_RESPONSIVE_MIN_MS : msecLimit;
+    const uint32_t refreshLimit = (requestedFullRefresh || requestedResponsiveUpdate)
+                                      ? getDeviceUiPolicy()->responsiveRefreshThrottleMs()
+                                      : msecLimit;
     if (refreshLimit != 0 && lastUpdateMs != 0 && Throttle::isWithinTimespanMs(lastUpdateMs, refreshLimit)) {
         LOG_DEBUG("rate-limited, skipping update");
         return false;
@@ -379,7 +330,7 @@ bool EInkParallelDisplay::updateFrame(uint32_t msecLimit)
     LOG_DEBUG("EPD update rows=%d..%d rowBytes=%u", newTop, newBottom, panelRowBytes);
 
     if (!forceFull) {
-        // Match T-Deck: use a full-screen partial window with the fast waveform.
+        // FastEPD's reliable mapped-panel path uses the full row window.
         epaper->partialUpdate(true, 0, panelHeight - 1);
         epaper->backupPlane();
         fastRefreshCount++;
@@ -396,13 +347,15 @@ bool EInkParallelDisplay::updateFrame(uint32_t msecLimit)
     lastDrawMsec = lastUpdateMs;
     return true;
 }
-#endif
 
 void EInkParallelDisplay::display(void)
 {
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-    updateFrame(EPD_BACKGROUND_UPDATE_MS);
-#else
+    if (getDeviceUiPolicy()->usesPanelCoordinateMapping()) {
+        const uint32_t backgroundInterval = getDeviceUiPolicy()->backgroundRefreshIntervalMs();
+        updateFrame(backgroundInterval != 0 ? backgroundInterval : 5 * 60 * 1000);
+        return;
+    }
+
     if (!displayReady) // no framebuffer (PSRAM absent / init failed) -> nothing to push
         return;
 
@@ -411,7 +364,7 @@ void EInkParallelDisplay::display(void)
 
     // Simple rate limiting: avoid very-frequent responsive updates
     uint32_t nowMs = millis();
-    if (lastUpdateMs != 0 && (nowMs - lastUpdateMs) < EPD_RESPONSIVE_MIN_MS) {
+    if (lastUpdateMs != 0 && (nowMs - lastUpdateMs) < getDeviceUiPolicy()->responsiveRefreshThrottleMs()) {
         LOG_DEBUG("rate-limited, skipping update");
         return;
     }
@@ -574,7 +527,6 @@ void EInkParallelDisplay::display(void)
 
     // Keep same behavior as before
     lastDrawMsec = millis();
-#endif
 }
 
 #ifdef EINK_LIMIT_GHOSTING_PX
@@ -618,11 +570,16 @@ void EInkParallelDisplay::resetGhostPixelTracking()
 /*
  * forceDisplay: trigger the responsive policy for T5S3 V2, or preserve the legacy path.
  */
+bool EInkParallelDisplay::forceDisplay()
+{
+    return forceDisplay(getDeviceUiPolicy()->responsiveRefreshThrottleMs());
+}
+
 bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
 {
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-    return updateFrame(msecLimit);
-#else
+    if (getDeviceUiPolicy()->usesPanelCoordinateMapping())
+        return updateFrame(msecLimit);
+
     if (!displayReady)
         return false;
 
@@ -632,7 +589,6 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
         return true;
     }
     return false;
-#endif
 }
 
 void EInkParallelDisplay::endUpdate()

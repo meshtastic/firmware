@@ -1,7 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    defined(HAS_LTR553ALS) && __has_include(<SensorLTR553.hpp>)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_LTR553ALS) && __has_include(<SensorLTR553.hpp>)
 
 #include "LTR553ALSSensor.h"
 #include "LTR553ALS.h"

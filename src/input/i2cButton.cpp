@@ -68,7 +68,7 @@ int32_t i2cButtonThread::runOnce()
                 }
 
                 if (press_duration < LONG_PRESS_TIME) {
-                    InputEvent evt;
+                    InputEvent evt = {};
                     evt.source = "UserButton";
                     evt.inputEvent = INPUT_BROKER_USER_PRESS;
                     evt.kbchar = 0;
@@ -82,7 +82,7 @@ int32_t i2cButtonThread::runOnce()
 
     if (btn1_pressed && !long_press_triggered && (millis() - press_start_time >= LONG_PRESS_TIME)) {
         long_press_triggered = true;
-        InputEvent evt;
+        InputEvent evt = {};
         evt.source = "UserButton";
         evt.inputEvent = INPUT_BROKER_SELECT;
         evt.kbchar = 0;

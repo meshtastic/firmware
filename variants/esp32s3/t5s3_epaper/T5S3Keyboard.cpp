@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if defined(T5_S3_EPAPER_PRO_V2) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 
 #include "T5S3Keyboard.h"
 #include "graphics/ScreenFonts.h"
@@ -132,12 +132,10 @@ bool T5S3Keyboard::handleInput(const InputEvent &event)
     if (!active)
         return false;
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     if (event.touchTargetKind == static_cast<uint8_t>(meshtastic::TouchTargetKind::KeyboardKey)) {
         enqueueKey(static_cast<uint16_t>(event.touchTargetValue));
         return true;
     }
-#endif
 
     // A touch that leaves a registered key is consumed rather than becoming a cursor move or page swipe.
     if (event.touchX != 0 || event.touchY != 0)
@@ -343,4 +341,4 @@ bool T5S3Keyboard::draw(OLEDDisplay *display)
 
 } // namespace graphics
 
-#endif // T5S3_EPD_TOUCH_KEYBOARD && !MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#endif

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "graphics/DeviceUiPolicy.h"
+#include <OLEDDisplayFonts.h>
+
 #ifdef OLED_PL
 #include "graphics/fonts/OLEDDisplayFontsPL.h"
 #endif
@@ -20,7 +23,7 @@
 #include "graphics/fonts/OLEDDisplayFontsGR.h"
 #endif
 
-#if (defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(T5_S3_EPAPER_PRO)) && defined(USE_EINK)
+#if defined(CROWPANEL_ESP32S3_5_EPAPER) && defined(USE_EINK)
 #include "graphics/fonts/EinkDisplayFonts.h"
 #endif
 
@@ -113,7 +116,7 @@
 #define FONT_LARGE FONT_LARGE_LOCAL   // Height: 28
 #endif
 
-#if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(T5_S3_EPAPER_PRO)
+#if defined(CROWPANEL_ESP32S3_5_EPAPER)
 #undef FONT_SMALL
 #undef FONT_MEDIUM
 #undef FONT_LARGE
@@ -121,6 +124,17 @@
 #define FONT_MEDIUM Monospaced_plain_30
 #define FONT_LARGE Monospaced_plain_30
 #endif
+
+inline constexpr const uint8_t *deviceUiDefaultFontSmall = FONT_SMALL;
+inline constexpr const uint8_t *deviceUiDefaultFontMedium = FONT_MEDIUM;
+inline constexpr const uint8_t *deviceUiDefaultFontLarge = FONT_LARGE;
+
+#undef FONT_SMALL
+#undef FONT_MEDIUM
+#undef FONT_LARGE
+#define FONT_SMALL deviceUiMetrics().fontSmall
+#define FONT_MEDIUM deviceUiMetrics().fontMedium
+#define FONT_LARGE deviceUiMetrics().fontLarge
 
 #define _fontHeight(font) ((font)[1] + 1) // height is position 1
 

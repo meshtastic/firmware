@@ -16,13 +16,9 @@
 #include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
 #include "input/HapticFeedback.h"
-#endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-#include "audio/A7682Audio.h"
-#endif
+#include "audio/NotificationAudio.h"
+#include "platform/DeviceVariant.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "main.h"
@@ -33,9 +29,6 @@
 #include "mesh/MeshTypes.h"
 #include "mesh/RadioLibInterface.h"
 #include "mesh/Router.h"
-#if defined(_VARIANT_T_DECK_MAX)
-#include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
-#endif
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -143,51 +136,54 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
     }
 }
 
-#if defined(_VARIANT_T_DECK_MAX)
-bool applyMaxAntenna(t_deck_max::Antenna antenna)
+bool applyDeviceAntenna(bool external)
 {
-    const t_deck_max::Antenna previous = tDeckMaxGetAntenna();
-    if (previous == antenna)
+    if (!deviceVariant || !deviceVariant->supportsAntennaSelection()) {
+        LOG_WARN("Antenna switch requested on a device without antenna selection");
+        return false;
+    }
+
+    const bool previous = deviceVariant->isExternalAntennaSelected();
+    if (previous == external)
         return true;
 
     RadioLibInterface *radio = RadioLibInterface::instance;
     if (!router || !radio || router->getRadioIface() != radio) {
-        LOG_WARN("T-Deck-MAX: antenna switch requested without an active radio");
+        LOG_WARN("Antenna switch requested without an active radio");
         return false;
     }
 
     if (!radio->canSleep(true) || radio->isSending() || radio->isActivelyReceiving() || radio->isIRQPending()) {
-        LOG_WARN("T-Deck-MAX: antenna switch deferred while radio is busy");
+        LOG_WARN("Antenna switch deferred while radio is busy");
         return false;
     }
 
     if (!radio->sleep()) {
-        LOG_WARN("T-Deck-MAX: failed to put radio to sleep for antenna switch");
+        LOG_WARN("Failed to put radio to sleep for antenna switch");
         return false;
     }
 
     auto restore = [&]() {
-        const bool antennaRestored = tDeckMaxSetAntenna(previous);
+        const bool antennaRestored = deviceVariant->setExternalAntenna(previous);
         const bool radioRestored = radio->reconfigure();
         if (!antennaRestored || !radioRestored)
-            LOG_ERROR("T-Deck-MAX: failed to restore antenna after switch failure");
+            LOG_ERROR("Failed to restore antenna after switch failure");
     };
 
-    if (!tDeckMaxSetAntenna(antenna) || !radio->reconfigure()) {
+    if (!deviceVariant->setExternalAntenna(external) || !radio->reconfigure()) {
         restore();
         return false;
     }
 
-    if (!tDeckMaxSaveAntenna()) {
-        LOG_WARN("T-Deck-MAX: antenna changed but preference could not be saved; restoring previous mode");
+    if (!deviceVariant->saveAntennaSelection()) {
+        LOG_WARN("Antenna changed but preference could not be saved; restoring previous mode");
         restore();
         return false;
     }
 
-    LOG_INFO("T-Deck-MAX: antenna switched to %s", antenna == t_deck_max::Antenna::Internal ? "internal" : "external");
+    LOG_INFO("Antenna switched to %s", external ? "external" : "internal");
     return true;
 }
-#endif
 
 } // namespace
 
@@ -199,22 +195,6 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {
-        "Back",
-        "Device Role",
-        "Radio Preset",
-        "Frequency Slot",
-        "LoRa Region",
-        "Transmit Enabled",
-#if defined(_VARIANT_T_DECK_MAX)
-        "Antenna",
-#endif
-#if HAS_LORA_FEM
-        "FEM LNA",
-#endif
-    };
-    // NOTE: "FEM LNA" must stay last; it is the only entry that can be hidden at runtime by
-    // trimming optionsCount, which only works for a trailing option.
     enum optionsNumbers {
         Back = 0,
         DeviceRolePicker = 1,
@@ -222,23 +202,45 @@ void menuHandler::loraMenu()
         FrequencySlot = 3,
         LoraPicker = 4,
         TxEnabled = 5,
-#if defined(_VARIANT_T_DECK_MAX)
         AntennaPicker,
-#endif
 #if HAS_LORA_FEM
         LoraFemLna
 #endif
     };
+
+    // The antenna action is inserted only when the active device exposes that hardware.
+    static std::array<const char *, 8> optionsArray{};
+    size_t optionCount = 0;
+    optionsArray[optionCount++] = "Back";
+    optionsArray[optionCount++] = "Device Role";
+    optionsArray[optionCount++] = "Radio Preset";
+    optionsArray[optionCount++] = "Frequency Slot";
+    optionsArray[optionCount++] = "LoRa Region";
+    optionsArray[optionCount++] = "Transmit Enabled";
+
+    const int antennaOption =
+        deviceVariant && deviceVariant->supportsAntennaSelection() ? static_cast<int>(optionCount) : -1;
+    if (antennaOption >= 0)
+        optionsArray[optionCount++] = "Antenna";
+
+#if HAS_LORA_FEM
+    const int loraFemOption = static_cast<int>(optionCount);
+    optionsArray[optionCount++] = "FEM LNA";
+#endif
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    const size_t optionCount = sizeof(optionsArray) / sizeof(optionsArray[0]);
+    bannerOptions.optionsArrayPtr = optionsArray.data();
 #if HAS_LORA_FEM
     bannerOptions.optionsCount = loraFEMInterface.isLnaCanControl() ? optionCount : optionCount - 1;
 #else
     bannerOptions.optionsCount = optionCount;
 #endif
-    bannerOptions.bannerCallback = [](int selected) -> void {
+    bannerOptions.bannerCallback = [antennaOption
+#if HAS_LORA_FEM
+                                    , loraFemOption
+#endif
+    ](int selected) -> void {
         if (selected == Back) {
             // No action
         } else if (selected == DeviceRolePicker) {
@@ -251,13 +253,11 @@ void menuHandler::loraMenu()
             menuHandler::menuQueue = menuHandler::LoraPicker;
         } else if (selected == TxEnabled) {
             menuHandler::menuQueue = menuHandler::TXEnabledMenu;
-#if defined(_VARIANT_T_DECK_MAX)
-        } else if (selected == AntennaPicker) {
+        } else if (selected == antennaOption) {
             menuHandler::menuQueue = menuHandler::AntennaPicker;
-#endif
         }
 #if HAS_LORA_FEM
-        else if (selected == LoraFemLna) {
+        else if (selected == loraFemOption) {
             menuHandler::menuQueue = menuHandler::LoraFemLnaToggleMenu;
         }
 #endif
@@ -265,7 +265,6 @@ void menuHandler::loraMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-#if defined(_VARIANT_T_DECK_MAX)
 void menuHandler::antennaPicker()
 {
     enum optionsNumbers { Back, Internal, External };
@@ -275,7 +274,7 @@ void menuHandler::antennaPicker()
     bannerOptions.message = "Antenna";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
-    bannerOptions.InitialSelected = tDeckMaxGetAntenna() == t_deck_max::Antenna::External ? External : Internal;
+    bannerOptions.InitialSelected = deviceVariant && deviceVariant->isExternalAntennaSelected() ? External : Internal;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             menuHandler::menuQueue = menuHandler::LoraMenu;
@@ -283,14 +282,11 @@ void menuHandler::antennaPicker()
             return;
         }
 
-        const t_deck_max::Antenna antenna =
-            selected == External ? t_deck_max::Antenna::External : t_deck_max::Antenna::Internal;
-        if (!applyMaxAntenna(antenna))
+        if (!applyDeviceAntenna(selected == External))
             screen->showSimpleBanner("Antenna switch failed", 3000);
     };
     screen->showOverlayBanner(bannerOptions);
 }
-#endif
 
 void menuHandler::OnboardMessage()
 {
@@ -1381,9 +1377,7 @@ void menuHandler::systemBaseMenu()
     enum optionsNumbers {
         Back,
         Notifications,
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
         MessageVolume,
-#endif
         VibrationToggle,
         ScreenOptions,
         Bluetooth,
@@ -1399,16 +1393,15 @@ void menuHandler::systemBaseMenu()
     optionsArray[options] = "Notifications";
     optionsEnumArray[options++] = Notifications;
 
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-    optionsArray[options] = "Message Volume";
-    optionsEnumArray[options++] = MessageVolume;
-#endif
+    if (getNotificationAudio()) {
+        optionsArray[options] = "Message Volume";
+        optionsEnumArray[options++] = MessageVolume;
+    }
 
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
-    optionsArray[options] = "Vibration Toggle";
-    optionsEnumArray[options++] = VibrationToggle;
-#endif
+    if (getHapticOutput()) {
+        optionsArray[options] = "Vibration Toggle";
+        optionsEnumArray[options++] = VibrationToggle;
+    }
 
     optionsArray[options] = "Display Options";
     optionsEnumArray[options++] = ScreenOptions;
@@ -1448,17 +1441,12 @@ void menuHandler::systemBaseMenu()
         if (selected == Notifications) {
             menuHandler::menuQueue = menuHandler::BuzzerModeMenuPicker;
             screen->runNow();
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
         } else if (selected == MessageVolume) {
-            menuHandler::menuQueue = menuHandler::A7682AudioVolumeMenu;
+            menuHandler::menuQueue = menuHandler::NotificationAudioVolumeMenu;
             screen->runNow();
-#endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
         } else if (selected == VibrationToggle) {
             menuHandler::menuQueue = menuHandler::HapticToggleMenu;
             screen->runNow();
-#endif
         } else if (selected == ScreenOptions) {
             menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
             screen->runNow();
@@ -2413,25 +2401,23 @@ void menuHandler::BuzzerModeMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-void menuHandler::a7682AudioVolumeMenu()
+void menuHandler::notificationAudioVolumeMenu()
 {
     static const char *optionsArray[] = {"Back", "0", "1", "2", "3", "4", "5", "6", "7"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Message Volume";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = static_cast<uint8_t>(sizeof(optionsArray) / sizeof(optionsArray[0]));
-    bannerOptions.InitialSelected = a7682Audio ? static_cast<int>(a7682Audio->getVolume()) + 1 : 1;
+    auto *audio = getNotificationAudio();
+    bannerOptions.InitialSelected = audio ? static_cast<int>(audio->getVolume()) + 1 : 1;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected >= 1 && selected <= A7682_AUDIO_MAX_VOLUME + 1 && a7682Audio)
-            a7682Audio->setVolume(static_cast<uint8_t>(selected - 1));
+        if (selected >= 1 && selected <= NOTIFICATION_AUDIO_MAX_VOLUME + 1) {
+            if (auto *audio = getNotificationAudio())
+                audio->setVolume(static_cast<uint8_t>(selected - 1));
+        }
     };
     screen->showOverlayBanner(bannerOptions);
 }
-#endif
-
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
 void menuHandler::hapticToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
@@ -2448,7 +2434,6 @@ void menuHandler::hapticToggleMenu()
     };
     screen->showOverlayBanner(bannerOptions);
 }
-#endif
 
 void menuHandler::BrightnessPickerMenu()
 {
@@ -2695,15 +2680,7 @@ void menuHandler::wifiToggleMenu()
 
 void menuHandler::screenOptionsMenu()
 {
-    // Check if brightness is supported
-#if defined(T_DECK)
-    // TDeck Doesn't seem to support brightness at all, at least not reliably
-    bool hasSupportBrightness = false;
-#elif defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
-    bool hasSupportBrightness = true;
-#else
-    bool hasSupportBrightness = false;
-#endif
+    const bool hasSupportBrightness = getDeviceUiPolicy()->supportsBrightness();
 
     enum optionsNumbers { Back, Brightness, FrameToggles, DisplayUnits, MessageBubbles, Theme };
     static const char *optionsArray[7] = {"Back"};
@@ -3136,11 +3113,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case LoraPicker:
         LoraRegionPicker();
         break;
-#if defined(_VARIANT_T_DECK_MAX)
     case AntennaPicker:
         antennaPicker();
         break;
-#endif
     case DeviceRolePicker:
         deviceRolePicker();
         break;
@@ -3203,17 +3178,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case BuzzerModeMenuPicker:
         BuzzerModeMenu();
         break;
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-    case A7682AudioVolumeMenu:
-        a7682AudioVolumeMenu();
+    case NotificationAudioVolumeMenu:
+        notificationAudioVolumeMenu();
         break;
-#endif
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && \
-    (defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605))
     case HapticToggleMenu:
         hapticToggleMenu();
         break;
-#endif
     case MuiPicker:
         switchToMUIMenu();
         break;

@@ -14,6 +14,8 @@
 #include "error.h"
 #include "main.h"
 #include "modules/StatusLEDModule.h"
+#include "platform/DevicePowerController.h"
+#include "platform/DeviceVariant.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -30,11 +32,6 @@
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 #include "Throttle.h"
-
-#if defined(USE_XL9555) && !defined(T_DECK_MAX)
-#include "ExtensionIOXL9555.hpp"
-extern ExtensionIOXL9555 io;
-#endif
 
 #ifdef HAS_PPM
 #include <XPowersLib.h>
@@ -285,10 +282,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(BUZZER_EN_PIN, LOW);
 #endif
 
-#ifdef PIN_DRV_EN
-    digitalWrite(PIN_DRV_EN, LOW);
-#endif
-
 #ifdef PIN_3V3_EN
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
@@ -296,6 +289,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
+
+    if (deviceVariant)
+        deviceVariant->setMotorPower(false);
+
     statusLEDModule->setPowerLED(false);
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power

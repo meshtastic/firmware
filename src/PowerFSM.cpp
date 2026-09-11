@@ -16,6 +16,8 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "modules/StatusLEDModule.h"
+#include "platform/DeviceVariant.h"
+#include "platform/DevicePowerController.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -75,34 +77,29 @@ static uint32_t getBluetoothWaitMs()
     return Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
 }
 
-#if defined(T5_S3_EPAPER_PRO)
 static void t5BacklightOffForSleep()
 {
-    t5BacklightSetForcedBySleep(true);
+    if (auto *powerController = getDevicePowerController())
+        powerController->onLightSleepEnter();
 }
 
 static void t5BacklightWakeFromSleep()
 {
-    t5BacklightSetForcedBySleep(false);
+    if (auto *powerController = getDevicePowerController())
+        powerController->onLightSleepExit();
 }
 
 static void t5BacklightOffForTimeout()
 {
-    t5BacklightSetForcedByTimeout(true);
-    t5TouchSetForcedByTimeout(true);
+    if (auto *powerController = getDevicePowerController())
+        powerController->onScreenTimeout();
 }
 
 static void t5BacklightOnFromUserInput()
 {
-    t5BacklightHandleUserInput();
-    t5TouchHandleUserInput();
+    if (auto *powerController = getDevicePowerController())
+        powerController->onUserInput();
 }
-#else
-static void t5BacklightOffForSleep() {}
-static void t5BacklightWakeFromSleep() {}
-static void t5BacklightOffForTimeout() {}
-static void t5BacklightOnFromUserInput() {}
-#endif
 
 static void sdsEnter()
 {

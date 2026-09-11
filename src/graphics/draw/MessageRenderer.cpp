@@ -6,17 +6,13 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
-#include "graphics/T5S3EpaperUI.h"
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || T5S3_EPD_UI_PROFILE
 #include "graphics/draw/MessageNotificationPolicy.h"
-#endif
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #include "graphics/TouchLayout.h"
-#endif
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
+#include "graphics/DeviceUiPolicy.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
@@ -58,7 +54,7 @@ bool scrollStarted = false;
 static bool didReset = false;
 static constexpr int MESSAGE_BLOCK_GAP = 6;
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
+#if defined(USE_EINK)
 static int getTDeckMessageContentTop(OLEDDisplay *display)
 {
     const int titleY = getTextPositions(display)[1] + 2;
@@ -90,13 +86,15 @@ void scrollDown()
     for (int h : cachedHeights)
         totalHeight += h;
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
+#if defined(USE_EINK)
     OLEDDisplay *display = (screen != nullptr) ? screen->getDisplayDevice() : nullptr;
     const int fallbackHeight = screen ? screen->getHeight() : 64;
-    const int visibleHeight =
-        display ? getTDeckMessageViewportHeight(display) : std::max(1, fallbackHeight - (FONT_HEIGHT_SMALL * 2));
+    const int visibleHeight = getDeviceUiPolicy()->usesExpandedEinkUi()
+                                  ? (display ? getTDeckMessageViewportHeight(display)
+                                             : std::max(1, fallbackHeight - (FONT_HEIGHT_SMALL * 2)))
+                                  : std::max(1, fallbackHeight - (FONT_HEIGHT_SMALL * 2));
 #else
-    int visibleHeight = screen->getHeight() - (FONT_HEIGHT_SMALL * 2);
+    int visibleHeight = screen ? screen->getHeight() - (FONT_HEIGHT_SMALL * 2) : 1;
 #endif
     int maxScroll = totalHeight - visibleHeight;
     if (maxScroll < 0)
@@ -143,9 +141,11 @@ void nudgeScroll(int8_t direction)
     OLEDDisplay *display = (screen != nullptr) ? screen->getDisplayDevice() : nullptr;
     const int displayHeight = display ? display->getHeight() : 64;
     const int navHeight = FONT_HEIGHT_SMALL;
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
+#if defined(USE_EINK)
     const int usableHeight =
-        display ? getTDeckMessageViewportHeight(display) : std::max(1, displayHeight - navHeight);
+        getDeviceUiPolicy()->usesExpandedEinkUi()
+            ? (display ? getTDeckMessageViewportHeight(display) : std::max(1, displayHeight - navHeight))
+            : std::max(1, displayHeight - navHeight);
 #else
     const int usableHeight = std::max(0, displayHeight - navHeight);
 #endif
@@ -421,7 +421,7 @@ static void drawMessageScrollbar(OLEDDisplay *display, int visibleHeight, int to
     if (totalHeight <= visibleHeight)
         return; // no scrollbar needed
 
-    const int scrollbarWidth = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_MESSAGE_SCROLLBAR_WIDTH : 1;
+    const int scrollbarWidth = getDeviceUiPolicy()->usesExpandedEinkUi() ? deviceUiMetrics().messageScrollbarWidth : 1;
     const int scrollbarX = display->getWidth() - scrollbarWidth - 1;
     int scrollbarHeight = visibleHeight;
     int thumbHeight = std::max(6, (scrollbarHeight * visibleHeight) / totalHeight);
@@ -435,12 +435,14 @@ static void drawMessageScrollbar(OLEDDisplay *display, int visibleHeight, int to
     }
 }
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
+#if defined(USE_EINK)
 static int drawTDeckThreadHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *threadTitle, size_t visibleCount)
 {
     graphics::drawCommonHeader(display, x, y, "Messages");
 
-    const int margin = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_MESSAGE_MARGIN : 8;
+    const bool expandedEink = getDeviceUiPolicy()->usesExpandedEinkUi();
+    const auto &ui = deviceUiMetrics();
+    const int margin = expandedEink ? ui.messageMargin : 8;
     const int left = x + margin;
     const int right = display->getWidth() - margin;
     const int titleY = getTextPositions(display)[1] + 2;
@@ -449,7 +451,7 @@ static int drawTDeckThreadHeader(OLEDDisplay *display, int16_t x, int16_t y, con
     char countLabel[20];
     snprintf(countLabel, sizeof(countLabel), "%u visible", static_cast<unsigned>(visibleCount));
 
-    display->setFont(T5S3_EPD_UI_FONT_BODY);
+    display->setFont(expandedEink ? ui.fontBody : FONT_SMALL);
     const int countWidth = display->getStringWidth(countLabel);
     const int titleMaxWidth = std::max(0, right - left - countWidth - 12);
     char clippedTitle[80];
@@ -465,10 +467,8 @@ static int drawTDeckThreadHeader(OLEDDisplay *display, int16_t x, int16_t y, con
 
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-    if (screen)
+    if (getDeviceUiPolicy()->usesExpandedEinkUi() && screen)
         screen->markTouchFrameMapped();
-#endif
 
     // Ensure any boot-relative timestamps are upgraded if RTC is valid
     messageStore.upgradeBootRelativeTimestamps();
@@ -508,54 +508,33 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     const bool compactPanel = graphics::isCompactPanel(display);
+    const bool expandedEink = getDeviceUiPolicy()->usesExpandedEinkUi();
+    const auto &ui = deviceUiMetrics();
     // Compact panels: no bottom nav row anymore (see UIRenderer::drawNavigationBar), full height available.
-#if T5S3_EPD_UI_PROFILE
-    const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL;
-#else
-    const int navHeight = compactPanel ? 0 : FONT_HEIGHT_SMALL + BASEUI_BELOW_HEADER_MARGIN + BASEUI_HEADER_MARGIN;
-#endif
+    const int navHeight = expandedEink ? (compactPanel ? 0 : FONT_HEIGHT_SMALL)
+                                       : (compactPanel ? 0 : FONT_HEIGHT_SMALL + BASEUI_BELOW_HEADER_MARGIN + BASEUI_HEADER_MARGIN);
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
-    const int contentTop = getTDeckMessageContentTop(display);
-    const int contentBottom = std::max(contentTop + 1, scrollBottom - 1);
-    const int usableHeight = std::max(1, contentBottom - contentTop);
-#else
-    const int contentTop = compactPanel ? 0 : navHeight;
-    const int contentBottom = scrollBottom;
-    const int usableHeight = compactPanel ? scrollBottom - contentTop : scrollBottom;
-#endif
-#if T5S3_EPD_UI_PROFILE
-    constexpr int LEFT_MARGIN = T5S3_EPD_UI_MESSAGE_MARGIN;
-    constexpr int RIGHT_MARGIN = T5S3_EPD_UI_MESSAGE_MARGIN;
-    constexpr int SCROLLBAR_WIDTH = T5S3_EPD_UI_MESSAGE_SCROLLBAR_WIDTH;
-    constexpr int BUBBLE_PAD_X = T5S3_EPD_UI_MESSAGE_BUBBLE_PAD_X;
-    constexpr int BUBBLE_PAD_Y = T5S3_EPD_UI_MESSAGE_BUBBLE_PAD_Y;
-    constexpr int BUBBLE_RADIUS = T5S3_EPD_UI_MESSAGE_BUBBLE_RADIUS;
-    constexpr int BUBBLE_MIN_W = T5S3_EPD_UI_MESSAGE_BUBBLE_MIN_WIDTH;
-    constexpr int BUBBLE_TEXT_INDENT = T5S3_EPD_UI_MESSAGE_TEXT_INDENT;
-#else
-    constexpr int LEFT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
-    constexpr int RIGHT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
-    constexpr int SCROLLBAR_WIDTH = 3;
-    constexpr int BUBBLE_PAD_X = 3;
-    constexpr int BUBBLE_PAD_Y = 4;
-    constexpr int BUBBLE_RADIUS = 4;
-    constexpr int BUBBLE_MIN_W = 24;
-    constexpr int BUBBLE_TEXT_INDENT = 2;
-#endif
+    const int contentTop = expandedEink ? getTDeckMessageContentTop(display) : (compactPanel ? 0 : navHeight);
+    const int contentBottom = expandedEink ? std::max(contentTop + 1, scrollBottom - 1) : scrollBottom;
+    const int usableHeight = expandedEink ? std::max(1, contentBottom - contentTop)
+                                          : (compactPanel ? scrollBottom - contentTop : scrollBottom);
+    const int leftMargin = expandedEink ? ui.messageMargin : 2 + BASEUI_BODY_LR_MARGIN;
+    const int rightMargin = expandedEink ? ui.messageMargin : 2 + BASEUI_BODY_LR_MARGIN;
+    const int scrollbarWidth = expandedEink ? ui.messageScrollbarWidth : 3;
+    const int bubblePadX = expandedEink ? ui.messageBubblePadX : 3;
+    const int bubblePadY = expandedEink ? ui.messageBubblePadY : 4;
+    const int bubbleRadius = expandedEink ? ui.messageBubbleRadius : 4;
+    const int bubbleMinWidth = expandedEink ? ui.messageBubbleMinWidth : 24;
+    const int bubbleTextIndent = expandedEink ? ui.messageTextIndent : 2;
 
     // Check if bubbles are enabled
     const bool showBubbles = config.display.enable_message_bubbles && !compactPanel;
-    const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
-#if T5S3_EPD_UI_PROFILE
-    const int contentLeft = x;
-#else
-    const int contentLeft = x + (showBubbles ? BASEUI_BODY_LR_MARGIN : 0);
-#endif
+    const int textIndent = showBubbles ? (bubblePadX + bubbleTextIndent) : leftMargin;
+    const int contentLeft = expandedEink ? x : x + (showBubbles ? BASEUI_BODY_LR_MARGIN : 0);
 
     // Derived widths
-    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
-    const int rightTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - SCROLLBAR_WIDTH;
+    const int leftTextWidth = SCREEN_WIDTH - leftMargin - rightMargin - (showBubbles ? (bubblePadX * 2) : 0);
+    const int rightTextWidth = SCREEN_WIDTH - leftMargin - rightMargin - scrollbarWidth;
 
     // Title string depending on mode
     char titleStr[48];
@@ -584,7 +563,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
     }
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     char threadTitle[80] = "ALL THREADS";
     switch (currentMode) {
     case ThreadMode::ALL:
@@ -597,7 +575,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         snprintf(threadTitle, sizeof(threadTitle), "THREAD / %s", titleStr);
         break;
     }
-#endif
 
     if (filtered.empty()) {
         // If current conversation is empty go back to ALL view
@@ -608,21 +585,20 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         // Still in ALL mode and no messages at all → show placeholder
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
-        const int emptyContentTop = drawTDeckThreadHeader(display, x, y, threadTitle, 0);
-        (void)emptyContentTop;
-        display->setFont(FONT_SMALL);
-        didReset = false;
-        const char *messageString = "No messages in this thread";
-        const int centerText = (display->getWidth() / 2) - (display->getStringWidth(messageString) / 2);
-        display->drawString(centerText, emptyContentTop + 28, messageString);
-#else
-        graphics::drawCommonHeader(display, x, y, titleStr);
-        didReset = false;
-        const char *messageString = "No messages";
-        int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
-        display->drawString(center_text, getTextPositions(display)[2], messageString);
-#endif
+        if (expandedEink) {
+            const int emptyContentTop = drawTDeckThreadHeader(display, x, y, threadTitle, 0);
+            display->setFont(FONT_SMALL);
+            didReset = false;
+            const char *messageString = "No messages in this thread";
+            const int centerText = (display->getWidth() / 2) - (display->getStringWidth(messageString) / 2);
+            display->drawString(centerText, emptyContentTop + 28, messageString);
+        } else {
+            graphics::drawCommonHeader(display, x, y, titleStr);
+            didReset = false;
+            const char *messageString = "No messages";
+            int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
+            display->drawString(center_text, getTextPositions(display)[2], messageString);
+        }
         graphics::drawCommonFooter(display, x, y);
         return;
     }
@@ -897,22 +873,22 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 #else
     // E-Ink: disable autoscroll
-#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE
-    // Keep manual UP/DOWN positioning while leaving automatic movement disabled.
-    waitingToReset = false;
-    scrollStarted = false;
-    lastTime = millis();
-#else
-    scrollY = 0.0f;
-    waitingToReset = false;
-    scrollStarted = false;
-    lastTime = millis();
-#endif
+    if (expandedEink) {
+        // Keep manual UP/DOWN positioning while leaving automatic movement disabled.
+        waitingToReset = false;
+        scrollStarted = false;
+        lastTime = millis();
+    } else {
+        scrollY = 0.0f;
+        waitingToReset = false;
+        scrollStarted = false;
+        lastTime = millis();
+    }
 #endif
 
     int finalScroll = (int)scrollY;
     int yOffset = -finalScroll + contentTop;
-    const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
+    const int rightEdge = SCREEN_WIDTH - scrollbarWidth - rightMargin;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
 #if GRAPHICS_TFT_COLORING_ENABLED
     const uint32_t themeId = getActiveTheme().id;
@@ -952,10 +928,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     constexpr int EMOTE_PADDING_ABOVE = 4;
                     visualTop -= EMOTE_PADDING_ABOVE;
                 }
-                topY = visualTop - BUBBLE_PAD_Y;
+                topY = visualTop - bubblePadY;
             }
             int visualBottom = getDrawnLinePixelBottom(lineTop[b.end], cachedLines[b.end], isHeader[b.end]);
-            int bottomY = visualBottom + BUBBLE_PAD_Y;
+            int bottomY = visualBottom + bubblePadY;
 
             // On high-res screens, keep a 1px gap under the header
             if (currentResolution == ScreenResolution::High) {
@@ -997,7 +973,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     maxLineW = w;
             }
 
-            int bubbleW = std::max(BUBBLE_MIN_W, maxLineW + (textIndent * 2));
+            int bubbleW = std::max(bubbleMinWidth, maxLineW + (textIndent * 2));
             int bubbleH = (bottomY - topY) + 1;
             int bubbleX = 0;
             if (b.mine) {
@@ -1010,19 +986,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             if (bubbleX + bubbleW > rightEdge)
                 bubbleW = std::max(1, rightEdge - bubbleX);
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)) && defined(USE_EINK)
-            if (screen) {
+            if (expandedEink && screen) {
                 const int touchTop = std::max(topY, contentTop);
                 const int touchBottom = std::min(bottomY, contentBottom - 1);
                 if (touchBottom >= touchTop)
                     screen->addTouchTarget(touchExpandedRect(bubbleX, touchTop, bubbleW, touchBottom - touchTop + 1, 2),
                                            meshtastic::TouchTargetKind::MessageRow, 0, INPUT_BROKER_NONE);
             }
-#endif
 
             // Draw rounded rectangle bubble
-            if (bubbleW > BUBBLE_RADIUS * 2 && bubbleH > BUBBLE_RADIUS * 2) {
-                const int r = BUBBLE_RADIUS;
+            if (bubbleW > bubbleRadius * 2 && bubbleH > bubbleRadius * 2) {
+                const int r = bubbleRadius;
                 const int bx = bubbleX;
                 const int by = topY;
                 const int bw = bubbleW;
@@ -1082,11 +1056,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int lineY = yOffset;
     for (size_t i = 0; i < cachedLines.size(); ++i) {
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
-        const bool lineVisible = lineY >= contentTop && lineY < contentBottom;
-#else
-        const bool lineVisible = lineY > -cachedHeights[i] && lineY < scrollBottom;
-#endif
+        const bool lineVisible = expandedEink ? (lineY >= contentTop && lineY < contentBottom)
+                                              : (lineY > -cachedHeights[i] && lineY < scrollBottom);
         if (lineVisible) {
             if (isHeader[i]) {
 
@@ -1094,9 +1065,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
-                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - w - (showBubbles ? textIndent : 0);
-                    if (headerX < LEFT_MARGIN)
-                        headerX = LEFT_MARGIN;
+                    headerX = (SCREEN_WIDTH - scrollbarWidth - rightMargin) - w - (showBubbles ? textIndent : 0);
+                    if (headerX < leftMargin)
+                        headerX = leftMargin;
                 } else {
                     headerX = contentLeft + textIndent;
                 }
@@ -1141,9 +1112,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 if (isMine[i]) {
                     // Calculate actual rendered width including emotes
                     int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
-                    int rightX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - renderedWidth - (showBubbles ? textIndent : 0);
-                    if (rightX < LEFT_MARGIN)
-                        rightX = LEFT_MARGIN;
+                    int rightX = (SCREEN_WIDTH - scrollbarWidth - rightMargin) - renderedWidth - (showBubbles ? textIndent : 0);
+                    if (rightX < leftMargin)
+                        rightX = leftMargin;
 
                     drawStringWithEmotes(display, rightX, lineY, cachedLines[i], emotes, numEmotes);
                 } else {
@@ -1156,15 +1127,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // Draw scrollbar
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
     drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, contentTop);
-    drawTDeckThreadHeader(display, x, y, threadTitle, filtered.size());
-#else
-    drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, contentTop);
-    if (!compactPanel) {
+    if (expandedEink) {
+        drawTDeckThreadHeader(display, x, y, threadTitle, filtered.size());
+    } else if (!compactPanel) {
         graphics::drawCommonHeader(display, x, y, titleStr);
     }
-#endif
     graphics::drawCommonFooter(display, x, y);
 }
 
@@ -1277,18 +1245,15 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 
 void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || T5S3_EPD_UI_PROFILE
     const char *msgText = MessageStore::getText(sm);
-#endif
+    const bool expandedEink = getDeviceUiPolicy()->usesExpandedEinkUi();
 
     if (packet.from != 0) {
         hasUnreadMessage = true;
         const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
         // Don't let the pop-up clobber a menu/picker the user is interacting with; the wake below
         // still happens so a message can light the screen back up.
-#if !defined(T_DECK_MAX) && !defined(_VARIANT_T_DECK_PRO_V1_1) && !T5S3_EPD_UI_PROFILE
         const bool menuShowing = NotificationRenderer::isMenuShowing();
-#endif
 
         // Determine if message belongs to a muted channel
         bool isChannelMuted = false;
@@ -1352,12 +1317,11 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
                 strcpy(banner, "New Message");
         }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || T5S3_EPD_UI_PROFILE
         // Select the thread after muted-message filtering and before rendering the banner.
-        if (msgText && msgText[0] != '\0')
+        if (expandedEink && msgText && msgText[0] != '\0')
             setThreadFor(sm, packet);
-        resetScrollState();
-#endif
+        if (expandedEink)
+            resetScrollState();
 
         // Append context (which channel or DM) so the banner shows where the message arrived
         {
@@ -1385,47 +1349,33 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
         // Shorter banner if already in a conversation (Channel or Direct)
         bool inThread = (getThreadMode() != ThreadMode::ALL);
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || T5S3_EPD_UI_PROFILE
-        const bool showBanner = shouldShowIncomingMessageBanner(screen && screen->isMessageFrameShown(), isAlert, suppressBanner);
+        const bool showBanner = expandedEink
+                                    ? shouldShowIncomingMessageBanner(screen && screen->isMessageFrameShown(), isAlert, suppressBanner)
+                                    : (!suppressBanner && !menuShowing);
 
-        if (showBanner && screen && shouldWakeOnReceivedMessage()) {
+        if ((expandedEink ? showBanner : !suppressBanner) && screen && shouldWakeOnReceivedMessage()) {
             screen->setOn(true);
         }
 
         if (showBanner && screen) {
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
         }
-#else
-        if (!suppressBanner && shouldWakeOnReceivedMessage()) {
-            screen->setOn(true);
-        }
-
-        if (!suppressBanner && !menuShowing) {
-            screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
-        }
-#endif
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || T5S3_EPD_UI_PROFILE
     } else {
         if (msgText && msgText[0] != '\0')
             setThreadFor(sm, packet);
         resetScrollState();
     }
 
-    // E-Ink needs the Screen thread to commit the frame after message state changes.
-    if (screen)
+    if (!expandedEink) {
+        // Preserve the legacy focus update for non-expanded displays.
+        if (packet.from != 0 && msgText && msgText[0] != '\0')
+            setThreadFor(sm, packet);
+        resetScrollState();
+    }
+
+    // Expanded E-Ink needs the Screen thread to commit the frame after message state changes.
+    if (expandedEink && screen)
         screen->runNow();
-#else
-    }
-
-    // Always focus into the correct conversation thread when a message with real text arrives
-    const char *msgText = MessageStore::getText(sm);
-    if (msgText && msgText[0] != '\0') {
-        setThreadFor(sm, packet);
-    }
-
-    // Reset scroll for a clean start
-    resetScrollState();
-#endif
 }
 
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)

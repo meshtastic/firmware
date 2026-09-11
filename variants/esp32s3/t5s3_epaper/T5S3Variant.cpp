@@ -1,12 +1,12 @@
+#include "variant.h"
 #include "configuration.h"
-
-#ifdef T5_S3_EPAPER_PRO
 
 #include "Observer.h"
 #include "TouchDrvGT911.hpp"
 #include "Wire.h"
 #include "buzz.h"
 #include "concurrency/OSThread.h"
+#include "graphics/DeviceUiPolicy.h"
 #include "input/InputBroker.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
@@ -18,6 +18,7 @@
 #include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
+#include "graphics/niche/Utils/FlashData.h"
 
 // Bridges touch events from TouchScreenImpl1 directly into InkHUD,
 // bypassing the InputBroker (which is excluded in InkHUD builds).
@@ -88,6 +89,17 @@ constexpr uint8_t BACKLIGHT_OFF_LEVEL = LOW;
 volatile bool backlightUserEnabled = true;
 volatile bool backlightForcedByTimeout = false;
 volatile bool backlightForcedBySleep = false;
+
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+constexpr uint32_t BACKLIGHT_PREFS_VERSION = 1;
+struct BacklightPrefs {
+    uint32_t version = BACKLIGHT_PREFS_VERSION;
+    bool keepOn = true;
+};
+
+BacklightPrefs backlightPrefs;
+bool backlightPrefsLoaded = false;
+#endif
 
 void applyBacklightState()
 {
@@ -187,10 +199,15 @@ bool isPca9535SideKeyPressed()
     return (port1 & BOARD_PCA9535_BUTTON_MASK) == 0;
 }
 
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+bool usesT5S3V2Ui()
+{
+    const auto *policy = getDeviceUiPolicy();
+    return policy != nullptr && policy->supportsT5Keyboard();
+}
+
 void injectT5s3QuickMessageEvent()
 {
-    if (!inputBroker)
+    if (!usesT5S3V2Ui() || !inputBroker)
         return;
 
     InputEvent event{};
@@ -202,7 +219,6 @@ void injectT5s3QuickMessageEvent()
     inputBroker->injectInputEvent(&event);
 #endif
 }
-#endif
 
 class SideKeyInterruptThread : public concurrency::OSThread
 {
@@ -220,20 +236,20 @@ class SideKeyInterruptThread : public concurrency::OSThread
 
     void begin()
     {
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        pinMode(BUTTON_PIN, INPUT_PULLUP);
-        if (!configurePca9535SideKey()) {
-            LOG_WARN("PCA9535 side-key input configuration failed");
+        if (usesT5S3V2Ui()) {
+            pinMode(BUTTON_PIN, INPUT_PULLUP);
+            if (!configurePca9535SideKey()) {
+                LOG_WARN("PCA9535 side-key input configuration failed");
+            }
+            uint8_t ignored = 0xFF;
+            (void)readPca9535Port1(&ignored);
         }
-        uint8_t ignored = 0xFF;
-        (void)readPca9535Port1(&ignored);
-#endif
         pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
         attachInterrupt(BOARD_PCA9535_INT, SideKeyInterruptThread::isr, FALLING);
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        // Keep a polling path as a fallback when the expander INT line is missed or latched.
-        startThread();
-#endif
+        if (usesT5S3V2Ui()) {
+            // Keep a polling path as a fallback when the expander INT line is missed or latched.
+            startThread();
+        }
     }
 
   protected:
@@ -253,12 +269,10 @@ class SideKeyInterruptThread : public concurrency::OSThread
         }
 
         // Ignore side-key handling while BOOT/user button is held.
-#if !defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        if (digitalRead(BUTTON_PIN) == LOW) {
+        if (!usesT5S3V2Ui() && digitalRead(BUTTON_PIN) == LOW) {
             resetStateAndStop();
             return OSThread::disable();
         }
-#endif
 
         switch (state) {
         case State::IRQ_PENDING:
@@ -275,12 +289,11 @@ class SideKeyInterruptThread : public concurrency::OSThread
 
             // Spurious/cleared edge.
             resetStateAndStop();
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-            startThread();
-            return SAMPLE_MS;
-#else
+            if (usesT5S3V2Ui()) {
+                startThread();
+                return SAMPLE_MS;
+            }
             return OSThread::disable();
-#endif
 
         case State::PRESSED: {
             if (isPca9535SideKeyPressed()) {
@@ -302,35 +315,29 @@ class SideKeyInterruptThread : public concurrency::OSThread
                     t5TouchHandleUserInput();
                     t5BacklightHandleUserInput();
                 } else {
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-                    injectT5s3QuickMessageEvent();
-#else
-                    toggleTouchInputEnabled();
-#endif
+                    if (usesT5S3V2Ui())
+                        injectT5s3QuickMessageEvent();
+                    else
+                        toggleTouchInputEnabled();
                 }
                 lastActionMs = now;
             }
 
             resetStateAndStop();
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-            startThread();
-            return SAMPLE_MS;
-#else
+            if (usesT5S3V2Ui()) {
+                startThread();
+                return SAMPLE_MS;
+            }
             return OSThread::disable();
-#endif
         }
 
         case State::REST:
         default:
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-            if (isPca9535SideKeyPressed()) {
+            if (usesT5S3V2Ui() && isPca9535SideKeyPressed()) {
                 state = State::PRESSED;
                 pressStartMs = now;
             }
-            return SAMPLE_MS;
-#else
-            return OSThread::disable();
-#endif
+            return usesT5S3V2Ui() ? SAMPLE_MS : OSThread::disable();
         }
     }
 
@@ -412,9 +419,8 @@ class SideKeyInterruptThread : public concurrency::OSThread
         (void)readPca9535Port1(&ignored);
         pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
         attachInterrupt(BOARD_PCA9535_INT, SideKeyInterruptThread::isr, FALLING);
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        startThread();
-#endif
+        if (usesT5S3V2Ui())
+            startThread();
 
         return 0;
     }
@@ -475,6 +481,31 @@ void t5BacklightSetUserEnabled(bool enabled)
 bool t5BacklightIsUserEnabled()
 {
     return backlightUserEnabled;
+}
+
+void t5BacklightLoadUserPreference()
+{
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+    if (!backlightPrefsLoaded) {
+        BacklightPrefs loaded;
+        if (FlashData<BacklightPrefs>::load(&loaded, "t5_backlight") && loaded.version == BACKLIGHT_PREFS_VERSION)
+            backlightPrefs = loaded;
+        backlightPrefsLoaded = true;
+    }
+    t5BacklightSetUserEnabled(backlightPrefs.keepOn);
+#endif
+}
+
+void t5BacklightSaveUserPreference(bool enabled)
+{
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+    t5BacklightLoadUserPreference();
+    backlightPrefs.version = BACKLIGHT_PREFS_VERSION;
+    backlightPrefs.keepOn = enabled;
+    FlashData<BacklightPrefs>::save(&backlightPrefs, "t5_backlight");
+#else
+    (void)enabled;
+#endif
 }
 
 void t5BacklightToggleUser()
@@ -696,36 +727,38 @@ bool readTouch(int16_t *x, int16_t *y)
         int16_t raw_x;
         int16_t raw_y;
         if (touch.getPoint(&raw_x, &raw_y)) {
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
+            if (getDeviceUiPolicy()->usesPanelCoordinateMapping()) {
             // GT911 already reports portrait logical coordinates (540x960); do not rotate again.
-            *x = raw_x;
-            *y = raw_y;
-#elif defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
-            // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
-            // rotation=3 is the physical identity (device's default orientation).
-            switch (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation) {
-            default:
-            case 3:
                 *x = raw_x;
                 *y = raw_y;
+            } else {
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+            // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
+            // rotation=3 is the physical identity (device's default orientation).
+                switch (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation) {
+                default:
+                case 3:
+                    *x = raw_x;
+                    *y = raw_y;
                 break; // identity
-            case 2:
-                *x = (EPD_WIDTH - 1) - raw_y;
-                *y = raw_x;
+                case 2:
+                    *x = (EPD_WIDTH - 1) - raw_y;
+                    *y = raw_x;
                 break; // 90° CW tilt
-            case 1:
-                *x = (EPD_HEIGHT - 1) - raw_x;
-                *y = (EPD_WIDTH - 1) - raw_y;
+                case 1:
+                    *x = (EPD_HEIGHT - 1) - raw_x;
+                    *y = (EPD_WIDTH - 1) - raw_y;
                 break; // 180° flip
-            case 0:
-                *x = raw_y;
-                *y = (EPD_HEIGHT - 1) - raw_x;
+                case 0:
+                    *x = raw_y;
+                    *y = (EPD_HEIGHT - 1) - raw_x;
                 break; // 90° CCW tilt
-            }
+                }
 #else
             *x = raw_x;
             *y = raw_y;
-#endif
+ #endif
+            }
             LOG_DEBUG("touched(%d/%d)", *x, *y);
             return true;
         }
@@ -734,13 +767,13 @@ bool readTouch(int16_t *x, int16_t *y)
     return false;
 }
 
-void variant_shutdown()
+void t5s3Shutdown()
 {
     // Ensure backlight is off during deep sleep.
     t5BacklightSetForcedBySleep(true);
 }
 
-void lateInitVariant()
+void t5s3LateInit()
 {
     touch.setPins(GT911_PIN_RST, GT911_PIN_INT);
     if (touch.begin(Wire, GT911_SLAVE_ADDRESS_H, GT911_PIN_SDA, GT911_PIN_SCL)) {
@@ -779,11 +812,10 @@ void lateInitVariant()
         touchLightSleepObserver.observer.observe(&notifyLightSleep);
         touchLightSleepEndObserver.observer.observe(&notifyLightSleepEnd);
 #endif
-#if defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        touchScreenImpl1 = new TouchScreenImpl1(EPD_HEIGHT, EPD_WIDTH, readTouch);
-#else
-        touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
-#endif
+        if (getDeviceUiPolicy()->usesPanelCoordinateMapping())
+            touchScreenImpl1 = new TouchScreenImpl1(EPD_HEIGHT, EPD_WIDTH, readTouch);
+        else
+            touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
         touchScreenImpl1->init();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
         touchBridge.observe(touchScreenImpl1);
@@ -801,4 +833,3 @@ void lateInitVariant()
     }
 #endif
 }
-#endif

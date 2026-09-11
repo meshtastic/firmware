@@ -66,13 +66,9 @@
 #define DAC_I2S_DOUT 17
 #define DAC_I2S_DIN 40
 
-// AudioThread controls the external amplifier through the MAX board helper.
-#define AUDIO_AMP_ENABLE(on) tDeckMaxSetAmplifier(on)
-
 // Battery charger and fuel gauge
 #define HAS_PPM 1
 #define XPOWERS_CHIP_SY6970
-#define T_DECK_MAX_CHARGER_ADDR 0x6A
 #define HAS_BQ27220 1
 #define BQ27220_I2C_SDA SDA
 #define BQ27220_I2C_SCL SCL

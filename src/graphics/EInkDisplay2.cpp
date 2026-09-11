@@ -5,7 +5,9 @@
 #include "EInkDisplay2.h"
 #include "FSCommon.h"
 #include "SPILock.h"
+#include "graphics/DeviceUiPolicy.h"
 #include "main.h"
+#include <memory>
 #include <SPI.h>
 
 #ifdef GXEPD2_DRIVER_0
@@ -56,9 +58,10 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
  */
 bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 {
-#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
-    return forceDisplayFromBuffer(buffer, msecLimit);
-#else
+    if (getDeviceUiPolicy()->usesSharedSpiEink()) {
+        return forceDisplayFromBuffer(buffer, msecLimit);
+    }
+
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
 
@@ -97,10 +100,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     endUpdate();
     LOG_DEBUG("done");
     return true;
-#endif
 }
 
-#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
 bool EInkDisplay::forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t msecLimit)
 {
     const uint8_t *frame = sourceBuffer != nullptr ? sourceBuffer : buffer;
@@ -111,14 +112,14 @@ bool EInkDisplay::forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t m
     if (msecLimit != 0 && lastDrawMsec != 0 && now - lastDrawMsec <= msecLimit)
         return false;
 
-#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
-    // T-Deck Pro shares this SPI bus with the LoRa radio. Avoid holding the
-    // lock for frames that the rate limiter will reject.
-    concurrency::LockGuard g(spiLock);
-    now = millis();
-    if (msecLimit != 0 && lastDrawMsec != 0 && now - lastDrawMsec <= msecLimit)
-        return false;
-#endif
+    std::unique_ptr<concurrency::LockGuard> spiGuard;
+    if (getDeviceUiPolicy()->usesSharedSpiEink()) {
+        // Shared-SPI displays must not hold the bus while a frame is rate-limited.
+        spiGuard = std::make_unique<concurrency::LockGuard>(spiLock);
+        now = millis();
+        if (msecLimit != 0 && lastDrawMsec != 0 && now - lastDrawMsec <= msecLimit)
+            return false;
+    }
 
     lastDrawMsec = now;
 
@@ -156,7 +157,6 @@ bool EInkDisplay::forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t m
 
     return true;
 }
-#endif
 
 // End the update process - virtual method, overridden in derived class
 void EInkDisplay::endUpdate()
@@ -212,6 +212,18 @@ bool EInkDisplay::connect()
 #else
     digitalWrite(PIN_EINK_EN, LOW);
 #endif
+#endif
+
+#if !defined(GXEPD2_DRIVER_0) && \
+    (defined(T_DECK_PRO) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX))
+    if (getDeviceUiPolicy()->usesSharedSpiEink()) {
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY));
+        adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->setRotation(0);
+        adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
+        return true;
+    }
 #endif
 
 #if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS) ||                \
@@ -317,7 +329,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(0);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(M5_COREINK) || defined(T_DECK_PRO) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX)
+#elif defined(M5_COREINK)
     // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
     adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
         EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY));

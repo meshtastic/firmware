@@ -1,8 +1,8 @@
 #pragma once
 
-#include "configuration.h"
+#if defined(T5_S3_EPAPER_PRO_V2) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 
-#if defined(T5S3_EPD_TOUCH_KEYBOARD) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#include "configuration.h"
 
 #include "T5S3KeyboardCore.h"
 #include "graphics/Screen.h"
@@ -69,4 +69,4 @@ class T5S3Keyboard
 
 } // namespace graphics
 
-#endif // T5S3_EPD_TOUCH_KEYBOARD && !MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#endif

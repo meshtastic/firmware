@@ -5,6 +5,8 @@
 #if !MESHTASTIC_EXCLUDE_I2C
 
 #include "concurrency/LockGuard.h"
+#include "platform/DevicePowerController.h"
+#include "platform/DeviceVariant.h"
 #if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
@@ -423,21 +425,22 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case TDECK_KB_ADDR:
-#if defined(T_DECK_MAX)
-                // MAX uses 0x55 for BQ27220; its keyboard is the TCA8418 at 0x34.
-                logFoundDevice("BQ27220", (uint8_t)addr.address);
-                type = BQ27220;
-#else
-                // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
-                if (registerValue != 0) {
+                if (auto *controller = getDevicePowerController();
+                    controller && controller->keyboardAddressIsBatteryGauge()) {
+                    // A board may place its battery gauge at the legacy keyboard address.
                     logFoundDevice("BQ27220", (uint8_t)addr.address);
                     type = BQ27220;
                 } else {
-                    logFoundDevice("TDECKKB", (uint8_t)addr.address);
-                    type = TDECKKB;
+                    // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
+                    if (registerValue != 0) {
+                        logFoundDevice("BQ27220", (uint8_t)addr.address);
+                        type = BQ27220;
+                    } else {
+                        logFoundDevice("TDECKKB", (uint8_t)addr.address);
+                        type = TDECKKB;
+                    }
                 }
-#endif
                 break;
             case BBQ10_KB_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
@@ -824,11 +827,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case LSM6DS3_ADDR:
-#if defined(T_DECK_MAX)
-                // MAX uses 0x6A for SY6970, which must not be classified as an IMU.
-                if (addr.address == T_DECK_MAX_CHARGER_ADDR)
+                // A charger sharing the LSM6DS3 address must not be classified as an IMU.
+                if (auto *controller = getDevicePowerController();
+                    controller && controller->isChargerAddress(static_cast<uint8_t>(addr.address)))
                     break;
-#endif
                 logFoundDevice("LSM6DS3", (uint8_t)addr.address);
                 type = LSM6DS3;
                 break;

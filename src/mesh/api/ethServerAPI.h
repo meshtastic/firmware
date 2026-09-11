@@ -1,7 +1,8 @@
 #pragma once
 
+#include "configuration.h"
 #include "ServerAPI.h"
-#if !defined(USE_WS5500) && !defined(USE_CH390D)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #if defined(USE_ARDUINO_ETHERNET)
 #include <Ethernet.h>
 #else

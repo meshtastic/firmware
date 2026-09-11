@@ -1,14 +1,11 @@
 #pragma once
 
+#include "audio/NotificationAudio.h"
+
 #include <cstddef>
 #include <cstdint>
 
-#include "mesh/MeshTypes.h"
-
-enum class A7682AudioCue : uint8_t {
-    TX_TEXT = 0,
-    RX_TEXT = 1,
-};
+using A7682AudioCue = NotificationAudioCue;
 
 static constexpr uint8_t A7682_AUDIO_MIN_VOLUME = 0;
 static constexpr uint8_t A7682_AUDIO_MAX_VOLUME = 7;
@@ -40,13 +37,13 @@ constexpr uint8_t clampA7682AudioVolume(int volume)
 
 constexpr bool shouldPlayA7682TxCue(uint32_t portnum, RxSource source, ErrorCode result)
 {
-    return portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && source != RX_SRC_RADIO && result == ERRNO_OK;
+    return shouldPlayNotificationTxCue(portnum, source, result);
 }
 
 constexpr bool shouldPlayA7682RxCue(bool isRemote, bool isMuted, bool isSilenced, bool notificationsEnabled,
                                     bool directMessagesOnly, bool isDmToUs)
 {
-    return isRemote && !isMuted && !isSilenced && notificationsEnabled && (!directMessagesOnly || isDmToUs);
+    return shouldPlayNotificationRxCue(isRemote, isMuted, isSilenced, notificationsEnabled, directMessagesOnly, isDmToUs);
 }
 
 constexpr const char *a7682AudioPathForCue(A7682AudioCue cue)

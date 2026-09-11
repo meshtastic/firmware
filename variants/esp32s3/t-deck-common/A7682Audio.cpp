@@ -1,7 +1,5 @@
 #include "A7682Audio.h"
 
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-
 #include <Arduino.h>
 
 #include <climits>
@@ -13,14 +11,8 @@
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
-
-#ifndef A7682_AUDIO_SERIAL_PORT
-#define A7682_AUDIO_SERIAL_PORT Serial2
-#endif
-
-#if defined(T_DECK_MAX)
-#include "platform/extra_variants/t_deck_max/TDeckMaxBoard.h"
-#endif
+#include "platform/DevicePowerController.h"
+#include "platform/DeviceVariant.h"
 
 namespace
 {
@@ -29,64 +21,40 @@ static constexpr char A7682_AUDIO_PREFERENCE_TEMP_FILE[] = "/prefs/a7682_audio.d
 
 static void setModemPower(bool on)
 {
-#if defined(T_DECK_MAX)
-    tDeckMaxSetModemPower(on);
-#else
-    pinMode(MODEM_POWER_EN, OUTPUT);
-    digitalWrite(MODEM_POWER_EN, on ? HIGH : LOW);
-#endif
+    if (auto *power = getDevicePowerController())
+        power->setModemPower(on);
 }
 
 static void setModemPwrKey(bool high)
 {
-#if defined(T_DECK_MAX)
-    tDeckMaxSetModemPwrKey(high);
-#else
-    pinMode(MODEM_PWRKEY, OUTPUT);
-    digitalWrite(MODEM_PWRKEY, high ? HIGH : LOW);
-#endif
+    if (auto *power = getDevicePowerController())
+        power->setModemPwrKey(high);
 }
 
 static void setModemReset(bool high)
 {
-#if defined(T_DECK_MAX)
-    (void)high;
-#else
-    pinMode(MODEM_RST, OUTPUT);
-    digitalWrite(MODEM_RST, high ? HIGH : LOW);
-#endif
+    if (auto *power = getDevicePowerController())
+        power->setModemReset(high);
 }
 
 static void setA7682AudioPath(bool active)
 {
-#if defined(T_DECK_MAX)
-    if (active) {
-        tDeckMaxSetAudioRoute(true);
-        tDeckMaxSetAmplifier(true);
-    } else {
-        tDeckMaxSetAmplifier(false);
-        tDeckMaxSetAudioRoute(false);
+    if (auto *power = getDevicePowerController()) {
+        power->setAudioRoute(active);
+        power->setAmplifier(active);
     }
-#else
-    (void)active;
-#endif
 }
 }
 
-A7682Audio *a7682Audio = nullptr;
-
-void initA7682Audio()
-{
-    if (!a7682Audio)
-        a7682Audio = new A7682Audio();
-}
-
-A7682Audio::A7682Audio()
-    : concurrency::OSThread("A7682Audio"), cueQueue(CUE_QUEUE_CAPACITY), serial(&A7682_AUDIO_SERIAL_PORT)
+A7682Audio::A7682Audio() : concurrency::OSThread("A7682Audio"), cueQueue(CUE_QUEUE_CAPACITY)
 {
     cueQueue.setReader(this);
     volume.store(loadSettings(), std::memory_order_relaxed);
-    beginModem();
+    if (auto *power = getDevicePowerController()) {
+        serial = power->notificationAudioSerial();
+        if (serial)
+            beginModem();
+    }
 }
 
 uint8_t A7682Audio::getVolume() const
@@ -107,7 +75,7 @@ void A7682Audio::setVolume(uint8_t value)
     setIntervalFromNow(0);
 }
 
-bool A7682Audio::queueCue(A7682AudioCue cue)
+bool A7682Audio::queueCue(NotificationAudioCue cue)
 {
     if (!acceptingCues.load(std::memory_order_relaxed))
         return false;
@@ -198,23 +166,21 @@ void A7682Audio::beginModem()
     setModemPwrKey(false);
     setModemReset(true);
 
-    pinMode(MODEM_DTR, OUTPUT);
-    digitalWrite(MODEM_DTR, LOW);
+    if (auto *power = getDevicePowerController()) {
+        power->setModemDtr(true);
+        power->configureNotificationAudioSerial(*serial);
+    }
 
-    // MODEM_RX/MODEM_TX name the A7682E side of the connection. The Arduino
-    // API takes the MCU-side RX pin first, matching the LilyGO examples.
-    serial->begin(115200, SERIAL_8N1, MODEM_TX, MODEM_RX);
     while (serial->available() > 0)
         serial->read();
 
-#if defined(T_DECK_MAX)
-    // Match the T-Deck-MAX factory startup sequence before probing the modem.
-    startPowerKeyPulse();
-#else
-    state = State::STARTUP_WAIT;
-    stateStartedAt = millis();
-    setIntervalFromNow(10);
-#endif
+    if (auto *power = getDevicePowerController(); power && power->usesAudioPowerKeyStartup())
+        startPowerKeyPulse();
+    else {
+        state = State::STARTUP_WAIT;
+        stateStartedAt = millis();
+        setIntervalFromNow(10);
+    }
 }
 
 void A7682Audio::startResetSequence()
@@ -321,7 +287,7 @@ void A7682Audio::sendGainCommand()
     sendCommand(Command::GAIN, commandText);
 }
 
-void A7682Audio::startPlayback(A7682AudioCue cue)
+void A7682Audio::startPlayback(NotificationAudioCue cue)
 {
     activeCue = cue;
     audioStarted = false;
@@ -402,21 +368,21 @@ void A7682Audio::commandFailed()
     }
 
     if (failed == Command::PROBE) {
-#if defined(T_DECK_MAX)
-        if (!powerKeyTried) {
-            startPowerKeyPulse();
-            return;
+        if (auto *power = getDevicePowerController(); power && power->usesAudioPowerKeyStartup()) {
+            if (!powerKeyTried) {
+                startPowerKeyPulse();
+                return;
+            }
+        } else {
+            if (!resetTried) {
+                startResetSequence();
+                return;
+            }
+            if (!powerKeyTried) {
+                startPowerKeyPulse();
+                return;
+            }
         }
-#else
-        if (!resetTried) {
-            startResetSequence();
-            return;
-        }
-        if (!powerKeyTried) {
-            startPowerKeyPulse();
-            return;
-        }
-#endif
     }
 
     enterBackoff();
@@ -547,10 +513,8 @@ void A7682Audio::shutdown()
 {
     const bool wasAcceptingCues = acceptingCues.exchange(false, std::memory_order_relaxed);
     if (!wasAcceptingCues) {
-#if defined(T_DECK_MAX)
         setA7682AudioPath(false);
         setModemPower(false);
-#endif
         return;
     }
 
@@ -574,5 +538,3 @@ void A7682Audio::shutdown()
     state = State::OFF;
     disable();
 }
-
-#endif // HAS_A7682_AUDIO

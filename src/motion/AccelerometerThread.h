@@ -21,6 +21,8 @@
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
+#include "platform/DeviceSensorProvider.h"
+#include "platform/DeviceVariant.h"
 #include "QMI8658Sensor.h"
 
 #include <memory>
@@ -29,9 +31,6 @@
 #endif
 #ifdef HAS_STK8XXX
 #include "STK8XXXSensor.h"
-#endif
-#if defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
-#include "BHI260APSensor.h"
 #endif
 
 extern ScanI2C::DeviceAddress accelerometer_found;
@@ -158,7 +157,12 @@ class AccelerometerThread : public concurrency::OSThread
 #endif
 #if defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
         case ScanI2C::DeviceType::BHI260AP:
-            sensor.reset(new BHI260APSensor(device));
+            if (auto *provider = getDeviceSensorProvider())
+                sensor = provider->createAccelerometer(device);
+            if (!sensor) {
+                disable();
+                return;
+            }
             break;
 #endif
         default:

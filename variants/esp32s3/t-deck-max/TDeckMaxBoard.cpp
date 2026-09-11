@@ -1,7 +1,5 @@
 #include "configuration.h"
 
-#if defined(_VARIANT_T_DECK_MAX)
-
 #include "TDeckMaxBoard.h"
 
 #include <Arduino.h>
@@ -9,13 +7,15 @@
 
 // SensorLib ships a same-named header; this board layer needs Meshtastic's adapter.
 #include "TDeckMaxXL9555.hpp"
-#include "../../../SafeFile.h"
-#include "../../../SPILock.h"
-#include "../../../concurrency/LockGuard.h"
+#include "SafeFile.h"
+#include "SPILock.h"
+#include "concurrency/LockGuard.h"
 
 #include <ErriezCRC32.h>
 #include <cstddef>
 #include <cstring>
+
+ExtensionIOXL9555 io;
 
 namespace
 {
@@ -103,6 +103,16 @@ void tDeckMaxSetModemPower(bool on)
 void tDeckMaxSetModemPwrKey(bool high)
 {
     setExpanderOutput(Xl9555Pin::ModemPwrKey, high);
+}
+
+void tDeckMaxSetModemReset(bool high)
+{
+    (void)high;
+}
+
+void tDeckMaxSetModemDtr(bool low)
+{
+    digitalWrite(t_deck_max::MODEM_DTR_PIN, low ? LOW : HIGH);
 }
 
 void tDeckMaxSetAudioRoute(bool a7682e)
@@ -254,11 +264,6 @@ void tDeckMaxInit()
     LOG_INFO("T-Deck-MAX: XL9555 0x%02x initialized", t_deck_max::I2C_ADDRESS);
 }
 
-void initVariantAfterI2C()
-{
-    tDeckMaxInit();
-}
-
 bool tDeckMaxRecoverI2C()
 {
     const bool ended = Wire.end();
@@ -283,5 +288,3 @@ GpioPin *tDeckMaxMakeGpioPin(uint8_t pin)
 {
     return io.makeGpioPin(pin);
 }
-
-#endif // _VARIANT_T_DECK_MAX

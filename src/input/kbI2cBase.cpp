@@ -2,8 +2,10 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
+#include "input/DeviceInputProvider.h"
+#include "platform/DeviceVariant.h"
 
-#if defined(T_DECK_PRO) || defined(T_DECK_MAX)
+#if defined(T_DECK_PRO) && !defined(_VARIANT_T_DECK_PRO_V1_1)
 #include "TDeckProKeyboard.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
@@ -26,7 +28,7 @@ extern uint8_t kb_model;
 
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
-#if defined(T_DECK_PRO) || defined(T_DECK_MAX)
+#if defined(T_DECK_PRO) && !defined(_VARIANT_T_DECK_PRO_V1_1)
       TCAKeyboard(new TDeckProKeyboard())
 #elif defined(T_LORA_PAGER)
       TCAKeyboard(new TLoraPagerKeyboard())
@@ -42,6 +44,23 @@ KbI2cBase::KbI2cBase(const char *name)
 }
 
 KbI2cBase::~KbI2cBase() = default;
+
+void KbI2cBase::resolveVariantKeyboard()
+{
+    if (_variantKeyboardResolved)
+        return;
+
+    auto *provider = getDeviceInputProvider();
+    if (!provider) {
+        _variantKeyboardResolved = true;
+        return;
+    }
+
+    _tca8418Address = provider->tca8418KeyboardAddress();
+    if (auto keyboard = provider->createTca8418Keyboard())
+        TCAKeyboard = std::move(keyboard);
+    _variantKeyboardResolved = true;
+}
 
 uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t length)
 {
@@ -62,6 +81,8 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
+    resolveVariantKeyboard();
+
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
@@ -82,8 +103,8 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, i2cBus);
             }
-            if (cardkb_found.address == TCA8418_KB_ADDR) {
-                TCAKeyboard->begin(TCA8418_KB_ADDR, i2cBus);
+            if (cardkb_found.address == _tca8418Address) {
+                TCAKeyboard->begin(_tca8418Address, i2cBus);
             }
             break;
 #endif
@@ -102,8 +123,8 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
             }
-            if (cardkb_found.address == TCA8418_KB_ADDR) {
-                TCAKeyboard->begin(TCA8418_KB_ADDR, &Wire);
+            if (cardkb_found.address == _tca8418Address) {
+                TCAKeyboard->begin(_tca8418Address, &Wire);
             }
             break;
         case ScanI2C::NO_I2C:

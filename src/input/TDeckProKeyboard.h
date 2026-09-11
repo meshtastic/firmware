@@ -1,3 +1,5 @@
+#pragma once
+
 #include "TCA8418KeyboardBase.h"
 
 class TDeckProKeyboard : public TCA8418KeyboardBase
@@ -17,8 +19,8 @@ class TDeckProKeyboard : public TCA8418KeyboardBase
     void toggleBacklight(void);
 
   private:
-    uint8_t modifierFlag;        // Flag to indicate if a modifier key is pressed
-    uint32_t last_modifier_time; // Timestamp of the last modifier key press
+    uint8_t modifierFlag;
+    uint32_t last_modifier_time;
     uint8_t last_key;
     uint8_t next_key;
     uint32_t last_tap;

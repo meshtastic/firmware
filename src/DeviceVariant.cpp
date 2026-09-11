@@ -1,5 +1,8 @@
 #include "configuration.h"
+#include "platform/DevicePowerController.h"
+#include "platform/DeviceSensorProvider.h"
 #include "platform/DeviceVariant.h"
+#include "graphics/DeviceUiPolicy.h"
 
 #include <Arduino.h>
 
@@ -11,22 +14,28 @@ __attribute__((noinline, weak)) void lateInitVariant() {}
 
 namespace
 {
+void setDefaultMotorPower(bool enabled)
+{
+#ifdef PIN_DRV_EN
+    pinMode(PIN_DRV_EN, OUTPUT);
+    digitalWrite(PIN_DRV_EN, enabled ? HIGH : LOW);
+#else
+    (void)enabled;
+#endif
+}
+
 class DefaultDeviceVariant final : public DeviceVariant
 {
   public:
     void earlyInit() override { earlyInitVariant(); }
     void afterI2CInit() override { initVariantAfterI2C(); }
     void lateInit() override { lateInitVariant(); }
+    DeviceSensorProvider *sensorProvider() override { return &sensors; }
 
-    void setMotorPower(bool enabled) override
-    {
-#ifdef PIN_DRV_EN
-        pinMode(PIN_DRV_EN, OUTPUT);
-        digitalWrite(PIN_DRV_EN, enabled ? HIGH : LOW);
-#else
-        (void)enabled;
-#endif
-    }
+    void setMotorPower(bool enabled) override { setDefaultMotorPower(enabled); }
+
+  private:
+    DeviceSensorProvider sensors;
 };
 } // namespace
 
@@ -48,4 +57,35 @@ void shutdownDeviceVariant()
 {
     if (deviceVariant)
         deviceVariant->shutdown();
+}
+
+DevicePowerController *getDevicePowerController()
+{
+    return deviceVariant ? deviceVariant->powerController() : nullptr;
+}
+
+DeviceSensorProvider *getDeviceSensorProvider()
+{
+    return deviceVariant ? deviceVariant->sensorProvider() : nullptr;
+}
+
+DeviceInputProvider *getDeviceInputProvider()
+{
+    return deviceVariant ? deviceVariant->inputProvider() : nullptr;
+}
+
+HapticOutput *getHapticOutput()
+{
+    return deviceVariant ? deviceVariant->hapticOutput() : nullptr;
+}
+
+NotificationAudio *getNotificationAudio()
+{
+    return deviceVariant ? deviceVariant->notificationAudio() : nullptr;
+}
+
+DeviceUiPolicy *getDeviceUiPolicy()
+{
+    return deviceVariant && deviceVariant->uiPolicy() ? deviceVariant->uiPolicy()
+                                                       : const_cast<DeviceUiPolicy *>(&getDefaultDeviceUiPolicy());
 }

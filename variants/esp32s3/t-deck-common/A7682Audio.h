@@ -1,9 +1,6 @@
 #pragma once
 
-#include "configuration.h"
-
-#if (defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1)) && defined(HAS_A7682_AUDIO)
-
+#include "audio/NotificationAudio.h"
 #include "A7682AudioPolicy.h"
 #include "concurrency/OSThread.h"
 #include "mesh/TypedQueue.h"
@@ -13,15 +10,15 @@
 
 class HardwareSerial;
 
-class A7682Audio : private concurrency::OSThread
+class A7682Audio final : public NotificationAudio, private concurrency::OSThread
 {
   public:
     A7682Audio();
 
-    uint8_t getVolume() const;
-    void setVolume(uint8_t volume);
-    bool queueCue(A7682AudioCue cue);
-    void shutdown();
+    uint8_t getVolume() const override;
+    void setVolume(uint8_t volume) override;
+    bool queueCue(NotificationAudioCue cue) override;
+    void shutdown() override;
 
   protected:
     int32_t runOnce() override;
@@ -65,7 +62,7 @@ class A7682Audio : private concurrency::OSThread
     static constexpr uint32_t RETRY_INITIAL_MS = 1000;
     static constexpr uint32_t RETRY_MAXIMUM_MS = 15000;
 
-    TypedQueue<A7682AudioCue> cueQueue;
+    TypedQueue<NotificationAudioCue> cueQueue;
     HardwareSerial *serial = nullptr;
     std::atomic<uint8_t> volume{A7682_AUDIO_DEFAULT_VOLUME};
     std::atomic<bool> volumeDirty{false};
@@ -73,7 +70,7 @@ class A7682Audio : private concurrency::OSThread
 
     State state = State::STARTUP_WAIT;
     Command command = Command::NONE;
-    A7682AudioCue activeCue = A7682AudioCue::RX_TEXT;
+    NotificationAudioCue activeCue = NotificationAudioCue::RX_TEXT;
     uint8_t commandVolume = A7682_AUDIO_DEFAULT_VOLUME;
     uint32_t stateStartedAt = 0;
     uint32_t commandStartedAt = 0;
@@ -97,13 +94,8 @@ class A7682Audio : private concurrency::OSThread
     void processLine(const char *line);
     void sendCommand(Command command, const char *text, uint32_t timeoutMs = COMMAND_TIMEOUT_MS);
     void sendGainCommand();
-    void startPlayback(A7682AudioCue cue);
+    void startPlayback(NotificationAudioCue cue);
     void commandSucceeded();
     void commandFailed();
     void enterBackoff();
 };
-
-extern A7682Audio *a7682Audio;
-void initA7682Audio();
-
-#endif // HAS_A7682_AUDIO

@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(T_DECK_MAX)
-
 #include <Arduino.h>
 #include <Wire.h>
 
@@ -56,5 +54,3 @@ class ExtensionIOXL9555
 };
 
 extern ExtensionIOXL9555 io;
-
-#endif // T_DECK_MAX

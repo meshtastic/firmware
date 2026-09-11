@@ -1,9 +1,10 @@
 #include "TouchScreenBase.h"
 #include "configuration.h"
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #include "input/HapticFeedback.h"
-#endif
 #include "main.h"
+#include "input/DeviceInputProvider.h"
+#include "platform/DeviceVariant.h"
+#include "Throttle.h"
 
 #if defined(RAK14014) && !defined(MESHTASTIC_EXCLUDE_CANNEDMESSAGES)
 #include "modules/CannedMessageModule.h"
@@ -47,23 +48,18 @@
 #endif
 
 TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t height)
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
     : concurrency::OSThread(name), _display_width(width), _display_height(height), _recognizer(width, height),
       _targets(width, height), _originName(name)
-#else
-    : concurrency::OSThread(name), _display_width(width), _display_height(height), _originName(name)
-#endif
 {
 }
 
 void TouchScreenBase::init(bool hasTouch)
 {
     if (hasTouch) {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        LOG_INFO("TouchScreen initialized: tap=12 lock=20 swipe=38 long=500ms stable=3");
-#else
-        LOG_INFO("TouchScreen initialized %d %d", TOUCH_THRESHOLD_X, TOUCH_THRESHOLD_Y);
-#endif
+        if (usesGestureRecognizer())
+            LOG_INFO("TouchScreen initialized: tap=12 lock=20 swipe=38 long=500ms stable=3");
+        else
+            LOG_INFO("TouchScreen initialized %d %d", TOUCH_THRESHOLD_X, TOUCH_THRESHOLD_Y);
         this->setInterval(TOUCH_POLL_INTERVAL_IDLE);
     } else {
         disable();
@@ -71,7 +67,6 @@ void TouchScreenBase::init(bool hasTouch)
     }
 }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 void TouchScreenBase::beginTouchFrame(uint32_t pageGeneration)
 {
     _targets.beginFrame(pageGeneration);
@@ -92,128 +87,127 @@ void TouchScreenBase::publishTouchFrame()
 {
     _targets.publishFrame();
 }
-#endif
 
 int32_t TouchScreenBase::runOnce()
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-    const uint32_t nowMs = millis();
-    if (nowMs - _lastRun < 20)
-        return 20;
-    _lastRun = nowMs;
+    if (usesGestureRecognizer()) {
+        const uint32_t nowMs = millis();
+        if (Throttle::isWithinTimespanMs(_lastRun, 20))
+            return 20;
+        _lastRun = nowMs;
 
-    TouchEvent e = {};
-    e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
-    e.targetAction = INPUT_BROKER_NONE;
-    this->setInterval(TOUCH_POLL_INTERVAL_IDLE);
+        TouchEvent e = {};
+        e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
+        e.targetAction = INPUT_BROKER_NONE;
+        this->setInterval(TOUCH_POLL_INTERVAL_IDLE);
 
-    const bool fastTapMode = fastTapModeEnabled();
-    const bool allowLongPress = longPressEnabled();
-    int16_t x = _last_x;
-    int16_t y = _last_y;
-    const bool rawTouched = getTouch(x, y);
-    const bool validTouched = rawTouched && meshtastic::TouchGestureRecognizer::transformCoordinates(
-                                             x, y, _display_width, _display_height, config.display.flip_screen);
-    bool touched = validTouched;
+        const bool fastTapMode = fastTapModeEnabled();
+        const bool allowLongPress = longPressEnabled();
+        int16_t x = _last_x;
+        int16_t y = _last_y;
+        const bool rawTouched = getTouch(x, y);
+        const bool validTouched = rawTouched && meshtastic::TouchGestureRecognizer::transformCoordinates(
+                                                     x, y, _display_width, _display_height, config.display.flip_screen);
+        bool touched = validTouched;
 
-    if (touched) {
-        _lastTouchSeenMs = nowMs;
-        this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
-    } else if (!rawTouched && _touchedOld && nowMs - _lastTouchSeenMs < TOUCH_RELEASE_GRACE_MS) {
-        touched = true;
-        this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
-    } else {
-        this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_RELEASE_FAST : TOUCH_POLL_INTERVAL_RELEASE);
-    }
-
-    meshtastic::TouchGestureEvent gestureEvent;
-    const bool emitted = _recognizer.update({x, y, nowMs, touched}, gestureEvent, allowLongPress);
-
-    if (touched) {
-        if (!_touchedOld) {
-            hapticFeedback();
-            _state = TOUCH_EVENT_OCCURRED;
-            _targetCaptureStarted = _targets.capture(x, y);
-        }
-        if (_targetCaptureStarted)
-            _targets.updateCapture(x, y);
-        _last_x = x;
-        _last_y = y;
-    } else {
-        _state = TOUCH_EVENT_CLEARED;
-    }
-    _touchedOld = touched;
-
-    if (emitted) {
-        switch (gestureEvent.gesture) {
-        case meshtastic::TouchGesture::SwipeLeft:
-            e.touchEvent = static_cast<char>(TOUCH_ACTION_LEFT);
-            break;
-        case meshtastic::TouchGesture::SwipeRight:
-            e.touchEvent = static_cast<char>(TOUCH_ACTION_RIGHT);
-            break;
-        case meshtastic::TouchGesture::SwipeUp:
-            e.touchEvent = static_cast<char>(TOUCH_ACTION_UP);
-            break;
-        case meshtastic::TouchGesture::SwipeDown:
-            e.touchEvent = static_cast<char>(TOUCH_ACTION_DOWN);
-            break;
-        case meshtastic::TouchGesture::Tap:
-            e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-            break;
-        case meshtastic::TouchGesture::LongPress:
-            e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
-            break;
-        default:
-            break;
-        }
-
-        _last_x = gestureEvent.x;
-        _last_y = gestureEvent.y;
-        if (gestureEvent.gesture == meshtastic::TouchGesture::Tap ||
-            gestureEvent.gesture == meshtastic::TouchGesture::LongPress) {
-            meshtastic::TouchTarget target{};
-            const bool targetCaptureStarted = _targetCaptureStarted;
-            const bool targetReleased =
-                _targets.release(_last_x, _last_y, gestureEvent.gesture == meshtastic::TouchGesture::LongPress, target);
-            _targetCaptureStarted = false;
-            if (targetReleased) {
-                e.targetAction = gestureEvent.gesture == meshtastic::TouchGesture::LongPress ? target.longPressAction
-                                                                                              : target.tapAction;
-                e.targetLongPress = gestureEvent.gesture == meshtastic::TouchGesture::LongPress;
-                if (target.kind != meshtastic::TouchTargetKind::LegacyFallback) {
-                    e.targetKind = static_cast<uint8_t>(target.kind);
-                    e.targetValue = target.value;
-                }
-            } else if (targetCaptureStarted) {
-                // A touch that leaves a registered target must not fall back to a generic tap.
-                e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
-            }
+        if (touched) {
+            _lastTouchSeenMs = nowMs;
+            this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
+        } else if (!rawTouched && _touchedOld && Throttle::isWithinTimespanMs(_lastTouchSeenMs, TOUCH_RELEASE_GRACE_MS)) {
+            touched = true;
+            this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
         } else {
+            this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_RELEASE_FAST : TOUCH_POLL_INTERVAL_RELEASE);
+        }
+
+        meshtastic::TouchGestureEvent gestureEvent;
+        const bool emitted = _recognizer.update({x, y, nowMs, touched}, gestureEvent, allowLongPress);
+
+        if (touched) {
+            if (!_touchedOld) {
+                hapticFeedback();
+                _state = TOUCH_EVENT_OCCURRED;
+                _targetCaptureStarted = _targets.capture(x, y);
+            }
+            if (_targetCaptureStarted)
+                _targets.updateCapture(x, y);
+            _last_x = x;
+            _last_y = y;
+        } else {
+            _state = TOUCH_EVENT_CLEARED;
+        }
+        _touchedOld = touched;
+
+        if (emitted) {
+            switch (gestureEvent.gesture) {
+            case meshtastic::TouchGesture::SwipeLeft:
+                e.touchEvent = static_cast<char>(TOUCH_ACTION_LEFT);
+                break;
+            case meshtastic::TouchGesture::SwipeRight:
+                e.touchEvent = static_cast<char>(TOUCH_ACTION_RIGHT);
+                break;
+            case meshtastic::TouchGesture::SwipeUp:
+                e.touchEvent = static_cast<char>(TOUCH_ACTION_UP);
+                break;
+            case meshtastic::TouchGesture::SwipeDown:
+                e.touchEvent = static_cast<char>(TOUCH_ACTION_DOWN);
+                break;
+            case meshtastic::TouchGesture::Tap:
+                e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
+                break;
+            case meshtastic::TouchGesture::LongPress:
+                e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
+                break;
+            default:
+                break;
+            }
+
+            _last_x = gestureEvent.x;
+            _last_y = gestureEvent.y;
+            if (gestureEvent.gesture == meshtastic::TouchGesture::Tap ||
+                gestureEvent.gesture == meshtastic::TouchGesture::LongPress) {
+                meshtastic::TouchTarget target{};
+                const bool targetCaptureStarted = _targetCaptureStarted;
+                const bool targetReleased =
+                    _targets.release(_last_x, _last_y, gestureEvent.gesture == meshtastic::TouchGesture::LongPress, target);
+                _targetCaptureStarted = false;
+                if (targetReleased) {
+                    e.targetAction = gestureEvent.gesture == meshtastic::TouchGesture::LongPress ? target.longPressAction
+                                                                                                  : target.tapAction;
+                    e.targetLongPress = gestureEvent.gesture == meshtastic::TouchGesture::LongPress;
+                    if (target.kind != meshtastic::TouchTargetKind::LegacyFallback) {
+                        e.targetKind = static_cast<uint8_t>(target.kind);
+                        e.targetValue = target.value;
+                    }
+                } else if (targetCaptureStarted) {
+                    // A touch that leaves a registered target must not fall back to a generic tap.
+                    e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
+                }
+            } else {
+                _targets.cancelCapture();
+                _targetCaptureStarted = false;
+            }
+        } else if (!touched && (!rawTouched || !validTouched)) {
             _targets.cancelCapture();
             _targetCaptureStarted = false;
         }
-    } else if (!touched && (!rawTouched || !validTouched)) {
-        _targets.cancelCapture();
-        _targetCaptureStarted = false;
+
+        if (e.touchEvent != TOUCH_ACTION_NONE) {
+            e.source = this->_originName;
+            e.x = static_cast<uint16_t>(_last_x);
+            e.y = static_cast<uint16_t>(_last_y);
+            onEvent(e);
+        }
+
+        return RUN_SAME;
     }
 
-    if (e.touchEvent != TOUCH_ACTION_NONE) {
-        e.source = this->_originName;
-        e.x = static_cast<uint16_t>(_last_x);
-        e.y = static_cast<uint16_t>(_last_y);
-        onEvent(e);
-    }
-
-    return interval;
-
-#else
     uint32_t nowMs = millis();
-    if (nowMs - _lastRun < 20) { // suppress too fast consecutive runOnce() executions
+    if (Throttle::isWithinTimespanMs(_lastRun, 20)) { // suppress too fast consecutive runOnce() executions
         return 20;
     }
     _lastRun = nowMs;
-    TouchEvent e;
+    TouchEvent e = {};
     e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
     this->setInterval(TOUCH_POLL_INTERVAL_IDLE);
     const bool fastTapMode = fastTapModeEnabled();
@@ -228,7 +222,7 @@ int32_t TouchScreenBase::runOnce()
         this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
         _last_x = x;
         _last_y = y;
-    } else if (_touchedOld && ((uint32_t)millis() - _lastTouchSeenMs) < TOUCH_RELEASE_GRACE_MS) {
+    } else if (_touchedOld && Throttle::isWithinTimespanMs(_lastTouchSeenMs, TOUCH_RELEASE_GRACE_MS)) {
         touched = true;
     }
     if (touched != _touchedOld) {
@@ -316,23 +310,18 @@ int32_t TouchScreenBase::runOnce()
         onEvent(e);
     }
 
-    return interval;
-#endif
+    return RUN_SAME;
 }
 
 void TouchScreenBase::hapticFeedback()
 {
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
-    if (::hapticFeedback)
-        ::hapticFeedback->play(HapticEffect::NAVIGATION);
-#endif
-#else
+    playNavigationHaptic();
 #if defined(T_WATCH_S3) || defined(T_WATCH_ULTRA)
-    drv.setWaveform(0, 75);
-    drv.setWaveform(1, 0); // end waveform
-    drv.go();
-#endif
+    if (!getHapticOutput()) {
+        drv.setWaveform(0, 75);
+        drv.setWaveform(1, 0);
+        drv.go();
+    }
 #endif
 }
 
@@ -344,4 +333,10 @@ bool TouchScreenBase::fastTapModeEnabled() const
 bool TouchScreenBase::longPressEnabled() const
 {
     return true;
+}
+
+bool TouchScreenBase::usesGestureRecognizer() const
+{
+    auto *provider = getDeviceInputProvider();
+    return provider != nullptr && provider->usesGestureRecognizer();
 }

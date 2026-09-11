@@ -9,11 +9,10 @@
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h" // for getTime() function
+#include "graphics/DeviceUiPolicy.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 #include "graphics/TouchLayout.h"
-#endif
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/images.h"
@@ -94,12 +93,10 @@ void scrollDown()
     popupTime = millis();
 }
 
-#if defined(T_DECK_MAX) || defined(_VARIANT_T_DECK_PRO_V1_1) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
 bool isTouchRowValid(uint32_t rowIndex)
 {
     return nodeDB && rowIndex < static_cast<uint32_t>(nodeDB->getNumMeshNodes());
 }
-#endif
 
 // =============================
 // Utility Functions
@@ -626,7 +623,7 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 // Main Screen Functions
 // =============================
 
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
+#if defined(USE_EINK)
 static void drawNodeListScrollPopup(OLEDDisplay *display, int totalEntries, int startIndex, int perPage, int page,
                                     int usableTop, int usableBottom)
 {
@@ -774,21 +771,22 @@ static void drawTDeckNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *st
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
-    const int contentMargin = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_CONTENT_MARGIN : 8;
+    const auto &ui = deviceUiMetrics();
+    const int bodyFontHeight = static_cast<int>(ui.fontBody[1]) + 1;
+    const int contentMargin = ui.contentMargin;
     const int contentLeft = x + contentMargin;
     const int contentRight = x + screenW - contentMargin;
     const int summaryY = y + FONT_HEIGHT_SMALL + 5;
     const int separatorY = summaryY + FONT_HEIGHT_SMALL + 3;
     const int cardsTop = separatorY + 7;
-    const int cardHeight = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_NODE_CARD_HEIGHT : 50;
-    const int cardGap = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_NODE_CARD_GAP : 4;
-    const int footerReserve = T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_FOOTER_RESERVE
-                                                  : ((currentResolution == ScreenResolution::High) ? 24 : 16);
+    const int cardHeight = ui.nodeCardHeight;
+    const int cardGap = ui.nodeCardGap;
+    const int footerReserve = ui.footerReserve;
     const int bodyBottom = screenH - footerReserve;
     const int cardWidth = contentRight - contentLeft;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(T5S3_EPD_UI_FONT_BODY);
+    display->setFont(ui.fontBody);
     const bool locationMode = mode == TDeckNodeListMode::Distance || mode == TDeckNodeListMode::Bearings;
 
     std::vector<int> drawList;
@@ -802,7 +800,7 @@ static void drawTDeckNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *st
 
     const int totalEntries = static_cast<int>(drawList.size());
     const int rowsAvailable = max(1, (bodyBottom - cardsTop + cardGap) / (cardHeight + cardGap));
-    const int visibleRows = min(T5S3_EPD_UI_PROFILE ? T5S3_EPD_UI_NODE_MAX_ROWS : 4, rowsAvailable);
+    const int visibleRows = min(static_cast<int>(ui.nodeMaxRows), rowsAvailable);
     const int perPage = max(1, visibleRows);
     const int maxScroll = totalEntries > 0 ? max(0, (totalEntries - 1) / perPage) : 0;
     if (scrollIndex > maxScroll)
@@ -875,7 +873,7 @@ static void drawTDeckNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *st
             break;
         }
 
-        display->setFont(T5S3_EPD_UI_FONT_BODY);
+        display->setFont(ui.fontBody);
         const int metricWidth = display->getStringWidth(metric);
         const int nameX = contentLeft + 32;
         const int metricRight = mode == TDeckNodeListMode::Bearings ? contentRight - 48 : contentRight - 8;
@@ -889,7 +887,7 @@ static void drawTDeckNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *st
 #endif
         UIRenderer::drawStringWithEmotes(display, nameX, cardY + 4, nodeName, FONT_HEIGHT_SMALL, 1, false);
 
-        display->setFont(T5S3_EPD_UI_FONT_BODY);
+        display->setFont(ui.fontBody);
         display->drawString(metricRight - metricWidth, cardY + 6, metric);
 
         char shortName[16];
@@ -932,37 +930,37 @@ static void drawTDeckNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *st
             break;
         }
         }
-        const int linkInfoY = T5S3_EPD_UI_PROFILE ? std::max(29, cardHeight / 2) : 29;
+        const int linkInfoY = std::max(29, static_cast<int>(cardHeight / 2));
         display->drawString(nameX, cardY + linkInfoY, linkInfo);
 
         if (mode == TDeckNodeListMode::Bearings) {
             if (hasBearing)
                 CompassRenderer::drawArrowToNode(display, contentRight - 24,
-                                                  cardY + (T5S3_EPD_UI_PROFILE ? cardHeight / 2 : FONT_HEIGHT_SMALL / 2),
+                                                  cardY + cardHeight / 2,
                                                   FONT_HEIGHT_SMALL - 5, bearingDegrees);
             else {
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
-                const int unknownY = T5S3_EPD_UI_PROFILE ? cardHeight / 2 - FONT_HEIGHT_SMALL / 2 : 7;
+                const int unknownY = cardHeight / 2 - FONT_HEIGHT_SMALL / 2;
                 display->drawString(contentRight - 24, cardY + unknownY, "?");
                 display->setTextAlignment(TEXT_ALIGN_LEFT);
             }
         }
 
         if (nodeInfoLiteIsFavorite(node)) {
-            const int favoriteMarkerY = T5S3_EPD_UI_PROFILE ? cardHeight - 12 : 35;
+            const int favoriteMarkerY = cardHeight - 12;
             display->fillRect(contentLeft + 10, cardY + favoriteMarkerY, 4, 4);
         }
         if (nodeInfoLiteIsIgnored(node) || nodeInfoLiteIsMuted(node)) {
-            const int ignoredLineY = T5S3_EPD_UI_PROFILE ? cardHeight / 2 + 4 : 14;
+            const int ignoredLineY = getDeviceUiPolicy()->isT5S3()
+                                         ? std::max(cardHeight / 2 + 4, linkInfoY + bodyFontHeight + 3)
+                                         : cardHeight / 2 + 4;
             display->drawLine(nameX, cardY + ignoredLineY, contentRight - 10, cardY + ignoredLineY);
         }
 
-#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        if (screen) {
+        if (getDeviceUiPolicy()->usesExpandedEinkUi() && screen) {
             screen->addTouchTarget(touchExpandedRect(contentLeft, cardY, cardWidth, cardHeight, 2),
                                    meshtastic::TouchTargetKind::NodeRow, static_cast<uint32_t>(idx), INPUT_BROKER_NONE);
         }
-#endif
     }
 
     drawCommonFooter(display, x, y);
@@ -973,20 +971,21 @@ static void drawTDeckNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *st
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
-    if (strcmp(title, "Last Heard") == 0) {
+#if defined(USE_EINK)
+    if (getDeviceUiPolicy()->usesExpandedEinkUi() && strcmp(title, "Last Heard") == 0) {
         drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::LastHeard);
         return;
     }
-    if (strcmp(title, "Hops/Sig") == 0 || strcmp(title, "Hops / Signal") == 0) {
+    if (getDeviceUiPolicy()->usesExpandedEinkUi() &&
+        (strcmp(title, "Hops/Sig") == 0 || strcmp(title, "Hops / Signal") == 0)) {
         drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::HopSignal);
         return;
     }
-    if (strcmp(title, "Distance") == 0) {
+    if (getDeviceUiPolicy()->usesExpandedEinkUi() && strcmp(title, "Distance") == 0) {
         drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::Distance);
         return;
     }
-    if (strcmp(title, "Bearings") == 0) {
+    if (getDeviceUiPolicy()->usesExpandedEinkUi() && strcmp(title, "Bearings") == 0) {
         drawTDeckNodeListScreen(display, state, x, y, title, TDeckNodeListMode::Bearings, headingRadian);
         return;
     }
@@ -1091,13 +1090,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         if (extras)
             extras(display, node, xPos, yPos, effectiveColumnWidth, headingRadian, lat, lon);
 
-#if defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || defined(MESHTASTIC_T5S3_EPAPER_V2_UI)
-        if (screen) {
+        if (getDeviceUiPolicy()->usesExpandedEinkUi() && screen) {
             screen->addTouchTarget(touchExpandedRect(xPos, yPos, effectiveColumnWidth, rowYOffset, 2),
                                    meshtastic::TouchTargetKind::NodeRow, static_cast<uint32_t>(idx),
                                    INPUT_BROKER_NONE);
         }
-#endif
 
         lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
@@ -1279,14 +1276,7 @@ void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
 void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if (defined(_VARIANT_T_DECK_PRO_V1_1) || defined(T_DECK_MAX) || T5S3_EPD_UI_PROFILE) && defined(USE_EINK)
-    const char *title = "Hops / Signal";
-#elif defined(USE_EINK)
-    const char *title = "Hops/Sig";
-#else
-
-    const char *title = "Hops/Signal";
-#endif
+    const char *title = getDeviceUiPolicy()->usesExpandedEinkUi() ? "Hops / Signal" : "Hops/Sig";
     drawNodeListScreen(display, state, x, y, title, drawEntryHopSignal);
 }
 void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
