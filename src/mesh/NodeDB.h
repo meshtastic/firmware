@@ -290,8 +290,7 @@ struct LoraSlotSnapshot {
     char primary_channel_name[16] = {0};
 
     /// Fold into the NODEINFO_BITFIELD_HEARD_SLOT_BITS-wide value stored per node. A collision only
-    /// costs a node heard on one slot reading as heard on another, and 12 bits is far more than the
-    /// handful of slots any radio actually visits.
+    /// costs a node heard on one slot reading as heard on another, which 12 bits makes remote.
     uint16_t fingerprint() const;
 };
 
@@ -364,9 +363,8 @@ class NodeDB
     /// against to derive NodeInfo.heard_on_current_lora.
     uint16_t committedLoraSlot() const { return committedSlot; }
 
-    /// Declare that config.lora holds a temporary radio switch rather than the config this node is
-    /// committed to - a beacon keying up on another preset. While set the committed slot is pinned,
-    /// so neither the switch nor its restore reads as the radio moving.
+    /// Declare that config.lora holds a temporary radio switch - a beacon keying up on another preset.
+    /// While set the committed slot is pinned, so neither the switch nor its restore reads as a move.
     void setLoraSlotTransient(bool transient) { loraSlotTransient = transient; }
 
     void addFromContact(const meshtastic_SharedContact);
@@ -869,9 +867,7 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_HAS_RF_HEAR_SHIFT 11
 #define NODEINFO_BITFIELD_HAS_RF_HEAR_MASK (1u << NODEINFO_BITFIELD_HAS_RF_HEAR_SHIFT)
 // Bits 12..23: fingerprint of the LoRa slot this node was last heard on. NodeInfo.heard_on_current_lora
-// is derived, not stored - it is this matching the slot the radio is committed to now. Storing where a
-// node was heard, rather than a bit that gets swept, is what makes a client rolling through presets
-// harmless: nothing is rewritten on the way out, and returning to a slot makes its nodes match again.
+// is derived from it matching the slot the radio is committed to, which is what makes scanning harmless.
 #define NODEINFO_BITFIELD_HEARD_SLOT_SHIFT 12
 #define NODEINFO_BITFIELD_HEARD_SLOT_BITS 12
 #define NODEINFO_BITFIELD_HEARD_SLOT_MASK (((1u << NODEINFO_BITFIELD_HEARD_SLOT_BITS) - 1) << NODEINFO_BITFIELD_HEARD_SLOT_SHIFT)

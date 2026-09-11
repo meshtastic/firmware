@@ -129,7 +129,7 @@ static void test_fingerprint_presetIsASlotChange(void)
     TEST_ASSERT_NOT_EQUAL_UINT16(fp(baselineLora(), "LongFast"), fp(other, "LongFast"));
 }
 
-static void test_fingerprint_channelNumIsASlotChange(void)
+static void test_fingerprint_channelNumChangesSlot(void)
 {
     meshtastic_Config_LoRaConfig other = baselineLora();
     other.channel_num = 8;
@@ -316,7 +316,7 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_fingerprint_identicalConfigMatches);
     RUN_TEST(test_fingerprint_regionIsASlotChange);
     RUN_TEST(test_fingerprint_presetIsASlotChange);
-    RUN_TEST(test_fingerprint_channelNumIsASlotChange);
+    RUN_TEST(test_fingerprint_channelNumChangesSlot);
     RUN_TEST(test_fingerprint_overrideFrequencyIsASlotChange);
     RUN_TEST(test_fingerprint_primaryChannelRenameIsASlotChange);
     RUN_TEST(test_fingerprint_usePresetToggleIsASlotChange);

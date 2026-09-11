@@ -3872,11 +3872,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
 
-        // RF-origin only, same gate as the hop histogram below: a via_mqtt rebroadcast proves the
-        // gateway is in earshot, not the node. Not has_rx_rssi-gated - the portduino SimRadio omits it.
-        // Stamp the slot we actually heard it on, read live rather than from committedSlot: a hear
-        // while parked on a beacon's preset belongs to that preset, and so correctly stops matching
-        // once the radio is back on ours.
+        // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
+        // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
         if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt)
             nodeInfoLiteSetHeardSlot(info, currentLoraSlot().fingerprint());
 
