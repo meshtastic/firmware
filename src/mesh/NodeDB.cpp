@@ -1111,16 +1111,26 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
-#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
-     defined(ELECROW_ThinkNode_M9) || defined(SEEED_WIO_TRACKER_L2) || defined(T_WATCH_ULTRA)) &&                                \
-    HAS_TFT
+#if HAS_TFT
+#if defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR)
+#define NODEDB_TFT_BLUETOOTH_OFF_BY_DEFAULT
+#elif defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||            \
+    defined(ELECROW_ThinkNode_M9)
+#define NODEDB_TFT_BLUETOOTH_OFF_BY_DEFAULT
+#elif defined(SEEED_WIO_TRACKER_L2) || defined(T_WATCH_ULTRA)
+#define NODEDB_TFT_BLUETOOTH_OFF_BY_DEFAULT
+#endif
+#endif
+
+#if defined(NODEDB_TFT_BLUETOOTH_OFF_BY_DEFAULT)
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
 #else
     // default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
 #endif
+
+#undef NODEDB_TFT_BLUETOOTH_OFF_BY_DEFAULT
 
     config.bluetooth.fixed_pin = defaultBLEPin;
 
