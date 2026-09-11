@@ -164,10 +164,10 @@ void MeshService::reloadConfig(int saveWhat)
 
         configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
 
-        // The single funnel for every path that can move the radio. saveWhat never carries the node
-        // database here, so add it - a LoRa config change reboots, and an unpersisted clear is lost.
-        if (nodeDB->clearHeardOnCurrentLoraIfSlotChanged())
-            saveWhat |= SEGMENT_NODEDATABASE;
+        // The single funnel for every path that can move the radio. Nothing is swept and nothing extra
+        // is persisted: each node already carries the slot it was heard on, so a client rolling through
+        // presets just moves this and moves it back.
+        nodeDB->refreshCommittedLoraSlot();
     }
     nodeDB->saveToDisk(saveWhat);
 }
