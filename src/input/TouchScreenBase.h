@@ -50,10 +50,22 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     bool _touchedOld = false;  // previous touch state
     int16_t _first_x, _last_x; // horizontal swipe direction
     int16_t _first_y, _last_y; // vertical swipe direction
-    time_t _start;             // for LONG_PRESS
-    uint32_t _lastTouchSeenMs; // helps suppress brief touch-controller dropouts
-    bool _tapped;              // for DOUBLE_TAP
-    uint32_t _lastRun = 0;     // helps suppress too fast consecutive runOnce() executions
+    // When the current touch began. A past event time, so every "how long has the finger been down"
+    // question goes through Throttle::hasElapsed(), which is wrap-correct and gets the full ~49.7
+    // day range. This and the two fields below used to be a single `time_t _start` that doubled as a
+    // suppression deadline; the LONG_PRESS block in runOnce() records what that cost.
+    uint32_t _pressStartMs;
+
+    // Repeat suppression for LONG_PRESS while one touch is held. Deliberately two fields: the bool
+    // answers "is suppression armed", the deadline answers "has it expired". Packing both into one
+    // timestamp is what made the old code wrong, and no single value can stand for "unarmed" here -
+    // Throttle::deadlinePassed() reads 0 as long past below ~24.8 days of uptime and as far future
+    // above it.
+    bool _longPressSuppressed;
+    uint32_t _longPressSuppressUntilMs; // meaningful only while _longPressSuppressed
+    uint32_t _lastTouchSeenMs;          // helps suppress brief touch-controller dropouts
+    bool _tapped;                       // for DOUBLE_TAP
+    uint32_t _lastRun = 0;              // helps suppress too fast consecutive runOnce() executions
 
     const char *_originName;
 };
