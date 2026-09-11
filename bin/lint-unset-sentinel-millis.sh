@@ -19,9 +19,15 @@
 # also declared in one file and enforced in six others - rebootAtMsec is written in AdminModule.cpp
 # and tested in Power.cpp, PowerFSM.cpp, main.cpp, Screen.cpp and portduino/USBHal.h - so no
 # single-file scan can infer it. The list below is therefore explicit, and each entry was verified
-# to actually test against 0 before being added. Deliberately absent: nagCycleCutoff, whose unset
-# state is the separate isNagging bool, and LinuxJoystick's nextRepeatX/nextRepeatY, gated by
-# heldX/heldY. Those may hold 0 safely, and flagging them would push someone to "fix" working code.
+# to actually test against 0 before being added - either `if (field)` / `field != 0` ahead of the
+# deadline check, or an explicit `field = 0` disarm.
+#
+# Deliberately absent, because their unset state is a separate flag rather than the timestamp:
+# nagCycleCutoff (isNagging), LinuxJoystick's nextRepeatX/nextRepeatY (heldX/heldY), lastTxStart
+# (busyTx), last_format_ms (formatted_this_boot), lastHeartbeat (heartbeat), lastAveraged (gotwind),
+# lastSampleMs (haveSample) and lastIaqMs (lastIaqValid). Those may hold 0 safely, and flagging them
+# would push someone to "fix" working code. Also absent: locals such as NodeInfoModule's lastNodeInfo,
+# which is derived per call from TransmitHistory rather than stored.
 #
 # Adding a field: append it to SENTINELS, but only after checking the field really is read as
 # 0-means-unset. A name on this list that does not have the contract is a false positive forever.
@@ -46,7 +52,7 @@
 set -uo pipefail
 
 # Fields whose 0 means "unarmed". See the note above before editing.
-SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec'
+SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort'
 
 for target in "$@"; do
 	[[ -f $target ]] || continue
