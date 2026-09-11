@@ -155,7 +155,7 @@ void test_pause_does_not_shorten_existing_longer_tx_after(void)
     TEST_ASSERT_EQUAL_UINT32(2000, pkt2.tx_after); // Must not be overwritten to 1050
 }
 
-void test_failed_start_does_not_trigger_pause(void)
+void test_failed_start_does_not_trigger_tx_pause(void)
 {
     setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
     JapanTxHook hook;
@@ -549,7 +549,7 @@ void test_carrier_sense_positive_rssi_and_error_codes_do_not_block(void)
     TEST_ASSERT_TRUE_MESSAGE(hook.performCarrierSense(&radio), "-706 glitch alongside valid samples must not block");
 }
 
-void test_carrier_sense_null_iface_fails_safe(void)
+void test_carrier_sense_null_iface_fails_safely(void)
 {
     JapanTxHook hook;
     Time::setTestMillis(1000);
@@ -763,7 +763,7 @@ void setup()
     RUN_TEST(test_pause_first_transmission_no_defer);
     RUN_TEST(test_pause_consecutive_transmission_held_before_50ms);
     RUN_TEST(test_pause_does_not_shorten_existing_longer_tx_after);
-    RUN_TEST(test_failed_start_does_not_trigger_pause);
+    RUN_TEST(test_failed_start_does_not_trigger_tx_pause);
 
     RUN_TEST(test_carrier_sense_free_below_threshold);
     RUN_TEST(test_carrier_sense_busy_at_threshold);
@@ -775,7 +775,7 @@ void setup()
     RUN_TEST(test_carrier_sense_ultra_low_rssi_valid_and_clear);
     RUN_TEST(test_is_valid_rssi_helper);
     RUN_TEST(test_carrier_sense_positive_rssi_and_error_codes_do_not_block);
-    RUN_TEST(test_carrier_sense_null_iface_fails_safe);
+    RUN_TEST(test_carrier_sense_null_iface_fails_safely);
     RUN_TEST(test_carrier_sense_no_valid_samples_defers_tx);
     RUN_TEST(test_before_transmit_busy_defers_and_backs_off);
     RUN_TEST(test_packet_released_resets_busy_count);
