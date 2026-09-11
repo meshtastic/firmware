@@ -554,7 +554,7 @@ static void test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops(void)
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
     request.hop_start = 5;
-    request.hop_limit = 1; // 4 hops away; router clamp should cap max at 3
+    request.hop_limit = 1; // 4 hops away; router clamp should cap max at 1
 
     ProcessMessage result = module.handleReceived(request);
     meshtastic_TrafficManagementStats stats = module.getStats();
@@ -636,7 +636,7 @@ static void test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown(void)
     request.decoded.want_response = true;
     request.id = 0x13570246;
     request.hop_start = 3;
-    request.hop_limit = 1;              // 2 hops away
+    request.hop_limit = 2;              // 1 hop away, inside the router ceiling, so the relayer guard is what rejects it
     request.relay_node = NO_RELAY_NODE; // no relayer, so the path it took cannot be corroborated
 
     ProcessMessage result = module.handleReceived(request);
@@ -647,6 +647,32 @@ static void test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown(void)
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
     TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
     TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+/**
+ * Verify a requestor one hop past the router ceiling is skipped even when config asks for more.
+ * Important because the role limit, not the config value, is what bounds a spoofed reply's reach.
+ */
+static void test_tm_nodeinfo_routerClamp_skipsJustBeyondCeiling(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 3;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 1; // 2 hops away, one past the ceiling of 1
+    request.relay_node = 0x00000042;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
 }
 
 /**
@@ -3415,6 +3441,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops);
     RUN_TEST(test_tm_nodeinfo_routerMultiHop_replyCarriesHopBudgetToReturn);
     RUN_TEST(test_tm_nodeinfo_routerMultiHop_skipsWhenRelayerUnknown);
+    RUN_TEST(test_tm_nodeinfo_routerClamp_skipsJustBeyondCeiling);
     RUN_TEST(test_tm_nodeinfo_directResponse_respondsFromCache);
     RUN_TEST(test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo);
     RUN_TEST(test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity);

@@ -36,7 +36,7 @@ constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interv
 #if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 // NodeInfo direct response: role-enforced hop ceilings (respond when hopsAway <= threshold);
 // config can only tighten them. nodeinfo_direct_response must also be enabled.
-constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
+constexpr uint32_t kRouterDefaultMaxHops = 1; // Routers: one hop out (can set lower via config)
 constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot increase)
 
 // Staleness window: never spoof a reply for a node not actually heard within it, or a cached
@@ -1431,12 +1431,13 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Caller already verified: nodeinfo_direct_response, portnum, want_response,
     // !isBroadcast, !isToUs, !isFromUs
 
-    if (!isWithinMaxHopsOfRequestor(p))
+    int8_t hopsAway = 0;
+    if (!isWithinMaxHopsOfRequestor(p, hopsAway))
         return false;
 
     // A request that crossed a hop but names no relayer is anomalous: we cannot corroborate the
     // path it took. Leave it for the genuine target rather than consume it on a guess.
-    const int8_t hopsAway = getHopsAway(*p, -1);
+    // NO_RELAY_NODE is 0, so a relayer whose node number ends in 0x00 reads the same here.
     if (hopsAway > 0 && p->relay_node == NO_RELAY_NODE) {
         TM_LOG_DEBUG("NodeInfo request from 0x%08x is %d hops out with no relayer, not responding", getFrom(p),
                      static_cast<int>(hopsAway));
@@ -1647,9 +1648,9 @@ bool TrafficManagementModule::directResponseAllowed(NodeNum requester, NodeNum t
     return true;
 }
 
-bool TrafficManagementModule::isWithinMaxHopsOfRequestor(const meshtastic_MeshPacket *p) const
+bool TrafficManagementModule::isWithinMaxHopsOfRequestor(const meshtastic_MeshPacket *p, int8_t &hopsAway) const
 {
-    int8_t hopsAway = getHopsAway(*p, -1);
+    hopsAway = getHopsAway(*p, -1);
     if (hopsAway < 0)
         return false;
 
