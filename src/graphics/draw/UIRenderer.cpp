@@ -545,7 +545,9 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
 
     // Draw satellite image
     if (currentResolution == ScreenResolution::High) {
-        NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgGPS_width, imgGPS_height, imgGPS, display);
+        const int iconSlack = FONT_HEIGHT_SMALL - (imgGPS_height * 2);
+        const int iconY = y + (iconSlack > 0 ? iconSlack / 2 : 0);
+        NodeListRenderer::drawScaledXBitmap16x16(x, iconY, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
         display->drawXbm(x + 1, y + 3, imgGPS_width, imgGPS_height, imgGPS);
     }

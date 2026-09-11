@@ -47,7 +47,7 @@ static bool touchBacklightActive = false;
 #endif
 #endif
 
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(MUZI_BASE)
 ButtonThread *UserButtonThread = nullptr;
 #endif
 
@@ -504,9 +504,33 @@ void InputBroker::Init()
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    if (screen && config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init(TB_DOWN, TB_UP, TB_LEFT, TB_RIGHT, TB_PRESS);
+    }
+#endif
+#if MUZI_BASE
+    if (!screen) {
+        UserButtonThread = new ButtonThread("UserButton");
+        ButtonConfig userConfigNoScreen;
+        userConfigNoScreen.pinNumber = (uint8_t)TB_PRESS;
+        userConfigNoScreen.activeLow = true;
+        userConfigNoScreen.activePullup = true;
+        userConfigNoScreen.pullupSense = pullup_sense;
+        userConfigNoScreen.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            UserButtonThread->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            concurrency::mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
+        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+        userConfigNoScreen.longPressTime = 500;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+        userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
+        userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
+        UserButtonThread->initButton(userConfigNoScreen);
     }
 #endif
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
