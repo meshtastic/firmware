@@ -58,6 +58,16 @@ inline uint32_t timerEndsAtMillis(uint32_t delayMs)
     return skipZero(getMillis() + delayMs);
 }
 
+// skipZero() is the whole 0-means-unset contract in one expression, and it is constexpr, so pin it
+// here rather than only in test_uptime_clock: a build that breaks it stops at this header instead of
+// shipping a deadline that reads as never-set. The two obvious "simplifications" are what these
+// catch - `ms | 1` perturbs every even value, and `ms + 1` turns the last tick of the wrap into the
+// 0 the function exists to avoid. Both compile and both pass a test that only checks skipZero(0).
+static_assert(skipZero(0) == 1, "skipZero must lift the one 0 tick to 1");
+static_assert(skipZero(1) == 1, "skipZero must leave 1 alone");
+static_assert(skipZero(2) == 2, "skipZero must pass even values through untouched (ms | 1 would not)");
+static_assert(skipZero(UINT32_MAX) == UINT32_MAX, "skipZero must not wrap the last tick to 0 (ms + 1 would)");
+
 /// Milliseconds since boot as a monotonic 64-bit count.
 ///
 /// A pure read: it derives its answer from a complete snapshot published by serviceMonotonic()
