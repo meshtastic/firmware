@@ -40,7 +40,7 @@ class MeshBeaconModule
     /**
      * Reconfigure the radio for beacon TX, or restore to original config if p is NULL.
      * Returns true if the radio was reconfigured (caller must re-run transmit delay for CCA).
-     * Driven by broadcast_on_preset / broadcast_on_channel from MeshBeaconConfig.
+     * Driven by the broadcast_targets entry associated with the packet.
      */
     static bool reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p);
 
@@ -77,7 +77,7 @@ class MeshBeaconModule
   protected:
     /**
      * Build the ChannelSettings the beacon transmits on: the base (primary) channel overlaid with
-     * any broadcast_on_channel overrides, defaulting an empty name to the target preset's display
+     * the target's channel-table slot, defaulting an empty name to the target preset's display
      * name. Shared by the encrypt-time channel swap and the radio-thread RF swap so the channel
      * key + hash are identical at both points.
      */

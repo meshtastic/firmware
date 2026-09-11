@@ -6,6 +6,12 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
+#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
+// The DCDC sensitivity workaround pokes RadioLib-internal DCDC registers that are NOT exposed via the
+// public LR2021.h, so pull in the internal register map explicitly. Opt-in only (see LR2021_DCDC_WORKAROUND).
+#include <modules/LR2021/LR2021_registers.h>
+#endif
+
 // Keep LR20x0 naming while RadioLib exposes LR2021 symbols.
 #ifndef LR20x0
 #define LR20x0 LR2021
@@ -45,6 +51,12 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 
 // Last programmed carrier; LF/HF hops use full begin() (live setOutputPower returns -706).
 static float lr20x0LastFreqMHz = 0;
+
+// Unlike SX126x/LR11x0 (on/off bool), the LR2021 RX gain boost is a 0-7 level (0 = disabled, 7 = max boost).
+// Map the historical on/off sx126x_rx_boosted_gain flag to max boost when enabled.
+#ifndef LR2021_RX_GAIN_BOOST_LEVEL
+#define LR2021_RX_GAIN_BOOST_LEVEL 7
+#endif
 
 template <typename T>
 LR20x0Interface<T>::LR20x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -140,12 +152,42 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
+        // Some basic info about the module's explicit firmware version - no other info available
+        // Currently requires radiolib godmode
+
+#if RADIOLIB_GODMODE
+    if (res == RADIOLIB_ERR_NONE) {
+        uint8_t fwMajor = 0;
+        uint8_t fwMinor = 0;
+        int versionRes = lora.getVersion(&fwMajor, &fwMinor);
+        if (versionRes == RADIOLIB_ERR_NONE)
+            LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
+    }
+#endif
+
+    // Semtech DCDC sensitivity workaround for sub-GHz operation - applied here after lora.begin() has set the
+    // packet type and modulation params. reconfigure() reapplies it after its own modulation changes.
+    if (res == RADIOLIB_ERR_NONE)
+        applyDcdcWorkaround();
+
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
+
+        // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
+        // Currently requires radiolib godmode
+#if RADIOLIB_GODMODE
+    if (res == RADIOLIB_ERR_NONE) {
+        uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
+        // godmode-only DCDC ramp tuning: log failures but don't fail init (radio is already up)
+        int16_t rmRes = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
+        if (rmRes != RADIOLIB_ERR_NONE)
+            LOG_WARN("LR2021 setRegMode failed: %d", rmRes);
+    }
+#endif
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
@@ -162,11 +204,11 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
-            res = lora.setRxBoostedGainMode(true);
-            LOG_INFO("Set RX gain to boosted mode; result: %d", res);
+            res = lora.setRxBoostedGainMode(LR2021_RX_GAIN_BOOST_LEVEL);
+            LOG_INFO("Set RX gain to boosted mode (level %d); result: %d", LR2021_RX_GAIN_BOOST_LEVEL, res);
         } else {
-            res = lora.setRxBoostedGainMode(false);
-            LOG_INFO("Set RX gain to power saving mode; result: %d", res);
+            res = lora.setRxBoostedGainMode(0);
+            LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", res);
         }
     }
 
@@ -179,7 +221,9 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 template <typename T> bool LR20x0Interface<T>::reconfigure()
 {
-    bool success = RadioLibInterface::reconfigure();
+    // Propagated to the return value below, separately from the chip-programming outcome, so a
+    // base-class failure isn't masked as success.
+    const bool reconfigureSuccess = RadioLibInterface::reconfigure();
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
         limitPower(LR2021_MAX_POWER_HF);
@@ -192,8 +236,107 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
     if (bandHop) {
         LOG_INFO("LR20x0 LF/HF band hop %.1f -> %.1f MHz, full begin()", lr20x0LastFreqMHz, freq);
-        setStandby();
+        // fullBegin() hardware-resets the chip, so a standby failure is survivable here
+        (void)trySetStandby();
 
+        if (!fullBegin(freq))
+            return false;
+
+        startReceive();
+        return reconfigureSuccess;
+    }
+
+    // Same-band reconfigure (previous incremental path)
+    bool standbySuccess = true;
+    int16_t standbyErr = trySetStandby();
+    if (standbyErr != RADIOLIB_ERR_NONE)
+        standbySuccess = false;
+
+    if (standbyErr == RADIOLIB_ERR_NONE) {
+        int err = lora.setFrequency(freq);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 setFrequency %.3f MHz %s%d", freq, radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
+        }
+
+        err = lora.setSpreadingFactor(sf);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 setSpreadingFactor(%u) %s%d", sf, radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
+        }
+
+        err = lora.setBandwidth(bw);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 setBandwidth(%.1f) %s%d", bw, radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
+        }
+
+        err = lora.setCodingRate(cr, cr != 7);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 setCodingRate(%u) %s%d", cr, radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
+        }
+
+        err = lora.setSyncWord(syncWord);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 setSyncWord %s%d", radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
+        }
+
+        err = lora.setPreambleLength(preambleLength);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 setPreambleLength(%u) %s%d", preambleLength, radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
+        }
+
+        err = lora.setOutputPower(power);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
+        }
+
+        // Warn-only, as in LR11x0: a rejected gain mode is cosmetic and not a lost-state signature, so
+        // it must not drag reconfigure() into a full chip reset.
+        err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
+        if (err != RADIOLIB_ERR_NONE)
+            LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
+    }
+
+    if (!standbySuccess) {
+        // A chip that fails standby or rejects parameter programming (typically WRONG_MODEM, -20) has
+        // lost its runtime configuration to a chip-internal reset or brownout. Recover in place with the
+        // same full begin() the band-hop path uses - it hardware-resets the chip. Crashing here instead
+        // would reboot before MeshService persists the config change that triggered us.
+        LOG_ERROR("LR20x0 rejected modem params, chip state lost? Full re-init");
+        if (!fullBegin(freq)) {
+            LOG_ERROR("LR20x0 unrecoverable, radio down until reboot");
+            return false;
+        }
+        LOG_INFO("LR20x0 recovered after re-init");
+    }
+
+    // setSpreadingFactor/setBandwidth/setCodingRate each re-run setLoRaModulationParams(), which resets
+    // the DCDC configure state, so reapply the workaround before we resume receiving.
+    if (standbySuccess)
+        applyDcdcWorkaround();
+
+    startReceive();
+    lr20x0LastFreqMHz = freq;
+    return reconfigureSuccess;
+}
+
+// The chip-side re-init the band-hop and recovery paths share: front-end switch GPIOs for the target
+// band, a fresh begin() (which hardware-resets the chip), CRC, DIO RF-switch table, and RX gain.
+template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
+{
+    {
         // Match init(): external LF/HF front-end GPIOs (if board defines them).
 #ifdef LR2021_RF_SWITCH_SUBGHZ
         pinMode(LR2021_RF_SWITCH_SUBGHZ, OUTPUT);
@@ -252,75 +395,81 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
             lora.setRfSwitchTable(lr20x0_rfswitch_dio_pins, lr20x0_rfswitch_table);
 #endif
 
-        res = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+        res = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 band-hop setRxBoostedGainMode %s%d", radioLibErr, res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
 
-        startReceive();
+        // begin() above reprogrammed the modulation params, so the DCDC configure state is reset here too.
+        applyDcdcWorkaround();
+
         return true;
     }
+}
 
-    // Same-band reconfigure (previous incremental path)
-    setStandby();
+// Semtech DCDC sensitivity workaround for sub-GHz operation on engineering sample date code 2513.
+// Worthy of note is that we tested this on non-engineering samples and it didn't make any difference, but
+// we went to the trouble of writing this, so it can stay in, albeit gated behind a compile-time option.
+// lr20xx_workarounds_dcdc_reset must follow setPacketType; lr20xx_workarounds_dcdc_configure must follow
+// setModulationParams. In init() both hold once lora.begin() returns; in reconfigure() the caller invokes this
+// after setSpreadingFactor/setBandwidth/setCodingRate, whose RadioLib implementations re-run
+// setLoRaModulationParams() and reset the DCDC configure state. Only applies to sub-GHz; 2.4 GHz (LORA_24) is
+// excluded. Opt-in only: requires -DLR2021_DCDC_WORKAROUND (and RADIOLIB_GODMODE for the internal register access).
+template <typename T> void LR20x0Interface<T>::applyDcdcWorkaround()
+{
+#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)
+        return;
 
-    int err = lora.setFrequency(freq);
-    if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR20x0 setFrequency %.3f MHz %s%d", freq, radioLibErr, err);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
+    // Helper: set DCDC LF frequency register and re-apply the current RF frequency.
+    auto dcdcSetFreq = [&](uint32_t freqHz) -> int16_t {
+        const uint32_t freqLf = (uint32_t)((float)freqHz * 1.048576f);
+        int16_t s = lora.writeRegMem32(RADIOLIB_LR2021_REG_DCDC_FREQ_LF, &freqLf, 1);
+        if (s != RADIOLIB_ERR_NONE)
+            return s;
+        uint32_t rawRfFreq = 0;
+        s = lora.readRegMem32(RADIOLIB_LR2021_REG_RTTOF_RF_FREQ, &rawRfFreq, 1);
+        if (s != RADIOLIB_ERR_NONE)
+            return s;
+        // Convert PLL steps to Hz: (steps * 15625 + 16383) / 16384
+        uint32_t rfHz = (uint32_t)(((uint64_t)rawRfFreq * 15625ULL + 16383ULL) / 16384ULL);
+        return lora.setRfFrequency(rfHz);
+    };
+
+    // dcdc_reset: reset RISE/FALL ramp fields to conservative 15/15 at 2.8 MHz
+    int16_t dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 20, 15u << 20);
+    if (dcdcRes == RADIOLIB_ERR_NONE)
+        dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 16, 15u << 16);
+    if (dcdcRes == RADIOLIB_ERR_NONE)
+        dcdcRes = dcdcSetFreq(2800000);
+
+    // dcdc_configure: tune RISE/FALL and DC freq based on ADC decimation and RX path.
+    // Matches lr20xx_workarounds_dcdc_configure() exactly.
+    if (dcdcRes == RADIOLIB_ERR_NONE) {
+        uint32_t adcCtrl = 0, rxPath = 0;
+        dcdcRes = lora.readRegMem32(RADIOLIB_LR2021_REG_DCDC_ADC_CTRL, &adcCtrl, 1);
+        if (dcdcRes == RADIOLIB_ERR_NONE)
+            dcdcRes = lora.readRegMem32(RADIOLIB_LR2021_REG_DCDC_RX_PATH, &rxPath, 1);
+        if (dcdcRes == RADIOLIB_ERR_NONE) {
+            const uint32_t anaDec = (adcCtrl >> 8) & 0x7;
+            const bool isRxHf = (rxPath & 0x3) == 1;
+            // Narrowband sub-GHz path (ana_dec 1 or 2): use tighter RISE=11/FALL=13 timing
+            const uint32_t rise = (!isRxHf && (anaDec == 1 || anaDec == 2)) ? 11u : 15u;
+            const uint32_t fall = (!isRxHf && (anaDec == 1 || anaDec == 2)) ? 13u : 15u;
+            dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 20, rise << 20);
+            if (dcdcRes == RADIOLIB_ERR_NONE)
+                dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 16, fall << 16);
+            if (dcdcRes == RADIOLIB_ERR_NONE)
+                dcdcRes = dcdcSetFreq(anaDec == 1 ? 4300000 : 2800000);
+        }
     }
-
-    err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
-
-    err = lora.setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
-
-    err = lora.setCodingRate(cr, cr != 7);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
-
-    err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
-
-    err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE) {
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
-
-    err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
-
-    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-    if (err != RADIOLIB_ERR_NONE) {
-        LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
-        success = false;
-    }
-
-    if (success) {
-        startReceive();
-        lr20x0LastFreqMHz = freq;
-    }
-    return success;
+    if (dcdcRes != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR20x0 DCDC workaround failed: %d", dcdcRes);
+    else
+        LOG_DEBUG("LR20x0 DCDC workaround applied");
+#endif
 }
 
 template <typename T> void LR20x0Interface<T>::clearRadioIsr()
@@ -328,23 +477,28 @@ template <typename T> void LR20x0Interface<T>::clearRadioIsr()
     lora.clearIrqAction();
 }
 
-template <typename T> void LR20x0Interface<T>::setStandby()
+template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
-    int err = lora.standby();
+    int16_t err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE) {
         LOG_DEBUG("LR20x0 standby failed, err %d", err);
     }
-
-    assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> void LR20x0Interface<T>::setStandby()
+{
+    int16_t err = trySetStandby();
+    assert(err == RADIOLIB_ERR_NONE);
 }
 
 /**
@@ -376,16 +530,31 @@ template <typename T> void LR20x0Interface<T>::startReceive()
     sleep();
 #else
 
-    setStandby();
+    int16_t err = trySetStandby();
 
-    lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
+    if (err == RADIOLIB_ERR_NONE) {
+        lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
 
-    // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
-    int err =
-        lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
-    if (err)
+        // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
+        err =
+            lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    }
+
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("StartReceive error: %d", err);
-    assert(err == RADIOLIB_ERR_NONE);
+        if (maybeRecoverChipStateLoss()) {
+            lora.setPreambleLength(preambleLength);
+            err = lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS,
+                                    RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+        }
+    }
+
+    if (err != RADIOLIB_ERR_NONE) {
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
+        LOG_ERROR("LR20x0 RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
+        return;
+    }
 
     RadioLibInterface::startReceive();
 
@@ -406,16 +575,18 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
                                        .timeout = 0,
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
-    int16_t result;
+    int16_t result = trySetStandby();
+    if (result == RADIOLIB_ERR_NONE) {
+        result = lora.scanChannel(cfg);
+        if (result == RADIOLIB_LORA_DETECTED)
+            return true;
+        if (result != RADIOLIB_ERR_WRONG_MODEM)
+            return false;
+    }
 
-    setStandby();
-    result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
-        return true;
-
-    assert(result != RADIOLIB_ERR_WRONG_MODEM);
-
-    return false;
+    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
+    maybeRecoverChipStateLoss();
+    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
@@ -451,7 +622,7 @@ template <typename T> void LR20x0Interface<T>::resetAGC()
     lora.calibrateImageRejection(getFreq() - 4.0f, getFreq() + 4.0f);
 
     // 5. Re-apply RX boosted gain mode
-    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
 
     // 6. Resume receiving
     startReceive();
@@ -462,7 +633,7 @@ template <typename T> bool LR20x0Interface<T>::sleep()
 {
     // \todo Display actual typename of the adapter, not just `LR20x0`
     LOG_DEBUG("LR20x0 entering sleep mode");
-    setStandby(); // Stop any pending operations
+    (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
     lora.setTCXO(0);

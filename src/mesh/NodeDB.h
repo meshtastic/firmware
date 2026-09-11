@@ -80,6 +80,11 @@ static const uint8_t LOW_ENTROPY_HASHES[][32] = {
     {0xcc, 0x11, 0xfb, 0x1a, 0xab, 0xa1, 0x31, 0x87, 0x6a, 0xc6, 0xde, 0x88, 0x87, 0xa9, 0xb9, 0x59,
      0x37, 0x82, 0x8d, 0xb2, 0xcc, 0xd8, 0x97, 0x40, 0x9a, 0x5c, 0x8f, 0x40, 0x55, 0xcb, 0x4c, 0x3e}};
 static const char LOW_ENTROPY_WARNING[] = "Compromised keys were detected and regenerated.";
+// Shown when a user tries to restore/set a known pre-2.8 low-entropy key: explains why the saved
+// key did not persist and that the node's identity (NodeNum == crc32(public_key)) changed with it.
+static const char LOW_ENTROPY_RESTORE_WARNING[] =
+    "That key is a known pre-2.8 low-entropy key and can't be restored. A new secure key was "
+    "generated; your node number has changed.";
 #endif
 static const char LICENSED_IDENTITY_MIGRATION_WARNING[] =
     "Licensed signing generated a new identity key; this node identity changed.";
@@ -586,6 +591,10 @@ class NodeDB
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    bool generateBlacklistCheckedKeyPair();
+    bool derivePublicKeyFromPrivate();
 #endif
 
     /// Consolidate crypto key generation logic used across multiple modules
