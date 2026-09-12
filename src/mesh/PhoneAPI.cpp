@@ -929,6 +929,13 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             }
             break;
 #endif
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+        case meshtastic_ModuleConfig_router_retirement_tag:
+            LOG_DEBUG("Send module config: router retirement");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_router_retirement_tag;
+            fromRadioScratch.moduleConfig.payload_variant.router_retirement = moduleConfig.router_retirement;
+            break;
+#endif
         default:
             LOG_DEBUG("Unhandled module config type %d", config_state);
         }
