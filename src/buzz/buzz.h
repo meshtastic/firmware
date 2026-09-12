@@ -1,5 +1,11 @@
 #pragma once
 
+#include <stdint.h>
+
+// Play one tone at an explicit duty cycle, blocking for durationMs; louder than tone()'s fixed 50%
+// on a piezo. Clamped to BUZZER_DUTY_MAX_PERCENT; variants opt in with BUZZER_DUTY_PERCENT.
+void playToneDuty(uint8_t pin, uint16_t freqHz, uint32_t durationMs, uint8_t dutyPct);
+
 void playBeep();
 void playLongBeep();
 void playStartMelody();
