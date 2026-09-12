@@ -41,11 +41,8 @@ class Throttle
     ///                 guard, so this third state wants naming rather than repeating.
     ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up. A computed renewal now dodges 0,
     ///                 so only a deliberate write still means "due now".
-    /// ExternalNotificationModule.cpp nagCycleCutoff used to be a fourth case, reserving UINT32_MAX
-    /// for "unarmed" while ALSO keeping an isNagging flag. It no longer reserves any value: isNagging
-    /// is the only armed flag and the deadline is read only while it is set. That is the shape this
-    /// TODO is aiming at, minus the type - a deadline whose arm site is `millis() + interval` cannot
-    /// safely reserve any value, because the sum can land on all of them.
+    /// ExternalNotificationModule.cpp nagCycleCutoff reserves nothing: isNagging is the only armed
+    /// flag and the deadline is read only while it is set.
     static bool deadlinePassed(uint32_t deadlineMs);
 
     /// deadlinePassed() against a caller-supplied "now", for a loop that snapshots the time once and

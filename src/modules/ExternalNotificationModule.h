@@ -64,8 +64,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     int handleInputEvent(const InputEvent *arg);
 #endif
 
-    /// When the current nag cycle ends. Meaningful ONLY while isNagging is set - it is a plain
-    /// deadline, not a sentinel, so never test it for a magic value. isNagging is the armed flag.
+    /// When the current nag cycle ends. Meaningful only while isNagging is set; never test it for a
+    /// magic value.
     uint32_t nagCycleCutoff = 0;
 
     void setExternalState(uint8_t index = 0, bool on = false);

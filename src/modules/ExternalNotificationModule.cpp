@@ -88,10 +88,8 @@ int32_t ExternalNotificationModule::runOnce()
 #if defined(HAS_I2S_SPEAKER_NRF52)
         isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
-        // isNagging is the armed flag, and nagCycleCutoff is only a deadline while it is set, so
-        // short-circuit before the comparison rather than giving the timestamp a magic value of its
-        // own. armNagCycle() computes `millis() + durationMs`, which can land on any value at all
-        // including UINT32_MAX, so no value is available to reserve as "unarmed".
+        // isNagging is the armed flag; nagCycleCutoff is only a deadline while it is set, so
+        // short-circuit before the comparison. `millis() + durationMs` can land on any value.
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
         if (nagWindowExpired && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
@@ -310,8 +308,7 @@ void ExternalNotificationModule::stopNow()
 #endif
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
-    // Clearing isNagging is what disarms the cycle; nagCycleCutoff is left as it is because no read
-    // consults it without checking isNagging first.
+    // Clearing isNagging disarms the cycle; nagCycleCutoff is never read without it.
     isNagging = false;
     buzzerShouldAlert = false;
 
@@ -626,15 +623,8 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 {
-    // isNagging is the armed flag, the same one every other read here uses. This used to test
-    // `nagCycleCutoff != UINT32_MAX` instead, which made the timestamp its own second armed flag -
-    // true at boot, because the field started at 1, so the first input event of every boot was
-    // answered with stopNow() and a non-zero return. A non-zero return aborts the rest of the
-    // observer chain (Observable::notifyObservers in src/Observer.h returns on the first one), so
-    // that event was swallowed from every later observer.
-    //
-    // Note InputBroker::handleInputEvent already stops a nag on input, before it notifies observers
-    // at all, so in practice this is belt and braces rather than the path that silences a device.
+    // Testing the deadline instead of isNagging was true at boot, and the non-zero return
+    // swallowed the first input event from every later observer.
     if (isNagging) {
         stopNow();
         return 1;
