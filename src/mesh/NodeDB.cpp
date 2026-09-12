@@ -253,6 +253,12 @@ std::map<NodeNum, meshtastic_EnvironmentMetrics> *s_decodeEnvironmentTarget = nu
 #if !MESHTASTIC_EXCLUDE_STATUSDB
 std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
 #endif
+
+// Keys that can never name a real node.
+[[maybe_unused]] inline bool isUsableSatelliteKey(NodeNum n)
+{
+    return n != 0 && !isBroadcast(n);
+}
 } // namespace
 
 bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
@@ -306,7 +312,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodePositionEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
                 if (s_decodePositionsTarget) {
-                    if (entry.has_position)
+                    if (entry.has_position && isUsableSatelliteKey(entry.num))
                         (*s_decodePositionsTarget)[entry.num] = entry.position;
                     return true;
                 }
@@ -332,7 +338,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeTelemetryEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
                 if (s_decodeTelemetryTarget) {
-                    if (entry.has_device_metrics)
+                    if (entry.has_device_metrics && isUsableSatelliteKey(entry.num))
                         (*s_decodeTelemetryTarget)[entry.num] = entry.device_metrics;
                     return true;
                 }
@@ -358,7 +364,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeStatusEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_STATUSDB
                 if (s_decodeStatusTarget) {
-                    if (entry.has_status)
+                    if (entry.has_status && isUsableSatelliteKey(entry.num))
                         (*s_decodeStatusTarget)[entry.num] = entry.status;
                     return true;
                 }
@@ -384,7 +390,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeEnvironmentEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
                 if (s_decodeEnvironmentTarget) {
-                    if (entry.has_environment_metrics)
+                    if (entry.has_environment_metrics && isUsableSatelliteKey(entry.num))
                         (*s_decodeEnvironmentTarget)[entry.num] = entry.environment_metrics;
                     return true;
                 }
@@ -702,15 +708,24 @@ NodeDB::NodeDB()
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
         {
             concurrency::LockGuard guard(&satelliteMutex);
-            nodePositions[info->num] = TypeConversions::ConvertToPositionLite(fixedGPS);
+            nodePositions[getNodeNum()] = TypeConversions::ConvertToPositionLite(fixedGPS);
         }
+        // nodePositions is a member map, so the nodeDatabase CRC compare above cannot see this write -
+        // and it has already run. Flag the segment or the fixed position is only persisted by chance.
+        saveWhat |= SEGMENT_NODEDATABASE;
 #endif
-        nodeDB->setLocalPosition(fixedGPS);
+        setLocalPosition(fixedGPS);
         config.position.fixed_position = true;
+        // Same for config, whose CRC compare also ran before this block. Keep that compare's
+        // degraded-boot guard so an unreadable config is never overwritten with UNSET defaults.
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
 #endif
     }
 #endif
     sortMeshDB();
+    // resetRadioConfig() above loaded config and channels, so this records the slot we booted on.
+    refreshCommittedLoraSlot();
     saveToDisk(saveWhat);
     bootInitializationInProgress = false;
 }
@@ -817,6 +832,63 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 
     // Update the global myRegion
     initRegion();
+}
+
+LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName)
+{
+    LoraSlotSnapshot snap;
+    snap.region = lora.region;
+    snap.use_preset = lora.use_preset;
+    // Record only the modem fields the radio is actually using. The unused half of the pair keeps
+    // whatever the client last wrote into it, and editing a dormant field moves nothing on air.
+    if (lora.use_preset) {
+        snap.modem_preset = lora.modem_preset;
+    } else {
+        snap.bandwidth = lora.bandwidth;
+        snap.spread_factor = lora.spread_factor;
+        snap.coding_rate = lora.coding_rate;
+    }
+    snap.override_frequency = lora.override_frequency;
+    snap.channel_num = lora.channel_num;
+    strncpy(snap.primary_channel_name, primaryChannelName, sizeof(snap.primary_channel_name) - 1);
+    return snap;
+}
+
+uint16_t LoraSlotSnapshot::fingerprint() const
+{
+    // FNV-1a over the populated fields. Only ever compared against another fingerprint, so the hash
+    // needs to be stable and well-spread, not cryptographic.
+    uint32_t h = 2166136261u;
+    auto mix = [&h](const void *data, size_t len) {
+        const uint8_t *p = static_cast<const uint8_t *>(data);
+        for (size_t i = 0; i < len; i++) {
+            h ^= p[i];
+            h *= 16777619u;
+        }
+    };
+    const uint8_t scalars[] = {(uint8_t)region,        (uint8_t)use_preset,  (uint8_t)modem_preset,
+                               (uint8_t)coding_rate,   (uint8_t)bandwidth,   (uint8_t)(bandwidth >> 8),
+                               (uint8_t)spread_factor, (uint8_t)channel_num, (uint8_t)(channel_num >> 8)};
+    mix(scalars, sizeof(scalars));
+    mix(&override_frequency, sizeof(override_frequency));
+    mix(primary_channel_name, strnlen(primary_channel_name, sizeof(primary_channel_name)));
+    // Fold the full width down rather than truncating, so every input bit reaches the stored value.
+    const uint16_t folded = (uint16_t)((h ^ (h >> 16)) & ((1u << NODEINFO_BITFIELD_HEARD_SLOT_BITS) - 1));
+    return folded;
+}
+
+LoraSlotSnapshot NodeDB::currentLoraSlot() const
+{
+    return loraSlotSnapshotFrom(config.lora, channels.getName(channels.getPrimaryIndex()));
+}
+
+void NodeDB::refreshCommittedLoraSlot()
+{
+    // A beacon TX parks the radio on someone else's preset and puts it back; config.lora is not the
+    // committed config for that window, and adopting it would read every node as unheard meanwhile.
+    if (loraSlotTransient)
+        return;
+    committedSlot = currentLoraSlot().fingerprint();
 }
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
@@ -1936,16 +2008,35 @@ bool NodeDB::enforceSatelliteCaps()
 {
     concurrency::LockGuard guard(&satelliteMutex);
     bool trimmedAny = false;
-    auto trim = [this, &trimmedAny](auto &map, const char *name) {
+    const NodeNum self = getNodeNum();
+    // One sorted snapshot of the hot keys serves all four maps; the orphan test is a binary search.
+    std::vector<NodeNum> hotNums;
+    hotNums.reserve(numMeshNodes);
+    for (int i = 0; i < numMeshNodes; i++)
+        hotNums.push_back(meshNodes->at(i).num);
+    std::sort(hotNums.begin(), hotNums.end());
+
+    auto trim = [this, &trimmedAny, &hotNums, self](auto &map, const char *name) {
         const size_t before = map.size();
+        // Orphans (key with no hot-table owner) only ever arrive from disk, and the
+        // cap paths never reclaim them because they fire above the cap, not at it.
+        size_t orphans = 0;
+        for (auto it = map.begin(); it != map.end();) {
+            if (it->first != self && !std::binary_search(hotNums.begin(), hotNums.end(), it->first)) {
+                it = map.erase(it);
+                orphans++;
+            } else {
+                ++it;
+            }
+        }
         while (map.size() > MAX_SATELLITE_NODES) {
             if (!evictStalestSatellite(*this, map))
                 break;
         }
         if (map.size() != before) {
             trimmedAny = true;
-            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
-                          MAX_SATELLITE_NODES);
+            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d, %u orphaned)", name, (unsigned)before, (unsigned)map.size(),
+                          MAX_SATELLITE_NODES, (unsigned)orphans);
         }
     };
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
@@ -2937,6 +3028,9 @@ bool NodeDB::reloadFromDisk()
         channels.onConfigChanged();
         rIface->reconfigure();
     }
+    // The unlock replaced the locked-default config with the operator's, so the boot snapshot
+    // describes a slot we were never on.
+    refreshCommittedLoraSlot();
     return true;
 }
 
@@ -3784,6 +3878,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
+
+        // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
+        // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt)
+            nodeInfoLiteSetHeardSlot(info, currentLoraSlot().fingerprint());
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
@@ -4666,6 +4765,10 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             }
             if (restoreWhat & SEGMENT_CHANNELS)
                 channels.onConfigChanged();
+
+            // Restore reboots without going through MeshService::reloadConfig(), which is where the
+            // committed slot is otherwise re-read.
+            refreshCommittedLoraSlot();
 
             success = saveToDisk(restoreWhat);
             if (success) {

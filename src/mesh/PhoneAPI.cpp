@@ -1281,26 +1281,26 @@ bool lastHeardIsWallClock(const meshtastic_NodeInfoLite *header)
 // Previously these packets carried a bare 0, which a client renders as a real reading.
 // Note the asymmetry with rx_snr below: that field is still proto3 singular, so "unknown" and
 //  "0 dB" remain indistinguishable there.
-meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const meshtastic_PositionLite &pos)
+meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(const meshtastic_NodeInfoLite *header,
+                                                         const meshtastic_PositionLite &pos)
 {
     // Shape this exactly like a fresh live broadcast Position from the peer so the
     // phone runs it through its normal "live position broadcast" handler path.
     // to=ourNum would read as a DM-from-peer and never lands in node detail UI.
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
     // rx_time means "when *we* received this" - use last_heard, not the position's own GPS
     // fix time (which is often 0 and, when present, already round-trips inside the payload
     // via ConvertToPosition).
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
     // Stable per-node/per-fix id: replaying the same unchanged history on every
     // reconnect must not look like a brand new packet to the phone's history/dedup.
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1315,19 +1315,19 @@ meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const mesh
     return pkt;
 }
 
-meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const meshtastic_DeviceMetrics &metrics)
+meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(const meshtastic_NodeInfoLite *header,
+                                                          const meshtastic_DeviceMetrics &metrics)
 {
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
     // No native timestamp on telemetry packets here; use last_heard.
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1376,10 +1376,13 @@ void PhoneAPI::prefetchReplayPositions()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayPositionIndex < replayPositionOrder.size()) {
             NodeNum num = replayPositionOrder[replayPositionIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_PositionLite pos;
-            if (!nodeDB->copyNodePosition(num, pos))
-                continue; // entry was evicted between snapshot and now
-            replayQueue.push_back(makeReplayPositionPacket(num, pos));
+            // No header means an orphan the phone cannot attribute; a failed copy means
+            // the entry was evicted between snapshot and now.
+            if (!header || !nodeDB->copyNodePosition(num, pos))
+                continue;
+            replayQueue.push_back(makeReplayPositionPacket(header, pos));
             added = true;
         }
     }
@@ -1412,10 +1415,11 @@ void PhoneAPI::prefetchReplayTelemetry()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayTelemetryIndex < replayTelemetryOrder.size()) {
             NodeNum num = replayTelemetryOrder[replayTelemetryIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_DeviceMetrics dm;
-            if (!nodeDB->copyNodeTelemetry(num, dm))
+            if (!header || !nodeDB->copyNodeTelemetry(num, dm))
                 continue;
-            replayQueue.push_back(makeReplayTelemetryPacket(num, dm));
+            replayQueue.push_back(makeReplayTelemetryPacket(header, dm));
             added = true;
         }
     }
@@ -1424,18 +1428,18 @@ void PhoneAPI::prefetchReplayTelemetry()
 #endif
 }
 
-meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env)
+meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(const meshtastic_NodeInfoLite *header,
+                                                            const meshtastic_EnvironmentMetrics &env)
 {
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1478,10 +1482,11 @@ void PhoneAPI::prefetchReplayEnvironment()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayEnvironmentIndex < replayEnvironmentOrder.size()) {
             NodeNum num = replayEnvironmentOrder[replayEnvironmentIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_EnvironmentMetrics env;
-            if (!nodeDB->copyNodeEnvironment(num, env))
+            if (!header || !nodeDB->copyNodeEnvironment(num, env))
                 continue;
-            replayQueue.push_back(makeReplayEnvironmentPacket(num, env));
+            replayQueue.push_back(makeReplayEnvironmentPacket(header, env));
             added = true;
         }
     }
@@ -1490,19 +1495,19 @@ void PhoneAPI::prefetchReplayEnvironment()
 #endif
 }
 
-meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status)
+meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(const meshtastic_NodeInfoLite *header,
+                                                       const meshtastic_StatusMessage &status)
 {
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
     // StatusMessage has no native timestamp; use last_heard.
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1540,10 +1545,11 @@ void PhoneAPI::prefetchReplayStatus()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayStatusIndex < replayStatusOrder.size()) {
             NodeNum num = replayStatusOrder[replayStatusIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_StatusMessage status;
-            if (!nodeDB->copyNodeStatus(num, status) || status.status[0] == '\0')
+            if (!header || !nodeDB->copyNodeStatus(num, status) || status.status[0] == '\0')
                 continue;
-            replayQueue.push_back(makeReplayStatusPacket(num, status));
+            replayQueue.push_back(makeReplayStatusPacket(header, status));
             added = true;
         }
     }
