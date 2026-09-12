@@ -1160,6 +1160,19 @@ static bool signedDataFits(meshtastic_Data *d)
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
+static bool isLocalStatsTelemetry(const meshtastic_MeshPacket *p)
+{
+    if (p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP)
+        return false;
+
+    // Telemetry is large on smaller targets, so do not place this decode scratch on the stack.
+    // perhapsEncode() holds cryptLock while calling wouldEncryptWithPKC(), which serializes its use.
+    static meshtastic_Telemetry telemetry;
+    memset(&telemetry, 0, sizeof(telemetry));
+    return pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_Telemetry_msg, &telemetry) &&
+           telemetry.which_variant == meshtastic_Telemetry_local_stats_tag;
+}
+
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
     // First, only PKC encrypt packets we are originating
@@ -1178,6 +1191,9 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
            // Some portnums either make no sense to send with PKC
            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
+           // LocalStats is shared-channel encrypted unless a caller explicitly requests PKC.
+           // Other telemetry keeps its existing PKC behavior.
+           (p->pki_encrypted || !isLocalStatsTelemetry(p)) &&
            // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
            // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
            // uses the pending key resolved into haveDestKey/destKey above.
