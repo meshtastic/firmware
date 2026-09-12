@@ -3375,6 +3375,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 #if !MESHTASTIC_EXCLUDE_BEACON
         moduleConfig.has_mesh_beacon = true;
 #endif
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+        moduleConfig.has_router_retirement = true;
+#endif
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);

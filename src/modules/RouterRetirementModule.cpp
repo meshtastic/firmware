@@ -2,6 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
 
+#include "Default.h"
 #include "FSCommon.h"
 #include "NodeDB.h"
 #include "SPILock.h"
@@ -14,8 +15,10 @@ RouterRetirementModule *routerRetirementModule;
 
 RouterRetirementModule::RouterRetirementModule() : concurrency::OSThread("RouterRetirement")
 {
-    // Runs everywhere but no-ops unless enabled AND the role is retirable (see runOnce).
+    // Runs everywhere but no-ops unless the role is retirable (see runOnce).
     loadFromDisk();
+    // A fresh thread fires at once; the first hour has to elapse before it counts.
+    setIntervalFromNow(ACCRUE_INTERVAL_SECS * 1000);
 }
 
 bool RouterRetirementModule::isRetirableRole(meshtastic_Config_DeviceConfig_Role role)
@@ -35,15 +38,19 @@ meshtastic_Config_DeviceConfig_Role RouterRetirementModule::nextRetirementRole(m
     }
 }
 
-uint32_t RouterRetirementModule::effectiveThresholdSecs(uint32_t configuredSecs)
+uint32_t RouterRetirementModule::effectiveThresholdSecs(uint32_t configuredWeeks)
 {
-    return configuredSecs > 0 ? configuredSecs : DEFAULT_STEP_THRESHOLD_SECS;
+    if (configuredWeeks == 0)
+        return DEFAULT_STEP_THRESHOLD_SECS;
+    // ~7101 weeks overflows uint32 seconds; clamp to the ceiling rather than wrap to a short threshold.
+    if (configuredWeeks > UINT32_MAX / WEEK_SECS)
+        return UINT32_MAX;
+    return configuredWeeks * WEEK_SECS;
 }
 
-bool RouterRetirementModule::shouldRetire(bool enabled, meshtastic_Config_DeviceConfig_Role role, uint32_t creditSecs,
-                                          uint32_t thresholdSecs)
+bool RouterRetirementModule::shouldRetire(meshtastic_Config_DeviceConfig_Role role, uint32_t creditSecs, uint32_t thresholdSecs)
 {
-    return enabled && isRetirableRole(role) && creditSecs >= thresholdSecs;
+    return isRetirableRole(role) && creditSecs >= thresholdSecs;
 }
 
 void RouterRetirementModule::loadFromDisk()
@@ -86,12 +93,38 @@ bool RouterRetirementModule::saveToDisk() const
 
 void RouterRetirementModule::noteAdminSession()
 {
+    concurrency::LockGuard g(&lock);
     // An admin touched us - we're managed; restart the unmanaged clock. Nothing to do (and no
     // flash write) when it never started.
     if (creditSecs == 0)
         return;
     creditSecs = 0;
     saveToDisk();
+}
+
+void RouterRetirementModule::restoreClientDefaults()
+{
+    // The ROUTER rung ran the interval installers under IF_ROUTER; run them again as CLIENT.
+    nodeDB->initConfigIntervals();
+    nodeDB->initModuleConfigIntervals();
+    moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
+    if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY)
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    owner.has_is_unmessagable = true;
+    owner.is_unmessagable = false;
+}
+
+bool RouterRetirementModule::commitRetirement()
+{
+    // Role defaults touch config, module config (telemetry interval) and the owner (devicestate).
+    if (!nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE)) {
+        LOG_WARN("Router retirement: role save failed, will retry next tick");
+        retirementSavePending = true;
+        return false;
+    }
+    retirementSavePending = false;
+    rebootAtMsec = Time::getMillis() + 5000; // reboot so the new role fully applies
+    return true;
 }
 
 void RouterRetirementModule::retireOneRung()
@@ -105,23 +138,32 @@ void RouterRetirementModule::retireOneRung()
     config.device.role = next;
     creditSecs = 0; // fresh credit at the new rung
     saveToDisk();
-    nodeDB->installRoleDefaults(next);                        // role-appropriate intervals/rebroadcast
-    nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_DEVICESTATE); // persist role
-    rebootAtMsec = Time::getMillis() + 5000;                  // reboot so the new role fully applies
+    if (next == meshtastic_Config_DeviceConfig_Role_CLIENT)
+        restoreClientDefaults(); // installRoleDefaults has no CLIENT branch
+    else
+        nodeDB->installRoleDefaults(next);
+    commitRetirement();
 }
 
 int32_t RouterRetirementModule::runOnce()
 {
+    concurrency::LockGuard g(&lock);
     const meshtastic_ModuleConfig_RouterRetirementConfig &cfg = moduleConfig.router_retirement;
 
-    // Dormant unless enabled and currently a retirable role.
-    if (cfg.enabled && isRetirableRole(config.device.role)) {
+    // A demotion is applied in RAM but not yet on flash: land it before anything else.
+    if (retirementSavePending) {
+        commitRetirement();
+        return ACCRUE_INTERVAL_SECS * 1000;
+    }
+
+    // Dormant unless currently a retirable role.
+    if (isRetirableRole(config.device.role)) {
         // Accrue this interval's uptime as a fixed count of seconds: no clock arithmetic, so
         // neither a rollover nor a reboot can inflate it. Checkpointed every tick.
         if (creditSecs < UINT32_MAX - ACCRUE_INTERVAL_SECS)
             creditSecs += ACCRUE_INTERVAL_SECS;
 
-        if (shouldRetire(cfg.enabled, config.device.role, creditSecs, effectiveThresholdSecs(cfg.step_threshold_secs)))
+        if (shouldRetire(config.device.role, creditSecs, effectiveThresholdSecs(cfg.step_threshold_weeks)))
             retireOneRung();
         else
             saveToDisk();

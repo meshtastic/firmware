@@ -197,14 +197,12 @@ typedef struct _meshtastic_ModuleConfig_NeighborInfoConfig {
     bool transmit_over_lora;
 } meshtastic_ModuleConfig_NeighborInfoConfig;
 
-/* RouterRetirementModule Config — auto-demote an unattended router/router_late
- (hand-stubbed; .proto + regeneration pending, see .notes/router-retirement-proto.md) */
+/* RouterRetirementModule Config - auto-demote an unattended router/router_late (always on)
+ (hand-stubbed; .proto + regeneration pending) */
 typedef struct _meshtastic_ModuleConfig_RouterRetirementConfig {
-    /* Whether automatic router retirement is enabled (default false) */
-    bool enabled;
-    /* Cumulative-uptime threshold per demotion rung, in seconds.
- 0 => firmware default (~3 months). */
-    uint32_t step_threshold_secs;
+    /* Cumulative unmanaged-uptime threshold per demotion rung, in weeks.
+ 0 => firmware default (52). */
+    uint32_t step_threshold_weeks;
 } meshtastic_ModuleConfig_RouterRetirementConfig;
 
 /* Detection Sensor Module Config */
@@ -671,7 +669,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0, 0}
-#define meshtastic_ModuleConfig_RouterRetirementConfig_init_default {0, 0}
+#define meshtastic_ModuleConfig_RouterRetirementConfig_init_default {0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
@@ -693,7 +691,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0}
-#define meshtastic_ModuleConfig_RouterRetirementConfig_init_zero {0, 0}
+#define meshtastic_ModuleConfig_RouterRetirementConfig_init_zero {0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
@@ -729,8 +727,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_NeighborInfoConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_NeighborInfoConfig_update_interval_tag 2
 #define meshtastic_ModuleConfig_NeighborInfoConfig_transmit_over_lora_tag 3
-#define meshtastic_ModuleConfig_RouterRetirementConfig_enabled_tag 1
-#define meshtastic_ModuleConfig_RouterRetirementConfig_step_threshold_secs_tag 2
+#define meshtastic_ModuleConfig_RouterRetirementConfig_step_threshold_weeks_tag 1
 #define meshtastic_ModuleConfig_DetectionSensorConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_broadcast_secs_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_state_broadcast_secs_tag 3
@@ -937,8 +934,7 @@ X(a, STATIC,   SINGULAR, BOOL,     transmit_over_lora,   3)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_DEFAULT NULL
 
 #define meshtastic_ModuleConfig_RouterRetirementConfig_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
-X(a, STATIC,   SINGULAR, UINT32,   step_threshold_secs,   2)
+X(a, STATIC,   SINGULAR, UINT32,   step_threshold_weeks,   1)
 #define meshtastic_ModuleConfig_RouterRetirementConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_RouterRetirementConfig_DEFAULT NULL
 
@@ -1171,7 +1167,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_size 10
 #define meshtastic_ModuleConfig_MeshBeaconConfig_size 242
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
-#define meshtastic_ModuleConfig_RouterRetirementConfig_size 8
+#define meshtastic_ModuleConfig_RouterRetirementConfig_size 6
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96

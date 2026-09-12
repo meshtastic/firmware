@@ -1,5 +1,6 @@
 #pragma once
 
+#include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -9,10 +10,9 @@
 
 /**
  * RouterRetirementModule - auto-demote an unattended infrastructure node down a "retirement
- * slope": ROUTER -> ROUTER_LATE -> CLIENT, one rung per ~3 months of cumulative uptime during
+ * slope": ROUTER -> ROUTER_LATE -> CLIENT, one rung per 52 weeks (default) of cumulative uptime during
  * which NO admin session (remote or local) occurred. An admin session resets the credit (proof
- * the node is still managed). Opt-in (default OFF). Prevents abandoned routers clogging dense
- * meshes.
+ * the node is still managed). Always on. Prevents abandoned routers clogging dense meshes.
  *
  * The credit lives in its own small file (/prefs/routerRetirement.bin), written once per hourly
  * tick and on every reset, so it survives power loss without churning the shared devicestate.
@@ -29,8 +29,10 @@ class RouterRetirementModule : public concurrency::OSThread
     /// authorization. Cheap when the credit is already zero; otherwise persists the reset at once.
     void noteAdminSession();
 
-    /// Default cumulative-uptime threshold per demotion rung: ~3 months.
-    static constexpr uint32_t DEFAULT_STEP_THRESHOLD_SECS = 90UL * 24 * 60 * 60; // 7,776,000
+    /// Default cumulative-uptime threshold per demotion rung: a year, in the config's unit.
+    static constexpr uint32_t DEFAULT_STEP_THRESHOLD_WEEKS = 52;
+    static constexpr uint32_t WEEK_SECS = 7UL * 24 * 60 * 60;
+    static constexpr uint32_t DEFAULT_STEP_THRESHOLD_SECS = DEFAULT_STEP_THRESHOLD_WEEKS * WEEK_SECS; // 31,449,600
     /// Credit is accrued and checkpointed on this cadence.
     static constexpr uint32_t ACCRUE_INTERVAL_SECS = 60UL * 60;
 
@@ -38,10 +40,10 @@ class RouterRetirementModule : public concurrency::OSThread
     static bool isRetirableRole(meshtastic_Config_DeviceConfig_Role role);
     /// Next rung down the slope. Returns the input role unchanged for non-retirable roles.
     static meshtastic_Config_DeviceConfig_Role nextRetirementRole(meshtastic_Config_DeviceConfig_Role role);
-    /// Configured threshold, or the default when configured == 0.
-    static uint32_t effectiveThresholdSecs(uint32_t configuredSecs);
-    /// Demote now? enabled + retirable role + credit has reached the threshold.
-    static bool shouldRetire(bool enabled, meshtastic_Config_DeviceConfig_Role role, uint32_t creditSecs, uint32_t thresholdSecs);
+    /// Configured threshold in seconds (the default when configured == 0); saturates rather than wrapping.
+    static uint32_t effectiveThresholdSecs(uint32_t configuredWeeks);
+    /// Demote now? retirable role + credit has reached the threshold.
+    static bool shouldRetire(meshtastic_Config_DeviceConfig_Role role, uint32_t creditSecs, uint32_t thresholdSecs);
 
   protected:
     int32_t runOnce() override;
@@ -61,8 +63,16 @@ class RouterRetirementModule : public concurrency::OSThread
     void loadFromDisk();
     bool saveToDisk() const;
     void retireOneRung();
+    /// Persist the demoted role; on success schedule the reboot that applies it.
+    bool commitRetirement();
+    /// Undo what installRoleDefaults(ROUTER/ROUTER_LATE) set, now that the role is CLIENT.
+    static void restoreClientDefaults();
 
+    /// Serialises the credit against noteAdminSession(), which the admin path may call from another task.
+    concurrency::Lock lock;
     uint32_t creditSecs = 0;
+    /// A demotion whose config save failed (unsafe power); the next tick retries before rebooting.
+    bool retirementSavePending = false;
 
 #ifdef PIO_UNIT_TESTING
     friend class RouterRetirementTestShim;
