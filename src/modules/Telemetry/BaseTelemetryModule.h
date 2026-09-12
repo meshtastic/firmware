@@ -13,6 +13,9 @@ class BaseTelemetryModule
     /// not a policy choice - and every flag bit is a further restriction, so unset answers everyone.
     static bool wouldReplyToPoll(NodeNum from, uint32_t dest)
     {
+        // The flags govern who on the mesh may poll us; a request from our own node is the phone.
+        if (nodeDB && from == nodeDB->getNodeNum())
+            return true;
         if (nodeDB) {
             const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(from);
             if (n && nodeInfoLiteIsIgnored(n))

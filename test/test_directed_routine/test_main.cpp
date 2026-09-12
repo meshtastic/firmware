@@ -110,6 +110,20 @@ void test_reply_ignoredBeatsDest()
     TEST_ASSERT_FALSE(BaseTelemetryModule::wouldReplyToPoll(POLLER, POLLER));
 }
 
+// The phone reaches its own node as a request from our own node number (MeshModule::callModules
+// answers those on purpose). The flags govern mesh pollers, so none of them may lock the phone out.
+void test_reply_ownNodeBypassesEveryFlag()
+{
+    clearFlags();
+    moduleConfig.telemetry.telemetry_flags =
+        Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NO_ADHOC_REPLY |
+        Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_REPLY_ONLY_TO_DEST |
+        Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_REPLY_TO_FAVOURITES_ONLY;
+    // Not in the DB, not a favourite, not the destination: every flag would refuse a mesh node here.
+    TEST_ASSERT_TRUE(BaseTelemetryModule::wouldReplyToPoll(LOCAL_NODE, DEST));
+    TEST_ASSERT_FALSE(BaseTelemetryModule::wouldReplyToPoll(OTHER, DEST));
+}
+
 // --- hopLimitForDirected -----------------------------------------------------------------------
 
 void test_hop_unknownDistanceUsesConfigured()
@@ -184,6 +198,7 @@ void setup()
     RUN_TEST(test_reply_favouritesOnly);
     RUN_TEST(test_reply_ignoredRefusedEvenWithFlagsUnset);
     RUN_TEST(test_reply_ignoredBeatsDest);
+    RUN_TEST(test_reply_ownNodeBypassesEveryFlag);
     RUN_TEST(test_hop_unknownDistanceUsesConfigured);
     RUN_TEST(test_hop_directNeighbourKeepsReturnMargin);
     RUN_TEST(test_hop_boundaryAtConfiguredLimit);
