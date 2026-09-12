@@ -108,8 +108,11 @@ class HopScalingTestShim : public HopScalingModule
         congested = value;
         congestionConfirmRuns = 0;
         utilizationAvg = value ? static_cast<float>(CONGESTION_ENGAGE_PCT) : 0.0f;
-        hasUtilizationSample = true;
     }
+
+    /// Set the smoothed utilization directly, so a test can sit on a band boundary without
+    /// pumping the EMA there sample by sample.
+    void setSmoothedChannelUtilization(float pct) { utilizationAvg = pct; }
 
     /// Insert an entry with an explicit hash, bypassing the sampling filter.
     /// Used to fill the histogram to a known state without depending on hashNodeId distribution.
@@ -181,8 +184,8 @@ static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, const
     }
 }
 
-// Drive N runOnce() ticks with the channel reading a fixed utilization.
-// The gate samples once per tick, so this is how a test moves it through the confirm counter.
+// Drive N runOnce() ticks with AirTime reporting a fixed smoothed utilization.
+// The gate reads it once per tick, so this is how a test moves it through the confirm counter.
 static void pumpRuns(HopScalingTestShim &shim, float channelUtilPct, int runs)
 {
     HopScalingModule::s_testChannelUtil = channelUtilPct;
@@ -722,6 +725,48 @@ void test_infrastructure_role_floor_applies_when_congested()
     config.device.role = savedRole;
 }
 
+// The one-hop extension used to be graded by a density trend (0-2 h vs 1-3 h node counts) while the
+// gate that decides whether the walk applies at all reads measured airtime. A node could therefore
+// be told the mesh was filling up by node counts while the channel sat idle, which is the same
+// mismatch issue #11794 reports one level up. Both now read the smoothed channel utilization.
+//
+// The three regimes PR #10176 defined are preserved, read from airtime instead of node counts:
+// GENEROUS while the channel is quiet or clearing, DEFAULT once past the gate's engage point, and
+// STRICT at the polite gate, where the radio is already withholding metadata traffic.
+void test_politeness_tracks_channel_utilization()
+{
+    TEST_MESSAGE("=== Politeness: graded by measured utilization, not by node-count trend ===");
+    TEST_MESSAGE("Expectation: 4/4 below 20%, 2/4 from 20%, 1/4 from 25%.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0xA4000000, distA);
+
+    struct Band {
+        float util;
+        uint8_t numer;
+    };
+    // forceCongestion() seeds the EMA, so each band is reached without pumping it there sample by
+    // sample; rollHour() then reads utilizationAvg directly.
+    const Band bands[] = {{10.0f, HopScalingModule::POLITENESS_GENEROUS}, {19.0f, HopScalingModule::POLITENESS_GENEROUS},
+                          {20.0f, HopScalingModule::POLITENESS_DEFAULT},  {24.0f, HopScalingModule::POLITENESS_DEFAULT},
+                          {25.0f, HopScalingModule::POLITENESS_STRICT},   {80.0f, HopScalingModule::POLITENESS_STRICT}};
+
+    for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); i++) {
+        shim->setSmoothedChannelUtilization(bands[i].util);
+        shim->rollHourTest();
+
+        const float expected = bands[i].numer / static_cast<float>(HopScalingModule::POLITENESS_DENOM);
+        TEST_MSG_FMT("util=%u%% -> polite=%u/4", static_cast<unsigned>(bands[i].util),
+                     static_cast<unsigned>(shim->getPoliteness() * HopScalingModule::POLITENESS_DENOM));
+        TEST_ASSERT_EQUAL_FLOAT(expected, shim->getPoliteness());
+    }
+
+    hopScalingModule = nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // Tests - Denominator state machine
 // ---------------------------------------------------------------------------
@@ -995,6 +1040,8 @@ void setup()
     RUN_TEST(test_congestion_gate_does_not_flap_at_threshold);
     RUN_TEST(test_congestion_release_ramps_one_hop_per_roll);
     RUN_TEST(test_infrastructure_role_floor_applies_when_congested);
+
+    RUN_TEST(test_politeness_tracks_channel_utilization);
 
     printf("\n=== Denominator state machine ===\n");
     RUN_TEST(test_denominator_rises_on_overflow);
