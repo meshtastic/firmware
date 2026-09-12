@@ -219,7 +219,7 @@ void test_pkc_clientExplicitPkiIsNotDowngraded()
 }
 
 // Paxcounter has no flags field of its own; it follows telemetry_flags.
-void test_pkc_paxcounterFollowsTelemetryFlags()
+void test_pkc_paxcounterFollowsFlags()
 {
     clearFlags();
     armPki();
@@ -231,7 +231,7 @@ void test_pkc_paxcounterFollowsTelemetryFlags()
 }
 
 // The fallback is scoped: a text DM without a key is still a PKC candidate, so the encoder refuses it.
-void test_pkc_fallbackDoesNotLeakToOtherPorts()
+void test_pkc_fallbackScopedToTelemetryPorts()
 {
     clearFlags();
     armPki();
@@ -354,7 +354,7 @@ meshtastic_MeshPacket packetAtDefaultHops(meshtastic_PortNum port, NodeNum to)
     return p;
 }
 
-void test_budget_trimsRoutineUnicastAtDefault()
+void test_budget_trimsUnicastAtDefault()
 {
     meshtastic_NodeInfoLite *n = ensureNode(DEST);
     n->has_hops_away = true;
@@ -392,7 +392,7 @@ void test_budget_ignoresBroadcastAndOtherPorts()
 }
 
 // Not only module sends: a phone-originated unicast on these ports at the default is trimmed too.
-void test_budget_coversPhoneOriginatedUnicast()
+void test_budget_coversPhoneOriginatedSends()
 {
     meshtastic_NodeInfoLite *n = ensureNode(DEST);
     n->has_hops_away = true;
@@ -441,16 +441,16 @@ void setup()
     RUN_TEST(test_pkc_neverPkcUsesPskEvenWithKey);
     RUN_TEST(test_pkc_alwaysBeatsNever);
     RUN_TEST(test_pkc_clientExplicitPkiIsNotDowngraded);
-    RUN_TEST(test_pkc_paxcounterFollowsTelemetryFlags);
-    RUN_TEST(test_pkc_fallbackDoesNotLeakToOtherPorts);
+    RUN_TEST(test_pkc_paxcounterFollowsFlags);
+    RUN_TEST(test_pkc_fallbackScopedToTelemetryPorts);
     RUN_TEST(test_gate_noAlwaysPkcAcceptsAnything);
     RUN_TEST(test_gate_alwaysPkcAcceptsKeyedDest);
     RUN_TEST(test_gate_alwaysPkcRefusesKeylessDest);
     RUN_TEST(test_gate_alwaysPkcCoversPaxcounterDest);
-    RUN_TEST(test_budget_trimsRoutineUnicastAtDefault);
+    RUN_TEST(test_budget_trimsUnicastAtDefault);
     RUN_TEST(test_budget_leavesAlreadySizedPacketAlone);
     RUN_TEST(test_budget_ignoresBroadcastAndOtherPorts);
-    RUN_TEST(test_budget_coversPhoneOriginatedUnicast);
+    RUN_TEST(test_budget_coversPhoneOriginatedSends);
     exit(UNITY_END());
 }
 
