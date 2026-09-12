@@ -36,6 +36,12 @@ bool RadioTxHooks::holdsRadio(const meshtastic_MeshPacket *p)
     return false;
 }
 
+void RadioTxHooks::postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p)
+{
+    for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook)
+        h->postTransmit(iface, p);
+}
+
 void RadioTxHooks::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
 {
     for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook)

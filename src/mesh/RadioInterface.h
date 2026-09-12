@@ -240,6 +240,12 @@ class RadioInterface
     [[nodiscard]] virtual uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) = 0;
 
     /**
+     * Compute static LoRa packet airtime in milliseconds for given modulation parameters.
+     * Pure arithmetic calculation based on standard Semtech formula (no hardware or buffer dependency).
+     */
+    static uint32_t calculateLoRaAirtimeMs(float bwKHz, uint8_t sf, uint8_t cr, uint32_t payloadLen);
+
+    /**
      * Get the channel we saved.
      */
     [[nodiscard]] uint32_t getChannelNum();
@@ -251,6 +257,12 @@ class RadioInterface
 
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
+
+    /**
+     * Get current RSSI reading from the radio.
+     * Returns 0 if not available.
+     */
+    virtual int16_t getCurrentRSSI() { return 0; }
 
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
@@ -310,12 +322,6 @@ class RadioInterface
      * Save the channel we selected for later reuse.
      */
     virtual void saveChannelNum(uint32_t savedChannelNum);
-
-    /**
-     * Get current RSSI reading from the radio.
-     * Returns 0 if not available.
-     */
-    virtual int16_t getCurrentRSSI() { return 0; }
 
   private:
     /**

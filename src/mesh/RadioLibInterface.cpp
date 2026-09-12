@@ -449,7 +449,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     packetPool.release(bad);
                     setTransmitDelay();
                 } else if (action == RadioTxHook::PRETX_DEFER) {
-                    setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                    const uint32_t nowAfter = Time::getMillis();
+                    if (txp->tx_after && !Throttle::deadlinePassedAt(nowAfter, txp->tx_after)) {
+                        uint32_t remaining = txp->tx_after - nowAfter;
+                        notifyLater(remaining, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+                    } else {
+                        setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                    }
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
                         if (!RadioTxHooks::holdsRadio(txp)) {
@@ -563,8 +569,10 @@ void RadioLibInterface::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case
     // ignore the transmit interrupt
-    if (sendingPacket)
+    if (sendingPacket) {
+        RadioTxHooks::postTransmit(this, sendingPacket);
         completeSending();
+    }
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
 }
 
@@ -822,8 +830,15 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
-            // This send failed, but make sure to 'complete' it properly
-            completeSending();
+            auto p = sendingPacket;
+            sendingPacket = NULL;
+#ifdef LED_LORA
+            digitalWrite(LED_LORA, LED_STATE_OFF);
+#endif
+            if (p) {
+                RadioTxHooks::packetReleased(this, p);
+                packetPool.release(p);
+            }
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
