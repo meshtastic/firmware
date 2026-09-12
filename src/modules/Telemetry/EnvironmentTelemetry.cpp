@@ -417,8 +417,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
-                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
-                // sensormap here.
+            // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+            // sensormap here.
 #ifdef HAS_RAKPROT
             if (rak9154Sensor.hasSensor())
                 result = rak9154Sensor.runOnce();
@@ -458,7 +458,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                                                                         TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
-            sendTelemetry();
+            sendTelemetry(routineDest(moduleConfig.telemetry.environment_dest));
             immediateSendRequested = false;
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
@@ -749,6 +749,10 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 {
     if (currentRequest) {
         if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
+        if (!wouldReplyToPoll(getFrom(currentRequest), moduleConfig.telemetry.environment_dest)) {
             ignoreRequest = true;
             return NULL;
         }

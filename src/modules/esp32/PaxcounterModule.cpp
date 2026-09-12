@@ -140,7 +140,8 @@ int32_t PaxcounterModule::runOnce()
             libpax_counter_start();
             startWifiChannelTimer(configuration.LIBPAX_WIFI_CHANNEL_switch_interval);
         } else {
-            sendInfo(NODENUM_BROADCAST);
+            sendInfo(moduleConfig.paxcounter.paxcounter_dest ? (NodeNum)moduleConfig.paxcounter.paxcounter_dest
+                                                             : NODENUM_BROADCAST);
         }
         return Default::getConfiguredOrDefaultMsScaled(moduleConfig.paxcounter.paxcounter_update_interval,
                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes);
