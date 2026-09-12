@@ -15,6 +15,8 @@
 #include <Utility.h>
 #include <assert.h>
 #include <cctype>
+#include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -60,6 +62,7 @@ bool portduinoWindowsPrimaryMac(uint8_t *dmac);
 
 portduino_config_struct portduino_config;
 portduino_status_struct portduino_status;
+
 std::ofstream traceFile;
 std::ofstream JSONFile;
 std::unique_ptr<Ch341Hal> ch341Hal;
@@ -70,6 +73,77 @@ bool yamlOnly = false;
 bool configCheck = false;
 // Every config file we attempted to load, in load order, for --check to report on.
 std::vector<std::string> attemptedConfigFiles;
+
+// ---------------------------------------------------------------------------
+// RF switch table: chip-neutral storage, per-part translation
+// ---------------------------------------------------------------------------
+
+const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT] = {
+    {"MODE_STBY", RFSW_STBY},   {"MODE_RX", RFSW_RX},       {"MODE_TX", RFSW_TX},     {"MODE_TX_HP", RFSW_TX_HP},
+    {"MODE_TX_HF", RFSW_TX_HF}, {"MODE_RX_HF", RFSW_RX_HF}, {"MODE_GNSS", RFSW_GNSS}, {"MODE_WIFI", RFSW_WIFI},
+};
+
+const int8_t kLr11x0SwitchDios[5] = {5, 6, 7, 8, 10};
+const int8_t kLr20x0SwitchDios[7] = {5, 6, 7, 8, 9, 10, 11};
+
+const int8_t *rfSwitchDiosFor(lora_module_enum module, size_t *count)
+{
+    switch (module) {
+    case use_lr1110:
+    case use_lr1120:
+    case use_lr1121:
+        *count = sizeof(kLr11x0SwitchDios) / sizeof(kLr11x0SwitchDios[0]);
+        return kLr11x0SwitchDios;
+    case use_lr2021:
+        *count = sizeof(kLr20x0SwitchDios) / sizeof(kLr20x0SwitchDios[0]);
+        return kLr20x0SwitchDios;
+    default:
+        *count = 0;
+        return nullptr;
+    }
+}
+
+bool moduleUsesRfSwitchTable(lora_module_enum module)
+{
+    size_t count = 0;
+    return rfSwitchDiosFor(module, &count) != nullptr;
+}
+
+size_t buildRfSwitchTable(uint32_t (&pins)[Module::RFSWITCH_MAX_PINS], Module::RfSwitchMode_t *table, size_t tableCapacity,
+                          const int8_t *dioNumbers, const uint32_t *pinConsts, size_t dioCount, const int32_t *modeMap)
+{
+    for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++)
+        pins[i] = RADIOLIB_NC;
+
+    // A DIO this part cannot use leaves the slot at RADIOLIB_NC, so mode rows still line up.
+    uint8_t usableSlots = 0;
+    for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++) {
+        const int8_t dio = portduino_config.rfswitch_dio_num[i];
+        if (dio < 0)
+            continue;
+        for (size_t s = 0; s < dioCount; s++) {
+            if (dioNumbers[s] == dio) {
+                pins[i] = pinConsts[s];
+                usableSlots |= (uint8_t)(1u << i);
+                break;
+            }
+        }
+    }
+
+    size_t rows = 0;
+    for (int m = 0; m < RFSW_MODE_COUNT && rows + 1 < tableCapacity; m++) {
+        if (modeMap[m] == RFSW_MODE_UNSUPPORTED)
+            continue;
+        table[rows].mode = (uint32_t)modeMap[m];
+        const uint8_t high = (uint8_t)(portduino_config.rfswitch_mode_high[m] & usableSlots);
+        for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++)
+            table[rows].values[i] = (high & (1u << i)) ? HIGH : LOW;
+        rows++;
+    }
+    if (rows < tableCapacity)
+        table[rows++] = END_OF_MODE_TABLE;
+    return rows;
+}
 
 const char *argp_program_version = optstr(APP_VERSION);
 
@@ -976,6 +1050,12 @@ bool loadConfig(const char *configPath)
                 if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
                     portduino_config.dio3_tcxo_voltage = 1800; // default millivolts for "true"
                 }
+                // A written-out false or 0 asks for DIO3 to be left alone, which stores the same as
+                // an absent key. Kept apart so --check can see it contradict TCXO_OPTIONAL.
+                portduino_config.dio3_tcxo_voltage_disabled =
+                    yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"] && portduino_config.dio3_tcxo_voltage == 0;
+                // Try both oscillators rather than requiring the user to know which is fitted.
+                portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 
                 // backwards API compatibility and to globally set gpiochip once
                 portduino_config.lora_default_gpiochip = yamlConfig["Lora"]["gpiochip"].as<int>(0);
@@ -1019,46 +1099,43 @@ bool loadConfig(const char *configPath)
             }
             if (yamlConfig["Lora"]["rfswitch_table"]) {
                 portduino_config.has_rfswitch_table = true;
-                portduino_config.rfswitch_table[0].mode = LR11x0::MODE_STBY;
-                portduino_config.rfswitch_table[1].mode = LR11x0::MODE_RX;
-                portduino_config.rfswitch_table[2].mode = LR11x0::MODE_TX;
-                portduino_config.rfswitch_table[3].mode = LR11x0::MODE_TX_HP;
-                portduino_config.rfswitch_table[4].mode = LR11x0::MODE_TX_HF;
-                portduino_config.rfswitch_table[5].mode = LR11x0::MODE_GNSS;
-                portduino_config.rfswitch_table[6].mode = LR11x0::MODE_WIFI;
-                portduino_config.rfswitch_table[7] = END_OF_MODE_TABLE;
+                // A later file's table fully replaces an earlier one, matching "last file wins"
+                // for every other Lora: key, rather than leaving omitted pins/modes as carryover.
+                for (int i = 0; i < 5; i++)
+                    portduino_config.rfswitch_dio_num[i] = -1;
+                for (int m = 0; m < RFSW_MODE_COUNT; m++) {
+                    portduino_config.rfswitch_mode_present[m] = false;
+                    portduino_config.rfswitch_mode_high[m] = 0;
+                }
+                const YAML::Node table = yamlConfig["Lora"]["rfswitch_table"];
 
+                // Store the DIO number as written; the slot it maps to is per-radio. Anything
+                // not spelled exactly "DIO<n>" (trailing junk included) leaves the slot unused.
                 for (int i = 0; i < 5; i++) {
+                    const std::string name = table["pins"][i].as<std::string>("");
+                    int dioNum = 0;
+                    if (sscanf(name.c_str(), "DIO%d", &dioNum) == 1 && dioNum >= 0 && dioNum <= INT8_MAX &&
+                        name == "DIO" + std::to_string(dioNum))
+                        portduino_config.rfswitch_dio_num[i] = (int8_t)dioNum;
+                }
 
-                    // set up the pin array first
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO5")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO5;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO6")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO6;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO7")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO7;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO8")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO8;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO10")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO10;
-
-                    // now fill in the table
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_STBY"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[0].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_RX"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[1].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[2].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HP"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[3].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[4].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_GNSS"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[5].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_WIFI"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[6].values[i] = HIGH;
+                for (int m = 0; m < RFSW_MODE_COUNT; m++) {
+                    const YAML::Node row = table[kRfSwitchModeNames[m].name];
+                    if (!row)
+                        continue;
+                    portduino_config.rfswitch_mode_present[m] = true;
+                    // Fresh mask per row, not OR'd onto whatever was there - a re-parse must be able
+                    // to clear a slot back to LOW, not just add HIGH bits.
+                    uint8_t high = 0;
+                    for (int i = 0; i < 5; i++)
+                        if (row[i].as<std::string>("") == "HIGH")
+                            high |= (uint8_t)(1u << i);
+                    portduino_config.rfswitch_mode_high[m] = high;
                 }
             }
+            // IRQ DIO for the LR20x0 driver; unset leaves RadioLib's default of DIO5.
+            if (yamlConfig["Lora"]["IRQ_DIO_NUM"])
+                portduino_config.irq_dio_num = yamlConfig["Lora"]["IRQ_DIO_NUM"].as<int>(-1);
         }
         readGPIOFromYaml(yamlConfig["GPIO"]["User"], portduino_config.userButtonPin);
         if (yamlConfig["GPS"]) {

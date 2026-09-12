@@ -1,0 +1,9 @@
+# FAULT: TCXO_OPTIONAL on an SX128x, which has no TCXO reference to probe for. The key is
+# read, stored and inert.
+Lora:
+  Module: sx1280
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  TCXO_OPTIONAL: true
