@@ -12,6 +12,9 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
     StatusMessageModule()
         : SinglePortModule("statusMessage", meshtastic_PortNum_NODE_STATUS_APP), concurrency::OSThread("StatusMessage")
     {
+        // Consume a directed NODE_STATUS_APP packet too: our own send is broadcast-only, but one
+        // can originate from the phone API or another implementation.
+        isPromiscuous = true;
         if (moduleConfig.has_statusmessage && moduleConfig.statusmessage.node_status[0] != '\0') {
             this->setInterval(2 * 60 * 1000);
         } else {

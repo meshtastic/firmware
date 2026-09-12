@@ -18,6 +18,8 @@ class DeviceTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("DeviceTelemetry"),
           ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        // Update our nodedb from directed telemetry too, not just broadcasts.
+        isPromiscuous = true;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(setStartDelay()); // Wait until NodeInfo is sent
     }

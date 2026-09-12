@@ -32,6 +32,8 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("AirQualityTelemetry"), ScanI2CConsumer(),
           ProtobufModule("AirQualityTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        // Update our nodedb from directed telemetry too, not just broadcasts.
+        isPromiscuous = true;
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
