@@ -123,8 +123,8 @@ class HopScalingModule : private concurrency::OSThread
     // EMA weight for each 5-minute utilization sample (1/4 -> ~20 min time constant).
     static constexpr float CONGESTION_EMA_ALPHA = 0.25f;
 
-    // Hop floor for router-class roles, so a remote router's own telemetry still reaches operators.
-    static constexpr uint8_t ROUTER_HOP_FLOOR = default_hop_scaling_router_hop_floor;
+    // Hop floor for the infrastructure roles, so a remote site's own telemetry still reaches operators.
+    static constexpr uint8_t INFRASTRUCTURE_HOP_FLOOR = default_hop_scaling_infrastructure_hop_floor;
 
     // -----------------------------------------------------------------------
     // Types
