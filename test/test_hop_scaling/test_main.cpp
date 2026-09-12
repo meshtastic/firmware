@@ -28,6 +28,7 @@
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 #include "modules/HopScalingModule.h"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -609,14 +610,21 @@ void test_congestion_gate_scales_on_busy_channel()
     hopScalingModule = nullptr;
 }
 
-// channelUtilizationPercent() is a 60-second window read once per 5-minute tick, so a mesh idling
-// near a threshold would toggle the gate - and therefore hop_limit - on every roll. The EMA plus
-// the confirm counter must swallow that in both directions.
+// HopScalingModule::updateCongestion() in src/modules/HopScalingModule.cpp.
+// A mesh idling near a threshold would otherwise toggle the gate - and therefore hop_limit - on
+// every roll. Smoothing lives in AirTime now, so what this pins is the confirm counter alone:
+// readings that cross a threshold on alternate ticks never hold it for CONGESTION_CONFIRM_RUNS
+// in a row, so the state must not flip in either direction. Delete the counter and it flaps.
 void test_congestion_gate_does_not_flap_at_threshold()
 {
     TEST_MESSAGE("=== Congestion gate: no flapping around the thresholds ===");
-    TEST_MESSAGE("Phase 1: released gate, samples alternating 24%/14% across the 20% engage threshold.");
-    TEST_MESSAGE("Phase 2: engaged gate, samples alternating 17%/7% across the 12% release threshold.");
+    TEST_MESSAGE("Phase 1: released gate, samples alternating either side of the engage threshold.");
+    TEST_MESSAGE("Phase 2: engaged gate, samples alternating either side of the release threshold.");
+
+    // Straddle each threshold rather than hard-coding percentages, so the test follows Default.h.
+    constexpr float kStraddle = 4.0f;
+    constexpr float kEngage = static_cast<float>(HopScalingModule::CONGESTION_ENGAGE_PCT);
+    constexpr float kRelease = static_cast<float>(HopScalingModule::CONGESTION_RELEASE_PCT);
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -627,17 +635,56 @@ void test_congestion_gate_does_not_flap_at_threshold()
     shim->forceCongestion(false);
     HopScalingModule::s_testChannelUtil = 0.0f;
     for (int i = 0; i < 60; i++) {
-        HopScalingModule::s_testChannelUtil = (i % 2) ? 14.0f : 24.0f;
+        HopScalingModule::s_testChannelUtil = (i % 2) ? kEngage - kStraddle : kEngage + kStraddle;
         shim->runOnce();
         TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "gate engaged on samples whose average stays below the threshold");
     }
 
     shim->forceCongestion(true);
     for (int i = 0; i < 60; i++) {
-        HopScalingModule::s_testChannelUtil = (i % 2) ? 7.0f : 17.0f;
+        HopScalingModule::s_testChannelUtil = (i % 2) ? kRelease - kStraddle : kRelease + kStraddle;
         shim->runOnce();
         TEST_ASSERT_TRUE_MESSAGE(shim->isCongested(), "gate released on a dip that never held for the confirm window");
     }
+
+    hopScalingModule = nullptr;
+}
+
+// HopScalingModule::updateCongestion() in src/modules/HopScalingModule.cpp.
+// Both threshold tests are inclusive - at exactly CONGESTION_ENGAGE_PCT the gate engages, at
+// exactly CONGESTION_RELEASE_PCT it releases - and nothing else pins that. It is worth pinning
+// because the comparison is made on a float average: AirTime's EMA converging on a threshold from
+// above settles one ULP off it (12.00006103515625 for a sustained 12%), so comparing at full float
+// precision left an inclusive test that could never fire and a gate that never released.
+// smoothedUtilPct() rounds to the whole percent the thresholds are declared in; drop that rounding
+// and a node sitting exactly on the release threshold stays throttled forever.
+void test_congestion_gate_thresholds_are_inclusive()
+{
+    TEST_MESSAGE("=== Congestion gate: engage and release thresholds are inclusive ===");
+    TEST_MESSAGE("Expectation: exactly the engage percent engages; exactly the release percent releases.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0xA5000000, distA);
+
+    shim->forceCongestion(false);
+    pumpRuns(*shim, static_cast<float>(HopScalingModule::CONGESTION_ENGAGE_PCT), HopScalingModule::CONGESTION_CONFIRM_RUNS);
+    TEST_MSG_FMT("At exactly %u%%: congested=%u", HopScalingModule::CONGESTION_ENGAGE_PCT, shim->isCongested() ? 1u : 0u);
+    TEST_ASSERT_TRUE_MESSAGE(shim->isCongested(), "sitting exactly on the engage threshold must engage");
+
+    pumpRuns(*shim, static_cast<float>(HopScalingModule::CONGESTION_RELEASE_PCT), HopScalingModule::CONGESTION_CONFIRM_RUNS);
+    TEST_MSG_FMT("At exactly %u%%: congested=%u", HopScalingModule::CONGESTION_RELEASE_PCT, shim->isCongested() ? 1u : 0u);
+    TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "sitting exactly on the release threshold must release");
+
+    // The dead zone itself: one ULP above the threshold is where AirTime's EMA actually settles
+    // when it converges on it from above, and a raw float compare reads that as "still congested"
+    // forever. Rounding to the whole percent is what makes it releasable.
+    shim->forceCongestion(true);
+    const float justAbove = std::nextafterf(static_cast<float>(HopScalingModule::CONGESTION_RELEASE_PCT), 100.0f);
+    pumpRuns(*shim, justAbove, HopScalingModule::CONGESTION_CONFIRM_RUNS);
+    TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "one ULP above the release threshold must still release");
 
     hopScalingModule = nullptr;
 }
@@ -736,7 +783,7 @@ void test_infrastructure_role_floor_applies_when_congested()
 void test_politeness_tracks_channel_utilization()
 {
     TEST_MESSAGE("=== Politeness: graded by measured utilization, not by node-count trend ===");
-    TEST_MESSAGE("Expectation: 4/4 below 20%, 2/4 from 20%, 1/4 from 25%.");
+    TEST_MESSAGE("Expectation: 4/4 below the engage point, 2/4 from it, 1/4 from the strict point.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -750,9 +797,13 @@ void test_politeness_tracks_channel_utilization()
     };
     // forceCongestion() seeds the EMA, so each band is reached without pumping it there sample by
     // sample; rollHour() then reads utilizationAvg directly.
-    const Band bands[] = {{10.0f, HopScalingModule::POLITENESS_GENEROUS}, {19.0f, HopScalingModule::POLITENESS_GENEROUS},
-                          {20.0f, HopScalingModule::POLITENESS_DEFAULT},  {24.0f, HopScalingModule::POLITENESS_DEFAULT},
-                          {25.0f, HopScalingModule::POLITENESS_STRICT},   {80.0f, HopScalingModule::POLITENESS_STRICT}};
+    constexpr float kEngage = static_cast<float>(HopScalingModule::CONGESTION_ENGAGE_PCT);
+    constexpr float kStrict = static_cast<float>(HopScalingModule::CONGESTION_STRICT_PCT);
+    // Both band edges are inclusive, so each is probed exactly and one below.
+    const Band bands[] = {
+        {0.0f, HopScalingModule::POLITENESS_GENEROUS},   {kEngage - 1.0f, HopScalingModule::POLITENESS_GENEROUS},
+        {kEngage, HopScalingModule::POLITENESS_DEFAULT}, {kStrict - 1.0f, HopScalingModule::POLITENESS_DEFAULT},
+        {kStrict, HopScalingModule::POLITENESS_STRICT},  {100.0f, HopScalingModule::POLITENESS_STRICT}};
 
     for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); i++) {
         shim->setSmoothedChannelUtilization(bands[i].util);
@@ -1038,6 +1089,7 @@ void setup()
     RUN_TEST(test_congestion_gate_idle_channel_does_not_scale);
     RUN_TEST(test_congestion_gate_scales_on_busy_channel);
     RUN_TEST(test_congestion_gate_does_not_flap_at_threshold);
+    RUN_TEST(test_congestion_gate_thresholds_are_inclusive);
     RUN_TEST(test_congestion_release_ramps_one_hop_per_roll);
     RUN_TEST(test_infrastructure_role_floor_applies_when_congested);
 

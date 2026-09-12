@@ -249,9 +249,9 @@ void HopScalingModule::rollHour()
     // 1b. Pick the politeness factor from measured channel utilization.  How far the walk may
     //     stretch and whether it is applied at all now read the same signal, so a node cannot be
     //     told the mesh is filling up by node counts while the channel says it is idle.
-    if (utilizationAvg >= CONGESTION_STRICT_PCT)
+    if (smoothedUtilPct() >= CONGESTION_STRICT_PCT)
         lastPoliteNumer = POLITENESS_STRICT;
-    else if (utilizationAvg >= CONGESTION_ENGAGE_PCT)
+    else if (smoothedUtilPct() >= CONGESTION_ENGAGE_PCT)
         lastPoliteNumer = POLITENESS_DEFAULT;
     else
         lastPoliteNumer = POLITENESS_GENEROUS;
@@ -434,7 +434,8 @@ void HopScalingModule::updateCongestion()
 
     // Separate engage/release thresholds, each confirmed over several ticks, so a mesh sitting
     // near a threshold does not flap the hop limit between rolls.
-    const bool wantsFlip = congested ? (utilizationAvg <= CONGESTION_RELEASE_PCT) : (utilizationAvg >= CONGESTION_ENGAGE_PCT);
+    const uint8_t util = smoothedUtilPct();
+    const bool wantsFlip = congested ? (util <= CONGESTION_RELEASE_PCT) : (util >= CONGESTION_ENGAGE_PCT);
     congestionConfirmRuns = wantsFlip ? static_cast<uint8_t>(congestionConfirmRuns + 1u) : 0u;
     if (congestionConfirmRuns >= CONGESTION_CONFIRM_RUNS) {
         congested = !congested;

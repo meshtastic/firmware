@@ -238,6 +238,12 @@ class HopScalingModule : private concurrency::OSThread
 
     /// Smoothed channel utilization percent, or 0 when AirTime is not up yet.
     static float channelUtil();
+
+    /// utilizationAvg to the nearest whole percent. The thresholds are whole percents and the
+    /// underlying 60 s window is far coarser than a float ULP, so comparing at full float
+    /// precision only creates dead zones: an EMA converging on a threshold from above settles one
+    /// ULP off it (12.00006103515625 for a sustained 12%) and an inclusive test never fires.
+    uint8_t smoothedUtilPct() const { return static_cast<uint8_t>(std::min(utilizationAvg + 0.5f, 255.0f)); }
     // -----------------------------------------------------------------------
     // Persistence
     // -----------------------------------------------------------------------
