@@ -34,6 +34,24 @@ class BaseTelemetryModule
     /// Routine (timer-driven) send destination: 0 = broadcast, else that node.
     static NodeNum routineDest(uint32_t configured) { return configured ? (NodeNum)configured : NODENUM_BROADCAST; }
 
+    /// Admin gate: with ALWAYS_PKC, every configured destination must have a public key in NodeDB,
+    /// or the routine send would fail at encode on every interval.
+    static bool pkcOnlyDestsHaveKeys(const meshtastic_ModuleConfig_TelemetryConfig &t, uint32_t paxcounterDest)
+    {
+        if (!(t.telemetry_flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC))
+            return true;
+        const uint32_t dests[] = {t.device_dest, t.environment_dest, t.air_quality_dest,
+                                  t.power_dest,  t.health_dest,      paxcounterDest};
+        for (uint32_t d : dests) {
+            meshtastic_NodeInfoLite_public_key_t key;
+            if (d && !(nodeDB && nodeDB->copyPublicKey(d, key))) {
+                LOG_WARN("ALWAYS_PKC refused: no public key for destination 0x%08x", d);
+                return false;
+            }
+        }
+        return true;
+    }
+
   protected:
     bool isSensorOrRouterRole() const
     {

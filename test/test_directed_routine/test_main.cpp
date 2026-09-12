@@ -124,6 +124,160 @@ void test_reply_ownNodeBypassesEveryFlag()
     TEST_ASSERT_FALSE(BaseTelemetryModule::wouldReplyToPoll(OTHER, DEST));
 }
 
+// --- wouldEncryptWithPKC: the telemetry_flags crypto table ------------------------------------
+//
+// The encoder has no channel-PSK fallback of its own: a PKC candidate without a destination key is
+// refused outright (perhapsEncode, PKI_SEND_FAIL_PUBLIC_KEY). The fallback lives in this function,
+// scoped to TELEMETRY_APP and PAXCOUNTER_APP, so the table below is the whole policy. Rows: flags x
+// key-known. A "true" here with no key means the send will fail - that is what ALWAYS_PKC buys.
+
+meshtastic_MeshPacket unicastOnPort(meshtastic_PortNum port, bool clientAskedPki = false)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = LOCAL_NODE;
+    p.to = DEST;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = port;
+    p.pki_encrypted = clientAskedPki;
+    return p;
+}
+
+void armPki()
+{
+    config.security.private_key.size = 32;
+    owner.is_licensed = false;
+}
+
+void test_pkc_unsetUsesKeyWhenKnown()
+{
+    clearFlags();
+    armPki();
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/true));
+}
+
+// The row that used to be a silent failure: no key and no flags now means PSK, not nothing.
+void test_pkc_unsetFallsBackToPskWithoutKey()
+{
+    clearFlags();
+    armPki();
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+void test_pkc_alwaysPkcRefusesToDowngrade()
+{
+    clearFlags();
+    armPki();
+    moduleConfig.telemetry.telemetry_flags = Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC;
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/true));
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false)); // will fail at encode, by design
+}
+
+void test_pkc_neverPkcUsesPskEvenWithKey()
+{
+    clearFlags();
+    armPki();
+    moduleConfig.telemetry.telemetry_flags = Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NEVER_PKC;
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/true));
+    TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+void test_pkc_alwaysBeatsNever()
+{
+    clearFlags();
+    armPki();
+    moduleConfig.telemetry.telemetry_flags = Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC |
+                                             Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NEVER_PKC;
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/true));
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// A client that set pki_encrypted itself keeps the upstream refusal: never downgrade an explicit ask.
+void test_pkc_clientExplicitPkiIsNotDowngraded()
+{
+    clearFlags();
+    armPki();
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP, /*clientAskedPki=*/true);
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// Paxcounter has no flags field of its own; it follows telemetry_flags.
+void test_pkc_paxcounterFollowsTelemetryFlags()
+{
+    clearFlags();
+    armPki();
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_PAXCOUNTER_APP);
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/true));
+    TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+    moduleConfig.telemetry.telemetry_flags = Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC;
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// The fallback is scoped: a text DM without a key is still a PKC candidate, so the encoder refuses it.
+void test_pkc_fallbackDoesNotLeakToOtherPorts()
+{
+    clearFlags();
+    armPki();
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TEXT_MESSAGE_APP);
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// --- pkcOnlyDestsHaveKeys: the admin gate ------------------------------------------------------
+//
+// ALWAYS_PKC with a destination we hold no key for is a node that goes silent on every interval. The
+// gate refuses the config instead. Same lookup as the encoder (copyPublicKey), so gate and send agree.
+
+void giveKey(NodeNum num)
+{
+    meshtastic_NodeInfoLite *n = ensureNode(num);
+    n->public_key.size = 32;
+    memset(n->public_key.bytes, 0x5a, 32);
+}
+
+void test_gate_noAlwaysPkcAcceptsAnything()
+{
+    meshtastic_ModuleConfig_TelemetryConfig t = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    t.device_dest = 0x5a5a5a5a; // not in the DB at all
+    TEST_ASSERT_TRUE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, 0x5a5a5a5b));
+}
+
+void test_gate_alwaysPkcAcceptsKeyedDest()
+{
+    giveKey(DEST);
+    meshtastic_ModuleConfig_TelemetryConfig t = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    t.telemetry_flags = Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC;
+    t.device_dest = DEST;
+    t.environment_dest = 0; // unset destinations are not checked
+    TEST_ASSERT_TRUE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, DEST));
+}
+
+void test_gate_alwaysPkcRefusesKeylessDest()
+{
+    meshtastic_NodeInfoLite *n = ensureNode(OTHER);
+    n->public_key.size = 0;
+    meshtastic_ModuleConfig_TelemetryConfig t = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    t.telemetry_flags = Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC;
+    t.health_dest = OTHER; // in the DB, no key
+    TEST_ASSERT_FALSE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, 0));
+    t.health_dest = 0;
+    t.power_dest = 0x5a5a5a5a; // not in the DB
+    TEST_ASSERT_FALSE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, 0));
+}
+
+// Paxcounter arrives in its own admin message, so its destination is checked against the stored flags.
+void test_gate_alwaysPkcCoversPaxcounterDest()
+{
+    meshtastic_ModuleConfig_TelemetryConfig t = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    t.telemetry_flags = Flags::meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC;
+    TEST_ASSERT_FALSE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, 0x5a5a5a5a));
+    giveKey(DEST);
+    TEST_ASSERT_TRUE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, DEST));
+}
+
 // --- hopLimitForDirected -----------------------------------------------------------------------
 
 void test_hop_unknownDistanceUsesConfigured()
@@ -173,6 +327,70 @@ void test_hop_mqttDistanceIsNotTrusted()
     TEST_ASSERT_EQUAL_UINT8(5, hopLimitForDirected(DEST, 5));
 }
 
+// --- applyDirectedHopBudget: the guard around hopLimitForDirected() in Router::send() ---------
+//
+// hopLimitForDirected() is tested above; these pin what send() does with it. The trap is the
+// "still at the configured default" guard: a reply that getHopLimitForResponse() already sized, or a
+// client that chose its own hop_limit, must not be trimmed a second time.
+
+meshtastic_MeshPacket packetAtDefaultHops(meshtastic_PortNum port, NodeNum to)
+{
+    meshtastic_MeshPacket p = unicastOnPort(port);
+    p.to = to;
+    p.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+    return p;
+}
+
+void test_budget_trimsRoutineUnicastAtDefault()
+{
+    meshtastic_NodeInfoLite *n = ensureNode(DEST);
+    n->has_hops_away = true;
+    n->hops_away = 0;
+    config.lora.hop_limit = 5;
+    meshtastic_MeshPacket p = packetAtDefaultHops(meshtastic_PortNum_TELEMETRY_APP, DEST);
+    applyDirectedHopBudget(&p);
+    TEST_ASSERT_EQUAL_UINT8(2, p.hop_limit);
+}
+
+void test_budget_leavesAlreadySizedPacketAlone()
+{
+    meshtastic_NodeInfoLite *n = ensureNode(DEST);
+    n->has_hops_away = true;
+    n->hops_away = 0;
+    config.lora.hop_limit = 5;
+    meshtastic_MeshPacket p = packetAtDefaultHops(meshtastic_PortNum_TELEMETRY_APP, DEST);
+    p.hop_limit = 4; // off the default: a reply or a client choice
+    applyDirectedHopBudget(&p);
+    TEST_ASSERT_EQUAL_UINT8(4, p.hop_limit);
+}
+
+void test_budget_ignoresBroadcastAndOtherPorts()
+{
+    meshtastic_NodeInfoLite *n = ensureNode(DEST);
+    n->has_hops_away = true;
+    n->hops_away = 0;
+    config.lora.hop_limit = 5;
+    meshtastic_MeshPacket b = packetAtDefaultHops(meshtastic_PortNum_TELEMETRY_APP, NODENUM_BROADCAST);
+    applyDirectedHopBudget(&b);
+    TEST_ASSERT_EQUAL_UINT8(5, b.hop_limit);
+    meshtastic_MeshPacket t = packetAtDefaultHops(meshtastic_PortNum_TEXT_MESSAGE_APP, DEST);
+    applyDirectedHopBudget(&t);
+    TEST_ASSERT_EQUAL_UINT8(5, t.hop_limit);
+}
+
+// Not only module sends: a phone-originated unicast on these ports at the default is trimmed too.
+void test_budget_coversPhoneOriginatedUnicast()
+{
+    meshtastic_NodeInfoLite *n = ensureNode(DEST);
+    n->has_hops_away = true;
+    n->hops_away = 0;
+    config.lora.hop_limit = 5;
+    meshtastic_MeshPacket p = packetAtDefaultHops(meshtastic_PortNum_NODEINFO_APP, DEST);
+    p.from = 0; // phone leaves from unset; isFromUs() treats 0 as us
+    applyDirectedHopBudget(&p);
+    TEST_ASSERT_EQUAL_UINT8(2, p.hop_limit);
+}
+
 void setUp(void)
 {
     if (!testNodeDB)
@@ -204,6 +422,22 @@ void setup()
     RUN_TEST(test_hop_boundaryAtConfiguredLimit);
     RUN_TEST(test_hop_neverExceedsConfigured);
     RUN_TEST(test_hop_mqttDistanceIsNotTrusted);
+    RUN_TEST(test_pkc_unsetUsesKeyWhenKnown);
+    RUN_TEST(test_pkc_unsetFallsBackToPskWithoutKey);
+    RUN_TEST(test_pkc_alwaysPkcRefusesToDowngrade);
+    RUN_TEST(test_pkc_neverPkcUsesPskEvenWithKey);
+    RUN_TEST(test_pkc_alwaysBeatsNever);
+    RUN_TEST(test_pkc_clientExplicitPkiIsNotDowngraded);
+    RUN_TEST(test_pkc_paxcounterFollowsTelemetryFlags);
+    RUN_TEST(test_pkc_fallbackDoesNotLeakToOtherPorts);
+    RUN_TEST(test_gate_noAlwaysPkcAcceptsAnything);
+    RUN_TEST(test_gate_alwaysPkcAcceptsKeyedDest);
+    RUN_TEST(test_gate_alwaysPkcRefusesKeylessDest);
+    RUN_TEST(test_gate_alwaysPkcCoversPaxcounterDest);
+    RUN_TEST(test_budget_trimsRoutineUnicastAtDefault);
+    RUN_TEST(test_budget_leavesAlreadySizedPacketAlone);
+    RUN_TEST(test_budget_ignoresBroadcastAndOtherPorts);
+    RUN_TEST(test_budget_coversPhoneOriginatedUnicast);
     exit(UNITY_END());
 }
 
