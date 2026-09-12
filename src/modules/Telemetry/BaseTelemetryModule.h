@@ -8,9 +8,8 @@
 class BaseTelemetryModule
 {
   public:
-    /// Whether we may answer a telemetry request from `from`, per ModuleConfig.TelemetryConfig
-    /// .telemetry_flags. An ignored node is refused unconditionally - that is what ignoring means,
-    /// not a policy choice - and every flag bit is a further restriction, so unset answers everyone.
+    /// May we answer a telemetry request from `from`? Ignored nodes are refused regardless of
+    /// telemetry_flags; every flag bit only restricts, so unset answers everyone.
     static bool wouldReplyToPoll(NodeNum from, uint32_t dest)
     {
         // The flags govern who on the mesh may poll us; a request from our own node is the phone.
@@ -32,8 +31,7 @@ class BaseTelemetryModule
         return true;
     }
 
-    /// Destination for a routine (timer-driven) send. 0 means broadcast, which is the default and
-    /// preserves the historic behaviour; any other value addresses that node.
+    /// Routine (timer-driven) send destination: 0 = broadcast, else that node.
     static NodeNum routineDest(uint32_t configured) { return configured ? (NodeNum)configured : NODENUM_BROADCAST; }
 
   protected:

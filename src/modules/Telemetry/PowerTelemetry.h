@@ -23,7 +23,7 @@ class PowerTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("PowerTelemetry"),
           ProtobufModule("PowerTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
-        // Update our nodedb from directed telemetry too, not just broadcasts.
+        // Promiscuous: learn from telemetry unicast between other nodes that we relay or overhear.
         isPromiscuous = true;
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
