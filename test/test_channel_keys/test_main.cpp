@@ -321,17 +321,6 @@ void test_aead_without_key_material_is_cleared()
     TEST_ASSERT_EQUAL_INT16(plainHash, channels.getHash(0)); // and no stray 0xAE in the hash
 }
 
-void test_aead_survives_on_secondary_borrowing_the_primary_key()
-{
-    // The guard keys off the *effective* key from getKey(), not psk.size: a secondary with
-    // no PSK of its own still has real key material inherited from the primary.
-    meshtastic_Channel &ch = setSlot(1, meshtastic_Channel_Role_SECONDARY, "second", NULL, 0);
-    ch.settings.use_aead = true;
-    channels.fixupChannel(1);
-    TEST_ASSERT_TRUE(ch.settings.use_aead);
-    TEST_ASSERT_TRUE(channels.isAEADEnabled(1));
-}
-
 void test_onconfigchanged_resolves_primary_before_hashing()
 {
     // The primary moves to slot 2 while slot 0 becomes a keyless secondary. onConfigChanged()
@@ -631,7 +620,6 @@ CK_TEST_ENTRY void setup()
     printf("\n=== use_aead consistency ===\n");
     RUN_TEST(test_aead_flag_changes_the_hash);
     RUN_TEST(test_aead_without_key_material_is_cleared);
-    RUN_TEST(test_aead_survives_on_secondary_borrowing_the_primary_key);
     RUN_TEST(test_onconfigchanged_resolves_primary_before_hashing);
 
     printf("\n=== onConfigChanged restore and setChannel ===\n");

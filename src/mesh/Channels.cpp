@@ -330,13 +330,8 @@ void Channels::initDefaults()
 
 void Channels::onConfigChanged()
 {
-    // Make sure the phone hasn't mucked anything up.
-    // Find the primary slot before fixing up anything: fixupChannel() hashes the channel and
-    // validates use_aead through getKey(), which follows a keyless secondary to primaryIndex.
-    // Doing both in one pass would resolve the early slots against the previous primary, so a
-    // primary that moved (say 0 -> 2) would leave slot 0 with a stale hash and its use_aead
-    // cleared against a key it does not actually use. Role only changes in fixupChannel() for a
-    // slot with no settings, which it disables, so reading it first is equivalent.
+    // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
+    // hashes through getKey(), which follows a keyless secondary to primaryIndex.
     bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
         const meshtastic_Channel &ch = getByIndex(i);

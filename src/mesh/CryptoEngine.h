@@ -70,8 +70,7 @@ class CryptoEngine
     bool getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out);
 #endif
 
-    // Plain SHA256 over `bytes`, result written back into the first 32 bytes. Not PKI-specific:
-    // PortduinoGlue derives a MAC address with it on builds that exclude PKI.
+    // Plain SHA256; outside the guard because PortduinoGlue uses it on EXCLUDE_PKI builds.
     virtual void hash(uint8_t *bytes, size_t numBytes);
 
     virtual void aesSetKey(const uint8_t *key, size_t key_len);

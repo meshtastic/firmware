@@ -1340,10 +1340,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
             // Now that we are encrypting the packet channel should be the hash (no longer the index)
             p->channel = hash;
-            if (hash < 0) {
-                // No suitable channel could be found for
+            if (hash < 0)
                 return meshtastic_Routing_Error_NO_CHANNEL;
-            }
 
             if (useAead) {
                 // AEAD (AES-CCM) authenticated encryption path
