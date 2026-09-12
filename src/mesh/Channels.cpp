@@ -77,6 +77,13 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
         // Convert the old string "Default" to our new short representation
         if (strcmp(meshtastic_channelSettings.name, "Default") == 0)
             *meshtastic_channelSettings.name = '\0';
+
+        // AEAD needs key material. Left set on a channel that resolves to no PSK it would make every
+        // send fail with BAD_REQUEST and every receive drop, with nothing in the config to show why.
+        if (meshtastic_channelSettings.use_aead && getKey(chIndex).length <= 0) {
+            LOG_WARN("Channel %d has AEAD enabled but no PSK; clearing use_aead", chIndex);
+            meshtastic_channelSettings.use_aead = false;
+        }
     }
 
     hashes[chIndex] = generateHash(chIndex);

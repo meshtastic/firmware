@@ -1325,21 +1325,28 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
-        } else {
+        } else
+#endif
+        {
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            if (channels.isAEADEnabled(chIndex)) {
+            const bool useAead = channels.isAEADEnabled(chIndex);
+            if (useAead && numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_AEAD_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
+                return meshtastic_Routing_Error_TOO_LARGE;
+
+            hash = channels.setActiveByIndex(chIndex);
+
+            // Now that we are encrypting the packet channel should be the hash (no longer the index)
+            p->channel = hash;
+            if (hash < 0) {
+                // No suitable channel could be found for
+                return meshtastic_Routing_Error_NO_CHANNEL;
+            }
+
+            if (useAead) {
                 // AEAD (AES-CCM) authenticated encryption path
-                if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_AEAD_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
-                    return meshtastic_Routing_Error_TOO_LARGE;
-
-                hash = channels.setActiveByIndex(chIndex);
-                p->channel = hash;
-                if (hash < 0)
-                    return meshtastic_Routing_Error_NO_CHANNEL;
-
                 CryptoKey k = channels.getKey(chIndex);
                 if (!crypto->encryptPacketCCM(k, getFrom(p), p->to, p->id, numbytes, bytes, p->encrypted.bytes)) {
                     LOG_ERROR("AEAD encryption failed for ch %d", chIndex);
@@ -1348,47 +1355,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 numbytes += MESHTASTIC_AEAD_OVERHEAD;
             } else {
                 // Standard AES-CTR encryption path
-                hash = channels.setActiveByIndex(chIndex);
-                p->channel = hash;
-                if (hash < 0)
-                    return meshtastic_Routing_Error_NO_CHANNEL;
-
                 crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
                 memcpy(p->encrypted.bytes, bytes, numbytes);
             }
         }
-#else
-        if (p->pki_encrypted == true) {
-            // Client specifically requested PKI encryption
-            return meshtastic_Routing_Error_PKI_FAILED;
-        }
-        if (channels.isAEADEnabled(chIndex)) {
-            // AEAD (AES-CCM) authenticated encryption path
-            if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_AEAD_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
-                return meshtastic_Routing_Error_TOO_LARGE;
-
-            hash = channels.setActiveByIndex(chIndex);
-            p->channel = hash;
-            if (hash < 0)
-                return meshtastic_Routing_Error_NO_CHANNEL;
-
-            CryptoKey k = channels.getKey(chIndex);
-            if (!crypto->encryptPacketCCM(k, getFrom(p), p->to, p->id, numbytes, bytes, p->encrypted.bytes)) {
-                LOG_ERROR("AEAD encryption failed for ch %d", chIndex);
-                return meshtastic_Routing_Error_BAD_REQUEST;
-            }
-            numbytes += MESHTASTIC_AEAD_OVERHEAD;
-        } else {
-            // Standard AES-CTR encryption path
-            hash = channels.setActiveByIndex(chIndex);
-            p->channel = hash;
-            if (hash < 0)
-                return meshtastic_Routing_Error_NO_CHANNEL;
-
-            crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
-            memcpy(p->encrypted.bytes, bytes, numbytes);
-        }
-#endif
 
         // Copy back into the packet and set the variant type
         p->encrypted.size = numbytes;

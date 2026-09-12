@@ -314,6 +314,10 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
     hash.finalize(bytes, 32);
 }
 
+#endif // !(MESHTASTIC_EXCLUDE_PKI)
+
+// aes-ccm.cpp drives the block cipher through these two, and it is compiled in every build,
+// so they must stay outside the PKI guard or MESHTASTIC_EXCLUDE_PKI=1 fails to link.
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
@@ -330,6 +334,8 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
 {
     aes->encryptBlock(out, in);
 }
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
 
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 {
