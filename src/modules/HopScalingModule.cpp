@@ -67,12 +67,6 @@ void HopScalingModule::clear()
     lastPoliteNumer = POLITENESS_DEFAULT;
     lastTrendStats = {};
     memset(denominatorHistory, DENOM_MIN, sizeof(denominatorHistory));
-    // A cleared instance that kept congested=true would scale again as soon as the histogram
-    // refilled. lastRequiredHop is left alone: the released gate walks it back up per hourly roll.
-    utilizationAvg = 0.0f;
-    hasUtilizationSample = false;
-    congested = false;
-    congestionConfirmRuns = 0;
 #ifndef PIO_UNIT_TESTING
     hashSeed = static_cast<uint16_t>(random());
 #else
