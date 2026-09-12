@@ -1,0 +1,42 @@
+/*
+ * XIAO nRF54L15 Sense + Wio-SX1262 Meshtastic overlay.
+ *
+ * The base XIAO DTS enables i2c22 on P1.10/P1.11 (D4/D5). The Wio-SX1262
+ * owns those pins for CS and RF_SW1, so leave i2c22 disabled. i2c30 remains
+ * available on D11/D12 for the Sense board's IMU and compatible peripherals.
+ */
+
+&i2c22 {
+    status = "disabled";
+};
+
+/*
+ * Keep SPI00 and its Seeed pinctrl assignments:
+ * P2.01 = SCK/D8, P2.02 = MOSI/D10, P2.04 = MISO/D9.
+ * RadioLib drives CS on D4 as a GPIO, so no hardware chip-select is declared.
+ */
+&spi00 {
+    status = "okay";
+};
+
+/*
+ * GPS on the XIAO header UART: uart21 with the Seeed pinctrl assignments
+ * TX = P2.08 (D6), RX = P2.07 (D7). The Arduino shim exposes this device as
+ * Serial1 for Meshtastic's GPS driver; the baud rate is reconfigured at
+ * runtime during GPS probing, so current-speed is only the initial value.
+ */
+&uart21 {
+    status = "okay";
+    current-speed = <9600>;
+};
+
+/*
+ * Meshtastic keeps configuration in LittleFS. Reclaim the unused secondary
+ * MCUboot slot for storage: 36 KiB -> 700 KiB. This profile is flashed through
+ * a debug probe and does not provide dual-bank MCUboot OTA updates.
+ */
+/delete-node/ &slot1_partition;
+
+&storage_partition {
+    reg = <0xb6000 0xaf000>;
+};
