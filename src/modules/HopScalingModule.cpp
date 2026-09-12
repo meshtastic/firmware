@@ -246,23 +246,15 @@ void HopScalingModule::rollHour()
     }
     lastPerHopCounts = counts;
 
-    // 1b. Compute politeness factor from the 0-2 h vs 1-3 h activity ratio.
-    {
-        const uint32_t recent = static_cast<uint32_t>(hourlyRaw[0]) + hourlyRaw[1];
-        const uint32_t older = static_cast<uint32_t>(hourlyRaw[1]) + hourlyRaw[2];
-        if (older > 1 && recent > 1) {
-            const uint32_t r = static_cast<uint32_t>(recent) * ACTIVITY_WEIGHT_SCALE;
-            const uint32_t o = static_cast<uint32_t>(older);
-            if (r < o * ACTIVITY_WEIGHT_GENEROUS_MAX_NUMER)
-                lastPoliteNumer = POLITENESS_GENEROUS;
-            else if (r > o * ACTIVITY_WEIGHT_STRICT_MIN_NUMER)
-                lastPoliteNumer = POLITENESS_STRICT;
-            else
-                lastPoliteNumer = POLITENESS_DEFAULT;
-        } else {
-            lastPoliteNumer = POLITENESS_DEFAULT;
-        }
-    }
+    // 1b. Pick the politeness factor from measured channel utilization.  How far the walk may
+    //     stretch and whether it is applied at all now read the same signal, so a node cannot be
+    //     told the mesh is filling up by node counts while the channel says it is idle.
+    if (utilizationAvg >= CONGESTION_STRICT_PCT)
+        lastPoliteNumer = POLITENESS_STRICT;
+    else if (utilizationAvg >= CONGESTION_ENGAGE_PCT)
+        lastPoliteNumer = POLITENESS_DEFAULT;
+    else
+        lastPoliteNumer = POLITENESS_GENEROUS;
 
     // 1c. Scale and cache trend stats (denominatorHistory already advanced above).
     {

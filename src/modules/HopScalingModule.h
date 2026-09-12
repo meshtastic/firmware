@@ -105,13 +105,6 @@ class HopScalingModule : private concurrency::OSThread
     static constexpr uint8_t POLITENESS_DEFAULT = 2u;  // 2/4 = 0.50
     static constexpr uint8_t POLITENESS_STRICT = 1u;   // 1/4 = 0.25
 
-    // Activity weight thresholds (ratio of 0-2 h window vs 1-3 h window).
-    // Cross-multiply form: recent * ACTIVITY_WEIGHT_SCALE vs older * threshold_numer.
-    // GENEROUS if recent*10 < older*9 (ratio < 0.9); STRICT if recent*10 > older*12 (ratio > 1.2)
-    static constexpr uint8_t ACTIVITY_WEIGHT_SCALE = 10u;
-    static constexpr uint8_t ACTIVITY_WEIGHT_GENEROUS_MAX_NUMER = 9u;
-    static constexpr uint8_t ACTIVITY_WEIGHT_STRICT_MIN_NUMER = 12u;
-
     // Scheduling: number of 5-minute runOnce() ticks that make up one hourly rollover
     static constexpr uint8_t RUNS_PER_HOUR = 12;
 
@@ -120,6 +113,9 @@ class HopScalingModule : private concurrency::OSThread
     static constexpr uint8_t CONGESTION_ENGAGE_PCT = default_hop_scaling_congestion_engage_pct;
     static constexpr uint8_t CONGESTION_RELEASE_PCT = default_hop_scaling_congestion_release_pct;
     static constexpr uint8_t CONGESTION_CONFIRM_RUNS = default_hop_scaling_congestion_confirm_runs;
+    // Upper band for the politeness numerator, which reads the same smoothed utilization as the
+    // gate: STRICT at or above this, DEFAULT from CONGESTION_ENGAGE_PCT, GENEROUS below it.
+    static constexpr uint8_t CONGESTION_STRICT_PCT = default_hop_scaling_congestion_strict_pct;
     // EMA weight for each 5-minute utilization sample (1/4 -> ~20 min time constant).
     static constexpr float CONGESTION_EMA_ALPHA = 0.25f;
 
