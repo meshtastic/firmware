@@ -285,6 +285,36 @@ run_case "compound assignment does not taint" "" 'void f() {
     rebootAtMsec = now;
 }'
 
+# --- one write must not be judged by its neighbour on the same line ----------
+#
+# rhs used to run to the end of the accumulated statement, so a neighbour decided this write.
+
+run_case "raw write is not excused by a helper call later on the line" "2" 'void f() {
+    rebootAtMsec = millis() + 5; shutdownAtMsec = Time::timerEndsAtMillis(10);
+}'
+
+run_case "safe copy is not blamed for a raw write later on the line" "2" 'void f() {
+    rebootAtMsec = otherDeadline; shutdownAtMsec = millis();
+}'
+
+run_case "helper call is not blamed for a raw write later on the line" "2" 'void f() {
+    rebootAtMsec = Time::skipZero(Time::getMillis()); shutdownAtMsec = millis();
+}'
+
+run_case "two raw writes on one line are both reported" "2
+2" 'void f() {
+    rebootAtMsec = millis() + 5; shutdownAtMsec = millis();
+}'
+
+run_case "two helper writes on one line are both quiet" "" 'void f() {
+    rebootAtMsec = Time::timerEndsAtMillis(5); shutdownAtMsec = Time::skipZero(Time::getMillis());
+}'
+
+run_case "multi-line statement still sees its whole right-hand side" "2" 'void f() {
+    ntp_renew =
+        millis() + 43200 * 1000;
+}'
+
 # --- scope -------------------------------------------------------------------
 
 # test/ builds raw wrap values on purpose, so the rule must not reach into it.

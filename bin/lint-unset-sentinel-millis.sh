@@ -262,7 +262,17 @@ for target in "$@"; do
 		# End of statement: judge each recorded write against its own right-hand side.
 		if (code ~ /;/ || NR - start >= LINE_CAP) {
 			for (k = 1; k <= nhits; k++) {
+				# The right-hand side of THIS write only, cut at its own semicolon. Without the
+				# cut, rhs ran on to the end of the accumulated statement and judged a neighbour
+				# as if it belonged to this write - wrongly in both directions. On
+				#   rebootAtMsec = millis() + 5; shutdownAtMsec = Time::timerEndsAtMillis(10);
+				# the later helper call suppressed a genuine raw arm, and on
+				#   rebootAtMsec = otherDeadline; shutdownAtMsec = millis();
+				# the later millis() reported a safe copy. Both are fixtures now.
 				rhs = substr(stmt, hit_at[k] + 1)
+				semi = index(rhs, ";")
+				if (semi > 0) rhs = substr(rhs, 1, semi - 1)
+
 				# Only a raw clock read is a finding. `= 0` disarms, a copy from another
 				# variable inherits whatever that one did, and anything already routed through
 				# the helpers is the fix rather than the defect. Matching `millis` loosely
