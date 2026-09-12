@@ -41,7 +41,7 @@ void InkHUD::Renderer::setDriver(Drivers::EInk *driver)
     imageBufferHeight = driver->height;
 
     // Allocate the image buffer
-    imageBuffer = new uint8_t[imageBufferWidth * imageBufferHeight];
+    imageBuffer = std::make_unique<uint8_t[]>(imageBufferWidth * imageBufferHeight);
 }
 
 // Set the target number of FAST display updates in a row, before a FULL update is used for display health
@@ -236,7 +236,7 @@ void InkHUD::Renderer::render(bool async)
 
         // Tell display to begin process of drawing new image
         LOG_INFO("Updating display");
-        driver->update(imageBuffer, updateType);
+        driver->update(imageBuffer.get(), updateType);
 
         // If not async, wait here until the update is complete
         if (!async)
@@ -260,7 +260,7 @@ void InkHUD::Renderer::render(bool async)
 // rather than rendering selectively, and manually blanking a portion of the display
 void InkHUD::Renderer::clearBuffer()
 {
-    memset(imageBuffer, 0xFF, imageBufferHeight * imageBufferWidth);
+    memset(imageBuffer.get(), 0xFF, imageBufferHeight * imageBufferWidth);
 }
 
 // Manually clear the pixels below a tile
@@ -312,7 +312,7 @@ void InkHUD::Renderer::clearTile(Tile *t)
 
     // Clear the pixels
     if (xStart == 0 && xEnd == driver->width) { // full width box is easier to clear
-        memset(imageBuffer + (yStart * imageBufferWidth), 0xFF, (yEnd - yStart) * imageBufferWidth);
+        memset(imageBuffer.get() + (yStart * imageBufferWidth), 0xFF, (yEnd - yStart) * imageBufferWidth);
     } else {
         const uint16_t byteStart = (xStart / 8) + 1;
         const uint16_t byteEnd = xEnd / 8;
@@ -324,7 +324,7 @@ void InkHUD::Renderer::clearTile(Tile *t)
 
             // Set the continuous bytes
             if (byteStart < byteEnd)
-                memset(imageBuffer + i + byteStart, 0xFF, byteEnd - byteStart);
+                memset(imageBuffer.get() + i + byteStart, 0xFF, byteEnd - byteStart);
 
             // Set the trailing byte
             if (byteEnd != imageBufferWidth)

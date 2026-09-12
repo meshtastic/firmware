@@ -100,7 +100,7 @@ void InkHUD::WindowManager::nextTile()
     refocusTile();
 
     if (menuWasOpen)
-        menu->show(userTiles.at(settings->userTiles.focused));
+        menu->show(userTiles.at(settings->userTiles.focused).get());
 
     // Ask the tile to draw an indicator showing which tile is now focused
     // Requests a render
@@ -132,7 +132,7 @@ void InkHUD::WindowManager::prevTile()
     refocusTile();
 
     if (menuWasOpen)
-        menu->show(userTiles.at(settings->userTiles.focused));
+        menu->show(userTiles.at(settings->userTiles.focused).get());
 
     // Ask the tile to draw an indicator showing which tile is now focused
     // Requests a render
@@ -153,7 +153,7 @@ bool InkHUD::WindowManager::selectTileAt(uint16_t x, uint16_t y)
     const int32_t ty = y;
 
     for (uint8_t i = 0; i < userTiles.size(); i++) {
-        Tile *tile = userTiles.at(i);
+        Tile *tile = userTiles.at(i).get();
 
         const int32_t left = tile->getLeft();
         const int32_t top = tile->getTop();
@@ -179,7 +179,7 @@ bool InkHUD::WindowManager::selectTileAt(uint16_t x, uint16_t y)
 void InkHUD::WindowManager::openMenu()
 {
     MenuApplet *menu = (MenuApplet *)inkhud->getSystemApplet("Menu");
-    menu->show(userTiles.at(settings->userTiles.focused));
+    menu->show(userTiles.at(settings->userTiles.focused).get());
 }
 
 // Show touch-only app switcher on the focused tile
@@ -190,7 +190,7 @@ void InkHUD::WindowManager::openAppSwitcher()
 
     AppSwitcherApplet *switcher = static_cast<AppSwitcherApplet *>(inkhud->getSystemApplet("AppSwitcher"));
     if (switcher) {
-        switcher->show(userTiles.at(settings->userTiles.focused));
+        switcher->show(userTiles.at(settings->userTiles.focused).get());
     }
 }
 
@@ -235,7 +235,7 @@ void InkHUD::WindowManager::closeKeyboard()
 // Applets available for this must be activated, and not already displayed on another tile
 void InkHUD::WindowManager::nextApplet()
 {
-    Tile *t = userTiles.at(settings->userTiles.focused);
+    Tile *t = userTiles.at(settings->userTiles.focused).get();
 
     // Abort if zero applets available
     // nullptr means WindowManager::refocusTile determined that there were no available applets
@@ -284,7 +284,7 @@ void InkHUD::WindowManager::nextApplet()
 // Applets available for this must be activated, and not already displayed on another tile
 void InkHUD::WindowManager::prevApplet()
 {
-    Tile *t = userTiles.at(settings->userTiles.focused);
+    Tile *t = userTiles.at(settings->userTiles.focused).get();
 
     // Abort if zero applets available
     // nullptr means WindowManager::refocusTile determined that there were no available applets
@@ -356,7 +356,7 @@ bool InkHUD::WindowManager::showApplet(uint8_t appletIndex)
     }
 
     // Otherwise replace the focused tile's applet.
-    Tile *focused = userTiles.at(settings->userTiles.focused);
+    Tile *focused = userTiles.at(settings->userTiles.focused).get();
     Applet *current = focused->getAssignedApplet();
     if (current && current != target)
         current->sendToBackground();
@@ -430,7 +430,7 @@ void InkHUD::WindowManager::changeLayout()
     // - its assignment was cleared (assignUserAppletsToTiles)
     MenuApplet *menu = (MenuApplet *)inkhud->getSystemApplet("Menu");
     if (menu->isForeground()) {
-        Tile *ft = userTiles.at(settings->userTiles.focused);
+        Tile *ft = userTiles.at(settings->userTiles.focused).get();
         menu->show(ft);
     }
 
@@ -480,7 +480,7 @@ void InkHUD::WindowManager::changeActivatedApplets()
     // Restore menu
     // - its assignment was cleared (assignUserAppletsToTiles)
     if (menu->isForeground()) {
-        Tile *ft = userTiles.at(settings->userTiles.focused);
+        Tile *ft = userTiles.at(settings->userTiles.focused).get();
         menu->show(ft);
     }
 
@@ -510,10 +510,10 @@ void InkHUD::WindowManager::autoshow()
             && !a->isForeground()                 // Not yet foreground
             && settings->userApplets.autoshow[i]) // User permits this applet to autoshow
         {
-            Tile *t = userTiles.at(settings->userTiles.focused); // Get focused tile
-            t->getAssignedApplet()->sendToBackground();          // Background whichever applet is already on the tile
-            t->assignApplet(a);                                  // Assign our new applet to tile
-            a->bringToForeground();                              // Foreground our new applet
+            Tile *t = userTiles.at(settings->userTiles.focused).get(); // Get focused tile
+            t->getAssignedApplet()->sendToBackground();                // Background whichever applet is already on the tile
+            t->assignApplet(a);                                        // Assign our new applet to tile
+            a->bringToForeground();                                    // Foreground our new applet
 
             // Check if autoshown applet shows the same information as notification intended to
             // In this case, we can dismiss the notification before it is shown
@@ -536,10 +536,10 @@ std::vector<InkHUD::Tile *> InkHUD::WindowManager::getEmptyTiles()
 {
     std::vector<Tile *> empty;
 
-    for (Tile *t : userTiles) {
+    for (auto &t : userTiles) {
         Applet *a = t->getAssignedApplet();
         if (!a || !a->isActive())
-            empty.push_back(t);
+            empty.push_back(t.get());
     }
 
     return empty;
@@ -673,16 +673,12 @@ void InkHUD::WindowManager::createUserApplets()
 // The amount of these is controlled by the user, via "layout" option in the InkHUD menu
 void InkHUD::WindowManager::createUserTiles()
 {
-    // Delete any tiles which currently exist
-    for (Tile *t : userTiles)
-        delete t;
+    // Delete any tiles which currently exist (~Tile breaks the link with any orphaned applet)
     userTiles.clear();
 
     // Create new tiles
-    for (uint8_t i = 0; i < settings->userTiles.count; i++) {
-        Tile *t = new Tile;
-        userTiles.push_back(t);
-    }
+    for (uint8_t i = 0; i < settings->userTiles.count; i++)
+        userTiles.push_back(std::make_unique<Tile>());
 }
 
 // Calculate the display region occupied by each tile
@@ -703,7 +699,7 @@ void InkHUD::WindowManager::assignUserAppletsToTiles()
 {
     // Each user tile
     for (uint8_t i = 0; i < userTiles.size(); i++) {
-        Tile *t = userTiles.at(i);
+        Tile *t = userTiles.at(i).get();
 
         // Check whether tile can display the previously shown applet again
         uint8_t oldIndex = settings->userTiles.displayedUserApplet[i]; // Previous index in WindowManager::userApplets
@@ -747,7 +743,7 @@ void InkHUD::WindowManager::refocusTile()
     // Give "focused tile" a valid applet
     // - scan for another valid applet, which we can addSubstitution
     // - reason: nextApplet() won't cycle if no applet is assigned
-    Tile *focusedTile = userTiles.at(settings->userTiles.focused);
+    Tile *focusedTile = userTiles.at(settings->userTiles.focused).get();
     if (!focusedTile->getAssignedApplet()) {
         // Search for available applets
         for (uint8_t i = 0; i < inkhud->userApplets.size(); i++) {
@@ -778,7 +774,7 @@ void InkHUD::WindowManager::findOrphanApplets()
         // Check each tile, to see if anyone claims this applet
         bool foundOwner = false;
         for (uint8_t it = 0; it < userTiles.size(); it++) {
-            Tile *t = userTiles.at(it);
+            Tile *t = userTiles.at(it).get();
             // A tile claims this applet: not orphaned
             if (t->getAssignedApplet() == a) {
                 foundOwner = true;
