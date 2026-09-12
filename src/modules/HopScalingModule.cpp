@@ -508,15 +508,16 @@ int32_t HopScalingModule::runOnce()
                 lastRequiredHop++;
         } else {
             uint8_t suggested = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
-            // Role-based hop floor: TRACKER/TAK_TRACKER always reach at least 2 hops,
-            // SENSOR reaches at least 1, router-class roles reach ROUTER_HOP_FLOOR, so these
+            // Role-based hop floor: TRACKER/TAK_TRACKER always reach at least 2 hops, SENSOR reaches
+            // at least 1, and the infrastructure roles reach INFRASTRUCTURE_HOP_FLOOR, so these
             // reporting roles remain reachable even on a dense mesh recommending fewer hops.
+            // The infrastructure set matches the one Router.cpp uses for zero-cost hops.
             uint8_t roleFloor = 0;
             switch (config.device.role) {
             case meshtastic_Config_DeviceConfig_Role_ROUTER:
             case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
-            case meshtastic_Config_DeviceConfig_Role_REPEATER:
-                roleFloor = ROUTER_HOP_FLOOR;
+            case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE:
+                roleFloor = INFRASTRUCTURE_HOP_FLOOR;
                 break;
             case meshtastic_Config_DeviceConfig_Role_TRACKER:
             case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:

@@ -531,7 +531,7 @@ void test_congestion_gate_idle_channel_does_not_scale()
 {
     TEST_MESSAGE("=== Congestion gate: dense mesh, idle channel ===");
     TEST_MESSAGE("Topology: the dense 110-node mesh that scales to <= 3 hops when the channel is busy.");
-    TEST_MESSAGE("Expectation: with the channel reading 12%, nothing is applied and hop returns to HOP_MAX.");
+    TEST_MESSAGE("Expectation: with the channel reading 10%, nothing is applied and hop returns to HOP_MAX.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -546,8 +546,8 @@ void test_congestion_gate_idle_channel_does_not_scale()
     TEST_MSG_FMT("While congested: hop=%u", scaledWhileBusy);
     TEST_ASSERT_TRUE(scaledWhileBusy <= 3);
 
-    // 12% is inside the band the reporter measured; it must release and stay released.
-    pumpRuns(*shim, 12.0f, HopScalingModule::RUNS_PER_HOUR * 8);
+    // 10% is inside the band the reporter measured; it must release and stay released.
+    pumpRuns(*shim, 10.0f, HopScalingModule::RUNS_PER_HOUR * 8);
 
     TEST_MSG_FMT("After idle channel: congested=%u hop=%u", shim->isCongested() ? 1u : 0u, shim->getLastRequiredHop());
     TEST_ASSERT_FALSE(shim->isCongested());
@@ -592,8 +592,8 @@ void test_congestion_gate_scales_on_busy_channel()
 void test_congestion_gate_does_not_flap_at_threshold()
 {
     TEST_MESSAGE("=== Congestion gate: no flapping around the thresholds ===");
-    TEST_MESSAGE("Phase 1: released gate, samples alternating 28%/18% across the 25% engage threshold.");
-    TEST_MESSAGE("Phase 2: engaged gate, samples alternating 20%/10% across the 15% release threshold.");
+    TEST_MESSAGE("Phase 1: released gate, samples alternating 24%/14% across the 20% engage threshold.");
+    TEST_MESSAGE("Phase 2: engaged gate, samples alternating 17%/7% across the 12% release threshold.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -604,7 +604,7 @@ void test_congestion_gate_does_not_flap_at_threshold()
     shim->forceCongestion(false);
     HopScalingModule::s_testChannelUtil = 0.0f;
     for (int i = 0; i < 60; i++) {
-        HopScalingModule::s_testChannelUtil = (i % 2) ? 18.0f : 28.0f;
+        HopScalingModule::s_testChannelUtil = (i % 2) ? 14.0f : 24.0f;
         shim->runOnce();
         TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "gate engaged on samples whose average stays below the threshold");
     }
@@ -612,7 +612,7 @@ void test_congestion_gate_does_not_flap_at_threshold()
 
     shim->forceCongestion(true);
     for (int i = 0; i < 60; i++) {
-        HopScalingModule::s_testChannelUtil = (i % 2) ? 10.0f : 20.0f;
+        HopScalingModule::s_testChannelUtil = (i % 2) ? 7.0f : 17.0f;
         shim->runOnce();
         TEST_ASSERT_TRUE_MESSAGE(shim->isCongested(), "gate released on a dip that never held for the confirm window");
     }
@@ -654,14 +654,18 @@ void test_congestion_release_ramps_one_hop_per_roll()
     hopScalingModule = nullptr;
 }
 
-// The role floor is keyed on the sending node's own role, so this lets a remote router's telemetry
+// The role floor is keyed on the sending node's own role, so this lets a remote site's telemetry
 // travel without loosening anything for client nodes. Operators read that telemetry to know a
 // mountain-top site is alive; issue #11794 is a report of exactly those routers going quiet.
-void test_router_role_floor_applies_when_congested()
+//
+// The floored set is the same one Router.cpp groups for zero-cost hops: ROUTER, ROUTER_LATE and
+// CLIENT_BASE. REPEATER is deliberately absent - it is deprecated and AdminModule demotes it to
+// CLIENT on config set, so a floor keyed on it could never fire.
+void test_infrastructure_role_floor_applies_when_congested()
 {
-    TEST_MESSAGE("=== Role floor: router-class roles keep a minimum hop count ===");
+    TEST_MESSAGE("=== Role floor: infrastructure roles keep a minimum hop count ===");
     TEST_MESSAGE("Topology: 200 nodes at hop 0, so the hop walk recommends 0 for an unfloored role.");
-    TEST_MESSAGE("Expectation: CLIENT scales below the floor, ROUTER/ROUTER_LATE/REPEATER sit on it.");
+    TEST_MESSAGE("Expectation: CLIENT scales below the floor, ROUTER/ROUTER_LATE/CLIENT_BASE sit on it.");
 
     const uint16_t distLocal[HOP_MAX + 1] = {200, 60, 20, 5, 3, 2, 2, 1};
     const meshtastic_Config_DeviceConfig_Role savedRole = config.device.role;
@@ -678,21 +682,21 @@ void test_router_role_floor_applies_when_congested()
         hopScalingModule = nullptr;
     }
     TEST_MSG_FMT("CLIENT: hop=%u", clientHop);
-    TEST_ASSERT_TRUE(clientHop < HopScalingModule::ROUTER_HOP_FLOOR);
+    TEST_ASSERT_TRUE(clientHop < HopScalingModule::INFRASTRUCTURE_HOP_FLOOR);
 
-    const meshtastic_Config_DeviceConfig_Role routerRoles[] = {meshtastic_Config_DeviceConfig_Role_ROUTER,
-                                                               meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                                                               meshtastic_Config_DeviceConfig_Role_REPEATER};
-    for (size_t i = 0; i < sizeof(routerRoles) / sizeof(routerRoles[0]); i++) {
-        config.device.role = routerRoles[i];
+    const meshtastic_Config_DeviceConfig_Role infraRoles[] = {meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                                              meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                                              meshtastic_Config_DeviceConfig_Role_CLIENT_BASE};
+    for (size_t i = 0; i < sizeof(infraRoles) / sizeof(infraRoles[0]); i++) {
+        config.device.role = infraRoles[i];
         auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
         hopScalingModule = shim.get();
         buildDenseLocalMesh();
         injectSampleTraffic(*shim, 0xA3000000 + (static_cast<uint32_t>(i) << 20), distLocal);
         shim->runOnce();
 
-        TEST_MSG_FMT("Router-class role %u: hop=%u", static_cast<unsigned>(routerRoles[i]), shim->getLastRequiredHop());
-        TEST_ASSERT_EQUAL_UINT8(HopScalingModule::ROUTER_HOP_FLOOR, shim->getLastRequiredHop());
+        TEST_MSG_FMT("Infrastructure role %u: hop=%u", static_cast<unsigned>(infraRoles[i]), shim->getLastRequiredHop());
+        TEST_ASSERT_EQUAL_UINT8(HopScalingModule::INFRASTRUCTURE_HOP_FLOOR, shim->getLastRequiredHop());
         hopScalingModule = nullptr;
     }
 
@@ -971,7 +975,7 @@ void setup()
     RUN_TEST(test_congestion_gate_scales_on_busy_channel);
     RUN_TEST(test_congestion_gate_does_not_flap_at_threshold);
     RUN_TEST(test_congestion_release_ramps_one_hop_per_roll);
-    RUN_TEST(test_router_role_floor_applies_when_congested);
+    RUN_TEST(test_infrastructure_role_floor_applies_when_congested);
 
     printf("\n=== Denominator state machine ===\n");
     RUN_TEST(test_denominator_rises_on_overflow);
