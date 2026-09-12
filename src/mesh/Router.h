@@ -24,8 +24,7 @@ bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p);
 bool coerceCoordinatePacketToPositionChannel(meshtastic_MeshPacket *p);
 bool willUsePki(const meshtastic_MeshPacket *p);
 
-/// Hop budget for a self-generated packet addressed to one node: hops_away + 2 when the distance is
-/// known and trustworthy, else `configured`. Only ever trims. Exposed for tests.
+/// hops_away + 2 for a known, non-MQTT distance, else `configured`; only trims. Exposed for tests.
 uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured);
 
 /// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a

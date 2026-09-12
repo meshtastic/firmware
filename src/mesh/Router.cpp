@@ -72,10 +72,8 @@ Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
-/// Hop budget for a self-generated packet addressed to one node. A node last heard hops_away out is
-/// assumed still reachable within hops_away + 2; the margin mirrors getHopLimitForResponse(), because
-/// the return path may differ from the inbound one. Only ever trims: an unknown or untrustworthy
-/// distance falls back to the caller's configured limit rather than extending it.
+/// hops_away + 2 for a from-us unicast, the same return-path margin as getHopLimitForResponse().
+/// Only trims: an unknown or untrustworthy distance keeps `configured`.
 uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
 {
     if (!nodeDB)
@@ -83,8 +81,7 @@ uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
     const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(dest);
     if (!n || !n->has_hops_away)
         return configured; // no basis to trim
-    // hops_away is stored without a via_mqtt guard (unlike snr and the hop histogram), so a distance
-    // learned over MQTT may not describe a LoRa path at all - do not size a LoRa budget from it.
+    // hops_away has no via_mqtt guard at the store, so an MQTT-learned distance may not be a LoRa path.
     if (nodeInfoLiteViaMqtt(n))
         return configured;
     const uint32_t want = (uint32_t)n->hops_away + 2;
@@ -561,10 +558,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
-    // Directed routine sends skip hop scaling above (it is broadcast-only), so they would otherwise
-    // launch at the full configured limit - higher than the broadcast they replace. Size them from the
-    // destination's recorded distance instead. Only trims, never raises, and only touches a packet still
-    // carrying the configured default, so a reply already sized by getHopLimitForResponse() is left alone.
+    // Hop scaling above is broadcast-only. Any from-us unicast on these ports (phone-originated too) is
+    // sized from the destination distance, unless something already moved it off the configured default.
     if (isFromUs(p) && !isBroadcast(p->to) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         switch (p->decoded.portnum) {
         case meshtastic_PortNum_POSITION_APP:
@@ -1207,10 +1202,8 @@ static bool signedDataFits(meshtastic_Data *d)
 #if !(MESHTASTIC_EXCLUDE_PKI)
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
-    // Telemetry policy decides its own crypto, so the choice is per node rather than a blanket
-    // portnum rule that would also change how replies to telemetry requests are encrypted.
-    // ALWAYS_PKC wins over NEVER_PKC: an accidental downgrade to a channel-readable payload is the
-    // worse failure, so the safer bit takes precedence.
+    // Node-wide telemetry crypto policy, replies included. ALWAYS_PKC beats NEVER_PKC: a silent
+    // downgrade to a channel-readable payload is the worse failure.
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP) {
         const uint32_t flags = moduleConfig.telemetry.telemetry_flags;
         if ((flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NEVER_PKC) &&
