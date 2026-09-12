@@ -1,3 +1,23 @@
+// Unit tests for HopScalingModule in src/modules/HopScalingModule.{h,cpp} - the sampled hop
+// histogram and the hop limit it recommends for this node's own routine broadcasts.
+//
+// What is pinned:
+//   - HopScalingModule::rollHour() walks the scaled per-hop buckets and recommends the smallest
+//     hop limit that still reaches default_hop_scaling_min_target_nodes, extended by at most one
+//     hop when the politeness envelope allows it.
+//   - HopScalingModule::runOnce() applies that recommendation only while the congestion gate is
+//     engaged, floors it by the sending node's role, and hands a hop back per hourly roll once
+//     congestion clears. Router.cpp reads the result through getLastRequiredHop() and only ever
+//     lowers a packet below the user's configured hop_limit.
+//   - The sampling/filtering denominator state machine, which keeps the 128-entry histogram
+//     bounded while leaving the population estimate invariant.
+//
+// The regression guarded: before the congestion gate, the recommendation was driven by node
+// density alone, so a dense but idle mesh was throttled exactly as hard as a saturated one and
+// remote routers on a near-idle MEDIUM_SLOW mesh went silent (meshtastic/firmware#11794). Delete
+// or relax the gate assertions and that returns: scaling engages on node count, with no reference
+// to whether the channel is actually busy.
+
 #include "MeshTypes.h"
 #include "TestUtil.h"
 #include <unity.h>
@@ -654,6 +674,7 @@ void test_congestion_release_ramps_one_hop_per_roll()
     hopScalingModule = nullptr;
 }
 
+// HopScalingModule::runOnce() in src/modules/HopScalingModule.cpp.
 // The role floor is keyed on the sending node's own role, so this lets a remote site's telemetry
 // travel without loosening anything for client nodes. Operators read that telemetry to know a
 // mountain-top site is alive; issue #11794 is a report of exactly those routers going quiet.
