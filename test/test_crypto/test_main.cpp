@@ -134,7 +134,7 @@ void test_PKC(void)
     uint8_t expected_nonce[16];
 
     uint32_t fromNode = 0x0929;
-    uint64_t packetNum = 0x13b2d662;
+    uint32_t packetNum = 0x13b2d662;
     HexToBytes(public_key.bytes, "db18fc50eea47f00251cb784819a3cf5fc361882597f589f0d7ff820e8064457");
     public_key.size = 32;
     HexToBytes(private_key, "a00330633e63522f8a4d81ec6d9d1e6617f6c8ffd3a4c698229537d44e522277");
