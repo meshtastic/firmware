@@ -155,11 +155,49 @@ for target in "$@"; do
 		return (c ~ /[A-Za-z0-9_]/)
 	}
 
+	# Brace depth, and which depths are a class/struct BODY rather than a function body. Needed
+	# because a typed declaration means opposite things in the two places: inside a function it is a
+	# throwaway local that shadows the field, but at class scope it IS the field, with an initializer
+	# that can read the clock - src/modules/SerialModule.h does exactly that. Treating the second as a
+	# local silently excused a real arm site.
+	function update_scope(s,   i, c) {
+		for (i = 1; i <= length(s); i++) {
+			c = substr(s, i, 1)
+			if (c == "{") {
+				depth++
+				if (pending_class) { class_body[depth] = 1; pending_class = 0 }
+			} else if (c == "}") {
+				delete class_body[depth]
+				if (depth > 0) depth--
+			}
+		}
+	}
+
+	# Is the statement being judged sitting directly in a class body? `opened` is the net brace
+	# count seen earlier in this same statement, which update_scope() has not applied yet: a body
+	# opened on this very line (a one-line inline method) puts the statement inside a function, not
+	# in the class body.
+	function at_class_scope(opened) { return ((depth in class_body) && opened <= 0) }
+
+	# Net unmatched `{` in the first `at` characters of the statement being judged.
+	function braces_before(s, at,   i, c, n) {
+		n = 0
+		for (i = 1; i < at && i <= length(s); i++) {
+			c = substr(s, i, 1)
+			if (c == "{") n++
+			else if (c == "}") n--
+		}
+		return n
+	}
+
 	# A local declaration that happens to reuse a sentinel name shadows the field and carries none
 	# of its contract, so it is not this rule business. Detected by a type-ish token immediately
 	# before the name - `uint32_t tx_after = millis() + d;` declares a local, `tx_after = ...` does
 	# not. Kept narrow: only the spellings this tree actually uses for a millis value.
+	#
+	# Only honoured inside a function body; see update_scope() for why class scope is different.
 	function is_declaration(s, at,   head) {
+		if (at_class_scope(braces_before(s, at))) return 0
 		head = substr(s, 1, at - 1)
 		sub(/[ \t]*(\*|&)?[ \t]*$/, "", head)
 		return (head ~ /(^|[^A-Za-z0-9_])(uint32_t|uint64_t|int32_t|unsigned[ \t]+long|unsigned[ \t]+int|unsigned|long|int|auto|size_t|TickType_t)$/)
@@ -171,6 +209,11 @@ for target in "$@"; do
 	# the same, so a sentinel armed from it needs the same guard.
 	function reads_clock(s) { return (s ~ /[Mm]illis[ \t]*\(/ || s ~ /k_uptime_get_32[ \t]*\(/) }
 
+	# Already routed through a helper that dodges 0, so it is the fix rather than the defect. Note
+	# stampMillis() belongs here even though its name ends in millis: a local read through it holds a
+	# value that is already non-zero, so a write from that local is safe and must not be flagged.
+	function is_safe_arm(s) { return (s ~ /skipZero/ || s ~ /timerEndsAtMillis/ || s ~ /stampMillis/) }
+
 	# Remember a local that was just assigned from a clock, so `field = now` a few lines later is
 	# recognised as the raw arm it really is. Without this the rule is blind to the commonest shape
 	# in the tree - `unsigned long now = millis();` at the top of a runOnce(), then half a dozen
@@ -181,19 +224,24 @@ for target in "$@"; do
 	# reassigned from anything else, so a variable reused for something unrelated stops matching.
 	# Taint is dropped at every function boundary (see the reset below), because a name that means a
 	# clock in one function usually means nothing in the next.
-	function note_taint(s,   lhs, rhs, eqp, i, n) {
+	function note_taint(s,   lhs, rhs, eqp, semi) {
 		eqp = index(s, "=")
 		if (eqp == 0) return
 		if (substr(s, eqp + 1, 1) == "=") return			# `==` is a comparison
 		if (substr(s, eqp - 1, 1) ~ /[-+*\/%&|^!<>=]/) return	# `+=`, `!=`, ... are not plain
 		lhs = substr(s, 1, eqp - 1)
 		rhs = substr(s, eqp + 1)
+		# This assignment only. Without the cut, a second statement on the same line teaches taint
+		# for the first - the same defect the judging path was fixed for.
+		semi = index(rhs, ";")
+		if (semi > 0) rhs = substr(rhs, 1, semi - 1)
 		# Take the last identifier on the left, which skips any type and `*`/`&` decoration.
 		if (!match(lhs, /[A-Za-z_][A-Za-z0-9_]*[ \t]*$/)) return
 		lhs = substr(lhs, RSTART, RLENGTH)
 		sub(/[ \t]+$/, "", lhs)
 		if (lhs == "") return
-		if (reads_clock(rhs) || rhs_is_tainted(rhs)) tainted[lhs] = 1
+		if (is_safe_arm(rhs)) delete tainted[lhs]	# holds an already-dodged value
+		else if (reads_clock(rhs) || rhs_is_tainted(rhs)) tainted[lhs] = 1
 		else delete tainted[lhs]	# reused for something else - stop trusting the name
 	}
 
@@ -219,6 +267,15 @@ for target in "$@"; do
 
 	{
 		code = strip_noncode($0)
+
+		# A class or struct header whose body opens on this line or the next. Anchored at the start
+		# of the line, because the keyword appears mid-line in shapes that are not class bodies at
+		# all: `template <class T>` on a function, and an elaborated type in a parameter list such as
+		# `void g(struct Bar *b)`. Both used to mark the following FUNCTION body as class scope, which
+		# then reported every typed local in it. Not a forward declaration either, which ends in a
+		# semicolon with no brace.
+		if (code ~ /^[ \t]*(class|struct)[ \t]+[A-Za-z_][A-Za-z0-9_]*/ && code !~ /;[ \t]*$/)
+			pending_class = 1
 
 		# A closing brace in column 1 is the end of a function as this tree formats code, and a
 		# local called `now` there has nothing to do with the one in the next function. clang-format
@@ -277,7 +334,7 @@ for target in "$@"; do
 				# variable inherits whatever that one did, and anything already routed through
 				# the helpers is the fix rather than the defect. Matching `millis` loosely
 				# covers millis(), Time::getMillis() and any wrapper ending in millis.
-				if (rhs ~ /skipZero/ || rhs ~ /timerEndsAtMillis/)
+				if (is_safe_arm(rhs))
 					continue	# already routed through the helpers
 				if (!reads_clock(rhs) && !rhs_is_tainted(rhs))
 					continue	# not a clock read, directly or via a local holding one
@@ -303,6 +360,10 @@ for target in "$@"; do
 			stmt = ""
 			nhits = 0
 		}
+
+		# Last, so every brace on this line counts toward the scope of the NEXT line: a declaration
+		# sits at the depth its own line opened with.
+		update_scope(code)
 	}
 	' "$target"
 done

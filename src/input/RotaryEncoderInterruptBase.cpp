@@ -49,7 +49,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
     InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     e.source = this->_originName;
-    unsigned long now = millis();
+    unsigned long now = Time::stampMillis();
 
     // Handle press long/short detection
     if (this->action == ROTARY_ACTION_PRESSED) {
@@ -103,7 +103,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
             } else if (!pressAndTurnEnabled() && duration >= LONG_PRESS_DURATION &&
                        this->_eventPressedLong != INPUT_BROKER_NONE && lastPressLongEventTime == 0) {
                 // fire single-shot long press; press-and-turn encoders defer this to release
-                lastPressLongEventTime = Time::skipZero(now);
+                lastPressLongEventTime = now;
                 LOG_DEBUG("Rotary event Press long");
                 e.inputEvent = this->_eventPressedLong;
             }

@@ -60,11 +60,11 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
 
-    uint32_t now = millis();
+    uint32_t now = Time::stampMillis();
     uint32_t sinceLast = now - lastDrawMsec;
 
     if (adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0))
-        lastDrawMsec = Time::skipZero(now);
+        lastDrawMsec = now;
     else
         return false;
 

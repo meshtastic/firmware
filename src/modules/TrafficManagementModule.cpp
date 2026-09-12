@@ -1524,7 +1524,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // request declined above never spends the budget). false forwards the request instead of consuming
     // it. Rationale in https://meshtastic.org/docs/development/reference/traffic-management-internals "Throttling direct
     // responses".
-    if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
+    if (!directResponseAllowed(getFrom(p), p->to, Time::skipZero(clockMs()))) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request", getFrom(p));
         return false;
     }
@@ -1628,7 +1628,7 @@ bool TrafficManagementModule::directResponseAllowed(NodeNum requester, NodeNum t
     reqSlot->lastReplyMs = nowMs;
     tgtSlot->key = target;
     tgtSlot->lastReplyMs = nowMs;
-    lastDirectResponseMs = Time::skipZero(nowMs);
+    lastDirectResponseMs = Time::skipZero(nowMs); // a parameter, so guard at the store as well
     return true;
 }
 

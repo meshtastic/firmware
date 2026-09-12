@@ -58,6 +58,21 @@ inline uint32_t timerEndsAtMillis(uint32_t delayMs)
     return skipZero(getMillis() + delayMs);
 }
 
+/// The clock read for a site that works with 0-means-unset stamps: getMillis() with the one 0 tick
+/// called 1.
+///
+/// Use this at the READ, not skipZero() at the store, whenever the same value is both stored as a
+/// stamp and used to measure elapsed time against stamps. Applying skipZero() only at the store
+/// splits the two sides apart for one tick per wrap: the stamp becomes 1 while a raw `now` is still
+/// 0, so `now - stamp` is UINT32_MAX - the stamp reads as ~49.7 days old instead of brand new, and
+/// an elapsed-since guard (a cooldown, a debounce, a long-press threshold) fires when it should not.
+/// Reading through this keeps both sides on one value, so that tick is simply called tick 1 and the
+/// elapsed time comes out 0. The cost is the same 1 ms skew skipZero() already documents.
+inline uint32_t stampMillis()
+{
+    return skipZero(getMillis());
+}
+
 // skipZero() is the whole 0-means-unset contract in one expression, and it is constexpr, so pin it
 // here rather than only in test_uptime_clock: a build that breaks it stops at this header instead of
 // shipping a deadline that reads as never-set. The two obvious "simplifications" are what these

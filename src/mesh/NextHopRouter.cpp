@@ -201,7 +201,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
                                  p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
-                    noteRouteLearned(p->from, p->relay_node, Time::getMillis()); // M3: anchor freshness (hot or overflow route)
+                    noteRouteLearned(p->from, p->relay_node, Time::stampMillis()); // M3: anchor freshness (hot or overflow route)
 #if HAS_TRAFFIC_MANAGEMENT
                     // Mirror the confirmed (and now unique-resolved) hop into the TMM overflow cache so it
                     // survives even when the source isn't (or is no longer) in the hot NodeDB.
@@ -313,7 +313,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         // a health record that still matches the stored byte; a next_hop set by another path (e.g.
         // TraceRouteModule) with no matching record is left authoritative.
         const RouteHealth *h = findRouteHealth(to);
-        if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, Time::getMillis())) {
+        if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, Time::stampMillis())) {
             LOG_INFO("Next hop 0x%x for 0x%08x stale (age/fails); flood and clear", node->next_hop, to);
             node->next_hop = NO_NEXT_HOP_PREFERENCE; // clear persisted route
             clearRouteHealth(to);                    // clear RAM health
@@ -345,7 +345,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         uint8_t hint = trafficManagementModule->getNextHopHint(to);
         if (hint && hint != relay_node) {
             const RouteHealth *h = findRouteHealth(to);
-            if (h && h->lastNextHop == hint && isRouteStale(*h, Time::getMillis())) {
+            if (h && h->lastNextHop == hint && isRouteStale(*h, Time::stampMillis())) {
                 LOG_INFO("TMM next hop 0x%x for 0x%08x stale (age/fails); flood and clear", hint, to);
                 trafficManagementModule->clearNextHop(to); // clear overflow route (setNextHop won't store 0)
                 clearRouteHealth(to);                      // clear RAM health
@@ -444,7 +444,7 @@ int32_t NextHopRouter::doRetransmissions()
 {
     // Same clock Throttle reads, so setNextTx() deadlines and this test can't diverge under an
     // injected test clock.
-    uint32_t now = Time::getMillis();
+    uint32_t now = Time::stampMillis();
     int32_t d = INT32_MAX;
 
     // FIXME, we should use a better datastructure rather than walking through this map.
@@ -617,6 +617,11 @@ void NextHopRouter::noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now
         h->lastNextHop = nextHop;
         h->consecutiveFailures = 0;
     }
+    // skipZero here and stampMillis() at the callers are both needed, and they compose without
+    // shifting twice. `now` is a parameter, so this function cannot assume a caller dodged the wrap
+    // tick - 0 is the empty-slot marker getOrAllocRouteHealth() evicts on, so the invariant belongs
+    // at the store. The caller-side dodge is what additionally keeps this stamp and the
+    // `now - learnedAtMsec` comparison in isRouteStale() on one value.
     h->learnedAtMsec = Time::skipZero(now);
 }
 
@@ -626,7 +631,7 @@ void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
     if (!h)
         return; // only routes we actually learned have health to refresh
     h->consecutiveFailures = 0;
-    h->learnedAtMsec = Time::skipZero(now);
+    h->learnedAtMsec = Time::skipZero(now); // a parameter, so guard here - see noteRouteLearned()
 }
 
 void NextHopRouter::noteRouteFailure(NodeNum dest)

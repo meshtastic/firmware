@@ -51,7 +51,7 @@ int32_t UpDownInterruptBase::runOnce()
 {
     InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
-    unsigned long now = millis();
+    unsigned long now = Time::stampMillis();
 
     // Read all button states once at the beginning
     bool pressButtonPressed = !digitalRead(_pinPress);
@@ -61,13 +61,13 @@ int32_t UpDownInterruptBase::runOnce()
     // Handle initial button press detection - only if not already detected
     if (this->action == UPDOWN_ACTION_PRESSED && pressButtonPressed && !pressDetected) {
         pressDetected = true;
-        pressStartTime = Time::skipZero(now);
+        pressStartTime = now;
     } else if (this->action == UPDOWN_ACTION_UP && upButtonPressed && !upDetected) {
         upDetected = true;
-        upStartTime = Time::skipZero(now);
+        upStartTime = now;
     } else if (this->action == UPDOWN_ACTION_DOWN && downButtonPressed && !downDetected) {
         downDetected = true;
-        downStartTime = Time::skipZero(now);
+        downStartTime = now;
     }
 
     // Handle long press detection for press button
@@ -87,7 +87,7 @@ int32_t UpDownInterruptBase::runOnce()
         } else if (pressDuration >= LONG_PRESS_DURATION && lastPressLongEventTime == 0) {
             // First long press event only - avoid repeated events causing lag
             e.inputEvent = this->_eventPressedLong;
-            lastPressLongEventTime = Time::skipZero(now);
+            lastPressLongEventTime = now;
         }
     }
 
@@ -109,7 +109,7 @@ int32_t UpDownInterruptBase::runOnce()
             // Auto-repeat long press events
             if (lastUpLongEventTime == 0 || (now - lastUpLongEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
                 e.inputEvent = this->_eventUpLong;
-                lastUpLongEventTime = Time::skipZero(now);
+                lastUpLongEventTime = now;
             }
         }
     }
@@ -132,7 +132,7 @@ int32_t UpDownInterruptBase::runOnce()
             // Auto-repeat long press events
             if (lastDownLongEventTime == 0 || (now - lastDownLongEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
                 e.inputEvent = this->_eventDownLong;
-                lastDownLongEventTime = Time::skipZero(now);
+                lastDownLongEventTime = now;
             }
         }
     }

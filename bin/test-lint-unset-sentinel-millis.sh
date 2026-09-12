@@ -41,6 +41,27 @@ run_case() {
 	fi
 }
 
+# run_case_h <name> <expected lines> <source> - same, but the fixture is a HEADER, so class-scope
+# cases can be pinned. A typed declaration means opposite things in a class body and a function body.
+run_case_h() {
+	local name="$1" expect="$2" body="$3"
+	local dir="$WORK/case_h"
+	rm -rf "$dir"
+	mkdir -p "$dir/src"
+	printf '%s\n' "$body" >"$dir/src/fixture.h"
+
+	local got want
+	got=$(cd "$dir" && "$LINT" src/fixture.h | awk -F: '{print $2}' | paste -sd, -)
+	want=$(printf '%s' "$expect" | paste -sd, -)
+
+	if [[ $got == "$want" ]]; then
+		echo "PASS  $name"
+	else
+		echo "FAIL  $name: expected lines [$want], got [$got]"
+		FAILURES=$((FAILURES + 1))
+	fi
+}
+
 # --- must be reported ---------------------------------------------------------
 
 run_case "bare millis() sum" "2" 'void f() {
@@ -313,6 +334,86 @@ run_case "two helper writes on one line are both quiet" "" 'void f() {
 run_case "multi-line statement still sees its whole right-hand side" "2" 'void f() {
     ntp_renew =
         millis() + 43200 * 1000;
+}'
+
+# --- stampMillis() is the read-side dodge, not a raw clock -------------------
+#
+# Its name ends in millis, so the clock-read test matches it. It must still count as safe, or every
+# site that normalises at the read and then stores the local gets flagged.
+
+run_case "local read through stampMillis is not tainted" "" 'void f() {
+    uint32_t now = Time::stampMillis();
+    lastSort = now;
+    rebootAtMsec = now + 5000;
+}'
+
+run_case "stampMillis directly in the write is safe" "" 'void f() {
+    lastSort = Time::stampMillis();
+}'
+
+run_case "a raw read after a safe one re-taints the local" "5" 'void f() {
+    uint32_t now = Time::stampMillis();
+    lastSort = now;
+    now = millis();
+    rebootAtMsec = now;
+}'
+
+# --- class scope versus function scope ---------------------------------------
+#
+# A typed declaration is a shadowing local inside a function, but AT CLASS SCOPE it is the field
+# itself, with an initializer that can read the clock - src/modules/SerialModule.h does that today.
+# Excusing the second as a local silently skipped a real arm site.
+
+run_case_h "class member initialised from the clock is reported" "2" 'class Foo {
+    uint32_t lastSort = millis();
+};'
+
+run_case_h "local inside an inline method is still excused" "6" 'class Foo {
+    void tick()
+    {
+        uint32_t lastSort = millis();
+    }
+    uint32_t lastDrawMsec = millis();
+};'
+
+run_case_h "member already routed through the helpers is quiet" "" 'class Foo {
+    uint32_t lastSort = Time::stampMillis();
+};'
+
+run_case_h "forward declaration does not open a class body" "3" 'class Foo;
+void f() {
+    lastSort = millis();
+}'
+
+# --- class scope must not swallow ordinary function bodies --------------------
+#
+# The keyword appears mid-line in shapes that are not class bodies, and a body opened on the same
+# line puts the statement inside a function. All three reported every typed local in the body.
+
+run_case "template <class T> on a function is not a class body" "" 'template <class T> void f(T x) {
+    uint32_t lastSort = millis();
+}'
+
+run_case "struct in a parameter list is not a class body" "" 'void g(struct Bar *b) {
+    uint32_t lastSort = millis();
+}'
+
+run_case_h "one-line inline method is a function body" "" 'class Foo {
+    void tick() { uint32_t lastSort = millis(); }
+};'
+
+run_case_h "class with a multi-line method: member yes, local no" "6" 'class Foo {
+    void tick()
+    {
+        uint32_t lastSort = millis();
+    }
+    uint32_t lastDrawMsec = millis();
+};'
+
+# note_taint gets the same per-write cut the judging path has.
+run_case "taint is not learned from a neighbour on the same line" "" 'void f() {
+    uint32_t a = 0; uint32_t now = packet->rx_time;
+    rebootAtMsec = now;
 }'
 
 # --- scope -------------------------------------------------------------------

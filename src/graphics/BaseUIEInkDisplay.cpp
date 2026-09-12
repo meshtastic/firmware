@@ -74,7 +74,7 @@ void BaseUIEInkDisplay::display()
 // Keyframe path. Returns true if a frame was pushed (sets lastDrawMsec).
 bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
 {
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     if (lastDrawMsec != 0 && (now - lastDrawMsec) < msecLimit)
         return false;
 
@@ -87,7 +87,7 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
 
     const bool pushed = commit(type, blocking);
     if (pushed)
-        lastDrawMsec = Time::skipZero(now);
+        lastDrawMsec = now;
 
     // Reset flags for next frame
     frameFlags = BACKGROUND;
