@@ -523,6 +523,28 @@ void test_explicitPkiPositionStillPublishesWithEventPolicy(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/PKI/!12345678", pubsub->published_.front().first.c_str());
 }
 
+// A PKI packet skips the per-channel uplink check, so the "does any channel want uplink" scan is the
+// only gate it passes. A disabled slot's stale uplink_enabled must not be what opens it.
+void test_pkiNotUplinkedWhenOnlyDisabledChannelHasUplink(void)
+{
+    clearPublicationState();
+    channelFile.channels[0].settings.uplink_enabled = false;
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "ghost", .uplink_enabled = true},
+        .role = meshtastic_Channel_Role_DISABLED,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+    meshtastic_MeshPacket encryptedPki = encrypted;
+    encryptedPki.pki_encrypted = true;
+
+    mqtt->onSend(encryptedPki, decoded, 0);
+
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+}
+
 // Verify that the decoded MeshPacket is proxied through the MeshService when encryption_enabled = false.
 void test_proxyToMeshServiceDecoded(void)
 {
@@ -743,6 +765,65 @@ void test_receiveWithoutChannelDownlink(void)
     unitTest->publish(&decoded);
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A disabled channel keeps its name and downlink_enabled: ensureLicensedOperation() leaves an admin
+// channel in exactly that shape. It must not answer for a channel the user turned off.
+void test_receiveIgnoresDisabledChannelDownlink(void)
+{
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "ghost", .downlink_enabled = true},
+        .role = meshtastic_Channel_Role_DISABLED,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+
+    unitTest->publish(&decoded, "!87654321", "ghost");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// Nor may it be the thing that unlocks the PKI topic.
+void test_receiveIgnoresPkiWhenOnlyDisabledChannelHasDownlink(void)
+{
+    channelFile.channels[0].settings.downlink_enabled = false;
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "ghost", .downlink_enabled = true},
+        .role = meshtastic_Channel_Role_DISABLED,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+    meshtastic_MeshPacket e = encrypted;
+    e.to = myNodeInfo.my_node_num;
+
+    unitTest->publish(&e, "!87654321", "PKI");
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// Two active slots can legitimately share a global id, since every blank name resolves to the preset
+// name. That must still deliver, resolved to the first match, not be rejected as ambiguous.
+void test_receiveAcceptsDownlinkWhenTwoChannelsShareAGlobalId(void)
+{
+    config.lora.use_preset = true; // blank names resolve to "LongFast"
+    channelFile.channels[0].settings.name[0] = '\0';
+    channelFile.channels[1] = meshtastic_Channel{
+        .index = 1,
+        .has_settings = true,
+        .settings = {.name = "", .downlink_enabled = true},
+        .role = meshtastic_Channel_Role_SECONDARY,
+    };
+    channelFile.channels_count = 2;
+    channels.onConfigChanged();
+
+    unitTest->publish(&decoded, "!87654321", "LongFast");
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_EQUAL(0, mockRouter->packets_.front().channel);
 }
 
 // Test receiving an encrypted MeshPacket on the PKI topic.
@@ -1492,6 +1573,7 @@ void setup()
     RUN_TEST(test_eventPositionPublicationFollowsCompileTimePolicy);
     RUN_TEST(test_privatePositionStillPublishesWithEventPolicy);
     RUN_TEST(test_explicitPkiPositionStillPublishesWithEventPolicy);
+    RUN_TEST(test_pkiNotUplinkedWhenOnlyDisabledChannelHasUplink);
     RUN_TEST(test_proxyToMeshServiceDecoded);
     RUN_TEST(test_proxyToMeshServiceEncrypted);
     RUN_TEST(test_dontMqttMeOnPublicServer);
@@ -1507,6 +1589,9 @@ void setup()
     RUN_TEST(test_receiveTextVariantFromProxyIsNotReadAsBytes);
     RUN_TEST(test_receiveNoVariantFromProxyIsIgnored);
     RUN_TEST(test_receiveWithoutChannelDownlink);
+    RUN_TEST(test_receiveIgnoresDisabledChannelDownlink);
+    RUN_TEST(test_receiveIgnoresPkiWhenOnlyDisabledChannelHasDownlink);
+    RUN_TEST(test_receiveAcceptsDownlinkWhenTwoChannelsShareAGlobalId);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
     RUN_TEST(test_receiveAcksOwnSentMessages);
