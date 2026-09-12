@@ -204,6 +204,10 @@ class HopScalingModule : private concurrency::OSThread
     uint16_t getHashSeed() const { return hashSeed; }
     /// Expose hashNodeId for tests that need to compute which node IDs pass a given denominator.
     uint16_t hashNodeIdPublic(uint32_t nodeId) const { return hashNodeId(nodeId); }
+    /// Directly inject the last-rollover per-hop counts, bypassing the histogram/rollHour()
+    /// machinery. For tests (e.g. FloodingRouter's dupe-repeat gate) that only need a specific
+    /// getLastPerHopCounts() result and don't care how it was derived.
+    void setLastPerHopCountsForTest(const PerHopCounts &counts) { lastPerHopCounts = counts; }
 #endif
 
   protected:

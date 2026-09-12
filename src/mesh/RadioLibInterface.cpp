@@ -832,6 +832,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             enableInterrupt(isrTxLevel0);
             lastTxStart = millis();
             printPacket("Started Tx", txp);
+            RadioTxHooks::transmitStarted(this, txp);
 #ifdef LED_LORA
             digitalWrite(LED_LORA, LED_STATE_ON);
 #endif

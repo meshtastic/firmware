@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/RepeatScalingModule.h"
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -137,10 +138,16 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-        // But only LoRa packets should be able to trigger this.
-        if (Router::cancelSending(p->from, p->id))
-            txRelayCanceled++;
+        // RepeatScalingModule owns the "how many duplicates should we tolerate before giving up"
+        // decision (and its bookkeeping/logging) - see RepeatScalingModule::shouldCancelDupe. When
+        // the module is compiled out (MESHTASTIC_EXCLUDE_REPEATSCALING), fall back to the historical
+        // behavior of cancelling on the first duplicate rather than never cancelling at all.
+        if (!repeatScalingModule || repeatScalingModule->shouldCancelDupe(p)) {
+            // cancel rebroadcast of this message *if* there was already one, unless we're a router!
+            // But only LoRa packets should be able to trigger this.
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
+        }
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
