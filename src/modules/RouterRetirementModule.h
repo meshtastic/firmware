@@ -12,22 +12,27 @@
  * slope": ROUTER -> ROUTER_LATE -> CLIENT, one rung per ~3 months of cumulative uptime during
  * which NO admin session (remote or local) occurred. An admin session resets the credit (proof
  * the node is still managed). Opt-in (default OFF). Prevents abandoned routers clogging dense
- * meshes. See .notes/router-retirement-proto.md.
+ * meshes.
  *
- * The policy is split into pure static helpers (no globals) so it is unit-testable with the
- * injected Time:: clock; the OSThread wiring applies it to config/devicestate.
+ * The credit lives in its own small file (/prefs/routerRetirement.bin), written once per hourly
+ * tick and on every reset, so it survives power loss without churning the shared devicestate.
+ *
+ * The policy is split into pure static helpers (no globals) so it is unit-testable; the OSThread
+ * wiring applies it to config and the persisted credit.
  */
 class RouterRetirementModule : public concurrency::OSThread
 {
   public:
     RouterRetirementModule();
 
-    /// Reset the unmanaged-uptime credit - call when any admin session (remote OR local) is
-    /// authenticated. Safe to call frequently; just zeroes the persisted counter.
+    /// Reset the unmanaged-uptime credit - call once an admin session (remote OR local) has passed
+    /// authorization. Cheap when the credit is already zero; otherwise persists the reset at once.
     void noteAdminSession();
 
     /// Default cumulative-uptime threshold per demotion rung: ~3 months.
     static constexpr uint32_t DEFAULT_STEP_THRESHOLD_SECS = 90UL * 24 * 60 * 60; // 7,776,000
+    /// Credit is accrued and checkpointed on this cadence.
+    static constexpr uint32_t ACCRUE_INTERVAL_SECS = 60UL * 60;
 
     // --- Pure policy helpers (no globals; unit-testable) ---
     static bool isRetirableRole(meshtastic_Config_DeviceConfig_Role role);
@@ -42,8 +47,26 @@ class RouterRetirementModule : public concurrency::OSThread
     int32_t runOnce() override;
 
   private:
+    // On-disk record. Fixed layout, seconds only - no clock arithmetic crosses a reboot.
+    struct PersistedCredit {
+        uint32_t magic;
+        uint16_t version;
+        uint16_t reserved;
+        uint32_t creditSecs;
+    };
+    static constexpr uint32_t CREDIT_FILE_MAGIC = 0x52525431; // "RRT1"
+    static constexpr uint16_t CREDIT_FILE_VERSION = 1;
+    static constexpr const char *CREDIT_FILE = "/prefs/routerRetirement.bin";
+
+    void loadFromDisk();
+    bool saveToDisk() const;
     void retireOneRung();
-    static constexpr uint32_t RUN_INTERVAL_MS = 60UL * 60 * 1000; // accrue hourly
+
+    uint32_t creditSecs = 0;
+
+#ifdef PIO_UNIT_TESTING
+    friend class RouterRetirementTestShim;
+#endif
 };
 
 extern RouterRetirementModule *routerRetirementModule;
