@@ -1,4 +1,17 @@
-// Unit tests for directed routine sends: destination selection, reply policy and hop budget.
+// Directed routine sends. Under test: BaseTelemetryModule::routineDest(), wouldReplyToPoll() and
+// pkcOnlyDestsHaveKeys() (src/modules/Telemetry/BaseTelemetryModule.h); hopLimitForDirected(),
+// applyDirectedHopBudget() and wouldEncryptWithPKC() (src/mesh/Router.cpp).
+//
+// Contract: telemetry_flags == 0 and a zero destination are byte-for-byte today's behaviour - answer
+// every poller, broadcast, PKC when the key is held. Every flag bit only restricts. A request carrying
+// our own node number is the phone and is never refused. A from-us unicast on the routine ports takes
+// hops_away + 2 unless something already moved it off the configured default; an MQTT-learned
+// distance is not a LoRa path. Telemetry and paxcounter to a destination with no stored key go
+// channel-PSK unless ALWAYS_PKC, which the admin gate refuses without a key.
+//
+// Regressions guarded: the reply policy locking the phone out of its own node (81b019488); ALWAYS_PKC
+// and UNSET being indistinguishable because the encoder had no fallback; a reply sized by
+// getHopLimitForResponse() being trimmed a second time.
 #include "Default.h"
 #include "TestUtil.h"
 #include "mesh/NodeDB.h"
