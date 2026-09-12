@@ -72,6 +72,25 @@ Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
+/// Hop budget for a self-generated packet addressed to one node. A node last heard hops_away out is
+/// assumed still reachable within hops_away + 2; the margin mirrors getHopLimitForResponse(), because
+/// the return path may differ from the inbound one. Only ever trims: an unknown or untrustworthy
+/// distance falls back to the caller's configured limit rather than extending it.
+static uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
+{
+    if (!nodeDB)
+        return configured;
+    const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(dest);
+    if (!n || !n->has_hops_away)
+        return configured; // no basis to trim
+    // hops_away is stored without a via_mqtt guard (unlike snr and the hop histogram), so a distance
+    // learned over MQTT may not describe a LoRa path at all - do not size a LoRa budget from it.
+    if (nodeInfoLiteIsViaMqtt(n))
+        return configured;
+    const uint32_t want = (uint32_t)n->hops_away + 2;
+    return want < configured ? (uint8_t)want : configured;
+}
+
 static ChannelIndex getEffectiveChannelIndex(const meshtastic_MeshPacket *p)
 {
     ChannelIndex chIndex = p->channel;
@@ -541,6 +560,32 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
     }
 #endif
+
+    // Directed routine sends skip hop scaling above (it is broadcast-only), so they would otherwise
+    // launch at the full configured limit - higher than the broadcast they replace. Size them from the
+    // destination's recorded distance instead. Only trims, never raises, and only touches a packet still
+    // carrying the configured default, so a reply already sized by getHopLimitForResponse() is left alone.
+    if (isFromUs(p) && !isBroadcast(p->to) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        switch (p->decoded.portnum) {
+        case meshtastic_PortNum_POSITION_APP:
+        case meshtastic_PortNum_TELEMETRY_APP:
+        case meshtastic_PortNum_NODEINFO_APP:
+        case meshtastic_PortNum_NEIGHBORINFO_APP:
+        case meshtastic_PortNum_PAXCOUNTER_APP: {
+            const uint8_t configured = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+            if (p->hop_limit != configured)
+                break; // already sized by someone with better information
+            const uint8_t want = hopLimitForDirected(p->to, configured);
+            if (want < p->hop_limit) {
+                LOG_DEBUG("Directed hop_limit %u -> %u for 0x%08x portnum %u", p->hop_limit, want, p->to, p->decoded.portnum);
+                p->hop_limit = want;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
 
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
