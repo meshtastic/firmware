@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "UptimeClock.h"
 #include "configuration.h"
+#include <algorithm>
 #include <assert.h>
 #include <cmath>
 #include <string.h>
@@ -113,20 +114,16 @@ void AirTime::Windows::syncNow(const Held &held)
     // Channel utilization is a rolling 60-second view split into six 10-second buckets.
     // Clear every bucket crossed while asleep so old airtime decays by real elapsed time.
     uint32_t elapsedUtilPeriods = (this->secSinceBoot / 10) - (oldSecSinceBoot / 10);
-    // Fold before the decay, or a cleared bucket leaves the figure light on steady traffic.
-    // Buckets beyond the first are elapsed time with no airtime, so they fold in as idle.
-    if (elapsedUtilPeriods > 0) {
+    // Fold one reading per crossed bucket, each before that bucket is cleared, so one delayed sync
+    // lands where the same number of 10 s syncs would have. Bounded: six clears empty the window.
+    const uint32_t steppedUtilPeriods = std::min<uint32_t>(elapsedUtilPeriods, CHANNEL_UTILIZATION_PERIODS);
+    for (uint32_t i = 1; i <= steppedUtilPeriods; i++) {
         foldChannelUtil(channelUtilizationPercentRaw(held), 1, held);
-        foldChannelUtil(0.0f, elapsedUtilPeriods - 1, held);
+        this->channelUtilization[((oldSecSinceBoot / 10) + i) % CHANNEL_UTILIZATION_PERIODS] = 0;
     }
-
-    if (elapsedUtilPeriods >= CHANNEL_UTILIZATION_PERIODS) {
-        memset(this->channelUtilization, 0, sizeof(this->channelUtilization));
-    } else {
-        for (uint32_t i = 1; i <= elapsedUtilPeriods; i++) {
-            this->channelUtilization[((oldSecSinceBoot / 10) + i) % CHANNEL_UTILIZATION_PERIODS] = 0;
-        }
-    }
+    // Anything past a full window is elapsed time against an already-empty ring, so it folds as
+    // idle in closed form rather than looping over a sleep that may have lasted days.
+    foldChannelUtil(0.0f, elapsedUtilPeriods - steppedUtilPeriods, held);
 
     // TX utilization is a rolling 60-minute view used by duty-cycle checks.
     uint32_t elapsedUtilTXPeriods = (this->secSinceBoot / 60) - (oldSecSinceBoot / 60);

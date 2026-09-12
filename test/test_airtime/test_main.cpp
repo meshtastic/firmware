@@ -193,6 +193,35 @@ void test_smoothed_channel_utilization_converges_on_a_sustained_level()
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(5.0f, raw, smoothed, "sustained load should converge on the raw window");
 }
 
+// The raw window is already required to be independent of how often the scheduler runs (see
+// test_channel_utilization_is_independent_of_scheduler_rate, and the rotation-on-access contract in
+// src/airtime.h). The smoothed figure inherits that requirement: folding one reading for a whole
+// delayed sync instead of one per crossed bucket would make the EMA a function of call frequency,
+// so two identical nodes would disagree purely because one of them slept.
+void test_smoothed_channel_utilization_is_independent_of_sync_rate()
+{
+    Time::setTestMillis(0);
+    AirTime stepped;
+    AirTime delayed;
+
+    // Identical airtime history: one burst, then a full window of silence. Only the rate at which
+    // each instance is asked for the figure differs.
+    stepped.logAirtime(RX_LOG, 30000);
+    delayed.logAirtime(RX_LOG, 30000);
+
+    for (uint32_t bucket = 0; bucket < CHANNEL_UTILIZATION_PERIODS; bucket++) {
+        Time::advanceTestMillis(10u * 1000u);
+        Time::serviceMonotonic();
+        stepped.smoothedChannelUtilizationPercent(); // sampled every bucket
+    }
+
+    const float steppedPct = stepped.smoothedChannelUtilizationPercent();
+    const float delayedPct = delayed.smoothedChannelUtilizationPercent(); // asked once, at the end
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, steppedPct, delayedPct,
+                                     "the smoothed figure must not depend on how often it is sampled");
+}
+
 void test_smoothed_channel_utilization_decays_across_a_long_sleep()
 {
     Time::setTestMillis(0);
@@ -1294,6 +1323,7 @@ void setup()
     RUN_TEST(test_smoothed_channel_utilization_starts_from_the_raw_window);
     RUN_TEST(test_smoothed_channel_utilization_lags_a_sudden_spike);
     RUN_TEST(test_smoothed_channel_utilization_converges_on_a_sustained_level);
+    RUN_TEST(test_smoothed_channel_utilization_is_independent_of_sync_rate);
     RUN_TEST(test_smoothed_channel_utilization_decays_across_a_long_sleep);
     RUN_TEST(test_isTxAllowedChannelUtil_blocks_once_over_threshold);
     RUN_TEST(test_tx_utilization_decays_once_the_60_minute_window_passes);
