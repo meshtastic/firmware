@@ -185,7 +185,6 @@ class HopScalingModule : private concurrency::OSThread
     uint8_t getLastSuggestedHop() const { return lastSuggestedHop; }
     const MeshTrendStats &getLastTrendStats() const { return lastTrendStats; }
     bool isCongested() const { return congested; }
-    float getSmoothedChannelUtilization() const { return utilizationAvg; }
 
     // Compatibility accessors used by tests
     uint8_t getCompactHistogramEntryCount() const { return getEntryCount(); }
