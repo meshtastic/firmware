@@ -3023,10 +3023,11 @@ bool NodeDB::reloadFromDisk()
         migrationSavePending = false;
     }
 
-    // Push the now-real config to the radio.
+    // Push the now-real config to the radio. Committed, not borrowed: the unlock swapped both
+    // config.lora and channelFile from disk, so the snapshot must follow.
     if (rIface) {
         channels.onConfigChanged();
-        rIface->reconfigure();
+        rIface->commitConfig();
     }
     // The unlock replaced the locked-default config with the operator's, so the boot snapshot
     // describes a slot we were never on.

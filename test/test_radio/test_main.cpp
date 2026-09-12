@@ -1,6 +1,8 @@
+#include "Channels.h"
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
 #include "memory/MemAudit.h"
@@ -473,6 +475,208 @@ static void test_beginSending_fittingPayloadIsSentWhole()
     testRadio->clearSendingPacketForTest();
     packetPool.release(p);
 }
+// ---------------------------------------------------------------------------
+// Configured radio identity vs the live radio.
+//
+// config.lora / myRegion / uses_default_frequency_slot describe the hardware as it is running, and
+// a feature that moves the radio temporarily moves them with it. Status gates - may this module
+// transmit, is this the public default mesh - must keep answering for the COMMITTED settings.
+// ---------------------------------------------------------------------------
+
+// A default channel: the well-known one-byte PSK, plus whatever name the caller wants. A blank name
+// resolves to the preset's display name, an explicit one does not - only the latter can disagree.
+static void installDefaultPrimary(const char *name)
+{
+    channelFile.channels_count = 1;
+    meshtastic_Channel &ch = channelFile.channels[0];
+    ch = meshtastic_Channel_init_zero;
+    ch.index = 0;
+    ch.has_settings = true;
+    ch.role = meshtastic_Channel_Role_PRIMARY;
+    if (name)
+        strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
+    ch.settings.psk.size = 1;
+    ch.settings.psk.bytes[0] = 1;
+    channels.onConfigChanged();
+}
+
+static void settleOn(meshtastic_Config_LoRaConfig_ModemPreset preset, bool usesDefaultSlot)
+{
+    config.lora.use_preset = true;
+    config.lora.modem_preset = preset;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.override_frequency = 0;
+    RadioInterface::uses_default_frequency_slot = usesDefaultSlot;
+    RadioInterface::captureConfiguredRadio(); // settings time
+}
+
+/**
+ * An explicitly-named default channel stays the default channel across a live radio move. The stored
+ * name is fixed, so only a comparison against the committed preset can still match it.
+ */
+static void test_isDefaultChannel_explicitlyNamedDefault_survivesALiveRadioMove(void)
+{
+    installDefaultPrimary("LongFast");
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    TEST_ASSERT_TRUE_MESSAGE(channels.isDefaultChannel(channels.getPrimaryIndex()),
+                             "an explicitly-named LongFast with the default PSK is the default channel");
+
+    // The radio moves without a settings commit - what a transient override does.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    TEST_ASSERT_TRUE_MESSAGE(channels.isDefaultChannel(channels.getPrimaryIndex()),
+                             "moving the radio must not change which mesh this node is configured on");
+}
+
+/**
+ * A blank name resolves to a preset display name, so both sides of the comparison move together and
+ * the verdict holds whichever preset isDefaultChannel() reads. Pinned so it stays insensitive.
+ */
+static void test_isDefaultChannel_blankNamedDefault_survivesALiveRadioMove(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    TEST_ASSERT_TRUE(channels.isDefaultChannel(channels.getPrimaryIndex()));
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    TEST_ASSERT_TRUE_MESSAGE(channels.isDefaultChannel(channels.getPrimaryIndex()),
+                             "a blank name resolves against the configured preset on both sides");
+}
+
+/** The snapshot is frozen against a live move, not frozen forever: a commit moves it. */
+static void test_configuredRadio_followsASettingsCommit(void)
+{
+    installDefaultPrimary("LongFast");
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                              RadioInterface::configuredLoraConfig().modem_preset, "a live move must not move the snapshot");
+
+    RadioInterface::captureConfiguredRadio(); // the operator commits it
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+                              RadioInterface::configuredLoraConfig().modem_preset, "a settings commit must move it");
+    TEST_ASSERT_FALSE_MESSAGE(channels.isDefaultChannel(channels.getPrimaryIndex()),
+                              "and once committed, a LongFast-named channel is no longer the default for LongSlow");
+}
+
+/** The slot verdict gets the same treatment: NeighborInfo's gate reads the configured one. */
+static void test_configuredUsesDefaultSlot_ignoresALiveSlotMove(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    TEST_ASSERT_TRUE(RadioInterface::configuredUsesDefaultSlot());
+    TEST_ASSERT_TRUE_MESSAGE(channels.hasDefaultChannel(), "a default channel on the default slot");
+
+    // A radio move republishes the live flag; the configured answer must not follow.
+    RadioInterface::uses_default_frequency_slot = false;
+
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::configuredUsesDefaultSlot(), "the configured slot verdict is settings-time");
+    TEST_ASSERT_TRUE_MESSAGE(channels.hasDefaultChannel(), "so hasDefaultChannel() does not flip mid-move either");
+}
+
+/**
+ * configuredRegion() resolves exactly as initRegion() does for the same committed config. On a
+ * regulatory build initRegion() ignores config.lora.region, so only a shared override agrees here.
+ */
+static void test_configuredRegion_agreesWithInitRegionAtCommitTime(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    initRegion(); // settleOn() only captures, so resolve myRegion here rather than leaning on setUp()
+
+    TEST_ASSERT_NOT_NULL(myRegion);
+    TEST_ASSERT_EQUAL_MESSAGE(myRegion->code, RadioInterface::configuredRegion()->code,
+                              "the configured region must resolve the same way initRegion() does, override included");
+
+    // And again for a second committed region, so the first is not a coincidence of the default.
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    initRegion();
+    RadioInterface::captureConfiguredRadio();
+    TEST_ASSERT_EQUAL_MESSAGE(myRegion->code, RadioInterface::configuredRegion()->code, "still agreeing after a second commit");
+}
+
+/**
+ * A borrowed channel must not change which mesh this node is configured on. MeshBeaconModule
+ * replaces the primary settings in place for a sidecar transmission, so the live PSK and name are
+ * the visited mesh's while that packet is in flight.
+ */
+static void test_isDefaultChannel_ignoresABorrowedPrimaryChannel(void)
+{
+    installDefaultPrimary("LongFast");
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    TEST_ASSERT_TRUE(channels.isDefaultChannel(channels.getPrimaryIndex()));
+
+    // Exactly what switchRadioConfig() does to the primary: no commit, no capture.
+    meshtastic_ChannelSettings &live = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    strncpy(live.name, "Sidecar", sizeof(live.name) - 1);
+    live.psk.size = 16;
+    memset(live.psk.bytes, 0xAB, live.psk.size);
+
+    TEST_ASSERT_TRUE_MESSAGE(channels.isDefaultChannel(channels.getPrimaryIndex()),
+                             "a borrowed channel must not change the configured verdict");
+    TEST_ASSERT_TRUE_MESSAGE(channels.hasDefaultChannel(), "nor the reachable-on-default answer");
+
+    // Frozen against a borrow, not frozen forever.
+    RadioInterface::captureConfiguredRadio();
+    TEST_ASSERT_FALSE_MESSAGE(channels.isDefaultChannel(channels.getPrimaryIndex()), "committing that channel does change it");
+}
+
+/**
+ * commitConfig() captures after the radio accepted the config. applyModemConfig() clamps
+ * config.lora in place, so capturing first would snapshot a value the radio refused.
+ */
+static void test_commitConfig_snapshotsTheAcceptedConfigNotTheRequestedOne(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true);
+
+    // LITE_FAST is not a US preset, so applyModemConfig() rewrites it to the region default.
+    // Three distinct values: LONG_SLOW is the stale snapshot, LITE_FAST the ask, LONG_FAST accepted.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+    initRegion();
+
+    testRadio->commitConfig();
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                              "the requested preset must have been clamped in place");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                              RadioInterface::configuredLoraConfig().modem_preset,
+                              "the snapshot holds the accepted preset, not the requested or the previous one");
+}
+
+/** reconfigure() is the borrowed path: it programs the radio and leaves the snapshot alone. */
+static void test_reconfigure_doesNotMoveTheSnapshot(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    initRegion();
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                              RadioInterface::configuredLoraConfig().modem_preset,
+                              "programming the radio is not a settings commit");
+}
+
+/** The region-keyed gates - audio permission, traffic throttle - must answer for the committed region. */
+static void test_configuredRegion_ignoresALiveRegionMove(void)
+{
+    installDefaultPrimary(nullptr);
+    settleOn(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_US, RadioInterface::configuredRegion()->code,
+                              "the configured region is the one that was committed");
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    initRegion(); // as a radio move does
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_US, RadioInterface::configuredRegion()->code,
+                              "a live region move must not change what this node is configured for");
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -525,6 +729,15 @@ void setup()
     RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
     RUN_TEST(test_beginSending_oversizedPayloadIsClamped);
     RUN_TEST(test_beginSending_fittingPayloadIsSentWhole);
+    RUN_TEST(test_isDefaultChannel_explicitlyNamedDefault_survivesALiveRadioMove);
+    RUN_TEST(test_isDefaultChannel_blankNamedDefault_survivesALiveRadioMove);
+    RUN_TEST(test_configuredRadio_followsASettingsCommit);
+    RUN_TEST(test_configuredUsesDefaultSlot_ignoresALiveSlotMove);
+    RUN_TEST(test_configuredRegion_ignoresALiveRegionMove);
+    RUN_TEST(test_configuredRegion_agreesWithInitRegionAtCommitTime);
+    RUN_TEST(test_isDefaultChannel_ignoresABorrowedPrimaryChannel);
+    RUN_TEST(test_commitConfig_snapshotsTheAcceptedConfigNotTheRequestedOne);
+    RUN_TEST(test_reconfigure_doesNotMoveTheSnapshot);
     exit(UNITY_END());
 }
 

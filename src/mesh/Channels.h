@@ -55,6 +55,14 @@ class Channels
      */
     const char *getName(size_t chIndex);
 
+    // getName() against an explicit preset: a blank name resolves to the preset's display name, so
+    // the answer depends on which preset is asked about. Status checks must ask the configured one.
+    const char *getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
+
+    // Freeze the primary channel's settings. Called by RadioInterface::captureConfiguredRadio(),
+    // so the channel and the LoRa config are snapshotted at the same commit.
+    void captureCommittedPrimary();
+
     /**
      * Return a globally unique channel ID usable with MQTT.
      */
@@ -151,6 +159,18 @@ class Channels
      * PSK)
      */
     CryptoKey getKey(ChannelIndex chIndex);
+
+    // getNameForPreset() against settings the caller already holds.
+    static const char *nameForSettings(const meshtastic_ChannelSettings &settings,
+                                       meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
+
+    // The committed settings for a channel: the snapshot for the primary, live for the rest.
+    const meshtastic_ChannelSettings &committedSettings(ChannelIndex chIndex);
+
+    // The primary as committed. A borrow replaces the live settings in place, so a status check
+    // that read those would answer for the mesh we are visiting.
+    meshtastic_ChannelSettings committedPrimary = meshtastic_ChannelSettings_init_zero;
+    bool committedPrimaryCaptured = false;
 };
 
 /// Singleton channel table
