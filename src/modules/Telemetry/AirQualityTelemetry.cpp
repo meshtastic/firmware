@@ -1,4 +1,5 @@
 #include "DebugConfiguration.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
@@ -244,7 +245,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         } else if (phoneDue && phoneAllowed) {
             // Mesh transmission isn't due yet, but we can still update the phone.
             if (sendTelemetry(NODENUM_BROADCAST, true)) {
-                lastSentToPhone = millis();
+                lastSentToPhone = Time::skipZero(Time::getMillis());
                 // Correct the awake time, trimming to 0
                 const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
                 awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;

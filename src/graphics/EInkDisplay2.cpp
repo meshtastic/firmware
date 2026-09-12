@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "graphics/Backlight.h"
 
@@ -63,7 +64,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     uint32_t sinceLast = now - lastDrawMsec;
 
     if (adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0))
-        lastDrawMsec = now;
+        lastDrawMsec = Time::skipZero(now);
     else
         return false;
 

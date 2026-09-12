@@ -530,7 +530,7 @@ float Screen::estimatedHeading(double lat, double lon)
     b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
-    lastHeadingAtMs = now;
+    lastHeadingAtMs = Time::skipZero(now);
 
     return b;
 }

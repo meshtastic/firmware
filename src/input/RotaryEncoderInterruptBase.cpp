@@ -1,4 +1,5 @@
 #include "RotaryEncoderInterruptBase.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 
 RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(const char *name) : concurrency::OSThread(name)
@@ -55,6 +56,8 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         bool buttonPressed = !digitalRead(_pinPress);
         if (!pressDetected && buttonPressed) {
             pressDetected = true;
+            // unset-sentinel-ok: pressDetected is the armed flag here - unlike the same-named field
+            // in UpDownInterruptBase, no read in this class tests the stamp against 0
             pressStartTime = now;
             pressAndTurnFired = false;
         }
@@ -100,7 +103,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
             } else if (!pressAndTurnEnabled() && duration >= LONG_PRESS_DURATION &&
                        this->_eventPressedLong != INPUT_BROKER_NONE && lastPressLongEventTime == 0) {
                 // fire single-shot long press; press-and-turn encoders defer this to release
-                lastPressLongEventTime = now;
+                lastPressLongEventTime = Time::skipZero(now);
                 LOG_DEBUG("Rotary event Press long");
                 e.inputEvent = this->_eventPressedLong;
             }

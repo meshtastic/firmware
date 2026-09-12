@@ -35,6 +35,7 @@ PositionModule::PositionModule()
     if (transmitHistory) {
         uint32_t restored = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_POSITION_APP);
         if (restored != 0) {
+            // unset-sentinel-ok: the enclosing restored != 0 already rules out the unset value
             lastGpsSend = restored;
             LOG_INFO("Position: restored lastGpsSend from transmit history");
         }
@@ -591,7 +592,7 @@ int32_t PositionModule::runOnce()
 
     if (lastGpsSend == 0 || msSinceLastSend >= effectiveIntervalMs) {
         if (nodeDB->hasValidPosition(node) && sendOurPosition()) {
-            lastGpsSend = now;
+            lastGpsSend = Time::skipZero(now);
 
             meshtastic_PositionLite selfPos;
             if (nodeDB->copyNodePosition(node->num, selfPos)) {
@@ -709,7 +710,7 @@ void PositionModule::trySmartBroadcast(const meshtastic_PositionLite &selfPos, u
     if (!sendOurPosition())
         return;
 
-    lastGpsSend = nowMs;
+    lastGpsSend = Time::skipZero(nowMs);
     if (transmitHistory)
         transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
     LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "

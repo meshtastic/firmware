@@ -1,6 +1,7 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -592,7 +593,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     }
 
     tracingNode = node;
-    lastTraceRouteTime = now;
+    lastTraceRouteTime = Time::skipZero(now);
     runState = TRACEROUTE_STATE_TRACKING;
     resultText = "";
     clearResultLines();
@@ -718,7 +719,7 @@ void TraceRouteModule::launch(NodeNum node)
 
     runState = TRACEROUTE_STATE_TRACKING;
     tracingNode = node;
-    lastTraceRouteTime = now;
+    lastTraceRouteTime = Time::skipZero(now);
     resultText = "";
     clearResultLines();
     bannerText = String("Tracing ") + getNodeName(node);

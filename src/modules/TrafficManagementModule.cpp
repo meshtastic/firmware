@@ -1,4 +1,5 @@
 #include "TrafficManagementModule.h"
+#include "UptimeClock.h"
 
 #if HAS_TRAFFIC_MANAGEMENT
 
@@ -1627,7 +1628,7 @@ bool TrafficManagementModule::directResponseAllowed(NodeNum requester, NodeNum t
     reqSlot->lastReplyMs = nowMs;
     tgtSlot->key = target;
     tgtSlot->lastReplyMs = nowMs;
-    lastDirectResponseMs = nowMs;
+    lastDirectResponseMs = Time::skipZero(nowMs);
     return true;
 }
 

@@ -209,6 +209,82 @@ run_case "opt-out covers both writes on its own line only" "3" 'void f() {
     rebootAtMsec = millis() + 5000;
 }'
 
+# --- clock held in a local ---------------------------------------------------
+#
+# The commonest shape in the tree: one `now = millis()` at the top of a runOnce(), then several
+# writes from it. Without these the rule is blind to every such field and listing one buys nothing.
+
+run_case "stamp copied from a tainted local" "3" 'void f() {
+    unsigned long now = millis();
+    rebootAtMsec = now;
+}'
+
+run_case "deadline built from a tainted local" "3" 'void f() {
+    uint32_t now = Time::getMillis();
+    tx_after = now + delay;
+}'
+
+run_case "several writes from one tainted local" "3
+4
+5" 'void f() {
+    unsigned long now = millis();
+    pulseOffAt = now;
+    rebootAtMsec = now + 5000;
+    lastSort = now;
+}'
+
+run_case "taint carried one hop through another local" "4" 'void f() {
+    uint32_t now = millis();
+    uint32_t alsoNow = now;
+    lastSort = alsoNow;
+}'
+
+run_case "tainted local still fixable via the helpers" "" 'void f() {
+    unsigned long now = millis();
+    rebootAtMsec = Time::skipZero(now);
+}'
+
+run_case "tainted local with an opt-out" "" 'void f() {
+    unsigned long now = millis();
+    // unset-sentinel-ok: heldX carries the armed state
+    nextRepeatX = now + JOY_REPEAT_INTERVAL_MS;
+}'
+
+# --- the taint must NOT spread further than one function, one name -----------
+
+run_case "untainted local is not flagged" "" 'void f() {
+    uint32_t now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+run_case "similarly named local is not tainted" "" 'void f() {
+    uint32_t now = millis();
+    rebootAtMsec = nowMs;
+}'
+
+run_case "taint dropped when the local is reassigned from something else" "" 'void f() {
+    uint32_t now = millis();
+    now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+run_case "taint does not cross a function boundary" "" 'void f() {
+    uint32_t now = millis();
+}
+void g() {
+    rebootAtMsec = now;
+}'
+
+run_case "taint from a comparison is not recorded" "" 'void f() {
+    if (now == millis()) {}
+    rebootAtMsec = now;
+}'
+
+run_case "compound assignment does not taint" "" 'void f() {
+    now += millis();
+    rebootAtMsec = now;
+}'
+
 # --- scope -------------------------------------------------------------------
 
 # test/ builds raw wrap values on purpose, so the rule must not reach into it.

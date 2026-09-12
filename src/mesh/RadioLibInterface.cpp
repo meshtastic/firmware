@@ -488,7 +488,15 @@ void RadioLibInterface::setTransmitDelay()
     if (p->tx_after) {
         unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
         unsigned long now = Time::getMillis();
-        p->tx_after = min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr));
+        // skipZero, not timerEndsAtMillis: the value is a clamp of three candidates rather than a
+        // plain now + delay, and `if (p->tx_after)` above is what reads 0 as "no delay wanted".
+        //
+        // Narrow to uint32_t BEFORE skipZero, not after. add_delay is unsigned long, which is 64-bit
+        // on the portduino host, so the clamp can exceed UINT32_MAX there; skipZero on the wide value
+        // would pass 0x100000000 through as non-zero and the store to this uint32_t field would then
+        // truncate it to the 0 this is meant to avoid.
+        p->tx_after = Time::skipZero(
+            (uint32_t)min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr)));
         notifyLater(p->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
         /* We assume if rx_snr = 0 and rx_rssi = 0, the packet was generated locally.

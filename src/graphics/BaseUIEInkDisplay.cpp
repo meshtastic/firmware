@@ -1,6 +1,7 @@
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 #include "./BaseUIEInkDisplay.h"
+#include "UptimeClock.h"
 
 #include "configuration.h"
 #include "main.h"
@@ -86,7 +87,7 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
 
     const bool pushed = commit(type, blocking);
     if (pushed)
-        lastDrawMsec = now;
+        lastDrawMsec = Time::skipZero(now);
 
     // Reset flags for next frame
     frameFlags = BACKGROUND;

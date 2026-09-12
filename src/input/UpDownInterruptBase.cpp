@@ -1,4 +1,5 @@
 #include "UpDownInterruptBase.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 
 UpDownInterruptBase::UpDownInterruptBase(const char *name) : concurrency::OSThread(name)
@@ -60,13 +61,13 @@ int32_t UpDownInterruptBase::runOnce()
     // Handle initial button press detection - only if not already detected
     if (this->action == UPDOWN_ACTION_PRESSED && pressButtonPressed && !pressDetected) {
         pressDetected = true;
-        pressStartTime = now;
+        pressStartTime = Time::skipZero(now);
     } else if (this->action == UPDOWN_ACTION_UP && upButtonPressed && !upDetected) {
         upDetected = true;
-        upStartTime = now;
+        upStartTime = Time::skipZero(now);
     } else if (this->action == UPDOWN_ACTION_DOWN && downButtonPressed && !downDetected) {
         downDetected = true;
-        downStartTime = now;
+        downStartTime = Time::skipZero(now);
     }
 
     // Handle long press detection for press button
@@ -86,7 +87,7 @@ int32_t UpDownInterruptBase::runOnce()
         } else if (pressDuration >= LONG_PRESS_DURATION && lastPressLongEventTime == 0) {
             // First long press event only - avoid repeated events causing lag
             e.inputEvent = this->_eventPressedLong;
-            lastPressLongEventTime = now;
+            lastPressLongEventTime = Time::skipZero(now);
         }
     }
 
@@ -108,7 +109,7 @@ int32_t UpDownInterruptBase::runOnce()
             // Auto-repeat long press events
             if (lastUpLongEventTime == 0 || (now - lastUpLongEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
                 e.inputEvent = this->_eventUpLong;
-                lastUpLongEventTime = now;
+                lastUpLongEventTime = Time::skipZero(now);
             }
         }
     }
@@ -131,7 +132,7 @@ int32_t UpDownInterruptBase::runOnce()
             // Auto-repeat long press events
             if (lastDownLongEventTime == 0 || (now - lastDownLongEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
                 e.inputEvent = this->_eventDownLong;
-                lastDownLongEventTime = now;
+                lastDownLongEventTime = Time::skipZero(now);
             }
         }
     }

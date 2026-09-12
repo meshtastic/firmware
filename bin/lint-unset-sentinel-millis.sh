@@ -85,7 +85,7 @@
 set -uo pipefail
 
 # Millisecond fields this rule watches. See the notes above before editing.
-SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort|lastTxStart|lastHeartbeat|lastAveraged|lastSampleMs|lastIaqMs|last_format_ms|nextRepeatX|nextRepeatY|_cached_next_run'
+SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort|lastTxStart|lastHeartbeat|lastAveraged|lastSampleMs|lastIaqMs|last_format_ms|nextRepeatX|nextRepeatY|_cached_next_run|connect_time_ms|directionStartTime|downStartTime|fileage|keyDownStart|lastAuthFailure|lastContactMsec|lastDirectResponseMs|lastDiskSave|lastDownLongEventTime|lastDrawMsec|lastGpsSend|lastHeadingAtMs|lastHeapLogTime|lastHeapWarning|lastLfsFormatMs|lastMillis|lastPressLongEventTime|lastRemoteSessionMs|lastSentStatsToPhone|lastSentToPhone|lastSetFromPhoneNtpOrGps|lastTraceRouteTime|lastUpLongEventTime|lastUpdateMs|last_probe|last_report_to_map|lastrun_ntp|navBarLastShown|pressStartTime|startSendConditions|suppressFromMs|touchResumeAtMs|upStartTime'
 
 for target in "$@"; do
 	[[ -f $target ]] || continue
@@ -165,10 +165,65 @@ for target in "$@"; do
 		return (head ~ /(^|[^A-Za-z0-9_])(uint32_t|uint64_t|int32_t|unsigned[ \t]+long|unsigned[ \t]+int|unsigned|long|int|auto|size_t|TickType_t)$/)
 	}
 
+	# Does this statement read a clock directly? Matches millis(), Time::getMillis() and any wrapper
+	# whose name ends in millis, which is how almost every clock read in this tree spells itself, plus
+	# Zephyr k_uptime_get_32() - the nRF54L15 BLE code has no millis() at all and wraps at 32 bits just
+	# the same, so a sentinel armed from it needs the same guard.
+	function reads_clock(s) { return (s ~ /[Mm]illis[ \t]*\(/ || s ~ /k_uptime_get_32[ \t]*\(/) }
+
+	# Remember a local that was just assigned from a clock, so `field = now` a few lines later is
+	# recognised as the raw arm it really is. Without this the rule is blind to the commonest shape
+	# in the tree - `unsigned long now = millis();` at the top of a runOnce(), then half a dozen
+	# `xStartTime = now;` writes below it - and listing those fields would buy no protection at all.
+	#
+	# Deliberately shallow: one hop, within one function, name-based. It records `<ident> = <clock>`
+	# and `<ident> = <already-tainted ident>`, and it FORGETS the name when the same local is
+	# reassigned from anything else, so a variable reused for something unrelated stops matching.
+	# Taint is dropped at every function boundary (see the reset below), because a name that means a
+	# clock in one function usually means nothing in the next.
+	function note_taint(s,   lhs, rhs, eqp, i, n) {
+		eqp = index(s, "=")
+		if (eqp == 0) return
+		if (substr(s, eqp + 1, 1) == "=") return			# `==` is a comparison
+		if (substr(s, eqp - 1, 1) ~ /[-+*\/%&|^!<>=]/) return	# `+=`, `!=`, ... are not plain
+		lhs = substr(s, 1, eqp - 1)
+		rhs = substr(s, eqp + 1)
+		# Take the last identifier on the left, which skips any type and `*`/`&` decoration.
+		if (!match(lhs, /[A-Za-z_][A-Za-z0-9_]*[ \t]*$/)) return
+		lhs = substr(lhs, RSTART, RLENGTH)
+		sub(/[ \t]+$/, "", lhs)
+		if (lhs == "") return
+		if (reads_clock(rhs) || rhs_is_tainted(rhs)) tainted[lhs] = 1
+		else delete tainted[lhs]	# reused for something else - stop trusting the name
+	}
+
+	# Is any tainted local read in this expression, as a whole token? Token-bounded so a tainted
+	# `now` does not match `nowMs` or `snowfall`. Local names are plain identifiers, so using one
+	# as a match() pattern carries no regex metacharacters.
+	function rhs_is_tainted(s,   name, t, p, before, after) {
+		for (name in tainted) {
+			t = s
+			while (match(t, name)) {
+				p = RSTART
+				before = (p == 1) ? " " : substr(t, p - 1, 1)
+				after = substr(t, p + length(name), 1)
+				if (before !~ /[A-Za-z0-9_]/ && after !~ /[A-Za-z0-9_]/) return 1
+				t = substr(t, p + length(name))
+				if (t == "") break
+			}
+		}
+		return 0
+	}
+
 	BEGIN { LINE_CAP = 12 }	# give up accumulating a statement after this many lines
 
 	{
 		code = strip_noncode($0)
+
+		# A closing brace in column 1 is the end of a function as this tree formats code, and a
+		# local called `now` there has nothing to do with the one in the next function. clang-format
+		# is enforced repo-wide, so this is reliable enough for a one-hop heuristic.
+		if ($0 ~ /^\}/) delete tainted
 
 		# An opt-out is sticky until the next statement that actually contains code is judged. That
 		# is what lets it sit on its own line above the write, however many comment lines intervene,
@@ -212,8 +267,10 @@ for target in "$@"; do
 				# variable inherits whatever that one did, and anything already routed through
 				# the helpers is the fix rather than the defect. Matching `millis` loosely
 				# covers millis(), Time::getMillis() and any wrapper ending in millis.
-				if (rhs !~ /[Mm]illis[ \t]*\(/ || rhs ~ /skipZero/ || rhs ~ /timerEndsAtMillis/)
-					continue
+				if (rhs ~ /skipZero/ || rhs ~ /timerEndsAtMillis/)
+					continue	# already routed through the helpers
+				if (!reads_clock(rhs) && !rhs_is_tainted(rhs))
+					continue	# not a clock read, directly or via a local holding one
 				if (pending_ok)
 					continue	# opted out, with a reason, at the write
 				if (pending_bare)
@@ -225,6 +282,11 @@ for target in "$@"; do
 					       hit_name[k] " is 0-means-unset - arm it with Time::timerEndsAtMillis(delay), or Time::skipZero(Time::getMillis()) for a stamp (see src/UptimeClock.h)",
 					       "unset-sentinel-millis"
 			}
+			# Learn from this statement before dropping it: `now = millis()` here is what makes
+			# `field = now` below recognisable. Done after judging so a sentinel write cannot
+			# taint its own name.
+			if (nhits == 0) note_taint(stmt)
+
 			# Comment-only lines carry an opt-out toward the write below them, so they must not
 			# clear it; a statement with real code in it consumes it.
 			if (stmt ~ /[^ \t]/) { pending_ok = 0; pending_bare = 0 }

@@ -1,4 +1,5 @@
 #include "EInkParallelDisplay.h"
+#include "UptimeClock.h"
 
 #ifdef USE_EINK_PARALLELDISPLAY
 
@@ -367,11 +368,11 @@ void EInkParallelDisplay::display(void)
         startAsyncFullUpdate(forceFull ? CLEAR_SLOW : CLEAR_FAST);
     }
 
-    lastUpdateMs = millis();
+    lastUpdateMs = Time::skipZero(Time::getMillis());
     previousImageHash = imageHash;
 
     // Keep same behavior as before
-    lastDrawMsec = millis();
+    lastDrawMsec = Time::skipZero(Time::getMillis());
 }
 
 #ifdef EINK_LIMIT_GHOSTING_PX
