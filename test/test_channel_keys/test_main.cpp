@@ -332,6 +332,26 @@ void test_aead_survives_on_secondary_borrowing_the_primary_key()
     TEST_ASSERT_TRUE(channels.isAEADEnabled(1));
 }
 
+void test_onconfigchanged_resolves_primary_before_hashing()
+{
+    // The primary moves to slot 2 while slot 0 becomes a keyless secondary. onConfigChanged()
+    // has to settle primaryIndex before it fixes anything up: hashing slot 0 against the old
+    // primary (itself) trips getKey()'s recursion guard, which yields a name-only hash and
+    // clears use_aead against key material the channel does in fact inherit.
+    static const uint8_t movedPsk[16] = {0x5A};
+    setSlot(0, meshtastic_Channel_Role_SECONDARY, "second", nullptr, 0);
+    channels.getByIndex(0).settings.use_aead = true;
+    setSlot(2, meshtastic_Channel_Role_PRIMARY, "moved", movedPsk, sizeof(movedPsk));
+
+    channels.onConfigChanged();
+
+    TEST_ASSERT_EQUAL_UINT8(2, channels.getPrimaryIndex());
+    TEST_ASSERT_TRUE(channels.isAEADEnabled(0)); // the key is inherited, not absent
+    TEST_ASSERT_EQUAL_INT16((uint8_t)(refHash("second", movedPsk, sizeof(movedPsk)) ^ 0xAE), channels.getHash(0));
+    TEST_ASSERT_TRUE(channels.setActiveByIndex(0) >= 0);
+    expectCryptoKey(movedPsk, sizeof(movedPsk));
+}
+
 // =====================================================================================
 // Group 4: onConfigChanged() no-primary restore and setChannel() demotion
 // =====================================================================================
@@ -612,6 +632,7 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_aead_flag_changes_the_hash);
     RUN_TEST(test_aead_without_key_material_is_cleared);
     RUN_TEST(test_aead_survives_on_secondary_borrowing_the_primary_key);
+    RUN_TEST(test_onconfigchanged_resolves_primary_before_hashing);
 
     printf("\n=== onConfigChanged restore and setChannel ===\n");
     RUN_TEST(test_onconfigchanged_promotes_demoted_primary_slot_keeping_key);

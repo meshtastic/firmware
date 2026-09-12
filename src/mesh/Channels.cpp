@@ -330,16 +330,26 @@ void Channels::initDefaults()
 
 void Channels::onConfigChanged()
 {
-    // Make sure the phone hasn't mucked anything up
+    // Make sure the phone hasn't mucked anything up.
+    // Find the primary slot before fixing up anything: fixupChannel() hashes the channel and
+    // validates use_aead through getKey(), which follows a keyless secondary to primaryIndex.
+    // Doing both in one pass would resolve the early slots against the previous primary, so a
+    // primary that moved (say 0 -> 2) would leave slot 0 with a stale hash and its use_aead
+    // cleared against a key it does not actually use. Role only changes in fixupChannel() for a
+    // slot with no settings, which it disables, so reading it first is equivalent.
     bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
-        const meshtastic_Channel &ch = fixupChannel(i);
+        const meshtastic_Channel &ch = getByIndex(i);
 
-        if (ch.role == meshtastic_Channel_Role_PRIMARY) {
+        if (ch.has_settings && ch.role == meshtastic_Channel_Role_PRIMARY) {
             primaryIndex = i;
             hasPrimary = true;
         }
     }
+
+    for (int i = 0; i < channelFile.channels_count; i++)
+        fixupChannel(i);
+
     // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
     // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
     if (!hasPrimary) {
@@ -352,7 +362,9 @@ void Channels::onConfigChanged()
             initDefaultChannel(0);
         }
         LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
-        fixupChannel(primaryIndex);
+        // The key every keyless secondary resolves through just changed, so re-run the lot
+        for (int i = 0; i < channelFile.channels_count; i++)
+            fixupChannel(i);
     }
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
