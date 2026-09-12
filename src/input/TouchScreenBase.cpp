@@ -10,14 +10,10 @@
 #define TIME_LONG_PRESS 400
 #endif
 
-// The RAK14014 deferred-tap window sits 50ms inside the long-press threshold. That subtraction is
-// unsigned now that the comparison goes through Throttle, so a variant lowering TIME_LONG_PRESS
-// below 50 would underflow it into a ~49.7 day wait and the deferred TAP would never fire. The only
-// override in the tree today is t5s3_epaper at 500; fail the build rather than the touch panel.
+// The deferred-tap window is `TIME_LONG_PRESS - 50`, unsigned: below 50 it underflows to ~49.7 days.
 static_assert(TIME_LONG_PRESS >= 50, "TIME_LONG_PRESS must be at least 50ms: see the deferred-tap window below");
 
-// How long a held finger stays suppressed after a LONG_PRESS is reported. Was the bare 30000 in
-// `_start = millis() + 30000`.
+// How long a held finger stays suppressed after a LONG_PRESS is reported.
 #define LONG_PRESS_REPEAT_SUPPRESS_MS 30000
 
 // Touch sampling cadence (milliseconds).
@@ -186,16 +182,11 @@ int32_t TouchScreenBase::runOnce()
 #endif
 
     // fire LONG_PRESS event without the need for release
-    // Suppression is armed-ness AND expiry, asked separately. The old single field answered both by
-    // storing `millis() + 30000` into the press-down stamp, so the elapsed-time subtraction here came
-    // out around -30000 and read as "not long enough yet". Where time_t is 64-bit - the portduino
-    // host - that uint32_t sum wraps to a small number while millis() is still just under
-    // 0xFFFFFFFF, the subtraction goes hugely positive instead, and LONG_PRESS then fires on every
-    // 20ms poll for the ~30 s until millis() itself wraps: about 1500 events for one held finger.
+    // Armed and expired are asked separately; folding the deadline into the press stamp repeated
+    // LONG_PRESS every poll across the wrap on 64-bit time_t hosts.
     const bool longPressSuppressed = _longPressSuppressed && !Throttle::deadlinePassed(_longPressSuppressUntilMs);
     if (allowLongPress && touched && !longPressSuppressed && Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS)) {
-        // Same window the bare `+ 30000` gave: a finger held past it re-reports LONG_PRESS once per
-        // window. Preserved rather than quietly narrowed to a once-per-touch latch.
+        // A finger held past the window re-reports LONG_PRESS once per window, as before.
         _longPressSuppressed = true;
         _longPressSuppressUntilMs = nowMs + LONG_PRESS_REPEAT_SUPPRESS_MS;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
