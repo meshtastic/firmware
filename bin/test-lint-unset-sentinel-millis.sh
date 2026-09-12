@@ -41,6 +41,27 @@ run_case() {
 	fi
 }
 
+# run_case_h <name> <expected lines> <source> - same, but the fixture is a HEADER, so class-scope
+# cases can be pinned. A typed declaration means opposite things in a class body and a function body.
+run_case_h() {
+	local name="$1" expect="$2" body="$3"
+	local dir="$WORK/case_h"
+	rm -rf "$dir"
+	mkdir -p "$dir/src"
+	printf '%s\n' "$body" >"$dir/src/fixture.h"
+
+	local got want
+	got=$(cd "$dir" && "$LINT" src/fixture.h | awk -F: '{print $2}' | paste -sd, -)
+	want=$(printf '%s' "$expect" | paste -sd, -)
+
+	if [[ $got == "$want" ]]; then
+		echo "PASS  $name"
+	else
+		echo "FAIL  $name: expected lines [$want], got [$got]"
+		FAILURES=$((FAILURES + 1))
+	fi
+}
+
 # --- must be reported ---------------------------------------------------------
 
 run_case "bare millis() sum" "2" 'void f() {
@@ -209,6 +230,82 @@ run_case "opt-out covers both writes on its own line only" "3" 'void f() {
     rebootAtMsec = millis() + 5000;
 }'
 
+# --- clock held in a local ---------------------------------------------------
+#
+# The commonest shape in the tree: one `now = millis()` at the top of a runOnce(), then several
+# writes from it. Without these the rule is blind to every such field and listing one buys nothing.
+
+run_case "stamp copied from a tainted local" "3" 'void f() {
+    unsigned long now = millis();
+    rebootAtMsec = now;
+}'
+
+run_case "deadline built from a tainted local" "3" 'void f() {
+    uint32_t now = Time::getMillis();
+    tx_after = now + delay;
+}'
+
+run_case "several writes from one tainted local" "3
+4
+5" 'void f() {
+    unsigned long now = millis();
+    pulseOffAt = now;
+    rebootAtMsec = now + 5000;
+    lastSort = now;
+}'
+
+run_case "taint carried one hop through another local" "4" 'void f() {
+    uint32_t now = millis();
+    uint32_t alsoNow = now;
+    lastSort = alsoNow;
+}'
+
+run_case "tainted local still fixable via the helpers" "" 'void f() {
+    unsigned long now = millis();
+    rebootAtMsec = Time::skipZero(now);
+}'
+
+run_case "tainted local with an opt-out" "" 'void f() {
+    unsigned long now = millis();
+    // unset-sentinel-ok: heldX carries the armed state
+    nextRepeatX = now + JOY_REPEAT_INTERVAL_MS;
+}'
+
+# --- the taint must NOT spread further than one function, one name -----------
+
+run_case "untainted local is not flagged" "" 'void f() {
+    uint32_t now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+run_case "similarly named local is not tainted" "" 'void f() {
+    uint32_t now = millis();
+    rebootAtMsec = nowMs;
+}'
+
+run_case "taint dropped when the local is reassigned from something else" "" 'void f() {
+    uint32_t now = millis();
+    now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+run_case "taint does not cross a function boundary" "" 'void f() {
+    uint32_t now = millis();
+}
+void g() {
+    rebootAtMsec = now;
+}'
+
+run_case "taint from a comparison is not recorded" "" 'void f() {
+    if (now == millis()) {}
+    rebootAtMsec = now;
+}'
+
+run_case "compound assignment does not taint" "" 'void f() {
+    now += millis();
+    rebootAtMsec = now;
+}'
+
 # --- one write must not be judged by its neighbour on the same line ----------
 #
 # rhs used to run to the end of the accumulated statement, so a neighbour decided this write.
@@ -237,6 +334,120 @@ run_case "two helper writes on one line are both quiet" "" 'void f() {
 run_case "multi-line statement still sees its whole right-hand side" "2" 'void f() {
     ntp_renew =
         millis() + 43200 * 1000;
+}'
+
+# --- stampMillis() is the read-side dodge, not a raw clock -------------------
+#
+# Its name ends in millis, so the clock-read test matches it. It must still count as safe, or every
+# site that normalises at the read and then stores the local gets flagged.
+
+run_case "storing a dodged local straight through is safe" "" 'void f() {
+    uint32_t now = Time::stampMillis();
+    lastSort = now;
+}'
+
+# A dodged value is safe to store or copy, NOT to do arithmetic on: stampMillis() guarantees only its
+# own result, and 0xFFFFEC78 + 5000 is exactly 0. That sum is what timerEndsAtMillis() is for.
+run_case "arithmetic on a dodged local can wrap back onto 0" "3" 'void f() {
+    uint32_t now = Time::stampMillis();
+    rebootAtMsec = now + 5000;
+}'
+
+run_case "arithmetic on a direct helper call is reported too" "2" 'void f() {
+    rebootAtMsec = Time::stampMillis() + 5000;
+}'
+
+run_case "an operator INSIDE the helper call is fine" "" 'void f() {
+    lastSort = Time::skipZero(Time::getMillis() - msAgo);
+}'
+
+run_case "copying a dodged local one more hop stays safe" "" 'void f() {
+    uint32_t now = Time::stampMillis();
+    uint32_t alsoNow = now;
+    lastSort = alsoNow;
+}'
+
+run_case "stampMillis directly in the write is safe" "" 'void f() {
+    lastSort = Time::stampMillis();
+}'
+
+run_case "a raw read after a safe one re-taints the local" "5" 'void f() {
+    uint32_t now = Time::stampMillis();
+    lastSort = now;
+    now = millis();
+    rebootAtMsec = now;
+}'
+
+# --- class scope versus function scope ---------------------------------------
+#
+# A typed declaration is a shadowing local inside a function, but AT CLASS SCOPE it is the field
+# itself, with an initializer that can read the clock - src/modules/SerialModule.h does that today.
+# Excusing the second as a local silently skipped a real arm site.
+
+run_case_h "class member initialised from the clock is reported" "2" 'class Foo {
+    uint32_t lastSort = millis();
+};'
+
+run_case_h "local inside an inline method is still excused" "6" 'class Foo {
+    void tick()
+    {
+        uint32_t lastSort = millis();
+    }
+    uint32_t lastDrawMsec = millis();
+};'
+
+run_case_h "member already routed through the helpers is quiet" "" 'class Foo {
+    uint32_t lastSort = Time::stampMillis();
+};'
+
+run_case_h "forward declaration does not open a class body" "3" 'class Foo;
+void f() {
+    lastSort = millis();
+}'
+
+# --- class scope must not swallow ordinary function bodies --------------------
+#
+# The keyword appears mid-line in shapes that are not class bodies, and a body opened on the same
+# line puts the statement inside a function. All three reported every typed local in the body.
+
+run_case "template <class T> on a function is not a class body" "" 'template <class T> void f(T x) {
+    uint32_t lastSort = millis();
+}'
+
+run_case "struct in a parameter list is not a class body" "" 'void g(struct Bar *b) {
+    uint32_t lastSort = millis();
+}'
+
+run_case_h "one-line inline method is a function body" "" 'class Foo {
+    void tick() { uint32_t lastSort = millis(); }
+};'
+
+run_case_h "class with a multi-line method: member yes, local no" "6" 'class Foo {
+    void tick()
+    {
+        uint32_t lastSort = millis();
+    }
+    uint32_t lastDrawMsec = millis();
+};'
+
+# note_taint gets the same per-write cut the judging path has.
+run_case "taint is not learned from a neighbour on the same line" "" 'void f() {
+    uint32_t a = 0; uint32_t now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+# --- a class body that opens and closes on one line ---------------------------
+#
+# The trailing semicolon cannot be used to rule out a class header, because the whole body fits on
+# the line; and that line\'s own brace is the CLASS brace, not a function body.
+
+run_case_h "one-line class body reports its member initialiser" "1" 'class Foo { uint32_t lastSort = millis(); };'
+
+run_case_h "one-line class with a one-line method excuses the local" "" 'class Foo { void tick() { uint32_t lastSort = millis(); } };'
+
+run_case_h "forward declaration opens nothing" "3" 'class Foo;
+void f() {
+    lastSort = millis();
 }'
 
 # --- scope -------------------------------------------------------------------

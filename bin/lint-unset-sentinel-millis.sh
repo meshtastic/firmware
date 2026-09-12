@@ -85,7 +85,7 @@
 set -uo pipefail
 
 # Millisecond fields this rule watches. See the notes above before editing.
-SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort|lastTxStart|lastHeartbeat|lastAveraged|lastSampleMs|lastIaqMs|last_format_ms|nextRepeatX|nextRepeatY|_cached_next_run'
+SENTINELS='rebootAtMsec|shutdownAtMsec|enterDfuAtMsec|alertBannerUntil|pulseOffAt|delayedPulseAt|ntp_renew|tx_after|suppressTouchTapUntilMs|fixHoldEnds|lastChipRecoveryMs|activeReceiveStart|rxTimeMsec|lastInterruptTime|lastSentReply|lastSort|lastTxStart|lastHeartbeat|lastAveraged|lastSampleMs|lastIaqMs|last_format_ms|nextRepeatX|nextRepeatY|_cached_next_run|connect_time_ms|directionStartTime|downStartTime|fileage|keyDownStart|lastAuthFailure|lastContactMsec|lastDirectResponseMs|lastDiskSave|lastDownLongEventTime|lastDrawMsec|lastGpsSend|lastHeadingAtMs|lastHeapLogTime|lastHeapWarning|lastLfsFormatMs|lastMillis|lastPressLongEventTime|lastRemoteSessionMs|lastSentStatsToPhone|lastSentToPhone|lastSetFromPhoneNtpOrGps|lastTraceRouteTime|lastUpLongEventTime|lastUpdateMs|last_probe|last_report_to_map|lastrun_ntp|navBarLastShown|pressStartTime|startSendConditions|suppressFromMs|touchResumeAtMs|upStartTime'
 
 for target in "$@"; do
 	[[ -f $target ]] || continue
@@ -155,20 +155,199 @@ for target in "$@"; do
 		return (c ~ /[A-Za-z0-9_]/)
 	}
 
+	# Brace depth, and which depths are a class/struct BODY rather than a function body. Needed
+	# because a typed declaration means opposite things in the two places: inside a function it is a
+	# throwaway local that shadows the field, but at class scope it IS the field, with an initializer
+	# that can read the clock - src/modules/SerialModule.h does exactly that. Treating the second as a
+	# local silently excused a real arm site.
+	function update_scope(s,   i, c) {
+		for (i = 1; i <= length(s); i++) {
+			c = substr(s, i, 1)
+			if (c == "{") {
+				depth++
+				if (pending_class) { class_body[depth] = 1; pending_class = 0 }
+			} else if (c == "}") {
+				delete class_body[depth]
+				if (depth > 0) depth--
+			}
+		}
+	}
+
+	# Is the statement being judged sitting directly in a class body? `opened` is the net brace
+	# count seen earlier in this same statement, which update_scope() has not applied yet: a body
+	# opened on this very line (a one-line inline method) puts the statement inside a function, not
+	# in the class body.
+	function at_class_scope(opened) {
+		# The class body opened on this very statement, so its own brace is the class brace: exactly
+		# one unmatched brace means class scope, two or more means a method body inside it.
+		if (stmt_class_brace) return (opened == 1)
+		return ((depth in class_body) && opened <= 0)
+	}
+
+	# Net unmatched `{` in the first `at` characters of the statement being judged.
+	function braces_before(s, at,   i, c, n) {
+		n = 0
+		for (i = 1; i < at && i <= length(s); i++) {
+			c = substr(s, i, 1)
+			if (c == "{") n++
+			else if (c == "}") n--
+		}
+		return n
+	}
+
 	# A local declaration that happens to reuse a sentinel name shadows the field and carries none
 	# of its contract, so it is not this rule business. Detected by a type-ish token immediately
 	# before the name - `uint32_t tx_after = millis() + d;` declares a local, `tx_after = ...` does
 	# not. Kept narrow: only the spellings this tree actually uses for a millis value.
+	#
+	# Only honoured inside a function body; see update_scope() for why class scope is different.
 	function is_declaration(s, at,   head) {
+		if (at_class_scope(braces_before(s, at))) return 0
 		head = substr(s, 1, at - 1)
 		sub(/[ \t]*(\*|&)?[ \t]*$/, "", head)
 		return (head ~ /(^|[^A-Za-z0-9_])(uint32_t|uint64_t|int32_t|unsigned[ \t]+long|unsigned[ \t]+int|unsigned|long|int|auto|size_t|TickType_t)$/)
+	}
+
+	# Does this statement read a clock directly? Matches millis(), Time::getMillis() and any wrapper
+	# whose name ends in millis, which is how almost every clock read in this tree spells itself, plus
+	# Zephyr k_uptime_get_32() - the nRF54L15 BLE code has no millis() at all and wraps at 32 bits just
+	# the same, so a sentinel armed from it needs the same guard.
+	function reads_clock(s) { return (s ~ /[Mm]illis[ \t]*\(/ || s ~ /k_uptime_get_32[ \t]*\(/) }
+
+	# Already routed through a helper that dodges 0, so it is the fix rather than the defect. Note
+	# stampMillis() belongs here even though its name ends in millis: a local read through it holds a
+	# value that is already non-zero, so a write from that local is safe and must not be flagged.
+	function is_safe_arm(s) { return (s ~ /skipZero/ || s ~ /timerEndsAtMillis/ || s ~ /stampMillis/) }
+
+	# Does the expression apply + or - to an already-dodged value at the OUTERMOST level? A dodged
+	# value is safe to store or copy, but not to do arithmetic on: stampMillis() guarantees only its
+	# own result, and `now + 5000` can carry a non-zero stamp straight back onto 0 - 0xFFFFEC78 + 5000
+	# is exactly 0. That sum is what Time::timerEndsAtMillis() exists to dodge, so it has to be
+	# reported rather than excused.
+	#
+	# Depth-aware on purpose: the operator inside Time::skipZero(getMillis() - msAgo) is at depth 1
+	# and is fine, because the helper wraps the result. So is the `? :` in the ternary arming form,
+	# which has no top-level + or - at all.
+	function toplevel_arith(s,   i, n, c, d, prev) {
+		n = length(s); d = 0; prev = ""
+		for (i = 1; i <= n; i++) {
+			c = substr(s, i, 1)
+			if (c == "(") d++
+			else if (c == ")") d--
+			else if (d == 0 && (c == "+" || c == "-")) {
+				# not a unary sign, and not part of -> or ++/--
+				if (prev != "" && prev != "(" && prev != "," && prev != "=" && prev != "+" &&
+				    prev != "-" && prev != "*" && prev != "/" && prev != "?" && prev != ":" &&
+				    substr(s, i + 1, 1) != ">")
+					return 1
+			}
+			if (c != " " && c != "\t") prev = c
+		}
+		return 0
+	}
+
+	# Remember a local that was just assigned from a clock, so `field = now` a few lines later is
+	# recognised as the raw arm it really is. Without this the rule is blind to the commonest shape
+	# in the tree - `unsigned long now = millis();` at the top of a runOnce(), then half a dozen
+	# `xStartTime = now;` writes below it - and listing those fields would buy no protection at all.
+	#
+	# Deliberately shallow: one hop, within one function, name-based. It records `<ident> = <clock>`
+	# and `<ident> = <already-tainted ident>`, and it FORGETS the name when the same local is
+	# reassigned from anything else, so a variable reused for something unrelated stops matching.
+	# Taint is dropped at every function boundary (see the reset below), because a name that means a
+	# clock in one function usually means nothing in the next.
+	function note_taint(s,   lhs, rhs, eqp, semi) {
+		eqp = index(s, "=")
+		if (eqp == 0) return
+		if (substr(s, eqp + 1, 1) == "=") return			# `==` is a comparison
+		if (substr(s, eqp - 1, 1) ~ /[-+*\/%&|^!<>=]/) return	# `+=`, `!=`, ... are not plain
+		lhs = substr(s, 1, eqp - 1)
+		rhs = substr(s, eqp + 1)
+		# This assignment only. Without the cut, a second statement on the same line teaches taint
+		# for the first - the same defect the judging path was fixed for.
+		semi = index(rhs, ";")
+		if (semi > 0) rhs = substr(rhs, 1, semi - 1)
+		# Take the last identifier on the left, which skips any type and `*`/`&` decoration.
+		if (!match(lhs, /[A-Za-z_][A-Za-z0-9_]*[ \t]*$/)) return
+		lhs = substr(lhs, RSTART, RLENGTH)
+		sub(/[ \t]+$/, "", lhs)
+		if (lhs == "") return
+		if (is_safe_arm(rhs) && !toplevel_arith(rhs)) {
+			delete tainted[lhs]
+			normalized[lhs] = 1	# holds a value that has already dodged 0
+		} else if (reads_clock(rhs) || rhs_is_tainted(rhs)) {
+			tainted[lhs] = 1
+			delete normalized[lhs]
+		} else {
+			delete tainted[lhs]	# reused for something else - stop trusting the name
+			delete normalized[lhs]
+		}
+	}
+
+	# Is any tainted local read in this expression, as a whole token? Token-bounded so a tainted
+	# `now` does not match `nowMs` or `snowfall`. Local names are plain identifiers, so using one
+	# as a match() pattern carries no regex metacharacters.
+	function rhs_is_normalized(s,   name, t, p, before, after) {
+		for (name in normalized) {
+			t = s
+			while (match(t, name)) {
+				p = RSTART
+				before = (p == 1) ? " " : substr(t, p - 1, 1)
+				after = substr(t, p + length(name), 1)
+				if (before !~ /[A-Za-z0-9_]/ && after !~ /[A-Za-z0-9_]/) return 1
+				t = substr(t, p + length(name))
+				if (t == "") break
+			}
+		}
+		return 0
+	}
+
+	function rhs_is_tainted(s,   name, t, p, before, after) {
+		for (name in tainted) {
+			t = s
+			while (match(t, name)) {
+				p = RSTART
+				before = (p == 1) ? " " : substr(t, p - 1, 1)
+				after = substr(t, p + length(name), 1)
+				if (before !~ /[A-Za-z0-9_]/ && after !~ /[A-Za-z0-9_]/) return 1
+				t = substr(t, p + length(name))
+				if (t == "") break
+			}
+		}
+		return 0
 	}
 
 	BEGIN { LINE_CAP = 12 }	# give up accumulating a statement after this many lines
 
 	{
 		code = strip_noncode($0)
+
+		# A class or struct header whose body opens on this line or the next. Anchored at the start
+		# of the line, because the keyword appears mid-line in shapes that are not class bodies at
+		# all: `template <class T>` on a function, and an elaborated type in a parameter list such as
+		# `void g(struct Bar *b)`. Both used to mark the following FUNCTION body as class scope, which
+		# then reported every typed local in it. Not a forward declaration either, which ends in a
+		# semicolon with no brace.
+		stmt_class_brace = 0
+		if (code ~ /^[ \t]*(class|struct)[ \t]+[A-Za-z_][A-Za-z0-9_]*/) {
+			# The body may open on this line or the next. `class Foo;` is a forward declaration and
+			# opens nothing; `class Foo { uint32_t t = millis(); };` opens AND closes here, so the
+			# trailing semicolon cannot be used to rule it out.
+			if (code ~ /\{/) {
+				# Body opens on this line. stmt_class_brace judges THIS statement (a one-liner
+				# whose member sits after the brace); pending_class is still needed so
+				# update_scope() registers the body for the lines that follow.
+				stmt_class_brace = 1
+				pending_class = 1
+			} else if (code !~ /;[ \t]*$/) {
+				pending_class = 1	# body opens on a later line
+			}
+		}
+
+		# A closing brace in column 1 is the end of a function as this tree formats code, and a
+		# local called `now` there has nothing to do with the one in the next function. clang-format
+		# is enforced repo-wide, so this is reliable enough for a one-hop heuristic.
+		if ($0 ~ /^\}/) delete tainted
 
 		# An opt-out is sticky until the next statement that actually contains code is judged. That
 		# is what lets it sit on its own line above the write, however many comment lines intervene,
@@ -222,8 +401,15 @@ for target in "$@"; do
 				# variable inherits whatever that one did, and anything already routed through
 				# the helpers is the fix rather than the defect. Matching `millis` loosely
 				# covers millis(), Time::getMillis() and any wrapper ending in millis.
-				if (rhs !~ /[Mm]illis[ \t]*\(/ || rhs ~ /skipZero/ || rhs ~ /timerEndsAtMillis/)
-					continue
+				# Arithmetic applied on top of an already-dodged value can wrap it back onto 0,
+				# so it is reported even though a helper appears in the expression.
+				if ((is_safe_arm(rhs) || rhs_is_normalized(rhs)) && !toplevel_arith(rhs)) {
+					continue	# stored or copied straight through - safe
+				}
+				if (is_safe_arm(rhs) && !toplevel_arith(rhs))
+					continue	# already routed through the helpers
+				if (!reads_clock(rhs) && !rhs_is_tainted(rhs) && !rhs_is_normalized(rhs))
+					continue	# not a clock read, directly or via a local holding one
 				if (pending_ok)
 					continue	# opted out, with a reason, at the write
 				if (pending_bare)
@@ -235,12 +421,21 @@ for target in "$@"; do
 					       hit_name[k] " is 0-means-unset - arm it with Time::timerEndsAtMillis(delay), or Time::skipZero(Time::getMillis()) for a stamp (see src/UptimeClock.h)",
 					       "unset-sentinel-millis"
 			}
+			# Learn from this statement before dropping it: `now = millis()` here is what makes
+			# `field = now` below recognisable. Done after judging so a sentinel write cannot
+			# taint its own name.
+			if (nhits == 0) note_taint(stmt)
+
 			# Comment-only lines carry an opt-out toward the write below them, so they must not
 			# clear it; a statement with real code in it consumes it.
 			if (stmt ~ /[^ \t]/) { pending_ok = 0; pending_bare = 0 }
 			stmt = ""
 			nhits = 0
 		}
+
+		# Last, so every brace on this line counts toward the scope of the NEXT line: a declaration
+		# sits at the depth its own line opened with.
+		update_scope(code)
 	}
 	' "$target"
 done

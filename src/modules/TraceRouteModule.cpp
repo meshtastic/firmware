@@ -1,6 +1,7 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -534,7 +535,7 @@ const char *TraceRouteModule::getNodeName(NodeNum node)
 bool TraceRouteModule::startTraceRoute(NodeNum node)
 {
     LOG_INFO("TraceRoute startTraceRoute: node=0x%08x", node);
-    unsigned long now = millis();
+    unsigned long now = Time::stampMillis();
 
     if (node == 0 || node == NODENUM_BROADCAST) {
         LOG_ERROR("Invalid trace route node: 0x%08x", node);
@@ -700,7 +701,7 @@ void TraceRouteModule::launch(NodeNum node)
         LOG_INFO("TraceRoute first init");
     }
 
-    unsigned long now = millis();
+    unsigned long now = Time::stampMillis();
     if (initialized && lastTraceRouteTime > 0 && now - lastTraceRouteTime < cooldownMs) {
         unsigned long wait = (cooldownMs - (now - lastTraceRouteTime)) / 1000;
         bannerText = String("Wait for ") + String(wait) + String("s");
@@ -842,7 +843,7 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 #endif // HAS_SCREEN
 int32_t TraceRouteModule::runOnce()
 {
-    unsigned long now = millis();
+    unsigned long now = Time::stampMillis();
 
     if (runState == TRACEROUTE_STATE_IDLE) {
         return INT32_MAX;

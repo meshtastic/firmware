@@ -3,6 +3,7 @@
 #include "CryptoEngine.h"
 #include "HardwareRNG.h"
 #include "MeshService.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
@@ -400,7 +401,7 @@ void KeyVerificationModule::resetToIdle()
     memset(hash1, 0, 32);
     memset(hash2, 0, 32);
     if (sessionFromRemote)
-        lastRemoteSessionMs = millis(); // start the cooldown when the session ends, not when it opened
+        lastRemoteSessionMs = Time::skipZero(Time::getMillis()); // start the cooldown when the session ends, not when it opened
     sessionFromRemote = false;
     currentNonce = 0;
     currentNonceTimestamp = 0;

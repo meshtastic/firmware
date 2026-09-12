@@ -21,6 +21,7 @@
 #include "BluetoothCommon.h"
 #include "BluetoothStatus.h"
 #include "PowerFSM.h"
+#include "UptimeClock.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
@@ -387,7 +388,7 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
     k_mutex_unlock(&ble_mutex);
 
     memset(lastToRadio, 0, sizeof(lastToRadio));
-    connect_time_ms = k_uptime_get_32();
+    connect_time_ms = Time::skipZero(k_uptime_get_32());
     last_att_time_ms = connect_time_ms;
 
     char addr[BT_ADDR_LE_STR_LEN];

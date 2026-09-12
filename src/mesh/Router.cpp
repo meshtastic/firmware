@@ -1129,7 +1129,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                         JSONFile.close();
                     }
                     JSONFile.open(portduino_config.JSONFilename + "_" + datetime, std::ios::out | std::ios::app);
-                    fileage = millis();
+                    fileage = Time::skipZero(Time::getMillis());
                 }
             }
             if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {

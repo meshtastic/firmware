@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #ifdef T5_S3_EPAPER_PRO
@@ -555,7 +556,7 @@ struct TouchLightSleepEndObserver {
         }
 
         touchStateEpoch++;
-        touchResumeAtMs = millis();
+        touchResumeAtMs = Time::skipZero(Time::getMillis());
         touchIndicatorRefreshPending = !isTouchInputEnabled();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
         // Clear sleep-time touch overlay after wake.
@@ -602,7 +603,7 @@ bool readTouch(int16_t *x, int16_t *y)
         LOG_DEBUG("touchscreen1: wakeup() on deferred resume");
         touch.wakeup();
         touchNeedsWake = false;
-        suppressFromMs = millis();
+        suppressFromMs = Time::skipZero(Time::getMillis());
         return false;
     }
 

@@ -493,7 +493,7 @@ float Screen::estimatedHeading(double lat, double lon)
     static double oldLat, oldLon;
     static float b = -1.0f;
     static uint32_t lastHeadingAtMs = 0;
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     const uint32_t gpsUpdateIntervalSecs =
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
     uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;

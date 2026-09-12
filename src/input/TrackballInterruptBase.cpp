@@ -203,20 +203,20 @@ int32_t TrackballInterruptBase::runOnce()
     if (e.inputEvent == INPUT_BROKER_NONE) {
         if (this->action == TB_ACTION_UP && !digitalRead(_pinUp) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventUp;
             // send event first,will automatically trigger every 50ms * 3 after 500ms
         } else if (this->action == TB_ACTION_DOWN && !digitalRead(_pinDown) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventDown;
         } else if (this->action == TB_ACTION_LEFT && !digitalRead(_pinLeft) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventLeft;
         } else if (this->action == TB_ACTION_RIGHT && !digitalRead(_pinRight) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventRight;
         }
     }
