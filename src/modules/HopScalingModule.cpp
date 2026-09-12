@@ -422,17 +422,15 @@ float HopScalingModule::channelUtil()
 #ifdef PIO_UNIT_TESTING
     return s_testChannelUtil;
 #else
-    return airTime ? airTime->channelUtilizationPercent() : 0.0f;
+    return airTime ? airTime->smoothedChannelUtilizationPercent() : 0.0f;
 #endif
 }
 
 void HopScalingModule::updateCongestion()
 {
-    const float util = channelUtil();
-    // channelUtilizationPercent() covers only the 60 s before each 5-minute tick, so smooth it:
-    // one quiet or one busy minute must not move the gate on its own.
-    utilizationAvg = hasUtilizationSample ? utilizationAvg + (util - utilizationAvg) * CONGESTION_EMA_ALPHA : util;
-    hasUtilizationSample = true;
+    // AirTime folds its own EMA once per 10 s bucket, so this reads a figure that already covers
+    // the whole interval between ticks rather than only the 60 s before each one.
+    utilizationAvg = channelUtil();
 
     // Separate engage/release thresholds, each confirmed over several ticks, so a mesh sitting
     // near a threshold does not flap the hop limit between rolls.
