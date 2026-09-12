@@ -12,7 +12,8 @@
  * from the stored epoch time, which plugs directly into existing throttle logic.
  *
  * On every broadcast transmit, modules call setLastSentToMesh() which updates the
- * in-memory cache and flushes to disk.
+ * in-memory cache and marks the history dirty; the main loop persists it via
+ * flushIfDue() so the flash write never runs inside packet processing.
  *
  * Keys are meshtastic_PortNum values (one entry per portnum).
  */
@@ -31,9 +32,17 @@ class TransmitHistory
 
     /**
      * Record that a broadcast was sent for the given key right now.
-     * Stores epoch seconds and flushes to disk.
+     * Stores epoch seconds in memory and marks the history dirty; the actual
+     * flash write happens later via flushIfDue() (or saveToDisk() directly).
      */
     void setLastSentToMesh(uint16_t key);
+
+    /**
+     * Persist dirty entries if a save is due: immediately for the first change
+     * after boot, then at most once per SAVE_INTERVAL_MS. Cheap no-op when
+     * nothing is dirty. Called from the main loop, outside packet processing.
+     */
+    void flushIfDue();
 
 #ifdef PIO_UNIT_TESTING
     /**
