@@ -88,6 +88,25 @@ uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
     return want < configured ? (uint8_t)want : configured;
 }
 
+// Hop scaling is broadcast-only. Any from-us unicast on these ports (phone-originated too) is sized
+// from the destination distance, unless something already moved it off the configured default.
+void applyDirectedHopBudget(meshtastic_MeshPacket *p)
+{
+    if (!isFromUs(p) || isBroadcast(p->to) || p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return;
+    if (!IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+                   meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_NEIGHBORINFO_APP, meshtastic_PortNum_PAXCOUNTER_APP))
+        return;
+    const uint8_t configured = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+    if (p->hop_limit != configured)
+        return; // already sized by someone with better information
+    const uint8_t want = hopLimitForDirected(p->to, configured);
+    if (want < p->hop_limit) {
+        LOG_DEBUG("Directed hop_limit %u -> %u for 0x%08x portnum %u", p->hop_limit, want, p->to, p->decoded.portnum);
+        p->hop_limit = want;
+    }
+}
+
 static ChannelIndex getEffectiveChannelIndex(const meshtastic_MeshPacket *p)
 {
     ChannelIndex chIndex = p->channel;
@@ -153,7 +172,9 @@ bool willUsePki(const meshtastic_MeshPacket *p)
     if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag || !isFromUs(p))
         return false;
     bool haveDestKey = false;
-    if (p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP) {
+    // Only these ports make the decision key-dependent, so only they pay for the lookup.
+    if (IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_TELEMETRY_APP,
+                  meshtastic_PortNum_PAXCOUNTER_APP)) {
         meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
         haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
         if (!haveDestKey && p->pki_encrypted)
@@ -558,29 +579,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
-    // Hop scaling above is broadcast-only. Any from-us unicast on these ports (phone-originated too) is
-    // sized from the destination distance, unless something already moved it off the configured default.
-    if (isFromUs(p) && !isBroadcast(p->to) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        switch (p->decoded.portnum) {
-        case meshtastic_PortNum_POSITION_APP:
-        case meshtastic_PortNum_TELEMETRY_APP:
-        case meshtastic_PortNum_NODEINFO_APP:
-        case meshtastic_PortNum_NEIGHBORINFO_APP:
-        case meshtastic_PortNum_PAXCOUNTER_APP: {
-            const uint8_t configured = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-            if (p->hop_limit != configured)
-                break; // already sized by someone with better information
-            const uint8_t want = hopLimitForDirected(p->to, configured);
-            if (want < p->hop_limit) {
-                LOG_DEBUG("Directed hop_limit %u -> %u for 0x%08x portnum %u", p->hop_limit, want, p->to, p->decoded.portnum);
-                p->hop_limit = want;
-            }
-            break;
-        }
-        default:
-            break;
-        }
-    }
+    applyDirectedHopBudget(p);
 
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
@@ -1202,13 +1201,20 @@ static bool signedDataFits(meshtastic_Data *d)
 #if !(MESHTASTIC_EXCLUDE_PKI)
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
-    // Node-wide telemetry crypto policy, replies included. ALWAYS_PKC beats NEVER_PKC: a silent
-    // downgrade to a channel-readable payload is the worse failure.
-    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP) {
+    // Node-wide telemetry crypto policy, replies and paxcounter included. ALWAYS_PKC beats NEVER_PKC: a
+    // silent downgrade to a channel-readable payload is the worse failure.
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !isBroadcast(p->to) &&
+        IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_PAXCOUNTER_APP)) {
         const uint32_t flags = moduleConfig.telemetry.telemetry_flags;
-        if ((flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NEVER_PKC) &&
-            !(flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC))
+        const bool alwaysPkc = flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC;
+        if ((flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NEVER_PKC) && !alwaysPkc)
             return false;
+        // No key for the destination: use the channel PSK rather than send nothing, unless ALWAYS_PKC
+        // forbids it or the client asked for PKI itself.
+        if (!haveDestKey && !alwaysPkc && !p->pki_encrypted) {
+            LOG_INFO("No key for 0x%08x, portnum %u goes channel-PSK", p->to, p->decoded.portnum);
+            return false;
+        }
     }
 
     // First, only PKC encrypt packets we are originating

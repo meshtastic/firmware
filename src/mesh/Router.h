@@ -26,6 +26,9 @@ bool willUsePki(const meshtastic_MeshPacket *p);
 
 /// hops_away + 2 for a known, non-MQTT distance, else `configured`; only trims. Exposed for tests.
 uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured);
+/// Trim a from-us unicast on the routine ports to hopLimitForDirected() if it still carries the
+/// configured default. Exposed for tests.
+void applyDirectedHopBudget(meshtastic_MeshPacket *p);
 
 /// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
 /// Time::getUptimeSecs() placeholder with valid=false. Uptime seconds are monotonic, so

@@ -8,6 +8,7 @@
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "Telemetry/BaseTelemetryModule.h"
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
@@ -1318,6 +1319,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_telemetry_tag:
         LOG_INFO("Set module config: Telemetry");
+        if (!BaseTelemetryModule::pkcOnlyDestsHaveKeys(c.payload_variant.telemetry, moduleConfig.paxcounter.paxcounter_dest))
+            return false;
         moduleConfig.has_telemetry = true;
         moduleConfig.telemetry = c.payload_variant.telemetry;
         break;
@@ -1357,6 +1360,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_paxcounter_tag:
         LOG_INFO("Set module config: Paxcounter");
+        if (!BaseTelemetryModule::pkcOnlyDestsHaveKeys(moduleConfig.telemetry, c.payload_variant.paxcounter.paxcounter_dest))
+            return false;
         moduleConfig.has_paxcounter = true;
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
