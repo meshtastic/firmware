@@ -685,6 +685,25 @@ void test_health_lru_eviction_bounds_table(void)
     TEST_ASSERT_NOT_NULL(shim->findRouteHealth(0x2000));                      // newest present
 }
 
+// A stamp of 0 is the empty-slot marker, so an arm landing on the wrap tick must be normalized:
+// getOrAllocRouteHealth() would otherwise read the slot as ever-older and evict it first.
+void test_health_learn_never_stores_zero_sentinel(void)
+{
+    shim->noteRouteLearned(DEST, 0xAB, 0); // learned exactly on the wrap tick
+    RouteHealth *h = shim->findRouteHealth(DEST);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_NOT_EQUAL_UINT32(0u, h->learnedAtMsec);
+}
+
+void test_health_success_never_stores_zero_sentinel(void)
+{
+    shim->noteRouteLearned(DEST, 0xAB, 1000);
+    shim->noteRouteSuccess(DEST, 0); // refreshed exactly on the wrap tick
+    RouteHealth *h = shim->findRouteHealth(DEST);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_NOT_EQUAL_UINT32(0u, h->learnedAtMsec);
+}
+
 // ===========================================================================
 // Group 4 - shouldDecrementHopLimit favorite-router resolution (M2, site 4)
 // ===========================================================================
@@ -1106,6 +1125,8 @@ void setup()
     RUN_TEST(test_health_failure_without_record_is_noop);
     RUN_TEST(test_health_clear);
     RUN_TEST(test_health_lru_eviction_bounds_table);
+    RUN_TEST(test_health_learn_never_stores_zero_sentinel);
+    RUN_TEST(test_health_success_never_stores_zero_sentinel);
 
     printf("\n=== shouldDecrementHopLimit (M2 site 4) ===\n");
     RUN_TEST(test_hoplimit_preserve_unique_favorite_router);

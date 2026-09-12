@@ -35,10 +35,12 @@ class Throttle
     /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the four
     /// meanings they give the sentinel today:
     ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec, GPS.cpp fixHoldEnds, AdminModule.cpp
-    ///                 enterDfuAtMsec - the last two remap a 0 result to 1 at the arm site by hand.
+    ///                 enterDfuAtMsec and the other timerEndsAtMillis()/skipZero() arm sites dodge
+    ///                 it; RadioLibInterface::setTransmitDelay()'s tx_after recompute still cannot.
     ///   0 = forever - NotificationRenderer.cpp alertBannerUntil. Every read spells its own `> 0`
     ///                 guard, so this third state wants naming rather than repeating.
-    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up.
+    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up. A computed renewal now dodges 0,
+    ///                 so only a deliberate write still means "due now".
     ///   UINT32_MAX  - ExternalNotificationModule.cpp nagCycleCutoff, whose armed() also lives in a
     ///                 second variable (isNagging) and whose arm site can land on the sentinel.
     static bool deadlinePassed(uint32_t deadlineMs);
