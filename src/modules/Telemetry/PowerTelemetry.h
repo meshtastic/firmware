@@ -23,6 +23,8 @@ class PowerTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("PowerTelemetry"),
           ProtobufModule("PowerTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        // Update our nodedb from directed telemetry too, not just broadcasts.
+        isPromiscuous = true;
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);

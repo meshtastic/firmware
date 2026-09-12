@@ -40,6 +40,8 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("EnvironmentTelemetry"), ScanI2CConsumer(),
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        // Update our nodedb from directed telemetry too, not just broadcasts.
+        isPromiscuous = true;
         environmentTelemetryModule = this;
         (void)getDisplaySource();
         lastMeasurementPacket = nullptr;
