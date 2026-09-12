@@ -367,6 +367,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     /// True when this position broadcast duplicates the sender's last one within the dedup window.
     bool shouldDropPosition(const meshtastic_MeshPacket *p, const meshtastic_Position *pos, uint32_t nowMs);
+#if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
     /// Decide (and with sendResponse, emit) a spoofed direct NodeInfo reply for a unicast request.
     bool shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse);
 
@@ -393,7 +394,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static DirectResponseThrottleEntry *directResponseSlot(DirectResponseThrottleEntry *table, NodeNum key, uint32_t nowMs,
                                                            uint32_t windowMs);
     /// True when the requestor is within the role-clamped hop limit for direct responses.
-    bool isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const;
+    /// Writes the requestor's hop distance to `hopsAway`, which is negative when unknown.
+    bool isWithinMaxHopsOfRequestor(const meshtastic_MeshPacket *p, int8_t &hopsAway) const;
+#endif // MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
+
     /// True when `from` exceeded the configured packet budget for the current rate window.
     bool isRateLimited(NodeNum from, uint32_t nowMs);
     /// True when `p`'s sender exceeded the undecodable-packet threshold for the current window.

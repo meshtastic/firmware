@@ -33,15 +33,18 @@ namespace
 
 constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interval
 
+#if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 // NodeInfo direct response: role-enforced hop ceilings (respond when hopsAway <= threshold);
 // config can only tighten them. nodeinfo_direct_response must also be enabled.
-constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
+constexpr uint32_t kRouterDefaultMaxHops = 1; // Routers: one hop out (can set lower via config)
 constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot increase)
 
 // Staleness window: never spoof a reply for a node not actually heard within it, or a cached
 // entry would be served indefinitely for a long-gone node while the genuine request is
 // suppressed. The cache path enforces the same 6 h in ticks (kNodeInfoMaxServeAgeTicks, header).
 constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL; // 6 h (NodeDB fallback path)
+
+#endif // MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 
 /// Convert seconds to milliseconds with overflow protection.
 uint32_t secsToMs(uint32_t secs)
@@ -1114,6 +1117,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         updateCachedRoleFromNodeInfo(mp);
     }
 
+#if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
     // -------------------------------------------------------------------------
     // NodeInfo Direct Response
     // -------------------------------------------------------------------------
@@ -1139,6 +1143,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             return ProcessMessage::STOP; // Consumed - request will not be forwarded
         }
     }
+#endif // MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 
     // -------------------------------------------------------------------------
     // Position Deduplication
@@ -1420,13 +1425,24 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
 #endif
 }
 
+#if MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse)
 {
     // Caller already verified: nodeinfo_direct_response, portnum, want_response,
     // !isBroadcast, !isToUs, !isFromUs
 
-    if (!isMinHopsFromRequestor(p))
+    int8_t hopsAway = 0;
+    if (!isWithinMaxHopsOfRequestor(p, hopsAway))
         return false;
+
+    // A request that crossed a hop but names no relayer is anomalous: we cannot corroborate the
+    // path it took. Leave it for the genuine target rather than consume it on a guess.
+    // NO_RELAY_NODE is 0, so a relayer whose node number ends in 0x00 reads the same here.
+    if (hopsAway > 0 && p->relay_node == NO_RELAY_NODE) {
+        TM_LOG_DEBUG("NodeInfo request from 0x%08x is %d hops out with no relayer, not responding", getFrom(p),
+                     static_cast<int>(hopsAway));
+        return false;
+    }
 
     meshtastic_User cachedUser = meshtastic_User_init_zero;
     bool hasCachedUser = false;
@@ -1562,17 +1578,18 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
                      static_cast<unsigned>(cachedSourceChannel), static_cast<unsigned>(p->channel));
     }
 
-    // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
-    // hop_limit=0 ensures this reply travels only one hop (direct to requestor).
+    // Spoof the sender as the target node so the requestor sees a valid NodeInfo response, and
+    // grant exactly the hops the request spent reaching us so the reply can get back.
     reply->from = p->to;
     reply->to = getFrom(p);
     reply->channel = p->channel;
     reply->decoded.request_id = p->id;
-    reply->hop_limit = 0;
-    // hop_start=0 is set explicitly because Router::send() only sets it for isFromUs(),
+    reply->hop_limit = (hopsAway > 0) ? static_cast<uint8_t>(hopsAway) : 0;
+    // hop_start is set explicitly because Router::send() only sets it for isFromUs(),
     // and our spoofed from means isFromUs() is false.
-    reply->hop_start = 0;
-    reply->next_hop = nodeDB->getLastByteOfNodeNum(getFrom(p));
+    reply->hop_start = reply->hop_limit;
+    // next_hop is deliberately left unset: NextHopRouter::sendWithNextHop() overwrites it from the
+    // NodeDB route (with staleness and unique-neighbour checks, else flooding) on the way out.
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
     service->sendToMesh(reply);
@@ -1631,9 +1648,9 @@ bool TrafficManagementModule::directResponseAllowed(NodeNum requester, NodeNum t
     return true;
 }
 
-bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const
+bool TrafficManagementModule::isWithinMaxHopsOfRequestor(const meshtastic_MeshPacket *p, int8_t &hopsAway) const
 {
-    int8_t hopsAway = getHopsAway(*p, -1);
+    hopsAway = getHopsAway(*p, -1);
     if (hopsAway < 0)
         return false;
 
@@ -1655,6 +1672,7 @@ bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket
                  isRouter, result ? "respond" : "skip");
     return result;
 }
+#endif // MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
 
 bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
 {
