@@ -12,10 +12,9 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-    pinMode(PIN_LED1, OUTPUT);
-    digitalWrite(PIN_LED1, HIGH); // turn off the white led while booting
-                                  // otherwise it will stay lit for several seconds (could be annoying)
-
+    // pinMode(LED_HEARTBEAT, OUTPUT);
+    // digitalWrite(LED_HEARTBEAT, HIGH); // turn off the white led while booting
+    //                               // otherwise it will stay lit for several seconds (could be annoying)
 #ifdef PIN_WD_EN
     pinMode(PIN_WD_EN, OUTPUT);
     digitalWrite(PIN_WD_EN, HIGH); // Enable the Watchdog at boot
