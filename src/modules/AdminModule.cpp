@@ -5,6 +5,7 @@
 #include "HardwareRNG.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "NodeInfoModule.h"
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
@@ -785,6 +786,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     int changed = 0;
     bool identityUpdated = false;
     bool channelsSanitized = false;
+    const bool licenseChanged = owner.is_licensed != o.is_licensed;
 
     if (*o.long_name) {
         // Apps built against the older 39-byte limit may send longer names; clamp
@@ -803,7 +805,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         owner.short_name[sizeof(owner.short_name) - 1] = '\0';
         sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
     }
-    if (owner.is_licensed != o.is_licensed) {
+    if (licenseChanged) {
         changed = 1;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
         const bool identityWillMigrate =
@@ -833,7 +835,9 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service->reloadOwner(!hasOpenEditTransaction);
+        ownerSyncPending = ownerSyncPending || licenseChanged;
+        // A license change can also change the radio config, so announce only after that config commits.
+        service->reloadOwner(!hasOpenEditTransaction && !licenseChanged);
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
                     (channelsSanitized ? SEGMENT_CHANNELS : 0));
     }
@@ -1910,6 +1914,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        flushPendingOwnerSync();
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
@@ -1917,6 +1922,14 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     }
     if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);
+    }
+}
+
+void AdminModule::flushPendingOwnerSync()
+{
+    if (ownerSyncPending && nodeInfoModule) {
+        nodeInfoModule->requestOwnerSync();
+        ownerSyncPending = false;
     }
 }
 
@@ -1993,6 +2006,7 @@ bool AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     }
 
     service->reloadOwner(false);
+    ownerSyncPending = true;
     saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
     return true;
 }
