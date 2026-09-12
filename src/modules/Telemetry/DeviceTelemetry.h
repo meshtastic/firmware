@@ -18,6 +18,8 @@ class DeviceTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("DeviceTelemetry"),
           ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        // Promiscuous: learn from telemetry unicast between other nodes that we relay or overhear.
+        isPromiscuous = true;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(setStartDelay()); // Wait until NodeInfo is sent
     }

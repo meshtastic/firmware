@@ -399,13 +399,15 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 
 bool PositionModule::sendOurPosition()
 {
+    // Fresh install only: radioGeneration is bumped solely by resetRadioConfig(is_fresh_install).
+    // A broadcast want_response asks every node in earshot to reply, so it must stay this rare.
     bool requestReplies = currentGeneration != radioGeneration;
 
-    // If we changed channels, ask everyone else for their latest info
     uint8_t positionChannel;
     if (findPositionChannel(positionChannel)) {
         LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-        if (!sendOurPosition(NODENUM_BROADCAST, requestReplies, positionChannel))
+        const NodeNum positionDest = config.position.position_dest ? (NodeNum)config.position.position_dest : NODENUM_BROADCAST;
+        if (!sendOurPosition(positionDest, requestReplies, positionChannel))
             return false;
         currentGeneration = radioGeneration; // only a send that went out consumes the channel change
         return true;

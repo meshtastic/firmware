@@ -97,7 +97,7 @@ int32_t PowerTelemetryModule::runOnce()
         uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_POWER_TELEMETRY) : 0;
         if (((lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, sendToMeshIntervalMs)) &&
             airTime->isTxAllowedAirUtil()) {
-            sendTelemetry();
+            sendTelemetry(routineDest(moduleConfig.telemetry.power_dest));
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_POWER_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
@@ -236,6 +236,10 @@ meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
 {
     if (currentRequest) {
         if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
+        if (!wouldReplyToPoll(getFrom(currentRequest), moduleConfig.telemetry.power_dest)) {
             ignoreRequest = true;
             return NULL;
         }

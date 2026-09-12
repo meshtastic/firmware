@@ -457,7 +457,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                                                                         TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
-            sendTelemetry();
+            sendTelemetry(routineDest(moduleConfig.telemetry.environment_dest));
             immediateSendRequested = false;
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
@@ -748,6 +748,10 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 {
     if (currentRequest) {
         if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
+        if (!wouldReplyToPoll(getFrom(currentRequest), moduleConfig.telemetry.environment_dest)) {
             ignoreRequest = true;
             return NULL;
         }

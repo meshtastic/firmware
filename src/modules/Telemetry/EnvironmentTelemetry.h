@@ -40,6 +40,8 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("EnvironmentTelemetry"), ScanI2CConsumer(),
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        // Promiscuous: learn from telemetry unicast between other nodes that we relay or overhear.
+        isPromiscuous = true;
         environmentTelemetryModule = this;
         (void)getDisplaySource();
         lastMeasurementPacket = nullptr;
@@ -78,7 +80,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     /**
      * Send our Telemetry into the mesh
      */
-    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool phoneOnly = false);
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
