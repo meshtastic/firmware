@@ -617,11 +617,7 @@ void NextHopRouter::noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now
         h->lastNextHop = nextHop;
         h->consecutiveFailures = 0;
     }
-    // skipZero here and stampMillis() at the callers are both needed, and they compose without
-    // shifting twice. `now` is a parameter, so this function cannot assume a caller dodged the wrap
-    // tick - 0 is the empty-slot marker getOrAllocRouteHealth() evicts on, so the invariant belongs
-    // at the store. The caller-side dodge is what additionally keeps this stamp and the
-    // `now - learnedAtMsec` comparison in isRouteStale() on one value.
+    // `now` is a parameter, so guard at the store too: 0 is the empty-slot marker.
     h->learnedAtMsec = Time::skipZero(now);
 }
 
@@ -631,7 +627,7 @@ void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
     if (!h)
         return; // only routes we actually learned have health to refresh
     h->consecutiveFailures = 0;
-    h->learnedAtMsec = Time::skipZero(now); // a parameter, so guard here - see noteRouteLearned()
+    h->learnedAtMsec = Time::skipZero(now); // a parameter, so guard at the store too
 }
 
 void NextHopRouter::noteRouteFailure(NodeNum dest)

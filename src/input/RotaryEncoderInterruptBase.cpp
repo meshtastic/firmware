@@ -56,8 +56,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         bool buttonPressed = !digitalRead(_pinPress);
         if (!pressDetected && buttonPressed) {
             pressDetected = true;
-            // unset-sentinel-ok: pressDetected is the armed flag here - unlike the same-named field
-            // in UpDownInterruptBase, no read in this class tests the stamp against 0
+            // unset-sentinel-ok: pressDetected is the armed flag; no read tests the stamp against 0
             pressStartTime = now;
             pressAndTurnFired = false;
         }
