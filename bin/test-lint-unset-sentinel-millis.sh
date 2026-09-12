@@ -341,10 +341,30 @@ run_case "multi-line statement still sees its whole right-hand side" "2" 'void f
 # Its name ends in millis, so the clock-read test matches it. It must still count as safe, or every
 # site that normalises at the read and then stores the local gets flagged.
 
-run_case "local read through stampMillis is not tainted" "" 'void f() {
+run_case "storing a dodged local straight through is safe" "" 'void f() {
     uint32_t now = Time::stampMillis();
     lastSort = now;
+}'
+
+# A dodged value is safe to store or copy, NOT to do arithmetic on: stampMillis() guarantees only its
+# own result, and 0xFFFFEC78 + 5000 is exactly 0. That sum is what timerEndsAtMillis() is for.
+run_case "arithmetic on a dodged local can wrap back onto 0" "3" 'void f() {
+    uint32_t now = Time::stampMillis();
     rebootAtMsec = now + 5000;
+}'
+
+run_case "arithmetic on a direct helper call is reported too" "2" 'void f() {
+    rebootAtMsec = Time::stampMillis() + 5000;
+}'
+
+run_case "an operator INSIDE the helper call is fine" "" 'void f() {
+    lastSort = Time::skipZero(Time::getMillis() - msAgo);
+}'
+
+run_case "copying a dodged local one more hop stays safe" "" 'void f() {
+    uint32_t now = Time::stampMillis();
+    uint32_t alsoNow = now;
+    lastSort = alsoNow;
 }'
 
 run_case "stampMillis directly in the write is safe" "" 'void f() {
@@ -414,6 +434,20 @@ run_case_h "class with a multi-line method: member yes, local no" "6" 'class Foo
 run_case "taint is not learned from a neighbour on the same line" "" 'void f() {
     uint32_t a = 0; uint32_t now = packet->rx_time;
     rebootAtMsec = now;
+}'
+
+# --- a class body that opens and closes on one line ---------------------------
+#
+# The trailing semicolon cannot be used to rule out a class header, because the whole body fits on
+# the line; and that line\'s own brace is the CLASS brace, not a function body.
+
+run_case_h "one-line class body reports its member initialiser" "1" 'class Foo { uint32_t lastSort = millis(); };'
+
+run_case_h "one-line class with a one-line method excuses the local" "" 'class Foo { void tick() { uint32_t lastSort = millis(); } };'
+
+run_case_h "forward declaration opens nothing" "3" 'class Foo;
+void f() {
+    lastSort = millis();
 }'
 
 # --- scope -------------------------------------------------------------------
