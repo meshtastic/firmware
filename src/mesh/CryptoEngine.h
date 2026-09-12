@@ -57,7 +57,6 @@ class CryptoEngine
     virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
-    virtual void hash(uint8_t *bytes, size_t numBytes);
 
     // Temporary holder for a peer's not-yet-verified public key, learned in-band during an
     // in-progress key-verification handshake before it is committed to NodeDB. Lets the Router
@@ -70,6 +69,10 @@ class CryptoEngine
     // Fills `out` (size set to 32) and returns true iff a pending key is held for `node`.
     bool getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out);
 #endif
+
+    // Plain SHA256 over `bytes`, result written back into the first 32 bytes. Not PKI-specific:
+    // PortduinoGlue derives a MAC address with it on builds that exclude PKI.
+    virtual void hash(uint8_t *bytes, size_t numBytes);
 
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 

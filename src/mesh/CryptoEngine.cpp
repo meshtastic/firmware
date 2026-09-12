@@ -2,6 +2,7 @@
 // #include "NodeDB.h"
 #include "aes-ccm.h"
 #include "architecture.h"
+#include <SHA256.h>
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -11,7 +12,6 @@
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <RNG.h>
-#include <SHA256.h>
 
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 #include "XEdDSA.h"
@@ -292,6 +292,8 @@ void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
     memcpy(private_key, _private_key, 32);
 }
 
+#endif // !(MESHTASTIC_EXCLUDE_PKI)
+
 /**
  * Hash arbitrary data using SHA256.
  *
@@ -313,8 +315,6 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
     }
     hash.finalize(bytes, 32);
 }
-
-#endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 // aes-ccm.cpp drives the block cipher through these two, and it is compiled in every build,
 // so they must stay outside the PKI guard or MESHTASTIC_EXCLUDE_PKI=1 fails to link.
