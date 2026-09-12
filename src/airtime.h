@@ -35,9 +35,7 @@
 
     channelUtilizationPercent()  % of the last 60s busy, all three types
     smoothedChannelUtilizationPercent()
-                                 the same figure behind a ~21 min EMA, folded
-                                 once per 10s bucket. For consumers that must
-                                 decide from a trend rather than one snapshot.
+                                 the same, behind a ~21 min EMA folded per bucket
     utilizationTXPercent()       % of the last hour we transmitted
     isTxAllowedChannelUtil()     gate on the former, 40% or 25% "polite"
     isTxAllowedAirUtil()         gate on the latter, at HALF the duty cycle
@@ -81,8 +79,8 @@
 */
 
 #define CHANNEL_UTILIZATION_PERIODS 6
-// EMA weight per crossed 10 s bucket for the smoothed channel utilization. 1/128 gives a time
-// constant of 128 x 10 s, about 21 minutes, so one busy or quiet minute cannot move it far.
+// EMA weight per crossed 10 s bucket: 1/128 is a time constant of about 21 minutes, so one busy
+// or quiet minute cannot move the smoothed figure far.
 #define CHANNEL_UTILIZATION_EMA_DIVISOR 128
 #define SECONDS_PER_PERIOD 3600
 #define PERIODS_TO_LOG 8
@@ -137,9 +135,8 @@ class AirTime : private concurrency::OSThread
 
     void logAirtime(reportTypes reportType, uint32_t airtime_ms);
     float channelUtilizationPercent();
-    /// Smoothed channel utilization. channelUtilizationPercent() is a 60-second window, so a
-    /// single reading says little about load; this is that window under an EMA advanced by real
-    /// elapsed time, so it is comparable between two calls however far apart they are.
+    /// channelUtilizationPercent() behind an EMA advanced by elapsed time, for a caller that must
+    /// judge load from a trend rather than from one 60-second window.
     float smoothedChannelUtilizationPercent();
     float utilizationTXPercent();
 
@@ -214,13 +211,12 @@ class AirTime : private concurrency::OSThread
 
         void logAirtime(reportTypes reportType, uint32_t airtime_ms, const Held &);
         float channelUtilizationPercent(const Held &);
-        /// The bucket sum alone, with no syncNow(). syncNow() folds the EMA and cannot call
-        /// channelUtilizationPercent() to get the value: that would re-enter syncNow().
+        /// The bucket sum alone. syncNow() folds the EMA and cannot reach it through
+        /// channelUtilizationPercent(), which would re-enter syncNow().
         float channelUtilizationPercentRaw(const Held &);
         float smoothedChannelUtilizationPercent(const Held &);
-        /// Fold `steps` readings of `sample` into channelUtilAvg. Repeated folding is a geometric
-        /// decay, so this closes the form rather than looping: a multi-day sleep costs one powf,
-        /// and the figure decays by the time actually elapsed instead of by a capped step count.
+        /// Fold `steps` readings of `sample` into channelUtilAvg. Closed form, not a loop, so a
+        /// multi-day sleep decays by the time elapsed at the cost of one powf.
         void foldChannelUtil(float sample, uint32_t steps, const Held &);
         float utilizationTXPercent(const Held &);
         bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count, const Held &);

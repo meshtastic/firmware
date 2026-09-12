@@ -328,8 +328,8 @@ class HopScalingModule : private concurrency::OSThread
     // -----------------------------------------------------------------------
     // Congestion state
     // -----------------------------------------------------------------------
-    // Cached once per runOnce() from AirTime, which owns the smoothing. Held here so the hourly
-    // roll and the status log read one consistent value without re-taking the AirTime lock.
+    // Cached once per runOnce() from AirTime, so the hourly roll and the status log read one
+    // consistent value without re-taking the AirTime lock.
     float utilizationAvg = 0.0f;
     bool congested = false;
     uint8_t congestionConfirmRuns = 0;

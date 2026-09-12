@@ -113,10 +113,8 @@ void AirTime::Windows::syncNow(const Held &held)
     // Channel utilization is a rolling 60-second view split into six 10-second buckets.
     // Clear every bucket crossed while asleep so old airtime decays by real elapsed time.
     uint32_t elapsedUtilPeriods = (this->secSinceBoot / 10) - (oldSecSinceBoot / 10);
-    // Fold before the decay below, not after: the window as it stands now is the reading that
-    // just completed, and sampling it after a bucket has been cleared would leave the smoothed
-    // figure a bucket light on steady traffic. Any further crossed buckets are elapsed time with
-    // no airtime recorded, which is what clearing them means, so they fold in as idle.
+    // Fold before the decay, or a cleared bucket leaves the figure light on steady traffic.
+    // Buckets beyond the first are elapsed time with no airtime, so they fold in as idle.
     if (elapsedUtilPeriods > 0) {
         foldChannelUtil(channelUtilizationPercentRaw(held), 1, held);
         foldChannelUtil(0.0f, elapsedUtilPeriods - 1, held);
@@ -188,8 +186,8 @@ void AirTime::Windows::foldChannelUtil(float sample, uint32_t steps, const Held 
         return;
 
     if (!hasChannelUtilSample) {
-        // Seed from the first reading rather than climbing out of 0, so a node that boots onto a
-        // busy channel does not spend a whole time constant reporting it as quiet.
+        // Seed from the first reading, or a node booting onto a busy channel reports it quiet
+        // for a whole time constant.
         channelUtilAvg = sample;
         hasChannelUtilSample = true;
         steps--;
@@ -205,8 +203,8 @@ float AirTime::Windows::smoothedChannelUtilizationPercent(const Held &held)
 {
     syncNow(held);
 
-    // Before the first bucket crossing there is nothing folded yet; the raw window is the best
-    // estimate available, and returning 0 would read as an idle channel rather than no data.
+    // Nothing folded yet before the first bucket crossing, and 0 would read as an idle channel
+    // rather than as no data.
     return hasChannelUtilSample ? channelUtilAvg : channelUtilizationPercentRaw(held);
 }
 
