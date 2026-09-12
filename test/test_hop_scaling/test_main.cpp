@@ -88,16 +88,11 @@ class HopScalingTestShim : public HopScalingModule
         congested = value;
         congestionConfirmRuns = 0;
         utilizationAvg = value ? static_cast<float>(CONGESTION_ENGAGE_PCT) : 0.0f;
-        hasUtilizationSample = true;
     }
 
     /// Set the smoothed utilization directly, so a test can sit on a band boundary without
     /// pumping the EMA there sample by sample.
-    void setSmoothedChannelUtilization(float pct)
-    {
-        utilizationAvg = pct;
-        hasUtilizationSample = true;
-    }
+    void setSmoothedChannelUtilization(float pct) { utilizationAvg = pct; }
 
     /// Insert an entry with an explicit hash, bypassing the sampling filter.
     /// Used to fill the histogram to a known state without depending on hashNodeId distribution.
@@ -169,8 +164,8 @@ static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, const
     }
 }
 
-// Drive N runOnce() ticks with the channel reading a fixed utilization.
-// The gate samples once per tick, so this is how a test moves it through the confirm counter.
+// Drive N runOnce() ticks with AirTime reporting a fixed smoothed utilization.
+// The gate reads it once per tick, so this is how a test moves it through the confirm counter.
 static void pumpRuns(HopScalingTestShim &shim, float channelUtilPct, int runs)
 {
     HopScalingModule::s_testChannelUtil = channelUtilPct;

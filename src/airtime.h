@@ -34,6 +34,10 @@
   OUTPUTS:
 
     channelUtilizationPercent()  % of the last 60s busy, all three types
+    smoothedChannelUtilizationPercent()
+                                 the same figure behind a ~21 min EMA, folded
+                                 once per 10s bucket. For consumers that must
+                                 decide from a trend rather than one snapshot.
     utilizationTXPercent()       % of the last hour we transmitted
     isTxAllowedChannelUtil()     gate on the former, 40% or 25% "polite"
     isTxAllowedAirUtil()         gate on the latter, at HALF the duty cycle
@@ -77,6 +81,9 @@
 */
 
 #define CHANNEL_UTILIZATION_PERIODS 6
+// EMA weight per crossed 10 s bucket for the smoothed channel utilization. 1/128 gives a time
+// constant of 128 x 10 s, about 21 minutes, so one busy or quiet minute cannot move it far.
+#define CHANNEL_UTILIZATION_EMA_DIVISOR 128
 #define SECONDS_PER_PERIOD 3600
 #define PERIODS_TO_LOG 8
 #define MINUTES_IN_HOUR 60
@@ -130,6 +137,10 @@ class AirTime : private concurrency::OSThread
 
     void logAirtime(reportTypes reportType, uint32_t airtime_ms);
     float channelUtilizationPercent();
+    /// Smoothed channel utilization. channelUtilizationPercent() is a 60-second window, so a
+    /// single reading says little about load; this is that window under an EMA advanced by real
+    /// elapsed time, so it is comparable between two calls however far apart they are.
+    float smoothedChannelUtilizationPercent();
     float utilizationTXPercent();
 
     /// Compatibility shim: no caller in the tree, kept for out-of-tree ones.
@@ -182,7 +193,12 @@ class AirTime : private concurrency::OSThread
 
         // Modular rings: index is absolute phase, (uptime secs / period) % N, never age.
         uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0}; // 6 x 10s
-        uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};                  // 60 x 60s, our TX only
+
+        // EMA over channelUtilization, folded in syncNow() once per crossed 10 s bucket so its
+        // time constant follows elapsed time rather than how often a caller happens to ask.
+        float channelUtilAvg = 0.0f;
+        bool hasChannelUtilSample = false;
+        uint32_t utilizationTX[MINUTES_IN_HOUR] = {0}; // 60 x 60s, our TX only
 
         // Hour crossings rotated but not yet traced. The core cannot log its own rotations: it
         // only ever runs under the lock, and DEBUG_PORT.log() blocks on a UART write. runOnce()
@@ -198,6 +214,14 @@ class AirTime : private concurrency::OSThread
 
         void logAirtime(reportTypes reportType, uint32_t airtime_ms, const Held &);
         float channelUtilizationPercent(const Held &);
+        /// The bucket sum alone, with no syncNow(). syncNow() folds the EMA and cannot call
+        /// channelUtilizationPercent() to get the value: that would re-enter syncNow().
+        float channelUtilizationPercentRaw(const Held &);
+        float smoothedChannelUtilizationPercent(const Held &);
+        /// Fold `steps` readings of `sample` into channelUtilAvg. Repeated folding is a geometric
+        /// decay, so this closes the form rather than looping: a multi-day sleep costs one powf,
+        /// and the figure decays by the time actually elapsed instead of by a capped step count.
+        void foldChannelUtil(float sample, uint32_t steps, const Held &);
         float utilizationTXPercent(const Held &);
         bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count, const Held &);
         uint8_t getSilentMinutes(float txPercent, float dutyCycle, const Held &);

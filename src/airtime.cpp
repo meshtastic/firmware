@@ -3,6 +3,7 @@
 #include "UptimeClock.h"
 #include "configuration.h"
 #include <assert.h>
+#include <cmath>
 #include <string.h>
 
 AirTime *airTime = NULL;
@@ -60,7 +61,7 @@ uint8_t AirTime::Windows::getPeriodUtilHour(const Held &)
     return (secSinceBoot / 60) % MINUTES_IN_HOUR;
 }
 
-void AirTime::Windows::syncNow(const Held &)
+void AirTime::Windows::syncNow(const Held &held)
 {
     // Monotonic uptime, not RTC/network time: a user, GPS, or NTP clock change must not move
     // airtime accounting. Pure read; the main loop publishes the wrap carry it derives from.
@@ -112,6 +113,15 @@ void AirTime::Windows::syncNow(const Held &)
     // Channel utilization is a rolling 60-second view split into six 10-second buckets.
     // Clear every bucket crossed while asleep so old airtime decays by real elapsed time.
     uint32_t elapsedUtilPeriods = (this->secSinceBoot / 10) - (oldSecSinceBoot / 10);
+    // Fold before the decay below, not after: the window as it stands now is the reading that
+    // just completed, and sampling it after a bucket has been cleared would leave the smoothed
+    // figure a bucket light on steady traffic. Any further crossed buckets are elapsed time with
+    // no airtime recorded, which is what clearing them means, so they fold in as idle.
+    if (elapsedUtilPeriods > 0) {
+        foldChannelUtil(channelUtilizationPercentRaw(held), 1, held);
+        foldChannelUtil(0.0f, elapsedUtilPeriods - 1, held);
+    }
+
     if (elapsedUtilPeriods >= CHANNEL_UTILIZATION_PERIODS) {
         memset(this->channelUtilization, 0, sizeof(this->channelUtilization));
     } else {
@@ -154,17 +164,50 @@ bool AirTime::Windows::airtimeReport(reportTypes reportType, uint32_t *out, size
     return true;
 }
 
-float AirTime::Windows::channelUtilizationPercent(const Held &held)
+float AirTime::Windows::channelUtilizationPercentRaw(const Held &)
 {
-    // Gate decisions should see buckets that have decayed across light-sleep time.
-    syncNow(held);
-
     uint32_t sum = 0;
     for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
         sum += this->channelUtilization[i];
     }
 
     return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
+}
+
+float AirTime::Windows::channelUtilizationPercent(const Held &held)
+{
+    // Gate decisions should see buckets that have decayed across light-sleep time.
+    syncNow(held);
+
+    return channelUtilizationPercentRaw(held);
+}
+
+void AirTime::Windows::foldChannelUtil(float sample, uint32_t steps, const Held &)
+{
+    if (steps == 0)
+        return;
+
+    if (!hasChannelUtilSample) {
+        // Seed from the first reading rather than climbing out of 0, so a node that boots onto a
+        // busy channel does not spend a whole time constant reporting it as quiet.
+        channelUtilAvg = sample;
+        hasChannelUtilSample = true;
+        steps--;
+    }
+
+    if (steps > 0) {
+        const float retained = powf(1.0f - 1.0f / float(CHANNEL_UTILIZATION_EMA_DIVISOR), float(steps));
+        channelUtilAvg = sample + (channelUtilAvg - sample) * retained;
+    }
+}
+
+float AirTime::Windows::smoothedChannelUtilizationPercent(const Held &held)
+{
+    syncNow(held);
+
+    // Before the first bucket crossing there is nothing folded yet; the raw window is the best
+    // estimate available, and returning 0 would read as an idle channel rather than no data.
+    return hasChannelUtilSample ? channelUtilAvg : channelUtilizationPercentRaw(held);
 }
 
 float AirTime::Windows::utilizationTXPercent(const Held &held)
@@ -240,6 +283,12 @@ float AirTime::channelUtilizationPercent()
 {
     Held held(this);
     return w.channelUtilizationPercent(held);
+}
+
+float AirTime::smoothedChannelUtilizationPercent()
+{
+    Held held(this);
+    return w.smoothedChannelUtilizationPercent(held);
 }
 
 float AirTime::utilizationTXPercent()

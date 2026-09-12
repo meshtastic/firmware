@@ -116,8 +116,6 @@ class HopScalingModule : private concurrency::OSThread
     // Upper band for the politeness numerator, which reads the same smoothed utilization as the
     // gate: STRICT at or above this, DEFAULT from CONGESTION_ENGAGE_PCT, GENEROUS below it.
     static constexpr uint8_t CONGESTION_STRICT_PCT = default_hop_scaling_congestion_strict_pct;
-    // EMA weight for each 5-minute utilization sample (1/4 -> ~20 min time constant).
-    static constexpr float CONGESTION_EMA_ALPHA = 0.25f;
 
     // Hop floor for the infrastructure roles, so a remote site's own telemetry still reaches operators.
     static constexpr uint8_t INFRASTRUCTURE_HOP_FLOOR = default_hop_scaling_infrastructure_hop_floor;
@@ -235,11 +233,11 @@ class HopScalingModule : private concurrency::OSThread
     /// 6. Shifts all seen bitmaps left by one hour slot.
     void rollHour();
 
-    /// Sample channel utilization into the EMA and flip the congestion state once the engage or
+    /// Cache the smoothed channel utilization and flip the congestion state once the engage or
     /// release threshold has held for CONGESTION_CONFIRM_RUNS consecutive runOnce() ticks.
     void updateCongestion();
 
-    /// Current channel utilization percent, or 0 when AirTime is not up yet.
+    /// Smoothed channel utilization percent, or 0 when AirTime is not up yet.
     static float channelUtil();
     // -----------------------------------------------------------------------
     // Persistence
@@ -330,8 +328,9 @@ class HopScalingModule : private concurrency::OSThread
     // -----------------------------------------------------------------------
     // Congestion state
     // -----------------------------------------------------------------------
+    // Cached once per runOnce() from AirTime, which owns the smoothing. Held here so the hourly
+    // roll and the status log read one consistent value without re-taking the AirTime lock.
     float utilizationAvg = 0.0f;
-    bool hasUtilizationSample = false;
     bool congested = false;
     uint8_t congestionConfirmRuns = 0;
 
