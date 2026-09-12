@@ -406,7 +406,8 @@ bool PositionModule::sendOurPosition()
     uint8_t positionChannel;
     if (findPositionChannel(positionChannel)) {
         LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-        if (!sendOurPosition(NODENUM_BROADCAST, requestReplies, positionChannel))
+        const NodeNum positionDest = config.position.position_dest ? (NodeNum)config.position.position_dest : NODENUM_BROADCAST;
+        if (!sendOurPosition(positionDest, requestReplies, positionChannel))
             return false;
         currentGeneration = radioGeneration; // only a send that went out consumes the channel change
         return true;

@@ -230,7 +230,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         bool phoneDue = (lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs);
 
         if (telemetryDue && telemetryAllowed) {
-            if (sendTelemetry()) {
+            if (sendTelemetry(routineDest(moduleConfig.telemetry.air_quality_dest))) {
                 if (transmitHistory) {
                     transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
                 }
@@ -448,6 +448,10 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
 {
     if (currentRequest) {
         if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
+        if (!wouldReplyToPoll(getFrom(currentRequest), moduleConfig.telemetry.air_quality_dest)) {
             ignoreRequest = true;
             return NULL;
         }

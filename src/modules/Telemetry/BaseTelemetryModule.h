@@ -7,6 +7,32 @@
 
 class BaseTelemetryModule
 {
+  public:
+    /// Whether we may answer a telemetry request from `from`, per ModuleConfig.TelemetryConfig
+    /// .telemetry_flags. An ignored node is refused unconditionally - that is what ignoring means,
+    /// not a policy choice - and every flag bit is a further restriction, so unset answers everyone.
+    static bool wouldReplyToPoll(NodeNum from, uint32_t dest)
+    {
+        if (nodeDB) {
+            const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(from);
+            if (n && nodeInfoLiteIsIgnored(n))
+                return false;
+        }
+        const uint32_t flags = moduleConfig.telemetry.telemetry_flags;
+        if (flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NO_ADHOC_REPLY)
+            return false;
+        if ((flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_REPLY_ONLY_TO_DEST) && (!dest || from != dest))
+            return false;
+        if ((flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_REPLY_TO_FAVOURITES_ONLY) && nodeDB &&
+            !nodeDB->isFavorite(from))
+            return false;
+        return true;
+    }
+
+    /// Destination for a routine (timer-driven) send. 0 means broadcast, which is the default and
+    /// preserves the historic behaviour; any other value addresses that node.
+    static NodeNum routineDest(uint32_t configured) { return configured ? (NodeNum)configured : NODENUM_BROADCAST; }
+
   protected:
     bool isSensorOrRouterRole() const
     {

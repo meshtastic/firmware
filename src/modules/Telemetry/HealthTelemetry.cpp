@@ -82,7 +82,7 @@ int32_t HealthTelemetryModule::runOnce()
                                                                                    numOnlineNodes, TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
-            sendTelemetry();
+            sendTelemetry(routineDest(moduleConfig.telemetry.health_dest));
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_HEALTH_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
@@ -212,6 +212,10 @@ meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
 {
     if (currentRequest) {
         if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
+        if (!wouldReplyToPoll(getFrom(currentRequest), moduleConfig.telemetry.health_dest)) {
             ignoreRequest = true;
             return NULL;
         }
