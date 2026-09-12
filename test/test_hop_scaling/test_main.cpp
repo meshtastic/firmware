@@ -628,7 +628,6 @@ void test_congestion_gate_does_not_flap_at_threshold()
         shim->runOnce();
         TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "gate engaged on samples whose average stays below the threshold");
     }
-    TEST_MSG_FMT("Phase 1 done: smoothed=%u pct", static_cast<unsigned>(shim->getSmoothedChannelUtilization()));
 
     shim->forceCongestion(true);
     for (int i = 0; i < 60; i++) {
@@ -636,7 +635,6 @@ void test_congestion_gate_does_not_flap_at_threshold()
         shim->runOnce();
         TEST_ASSERT_TRUE_MESSAGE(shim->isCongested(), "gate released on a dip that never held for the confirm window");
     }
-    TEST_MSG_FMT("Phase 2 done: smoothed=%u pct", static_cast<unsigned>(shim->getSmoothedChannelUtilization()));
 
     hopScalingModule = nullptr;
 }

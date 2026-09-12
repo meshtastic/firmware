@@ -319,10 +319,9 @@ void HopScalingModule::rollHour()
         }
         const uint32_t scaledTotal = static_cast<uint32_t>(counts.total) * filteringDenominator;
         memcpy(lastScaledPerHop, scaled, sizeof(lastScaledPerHop));
-        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%u/4 "
-                 "congested=%u chanUtil=%u%%",
-                 count, samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
-                 lastPoliteNumer, congested ? 1u : 0u, static_cast<unsigned>(utilizationAvg));
+        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%u/4", count,
+                 samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
+                 lastPoliteNumer);
 
         const auto &ts = lastTrendStats;
         LOG_INFO("[HOPSCALE] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", ts.scaledPerHour[0],
