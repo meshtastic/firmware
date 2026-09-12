@@ -76,7 +76,7 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 /// assumed still reachable within hops_away + 2; the margin mirrors getHopLimitForResponse(), because
 /// the return path may differ from the inbound one. Only ever trims: an unknown or untrustworthy
 /// distance falls back to the caller's configured limit rather than extending it.
-static uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
+uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
 {
     if (!nodeDB)
         return configured;
@@ -85,7 +85,7 @@ static uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
         return configured; // no basis to trim
     // hops_away is stored without a via_mqtt guard (unlike snr and the hop histogram), so a distance
     // learned over MQTT may not describe a LoRa path at all - do not size a LoRa budget from it.
-    if (nodeInfoLiteIsViaMqtt(n))
+    if (nodeInfoLiteViaMqtt(n))
         return configured;
     const uint32_t want = (uint32_t)n->hops_away + 2;
     return want < configured ? (uint8_t)want : configured;
@@ -1207,6 +1207,17 @@ static bool signedDataFits(meshtastic_Data *d)
 #if !(MESHTASTIC_EXCLUDE_PKI)
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
+    // Telemetry policy decides its own crypto, so the choice is per node rather than a blanket
+    // portnum rule that would also change how replies to telemetry requests are encrypted.
+    // ALWAYS_PKC wins over NEVER_PKC: an accidental downgrade to a channel-readable payload is the
+    // worse failure, so the safer bit takes precedence.
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP) {
+        const uint32_t flags = moduleConfig.telemetry.telemetry_flags;
+        if ((flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NEVER_PKC) &&
+            !(flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC))
+            return false;
+    }
+
     // First, only PKC encrypt packets we are originating
     return isFromUs(p) &&
 #if ARCH_PORTDUINO
