@@ -135,14 +135,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
     }
-
-#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
-    // Any admin session - local (USB/BLE, from==0) or remote (over-mesh) - proves this node is
-    // still actively managed, so reset the router-retirement unmanaged-uptime credit. (v1 counts
-    // any serviced admin message; gating strictly on auth-success is a possible later refinement.)
-    if (routerRetirementModule)
-        routerRetirementModule->noteAdminSession();
-#endif
 #ifdef ARCH_PORTDUINO
     // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
     // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
@@ -252,6 +244,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
     }
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+    // Past every gate above, so only an authorized admin - local or remote - proves this node is
+    // still managed. Responses are excluded: those come from nodes *we* administer.
+    if (routerRetirementModule && !messageIsResponse(r))
+        routerRetirementModule->noteAdminSession();
+#endif
     // Before the switch, so every case below sees consistent transaction state.
     expireStaleEditTransaction();
 
@@ -1265,11 +1263,12 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
     // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
-    // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
+    // themselves, and statusmessage/mesh_beacon/router_retirement never reboot, so a disable would strand BLE until the
     // next PowerFSM transition. Everything else reboots, so take BLE down before the phone interferes.
     if (!hasOpenEditTransaction &&
         !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag, meshtastic_ModuleConfig_serial_tag,
-                   meshtastic_ModuleConfig_statusmessage_tag, meshtastic_ModuleConfig_mesh_beacon_tag)) {
+                   meshtastic_ModuleConfig_statusmessage_tag, meshtastic_ModuleConfig_mesh_beacon_tag,
+                   meshtastic_ModuleConfig_router_retirement_tag)) {
         disableBluetooth();
     }
 
@@ -1456,6 +1455,14 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             meshBeaconBroadcastModule->invalidateCache();
         break;
     }
+#endif
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+    case meshtastic_ModuleConfig_router_retirement_tag:
+        LOG_INFO("Set module config: RouterRetirement");
+        moduleConfig.has_router_retirement = true;
+        moduleConfig.router_retirement = c.payload_variant.router_retirement;
+        shouldReboot = false; // the hourly thread reads the live config
+        break;
 #endif
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
@@ -1700,6 +1707,13 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             configName = "MeshBeacon";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
             res.get_module_config_response.payload_variant.mesh_beacon = moduleConfig.mesh_beacon;
+            break;
+#endif
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+        case meshtastic_AdminMessage_ModuleConfigType_ROUTERRETIREMENT_CONFIG:
+            configName = "RouterRetirement";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_router_retirement_tag;
+            res.get_module_config_response.payload_variant.router_retirement = moduleConfig.router_retirement;
             break;
 #endif
         }
