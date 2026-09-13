@@ -178,6 +178,9 @@ void test_XEdDSA(void)
     uint32_t fromNode = 0x1234;
     uint32_t packetId = 0xDEADBEEF;
     uint32_t portnum = 1;
+    // Nonzero on purpose so the v2 buffer's request/reply binding is exercised, not just zero-padded.
+    uint32_t requestId = 0xCAFE0001;
+    uint32_t replyId = 0xCAFE0002;
     for (int times = 0; times < 10; times++) {
         printf("Start of time %u\n", times);
         crypto->generateKeyPair(x_public_key, private_key);
@@ -186,24 +189,33 @@ void test_XEdDSA(void)
         TEST_ASSERT_EQUAL_MEMORY(ed_public_key, ed_public_key2, 32);
 
         // Sign and verify with metadata
-        TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), signature));
-        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, message, sizeof(message), signature));
+        TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), signature));
+        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message),
+                                          signature));
 
         // Different payload fails
-        TEST_ASSERT_FALSE(
-            crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, message2, sizeof(message2), signature));
+        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, requestId, replyId, message2,
+                                                sizeof(message2), signature));
 
         // Different fromNode fails
-        TEST_ASSERT_FALSE(
-            crypto->xeddsa_verify(x_public_key, fromNode + 1, packetId, portnum, message, sizeof(message), signature));
+        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, fromNode + 1, packetId, portnum, requestId, replyId, message,
+                                                sizeof(message), signature));
 
         // Different packetId fails
-        TEST_ASSERT_FALSE(
-            crypto->xeddsa_verify(x_public_key, fromNode, packetId + 1, portnum, message, sizeof(message), signature));
+        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, fromNode, packetId + 1, portnum, requestId, replyId, message,
+                                                sizeof(message), signature));
 
         // Different portnum fails
-        TEST_ASSERT_FALSE(
-            crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum + 1, message, sizeof(message), signature));
+        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum + 1, requestId, replyId, message,
+                                                sizeof(message), signature));
+
+        // Retargeting an ack/reply at a different request fails
+        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, requestId + 1, replyId, message,
+                                                sizeof(message), signature));
+
+        // Re-pointing a reply/tapback at a different message fails
+        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, requestId, replyId + 1, message,
+                                                sizeof(message), signature));
     }
 }
 
@@ -214,18 +226,21 @@ void test_XEdDSA_cross_key_reject(void)
     uint8_t pubB[32], privB[32];
     uint8_t signature[64];
     uint8_t message[] = "cross-key check";
-    uint32_t fromNode = 0x4242, packetId = 0xABCD1234, portnum = 7;
+    uint32_t fromNode = 0x4242, packetId = 0xABCD1234, portnum = 7, requestId = 0x77, replyId = 0x88;
 
     crypto->generateKeyPair(pubA, privA); // engine now holds key A
-    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), signature));
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), signature));
 
     crypto->generateKeyPair(pubB, privB); // unrelated key pair
 
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, message, sizeof(message), signature));
-    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pubB, fromNode, packetId, portnum, message, sizeof(message), signature));
+    TEST_ASSERT_TRUE(
+        crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), signature));
+    TEST_ASSERT_FALSE(
+        crypto->xeddsa_verify(pubB, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), signature));
 
     uint8_t zeroKey[32] = {0};
-    TEST_ASSERT_FALSE(crypto->xeddsa_verify(zeroKey, fromNode, packetId, portnum, message, sizeof(message), signature));
+    TEST_ASSERT_FALSE(
+        crypto->xeddsa_verify(zeroKey, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), signature));
 }
 
 // Signing with an unset (all-zero) private key must fail rather than emit a bogus signature.
@@ -234,7 +249,7 @@ void test_XEdDSA_empty_key_sign_fails(void)
     CryptoEngine fresh; // freshly constructed: xeddsa_private_key is all zero
     uint8_t signature[64];
     uint8_t message[] = "no key";
-    TEST_ASSERT_FALSE(fresh.xeddsa_sign(0x1, 0x2, 0x3, message, sizeof(message), signature));
+    TEST_ASSERT_FALSE(fresh.xeddsa_sign(0x1, 0x2, 0x3, 0x4, 0x5, message, sizeof(message), signature));
 }
 
 // curve_to_ed_pub caches the last converted key; verifying A, then B, then A must stay correct.
@@ -243,18 +258,22 @@ void test_XEdDSA_curve_to_ed_cache(void)
     uint8_t pubA[32], privA[32], sigA[64];
     uint8_t pubB[32], privB[32], sigB[64];
     uint8_t message[] = "cache check";
-    uint32_t fromNode = 0x11, packetId = 0x22, portnum = 3;
+    uint32_t fromNode = 0x11, packetId = 0x22, portnum = 3, requestId = 0x44, replyId = 0x55;
 
     crypto->generateKeyPair(pubA, privA);
-    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sigA));
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigA));
     crypto->generateKeyPair(pubB, privB);
-    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sigB));
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigB));
 
     // Interleave keys to exercise both cache hits and cache invalidation.
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, message, sizeof(message), sigA));
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pubB, fromNode, packetId, portnum, message, sizeof(message), sigB));
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, message, sizeof(message), sigA));
-    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, message, sizeof(message), sigB));
+    TEST_ASSERT_TRUE(
+        crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigA));
+    TEST_ASSERT_TRUE(
+        crypto->xeddsa_verify(pubB, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigB));
+    TEST_ASSERT_TRUE(
+        crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigA));
+    TEST_ASSERT_FALSE(
+        crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigB));
 }
 
 // A payload at the maximum signable size (DATA_PAYLOAD_LEN - signature) round-trips and detects tampering.
@@ -267,12 +286,12 @@ void test_XEdDSA_max_payload(void)
 
     uint8_t pub[32], priv[32], signature[64];
     crypto->generateKeyPair(pub, priv);
-    uint32_t fromNode = 0xFEED, packetId = 0xC0DE, portnum = 1;
+    uint32_t fromNode = 0xFEED, packetId = 0xC0DE, portnum = 1, requestId = 0xF00D, replyId = 0xBEAD;
 
-    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, payload, len, signature));
-    TEST_ASSERT(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, payload, len, signature));
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, payload, len, signature));
+    TEST_ASSERT(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, requestId, replyId, payload, len, signature));
     payload[0] ^= 0x01;
-    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, payload, len, signature));
+    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, requestId, replyId, payload, len, signature));
 }
 
 // XEdDSA is a randomized (hedged) scheme: the nonce mixes in Z, caller-supplied randomness
@@ -284,16 +303,52 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
 {
     uint8_t pub[32], priv[32], sig1[64], sig2[64];
     uint8_t message[] = "same message";
-    uint32_t fromNode = 0x9, packetId = 0x9, portnum = 9;
+    uint32_t fromNode = 0x9, packetId = 0x9, portnum = 9, requestId = 0x9, replyId = 0x9;
 
     crypto->generateKeyPair(pub, priv);
-    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sig1));
-    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sig2));
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sig1));
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sig2));
 
     TEST_ASSERT_TRUE_MESSAGE(memcmp(sig1, sig2, sizeof(sig1)) != 0,
                              "signatures must differ - XEdDSA Z randomization is not wired through");
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, message, sizeof(message), sig1));
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, message, sizeof(message), sig2));
+    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sig1));
+    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sig2));
+}
+
+// A packet with no request/reply linkage keeps the base signing layout, byte-identical to the
+// pre-request_id-binding format: a signature built by hand over [from|id|portnum|payload] - what
+// an existing 2.8 draft signer emits - must verify through the current engine with 0/0 fields,
+// and must NOT verify when reinterpreted with nonzero request/reply fields (or vice versa).
+void test_XEdDSA_legacy_layout_compat(void)
+{
+    uint8_t pub[32], priv[32], ed_priv[32], ed_pub[32];
+    uint8_t message[] = "legacy signer";
+    uint8_t signature[64];
+    uint32_t fromNode = 0x77, packetId = 0x1CEB00DA, portnum = 1;
+
+    crypto->generateKeyPair(pub, priv);
+    XEdDSA::priv_curve_to_ed_keys(priv, ed_priv, ed_pub);
+
+    // Hand-build the base-format buffer exactly as pre-binding firmware does.
+    uint8_t legacyBuf[12 + sizeof(message)];
+    memcpy(legacyBuf, &fromNode, 4);
+    memcpy(legacyBuf + 4, &packetId, 4);
+    memcpy(legacyBuf + 8, &portnum, 4);
+    memcpy(legacyBuf + 12, message, sizeof(message));
+    memset(signature, 0x42, 32); // hedge nonce seed, any value works
+    XEdDSA::sign(signature, ed_priv, ed_pub, legacyBuf, sizeof(legacyBuf));
+
+    // Legacy signature verifies through the new engine when both fields are zero...
+    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0, 0, message, sizeof(message), signature));
+    // ...and cannot be re-framed as a signature over a request/reply-bearing packet.
+    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0xA1, 0, message, sizeof(message), signature));
+    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0, 0xB2, message, sizeof(message), signature));
+
+    // The mirror image: an extended-format signature must not verify with the fields zeroed.
+    uint8_t extSig[64];
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, 0xA1, 0xB2, message, sizeof(message), extSig));
+    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0xA1, 0xB2, message, sizeof(message), extSig));
+    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0, 0, message, sizeof(message), extSig));
 }
 
 void test_AES_CTR(void)
@@ -380,6 +435,7 @@ void setup()
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
     RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
+    RUN_TEST(test_XEdDSA_legacy_layout_compat);
     exit(UNITY_END()); // stop unit testing
 }
 
