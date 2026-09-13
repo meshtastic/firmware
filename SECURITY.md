@@ -31,14 +31,18 @@ Meshtastic is an off-grid mesh protocol that runs on constrained microcontroller
 
 A client connected to a node over Bluetooth, USB serial, WiFi, or Ethernet has full local API access. From that connection it can read decrypted traffic, send messages as the node, change configuration (subject to managed mode), and read the node's private key for backup. This is intended behavior. The firmware trusts the local link the same way a phone or laptop trusts a directly attached device, and anything within reach of that connection (a shared LAN, a USB cable to an untrusted host, a paired phone) should be treated as part of the node itself.
 
-#### The serial setting is not a security boundary
+#### What the serial setting does, and what it does not
 
-`security.serial_enabled = false` is an operational convenience, not an access control. It stops the serial console from accepting API frames and suppresses log output on that port. It does nothing else:
+`security.serial_enabled = false` does two things. It stops the serial console from accepting API frames, and it suppresses log output on that port.
 
-- Bluetooth, WiFi, and Ethernet API access are unaffected. A node with the serial console disabled and Bluetooth enabled, the default on most boards, still offers full local API access to anyone who can pair with it.
+Suppressing that output is a real protection worth understanding: the Bluetooth pairing PIN is written to the log. On nRF52 the configured PIN is logged at setup and again when a pairing attempt begins; on ESP32 the passkey is logged for the user to read off the console. Anyone who can watch the serial port can therefore read the PIN and pair over Bluetooth. Disabling the serial console closes that disclosure, which matters when a node's USB or UART is reachable, for example a board with an exposed header, a node plugged into a host you do not control, or a gateway whose console output is captured to a log.
+
+What it does not do:
+
+- It does not restrict local API access. Bluetooth, WiFi, and Ethernet never consult this setting. A node with the serial console disabled and Bluetooth enabled, the default on most boards, still offers full local API access, including the private-key read described above, to anyone who can pair with it.
 - It does not protect a node from someone holding it. The setting is stored configuration, not a lock. Physical possession allows re-enabling it, factory resetting, or reflashing, and on a device without at-rest encryption the private key can be read out of flash directly.
 
-Turn it off to keep a port quiet or to avoid a host that chatters at the console. Do not rely on it to harden an unattended node.
+Disable it to keep the pairing PIN and other log output off an exposed port. To restrict what a connected client may do, or to protect stored keys, use lockdown.
 
 #### Lockdown mode
 
