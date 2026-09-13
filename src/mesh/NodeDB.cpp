@@ -4037,7 +4037,7 @@ void NodeDB::pause_sort(bool paused)
 void NodeDB::sortMeshDB()
 {
     if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
-        lastSort = millis();
+        lastSort = Time::skipZero(Time::getMillis());
         bool changed = true;
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
