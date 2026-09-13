@@ -6,6 +6,15 @@
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR11x0: SX1262, SX1268.
  */
+// RadioLib keeps getTemp() protected; this exposes it only inside the Meshtastic adapter.
+template <class T> class TemperatureReadableLR11x0 : public T
+{
+  public:
+    explicit TemperatureReadableLR11x0(Module *mod) : T(mod) {}
+
+    bool readChipTemperature(float &temperature) { return this->getTemp(&temperature) == RADIOLIB_ERR_NONE; }
+};
+
 template <class T> class LR11x0Interface : public RadioLibInterface
 {
   public:
@@ -27,6 +36,15 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    bool getChipTemperature(float &temperature) override
+    {
+        if (isSending() || isReceiving) {
+            return false;
+        }
+
+        return lora.readChipTemperature(temperature);
+    }
+
 #ifdef LR11X0_AGC_RESET
     void resetAGC() override;
 #endif
@@ -35,7 +53,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /**
      * Specific module instance
      */
-    T lora;
+    TemperatureReadableLR11x0<T> lora;
 
     int16_t getCurrentRSSI() override;
 
