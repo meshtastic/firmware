@@ -31,6 +31,32 @@ Meshtastic is an off-grid mesh protocol that runs on constrained microcontroller
 
 A client connected to a node over Bluetooth, USB serial, WiFi, or Ethernet has full local API access. From that connection it can read decrypted traffic, send messages as the node, change configuration (subject to managed mode), and read the node's private key for backup. This is intended behavior. The firmware trusts the local link the same way a phone or laptop trusts a directly attached device, and anything within reach of that connection (a shared LAN, a USB cable to an untrusted host, a paired phone) should be treated as part of the node itself.
 
+#### The serial setting is not a security boundary
+
+`security.serial_enabled = false` is an operational convenience, not an access control. It stops the serial console from accepting API frames and suppresses log output on that port. It does nothing else:
+
+- Bluetooth, WiFi, and Ethernet API access are unaffected. A node with the serial console disabled and Bluetooth enabled, the default on most boards, still offers full local API access to anyone who can pair with it.
+- It does not protect a node from someone holding it. The setting is stored configuration, not a lock. Physical possession allows re-enabling it, factory resetting, or reflashing, and on a device without at-rest encryption the private key can be read out of flash directly.
+
+Turn it off to keep a port quiet or to avoid a host that chatters at the console. Do not rely on it to harden an unattended node.
+
+#### Lockdown mode
+
+Lockdown is the mechanism that actually restricts local access, and it is what to use when a node is physically exposed and its configuration and keys must survive that. Rather than trusting every local connection, it requires a passphrase before a connection may administer the node or read sensitive configuration, encrypts stored configuration at rest, and can permanently disable the debug port.
+
+When lockdown is provisioned, the node gains:
+
+- **Per-connection authentication and redaction.** An unauthenticated local client is not trusted. Admin payloads other than the unlock itself are dropped, and sensitive configuration is redacted: the client receives an empty security config, with no private key, no admin keys, and no channel PSKs.
+- **Encrypted storage at rest.** Stored configuration, including the private key, is encrypted with AES-128-CTR and authenticated with HMAC-SHA256, so reading the flash does not yield the key.
+- **APPROTECT.** On nRF52 silicon that supports it, the debug port is burned off, closing SWD as a route to memory. This is one-way and is not reversed by disabling lockdown.
+- **Optional session limits.** Builds may cap how long an unlocked session lasts, bounding exposure if a node is taken while unlocked.
+
+Availability and setup:
+
+- Lockdown is **nRF52 only** and is **opt-in at build time**. No released variant ships with it enabled, so it requires a firmware build with `-DMESHTASTIC_ENABLE_LOCKDOWN=1`. Flash-constrained nRF52 variants may be unable to fit it.
+- Once built in, whether it is active is decided at runtime. A node that has never been provisioned behaves exactly like stock firmware, with plaintext storage, no redaction, and normal logging.
+- The operator provisions and removes it from the client app. Removing it decrypts storage back to plaintext and reboots, with the exception of APPROTECT, which cannot be undone.
+
 ### Node identity (Trust On First Use)
 
 There is no central authority to sign node keys. The first public key a node hears for a given node number is the one it binds to that node number, a Trust On First Use (TOFU) model that is a hard requirement of a decentralized mesh. Clients and firmware reduce the impact of this by keeping favorited nodes from rolling out of the node database and by flagging public-key changes in the client UI.
@@ -42,3 +68,4 @@ Firmware 2.8.X adds XEdDSA packet signing to further secure node identity claims
 - No perfect forward secrecy. Traffic captured today can be decrypted later if a key is compromised, for example through a lost node or a mishandled channel key.
 - Channel messages are not authenticated, as noted above. Although as of 2.8, channel messages will be xedDSA signed as a means of verification that is non-breaking.
 - Setting WiFi credentials, or performing any other local administration, on an ESP32 over an untrusted network exposes that traffic, including the credentials, to the network. Provision and administer nodes over a trusted channel instead: Bluetooth, USB serial, or remote admin over the mesh. There is no current roadmap item to secure local administration over untrusted WiFi, though it may be addressed in a future release.
+- Lockdown, described above, is the only mechanism that restricts local API access or protects stored keys, and it exists on nRF52 only. On every other platform, including all ESP32 targets, a node's configuration and private key are readable by anyone who can connect to it locally or take possession of it. Site a node accordingly.
