@@ -6,6 +6,7 @@
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
+#include <cstdlib>
 #include <cstring>
 
 #if HAS_SCREEN
@@ -20,9 +21,14 @@ GeofenceModule *geofenceModule;
 
 static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
 
+// Capacity taken on the first tracked crossing. The cap above is a ceiling for a pathological mesh,
+// not an expectation: a node typically watches a couple of geofences and sees a handful of peers
+// cross them, so claiming all 256 slots (4 KB) at boot spent the memory on every node in the fleet
+// to serve the few that have waypoints at all. ensureCrossingCapacity() doubles from here to the cap.
+static constexpr size_t GEOFENCE_INITIAL_CROSSING = 8;
+
 GeofenceModule::GeofenceModule()
 {
-    crossingInside.reserve(GEOFENCE_MAX_CROSSING);
     waypointStoreObserver.observe(&waypointStore);
 }
 
@@ -73,6 +79,36 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
     return notifyOnExit ? Crossing::Exit : Crossing::None;
 }
 
+/// Make room for one more tracked crossing, or report that the heap would not wear it.
+///
+/// Waiting until the first crossing to allocate also moves the allocation off the pristine boot
+/// heap and onto a live one running WiFi and TLS - the heap that fails in #6960. This firmware
+/// compiles with exceptions off, so a reserve() that cannot find the block calls abort() and
+/// reboots the node rather than throwing. Ask malloc() first, the one allocator that answers a
+/// refusal with a null pointer, and let a no go degrade into the bounded-drop path the caller
+/// already has for a full table. Stepping the capacity explicitly (rather than letting the vector
+/// pick a growth factor) is what gives the probe a size to ask about.
+bool GeofenceModule::ensureCrossingCapacity()
+{
+    if (crossingInside.size() < crossingInside.capacity())
+        return true; // push_back cannot reallocate
+
+    size_t target = crossingInside.empty() ? GEOFENCE_INITIAL_CROSSING : crossingInside.capacity() * 2;
+    if (target > GEOFENCE_MAX_CROSSING)
+        target = GEOFENCE_MAX_CROSSING;
+
+    // Probed while the vector still holds its current block, which is the state reserve() will
+    // allocate in: it has to find the new block before it can release the old one.
+    void *probe = malloc(target * sizeof(CrossingState));
+    if (!probe)
+        return false;
+    *static_cast<volatile char *>(probe) = 0; // observable, so LTO cannot delete the question
+    free(probe);
+
+    crossingInside.reserve(target);
+    return true;
+}
+
 GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
 {
     for (auto &state : crossingInside) {
@@ -101,8 +137,13 @@ bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint8_t notifica
 
 int GeofenceModule::onWaypointStoreChanged(const WaypointStore *store)
 {
-    (void)store;
-    crossingInside.clear();
+    // clear() keeps the capacity, so a node that once had geofences would hold the block for the
+    // rest of its uptime. Once the last waypoint is gone there is nothing left to track, so hand
+    // the memory back; while waypoints remain, keep the capacity and just drop the stale pairs.
+    if (store && store->getWaypoints().empty())
+        std::vector<CrossingState>().swap(crossingInside);
+    else
+        crossingInside.clear();
     return 0;
 }
 
@@ -138,13 +179,14 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
 
         // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {
-            if (crossingInside.size() < GEOFENCE_MAX_CROSSING) {
+            if (crossingInside.size() < GEOFENCE_MAX_CROSSING && ensureCrossingCapacity()) {
                 crossingInside.push_back(CrossingState{key, isInside});
             } else {
                 static bool warnedCrossingFull = false;
                 if (!warnedCrossingFull) {
-                    LOG_WARN("Geofence crossing-state full (%u); new (waypoint,node) pairs will not alert until space frees",
-                             (unsigned)GEOFENCE_MAX_CROSSING);
+                    LOG_WARN("Geofence crossing-state cannot grow (%u tracked, %u max); new (waypoint,node) pairs will "
+                             "not alert until space frees",
+                             (unsigned)crossingInside.size(), (unsigned)GEOFENCE_MAX_CROSSING);
                     warnedCrossingFull = true;
                 }
             }

@@ -20,6 +20,8 @@
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
+#include <esp_heap_caps.h>
+#include <mbedtls/ssl.h>
 #endif
 
 // Persistent Data Storage
@@ -59,8 +61,62 @@ static const int32_t IDLE_INTERVAL_MS = 1000;
 // Maximum concurrent HTTPS connections (reduced from default 4 to save memory)
 static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
 
-// Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
-static const uint32_t MIN_HEAP_FOR_SSL = 40000;
+// What a new TLS session has to be able to allocate before it can do anything.
+//
+// mbedtls_ssl_setup() makes two independent calloc() calls - one inbound record buffer, one
+// outbound - and each has to come back as a single contiguous block:
+//   MBEDTLS_SSL_{IN,OUT}_CONTENT_LEN + MBEDTLS_SSL_HEADER_LEN + MBEDTLS_SSL_PAYLOAD_OVERHEAD.
+// The two overhead terms are private to the library's ssl_misc.h, so round them up here instead of
+// reaching into it; over-stating them only makes the gate below slightly stricter.
+static const size_t TLS_RECORD_OVERHEAD = 512;
+static const size_t TLS_IN_BUFFER_BYTES = MBEDTLS_SSL_IN_CONTENT_LEN + TLS_RECORD_OVERHEAD;
+static const size_t TLS_OUT_BUFFER_BYTES = MBEDTLS_SSL_OUT_CONTENT_LEN + TLS_RECORD_OVERHEAD;
+
+// The rest of a handshake - handshake params, the transform, the peer certificate - is many small
+// blocks rather than one big one, so a free-heap sum is the right instrument for that part.
+static const uint32_t TLS_HANDSHAKE_SLACK = 8192;
+
+// mbedTLS allocates through esp_mbedtls_mem_calloc(), which is pinned to one heap by
+// CONFIG_MBEDTLS_{INTERNAL,EXTERNAL}_MEM_ALLOC. Probe the heap it will actually ask, or the answer
+// is about memory mbedTLS is not allowed to use.
+#if defined(CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC)
+#define TLS_PROBE_CAPS (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#elif defined(CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC)
+#define TLS_PROBE_CAPS (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+#else
+#define TLS_PROBE_CAPS (MALLOC_CAP_8BIT)
+#endif
+
+/// Can the heap still hand out the contiguous record buffers a new TLS session needs?
+///
+/// A free-heap total is a sum over every free block and says nothing about the largest one, so on a
+/// fragmented heap it waves the connection through: the accept succeeds, mbedtls_ssl_setup() then
+/// fails with MBEDTLS_ERR_SSL_ALLOC_FAILED, and the client gets a TCP reset instead of waiting in
+/// the listen backlog (#6960). Ask the allocator the same question mbedTLS is about to ask it.
+/// Deliberately not heap_caps_get_largest_free_block(): that walks every block while holding the
+/// allocator lock and tripped the interrupt watchdog on PSRAM boards (#11666).
+///
+/// The answer is advisory, not a guarantee. loop() services the open connections before it accepts,
+/// so the heap can still turn between this question and mbedtls_ssl_setup(); a handshake that loses
+/// that race fails exactly as it does today, with a reset. This makes it rare rather than routine.
+static bool canAllocateTlsSession()
+{
+    if (ESP.getFreeHeap() < TLS_IN_BUFFER_BYTES + TLS_OUT_BUFFER_BYTES + TLS_HANDSHAKE_SLACK)
+        return false;
+
+    // Hold both at once, exactly as mbedtls_ssl_setup() does - one can well fit where two do not.
+    void *in = heap_caps_malloc(TLS_IN_BUFFER_BYTES, TLS_PROBE_CAPS);
+    void *out = in ? heap_caps_malloc(TLS_OUT_BUFFER_BYTES, TLS_PROBE_CAPS) : nullptr;
+    const bool fits = in && out;
+    // Observable accesses, so LTO cannot judge the pair dead and delete the question.
+    if (in)
+        *static_cast<volatile char *>(in) = 0;
+    if (out)
+        *static_cast<volatile char *>(out) = 0;
+    heap_caps_free(out);
+    heap_caps_free(in);
+    return fits;
+}
 
 // HTTPSServer that can service and reap the connections it already holds without accepting new ones,
 // so a low-heap pause doesn't freeze open TLS sessions (and their heap) in place. Needs the protected table.
@@ -69,21 +125,53 @@ class MeshHTTPSServer : public HTTPSServer
   public:
     using HTTPSServer::HTTPSServer;
 
+    /// Give back the slots of connections that have closed. Costs nothing and touches no socket.
+    ///
+    /// Has to run before the heap is judged: HTTPServer::loop() reaps and accepts in a single pass,
+    /// so a connection it frees during that pass opens a slot after any measurement we made and
+    /// gets accepted unmeasured. Reaping here first means loop()'s own reap pass can no longer turn
+    /// up a slot we did not already know about, and hands back the ~21 kB a finished session held.
+    void reapClosedConnections()
+    {
+        if (!_running)
+            return;
+        for (uint8_t i = 0; i < _maxConnections; i++) {
+            if (_connections[i] && _connections[i]->isClosed()) {
+                delete _connections[i];
+                _connections[i] = nullptr;
+            }
+        }
+    }
+
     /// The first half of HTTPServer::loop(): drive and reap existing connections, accept nothing.
     void serviceExistingConnections()
     {
         if (!_running)
             return;
+        reapClosedConnections();
+        for (uint8_t i = 0; i < _maxConnections; i++) {
+            if (_connections[i])
+                _connections[i]->loop();
+        }
+    }
+
+    /// Whether loop() could accept this time round, i.e. whether the heap question is worth asking.
+    ///
+    /// Deliberately only asks about slots, not about whether a client is waiting right now. loop()
+    /// runs its own select() *after* it has synchronously driven every open connection, and driving
+    /// one means running a handler that writes a whole response body over a blocking socket - easily
+    /// milliseconds. A client that arrives during that window is invisible to any select() we could
+    /// do beforehand and would be accepted with no heap behind it. The slot scan has no such window:
+    /// loop() picks its free slot from the same state we just read.
+    bool hasFreeConnectionSlot()
+    {
+        if (!_running)
+            return false;
         for (uint8_t i = 0; i < _maxConnections; i++) {
             if (!_connections[i])
-                continue;
-            if (_connections[i]->isClosed()) {
-                delete _connections[i];
-                _connections[i] = nullptr;
-            } else {
-                _connections[i]->loop();
-            }
+                return true;
         }
+        return false;
     }
 };
 
@@ -101,8 +189,12 @@ static void handleWebResponse()
         if (isWebServerReady) {
             // Check heap before HTTPS processing - SSL requires significant memory
             if (secureServer) {
-                uint32_t freeHeap = ESP.getFreeHeap();
-                if (freeHeap >= MIN_HEAP_FOR_SSL) {
+                // Reap first: it settles the slot picture judged below, and hands back the ~21 kB a
+                // finished session was holding so the probe measures the heap we will really have.
+                secureServer->reapClosedConnections();
+                // Only pay for the probe when the answer can change something: with every slot
+                // busy, loop() cannot accept anyway and is just the servicing half.
+                if (!secureServer->hasFreeConnectionSlot() || canAllocateTlsSession()) {
                     secureServer->loop();
                 } else {
                     // Low heap: accept nothing new, but keep servicing open connections so they can time out
@@ -110,7 +202,8 @@ static void handleWebResponse()
                     secureServer->serviceExistingConnections();
                     static uint32_t lastHeapWarning = 0;
                     if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
-                        LOG_WARN("Low heap (%u bytes), not accepting HTTPS connections", freeHeap);
+                        LOG_WARN("No contiguous heap for a TLS session (%u free), not accepting HTTPS connections",
+                                 ESP.getFreeHeap());
                         lastHeapWarning = millis();
                     }
                 }
