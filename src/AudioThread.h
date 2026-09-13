@@ -1,6 +1,8 @@
 #pragma once
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "concurrency/Lock.h"
+#include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
@@ -30,45 +32,65 @@ extern PCA95X5_CLS io;
 class AudioThread : public concurrency::OSThread
 {
   public:
+    enum class RtttlOwner : uint8_t { NONE, SYSTEM, EXTERNAL_NOTIFICATION };
+
     AudioThread() : OSThread("Audio") { initOutput(); }
 
-    void beginRttl(const void *data, uint32_t len)
+    void beginRttl(const void *data, uint32_t len, RtttlOwner owner = RtttlOwner::SYSTEM)
     {
-        ampEnable(true);
-        setCPUFast(true);
-        rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
-        i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
-        i2sRtttl->begin(rtttlFile.get(), audioOut.get());
+        concurrency::LockGuard guard(&rtttlLock);
+        beginRttlUnlocked(data, len, owner);
+    }
+
+    bool beginRttlIfIdle(const void *data, uint32_t len, RtttlOwner owner = RtttlOwner::SYSTEM)
+    {
+        concurrency::LockGuard guard(&rtttlLock);
+        if (isPlayingUnlocked()) {
+            return false;
+        }
+        beginRttlUnlocked(data, len, owner);
+        return true;
     }
 
     // Also handles actually playing the RTTTL, needs to be called in loop
     bool isPlaying()
     {
-        if (i2sRtttl != nullptr) {
-            return i2sRtttl->isRunning() && i2sRtttl->loop();
+        concurrency::LockGuard guard(&rtttlLock);
+        return isPlayingUnlocked();
+    }
+
+    bool isPlaying(RtttlOwner owner)
+    {
+        concurrency::LockGuard guard(&rtttlLock);
+        const bool playing = isPlayingUnlocked();
+        return playing && rtttlOwner == owner;
+    }
+
+    bool stopRtttlIfOwnedBy(RtttlOwner owner)
+    {
+        concurrency::LockGuard guard(&rtttlLock);
+        if (rtttlOwner != owner) {
+            return false;
         }
-        return false;
+        stopUnlocked();
+        return true;
     }
 
     void stop()
     {
-        if (i2sRtttl != nullptr) {
-            i2sRtttl->stop();
-            i2sRtttl = nullptr;
-        }
-
-        rtttlFile = nullptr;
-
-        setCPUFast(false);
-        ampEnable(false);
+        concurrency::LockGuard guard(&rtttlLock);
+        stopUnlocked();
     }
 
     void readAloud(const char *text)
     {
+        concurrency::LockGuard guard(&rtttlLock);
         if (i2sRtttl != nullptr) {
             i2sRtttl->stop();
             i2sRtttl = nullptr;
         }
+        rtttlFile = nullptr;
+        rtttlOwner = RtttlOwner::NONE;
 
         ampEnable(true);
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
@@ -76,6 +98,7 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(false);
         audioOut->stop();
         ampEnable(false);
+        restoreOutputPinMode();
     }
 
   protected:
@@ -90,6 +113,51 @@ class AudioThread : public concurrency::OSThread
     }
 
   private:
+    void beginRttlUnlocked(const void *data, uint32_t len, RtttlOwner owner)
+    {
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+        }
+        ampEnable(true);
+        setCPUFast(true);
+        rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
+        i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
+        rtttlOwner = owner;
+        i2sRtttl->begin(rtttlFile.get(), audioOut.get());
+    }
+
+    bool isPlayingUnlocked()
+    {
+        if (i2sRtttl == nullptr) {
+            return false;
+        }
+        const bool playing = i2sRtttl->isRunning() && i2sRtttl->loop();
+        if (!playing) {
+            stopUnlocked();
+        }
+        return playing;
+    }
+
+    void stopUnlocked()
+    {
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+            i2sRtttl = nullptr;
+        }
+        rtttlFile = nullptr;
+        rtttlOwner = RtttlOwner::NONE;
+        setCPUFast(false);
+        ampEnable(false);
+        restoreOutputPinMode();
+    }
+
+    static void restoreOutputPinMode()
+    {
+#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
+        pinMode(0, INPUT);
+#endif
+    }
+
     // Amps like the NS4150 need time to leave shutdown, longer when the enable is an I/O expander write.
     // Without a variant's AUDIO_AMP_SETTLE_MS the short system tones are over before any audio gets out.
     static void ampEnable(bool on)
@@ -116,6 +184,8 @@ class AudioThread : public concurrency::OSThread
     std::unique_ptr<AudioOutputI2S> audioOut = nullptr;
 
     std::unique_ptr<AudioFileSourcePROGMEM> rtttlFile = nullptr;
+    RtttlOwner rtttlOwner = RtttlOwner::NONE;
+    concurrency::Lock rtttlLock;
 };
 
 #endif

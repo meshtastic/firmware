@@ -73,8 +73,8 @@ void initVariant()
     pinMode(SX126X_CS, OUTPUT);
     digitalWrite(SX126X_CS, HIGH);
 
-    pinMode(GPS_EN_GPIO, OUTPUT);
-    digitalWrite(GPS_EN_GPIO, HIGH); // GPS on initially
+    pinMode(PIN_GPS_EN, OUTPUT);
+    digitalWrite(PIN_GPS_EN, LOW);
 
     pinMode(SCREEN_12V_ENABLE, OUTPUT);
     digitalWrite(SCREEN_12V_ENABLE, LOW); //

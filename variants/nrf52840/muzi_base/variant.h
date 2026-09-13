@@ -103,7 +103,7 @@ extern "C" {
 // GPS
 #define GPS_RX_PIN (0 + 20)  // P0.20
 #define GPS_TX_PIN (0 + 19)  // P0.19
-#define GPS_EN_GPIO (32 + 1) // P1.01
+#define PIN_GPS_EN (32 + 1)  // P1.01
 
 #define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_SERIAL1_TX GPS_TX_PIN
@@ -125,6 +125,9 @@ extern "C" {
 #define HAS_SCREEN 1
 #define SCREEN_12V_ENABLE (0 + 23) // P0.23
 #define USE_SH1107
+#define USERPREFS_CONFIG_SCREEN_ON_SECS 30
+
+#define MOTION_SENSOR_SLEEP_CHECK_INTERVAL_MS 1000
 
 #define USERPREFS_OEM_TEXT "muzi_works_logo"
 #define USERPREFS_OEM_FONT_SIZE 0
