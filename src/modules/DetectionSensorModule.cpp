@@ -96,30 +96,50 @@ int32_t DetectionSensorModule::runOnce()
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
-    if (!Throttle::isWithinTimespanMs(lastSentToMesh,
+    // Sample and evaluate the trigger every poll so a transition is never missed; minimum_broadcast_secs
+    // only rate-limits sends, not sampling.
+    bool isDetected = hasDetectionEvent();
+    DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
+    wasDetected = isDetected;
+    switch (verdict) {
+    case DetectionSensorVerdictDetected:
+        if (!pendingDetected)
+            pendingDetectedFirst = !pendingState;
+        pendingDetected = true;
+        break;
+    case DetectionSensorVerdictSendState:
+        if (!pendingState)
+            pendingDetectedFirst = pendingDetected;
+        pendingState = true;
+        pendingStateIsDetected = isDetected;
+        break;
+    case DetectionSensorVerdictNoop:
+        break;
+    }
+    if ((pendingDetected || pendingState) &&
+        !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
-        bool isDetected = hasDetectionEvent();
-        DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
-        wasDetected = isDetected;
-        switch (verdict) {
-        case DetectionSensorVerdictDetected:
+        // Send whichever verdict occurred first when both are outstanding, so the mesh sees them
+        // in the order they actually happened.
+        if (pendingDetected && (!pendingState || pendingDetectedFirst)) {
+            pendingDetected = false;
             sendDetectionMessage();
-            return DELAYED_INTERVAL;
-        case DetectionSensorVerdictSendState:
-            sendCurrentStateMessage(isDetected);
-            return DELAYED_INTERVAL;
-        case DetectionSensorVerdictNoop:
-            break;
+        } else {
+            pendingState = false;
+            sendCurrentStateMessage(pendingStateIsDetected);
         }
+        return DELAYED_INTERVAL;
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
-    if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
+    // Skipped while a verdict is pending: sending one resets lastSentToMesh, which could postpone
+    // the pending verdict indefinitely if state_broadcast_secs < minimum_broadcast_secs.
+    if (!pendingDetected && !pendingState && moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                         default_telemetry_broadcast_interval_secs))) {
-        sendCurrentStateMessage(hasDetectionEvent());
+        sendCurrentStateMessage(isDetected);
         return DELAYED_INTERVAL;
     }
     return GPIO_POLLING_INTERVAL;
