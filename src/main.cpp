@@ -40,6 +40,9 @@
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
 #include "detect/ScanI2CTwoWire.h"
+#if defined(HAS_SE050)
+#include "security/SE050.h"
+#endif
 #include <Wire.h>
 #endif
 #include "detect/einkScan.h"
@@ -637,6 +640,28 @@ void setup()
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
+#ifdef SE050_ENA_PIN
+    // The SE050 has no reset line, and it survives an MCU reset in whatever state it
+    // was left in - typically refusing to ack 0x48 until the board is power cycled by
+    // hand. ENA switches its internal regulator, so pulsing it here is the only way to
+    // hand the secure element a clean power-on reset, and it has to happen before the
+    // I2C scan that is supposed to find it.
+    //
+    // Boards where ENA is strapped to the rail simply do not define SE050_ENA_PIN.
+    // 2us of ENA low is enough to enter deep power-down (tENalt, datasheet 14.2), but
+    // the pull-up and the filter capacitor on that node make the edges slow, so both
+    // delays are generous rather than minimal.
+    // The settle time is empirical: the datasheet gives no figure for "ENA high to
+    // ready". With 10ms the chip already acked its address but answered the T=1oI2C
+    // soft reset with nothing, and the scanner's probe is single shot, so a short
+    // wait here costs the detection entirely.
+    pinMode(SE050_ENA_PIN, OUTPUT);
+    digitalWrite(SE050_ENA_PIN, LOW);
+    delay(5);
+    digitalWrite(SE050_ENA_PIN, HIGH);
+    delay(250);
+#endif
+
     // Currently only the tbeam has a PMU
     // PMU initialization needs to be placed before i2c scanning
     power = new Power();
@@ -696,6 +721,22 @@ void setup()
         sensor_detected = true;
 #endif
     }
+
+#if defined(HAS_SE050)
+    // Secure element bring-up: only talk T=1oI2C to it if the scan actually saw one.
+    {
+        auto se050Info = i2cScanner->find(ScanI2C::DeviceType::NXP_SE050);
+        if (se050Info.type != ScanI2C::DeviceType::NONE) {
+            // Outlives setup: the crypto engine talks to the chip for the rest of the
+            // run, and reopening the secure channel per operation would be absurd.
+            se050 = new SE050(se050Info.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire, se050Info.address.address);
+            if (se050 && !se050->probe()) {
+                delete se050;
+                se050 = nullptr;
+            }
+        }
+    }
+#endif
 #ifdef ARCH_ESP32
 #ifdef DEBUG_PARTITION_TABLE
     printPartitionTable();
@@ -1206,6 +1247,13 @@ void setup()
     // Initialize Ethernet
     initEthernet();
 #endif
+#endif
+
+#if defined(HAS_SE050) && defined(HAS_CUSTOM_CRYPTO_ENGINE)
+    // Deliberately after the network is up, not next to NodeDB where the identity is
+    // actually loaded. If this ever hangs, the board still answers over the network
+    // and can be recovered without pulling it apart for a manual bootloader entry.
+    se050CryptoSelfTest();
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
