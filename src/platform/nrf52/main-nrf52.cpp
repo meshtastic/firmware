@@ -11,8 +11,10 @@
 
 #define APP_WATCHDOG_SECS 90
 #ifdef ARCH_NRF54L
-// The nRF54L core compiles the nrfx drivers itself; POWER/RESET registers are split differently.
+// The nRF54L core compiles the nrfx drivers itself (nrfx 3: errno-style returns, 0 is success);
+// POWER/RESET registers are split differently.
 #include <nrfx_wdt.h>
+#define NRFX_OK 0
 #define GPREGRET_REG NRF_POWER->GPREGRET[0]
 #define RESETREAS_REG NRF_RESET->RESETREAS
 #else
@@ -24,6 +26,7 @@
 #include <nrfx_wdt.h>
 #define GPREGRET_REG NRF_POWER->GPREGRET
 #define RESETREAS_REG NRF_POWER->RESETREAS
+#define NRFX_OK NRFX_SUCCESS
 #endif
 #include <assert.h>
 #include <ble_gap.h>
@@ -204,7 +207,8 @@ bool loopCanSleep()
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
-    // debugger_break(); FIXME doesn't work, possibly not for segger
+    Serial.flush(); // the reset below would cut the message short
+    // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu
     NVIC_SystemReset();
 }
@@ -491,10 +495,10 @@ void nrf52Setup()
                                  nullptr // Watchdog event handler, not used, we just reset.
     );
 #endif
-    assert(r == NRFX_SUCCESS);
+    assert(r == NRFX_OK);
 
     r = nrfx_wdt_channel_alloc(&nrfx_wdt, &nrfx_wdt_channel_id_nrf52_main);
-    assert(r == NRFX_SUCCESS);
+    assert(r == NRFX_OK);
 }
 
 void cpuDeepSleep(uint32_t msecToWake)
