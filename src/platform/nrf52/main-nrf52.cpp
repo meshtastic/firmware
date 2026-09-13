@@ -1,22 +1,33 @@
 #include "UptimeClock.h"
 #include "configuration.h"
 #include "mesh/Throttle.h"
+#ifndef ARCH_NRF54L
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
+#endif
 #include <InternalFileSystem.h>
 #include <SPI.h>
 #include <Wire.h>
 
 #define APP_WATCHDOG_SECS 90
+#ifdef ARCH_NRF54L
+// The nRF54L core compiles the nrfx drivers itself; POWER/RESET registers are split differently.
+#include <nrfx_wdt.h>
+#define GPREGRET_REG NRF_POWER->GPREGRET[0]
+#define RESETREAS_REG NRF_RESET->RESETREAS
+#else
 #define NRFX_WDT_ENABLED 1
 #define NRFX_WDT0_ENABLED 1
 #define NRFX_WDT_CONFIG_NO_IRQ 1
 #include "nrfx_power.h"
+#include <nrfx_wdt.c>
+#include <nrfx_wdt.h>
+#define GPREGRET_REG NRF_POWER->GPREGRET
+#define RESETREAS_REG NRF_POWER->RESETREAS
+#endif
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
-#include <nrfx_wdt.c>
-#include <nrfx_wdt.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
 #include "HardwareRNG.h"
@@ -71,7 +82,11 @@ __attribute__((noinline)) bool variant_enableBatteryLpcompWake()
     return true;
 }
 
+#ifdef ARCH_NRF54L
+static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(NRF_WDT31);
+#else
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
+#endif
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
 // This is a public global so that the debugger can set it to false automatically from our gdbinit
@@ -89,7 +104,11 @@ static inline void debugger_break(void)
 // PowerHAL NRF52 specific function implementations
 bool powerHAL_isVBUSConnected()
 {
+#ifdef ARCH_NRF54L
+    return false; // no USB peripheral
+#else
     return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
+#endif
 }
 
 bool powerHAL_isPowerLevelSafe()
@@ -138,8 +157,10 @@ void powerHAL_platformInit()
     // I did experiments with bench power supply and no matter what is set to POFCON, it always triggers right below
     // 2.8V. I compared raw registry values with datasheet.
 
+#ifndef ARCH_NRF54L
     NRF_POWER->POFCON =
         ((POWER_POFCON_THRESHOLD_V22 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
+#endif
 
     // remember to always match VBAT_AR_INTERNAL with AREF_VALUE in variant definition file
 #ifdef VBAT_AR_INTERNAL
@@ -203,7 +224,11 @@ bool getDeviceId(uint8_t *deviceId)
 {
     // Nordic burns a FIPS-compliant random id into each chip at the factory. We concatenate
     // the device address to that random id to form the 16-byte hardware identifier.
+#ifdef ARCH_NRF54L
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
+#else
     uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+#endif
     uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
     memcpy(deviceId, &device_id_start, sizeof(device_id_start));
     memcpy(deviceId + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
@@ -294,9 +319,9 @@ void preFSBegin()
 {
     // The GPREGRET register keeps its value across warm boots. Check that this is a warm boot and, if GPREGRET
     // is set to NRF52_MAGIC_LFS_IS_CORRUPT, format LittleFS.
-    if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
+    if (!(RESETREAS_REG == 0 && GPREGRET_REG == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
-    NRF_POWER->GPREGRET = 0;
+    GPREGRET_REG = 0;
     // unset-sentinel-ok: formatted_this_boot carries the armed state, so 0 is a legal stamp
     last_format_ms = Time::getMillis();
     formatted_this_boot = true;
@@ -334,7 +359,7 @@ extern "C" void lfs_assert(const char *reason)
     if (!NRF_POWER->EVENTS_POFWARN) {
         if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS &&
               sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
-            NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+            GPREGRET_REG = NRF52_MAGIC_LFS_IS_CORRUPT;
         }
     }
 
@@ -452,6 +477,11 @@ void nrf52Setup()
     // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
     // the first time through the main loop), so that other threads can
     // allocate their own wdt channel to protect themselves from hangs.
+#ifdef ARCH_NRF54L
+    // nrfx 3: behaviour is a RUN_* mask (0 = pause in sleep and halt), init takes a context argument
+    nrfx_wdt_config_t wdt0_config = {.behaviour = 0, .reload_value = APP_WATCHDOG_SECS * 1000};
+    int r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config, nullptr, nullptr);
+#else
     nrfx_wdt_config_t wdt0_config = {
         .behaviour = NRF_WDT_BEHAVIOUR_PAUSE_SLEEP_HALT, .reload_value = APP_WATCHDOG_SECS * 1000,
         // Note: Not using wdt interrupts.
@@ -460,6 +490,7 @@ void nrf52Setup()
     nrfx_err_t r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config,
                                  nullptr // Watchdog event handler, not used, we just reset.
     );
+#endif
     assert(r == NRFX_SUCCESS);
 
     r = nrfx_wdt_channel_alloc(&nrfx_wdt, &nrfx_wdt_channel_id_nrf52_main);
@@ -541,11 +572,16 @@ void cpuDeepSleep(uint32_t msecToWake)
         }
 #endif
 
+#ifdef ARCH_NRF54L
+        // s145 has no sd_power_system_off(); REGULATORS is not SoftDevice-restricted
+        NRF_REGULATORS->SYSTEMOFF = 1;
+#else
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
             LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off");
             NRF_POWER->SYSTEMOFF = 1;
         }
+#endif
     }
 
     // The following code should not be run, because we are off
