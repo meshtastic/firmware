@@ -2121,7 +2121,6 @@ bool GPS::lookForLocation()
     // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
-    fixQual = reader.fixQuality();
 
     const uint8_t parsedFixType = reader.gsaFixType();
 
