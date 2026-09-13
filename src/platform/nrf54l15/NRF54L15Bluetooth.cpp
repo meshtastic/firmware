@@ -397,11 +397,14 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
 
-    // nRF54L15-DK has no screen - cannot display a PIN to the user.
-    // Requesting BT_SECURITY_L2 causes the OS to show a pairing dialog that
-    // the user dismisses, triggering disconnect + advertising restart failure.
-    // Skip security negotiation; the Meshtastic app works over plain GATT.
-    // (Security can be re-enabled once a display or NFC OOB path is available.)
+#if defined(CONFIG_BT_SMP)
+    // mesh_svc attributes all require BT_GATT_PERM_*_AUTHEN, and some centrals never
+    // escalate on their own, so request an authenticated link instead of waiting.
+    int sec_err = bt_conn_set_security(conn, BT_SECURITY_L4);
+    if (sec_err) {
+        LOG_WARN("BLE security request failed: %d", sec_err);
+    }
+#endif
 }
 
 static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
