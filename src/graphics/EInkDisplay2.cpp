@@ -207,10 +207,8 @@ bool EInkDisplay::connect()
             (void)adafruitDisplay;
         }
     }
-
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) ||                 \
-    defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) ||         \
-    defined(MINI_EPAPER_S3)
+    defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER)
     {
 #if defined(TLORA_T3S3_EPAPER)
         // T3-S3 shares HSPI with the SD card; preconfigure the panel control pins.
@@ -246,6 +244,15 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(0);
 #endif
 #endif
+    }
+#elif defined(MINI_EPAPER_S3)
+    {
+        hspi = new SPIClass(HSPI);
+        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+            EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi));
+        adafruitDisplay->init();
+        adafruitDisplay->setRotation(3);
     }
 #elif defined(PCA10059) || defined(ME25LS01)
     {

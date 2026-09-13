@@ -763,11 +763,9 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         } else {
             LOG_WARN("[AW35615] not found at 0x22");
         }
-        getBattVoltage(); // initial read cached_mv
         return true;
     }
 
-    virtual bool isBatteryConnect() override { return true; }
     virtual uint16_t getBattVoltage() override
     {
         if (!initialized)
@@ -1108,7 +1106,7 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
 
     if (counter < UINT8_MAX)
         counter++;
-    return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
+    return counter >= LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
 /// Reads power status to powerStatus singleton.

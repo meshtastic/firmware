@@ -141,6 +141,35 @@ class GPS : private concurrency::OSThread
     // Let the GPS hardware save power between updates
     void down();
 
+    // Multi-GNSS diagnostics.
+    const TinyGPSTrackedSattelites *getTrackedSatellites() const { return reader.trackedSatellites; }
+    size_t getTrackedSatelliteCapacity() const { return TINYGPS_MAX_SATS; }
+
+    uint16_t getSatellitesUsed() const { return reader.gsaSatellitesUsedTotal(); }
+    uint16_t getSatellitesTracked() const { return reader.satellitesTracked(); }
+    uint16_t getSatellitesInView() const { return reader.satellitesInView(); }
+
+    uint16_t getSatellitesUsedBySystem(uint8_t system) const { return reader.gsaSatellitesUsed(system); }
+    uint16_t getSatellitesInViewBySystem(uint8_t system) const { return reader.satellitesInView(system); }
+
+    uint8_t getGsaFixType() const { return reader.gsaFixType(); }
+    uint16_t getGsaPDOP() const { return reader.gsaPDOP(); }
+    uint16_t getGsaHDOP() const { return reader.gsaHDOP(); }
+    uint16_t getGsaVDOP() const { return reader.gsaVDOP(); }
+
+    bool hasValidGLL() const { return reader.hasValidGLL(); }
+    double getGLLLatitude() { return reader.gllLocation.isValid() ? reader.gllLocation.lat() : 0.0; }
+    double getGLLLongitude() { return reader.gllLocation.isValid() ? reader.gllLocation.lng() : 0.0; }
+    char getGLLStatus() const { return reader.gllInfo.status; }
+    char getGLLMode() const { return reader.gllInfo.mode; }
+
+    bool hasValidZDA() const { return reader.hasValidZDA(); }
+    uint16_t getZDAYear() const { return reader.zdaInfo.year; }
+    uint8_t getZDAMonth() const { return reader.zdaInfo.month; }
+    uint8_t getZDADay() const { return reader.zdaInfo.day; }
+
+    TinyGPSAntennaStatus getAntennaStatus() const { return reader.antennaStatus(); }
+
   private:
     GPS() : concurrency::OSThread("GPS") {}
 
@@ -189,13 +218,13 @@ class GPS : private concurrency::OSThread
     int32_t currentDelay = 2000;
     bool gotTime = false;
 
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
-    // via optional feature "custom fields", currently disabled (bug #525)
-    TinyGPSCustom gsafixtype; // custom extract fix type from GPGSA
-    TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
-    uint8_t fixType = 0;      // fix type from GPGSA
-#endif
+    // #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    //  (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
+    //  via optional feature "custom fields", currently disabled (bug #525)
+    // TinyGPSCustom gsafixtype; // custom extract fix type from GPGSA
+    // TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
+    // uint8_t fixType = 0;      // fix type from GPGSA
+    // #endif
 
     uint32_t fixHoldEnds = 0;
     uint32_t rx_gpio = 0;
