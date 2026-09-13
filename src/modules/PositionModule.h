@@ -34,6 +34,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
      * Send our position into the mesh. True only when the router took the packet.
      */
     bool sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
+    /// The channel whose precision a directed send to `dest` takes; `fallback` unless PKC_ALWAYS. Exposed for tests.
+    static uint8_t directedSendChannel(NodeNum dest, uint8_t fallback);
     bool sendOurPosition();
 
     /**
@@ -76,6 +78,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     virtual int32_t runOnce() override;
 
   private:
+    bool mayReplyTo(NodeNum from);
     meshtastic_MeshPacket *allocPositionPacket(uint32_t atPrecision);
     // Streams our own position to the connected phone/UI at full precision without touching the
     // mesh. Keeps the local view alive now that mesh position sharing is opt-in. Returns true

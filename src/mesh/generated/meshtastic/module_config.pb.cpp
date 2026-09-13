@@ -84,5 +84,3 @@ PB_BIND(meshtastic_RemoteHardwarePin, meshtastic_RemoteHardwarePin, AUTO)
 
 
 
-
-

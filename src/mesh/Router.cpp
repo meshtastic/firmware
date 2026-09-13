@@ -8,6 +8,7 @@
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 
+#include "PortPolicy.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -172,9 +173,9 @@ bool willUsePki(const meshtastic_MeshPacket *p)
     if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag || !isFromUs(p))
         return false;
     bool haveDestKey = false;
-    // Only these ports make the decision key-dependent, so only they pay for the lookup.
-    if (IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_TELEMETRY_APP,
-                  meshtastic_PortNum_PAXCOUNTER_APP)) {
+    // The key lookup only changes the answer for key verification and the policy ports.
+    uint32_t unused;
+    if (p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP || portPolicyFlags(p->decoded.portnum, unused)) {
         meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
         haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
         if (!haveDestKey && p->pki_encrypted)
@@ -1201,15 +1202,15 @@ static bool signedDataFits(meshtastic_Data *d)
 #if !(MESHTASTIC_EXCLUDE_PKI)
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
-    // Node-wide telemetry crypto policy, replies and paxcounter included. ALWAYS_PKC beats NEVER_PKC: a
-    // silent downgrade to a channel-readable payload is the worse failure.
+    // Per-port crypto policy, routine sends and replies alike. With both bits set PKC_ALWAYS applies.
+    uint32_t flags = 0;
+    bool alwaysPkc = false;
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !isBroadcast(p->to) &&
-        IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_PAXCOUNTER_APP)) {
-        const uint32_t flags = moduleConfig.telemetry.telemetry_flags;
-        const bool alwaysPkc = flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_ALWAYS_PKC;
-        if ((flags & meshtastic_ModuleConfig_TelemetryConfig_TelemetryFlags_NEVER_PKC) && !alwaysPkc)
+        portPolicyFlags(p->decoded.portnum, flags)) {
+        alwaysPkc = flags & meshtastic_PortPolicyFlags_PKC_ALWAYS;
+        if ((flags & meshtastic_PortPolicyFlags_PKC_NEVER) && !alwaysPkc)
             return false;
-        // No key for the destination: use the channel PSK rather than send nothing, unless ALWAYS_PKC
+        // No key for the destination: use the channel PSK rather than send nothing, unless PKC_ALWAYS
         // forbids it or the client asked for PKI itself.
         if (!haveDestKey && !alwaysPkc && !p->pki_encrypted) {
             LOG_INFO("No key for 0x%08x, portnum %u goes channel-PSK", p->to, p->decoded.portnum);
@@ -1230,9 +1231,10 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
                                           strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
            // Check for valid keys and single node destination
            config.security.private_key.size == 32 && !isBroadcast(p->to) &&
-           // Some portnums either make no sense to send with PKC
+           // Some portnums either make no sense to send with PKC; a position policy of PKC_ALWAYS overrides.
            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-           p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
+           p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
+           !(p->decoded.portnum == meshtastic_PortNum_POSITION_APP && !alwaysPkc) &&
            // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
            // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
            // uses the pending key resolved into haveDestKey/destKey above.
