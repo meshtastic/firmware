@@ -147,10 +147,6 @@ template <typename T> struct TinyGPSDatum {
         return val;
     }
 
-    // Read the last checksum-committed value without consuming FLAG_UPDATED.
-    // UI/diagnostic fallbacks must never change the parser state seen by GPS.cpp.
-    T peekValue() const { return val; }
-
     TinyGPSDatum() : flags(FLAG_DEFAULT), val(T()) {}
 
   protected:
@@ -353,8 +349,7 @@ class TinyGPSPlus
     uint8_t gsaFixType() const
     {
         uint8_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-        {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
             if (gsaInfo[s].valid && gsaInfo[s].fixType > best)
                 best = gsaInfo[s].fixType;
         }
@@ -364,10 +359,8 @@ class TinyGPSPlus
     uint16_t gsaPDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-        {
-            if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 && (best == 0 || gsaInfo[s].pdop < best))
-            {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+            if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 && (best == 0 || gsaInfo[s].pdop < best)) {
                 best = gsaInfo[s].pdop;
             }
         }
@@ -377,23 +370,18 @@ class TinyGPSPlus
     uint16_t gsaHDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-        {
-            if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 && (best == 0 || gsaInfo[s].hdop < best))
-            {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+            if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 && (best == 0 || gsaInfo[s].hdop < best)) {
                 best = gsaInfo[s].hdop;
             }
         }
         return best;
     }
-
     uint16_t gsaVDOP() const
     {
         uint16_t best = 0;
-        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-        {
-            if (gsaInfo[s].valid && gsaInfo[s].vdop > 0 && (best == 0 || gsaInfo[s].vdop < best))
-            {
+        for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) {
+            if (gsaInfo[s].valid && gsaInfo[s].vdop > 0 && (best == 0 || gsaInfo[s].vdop < best)) {
                 best = gsaInfo[s].vdop;
             }
         }
@@ -427,11 +415,8 @@ class TinyGPSPlus
         return total;
     }
 
-    bool hasValidGLL() const
-    {
-        return gllInfo.valid && isFreshAuxTimestamp(gllInfo.lastUpdate) && gllLocation.isValid() && gllTime.isValid();
-    }
-    bool hasValidZDA() const { return zdaInfo.valid && isFreshAuxTimestamp(zdaInfo.lastUpdate) && zdaTime.isValid(); }
+    bool hasValidGLL() const { return gllInfo.valid && gllLocation.isValid() && gllTime.isValid(); }
+    bool hasValidZDA() const { return zdaInfo.valid && zdaTime.isValid(); }
     TinyGPSAntennaStatus antennaStatus() const { return antInfo.status; }
 
     TinyGPSHDOP hdop;
@@ -497,8 +482,6 @@ class TinyGPSPlus
     TinyGPSAntennaStatus pendingAntennaStatus = TINYGPS_ANT_UNKNOWN;
 
     uint32_t sentenceTime = 0;
-    uint32_t lastGGAUpdate = 0;
-    uint8_t pendingFixQ = 0;
     uint8_t fixQ = 0; /* From Eric S. Raymond's website:
                          http://www.catb.org/gpsd/NMEA.html#_gga_global_positioning_system_fix_data 0 - fix not available, 1 - GPS
                          fix, 2 - Differential GPS fix (values above 2 are 2.3 features) 3 = PPS fix 4 = Real Time Kinematic 5 =

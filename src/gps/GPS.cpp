@@ -2,13 +2,6 @@
 #include <cstring> // Include for strstr
 #include <vector>
 
-// TinyGPS++ exposes checksum statistics only through a private member; this build
-// does not use those counters and the local access pattern is invalid. Disable the
-// statistics branch to avoid direct access to private state in a single-file fix.
-#ifndef TINYGPS_OPTION_NO_STATISTICS
-#define TINYGPS_OPTION_NO_STATISTICS
-#endif
-
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
@@ -1152,10 +1145,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     // Update the stored GPSPowerstate, and create local copies
     GPSPowerState oldState = powerState;
     powerState = newState;
-    if (newState == GPS_ACTIVE && oldState != GPS_ACTIVE) {
-        activeCycleStartedMs = Time::getMillis();
-        activeCycleFreshSatelliteSeen = false;
-    }
     LOG_INFO("GPS power state %s -> %s", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
 
     switch (newState) {
@@ -1219,11 +1208,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 #endif
         break;
     }
-
-    // Power-state changes are UI status only. Do not call PositionModule here:
-    // the upstream scheduler remains the sole owner of wake/sleep decisions.
-    if (GPSInitFinished && oldState != newState)
-        notifyStatusObservers();
 }
 
 // Set power with EN pin, if relevant
@@ -1430,21 +1414,6 @@ void GPS::down()
     }
 }
 
-void GPS::notifyStatusObservers()
-{
-    const bool searching = powerState == GPS_ACTIVE;
-    const bool sleeping = powerState == GPS_SOFTSLEEP || powerState == GPS_HARDSLEEP;
-
-    // This flag becomes true only after lookForLocation() sees a checksum-valid
-    // GGA/GSV that belongs to the current ACTIVE acquisition. It therefore
-    // cannot be satisfied by a still-young sentence left over from before sleep.
-    const bool freshSatelliteData = searching && activeCycleFreshSatelliteSeen;
-
-    const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p, gotTime,
-                                                               searching, sleeping, freshSatelliteData);
-    newStatus.notifyObservers(&status);
-}
-
 void GPS::publishUpdate()
 {
     if (shouldPublish) {
@@ -1453,7 +1422,9 @@ void GPS::publishUpdate()
         // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
         LOG_DEBUG("Publish pos@%x:2, hasVal=%d, Sats=%d, GPSlock=%d", p.timestamp, hasValidLocation, p.sats_in_view, hasLock());
 
-        notifyStatusObservers();
+        // Notify any status instances that are observing us
+        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p, gotTime);
+        newStatus.notifyObservers(&status);
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             positionModule->handleNewPosition();
         }
@@ -1594,15 +1565,6 @@ int32_t GPS::runOnce()
                 fixHoldEnds = Time::timerEndsAtMillis(holdTime);
                 LOG_DEBUG_GPS("Holding for %ums after lock", holdTime);
             }
-        }
-
-        // Satellite/GSV display changes are deliberately status-only. They
-        // must not set shouldPublish, clear fixHoldEnds, call PositionModule,
-        // or alter the official scheduler's success/failure/backoff behavior.
-        if (statusOnlyDirty) {
-            if (!shouldPublish)
-                notifyStatusObservers();
-            statusOnlyDirty = false;
         }
 
         bool tooLong = scheduling.searchedTooLong();

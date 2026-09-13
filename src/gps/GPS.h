@@ -128,12 +128,6 @@ class GPS : private concurrency::OSThread
 
     bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
 
-    // Runtime receiver state is separate from the configured GPS mode.
-    // UI code can use this to distinguish intentional sleep from missing NMEA.
-    GPSPowerState getPowerState() const { return powerState; }
-    bool isActivelySearching() const { return powerState == GPS_ACTIVE; }
-    bool isRuntimeSleeping() const { return powerState == GPS_SOFTSLEEP || powerState == GPS_HARDSLEEP; }
-
     // Empty the input buffer as quickly as possible
     void clearBuffer();
 
@@ -155,19 +149,6 @@ class GPS : private concurrency::OSThread
     uint16_t getSatellitesTracked() const { return reader.satellitesTracked(); }
     uint16_t getSatellitesInView() const { return reader.satellitesInView(); }
 
-    // Last checksum-valid snapshots. These intentionally ignore age and are
-    // only for UI/diagnostics while the receiver is not ACTIVE.
-    uint16_t getSatellitesUsedSnapshot() const { return reader.gsaSatellitesUsedTotalSnapshot(); }
-    uint16_t getSatellitesTrackedSnapshot() const { return reader.satellitesTrackedSnapshot(); }
-    uint16_t getSatellitesInViewSnapshot() const { return reader.satellitesInViewSnapshot(); }
-    uint16_t getSatellitesUsedBySystemSnapshot(uint8_t system) const { return reader.gsaSatellitesUsedSnapshot(system); }
-    uint8_t getGsaFixTypeSnapshot() const { return reader.gsaFixTypeSnapshot(); }
-    uint16_t getGsaPDOPSnapshot() const { return reader.gsaPDOPSnapshot(); }
-    uint16_t getGsaHDOPSnapshot() const { return reader.gsaHDOPSnapshot(); }
-    uint16_t getGsaVDOPSnapshot() const { return reader.gsaVDOPSnapshot(); }
-    uint32_t getGsvAgeMs() const { return reader.gsvAge(); }
-    uint32_t getGsaAgeMs() const { return reader.gsaAge(); }
-
     uint16_t getSatellitesUsedBySystem(uint8_t system) const { return reader.gsaSatellitesUsed(system); }
     uint16_t getSatellitesInViewBySystem(uint8_t system) const { return reader.satellitesInView(system); }
 
@@ -175,37 +156,6 @@ class GPS : private concurrency::OSThread
     uint16_t getGsaPDOP() const { return reader.gsaPDOP(); }
     uint16_t getGsaHDOP() const { return reader.gsaHDOP(); }
     uint16_t getGsaVDOP() const { return reader.gsaVDOP(); }
-
-    // Fresh RMC Course-over-Ground for the compass fallback.
-    // This is deliberately read-only: it must not consume TinyGPS++'s
-    // isUpdated() flags or influence GPS scheduling/power management.
-    bool getFreshCourseOverGround(float &courseDeg, float &speedKmph, uint32_t &sampleMillis)
-    {
-        constexpr uint32_t COURSE_MAX_AGE_MS = 5000U;
-
-        // A sleeping receiver has no live course, even if the last RMC value
-        // is still stored in TinyGPS++. Require the same valid fix used by
-        // the rest of the internal GNSS path.
-        if (powerState != GPS_ACTIVE || !hasLock())
-            return false;
-
-        if (!reader.course.isValid() || !reader.speed.isValid())
-            return false;
-
-        const uint32_t courseAge = reader.course.age();
-        const uint32_t speedAge = reader.speed.age();
-        if (courseAge > COURSE_MAX_AGE_MS || speedAge > COURSE_MAX_AGE_MS)
-            return false;
-
-        const uint32_t rawCourse = reader.course.peekValue(); // 1/100 degree from RMC
-        if (rawCourse >= 36000U)
-            return false;
-
-        courseDeg = rawCourse * 0.01f;
-        speedKmph = reader.speed.peekValue() * (0.01f * _GPS_KMPH_PER_KNOT);
-        sampleMillis = millis() - courseAge;
-        return true;
-    }
 
     bool hasValidGLL() const { return reader.hasValidGLL(); }
     double getGLLLatitude() { return reader.gllLocation.isValid() ? reader.gllLocation.lat() : 0.0; }
@@ -293,18 +243,7 @@ class GPS : private concurrency::OSThread
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    bool shouldPublish = false; // Upstream publish path: position/connection/time state.
-
-    // Satellite/UI-only changes must never feed the upstream publish/hold state
-    // machine. Keeping this separate prevents a GSV count change from clearing
-    // fixHoldEnds or otherwise changing when the receiver sleeps/wakes.
-    bool statusOnlyDirty = false;
-
-    // Start of the current ACTIVE acquisition window. Used only to distinguish
-    // NMEA received after wake from a still-young sentence left by the previous
-    // cycle; it has no role in scheduler decisions.
-    uint32_t activeCycleStartedMs = 0;
-    bool activeCycleFreshSatelliteSeen = false;
+    bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
 
     bool hasGPS = false; // Do we have a GPS we are talking to
 
@@ -370,7 +309,6 @@ class GPS : private concurrency::OSThread
     /**
      * Tell users we have new GPS readings
      */
-    void notifyStatusObservers();
     void publishUpdate();
 
     virtual int32_t runOnce() override;
