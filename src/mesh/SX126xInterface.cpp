@@ -46,8 +46,8 @@ template <typename T> bool SX126xInterface<T>::init()
 // means this workaround is not necessary.
 #ifdef SX126X_ANT_SW // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
                      // used and not part of the 'default' set of pin definitions.
-    digitalWrite(SX126X_ANT_SW, HIGH);
     pinMode(SX126X_ANT_SW, OUTPUT);
+    digitalWrite(SX126X_ANT_SW, HIGH);
 #endif
 
 #ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
@@ -72,8 +72,8 @@ template <typename T> bool SX126xInterface<T>::init()
 #if ARCH_PORTDUINO
     tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
         pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
     }
 #endif
     if (tcxoVoltage == 0.0)
