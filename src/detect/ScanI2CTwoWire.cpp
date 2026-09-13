@@ -459,6 +459,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(ES7243E_ADDR, ES7243E, "ES7243E", (uint8_t)addr.address);
 #endif
             case XPOWERS_AXP192_AXP2101_ADDRESS:
+                // Qwiic Buzzer: ID register reads 0x5E and register 0x0A echoes its own address. Probe first,
+                // it answers the 0x90 read below with 0xFF and would pass as a PMU.
+                if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1) == 0x5E &&
+                    getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1) == addr.address) {
+                    type = QWIIC_BUZZER;
+                    logFoundDevice("Qwiic Buzzer", (uint8_t)addr.address);
+                    break;
+                }
 #ifndef SEEED_WIO_TRACKER_L2 // false positive on Wio Tracker L2
                 // Do we have the axp2101/192 or the TCA8418
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x90), 1);
@@ -782,6 +790,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x40) {
                     type = IIS2MDCTR;
                     logFoundDevice("IIS2MDCTR", (uint8_t)addr.address);
+                    break;
+                }
+
+                // A Modulino node answers a read of register 0x00 with its pinstrap byte, 0x3C for the
+                // buzzer. Probe before DS248X: its status heuristic also matches 0x3C.
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
+                if (registerValue == 0x3C) {
+                    type = MODULINO_BUZZER;
+                    logFoundDevice("Modulino Buzzer", (uint8_t)addr.address);
                     break;
                 }
 

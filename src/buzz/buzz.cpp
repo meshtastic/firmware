@@ -2,6 +2,10 @@
 #include "NodeDB.h"
 #include "configuration.h"
 
+#if !MESHTASTIC_EXCLUDE_I2C
+#include "I2CBuzzer.h"
+#endif
+
 #if !defined(ARCH_ESP32) && !defined(ARCH_RP2040) && !defined(ARCH_PORTDUINO)
 #include "Tone.h"
 #endif
@@ -116,6 +120,17 @@ void playTones(const ToneDuration *tone_durations, int size)
 #ifdef HAS_I2S
     if (moduleConfig.external_notification.use_i2s_as_buzzer && audioThread) {
         playTonesRTTTL(tone_durations, size);
+        return;
+    }
+#endif
+#if !MESHTASTIC_EXCLUDE_I2C
+    if (i2cBuzzer) {
+        for (int i = 0; i < size; i++) {
+            const auto &tone_duration = tone_durations[i];
+            i2cBuzzer->tone(tone_duration.frequency_khz, tone_duration.duration_ms);
+            // to distinguish the notes, set a minimum time between them.
+            delay(1.3 * tone_duration.duration_ms);
+        }
         return;
     }
 #endif
