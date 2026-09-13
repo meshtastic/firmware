@@ -95,6 +95,13 @@ class MockNodeDB : public NodeDB
         nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, value);
     }
 
+    void markHasUser(NodeNum num)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
+    }
+
     void setLongName(NodeNum num, const char *name)
     {
         meshtastic_NodeInfoLite *n = getMeshNode(num);
@@ -191,12 +198,14 @@ class AuthPipelineRouter : public ReliableRouter
 class AuthPipelineRoutingModule : public RoutingModule
 {
   public:
-    void sendAckNak(meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false,
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false,
                     const meshtastic_MeshPacket * = nullptr) override
     {
         ackCalls++;
+        lastErr = err;
     }
     uint32_t ackCalls = 0;
+    meshtastic_Routing_Error lastErr = meshtastic_Routing_Error_NONE;
 };
 
 class AuthPipelineModule : public SinglePortModule
@@ -1179,6 +1188,18 @@ static void runPipelineIngress(const meshtastic_MeshPacket &p)
     pipelineRouter->runOnce();
 }
 
+/// Drain the phone queue, asserting exactly `n` still-encrypted frames were delivered.
+static void expectEncryptedPhoneDeliveries(int n)
+{
+    int seen = 0;
+    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
+        TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, queued->which_payload_variant);
+        packetPool.release(queued);
+        seen++;
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(n, seen, "encrypted frames delivered to the phone");
+}
+
 static void assertNoRejectedPipelineEffects(NodeNum sender, uint32_t lastHeardBefore)
 {
     TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
@@ -1334,7 +1355,7 @@ void test_C6_opaque_unknown_channel_is_relay_only(void)
     TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
     TEST_ASSERT_EQUAL(0, pipelineModule->calls);
     TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
-    TEST_ASSERT_NULL(pipelineService->getForPhone());
+    expectEncryptedPhoneDeliveries(1); // unreadable to us or broadcast: the phone still sees the frame
     TEST_ASSERT_FALSE(pipelineRouter->historyContains(&opaque));
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
 
@@ -1347,12 +1368,13 @@ void test_C6_opaque_unknown_channel_is_relay_only(void)
     TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
     TEST_ASSERT_EQUAL(0, pipelineModule->calls);
     TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
-    TEST_ASSERT_NULL(pipelineService->getForPhone());
+    expectEncryptedPhoneDeliveries(1); // unreadable to us or broadcast: the phone still sees the frame
     TEST_ASSERT_FALSE(pipelineRouter->historyContains(&addressed));
 
+    // An unknown-channel broadcast is not PKI-shaped, so KNOWN/LOCAL decline it; CORE relays it (R4).
     const meshtastic_Config_DeviceConfig_RebroadcastMode blockedModes[] = {
         meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
-        meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
         meshtastic_Config_DeviceConfig_RebroadcastMode_NONE,
     };
     for (const auto mode : blockedModes) {
@@ -1367,7 +1389,7 @@ void test_C6_opaque_unknown_channel_is_relay_only(void)
         TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
         TEST_ASSERT_EQUAL(0, pipelineModule->calls);
         TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
-        TEST_ASSERT_NULL(pipelineService->getForPhone());
+        expectEncryptedPhoneDeliveries(1); // unreadable to us or broadcast: the phone still sees the frame
         TEST_ASSERT_FALSE(pipelineRouter->historyContains(&blocked));
     }
 }
@@ -2110,6 +2132,375 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
+// ===========================================================================
+// Group R - what a relay does with traffic it cannot read, per rebroadcast_mode
+// ===========================================================================
+//
+// A PKI unicast between two other nodes is opaque to a relay: the port, the payload and the
+// signature are inside the ciphertext. rebroadcast_mode is the only knob that governs whether
+// such a packet is carried, and these cases pin what each value means. The signature policy
+// is deliberately varied across them to show it plays no part.
+
+struct RelayIdentity {
+    NodeNum num;
+    uint8_t pub[32];
+    uint8_t priv[32];
+};
+
+// CryptoEngine::setDHPrivateKey takes a mutable pointer; the identities above are const.
+static void useDHKey(const uint8_t *priv)
+{
+    uint8_t k[32];
+    memcpy(k, priv, sizeof(k));
+    crypto->setDHPrivateKey(k);
+}
+
+static RelayIdentity makeIdentity(NodeNum num)
+{
+    RelayIdentity id;
+    id.num = num;
+    crypto->generateKeyPair(id.pub, id.priv);
+    return id;
+}
+
+static constexpr NodeNum ADMIN_NODE = 0x0C0C0C0C;  // the operator's node, sending remote admin
+static constexpr NodeNum TARGET_NODE = 0x0D0D0D0D; // the node being administered
+
+/// A genuine PKI-encrypted packet on `port` from one remote identity to another, as it would be
+/// heard off the air by a third node (us). Leaves the engine holding a fresh key of its own.
+static meshtastic_MeshPacket makePkiUnicastBetween(const RelayIdentity &from, const RelayIdentity &to, meshtastic_PortNum port,
+                                                   PacketId id, bool wantAck = false)
+{
+    meshtastic_Data d = meshtastic_Data_init_zero;
+    d.portnum = port;
+    d.payload.size = SMALL_PAYLOAD;
+    for (size_t i = 0; i < SMALL_PAYLOAD; i++)
+        d.payload.bytes[i] = (uint8_t)(0xA0 + i);
+    uint8_t plain[MAX_LORA_PAYLOAD_LEN + 1];
+    const size_t plainSize = pb_encode_to_bytes(plain, sizeof(plain), &meshtastic_Data_msg, &d);
+    TEST_ASSERT_GREATER_THAN(0, plainSize);
+
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from.num;
+    p.to = to.num;
+    p.id = id;
+    p.channel = 0; // PKI packets carry channel hash 0 on the wire
+    p.hop_limit = 2;
+    p.hop_start = 3;
+    p.want_ack = wantAck;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+
+    meshtastic_NodeInfoLite_public_key_t toKey = {32, {0}};
+    memcpy(toKey.bytes, to.pub, 32);
+    uint8_t ourPub[32], ourPriv[32];
+    crypto->generateKeyPair(ourPub, ourPriv);
+    useDHKey(from.priv);
+    TEST_ASSERT_TRUE(crypto->encryptCurve25519(p.to, p.from, toKey, p.id, plainSize, plain, p.encrypted.bytes));
+    p.encrypted.size = plainSize + MESHTASTIC_PKC_OVERHEAD;
+    crypto->setDHPrivateKey(ourPriv);
+    return p;
+}
+
+static const meshtastic_Config_DeviceConfig_RebroadcastMode ALL_MODES[] = {
+    meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
+    meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+    meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY,
+    meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
+    meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+    meshtastic_Config_DeviceConfig_RebroadcastMode_NONE,
+};
+
+static const char *modeName(meshtastic_Config_DeviceConfig_RebroadcastMode m)
+{
+    switch (m) {
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL:
+        return "ALL";
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING:
+        return "ALL_SKIP_DECODING";
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY:
+        return "CORE_PORTNUMS_ONLY";
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY:
+        return "KNOWN_ONLY";
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY:
+        return "LOCAL_ONLY";
+    default:
+        return "NONE";
+    }
+}
+
+/// Feed `p` through ingress under `mode` and assert it was, or was not, handed to the radio - and
+/// that nothing else happened to it either way.
+static void assertOpaqueRelay(const meshtastic_MeshPacket &p, meshtastic_Config_DeviceConfig_RebroadcastMode mode,
+                              bool expectRelay, const char *why)
+{
+    pipelineRadio->reset();
+    pipelineRouting->ackCalls = 0;
+    pipelineModule->calls = 0;
+    config.device.rebroadcast_mode = mode;
+    meshtastic_MeshPacket copy = p;
+    copy.id += (uint32_t)mode; // a fresh id per mode so the opaque dedup does not decide the outcome
+    runPipelineIngress(copy);
+    char msg[200];
+    snprintf(msg, sizeof(msg), "%s: %s", modeName(mode), why);
+    TEST_ASSERT_EQUAL_MESSAGE(expectRelay ? 1 : 0, pipelineRadio->sendCalls, msg);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouting->ackCalls, "an opaque packet not for us must never be ACKed");
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineModule->calls, "an opaque packet must not reach modules");
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "an opaque unicast for someone else is not the phone's business");
+    TEST_ASSERT_FALSE_MESSAGE(pipelineRouter->historyContains(&copy), "an opaque packet must not enter PacketHistory");
+}
+
+// R1: remote admin from the operator's node to a node behind us, both of them known to us. This
+// is what a router in the field does all day. Anyone who makes this assertion fail in any mode but
+// NONE is turning a stock ROUTER (whose default is CORE_PORTNUMS_ONLY) into a black hole for
+// remote administration, direct messages and key verification, and owes an explanation in the PR.
+void test_R1_remote_admin_between_other_nodes_relays_in_every_rebroadcast_mode(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->setPublicKey(ADMIN_NODE, admin.pub);
+    mockNodeDB->markHasUser(ADMIN_NODE);
+    mockNodeDB->addNode(TARGET_NODE);
+    mockNodeDB->setPublicKey(TARGET_NODE, target.pub);
+    mockNodeDB->markHasUser(TARGET_NODE);
+    const meshtastic_MeshPacket adminPacket =
+        makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADA10001, /*wantAck=*/true);
+
+    // Sanity: the frame really is opaque to us, not merely undecodable.
+    meshtastic_MeshPacket probe = adminPacket;
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&probe)));
+
+    for (const auto mode : ALL_MODES) {
+        const bool expect = mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
+        assertOpaqueRelay(adminPacket, mode, expect,
+                          expect ? "a relay must carry remote admin it cannot read - justify any change to this in the PR"
+                                 : "NONE relays nothing");
+    }
+    // NodeDB is untouched by all of it: no last_heard, no new entries.
+    TEST_ASSERT_EQUAL(0, mockNodeDB->getMeshNode(ADMIN_NODE)->last_heard);
+}
+
+// R2: the same admin packet between two nodes we have never heard of. Modes that key on identity
+// (KNOWN_ONLY, LOCAL_ONLY) decline; the port-based and unconditional modes still carry it.
+void test_R2_pki_unicast_between_strangers_relays_unless_mode_needs_identity(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADA20002);
+
+    for (const auto mode : ALL_MODES) {
+        const bool needsIdentity = IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
+                                             meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY);
+        const bool expect = mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE && !needsIdentity;
+        assertOpaqueRelay(p, mode, expect,
+                          expect ? "a PKI unicast between strangers is still carried by a port- or unconditional-mode relay"
+                                 : "this mode only carries PKI traffic with a party we know");
+    }
+}
+
+// R3: one party known is enough for KNOWN_ONLY / LOCAL_ONLY - the rule 6eabbaf43 added in 2024.
+// The known party is the destination here, so the sender is a stranger and KNOWN_ONLY's decode
+// short-circuit fires; the packet must still reach the relay decision.
+void test_R3_known_destination_satisfies_known_only_and_local_only(void)
+{
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    mockNodeDB->addNode(TARGET_NODE);
+    mockNodeDB->setPublicKey(TARGET_NODE, target.pub);
+    mockNodeDB->markHasUser(TARGET_NODE);
+    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA30003);
+
+    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY, true,
+                      "KNOWN_ONLY carries a PKI unicast to a node we know, whoever sent it");
+    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY, true,
+                      "LOCAL_ONLY carries a PKI unicast to a node we know, whoever sent it");
+}
+
+static meshtastic_MeshPacket makeUnknownChannelBroadcast(PacketId id)
+{
+    meshtastic_MeshPacket foreign = meshtastic_MeshPacket_init_zero;
+    foreign.from = ADMIN_NODE;
+    foreign.to = NODENUM_BROADCAST;
+    foreign.id = id;
+    foreign.channel = 0xFE;
+    foreign.hop_limit = 1;
+    foreign.hop_start = 2;
+    foreign.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    foreign.encrypted.size = 16;
+    memset(foreign.encrypted.bytes, 0x5A, foreign.encrypted.size);
+    return foreign;
+}
+
+// R4: an opaque *broadcast* (a channel we do not hold) is not PKI-shaped. CORE relays it - the
+// port list cannot apply to a packet with no readable port - and only KNOWN/LOCAL/NONE decline.
+void test_R4_unknown_channel_broadcast_relays_in_core_portnums_only(void)
+{
+    const meshtastic_MeshPacket foreign = makeUnknownChannelBroadcast(0xADA40004);
+    for (const auto mode : ALL_MODES) {
+        const bool expect = IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
+                                      meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+                                      meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY);
+        pipelineRadio->reset();
+        config.device.rebroadcast_mode = mode;
+        meshtastic_MeshPacket copy = foreign;
+        copy.id += (uint32_t)mode;
+        runPipelineIngress(copy);
+        while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) // R9 covers the phone side
+            packetPool.release(queued);
+        char msg[120];
+        snprintf(msg, sizeof(msg), "%s: %s", modeName(mode),
+                 expect ? "an unreadable broadcast is carried" : "an unreadable broadcast is not PKI-shaped, so declined");
+        TEST_ASSERT_EQUAL_MESSAGE(expect ? 1 : 0, pipelineRadio->sendCalls, msg);
+        TEST_ASSERT_FALSE(pipelineRouter->historyContains(&copy));
+    }
+}
+
+static RelayIdentity installOurIdentity()
+{
+    RelayIdentity us = makeIdentity(LOCAL_NODE);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, us.pub);
+    return us;
+}
+
+// R5: a PKI DM to us from a node whose key we do not hold. We cannot read it, but the sender must
+// find out why: a PKI_UNKNOWN_PUBKEY NAK makes it send us its NodeInfo, after which its retry
+// decrypts. The phone also gets the encrypted frame. Nothing is relayed and NodeDB is untouched.
+void test_R5_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void)
+{
+    const RelayIdentity us = installOurIdentity();
+    const RelayIdentity stranger = makeIdentity(ADMIN_NODE); // not added to NodeDB
+    const meshtastic_MeshPacket dm =
+        makePkiUnicastBetween(stranger, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA50005, /*wantAck=*/true);
+    useDHKey(us.priv); // we hold our own key; the sender's is what we lack
+
+    for (const auto mode : ALL_MODES) {
+        pipelineRadio->reset();
+        pipelineRouting->ackCalls = 0;
+        config.device.rebroadcast_mode = mode;
+        meshtastic_MeshPacket copy = dm;
+        copy.id += (uint32_t)mode;
+        runPipelineIngress(copy);
+        char msg[120];
+        snprintf(msg, sizeof(msg), "%s: an undecryptable DM to us must be NAKed exactly once", modeName(mode));
+        TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRouting->ackCalls, msg);
+        TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, pipelineRouting->lastErr,
+                                  "the NAK must say PKI_UNKNOWN_PUBKEY so the sender answers with its NodeInfo");
+        TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "a packet addressed to us is never relayed");
+        meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
+        TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "the phone must see the encrypted frame, as before #10967");
+        TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, toPhone->which_payload_variant);
+        packetPool.release(toPhone);
+        TEST_ASSERT_NULL(pipelineService->getForPhone());
+        TEST_ASSERT_FALSE(pipelineRouter->historyContains(&copy));
+        TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(ADMIN_NODE), "an unverified sender must not be added to NodeDB");
+    }
+}
+
+// R6: the same frame claiming to be from us is a forgery and gets nothing - no NAK, no phone,
+// no relay (#11544's isFromUs guard).
+void test_R6_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction(void)
+{
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    const RelayIdentity forger = makeIdentity(LOCAL_NODE);
+    meshtastic_MeshPacket p = makePkiUnicastBetween(forger, target, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA60006, true);
+    p.to = LOCAL_NODE; // to us, "from" us
+    runPipelineIngress(p);
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+    TEST_ASSERT_NULL(pipelineService->getForPhone());
+}
+
+// R7: sender key known, decrypt fails anyway (tampered or rotated key): NAK NO_CHANNEL, the reason
+// the pre-#10967 code gave for "want_ack packet destined for us cannot be decoded".
+void test_R7_pki_to_us_with_known_key_that_fails_naks_no_channel(void)
+{
+    const RelayIdentity us = installOurIdentity();
+    const RelayIdentity sender = makeIdentity(ADMIN_NODE);
+    const RelayIdentity stale = makeIdentity(ADMIN_NODE);
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->setPublicKey(ADMIN_NODE, stale.pub); // we hold a key for the sender, just not the one it used
+    const meshtastic_MeshPacket dm = makePkiUnicastBetween(sender, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA70007, true);
+    useDHKey(us.priv);
+
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NO_CHANNEL, pipelineRouting->lastErr);
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+    // We had a key and it failed: junk or tampering, not something the phone can use.
+    TEST_ASSERT_NULL(pipelineService->getForPhone());
+}
+
+// R8: an MQTT gateway carries PKI DMs between other nodes as ciphertext when encrypted uplink is
+// on, and never uplinks them in plaintext mode. Relay and uplink are independent of each other.
+void test_R8_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt(void)
+{
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADA80008);
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_NONE; // uplink is not relay
+    channels.getByIndex(0).settings.uplink_enabled = true;
+
+    moduleConfig.mqtt.enabled = true;
+    moduleConfig.mqtt.encryption_enabled = true;
+    runPipelineIngress(p);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "encrypted uplink must carry a PKI DM it cannot read");
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+
+    pipelineMqtt->clearQueue();
+    moduleConfig.mqtt.encryption_enabled = false;
+    meshtastic_MeshPacket again = p;
+    again.id++;
+    runPipelineIngress(again);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineMqtt->queueSize(), "plaintext uplink has nothing to publish for an opaque packet");
+
+    moduleConfig.mqtt.enabled = false;
+    moduleConfig.mqtt.encryption_enabled = true;
+    again.id++;
+    runPipelineIngress(again);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+}
+
+// R9: an unreadable broadcast on a channel we do not hold still reaches the phone (it did before
+// #10967) without touching NodeDB, in every mode - relay and phone delivery are separate decisions.
+void test_R9_unknown_channel_broadcast_reaches_phone_without_nodedb(void)
+{
+    const meshtastic_MeshPacket foreign = makeUnknownChannelBroadcast(0xADA90009);
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
+    runPipelineIngress(foreign);
+    meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, toPhone->which_payload_variant);
+    packetPool.release(toPhone);
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+    TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
+}
+
+// R10: none of the above depends on packet_signature_policy. R1 ran STRICT, R2 COMPATIBLE; here
+// the same admin packet under every policy, pinning that the relay decision is policy-blind.
+void test_R10_relay_decision_ignores_signature_policy(void)
+{
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADAA000A);
+    const meshtastic_Config_SecurityConfig_PacketSignaturePolicy policies[] = {
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE,
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED,
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
+    };
+    uint32_t salt = 0;
+    for (const auto policy : policies) {
+        setPolicy(policy);
+        meshtastic_MeshPacket copy = p;
+        copy.id += 0x100 * ++salt;
+        assertOpaqueRelay(copy, meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY, true,
+                          "the signature policy governs what we admit, not what we carry");
+    }
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -2191,6 +2582,16 @@ void setup()
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
+    RUN_TEST(test_R1_remote_admin_between_other_nodes_relays_in_every_rebroadcast_mode);
+    RUN_TEST(test_R2_pki_unicast_between_strangers_relays_unless_mode_needs_identity);
+    RUN_TEST(test_R3_known_destination_satisfies_known_only_and_local_only);
+    RUN_TEST(test_R4_unknown_channel_broadcast_relays_in_core_portnums_only);
+    RUN_TEST(test_R5_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone);
+    RUN_TEST(test_R6_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction);
+    RUN_TEST(test_R7_pki_to_us_with_known_key_that_fails_naks_no_channel);
+    RUN_TEST(test_R8_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt);
+    RUN_TEST(test_R9_unknown_channel_broadcast_reaches_phone_without_nodedb);
+    RUN_TEST(test_R10_relay_decision_ignores_signature_policy);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
