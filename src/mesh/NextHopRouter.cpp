@@ -26,14 +26,30 @@ static void capEventRelayHops(meshtastic_MeshPacket *packet)
 
 NextHopRouter::NextHopRouter() {}
 
+/// rebroadcast_mode for a packet we cannot read. The port list and sender identity are inside the
+/// ciphertext, so CORE_PORTNUMS_ONLY relays; KNOWN/LOCAL relay a PKI-shaped unicast with one known party.
+static bool opaqueRelayAllowedByMode(const meshtastic_MeshPacket *p)
+{
+    switch (config.device.rebroadcast_mode) {
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL:
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING:
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY:
+        return true;
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY:
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY:
+        return p->channel == 0 && !isBroadcast(p->to) &&
+               (nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from)) || nodeInfoLiteHasUser(nodeDB->getMeshNode(p->to)));
+    default:
+        return false;
+    }
+}
+
 bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
 {
-    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, phone, MQTT, or ACK
-    // handling. Relay only from the immutable outer routing header and let hop exhaustion bound it.
-    const auto mode = config.device.rebroadcast_mode;
+    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, or ACK handling. Relay
+    // only from the immutable outer routing header and let hop exhaustion bound it.
     if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
-        !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
-                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING) ||
+        !opaqueRelayAllowedByMode(p) ||
         (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
         return false;
 

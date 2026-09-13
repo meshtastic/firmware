@@ -10,17 +10,10 @@ RoutingModule *routingModule;
 
 bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Routing *r)
 {
-    bool maybePKI = mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag && mp.channel == 0 && !isBroadcast(mp.to);
-    // Beginning of logic whether to drop the packet based on Rebroadcast mode
-    if (mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
-        (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
-         config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
-        if (!maybePKI)
-            return false;
-        if (!nodeInfoLiteHasUser(nodeDB->getMeshNode(mp.from)) && !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp.to)))
-            return false;
-    } else if (owner.is_licensed && ((nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) ||
-                                     (nodeDB->getLicenseStatus(mp.to) == UserLicenseStatus::NotLicensed))) {
+    // Packets we cannot decrypt never reach a module; their rebroadcast_mode rule lives in
+    // NextHopRouter::relayOpaquePacket().
+    if (owner.is_licensed && ((nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) ||
+                              (nodeDB->getLicenseStatus(mp.to) == UserLicenseStatus::NotLicensed))) {
         // Don't let licensed users to rebroadcast packets to or from unlicensed users
         // If we know they are in-fact unlicensed
         LOG_DEBUG("Packet to or from unlicensed user, ignoring packet");
