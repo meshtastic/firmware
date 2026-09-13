@@ -54,10 +54,12 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     static uint64_t crossingKey(uint32_t waypointId, NodeNum node) { return ((uint64_t)waypointId << 32) | node; }
 
     CrossingState *findCrossingState(uint64_t key);
+    bool ensureCrossingCapacity();
     void notify(const meshtastic_Waypoint &wp, NodeNum node, bool entered);
     int onWaypointStoreChanged(const WaypointStore *store);
 
     // Bounded (waypointId, nodeNum) state; new pairs are skipped until an old waypoint frees space.
+    // Unallocated until the first crossing, so a node with no geofenced waypoints never pays for it.
     std::vector<CrossingState> crossingInside;
     CallbackObserver<GeofenceModule, const WaypointStore *> waypointStoreObserver =
         CallbackObserver<GeofenceModule, const WaypointStore *>(this, &GeofenceModule::onWaypointStoreChanged);

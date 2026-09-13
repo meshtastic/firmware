@@ -254,6 +254,21 @@ static std::string jsonNum(double v)
     return ss.str();
 }
 
+// mbedtls_ssl_write() takes one TLS record per call and short-counts the rest; neither the server
+// library nor Print::print() loops on that, so a longer body was silently cut at the record edge.
+static void writeAll(HTTPResponse *res, const std::string &body)
+{
+    size_t sent = 0;
+    while (sent < body.size()) {
+        const size_t remaining = body.size() - sent;
+        const size_t written = res->write(reinterpret_cast<const uint8_t *>(body.data()) + sent, remaining);
+        // An error code arrives as a huge count, write() returning mbedtls' int through a size_t.
+        if (written == 0 || written > remaining)
+            return;
+        sent += written;
+    }
+}
+
 // Build a serialized JSON array string listing files in `dirname`.
 // Subdirectories recurse as nested arrays (up to `levels` deep).
 std::string htmlListDir(const char *dirname, uint8_t levels)
@@ -356,7 +371,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     out += jsonNum((int)used);
     out += "}},\"status\":\"ok\"}";
 
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -376,7 +391,7 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
         std::string out = "{\"status\":";
         out += jsonEscape(status);
         out += "}";
-        res->print(out.c_str());
+        writeAll(res, out);
         return;
     }
 }
@@ -725,7 +740,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     out += "},\"status\":\"ok\"}";
 
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 
 void handleNodes(HTTPRequest *req, HTTPResponse *res)
@@ -746,9 +761,11 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
+    // A node at a time: buffering 200 of them asked for a 64 kB block while holding 32 kB, through
+    // an operator new that aborts rather than throws.
     std::string out;
-    out.reserve(2048);
-    out += "{\"data\":{\"nodes\":[";
+    out.reserve(320);
+    writeAll(res, "{\"data\":{\"nodes\":[");
 
     bool firstNode = true;
     uint32_t readIndex = 0;
@@ -776,6 +793,7 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
                 position = "null";
             }
 
+            out.clear(); // keeps the capacity, so this never grows past one record
             if (!firstNode)
                 out += ",";
             firstNode = false;
@@ -800,12 +818,12 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
             out += ",\"via_mqtt\":";
             out += jsonEscape(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
             out += "}";
+            writeAll(res, out);
         }
         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     }
 
-    out += "]},\"status\":\"ok\"}";
-    res->print(out.c_str());
+    writeAll(res, "]},\"status\":\"ok\"}");
 }
 
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
@@ -872,6 +890,6 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
         }
     }
     out += "],\"status\":\"ok\"}";
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 #endif
