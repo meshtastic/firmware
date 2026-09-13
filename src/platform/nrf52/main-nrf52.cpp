@@ -382,6 +382,10 @@ void checkSDEvents()
             case NRF_EVT_POWER_FAILURE_WARNING:
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
                 break;
+#ifdef ARCH_NRF54L
+            case NRF_EVT_RAND_SEED_REQUEST: // seeded unconditionally by Bluefruit.begin()
+                break;
+#endif
 
             default:
                 LOG_DEBUG("Unexpected SDevt %d", evt);
