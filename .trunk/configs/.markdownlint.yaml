@@ -9,3 +9,6 @@ spaces: false
 url: false
 whitespace: false
 headings: false
+# Table column alignment is decided by the markdown formatter, which pads by
+# codepoint count and so disagrees with MD060 on emoji-width table columns.
+MD060: false
