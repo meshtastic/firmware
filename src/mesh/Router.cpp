@@ -33,6 +33,9 @@
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
+#ifdef USE_SERIAL_PACKET_IO
+#include "modules/SerialModule.h"
+#endif
 
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
@@ -595,7 +598,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #endif
         packetPool.release(p_decoded);
     }
-
+#ifdef USE_SERIAL_PACKET_IO
+    if (moduleConfig.serial.enabled) {
+        serialModuleRadio->onSend(p);
+    }
+#endif
 #if HAS_UDP_MULTICAST
     if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
         udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
