@@ -103,7 +103,6 @@ int32_t SerialKeyboard::runOnce()
                 } else {
                     e.inputEvent = INPUT_BROKER_RIGHT;
                 }
-                e.kbchar = 0;
             } else if (!(shiftRegister2 & (1 << 1))) {
                 e.inputEvent = INPUT_BROKER_SELECT;
             } else if (!(shiftRegister2 & (1 << 0))) {
