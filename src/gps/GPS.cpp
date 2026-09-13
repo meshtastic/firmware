@@ -2118,7 +2118,6 @@ bool GPS::lookForTime()
  */
 bool GPS::lookForLocation()
 {
-<<<<<<< HEAD
     // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
@@ -2152,7 +2151,6 @@ bool GPS::lookForLocation()
         LOG_DEBUG_GPS("Satellite status updated: view=%u", p.sats_in_view);
     }
 
->>>>>>> 0a7ef0972 (t-echo-plus)
     // check if GPS has an acceptable lock
     if (!hasLock())
         return false;
@@ -2236,13 +2234,8 @@ bool GPS::lookForLocation()
     LOG_DEBUG_GPS("GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
                   reader.gsaSatellitesUsedTotal(), reader.satellitesTracked(), reader.satellitesInView(),
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_GPS), reader.gsaSatellitesUsed(TINYGPS_GNSS_GLONASS),
-<<<<<<< HEAD
-                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
-                  reader.gsaFixType(), reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
-=======
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
                   parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
->>>>>>> 0a7ef0972 (t-echo-plus)
 
     if (reader.hasValidGLL()) {
         LOG_DEBUG_GPS("GLL lat=%.7f lon=%.7f status=%c mode=%c", reader.gllLocation.lat(), reader.gllLocation.lng(),
