@@ -254,22 +254,15 @@ static std::string jsonNum(double v)
     return ss.str();
 }
 
-// Write a whole response body, tolerating short writes.
-//
-// HTTPResponse::write() hands the buffer to mbedtls_ssl_write(), which accepts at most one TLS
-// record - MBEDTLS_SSL_OUT_CONTENT_LEN bytes - per call and returns a short count for the rest.
-// Neither the library nor Print::print() loops on that, so a body larger than one record was
-// quietly cut off at the record boundary. The node list and the /static listing both outgrow it
-// on a busy node, and the output record is deliberately small (see esp32-common.ini) so that two
-// TLS sessions fit in RAM at once.
+// mbedtls_ssl_write() takes one TLS record per call and short-counts the rest; neither the server
+// library nor Print::print() loops on that, so a longer body was silently cut at the record edge.
 static void writeAll(HTTPResponse *res, const std::string &body)
 {
     size_t sent = 0;
     while (sent < body.size()) {
         const size_t remaining = body.size() - sent;
         const size_t written = res->write(reinterpret_cast<const uint8_t *>(body.data()) + sent, remaining);
-        // write() returns mbedtls_ssl_write()'s int through a size_t, so an error code arrives as a
-        // huge count. Anything that cannot be a real byte count means the connection is done.
+        // An error code arrives as a huge count, write() returning mbedtls' int through a size_t.
         if (written == 0 || written > remaining)
             return;
         sent += written;
@@ -768,11 +761,8 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
-    // Emitted a node at a time rather than assembled whole. A full node DB is 200 entries of
-    // ~240 bytes, and std::string grows by doubling, so buffering the body meant asking for a
-    // 64 kB contiguous block while still holding the 32 kB one - on a board with ~50 kB of heap,
-    // and through operator new, which aborts rather than throws here. That is a reboot, on exactly
-    // the board and the heap that #6960 is about.
+    // A node at a time: buffering 200 of them asked for a 64 kB block while holding 32 kB, through
+    // an operator new that aborts rather than throws.
     std::string out;
     out.reserve(320);
     writeAll(res, "{\"data\":{\"nodes\":[");
@@ -803,7 +793,7 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
                 position = "null";
             }
 
-            out.clear(); // keeps the capacity, so this never grows past one node record
+            out.clear(); // keeps the capacity, so this never grows past one record
             if (!firstNode)
                 out += ",";
             firstNode = false;

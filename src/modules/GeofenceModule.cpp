@@ -21,10 +21,7 @@ GeofenceModule *geofenceModule;
 
 static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
 
-// Capacity taken on the first tracked crossing. The cap above is a ceiling for a pathological mesh,
-// not an expectation: a node typically watches a couple of geofences and sees a handful of peers
-// cross them, so claiming all 256 slots (4 KB) at boot spent the memory on every node in the fleet
-// to serve the few that have waypoints at all. ensureCrossingCapacity() doubles from here to the cap.
+// The cap above is a ceiling, not an expectation; ensureCrossingCapacity() doubles from here to it.
 static constexpr size_t GEOFENCE_INITIAL_CROSSING = 8;
 
 GeofenceModule::GeofenceModule()
@@ -79,15 +76,8 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
     return notifyOnExit ? Crossing::Exit : Crossing::None;
 }
 
-/// Make room for one more tracked crossing, or report that the heap would not wear it.
-///
-/// Waiting until the first crossing to allocate also moves the allocation off the pristine boot
-/// heap and onto a live one running WiFi and TLS - the heap that fails in #6960. This firmware
-/// compiles with exceptions off, so a reserve() that cannot find the block calls abort() and
-/// reboots the node rather than throwing. Ask malloc() first, the one allocator that answers a
-/// refusal with a null pointer, and let a no go degrade into the bounded-drop path the caller
-/// already has for a full table. Stepping the capacity explicitly (rather than letting the vector
-/// pick a growth factor) is what gives the probe a size to ask about.
+/// Growing on a live heap, where reserve() would abort rather than throw, so ask malloc() first and
+/// let a refusal fall into the caller's bounded-drop path. Explicit steps give the probe a size.
 bool GeofenceModule::ensureCrossingCapacity()
 {
     if (crossingInside.size() < crossingInside.capacity())
@@ -97,8 +87,7 @@ bool GeofenceModule::ensureCrossingCapacity()
     if (target > GEOFENCE_MAX_CROSSING)
         target = GEOFENCE_MAX_CROSSING;
 
-    // Probed while the vector still holds its current block, which is the state reserve() will
-    // allocate in: it has to find the new block before it can release the old one.
+    // Probed while the old block is still held, which is the state reserve() allocates in.
     void *probe = malloc(target * sizeof(CrossingState));
     if (!probe)
         return false;
@@ -137,9 +126,7 @@ bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint8_t notifica
 
 int GeofenceModule::onWaypointStoreChanged(const WaypointStore *store)
 {
-    // clear() keeps the capacity, so a node that once had geofences would hold the block for the
-    // rest of its uptime. Once the last waypoint is gone there is nothing left to track, so hand
-    // the memory back; while waypoints remain, keep the capacity and just drop the stale pairs.
+    // clear() keeps the capacity, so give the block back once nothing can need it again.
     if (store && store->getWaypoints().empty())
         std::vector<CrossingState>().swap(crossingInside);
     else
