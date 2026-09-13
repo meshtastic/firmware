@@ -12,6 +12,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -104,7 +105,7 @@ extern Power *power;
 static void shutdownEnter()
 {
     LOG_POWERFSM("State: SHUTDOWN");
-    shutdownAtMsec = millis();
+    shutdownAtMsec = Time::skipZero(Time::getMillis());
 }
 
 #include "error.h"

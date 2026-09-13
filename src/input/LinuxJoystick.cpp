@@ -138,6 +138,7 @@ int32_t LinuxJoystick::runOnce()
                         heldX = zone;
                         if (zone != 0) {
                             emitEvent((zone < 0) ? INPUT_BROKER_LEFT : INPUT_BROKER_RIGHT);
+                            // unset-sentinel-ok: heldX carries the armed state, so 0 is a legal deadline
                             nextRepeatX = millis() + JOY_REPEAT_DELAY_MS;
                         }
                     }
@@ -147,6 +148,7 @@ int32_t LinuxJoystick::runOnce()
                         heldY = zone;
                         if (zone != 0) {
                             emitEvent((zone < 0) ? INPUT_BROKER_UP : INPUT_BROKER_DOWN);
+                            // unset-sentinel-ok: heldY carries the armed state, so 0 is a legal deadline
                             nextRepeatY = millis() + JOY_REPEAT_DELAY_MS;
                         }
                     }
