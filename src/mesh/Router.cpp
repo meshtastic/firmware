@@ -838,10 +838,11 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
-        // One-byte hash collisions are indistinguishable from tampering, so relay opaquely
-        // instead of blackholing; isFromUs stays REJECT to keep forged senders off the ACK path.
-        if (!isToUs(p) && !isFromUs(p)) {
-            LOG_WARN("Decryptable packet failed decoding, relay opaquely");
+        // One-byte hash collisions are indistinguishable from tampering, so treat as opaque instead of
+        // blackholing: relayed if not for us, NAKed and shown to the phone if it is. isFromUs stays
+        // REJECT to keep forged senders off the ACK path.
+        if (!isFromUs(p)) {
+            LOG_WARN("Decryptable packet failed decoding, handle as opaque");
             return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
         }
         LOG_WARN("Decryptable packet failed decoding, drop");
@@ -1594,14 +1595,8 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         if (p_encrypted == nullptr) {
             LOG_WARN("p_encrypted null, skip MQTT publish");
         } else {
-            // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
-            // to us (because we would be able to decrypt it)
-            if (decodedState == DecodeState::DECODE_OPAQUE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
-                !isBroadcast(p->to) && !isToUs(p))
-                p_encrypted->pki_encrypted = true;
-            // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-            if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
-                !isFromUs(p) && mqtt) {
+            // Opaque PKI DMs never reach here (uplinkOpaqueUnicast handles them); this path is decoded only.
+            if (decodedState == DecodeState::DECODE_SUCCESS && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt) {
                 if (decodedState == DecodeState::DECODE_SUCCESS && p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP &&
                     moduleConfig.mqtt.encryption_enabled) {
                     // For TRACEROUTE_APP packets release the original encrypted packet and encrypt a new from the changed packet
@@ -1632,6 +1627,59 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
+}
+
+/// A packet we had no way to read: PKI without the sender's key, or a channel we do not hold. A
+/// packet we matched and failed on (bad key, tampering, junk) is not one of these.
+static bool isUnreadableToUs(const meshtastic_MeshPacket *p)
+{
+    if (p->channel == 0) {
+        meshtastic_NodeInfoLite_public_key_t senderKey;
+        return !nodeDB->copyPublicKeyForDecrypt(p->from, senderKey);
+    }
+    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++)
+        if (channels.getHash(i) == p->channel)
+            return false;
+    return true;
+}
+
+/// An undecryptable packet addressed to us, or a broadcast on a channel we lack. A want_ack unicast
+/// gets the NAK that tells the sender why (PKI_UNKNOWN_PUBKEY makes it send us its NodeInfo), and a
+/// frame we had no way to read still reaches the phone. Header-only; nothing enters NodeDB or history.
+void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p)
+{
+    if (isFromUs(p) || p->from == 0)
+        return;
+    const bool unreadable = isUnreadableToUs(p);
+    if (isToUs(p) && p->want_ack && !isBroadcast(p->to) && routingModule) {
+        const auto err =
+            (p->channel == 0 && unreadable) ? meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY : meshtastic_Routing_Error_NO_CHANNEL;
+        LOG_INFO("Cannot decrypt 0x%08x from 0x%08x, NAK %d", p->id, p->from, (int)err);
+        sendAckNak(err, getFrom(p), p->id, channels.getPrimaryIndex(), routingModule->getHopLimitForResponse(*p));
+    }
+    // Straight to the phone queue: handleFromRadio() would updateFrom() NodeDB for an unverified sender.
+    if (unreadable && (isToUs(p) || isBroadcast(p->to)) && service) {
+        if (meshtastic_MeshPacket *toPhone = packetPool.allocCopy(*p)) {
+            stampRxTime(toPhone);
+            service->sendToPhone(toPhone);
+        }
+    }
+}
+
+/// A PKI DM between two other nodes goes to MQTT as ciphertext when encrypted uplink is on, so a
+/// gateway carries traffic it cannot read. The uplink marks it pki_encrypted for the broker side.
+void Router::uplinkOpaqueUnicast(const meshtastic_MeshPacket *p)
+{
+#if !MESHTASTIC_EXCLUDE_MQTT
+    if (!mqtt || !moduleConfig.mqtt.enabled || !moduleConfig.mqtt.encryption_enabled || p->channel != 0 || isBroadcast(p->to) ||
+        isToUs(p) || isFromUs(p))
+        return;
+    meshtastic_MeshPacket copy = *p;
+    copy.pki_encrypted = true;
+    mqtt->onSend(copy, copy, p->channel);
+#else
+    (void)p;
+#endif
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
@@ -1682,8 +1730,9 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     // Decrypt and authenticate before Reliable/Flooding/NextHop filters can update retry
-    // timers, packet history, implicit ACK state, cancellation, or relay queues. A packet for
-    // an unknown channel passes as opaque traffic and retains the existing relay behavior.
+    // timers, packet history, implicit ACK state, cancellation, or relay queues. A packet we
+    // cannot read touches no local state: it is relayed per rebroadcast_mode, handed to the phone
+    // if addressed here or broadcast, NAKed if it wanted an ACK, and uplinked if it is a PKI DM.
     const auto authVerdict = passesRoutingAuthGate(p);
     if (authVerdict == RoutingAuthVerdict::REJECT) {
         packetPool.release(p);
@@ -1696,7 +1745,9 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         // generate it here from the still-encrypted packet before opaque relay.
         if (isFromUs(p))
             perhapsGenerateImplicitAckForOwnOverheard(p);
+        handleOpaqueForUs(p);
         relayOpaquePacket(p);
+        uplinkOpaqueUnicast(p);
         packetPool.release(p);
         return;
     }

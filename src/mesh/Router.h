@@ -141,6 +141,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Relay an opaque packet without admitting it to local routing/history state. */
     virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
 
+    /** Phone delivery and NAK for an opaque packet addressed to us (or a broadcast we cannot read). */
+    void handleOpaqueForUs(const meshtastic_MeshPacket *p);
+
+    /** MQTT uplink of an opaque PKI unicast between other nodes, when encrypted uplink is enabled. */
+    void uplinkOpaqueUnicast(const meshtastic_MeshPacket *p);
+
     /**
      * Generate the implicit ACK for our own transmission overheard being rebroadcast, using header
      * fields only (from/id). Split out of shouldFilterReceived() so it can also run when the auth
