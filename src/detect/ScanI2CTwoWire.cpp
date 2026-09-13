@@ -543,8 +543,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     uint16_t die = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
                     LOG_DEBUG("Register DIE_UID: 0x%x", die);
 
+                    // TI HDC1080 temperature and humidity sensor
+                    if (mfg == 0x5449 && die == 0x1050) {
+                        logFoundDevice("HDC1080", (uint8_t)addr.address);
+                        type = HDC1080;
+                        break;
+                    }
                     // TI INA226 or fully compatible clones (e.g. TPA626)
-                    if (mfg == 0x5449 && die == 0x2260) {
+                    else if (mfg == 0x5449 && die == 0x2260) {
                         logFoundDevice("INA226", (uint8_t)addr.address);
                         type = INA226;
                         break;
@@ -556,7 +562,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         break;
                     }
                     // TI INA260
-                    else if (mfg == 0x5449) {
+                    else if (mfg == 0x5449 && die == 0x2270) {
+                        logFoundDevice("INA260", (uint8_t)addr.address);
+                        type = INA260;
+                        break;
+                    } else if (mfg == 0x5449) {
                         logFoundDevice("INA260", (uint8_t)addr.address);
                         type = INA260;
                         break;
