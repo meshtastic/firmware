@@ -39,6 +39,16 @@
 #error "STM32WL: HAS_CPU_SHUTDOWN requires HAS_LSE (RTC wake path)"
 #endif
 
+// How long to wait for the LPUART1 kernel clock to be ready for switching to HSI16 before giving up.
+#ifndef STM32WL_LPUART1_SWITCH_TIMEOUT_MS
+#define STM32WL_LPUART1_SWITCH_TIMEOUT_MS 1000
+#endif
+
+#if defined(ENABLE_HWSERIALLP1)
+// True once stm32wlSetup() has verified HSI16 is stable and routed to LPUART1.
+bool stm32wlLpuartAvailable();
+#endif
+
 //
 // set HW_VENDOR
 //
