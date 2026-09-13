@@ -92,6 +92,23 @@ class File
         return read(&b, 1) == 1 ? (int)b : -1;
     }
 
+    // Arduino Stream compat: fill up to len bytes, returning how many arrived.
+    // fs_read() is allowed to come back short, so keep going until it stalls.
+    size_t readBytes(char *buf, size_t len)
+    {
+        size_t got = 0;
+        while (got < len) {
+            size_t want = len - got;
+            int n = read(buf + got, want > 0xFFFF ? 0xFFFF : (uint16_t)want);
+            if (n <= 0)
+                break;
+            got += (size_t)n;
+        }
+        return got;
+    }
+
+    size_t readBytes(uint8_t *buf, size_t len) { return readBytes(reinterpret_cast<char *>(buf), len); }
+
     size_t write(const uint8_t *buf, size_t len)
     {
         if (!_s || !_s->valid || _s->is_dir)
