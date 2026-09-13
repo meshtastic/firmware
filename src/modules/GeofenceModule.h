@@ -59,8 +59,7 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     int onWaypointStoreChanged(const WaypointStore *store);
 
     // Bounded (waypointId, nodeNum) state; new pairs are skipped until an old waypoint frees space.
-    // Stays unallocated until the first crossing is tracked - a node with no geofenced waypoints
-    // never reaches evaluatePosition's tracking path and so never pays for this.
+    // Unallocated until the first crossing, so a node with no geofenced waypoints never pays for it.
     std::vector<CrossingState> crossingInside;
     CallbackObserver<GeofenceModule, const WaypointStore *> waypointStoreObserver =
         CallbackObserver<GeofenceModule, const WaypointStore *>(this, &GeofenceModule::onWaypointStoreChanged);
