@@ -1,7 +1,9 @@
 #pragma once
 
 /*
- * Seeed XIAO nRF54L15 with a Wio-SX1262 for XIAO (SKU 113010003) on the header.
+ * Seeed XIAO nRF54L15 with either a Wio-SX1262 for XIAO (SKU 113010003) or a Wio-LR2021 on the
+ * LoRa Plus expansion board (SKU 100039980, SSD1306 OLED and Grove I2C on D4/D5). The radio is
+ * probed at boot, LR2021 first because the SX1262 wiring drives D4/D5.
  *
  * This header shadows the framework's variants/xiao_nrf54l15/variant.h, so it carries the core
  * pin table definitions as well. Arduino pins 0..10 are the XIAO header D0..D10, 11..23 are
@@ -53,9 +55,10 @@ static const uint8_t A5 = PIN_A5;
 #define LED_BUILTIN PIN_LED1
 #define LED_STATE_ON 0
 
-// User button P0.00 (active low)
+// User button P0.00 (active low); K1 on the LoRa Plus expansion board sits on D14 (P2.09)
 #define PIN_BUTTON1 17
 #define BUTTON_NEED_PULLUP
+#define PIN_BUTTON2 14
 
 // Serial1: the SAMD11 USB-CDC bridge (UARTE20): nRF TX P1.09, nRF RX P1.08
 #define PIN_SERIAL1_TX 18
@@ -76,19 +79,19 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_SPI_MISO D9
 #define PIN_SPI_MOSI D10
 #define PIN_SPI_SCK D8
-static const uint8_t SS = D4;
+static const uint8_t SS = D3;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-// Wire (TWIM30): the Sense variant's internal sensor bus, SDA P0.04, SCL P0.03
+// Wire (TWIM22): header I2C on D4 (SDA, P1.10) / D5 (SCL, P1.11)
 #define WIRE_INTERFACES_COUNT 1
-#define PIN_WIRE_SDA 12
-#define PIN_WIRE_SCL 11
-#define WIRE_TWIM NRF_TWIM30
-#define WIRE_TWIS NRF_TWIS30
-#define WIRE_IRQN SERIAL30_IRQn
-#define WIRE_IRQ_HANDLER SERIAL30_IRQHandler
+#define PIN_WIRE_SDA D4
+#define PIN_WIRE_SCL D5
+#define WIRE_TWIM NRF_TWIM22
+#define WIRE_TWIS NRF_TWIS22
+#define WIRE_IRQN SERIAL22_IRQn
+#define WIRE_IRQ_HANDLER SERIAL22_IRQHandler
 
 #ifdef __cplusplus
 }
@@ -104,3 +107,15 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+
+// Wio-LR2021 (LoRa Plus expansion board): NSS D3, IRQ on DIO8 D0, NRESET D2, BUSY D1, switchless RF,
+// 32 MHz crystal (no TCXO), DIO7/DIO11 reach D6/D7 through 470R and stay unused
+#define USE_LR2021
+#define LR2021_SPI_NSS_PIN D3
+#define LR2021_IRQ_PIN D0
+#define LR2021_NRESET_PIN D2
+#define LR2021_BUSY_PIN D1
+#define LR2021_SPI_SCK_PIN PIN_SPI_SCK
+#define LR2021_SPI_MOSI_PIN PIN_SPI_MOSI
+#define LR2021_SPI_MISO_PIN PIN_SPI_MISO
+#define IRQ_DIO_NUM 8
