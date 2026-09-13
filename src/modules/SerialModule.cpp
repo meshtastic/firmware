@@ -6,6 +6,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#include "meshUtils.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -71,6 +72,38 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
     }
 
     return true;
+}
+
+size_t sanitizeTextMessagePayload(char *buf, size_t size)
+{
+    if (!buf)
+        return 0;
+
+    size_t out = 0;
+    for (size_t i = 0; i < size;) {
+        const size_t seqLen = utf8SequenceLength(buf + i, size - i);
+        const uint8_t b = (uint8_t)buf[i];
+        const bool isControl = (b < 0x20 || b == 0x7F) && b != '\n' && b != '\t';
+        if (seqLen == 0 || isControl) {
+            i++; // line noise or a control character - drop the byte
+            continue;
+        }
+        for (size_t j = 0; j < seqLen; j++)
+            buf[out++] = buf[i + j];
+        i += seqLen;
+    }
+
+    // Trim the whitespace a terminal wraps a line in; whitespace alone is not worth a packet
+    size_t start = 0;
+    while (start < out && (buf[start] == ' ' || buf[start] == '\t' || buf[start] == '\n'))
+        start++;
+    while (out > start && (buf[out - 1] == ' ' || buf[out - 1] == '\t' || buf[out - 1] == '\n'))
+        out--;
+
+    if (start > 0)
+        memmove(buf, buf + start, out - start);
+
+    return out - start;
 }
 
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
@@ -292,7 +325,10 @@ int32_t SerialModule::runOnce()
                 while (serialInstance->available()) {
                     serialPayloadSize = serialInstance->readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #endif
-                    serialModuleRadio->sendPayload();
+                    if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)
+                        serialPayloadSize = sanitizeTextMessagePayload(serialBytes, serialPayloadSize);
+                    if (serialPayloadSize > 0)
+                        serialModuleRadio->sendPayload();
                 }
             }
 #endif
