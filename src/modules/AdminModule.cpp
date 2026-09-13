@@ -941,6 +941,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     } // case meshtastic_Config_device_tag
     case meshtastic_Config_position_tag:
         LOG_INFO("Set config: Position");
+        if (!pkcAlwaysDestsHaveKeys(c.payload_variant.position.policy_flags, &c.payload_variant.position.position_dest, 1))
+            return; // refused: nothing applied, nothing saved
         config.has_position = true;
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
         // clear the stored position since it may not get updated
@@ -1319,7 +1321,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_telemetry_tag:
         LOG_INFO("Set module config: Telemetry");
-        if (!BaseTelemetryModule::pkcOnlyDestsHaveKeys(c.payload_variant.telemetry, moduleConfig.paxcounter.paxcounter_dest))
+        if (!BaseTelemetryModule::pkcOnlyDestsHaveKeys(c.payload_variant.telemetry))
             return false;
         moduleConfig.has_telemetry = true;
         moduleConfig.telemetry = c.payload_variant.telemetry;
@@ -1360,7 +1362,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_paxcounter_tag:
         LOG_INFO("Set module config: Paxcounter");
-        if (!BaseTelemetryModule::pkcOnlyDestsHaveKeys(moduleConfig.telemetry, c.payload_variant.paxcounter.paxcounter_dest))
+        if (!pkcAlwaysDestsHaveKeys(c.payload_variant.paxcounter.policy_flags, &c.payload_variant.paxcounter.paxcounter_dest, 1))
             return false;
         moduleConfig.has_paxcounter = true;
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
