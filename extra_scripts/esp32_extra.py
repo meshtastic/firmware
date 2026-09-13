@@ -3,6 +3,7 @@
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 # trunk-ignore-all(ruff/E402): Hacky esptool import
 # trunk-ignore-all(flake8/E402): Hacky esptool import
+import importlib.util
 import sys
 from os.path import join
 
@@ -12,9 +13,7 @@ platform = env.PioPlatform()
 sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
 # IntelHex workaround, remove after fixed upstream
 # https://github.com/platformio/platform-espressif32/issues/1632
-try:
-    import intelhex
-except ImportError:
+if importlib.util.find_spec("intelhex") is None:
     env.Execute("$PYTHONEXE -m pip install intelhex")
 import esptool
 
