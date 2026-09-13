@@ -15,3 +15,27 @@ const uint8_t LEGACY_LOGRADIO_UUID_16[16u] = {0xe2, 0xf2, 0x1e, 0xbe, 0xc5, 0x15
                                               0x6b, 0x43, 0xfa, 0x78, 0x38, 0xd2, 0x6f, 0x6c};
 const uint8_t LOGRADIO_UUID_16[16u] = {0x47, 0x95, 0xDF, 0x8C, 0xDE, 0xE9, 0x44, 0x99,
                                        0x23, 0x44, 0xE6, 0x06, 0x49, 0x6E, 0x3D, 0x5A};
+
+void BluetoothApi::setup() {}
+void BluetoothApi::shutdown() {}
+void BluetoothApi::deinit() {}
+void BluetoothApi::clearBonds() {}
+bool BluetoothApi::isActive()
+{
+    return false;
+}
+bool BluetoothApi::isConnected()
+{
+    return false;
+}
+void BluetoothApi::sendLog(const uint8_t *logMessage, size_t length)
+{
+    (void)logMessage;
+    (void)length;
+}
+
+void updateBatteryLevel(uint8_t level) __attribute__((weak));
+void updateBatteryLevel(uint8_t level)
+{
+    (void)level;
+}
