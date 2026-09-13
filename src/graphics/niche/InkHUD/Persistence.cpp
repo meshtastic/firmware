@@ -31,10 +31,10 @@ void InkHUD::Persistence::loadLatestMessage()
             continue;
         }
         if (m.type == MessageType::BROADCAST) {
-            latestMessage.broadcast = m;
+            latestMessage.set(true, m, MessageStore::getText(m), m.textLength);
             lastBroadcastPos = pos;
         } else if (m.type == MessageType::DM_TO_US) {
-            latestMessage.dm = m;
+            latestMessage.set(false, m, MessageStore::getText(m), m.textLength);
             lastDMPos = pos;
         }
         pos++;
