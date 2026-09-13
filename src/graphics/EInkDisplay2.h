@@ -87,6 +87,7 @@ class EInkDisplay : public OLEDDisplay
 #endif
 
     // If display uses HSPI
+    // trunk-ignore(too-many-defined/too-many-defined): explicit HSPI e-paper board list, no umbrella macro fits
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
     defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
     defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) || defined(ELECROW_ThinkNode_M5) ||               \
