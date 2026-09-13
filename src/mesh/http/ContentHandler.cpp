@@ -254,6 +254,28 @@ static std::string jsonNum(double v)
     return ss.str();
 }
 
+// Write a whole response body, tolerating short writes.
+//
+// HTTPResponse::write() hands the buffer to mbedtls_ssl_write(), which accepts at most one TLS
+// record - MBEDTLS_SSL_OUT_CONTENT_LEN bytes - per call and returns a short count for the rest.
+// Neither the library nor Print::print() loops on that, so a body larger than one record was
+// quietly cut off at the record boundary. The node list and the /static listing both outgrow it
+// on a busy node, and the output record is deliberately small (see esp32-common.ini) so that two
+// TLS sessions fit in RAM at once.
+static void writeAll(HTTPResponse *res, const std::string &body)
+{
+    size_t sent = 0;
+    while (sent < body.size()) {
+        const size_t remaining = body.size() - sent;
+        const size_t written = res->write(reinterpret_cast<const uint8_t *>(body.data()) + sent, remaining);
+        // write() returns mbedtls_ssl_write()'s int through a size_t, so an error code arrives as a
+        // huge count. Anything that cannot be a real byte count means the connection is done.
+        if (written == 0 || written > remaining)
+            return;
+        sent += written;
+    }
+}
+
 // Build a serialized JSON array string listing files in `dirname`.
 // Subdirectories recurse as nested arrays (up to `levels` deep).
 std::string htmlListDir(const char *dirname, uint8_t levels)
@@ -356,7 +378,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     out += jsonNum((int)used);
     out += "}},\"status\":\"ok\"}";
 
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -376,7 +398,7 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
         std::string out = "{\"status\":";
         out += jsonEscape(status);
         out += "}";
-        res->print(out.c_str());
+        writeAll(res, out);
         return;
     }
 }
@@ -725,7 +747,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     out += "},\"status\":\"ok\"}";
 
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 
 void handleNodes(HTTPRequest *req, HTTPResponse *res)
@@ -746,9 +768,14 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
+    // Emitted a node at a time rather than assembled whole. A full node DB is 200 entries of
+    // ~240 bytes, and std::string grows by doubling, so buffering the body meant asking for a
+    // 64 kB contiguous block while still holding the 32 kB one - on a board with ~50 kB of heap,
+    // and through operator new, which aborts rather than throws here. That is a reboot, on exactly
+    // the board and the heap that #6960 is about.
     std::string out;
-    out.reserve(2048);
-    out += "{\"data\":{\"nodes\":[";
+    out.reserve(320);
+    writeAll(res, "{\"data\":{\"nodes\":[");
 
     bool firstNode = true;
     uint32_t readIndex = 0;
@@ -776,6 +803,7 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
                 position = "null";
             }
 
+            out.clear(); // keeps the capacity, so this never grows past one node record
             if (!firstNode)
                 out += ",";
             firstNode = false;
@@ -800,12 +828,12 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
             out += ",\"via_mqtt\":";
             out += jsonEscape(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
             out += "}";
+            writeAll(res, out);
         }
         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     }
 
-    out += "]},\"status\":\"ok\"}";
-    res->print(out.c_str());
+    writeAll(res, "]},\"status\":\"ok\"}");
 }
 
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
@@ -872,6 +900,6 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
         }
     }
     out += "],\"status\":\"ok\"}";
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 #endif
