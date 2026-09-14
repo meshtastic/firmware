@@ -23,6 +23,7 @@
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
@@ -762,9 +763,11 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         } else {
             LOG_WARN("[AW35615] not found at 0x22");
         }
+        getBattVoltage(); // initial read cached_mv
         return true;
     }
 
+    virtual bool isBatteryConnect() override { return true; }
     virtual uint16_t getBattVoltage() override
     {
         if (!initialized)
@@ -779,6 +782,12 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
                 for (uint8_t i = 0; i < SAMPLE_COUNT; i++) {
                     int16_t raw = _ads.readADC_SingleEnded(0);
                     sum += _ads.computeVolts(raw);
+                }
+                // Piggyback a toggle-engine watchdog on this same throttle interval.
+                // Only re-arm when VBUS is absent - calling this while attached
+                // would restart CC toggling and could glitch an active sink attach.
+                if (_aw35615.isReady() && !_aw35615.isVbusPresent()) {
+                    _aw35615.rearmToggle();
                 }
             }
 
@@ -800,7 +809,14 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
     {
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isVbusPresent();
+
+            bool vbus = _aw35615.isVbusPresent();
+            if (!vbus) {
+                // VBUS just went away (or has been away) - make sure the CC
+                // toggle engine is re-armed so the next attach gets detected.
+                _aw35615.rearmToggle();
+            }
+            return vbus;
         }
         // Fallback to base GPIO/board checks (or false) if CC chip is absent
         return false;
@@ -813,7 +829,10 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            return _aw35615.isSinkAttached();
+            // Charging == VBUS present AND we're attached as a sink.
+            // (isSinkAttached() is a latched result - safe to trust here since
+            // isVbusIn() above keeps re-arming toggle on every detach.)
+            return _aw35615.isVbusPresent() && _aw35615.isSinkAttached();
         }
         return isVbusIn();
     }
@@ -974,6 +993,14 @@ void Power::powerCommandsCheck()
         shutdownAtMsec = 0;
         shutdown();
     }
+
+#ifdef ARCH_STM32
+    // Deferred DFU entry; the delay is armed by AdminModule's enter_dfu handler (rationale there).
+    if (enterDfuAtMsec && Throttle::deadlinePassed(enterDfuAtMsec)) {
+        enterDfuAtMsec = 0;
+        enterDfuMode(); // never returns
+    }
+#endif
 }
 
 void Power::reboot()
@@ -1068,6 +1095,20 @@ void Power::shutdown()
 #else
     LOG_WARN("FIXME implement shutdown for this platform");
 #endif
+}
+
+// Consecutive readings only: a battery-less board's floating divider drifts in and out of the
+// "battery present" window, and a count that survived the gaps would deep-sleep a USB-powered node.
+bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv)
+{
+    if (!hasBattery || hasUsb || battMv >= cutoffMv) {
+        counter = 0;
+        return false;
+    }
+
+    if (counter < UINT8_MAX)
+        counter++;
+    return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
 /// Reads power status to powerStatus singleton.
@@ -1202,16 +1243,16 @@ void Power::readPowerStatus()
     // is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
     //
 
-    if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
-            low_voltage_counter++;
-            LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
-            if (low_voltage_counter > 10) {
-                LOG_INFO("Low voltage detected, trigger deep sleep");
-                powerFSM.trigger(EVENT_LOW_BATTERY);
-            }
-        } else {
-            low_voltage_counter = 0;
+    if (batteryLevel) {
+        // getBattVoltage() reports pack voltage; the OCV table is per cell.
+        const bool shutdownNow =
+            updateLowVoltageCounter(low_voltage_counter, powerStatus2.getHasBattery(), powerStatus2.getHasUSB(),
+                                    batteryLevel->getBattVoltage(), OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+        if (low_voltage_counter)
+            LOG_DEBUG("Low voltage counter: %d/%d", low_voltage_counter, LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN);
+        if (shutdownNow) {
+            LOG_INFO("Low voltage detected, trigger deep sleep");
+            powerFSM.trigger(EVENT_LOW_BATTERY);
         }
     }
 }
@@ -1236,12 +1277,23 @@ void Power::logHeapUsage()
     // The first line has no earlier sample to difference against
     const int32_t delta = lastHeapLogTime ? (int32_t)(heapFree - lastHeapLogFree) : 0;
 
+    // min only ever falls: one step down is a transient alloc, repeated new lows are a leak.
+    // A steady min with a shrinking largest block is fragmentation. Empty where unsupported.
+    char detail[64] = "";
+    const uint32_t minFree = memGet.getMinFreeHeap();
+    const uint32_t maxAlloc = memGet.getMaxAllocHeap();
+    if (minFree || maxAlloc)
+        snprintf(detail, sizeof(detail), ", min %u, largest block %u", minFree, maxAlloc);
+
     const uint32_t psramTotal = memGet.getPsramSize();
     if (psramTotal)
-        LOG_INFO("Heap: %u/%u bytes free (%d since last), PSRAM: %u/%u bytes free", heapFree, heapTotal, delta,
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)%s, PSRAM: %u/%u bytes free", heapFree, heapTotal, delta, detail,
                  memGet.getFreePsram(), psramTotal);
     else
-        LOG_INFO("Heap: %u/%u bytes free (%d since last)", heapFree, heapTotal, delta);
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)%s", heapFree, heapTotal, delta, detail);
+
+    // Which tagged subsystem moved since boot
+    memaudit::logBreakdown("periodic");
 
     lastHeapLogFree = heapFree;
     lastHeapLogTime = millis();

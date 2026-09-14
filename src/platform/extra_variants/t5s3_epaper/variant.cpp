@@ -3,7 +3,6 @@
 #ifdef T5_S3_EPAPER_PRO
 
 #include "Observer.h"
-#include "TouchDrvGT911.hpp"
 #include "Wire.h"
 #include "buzz.h"
 #include "concurrency/OSThread.h"
@@ -12,6 +11,7 @@
 #include "main.h"
 #include "mesh/Throttle.h"
 #include "sleep.h"
+#include "touch/TouchDrvGT911.hpp"
 #include <cstring>
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -613,9 +613,11 @@ bool readTouch(int16_t *x, int16_t *y)
 #endif
 
     if (!digitalRead(GT911_PIN_INT)) {
-        int16_t raw_x;
-        int16_t raw_y;
-        if (touch.getPoint(&raw_x, &raw_y)) {
+        // 0.4.x deprecates getPoint() in favour of getTouchPoints(); only the first touch is used here.
+        const TouchPoints &points = touch.getTouchPoints();
+        if (points.getPointCount()) {
+            const int16_t raw_x = static_cast<int16_t>(points.getPoint(0).x);
+            const int16_t raw_y = static_cast<int16_t>(points.getPoint(0).y);
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
             // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
             // rotation=3 is the physical identity (device's default orientation).

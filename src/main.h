@@ -92,6 +92,9 @@ extern uint32_t timeLastPowered;
 extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
+#ifdef ARCH_STM32
+extern uint32_t enterDfuAtMsec; // 0 = unset; else millis() deadline for the deferred DFU jump
+#endif
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 // Set by PhoneAPI::handleLockdownAuthInline after a successful unlock.

@@ -5,22 +5,32 @@ on:
     inputs:
       suite_order_seed:
         description: >-
-          Seed for shuffling the test-area order. Empty (the default) means: fixed declared order on
-          pull_request, so a contributor's PR never turns red because of an order they did not
-          choose; commit-SHA-derived elsewhere. Set a number to force that exact order anywhere -
-          that is how you replay a shuffled failure.
+          Seed varying which suites share a shard. Empty (the default) means: the fixed declared
+          arrangement on pull_request, so a contributor's PR never turns red because of a pairing
+          they did not choose; commit-SHA-derived elsewhere. Set a number to force that exact
+          arrangement anywhere - that is how you replay a shuffled failure.
         type: string
         required: false
         default: ""
+      max_suites_per_shard:
+        description: >-
+          Largest shard, in suites. Lower splits the matrix further: faster wall clock, more
+          runners. The floor per shard is checkout + toolchain + one src build, so below about 8
+          the fixed cost starts to dominate what is being parallelised.
+        type: number
+        required: false
+        default: 10
   workflow_dispatch:
 
 permissions: {}
 
 env:
-  # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
+  # Only pushes to the default branch (develop) populate the caches; PR / merge_group runs
   # restore it but never save, so they stop filling up the repo's Actions cache storage.
   SAVE_CACHE: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
-  LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
+  # No --directory: callers add it, since shards capture from .pio/build/<env>/src. Keeping the
+  # include/exclude filters shared is what stops a shard capturing a different file set.
+  LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --base-directory "${PWD}"
 
 jobs:
   # Tripwire against the native suite set shrinking by accident. `platformio test` discovers and
@@ -184,7 +194,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get install -y lcov
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --initial --output-file coverage_base.info
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --directory .pio/build/coverage/src --initial --output-file coverage_base.info
           sed -i -e "s#${PWD}#.#" coverage_base.info # Make paths relative.
 
       - name: Config check tests
@@ -234,12 +244,12 @@ jobs:
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
         run: |
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name integration --output-file coverage_integration.info
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --directory .pio/build/coverage/src --test-name integration --output-file coverage_integration.info
           sed -i -e "s#${PWD}#.#" coverage_integration.info # Make paths relative.
 
       - name: Get release version string
         if: always() # run this step even if previous step failed
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
         id: version
 
       - name: Save coverage information
@@ -250,24 +260,102 @@ jobs:
           overwrite: true
           path: ./coverage_*.info
 
-  platformio-tests:
-    name: Native PlatformIO Tests
-    runs-on: ubuntu-24.04-arm
+  # bin/test-shards.py derives the matrix from test/, so adding a suite needs no CI change.
+  # Cheap by design: a checkout and a python run, sitting on every shard critical path.
+  discover:
+    name: Native Test Shards
+    # ubuntu-latest, not the slim image: this needs a python3 to run bin/test-shards.py, and it is
+    # on the critical path of every shard, so it must not have to install one.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.shards.outputs.matrix }}
+      suites: ${{ steps.shards.outputs.suites }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          submodules: recursive
+          persist-credentials: false
 
-      - name: Setup native build
+      - name: Build the shard matrix
+        id: shards
+        shell: bash
+        # Both inputs reach the script through env: rather than ${{ }} inside run:, so nothing from
+        # the event payload is ever spliced into the shell text.
+        env:
+          SUITE_ORDER_SEED: ${{ inputs.suite_order_seed }}
+          MAX_SUITES: ${{ inputs.max_suites_per_shard || 10 }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # pull_request keeps the declared arrangement so a PR never reds for a pairing its author did not
+          # choose; elsewhere the SHA seeds it. Varies co-location, not order within a shard.
+          if [ -n "${SUITE_ORDER_SEED:-}" ]; then
+            seed="$SUITE_ORDER_SEED"
+            echo "shard arrangement: shuffled with explicitly supplied seed $seed"
+          elif [ "${EVENT_NAME:-}" = "pull_request" ]; then
+            seed=""
+            echo "shard arrangement: declared order (pull_request)"
+            echo "  to exercise a different arrangement, re-run this workflow with a suite_order_seed input"
+          else
+            seed=$((16#${GITHUB_SHA:0:8}))
+            echo "shard arrangement: shuffled with seed $seed (from ${GITHUB_SHA:0:8})"
+          fi
+
+          matrix=$(./bin/test-shards.py --max-suites "$MAX_SUITES" --seed "$seed" --summary)
+          # The canonical suite set, passed to the collector so its whole-run gate checks against
+          # the same walk this matrix was built from rather than a second one.
+          suites=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort | tr '\n' ' ')
+
+          # A newline in a value writes a second entry, setting outputs this step never declared. Both feed
+          # control flow, so assert single-line rather than assume it.
+          for value in "$matrix" "$suites"; do
+            if [ "$value" != "${value%%$'\n'*}" ]; then
+              echo "::error title=Multi-line step output::bin/test-shards.py or the suite walk produced a value spanning lines. Refusing to write it to \$GITHUB_OUTPUT - a newline there sets outputs this step did not declare."
+              exit 1
+            fi
+          done
+          [ -n "$matrix" ] && [ -n "$suites" ] || {
+            echo "::error title=Empty shard matrix::the matrix or the suite list came out empty; a downstream gate that expects nothing passes on anything."
+            exit 1
+          }
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+
+  # No build-then-run split: PlatformIO relinks each suite regardless, so the warm build bought a
+  # shared src build and ~75 throwaway links. ccache carries src objects between shards instead.
+  platformio-tests:
+    name: Suites (${{ matrix.shard }})
+    needs: discover
+    runs-on: ubuntu-24.04-arm
+    # Measured cold-cache shards run 5-12 minutes. Without this a hung suite, or a runner that
+    # stops reporting, holds a runner until GitHub's 6-hour default - times twelve shards.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # fail-fast off: a cancelled sibling stops the collector telling "failed" from "never ran".
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      # No submodules: src/mesh/generated is tracked and meshtestic is the hardware harness, so neither
+      # is reachable from .
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup native test build
         id: base
-        uses: ./.github/actions/setup-native
+        uses: ./.github/actions/setup-native-test
 
       - name: Get release version string
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
         id: version
 
-      # Disable (comment-out) BUILD_EPOCH. It causes a full rebuild between tests and resets the
-      # coverage information each time.
+      # Disable (comment-out) BUILD_EPOCH. It forces a full rebuild between tests, resets coverage each
+      # time, and would put a fresh timestamp in every TU, which is also what would defeat ccache.
       - name: Disable BUILD_EPOCH
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
@@ -280,214 +368,163 @@ jobs:
           restore-keys: |
             pio-coverage-tests-
 
-      - name: Warm the shared test build
-        # Compiles src + every test program once so no single area absorbs the whole src build in
-        # its reported duration; gcov then accumulates counts into this shared
-        # .pio/build/coverage/src as the areas run. NOT a substitute for building in the run step:
-        # PlatformIO links every test program to the one .pio/build/coverage/meshtasticd path, so a
-        # --without-building run executes whichever suite was linked last under every suite's name.
-        run: platformio test -e coverage --without-testing
+      # Every shard compiles the same ~450 src TUs; unshared, that is the cost of fanning out.
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.ccache
+          # One lineage for all shards: src objects dominate and are identical. run_id only makes each save
+          # a fresh entry; the prefix restore-key selects the newest.
+          key: ccache-native-tests-${{ github.run_id }}
+          restore-keys: |
+            ccache-native-tests-
+
+      - name: Run this shard's suites
+        id: run
+        shell: bash
+        # Suite names come from bin/test-shards.py, which refuses any name outside
+        # ^test_[A-Za-z0-9_]+$ - so the word-split below cannot pick up shell metacharacters.
+        env:
+          PIO_ENV: ${{ matrix.env }}
+          SHARD: ${{ matrix.shard }}
+          SUITES: ${{ matrix.suites }}
+        run: |
+          set -uo pipefail
+          # read -ra, not an unquoted expansion: word-splits without letting a token glob against
+          # the workspace. bin/test-shards.py holds every name to ^test_[A-Za-z0-9_]+$ as well.
+          read -ra suites <<<"$SUITES"
+          filters=()
+          for suite in "${suites[@]}"; do filters+=(-f "$suite"); done
+          echo "shard $SHARD: ${#suites[@]} suite(s) under [env:$PIO_ENV] -> $SUITES"
+
+          # Log to a file for platformio real exit status, then drop the per-variant SKIPPED rows: suites
+          # outside this shard are reported SKIPPED by design.
+          rc=0
+          platformio test -e "$PIO_ENV" -v "${filters[@]}" \
+            --junit-output-path "testreport-$SHARD.xml" > shard.log 2>&1 || rc=$?
+          grep -v "[[:space:]]SKIPPED$" shard.log || true
+          exit $rc
+
+      - name: Verify this shard ran its own tests
+        # Not conditional on the run passing: a suite that reported another suite's test cases is a
+        # different, worse finding than a failing assertion, and it must not be hidden behind one.
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+          SUITES: ${{ matrix.suites }}
+        run: ./bin/check-test-attribution.py --label "shard $SHARD" --expect "$SUITES" "testreport-$SHARD.xml"
+
+      - name: Capture coverage information
+        if: always() # run this step even if previous step failed
+        env:
+          PIO_ENV: ${{ matrix.env }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          sudo apt-get install -y lcov
+          # One tracefile per shard; the collector sums them with --add-tracefile into the union.
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --directory ".pio/build/$PIO_ENV/src" \
+            --test-name "$SHARD" --output-file "coverage_tests_$SHARD.info"
+          sed -i -e "s#${PWD}#.#" "coverage_tests_$SHARD.info" # Make paths relative.
+
+      - name: ccache statistics
+        # Printed, not asserted. A cache that has silently stopped hitting shows up here as the
+        # shards getting slower, which is the symptom worth being able to explain.
+        if: always()
+        run: ccache --show-stats || true
+
+      - name: Save ccache
+        # Exactly one shard saves (cache_writer): every shard needs the same src objects, and letting all
+        # of them save would race for the key.
+        if: always() && env.SAVE_CACHE == 'true' && matrix.cache_writer
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.ccache
+          key: ccache-native-tests-${{ github.run_id }}
 
       - name: Save PlatformIO cache
-        if: env.SAVE_CACHE == 'true' && steps.pio-cache.outputs.cache-hit != 'true'
+        if: env.SAVE_CACHE == 'true' && matrix.cache_writer && steps.pio-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.platformio/.cache
           key: pio-coverage-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
 
-      - name: Run tests one area at a time
-        shell: bash
-        # Both values reach the script through env: rather than ${{ }} inside run:, so nothing from
-        # the event payload is ever spliced into the shell text.
-        env:
-          SUITE_ORDER_SEED: ${{ inputs.suite_order_seed }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          set -uo pipefail
-          # One runner, no matrix, no concurrency. Group the test_* suites by area and run each
-          # area sequentially, reusing the single build above (--without-building). Each area gets
-          # its own JUnit report and its own collapsible log, so a failure lands in a small named
-          # section instead of being buried past the log limit. Sequential runs share one build
-          # dir, so gcov coverage accumulates and the single capture in the next step has the union.
-
-          # Ordered area rules "name:ERE"; first match wins. Anything unmatched falls to "misc", so
-          # a newly added suite always runs even before it is placed. Add a suite to an area by
-          # extending that area's regex; add a new area by inserting a rule line.
-          area_rules=(
-            "admin:^test_(admin|pki)_"
-            "crypto:^test_(crypto|packet_signing)$"
-            "routing:^test_(mesh|nexthop|traceroute|hop|traffic|nodedb|warm)_"
-            "position:^test_position_"
-            "fuzz:^test_fuzz_"
-            "packets:^test_(packet|transmit|meshpacket)_"
-            "io:^test_(serial|stream|xmodem|http|mqtt)"
-          )
-
-          mapfile -t suites < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
-          declare -A group
-          for s in "${suites[@]}"; do
-            a="misc"
-            for rule in "${area_rules[@]}"; do
-              if [[ "$s" =~ ${rule#*:} ]]; then a="${rule%%:*}"; break; fi
-            done
-            group[$a]="${group[$a]:-} -f $s"
-          done
-
-          run_order=()
-          for rule in "${area_rules[@]}"; do run_order+=("${rule%%:*}"); done
-          run_order+=("misc")
-
-          # Area order. The rule order above is an accident of how the areas were written, and
-          # running it fixed forever means order dependence between areas is never observed - but
-          # randomising it on a contributor's PR would turn their run red for an order they did not
-          # choose, which is how a randomisation gets reverted instead of the coupling fixed.
-          #
-          # So: pull_request keeps the fixed declared order. Everywhere else (push, schedule) the
-          # order is shuffled, seeded from the commit SHA - deterministic per commit, replayable,
-          # attributable, and it never blocks someone else's PR. An explicit seed input overrides
-          # both, which is how you replay a specific failing order anywhere.
-          #
-          # Intra-area order stays PlatformIO's: filters select suites, they do not order them
-          # (list_test_names() walks test/ with os.walk()), so controlling it needs one invocation
-          # per suite. bin/run-tests.sh --shuffle does exactly that locally.
-          seed_input="${SUITE_ORDER_SEED:-}"
-          if [ -n "$seed_input" ]; then
-            seed="$seed_input"
-            echo "area order: shuffled with explicitly supplied seed $seed"
-          elif [ "${EVENT_NAME:-}" = "pull_request" ]; then
-            seed=""
-            echo "area order: fixed declared order (pull_request) - ${run_order[*]}"
-            echo "  to exercise a different order, re-run this workflow with a suite_order_seed input"
-          else
-            seed=$((16#${GITHUB_SHA:0:8}))
-            echo "area order: shuffled with seed $seed (from ${GITHUB_SHA:0:8})"
-          fi
-
-          if [ -n "$seed" ]; then
-            # Same shuffle_suites() bin/run-tests.sh uses, so the replay hint below is true by
-            # construction rather than by two copies happening to agree.
-            source bin/lib/shuffle.sh
-            mapfile -t run_order < <(shuffle_suites "$seed" "${run_order[@]}")
-            echo "area order: ${run_order[*]}"
-            echo "  replay locally: ./bin/run-tests.sh --shuffle --seed $seed"
-          fi
-
-          fail=0
-          for a in "${run_order[@]}"; do
-            [ -n "${group[$a]:-}" ] || continue
-            echo "::group::area $a (${group[$a]# })"
-            # Capture platformio's real exit status (not grep's) via a log file, then show the log
-            # with the noisy per-variant SKIPPED rows filtered out.
-            if ! platformio test -e coverage -v ${group[$a]# } \
-                 --junit-output-path "testreport-$a.xml" > "area-$a.log" 2>&1; then
-              fail=1
-              echo "::error::area $a had test failures"
-            fi
-            # Suites outside this area are reported SKIPPED by design (PlatformIO lists every suite
-            # in the env and marks the unselected ones finished), so those rows are noise here. The
-            # attribution check below is what catches a suite that was selected and did not run.
-            grep -v "[[:space:]]SKIPPED$" "area-$a.log" || true
-            # Per area, so a mismatch names the area it happened in rather than the whole run.
-            if ! ./bin/check-test-attribution.py --label "area $a" \
-                 --expect "${group[$a]# }" "testreport-$a.xml"; then
-              fail=1
-              echo "::error::area $a ran suites that did not match their own test binaries"
-            fi
-            echo "::endgroup::"
-          done
-          exit $fail
-
-      - name: Merge per-area reports into testreport.xml
-        # Preserve the single-file JUnit contract that downstream consumers rely on
-        # (pr_tests.yml's summary and generate-reports' Test Report both read testreport.xml).
-        # The per-area split is only for readable logs; the report stays consolidated.
-        if: always() # run even when a chunk failed, so the report captures the failures
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import glob, xml.etree.ElementTree as ET
-          out = ET.Element('testsuites')
-          for f in sorted(glob.glob('testreport-*.xml')):
-              try:
-                  root = ET.parse(f).getroot()
-              except ET.ParseError:
-                  continue
-              # PlatformIO writes a <testsuites> root; fold in a bare <testsuite> too, just in case.
-              out.extend(root.findall('testsuite') if root.tag == 'testsuites' else [root])
-          ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
-          PY
-
-      - name: Verify every suite ran its own tests
-        # Whole-run gate over the merged report: every test_* directory must appear with at least
-        # one test case, and every case must come from the suite that reported it. The per-area
-        # check above cannot see an area that never executed - this can.
-        if: always() # a suite going missing is the finding; do not hide it behind an earlier failure
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t suites < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
-          ./bin/check-test-attribution.py --label "coverage (all areas)" \
-            --expect "${suites[*]}" testreport.xml
-
-      - name: Capture coverage information
-        if: always() # run this step even if previous step failed
-        run: |
-          sudo apt-get install -y lcov
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
-          sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
-
-      - name: Attribution canary
-        # Guards the guard above: runs two suites the broken way (--without-building, so PlatformIO
-        # does not relink and both execute the same leftover binary) and requires the checker to
-        # catch it. Fails if the checker regressed, or if the reproduction stops reproducing - in
-        # which case the reason both harnesses stopped passing that flag no longer holds.
-        #
-        # Lives in this job, not simulator-tests: it relinks $BUILD_DIR/$PROGNAME, and there that
-        # replaced the daemon binary with a test suite, so the integration test waited for a socket
-        # a test binary never opens. Here the binary is already per-suite and nothing later needs it.
-        timeout-minutes: 15
-        run: ./bin/test-attribution-canary.sh -e coverage
-
-      - name: Event channel policy tests
-        run: platformio test -e coverage-event-policy -v --junit-output-path event-policy-testreport.xml
-
-      - name: Verify the event-policy suites ran their own tests
-        # Expected set read through PlatformIO's own config parser, so it cannot drift from the
-        # env's test_filter the way a second hand-maintained list would.
-        run: |
-          set -euo pipefail
-          expect=$(python3 -c "from platformio.project.config import ProjectConfig; \
-            print(' '.join(ProjectConfig().get('env:coverage-event-policy', 'test_filter', [])))")
-          ./bin/check-test-attribution.py --label coverage-event-policy \
-            --expect "$expect" event-policy-testreport.xml
-
-      - name: Channel table userPrefs tests
-        run: platformio test -e coverage-channel-table -v --junit-output-path channel-table-testreport.xml
-
-      - name: Verify the channel-table suite ran its own tests
-        run: |
-          set -euo pipefail
-          expect=$(python3 -c "from platformio.project.config import ProjectConfig; \
-            print(' '.join(ProjectConfig().get('env:coverage-channel-table', 'test_filter', [])))")
-          ./bin/check-test-attribution.py --label coverage-channel-table \
-            --expect "$expect" channel-table-testreport.xml
-
       - name: Save test results
         if: always() # run this step even if previous step failed
         uses: actions/upload-artifact@v7
         with:
-          name: platformio-test-report-${{ steps.version.outputs.long }}
+          name: platformio-test-report-${{ matrix.shard }}-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./*testreport.xml
+          # Named, not globbed: a test suite can write to the workspace, and the collector merges whatever
+          # arrives into the report its gate reads.
+          path: ./testreport-${{ matrix.shard }}.xml
 
       - name: Save coverage information
-        uses: actions/upload-artifact@v7
         if: always() # run this step even if previous step failed
+        uses: actions/upload-artifact@v7
         with:
-          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.long }}
+          name: lcov-coverage-info-native-shard-${{ matrix.shard }}-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./coverage_*.info
+          # Named exactly, for the same reason as the report above: everything uploaded here is
+          # merged into the published coverage report.
+          path: ./coverage_tests_${{ matrix.shard }}.info
 
+  # Reproduces the false green on purpose (--without-building) and requires the checker to catch it.
+  # Its own job because it relinks $BUILD_DIR/$PROGNAME, which no shard build dir can survive.
+  attribution-canary:
+    name: Attribution Canary
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup native test build
+        uses: ./.github/actions/setup-native-test
+
+      - name: Disable BUILD_EPOCH
+        run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
+
+      - name: Restore PlatformIO cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-coverage-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
+          restore-keys: |
+            pio-coverage-tests-
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.ccache
+          key: ccache-native-tests-${{ github.run_id }}
+          restore-keys: |
+            ccache-native-tests-
+
+      - name: Attribution canary
+        timeout-minutes: 15
+        run: ./bin/test-attribution-canary.sh -e coverage
+
+  # Load-bearing name: branch protection matches it, and matrix rows are named per shard so none of
+  # them can carry it.
+  platformio-tests-gate:
+    name: Native PlatformIO Tests
+    needs: platformio-tests
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-slim
+    steps:
+      - name: Report the matrix result
+        env:
+          RESULT: ${{ needs.platformio-tests.result }}
+        run: |
+          set -euo pipefail
+          echo "shard matrix: $RESULT"
+          [ "$RESULT" = "success" ]
+
+  # The collector. A shard knows only its own suites and one that never started reports nothing, so
+  # only here can the union be checked against the canonical set.
   generate-reports:
     name: Generate Test Reports
     runs-on: ubuntu-latest
@@ -496,22 +533,73 @@ jobs:
       actions: read
       checks: write
     needs:
+      - discover
       - simulator-tests
       - platformio-tests
+      - attribution-canary
     # Run this job even if the previous jobs failed, but skip if the workflow was cancelled.
     if: ${{ !cancelled() }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Get release version string
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
         id: version
 
-      - name: Download test artifacts
+      - name: Download per-shard test artifacts
         uses: actions/download-artifact@v8
         with:
-          name: platformio-test-report-${{ steps.version.outputs.long }}
+          pattern: platformio-test-report-*-${{ steps.version.outputs.long }}
           merge-multiple: true
+
+      - name: Merge the shard reports into testreport.xml
+        # Preserve the single-file JUnit contract downstream consumers rely on (pr_tests.yml summary, and
+        # the Test Report below). The split is only how the run executes; the report stays consolidated.
+        if: always() # run even when a shard failed, so the report captures the failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          out = ET.Element('testsuites')
+          files = sorted(glob.glob('testreport-*.xml'))
+          for f in files:
+              try:
+                  root = ET.parse(f).getroot()
+              except ET.ParseError:
+                  print(f"WARNING: {f} is not parseable, skipping")
+                  continue
+              # PlatformIO writes a <testsuites> root; fold in a bare <testsuite> too, just in case.
+              out.extend(root.findall('testsuite') if root.tag == 'testsuites' else [root])
+          ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
+          print(f"merged {len(files)} shard report(s) into testreport.xml")
+          PY
+
+      - name: Verdict - every suite ran, and ran its own tests
+        # Only here is the union compared against the canonical test_* set, which is what catches a shard
+        # that failed to start or was cancelled.
+        if: always() # a suite going missing is the finding; do not hide it behind an earlier failure
+        env:
+          SUITES: ${{ needs.discover.outputs.suites }}
+        run: |
+          set -euo pipefail
+          # --expect "" passes over anything, and it is empty exactly when discover failed, which is one of
+          # the situations this gate exists to catch.
+          if [ -z "${SUITES// /}" ]; then
+            echo "::error title=No expected suite set::the discover job produced no suite list, so the whole-run attribution gate has nothing to check against. Treating that as a failure - a gate with an empty expectation passes vacuously."
+            exit 1
+          fi
+          ./bin/check-test-attribution.py --label "all shards" --expect "$SUITES" testreport.xml
+
+      - name: Save merged test results
+        # Same artifact name the single-runner job used to publish, so pr_tests.yml's summary keeps
+        # finding it.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: platformio-test-report-${{ steps.version.outputs.long }}
+          overwrite: true
+          path: ./testreport.xml
 
       - name: Drop no-status testsuites from the report
         # PlatformIO emits a self-closing <testsuite tests="0"/> row for every test_* dir
@@ -519,9 +607,11 @@ jobs:
         # They carry no pass/fail/skip status and bury the suites that actually ran. Strip
         # them so the Test Report lists only suites with a real status. Only the copy the
         # reporter renders is trimmed; the uploaded artifact keeps the full XML.
+        if: always()
         run: sed -i -E 's#<testsuite [^>]*tests="0"[^>]*/>##g' testreport.xml
 
       - name: Test Report
+        if: always()
         uses: dorny/test-reporter@v3.0.0
         with:
           name: PlatformIO Tests
@@ -529,6 +619,7 @@ jobs:
           reporter: java-junit
 
       - name: Download coverage artifacts
+        if: always()
         uses: actions/download-artifact@v8
         with:
           pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}
@@ -537,9 +628,10 @@ jobs:
 
       - name: Generate Code Coverage Report
         # Merge every tracefile the jobs produced: coverage_base.info (zeroed baseline),
-        # coverage_integration.info, and one coverage_tests_<chunk>.info per chunk. lcov
-        # sums hit counts across them, so the merged report is the union of all chunks -
+        # coverage_integration.info, and one coverage_tests_<shard>.info per shard. lcov
+        # sums hit counts across them, so the merged report is the union of all shards -
         # identical to running the whole suite in one job.
+        if: always()
         run: |
           sudo apt-get install -y lcov
           args=()
@@ -550,7 +642,54 @@ jobs:
           genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
       - name: Save Code Coverage Report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: code-coverage-report-${{ steps.version.outputs.long }}
           path: code-coverage-report
+
+      - name: Final verdict
+        # States the run result in one place, rather than leaving it reconstructed from a dozen shard logs.
+        if: always()
+        env:
+          SHARDS: ${{ needs.platformio-tests.result }}
+          SIMULATOR: ${{ needs.simulator-tests.result }}
+          CANARY: ${{ needs.attribution-canary.result }}
+        run: |
+          set -uo pipefail
+          {
+            echo "## Native tests"
+            echo ""
+            echo "| Part | Result |"
+            echo "| --- | --- |"
+            echo "| Suite shards | \`$SHARDS\` |"
+            echo "| Simulator | \`$SIMULATOR\` |"
+            echo "| Attribution canary | \`$CANARY\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          cases = fails = skips = 0
+          failed = []
+          for suite in ET.parse('testreport.xml').getroot().iter('testsuite'):
+              n = int(suite.get('tests', '0'))
+              bad = int(suite.get('failures', '0')) + int(suite.get('errors', '0'))
+              cases += n
+              fails += bad
+              skips += int(suite.get('skipped', '0'))
+              if bad:
+                  failed.append(f"{suite.get('name', '?')} ({bad})")
+          print("")
+          print(f"{cases} test case(s), {fails} failed, {skips} skipped.")
+          if failed:
+              print("")
+              print("Failing suites: " + ", ".join(sorted(failed)))
+          PY
+
+          for result in "$SHARDS" "$SIMULATOR" "$CANARY"; do
+            [ "$result" = "success" ] || {
+              echo "::error title=Native tests failed::shards=$SHARDS simulator=$SIMULATOR canary=$CANARY - see the job summary."
+              exit 1
+            }
+          done
+          echo "RESULT: GREEN - every shard, the simulator, and the canary passed."

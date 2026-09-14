@@ -297,6 +297,7 @@ void preFSBegin()
     if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
     NRF_POWER->GPREGRET = 0;
+    // unset-sentinel-ok: formatted_this_boot carries the armed state, so 0 is a legal stamp
     last_format_ms = Time::getMillis();
     formatted_this_boot = true;
     InternalFS.format();
