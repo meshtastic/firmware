@@ -64,10 +64,6 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "GPS.h"
 #include "buzz.h"
 #endif
-#if defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
-#include "motion/BHI260APSensor.h"
-#define T_ECHO_PLUS_BHI260_ASSIST 1
-#endif
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "MessageStore.h"
@@ -520,13 +516,6 @@ float Screen::estimatedHeading(double lat, double lon)
     // other when the GNSS receiver sleeps or wakes again.
     static float filteredRmcHeading = -1.0f;
     static uint32_t lastRmcSampleMs = 0;
-#ifdef T_ECHO_PLUS_BHI260_ASSIST
-    // The BHI260 has no absolute north reference.  We therefore anchor its
-    // relative yaw to every trustworthy L76K COG sample and use only the short
-    // delta between GNSS updates.
-    static float bhiYawAtGnssAnchor = 0.0f;
-    static bool bhiYawAnchorValid = false;
-#endif
 
     const uint32_t now = millis();
     const uint32_t gpsUpdateIntervalSecs =
@@ -593,70 +582,17 @@ float Screen::estimatedHeading(double lat, double lon)
                         filteredRmcHeading = wrapHeading360(filteredRmcHeading + step);
                     }
                     lastRmcSampleMs = rmcSampleMs;
-#ifdef T_ECHO_PLUS_BHI260_ASSIST
-                    float currentBhiYaw = 0.0f;
-                    uint32_t currentBhiAgeMs = 0;
-                    if (BHI260APSensor::getLatestYawDegrees(currentBhiYaw, currentBhiAgeMs) && currentBhiAgeMs <= 250U) {
-                        bhiYawAtGnssAnchor = currentBhiYaw;
-                        bhiYawAnchorValid = true;
-                    } else {
-                        bhiYawAnchorValid = false;
-                    }
-#endif
                 }
-
-                float headingResult = filteredRmcHeading;
-#ifdef T_ECHO_PLUS_BHI260_ASSIST
-                // Bridge at most 2.5 s.  L76K remains the absolute reference;
-                // the IMU contributes only the fast relative turn between COG samples.
-                constexpr uint32_t BHI_HEADING_BRIDGE_MS = 2500U;
-                constexpr float BHI_HEADING_MAX_DELTA_DEG = 35.0f;
-                constexpr float BHI_HEADING_GAIN = 0.80f;
-                if (bhiYawAnchorValid && lastRmcSampleMs != 0 &&
-                    (uint32_t)(now - lastRmcSampleMs) <= BHI_HEADING_BRIDGE_MS) {
-                    float currentBhiYaw = 0.0f;
-                    uint32_t currentBhiAgeMs = 0;
-                    if (BHI260APSensor::getLatestYawDegrees(currentBhiYaw, currentBhiAgeMs) && currentBhiAgeMs <= 250U) {
-                        float imuDelta = wrapDelta180(currentBhiYaw - bhiYawAtGnssAnchor);
-                        if (imuDelta > BHI_HEADING_MAX_DELTA_DEG)
-                            imuDelta = BHI_HEADING_MAX_DELTA_DEG;
-                        else if (imuDelta < -BHI_HEADING_MAX_DELTA_DEG)
-                            imuDelta = -BHI_HEADING_MAX_DELTA_DEG;
-                        headingResult = wrapHeading360(filteredRmcHeading + imuDelta * BHI_HEADING_GAIN);
-                    }
-                }
-#endif
-                return headingResult;
+                return filteredRmcHeading;
             }
         }
     }
-
-#ifdef T_ECHO_PLUS_BHI260_ASSIST
-    // If a single L76K COG update is missed or rejected for low speed, keep the
-    // most recent absolute anchor briefly and let only relative BHI yaw move it.
-    if (filteredRmcHeading >= 0.0f && bhiYawAnchorValid && lastRmcSampleMs != 0 &&
-        (uint32_t)(now - lastRmcSampleMs) <= 2500U) {
-        float currentBhiYaw = 0.0f;
-        uint32_t currentBhiAgeMs = 0;
-        if (BHI260APSensor::getLatestYawDegrees(currentBhiYaw, currentBhiAgeMs) && currentBhiAgeMs <= 250U) {
-            float imuDelta = wrapDelta180(currentBhiYaw - bhiYawAtGnssAnchor);
-            if (imuDelta > 35.0f)
-                imuDelta = 35.0f;
-            else if (imuDelta < -35.0f)
-                imuDelta = -35.0f;
-            return wrapHeading360(filteredRmcHeading + imuDelta * 0.80f);
-        }
-    }
-#endif
 
     // Do not carry an old COG filter state across a long receiver sleep. A new
     // valid RMC/VTG sample after wake will then become the new heading immediately.
     if (lastRmcSampleMs != 0 && (uint32_t)(now - lastRmcSampleMs) > 10000U) {
         filteredRmcHeading = -1.0f;
         lastRmcSampleMs = 0;
-#ifdef T_ECHO_PLUS_BHI260_ASSIST
-        bhiYawAnchorValid = false;
-#endif
     }
 #endif
 
@@ -1245,6 +1181,7 @@ int32_t Screen::runOnce()
 
     // If we don't have a screen, don't ever spend any CPU for us.
     if (!useDisplay) {
+        textMessageFrameShown = false;
         enabled = false;
         return RUN_SAME;
     }
@@ -1364,7 +1301,11 @@ int32_t Screen::runOnce()
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
+            // Cleared even while a module holds the screen: START_ALERT_FRAME set it and nothing
+            // else would, so swallowing it here would leave banners suppressed for good.
             NotificationRenderer::pauseBanner = false;
+            if (hasModalModule())
+                break; // only the owning module may take the screen back off its own frame
             // Return from one-off alert mode back to regular frames.
             if (!showingNormalScreen && NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
                 setFrames();
@@ -1385,6 +1326,7 @@ int32_t Screen::runOnce()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
+        textMessageFrameShown = false;
         enabled = false;
         return 0;
     }
@@ -1422,7 +1364,7 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (config.display.auto_screen_carousel_secs > 0 &&
+        if (config.display.auto_screen_carousel_secs > 0 && !hasModalModule() &&
             NotificationRenderer::current_notification_type != notificationTypeEnum::text_input &&
             !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
@@ -1437,6 +1379,9 @@ int32_t Screen::runOnce()
             handleOnPress();
         }
     }
+
+    textMessageFrameShown = showingNormalScreen && framesetInfo.positions.textMessage != 255 && ui &&
+                            ui->getUiState()->currentFrame == framesetInfo.positions.textMessage;
 
     // LOG_DEBUG("want fps %d, fixed=%d", targetFramerate,
     // ui->getUiState()->frameState); If we are scrolling we need to be called
@@ -1477,6 +1422,10 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     if (einkScreensaver != NULL) {
         screensaverFrame = einkScreensaver;
         ui->setFrames(&screensaverFrame, 1);
+
+        // Hide the nav bar before the sleep / shutdown screen is rendered
+        static OverlayCallback screensaverOverlays[] = {NotificationRenderer::drawBannercallback};
+        ui->setOverlays(screensaverOverlays, 1);
     }
 
     // Else, display the usual "overlay" screensaver
@@ -2025,6 +1974,19 @@ void Screen::applyHiddenFramesMask(uint32_t mask)
     hiddenFrames.chirpy = getBit(mask, FVBIT_CHIRPY);
 }
 
+bool Screen::isShowingModuleFrame(const MeshModule *m) const
+{
+    if (!m || !showingNormalScreen)
+        return false;
+    // Same effective frame drawModuleFrame() picks: mid-transition the incoming frame is the one
+    // being rendered, so comparing currentFrame would report false while the module is on screen.
+    const OLEDDisplayUiState *state = ui->getUiState();
+    uint8_t frame = state->currentFrame;
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == TransitionRelationship_INCOMING)
+        frame = state->transitionFrameTarget;
+    return frame < moduleFrames.size() && moduleFrames.at(frame) == m;
+}
+
 void Screen::loadFrameVisibility()
 {
 #ifdef FSCom
@@ -2529,7 +2491,8 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
             if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
                 showFrame(FrameDirection::PREVIOUS);
-            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
+            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS ||
+                       (event->inputEvent == INPUT_BROKER_ANYKEY && event->kbchar == ' ')) {
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
                 this->ui->switchToFrame(0);
@@ -2658,6 +2621,11 @@ int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
 bool Screen::isOverlayBannerShowing()
 {
     return NotificationRenderer::isOverlayBannerShowing();
+}
+
+bool Screen::isTextMessageFrameShown() const
+{
+    return textMessageFrameShown.load();
 }
 
 bool Screen::isGamesFrameShown()

@@ -541,7 +541,6 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
     } else if (gps->getNumSatellites() == 0) {
         // No position lock and no visible satellites are different states.
         // Show "No Sats" only when the published satellite count is really 0.
-    } else if (gps->getNumSatellites() == 0) {
         snprintf(textString, sizeof(textString), "No Sats");
     } else {
         snprintf(textString, sizeof(textString), "%u sats", gps->getNumSatellites());

@@ -1,10 +1,6 @@
 #pragma once
 #if HAS_SCREEN
-#include <functional>
 #include "configuration.h"
-
-class OLEDDisplay;
-
 namespace graphics
 {
 
