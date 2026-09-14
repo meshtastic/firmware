@@ -54,6 +54,14 @@ class MeshTransportBase
     static void callTransportsPreEncode(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded,
                                         ChannelIndex chIndex);
 
+    /** Ask every PostEncode transport to drop a queued copy of (from, id) it has not yet sent,
+     * because a duplicate was overheard on `medium`.
+     *
+     * An overhear is evidence about one medium only: hearing a neighbour rebroadcast over BLE says
+     * nothing about who heard us on LoRa. So the medium is passed through and each transport ignores
+     * a cancel for a medium that is not its own. Returns true if any transport dropped something. */
+    static bool cancelTransportsOn(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id);
+
   protected:
     /** True when this transport should receive outgoing packets right now (typically its
      * config.network.enabled_protocols flag). Checked by callTransports before each onSend(). Only the
@@ -72,4 +80,8 @@ class MeshTransportBase
                                  ChannelIndex chIndex)
     {
     }
+
+    /** Drop a queued, not-yet-transmitted copy of (from, id) when `medium` is this transport's own.
+     * Default no-op: a transport that emits inline has no queue to cancel from. */
+    virtual bool onCancelSending(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id) { return false; }
 };

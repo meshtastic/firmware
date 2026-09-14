@@ -31,13 +31,16 @@ uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t
     if (protoLen == 0) {
         // pb_encode_to_bytes returns 0 both for a genuine encode failure and for a packet that does
         // not fit the buffer. Either way it cannot ride BLE; it still goes out over LoRa.
+        txDroppedTooLarge++;
         LOG_WARN("BLE mesh: drop 0x%08x, does not fit %u-byte advertisement budget", mp->id, (unsigned)BLE_MESH_MAX_PROTO_LEN);
         return 0;
     }
 
     const size_t total = BLE_MESH_ADV_OVERHEAD + protoLen;
-    if (total > outCap || total > BLE_MESH_ADV_TOTAL_MAX)
+    if (total > outCap || total > BLE_MESH_ADV_TOTAL_MAX) {
+        txDroppedTooLarge++;
         return 0;
+    }
 
     uint8_t *p = out;
     // Flags AD structure.
@@ -76,6 +79,10 @@ bool BLEMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     slot.len = buildAdvPayload(mp, slot.data.data(), slot.data.size());
     if (slot.len == 0)
         return false;
+    // mp->from, not getFrom(mp): buildAdvPayload has already refused from == 0, and this has to be
+    // the same key perhapsCancelDupe cancels with.
+    slot.from = mp->from;
+    slot.id = mp->id;
 
     if (txCount >= BLE_MESH_TX_QUEUE_SIZE) {
         LOG_WARN("BLE mesh: TX queue full, dropping 0x%08x", mp->id);
@@ -113,10 +120,53 @@ int32_t BLEMeshHandler::runOnce()
     txHead = (txHead + 1) % BLE_MESH_TX_QUEUE_SIZE;
     txCount--;
 
-    if (platformBeginAdvertising(slot.data.data(), slot.len))
+    if (platformBeginAdvertising(slot.data.data(), slot.len)) {
         advertising = true;
+        advertisingFrom = slot.from;
+        advertisingId = slot.id;
+    }
 
     return 10;
+}
+
+bool BLEMeshHandler::onCancelSending(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id)
+{
+    // A duplicate overheard on another medium says nothing about who heard this one.
+    if (medium != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV)
+        return false;
+
+    bool canceled = false;
+
+    // Compact the ring in place, keeping order. A cancel is rare and the ring is eight deep, so a
+    // copy costs less than threading a tombstone through runOnce().
+    size_t kept = 0;
+    for (size_t i = 0; i < txCount; i++) {
+        const AdvSlot &slot = txQueue[(txHead + i) % BLE_MESH_TX_QUEUE_SIZE];
+        if (slot.from == from && slot.id == id) {
+            canceled = true;
+            continue;
+        }
+        if (kept != i)
+            txQueue[(txHead + kept) % BLE_MESH_TX_QUEUE_SIZE] = slot;
+        kept++;
+    }
+    txCount = kept;
+    txTail = (txHead + kept) % BLE_MESH_TX_QUEUE_SIZE;
+
+    // Cut a burst already on air short too. Extended advertising repeats one payload for
+    // BLE_MESH_ADV_EVENTS events, so the copies still to come are exactly what the overhear says are
+    // unnecessary. runOnce() pops before it advertises, so this frame is no longer in the ring.
+    if (advertising && advertisingFrom == from && advertisingId == id) {
+        platformEndAdvertising();
+        advertising = false;
+        advertisingFrom = 0;
+        advertisingId = 0;
+        canceled = true;
+    }
+
+    if (canceled)
+        LOG_DEBUG("BLE mesh: canceling our copy of 0x%08x, a neighbour relayed it", id);
+    return canceled;
 }
 
 void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rssi)

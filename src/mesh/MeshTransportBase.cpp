@@ -36,6 +36,19 @@ void MeshTransportBase::callTransports(const meshtastic_MeshPacket *mp)
     }
 }
 
+bool MeshTransportBase::cancelTransportsOn(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id)
+{
+    if (!postEncodeTransports)
+        return false;
+
+    // No isEnabled() gate: a transport disabled since the packet was queued still holds it, and a
+    // frame we have decided not to relay should not go out when it is re-enabled.
+    bool canceled = false;
+    for (auto *t : *postEncodeTransports)
+        canceled |= t->onCancelSending(medium, from, id);
+    return canceled;
+}
+
 void MeshTransportBase::callTransportsPreEncode(const meshtastic_MeshPacket &mp_encrypted,
                                                 const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex)
 {

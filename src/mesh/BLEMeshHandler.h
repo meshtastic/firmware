@@ -51,9 +51,10 @@
  *
  * Connectionless, not GATT. GATT is point-to-point: reaching N peers costs N writes and no peer
  * overhears another, where one advertisement reaches every neighbour at once - the same one-to-many
- * shape LoRa has. Note this does not yet buy dupe suppression: FloodingRouter::perhapsCancelDupe is
- * gated on TRANSPORT_LORA and Router::cancelSending reaches only iface's TX queue, never this ring.
- * Advertising keeps suppression possible later; it is not active today.
+ * shape LoRa has. That one-to-many shape is what makes dupe suppression possible, and
+ * onCancelSending() is where it lands: a duplicate overheard on BLE drops our own queued copy, the
+ * same way FloodingRouter cancels a queued LoRa rebroadcast. Strictly same-medium - hearing a
+ * neighbour on BLE says nothing about who heard us on LoRa.
  *
  * onSend() only encodes and queues. The advertising itself is clocked by runOnce() on the main
  * thread, because Router::send() is not a place to block: an implementation that advertises
@@ -76,14 +77,27 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
         return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
     }
 
+    /// Packets refused because they do not fit one unfragmented advertisement. Counted rather than
+    /// only logged: this is a routine, silent loss of the top of the payload range, not an anomaly.
+    /// The ceiling is BLE_MESH_MAX_PROTO_LEN for the whole encoded MeshPacket, so the usable
+    /// ciphertext is that minus the envelope - well under LoRa's MAX_RADIO_PAYLOAD_LEN.
+    uint32_t txDroppedTooLarge = 0;
+
     /// Called from Router::send(). Encodes and queues; never transmits inline.
     bool onSend(const meshtastic_MeshPacket *mp) override;
 
+    /// Drop our queued copy of (from, id) because a neighbour was heard rebroadcasting it on BLE.
+    /// Ignores every other medium: an overhear is evidence about one radio only.
+    bool onCancelSending(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id) override;
+
   protected:
-    /// One queued outbound frame, already built into a complete AD payload.
+    /// One queued outbound frame, already built into a complete AD payload. `from`/`id` are kept
+    /// alongside the bytes so a cancel does not have to decode its own queue back out again.
     struct AdvSlot {
         std::array<uint8_t, BLE_MESH_ADV_TOTAL_MAX> data;
         uint8_t len;
+        NodeNum from;
+        PacketId id;
     };
 
     // --- platform hooks ---------------------------------------------------------------------
@@ -125,6 +139,11 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     size_t txTail = 0;
     size_t txCount = 0;
     bool advertising = false;
+
+    // runOnce() pops a slot before it begins the burst, so a frame already on air is no longer in
+    // the ring. Its identity is kept here so a cancel can cut a live burst short as well.
+    NodeNum advertisingFrom = 0;
+    PacketId advertisingId = 0;
 
     // The BLE stack is brought up by setBluetoothEnable(), which on ESP32 runs *before* main()
     // constructs this handler - so a one-shot "bluetooth is ready" callback into the handler is a

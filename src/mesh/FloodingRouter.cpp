@@ -1,4 +1,5 @@
 #include "FloodingRouter.h"
+#include "MeshTransportBase.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "configuration.h"
@@ -136,11 +137,23 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-        // But only LoRa packets should be able to trigger this.
-        if (Router::cancelSending(p->from, p->id))
-            txRelayCanceled++;
+    if (roleAllowsCancelingDupe(p)) {
+        // Cancel rebroadcast of this message *if* there was already one, unless we're a router.
+        // Strictly same-medium: overhearing a neighbour relay this on BLE is evidence that our BLE
+        // neighbours have it, and no evidence at all about who heard us on LoRa. Cancelling across
+        // media would silently thin the LoRa flood.
+        switch (p->transport_mechanism) {
+        case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA:
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
+            break;
+        case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV:
+            if (MeshTransportBase::cancelTransportsOn(p->transport_mechanism, p->from, p->id))
+                txRelayCanceled++;
+            break;
+        default:
+            break;
+        }
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);

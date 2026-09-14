@@ -33,6 +33,10 @@ class FakeBLEMesh : public BLEMeshHandler
 
     // Exposed so tests can drive ingress without a BLE stack.
     void feed(const uint8_t *data, size_t len, int8_t rssi) { deliverToRouter(data, len, rssi); }
+    bool cancel(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id)
+    {
+        return onCancelSending(medium, from, id);
+    }
     uint8_t build(const meshtastic_MeshPacket *mp, uint8_t *out, size_t cap) { return buildAdvPayload(mp, out, cap); }
     int32_t pump() { return runOnce(); }
 
@@ -137,6 +141,157 @@ void test_drops_a_packet_too_large_for_one_advertisement(void)
 
     uint8_t adv[BLE_MESH_ADV_TOTAL_MAX];
     TEST_ASSERT_EQUAL_UINT8(0, h.build(&p, adv, sizeof(adv)));
+}
+
+/// The largest ciphertext that still fits one advertisement, found rather than assumed.
+///
+/// The budget is BLE_MESH_MAX_PROTO_LEN for the *whole* encoded MeshPacket, so the answer is that
+/// minus whatever envelope the packet happens to carry - which is why it is measured per packet
+/// shape rather than written down once.
+size_t largestCiphertextThatFits(meshtastic_MeshPacket shape)
+{
+    FakeBLEMesh h;
+    h.start();
+    uint8_t adv[BLE_MESH_ADV_TOTAL_MAX];
+
+    size_t lo = 0, hi = MAX_ENCRYPTED_FOR_TEST;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo + 1) / 2;
+        shape.encrypted.size = mid;
+        if (h.build(&shape, adv, sizeof(adv)) > 0)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    return lo;
+}
+
+void test_the_advertisement_ceiling_is_below_the_lora_ceiling(void)
+{
+    auto p = encryptedPacket();
+    const size_t fits = largestCiphertextThatFits(p);
+
+    // The bearer is not a full bearer and never has been: one unfragmented extended advertisement
+    // cannot hold what one LoRa frame holds, and nothing fragments. Everything above this rides
+    // LoRa only, counted by txDroppedTooLarge. Pinned so a change to the envelope - a field added to
+    // MeshPacket, an AD structure added to the payload - shows up here rather than as quietly
+    // shorter reach.
+    TEST_ASSERT_EQUAL_size_t(219, fits);
+    TEST_ASSERT_LESS_THAN_size_t_MESSAGE(MAX_RADIO_PAYLOAD_LEN, fits, "BLE carries less than LoRa");
+}
+
+void test_a_relayed_packet_pays_for_its_reception_metadata(void)
+{
+    auto local = encryptedPacket();
+    auto relayed = encryptedPacket();
+    // What Router::send hands a transport when it is relaying something heard on the air.
+    // buildAdvPayload encodes the packet as it stands, so these ride over the air: rx_rssi is a
+    // negative int32, which nanopb spends ten bytes on.
+    relayed.rx_rssi = -113;
+    relayed.has_rx_rssi = true;
+    relayed.rx_snr = -7.25f;
+    relayed.rx_time = 1757808000;
+    relayed.has_rx_time = true;
+
+    const size_t localFits = largestCiphertextThatFits(local);
+    const size_t relayedFits = largestCiphertextThatFits(relayed);
+
+    // A relay therefore reaches less far up the payload range than the originator did, and leaks the
+    // relayer's own link quality while doing it. Both are fixable by encoding a stripped copy.
+    TEST_ASSERT_LESS_THAN_size_t_MESSAGE(localFits, relayedFits, "relaying costs budget");
+    TEST_ASSERT_EQUAL_size_t(198, relayedFits);
+}
+
+void test_an_oversized_packet_is_counted_not_just_logged(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = encryptedPacket(0x3061b02e, 0x04050b6e, MAX_ENCRYPTED_FOR_TEST);
+
+    TEST_ASSERT_FALSE(h.onSend(&p));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, h.txDroppedTooLarge, "the loss is countable");
+}
+
+void test_a_dupe_heard_on_ble_cancels_our_queued_copy(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = encryptedPacket(0x3061b02e, 0x04050b6e);
+    TEST_ASSERT_TRUE(h.onSend(&p));
+
+    // A neighbour relayed it before we got to. One advertisement reaches every neighbour at once,
+    // so their copy has already done our work.
+    TEST_ASSERT_TRUE(h.cancel(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV, p.from, p.id));
+
+    h.pump();
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.sent.size(), "nothing went out");
+}
+
+void test_a_dupe_heard_on_lora_leaves_the_ble_queue_alone(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = encryptedPacket(0x3061b02e, 0x04050b6e);
+    TEST_ASSERT_TRUE(h.onSend(&p));
+
+    // Hearing a LoRa neighbour relay this says nothing about whether our BLE neighbours have it.
+    // Cancelling here would silently thin the BLE flood every time the two meshes overlap.
+    TEST_ASSERT_FALSE(h.cancel(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA, p.from, p.id));
+
+    h.pump();
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.sent.size(), "still advertised");
+}
+
+void test_canceling_keeps_the_other_queued_frames_in_order(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto first = encryptedPacket(0x3061b02e, 0x11111111);
+    auto doomed = encryptedPacket(0x3061b02e, 0x22222222);
+    auto last = encryptedPacket(0x3061b02e, 0x33333333);
+    TEST_ASSERT_TRUE(h.onSend(&first));
+    TEST_ASSERT_TRUE(h.onSend(&doomed));
+    TEST_ASSERT_TRUE(h.onSend(&last));
+
+    TEST_ASSERT_TRUE(h.cancel(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV, doomed.from, doomed.id));
+
+    // Compacting the ring must not drop or reorder its neighbours - the frames either side are
+    // unrelated packets that still have to go out, in the order they were queued.
+    uint8_t expectedFirst[BLE_MESH_ADV_TOTAL_MAX];
+    uint8_t expectedLast[BLE_MESH_ADV_TOTAL_MAX];
+    const uint8_t firstLen = h.build(&first, expectedFirst, sizeof(expectedFirst));
+    const uint8_t lastLen = h.build(&last, expectedLast, sizeof(expectedLast));
+
+    h.pump();
+    h.advertising = false;
+    h.pump();
+    h.advertising = false;
+    h.pump();
+
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.sent.size(), "two frames survived");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedFirst, h.sent[0].data(), firstLen);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedLast, h.sent[1].data(), lastLen);
+}
+
+void test_canceling_cuts_a_burst_already_on_air(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = encryptedPacket(0x3061b02e, 0x04050b6e);
+    TEST_ASSERT_TRUE(h.onSend(&p));
+    h.pump();
+    TEST_ASSERT_TRUE_MESSAGE(h.advertising, "on air");
+
+    // The payload repeats for BLE_MESH_ADV_EVENTS events, so the copies still to come are exactly
+    // what the overhear says are unnecessary. runOnce pops before it advertises, so this frame is
+    // no longer in the ring and only the live-burst identity can find it.
+    TEST_ASSERT_TRUE(h.cancel(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV, p.from, p.id));
+    TEST_ASSERT_FALSE_MESSAGE(h.advertising, "burst ended");
+
+    // And the state machine is not left half-advanced: the next pump finds an empty ring and idles
+    // rather than re-ending a burst that is already over.
+    h.pump();
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.sent.size(), "nothing re-sent");
 }
 
 void test_send_queues_rather_than_transmitting(void)
@@ -303,6 +458,13 @@ void setup()
     RUN_TEST(test_refuses_an_unencrypted_packet);
     RUN_TEST(test_refuses_a_packet_with_no_sender);
     RUN_TEST(test_drops_a_packet_too_large_for_one_advertisement);
+    RUN_TEST(test_the_advertisement_ceiling_is_below_the_lora_ceiling);
+    RUN_TEST(test_a_relayed_packet_pays_for_its_reception_metadata);
+    RUN_TEST(test_an_oversized_packet_is_counted_not_just_logged);
+    RUN_TEST(test_a_dupe_heard_on_ble_cancels_our_queued_copy);
+    RUN_TEST(test_a_dupe_heard_on_lora_leaves_the_ble_queue_alone);
+    RUN_TEST(test_canceling_keeps_the_other_queued_frames_in_order);
+    RUN_TEST(test_canceling_cuts_a_burst_already_on_air);
     RUN_TEST(test_send_queues_rather_than_transmitting);
     RUN_TEST(test_tx_queue_is_bounded);
     RUN_TEST(test_a_relayed_packet_is_re_advertised);
