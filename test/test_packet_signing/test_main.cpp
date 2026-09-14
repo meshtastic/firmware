@@ -1891,6 +1891,10 @@ void test_C18_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void
     const meshtastic_MeshPacket dm =
         makePkiUnicastBetween(stranger, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA50005, /*wantAck=*/true);
     useDHKey(us.priv); // we hold our own key; the sender's is what we lack
+    // An unrelated admin key is tried as a fallback and fails; that must not turn "no key" into "key failed".
+    const RelayIdentity admin = makeIdentity(TARGET_NODE);
+    config.security.admin_key[0].size = 32;
+    memcpy(config.security.admin_key[0].bytes, admin.pub, 32);
 
     for (const auto mode : ALL_MODES) {
         pipelineRadio->reset();
@@ -1916,13 +1920,18 @@ void test_C18_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void
 }
 
 // C19: the same frame claiming to be from us is a forgery and gets nothing - no NAK, no phone,
-// no relay.
+// no relay. We hold our own identity, so the decrypt is attempted with our key and fails: the gate
+// must REJECT (from-us decode failure), not hand it to the opaque path.
 void test_C19_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction(void)
 {
+    const RelayIdentity us = installOurIdentity();
+    useDHKey(us.priv);
     const RelayIdentity target = makeIdentity(TARGET_NODE);
     const RelayIdentity forger = makeIdentity(LOCAL_NODE);
     meshtastic_MeshPacket p = makePkiUnicastBetween(forger, target, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA60006, true);
     p.to = LOCAL_NODE; // to us, "from" us
+    meshtastic_MeshPacket verdictCopy = p;
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&verdictCopy)));
     runPipelineIngress(p);
     TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
     TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
@@ -1994,6 +2003,62 @@ void test_C22_unknown_channel_broadcast_reaches_phone_without_nodedb(void)
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
 }
 
+// C23: a broadcast on wire hash 0 from a sender whose key we hold, on a channel we do not hold. PKI
+// never applies to a broadcast, so the sender's key is irrelevant: the frame is unreadable to us and
+// reaches the phone. Guards the header-based guess this replaced, which called it readable.
+void test_C23_hash0_broadcast_from_keyed_sender_is_unreadable_and_reaches_phone(void)
+{
+    TEST_ASSERT_FALSE_MESSAGE(channels.hasHash(0), "fixture assumes no configured channel hashes to 0");
+    const RelayIdentity sender = makeIdentity(ADMIN_NODE);
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->setPublicKey(ADMIN_NODE, sender.pub);
+    meshtastic_MeshPacket foreign = makeUnknownChannelBroadcast(0xADAC000C);
+    foreign.channel = 0;
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
+    runPipelineIngress(foreign);
+    meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
+    TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "a hash-0 broadcast we cannot read must reach the phone whoever sent it");
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, toPhone->which_payload_variant);
+    packetPool.release(toPhone);
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+}
+
+// C24: KNOWN_ONLY declines a stranger before any decrypt attempt. On a channel we hold that must
+// still count as "matched", so the phone never sees a stranger's ciphertext; only a frame we had no
+// key or channel for is unreadable. Nothing is relayed, NAKed or learned.
+void test_C24_known_only_stranger_on_held_channel_is_withheld_from_phone(void)
+{
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY;
+    meshtastic_MeshPacket junk = meshtastic_MeshPacket_init_zero;
+    junk.from = REMOTE_NODE; // never added to NodeDB
+    junk.to = NODENUM_BROADCAST;
+    junk.id = 0xADAD000D;
+    junk.hop_limit = 1;
+    junk.hop_start = 2;
+    junk.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    junk.encrypted.size = 3;
+    memset(junk.encrypted.bytes, 0xFF, junk.encrypted.size);
+    junk.channel = channels.setActiveByIndex(0);
+    crypto->encryptPacket(junk.from, junk.id, junk.encrypted.size, junk.encrypted.bytes);
+
+    meshtastic_MeshPacket verdictCopy = junk;
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY),
+                      static_cast<int>(passesRoutingAuthGate(&verdictCopy)));
+    runPipelineIngress(junk);
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "a stranger's frame on a channel we hold is not for the phone");
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "KNOWN_ONLY does not carry an opaque broadcast");
+    TEST_ASSERT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
+
+    // The same stranger on a channel we do not hold is unreadable, and the phone does see that.
+    meshtastic_MeshPacket foreign = makeUnknownChannelBroadcast(0xADAD001D);
+    foreign.from = REMOTE_NODE;
+    runPipelineIngress(foreign);
+    meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    packetPool.release(toPhone);
+}
+
 void setup()
 {
     pipelineHarnessCreate();
@@ -2062,6 +2127,8 @@ void setup()
     RUN_TEST(test_C20_pki_to_us_with_known_key_that_fails_naks_no_channel);
     RUN_TEST(test_C21_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt);
     RUN_TEST(test_C22_unknown_channel_broadcast_reaches_phone_without_nodedb);
+    RUN_TEST(test_C23_hash0_broadcast_from_keyed_sender_is_unreadable_and_reaches_phone);
+    RUN_TEST(test_C24_known_only_stranger_on_held_channel_is_withheld_from_phone);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
