@@ -61,7 +61,7 @@ bool BHI260APSensor::init()
         BoschSensorInfo info = sensor.getSensorInfo();
         LOG_INFO("Product ID     : %02x\n", info.product_id);
         LOG_INFO("Kernel version : %04u\n", info.kernel_version);
-        LOG_INFO("User version   : %04u\n", info.getUserVersion());
+        LOG_INFO("User version   : %04u\n", info.user_version);
         LOG_INFO("ROM version    : %04u\n", info.getRomVersion());
         LOG_INFO("Power state    : %s\n", (info.getHostStatus() & BHY2_HST_POWER_STATE) ? "sleeping" : "active");
         LOG_INFO("Host interface : %s\n", (info.getHostStatus() & BHY2_HST_HOST_PROTOCOL) ? "SPI" : "I2C");
