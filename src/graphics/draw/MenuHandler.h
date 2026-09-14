@@ -1,6 +1,10 @@
 #pragma once
 #if HAS_SCREEN
 #include "configuration.h"
+#include <functional>
+
+class OLEDDisplay;
+
 namespace graphics
 {
 
@@ -47,6 +51,9 @@ class menuHandler
         EnvironmentTelemetrySourceMenu,
         WifiToggleMenu,
         BluetoothToggleMenu,
+#if HAS_BLE_MESH
+        NodePairingMenu,
+#endif
         ScreenOptionsMenu,
         PowerMenu,
         SystemBaseMenu,
@@ -145,12 +152,20 @@ class menuHandler
     // the selection is written.
     static meshtastic_Config_LoRaConfig_ModemPreset presetForRegionSelection(const meshtastic_Config_LoRaConfig &lora,
                                                                              meshtastic_Config_LoRaConfig_RegionCode selected);
+#if HAS_BLE_MESH
+    // Apply the BLE mesh setting and report whether Bluetooth/WiFi changes require a reboot.
+    static bool setNodePairingEnabled(bool enabled);
+#endif
 
   private:
     static void saveUIConfig();
     static void keyVerificationInitMenu();
     static void keyVerificationFinalPrompt();
     static void bluetoothToggleMenu();
+#if HAS_BLE_MESH
+    static void nodePairingMenu();
+    static void showNodePairingCandidate(uint32_t nodeNum, uint32_t verificationCode);
+#endif
 };
 
 /* Generic Menu Options designations  */

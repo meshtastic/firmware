@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "buzz.h"
 #include "graphics/Backlight.h"
 #include "graphics/Screen.h"
@@ -1303,7 +1304,19 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
+    enum optionsNumbers {
+        Back,
+        Notifications,
+        ScreenOptions,
+        Bluetooth,
+#if HAS_BLE_MESH
+        NodePairing,
+#endif
+        WiFiToggle,
+        PowerMenu,
+        Test,
+        enumEnd
+    };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1320,6 +1333,10 @@ void menuHandler::systemBaseMenu()
         optionsArray[options] = "Bluetooth Toggle";
     }
     optionsEnumArray[options++] = Bluetooth;
+#if HAS_BLE_MESH
+    optionsArray[options] = "Node Pairing";
+    optionsEnumArray[options++] = NodePairing;
+#endif
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     optionsArray[options] = "WiFi Toggle";
     optionsEnumArray[options++] = WiFiToggle;
@@ -1361,6 +1378,11 @@ void menuHandler::systemBaseMenu()
         } else if (selected == Bluetooth) {
             menuQueue = BluetoothToggleMenu;
             screen->runNow();
+#if HAS_BLE_MESH
+        } else if (selected == NodePairing) {
+            menuQueue = NodePairingMenu;
+            screen->runNow();
+#endif
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
         } else if (selected == WiFiToggle) {
             menuQueue = WifiToggleMenu;
@@ -2287,6 +2309,125 @@ void menuHandler::bluetoothToggleMenu()
     bannerOptions.InitialSelected = config.bluetooth.enabled ? 1 : 2;
     screen->showOverlayBanner(bannerOptions);
 }
+
+#if HAS_BLE_MESH
+bool menuHandler::setNodePairingEnabled(bool enabled)
+{
+    bool needsReboot = false;
+    config.has_network = true;
+
+    if (enabled) {
+        config.network.enabled_protocols |= meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
+        if (!config.bluetooth.enabled) {
+            config.bluetooth.enabled = true;
+            needsReboot = true;
+        }
+#if HAS_WIFI && defined(ARCH_ESP32)
+        if (config.network.wifi_enabled) {
+            config.network.wifi_enabled = false;
+            needsReboot = true;
+        }
+#endif
+        if (bleMeshHandler)
+            bleMeshHandler->start();
+    } else {
+        config.network.enabled_protocols &= ~meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
+        if (bleMeshHandler)
+            bleMeshHandler->stop();
+    }
+
+    return needsReboot;
+}
+
+void menuHandler::nodePairingMenu()
+{
+    enum optionsNumbers { Back, PairNew, Toggle, Forget, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back", "Pair New", nullptr, "Forget Node"};
+    static int optionsEnumArray[enumEnd] = {Back, PairNew, Toggle, Forget};
+    const bool enabled = config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
+    optionsArray[Toggle] = enabled ? "Bridge Off" : "Bridge On";
+    const int optionCount = bleMeshHandler && bleMeshHandler->pairedCount() ? enumEnd : enumEnd - 1;
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = currentResolution == ScreenResolution::UltraLow ? "Node Pair" : "Node Pairing";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = optionCount;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back)
+            return;
+
+        if (selected == PairNew) {
+            if (bleMeshHandler && bleMeshHandler->pairedCount() >= BLE_MESH_MAX_PAIRED_NODES) {
+                screen->showSimpleBanner("Pair list full", 3000);
+                return;
+            }
+            const bool enabledNow =
+                config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
+            if (!enabledNow) {
+                const bool needsReboot = setNodePairingEnabled(true);
+                nodeDB->saveToDisk(SEGMENT_CONFIG);
+                if (needsReboot) {
+                    screen->showSimpleBanner("Bridge enabled\nPair after reboot", 3000);
+                    rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
+                    return;
+                }
+            }
+            if (!bleMeshHandler ||
+                !bleMeshHandler->beginPairing([](NodeNum nodeNum, uint32_t code) { showNodePairingCandidate(nodeNum, code); })) {
+                screen->showSimpleBanner("Pairing unavailable", 3000);
+                return;
+            }
+            screen->showSimpleBanner("Pairing for 60s\nWaiting for node", BLE_MESH_PAIRING_TIMEOUT_MS);
+            return;
+        }
+
+        if (selected == Toggle) {
+            const bool current = config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
+            const bool needsReboot = setNodePairingEnabled(!current);
+            nodeDB->saveToDisk(SEGMENT_CONFIG);
+            if (needsReboot) {
+                screen->showSimpleBanner("Bridge ON\nRebooting", 3000);
+                rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
+            } else {
+                screen->showSimpleBanner(current ? "Bridge OFF" : "Bridge ON", 3000);
+            }
+            return;
+        }
+
+        if (selected == Forget && bleMeshHandler) {
+            screen->showNodePicker("Forget Bridge Node", 30000, [](NodeNum nodeNum) {
+                screen->showSimpleBanner(bleMeshHandler->forgetPeer(nodeNum) ? "Bridge node forgotten" : "Node not paired", 3000);
+            });
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::showNodePairingCandidate(uint32_t nodeNum, uint32_t verificationCode)
+{
+    char message[64];
+    snprintf(message, sizeof(message), "Pair !%08x?\nCode %03u %03u", nodeNum, verificationCode / 1000, verificationCode % 1000);
+    static const char *optionsArray[] = {"Reject", "Accept"};
+    BannerOverlayOptions options;
+    options.message = message;
+    options.durationMs = 30000;
+    options.optionsArrayPtr = optionsArray;
+    options.optionsCount = 2;
+    options.notificationType = notificationTypeEnum::selection_picker;
+    options.bannerCallback = [](int selected) {
+        if (!bleMeshHandler)
+            return;
+        if (selected == 1) {
+            screen->showSimpleBanner(bleMeshHandler->approvePairingCandidate() ? "Node approved" : "Pairing failed", 3000);
+        } else {
+            bleMeshHandler->cancelPairing();
+            screen->showSimpleBanner("Pairing rejected", 3000);
+        }
+    };
+    screen->showOverlayBanner(options);
+}
+#endif
 
 void menuHandler::BuzzerModeMenu()
 {
@@ -3266,6 +3407,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case BluetoothToggleMenu:
         bluetoothToggleMenu();
         break;
+#if HAS_BLE_MESH
+    case NodePairingMenu:
+        nodePairingMenu();
+        break;
+#endif
     case ScreenOptionsMenu:
         screenOptionsMenu();
         break;

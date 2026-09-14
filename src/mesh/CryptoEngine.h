@@ -56,6 +56,10 @@ class CryptoEngine
                                    uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
     virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+    // Derive a domain-separated 32-byte key from our X25519 identity and a peer key.
+    // Callers must hold cryptLock for this operation and any immediately following cipher use.
+    bool deriveSharedKey(meshtastic_NodeInfoLite_public_key_t remotePublic, const uint8_t *context, size_t contextLen,
+                         uint8_t out[32]);
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 

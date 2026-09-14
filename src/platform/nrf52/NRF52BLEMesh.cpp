@@ -34,6 +34,7 @@ void NRF52BLEMesh::start()
         return;
     }
 
+    pairedCount();
     instance = this;
     memset(peers, 0, sizeof(peers));
     peerCount = 0;
@@ -61,6 +62,7 @@ void NRF52BLEMesh::stop()
     if (!isRunning)
         return;
 
+    cancelPairing();
     platformEndAdvertising();
     stopScanning();
     isRunning = false;

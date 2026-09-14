@@ -287,6 +287,21 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
+bool CryptoEngine::deriveSharedKey(meshtastic_NodeInfoLite_public_key_t remotePublic, const uint8_t *context, size_t contextLen,
+                                   uint8_t out[32])
+{
+    if (remotePublic.size != 32 || !context || contextLen == 0 || !out || !setDHPublicKey(remotePublic.bytes))
+        return false;
+
+    SHA256 kdf;
+    kdf.reset();
+    kdf.update(shared_key, sizeof(shared_key));
+    kdf.update(context, contextLen);
+    kdf.finalize(out, 32);
+    memset(shared_key, 0, sizeof(shared_key));
+    return true;
+}
+
 void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
 {
     memcpy(private_key, _private_key, 32);

@@ -22,16 +22,15 @@ MEMORY
    * - Concurrent connection peripheral + central + secure links
    * - Event Len, HVN queue, Write CMD queue
    *
-   * With our fixed Bluefruit config (1 peripheral link, BANDWIDTH_MAX / MTU 247,
-   * 0x1000 attr table) sd_ble_enable() reports a requirement well below the old
-   * 0x20006000 ORIGIN; every byte of gap is unusable RAM. 0x20004000 keeps a
-   * ~2+ KB margin over the reported base. NRF52Bluetooth::setup() now checks
-   * Bluefruit.begin() and records a critical error if the SoftDevice ever
-   * rejects this base (e.g. after an SD/Bluefruit config change) - re-measure
-   * with CFG_DEBUG=1 (Bluefruit logs "SoftDevice's RAM requires: 0x...")
-   * before raising bandwidth/MTU/link settings.
+   * With our fixed Bluefruit config (1 peripheral link, 1 central link,
+   * BANDWIDTH_MAX / MTU 247, 0x1000 attr table) sd_ble_enable() reports a
+   * requirement above 0x20004000. 0x20006000 keeps the known-safe margin.
+   * NRF52Bluetooth::setup() now checks Bluefruit.begin() and records a critical
+   * error if the SoftDevice ever rejects this base (e.g. after an SD/Bluefruit
+   * config change) - re-measure with CFG_DEBUG=1 (Bluefruit logs "SoftDevice's
+   * RAM requires: 0x...") before raising bandwidth/MTU/link settings.
    */
-  RAM (rwx) :  ORIGIN = 0x20004000, LENGTH = 0x20040000 - 0x20004000
+  RAM (rwx) :  ORIGIN = 0x20006000, LENGTH = 0x20040000 - 0x20006000
 }
 
 SECTIONS

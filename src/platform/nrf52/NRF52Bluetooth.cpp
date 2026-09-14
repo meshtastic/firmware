@@ -342,12 +342,11 @@ void NRF52Bluetooth::setup()
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
 #if HAS_BLE_MESH && defined(BLE_MESH_NRF52_CENTRAL)
-    // BLE mesh scans, and scanning needs a central link: Bluefruit.begin() defaults to (1, 0), so
-    // sd_ble_gap_scan_start fails outright without one. But asking for it raises the SoftDevice's
-    // RAM requirement above what the linker ORIGIN below reserves, and sd_ble_enable() then rejects
-    // the RAM base - see the failure path just below. So this is gated behind its own flag until
-    // nrf52840_s140_v*.ld is re-based; enabling it without that change gets you a node with no
-    // Bluetooth at all.
+    // BLE node pairing scans, and scanning needs a central link: Bluefruit.begin() defaults to
+    // (1 peripheral, 0 central), so sd_ble_gap_scan_start fails without one. Asking for it raises
+    // the SoftDevice RAM requirement above the former 0x20004000 linker origin. The standard
+    // nrf52840_s140_v*.ld scripts reserve 0x20006000 and the failure path below catches future
+    // configuration changes that outgrow it.
     Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
 #if HAS_BLE_GATT_MESH
     // Two peripheral links: the phone and one mesh peer.

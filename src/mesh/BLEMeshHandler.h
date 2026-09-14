@@ -7,17 +7,19 @@
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "Router.h"
+#include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
 #include "mesh-pb-constants.h"
 
 #include <array>
+#include <functional>
 
 // Meshtastic BLE mesh manufacturer data identifier.
 // 0xFFFF is the SIG-reserved "internal/test" company ID. A shipping build needs either a member
 // company ID or - better, because iOS can only scan in the background when filtering by service
 // UUID - an assigned 16-bit service UUID with the payload as service data.
 #define BLE_MESH_COMPANY_ID 0xFFFF
-#define BLE_MESH_PROTOCOL_VERSION 1
+#define BLE_MESH_PROTOCOL_VERSION 2
 
 // A single unfragmented extended advertising payload is capped at 251 bytes, not the 254 an
 // AUX_ADV_IND could hold: the HCI LE Set Extended Advertising Data command spends four of its 255
@@ -28,7 +30,24 @@
 
 // Flags AD structure (3) + manufacturer-data AD header (2) + company ID (2) + version (1).
 #define BLE_MESH_ADV_OVERHEAD 8
-#define BLE_MESH_MAX_PROTO_LEN (BLE_MESH_ADV_TOTAL_MAX - BLE_MESH_ADV_OVERHEAD)
+
+#define BLE_MESH_FRAME_DATA 1
+#define BLE_MESH_FRAME_PAIRING_HELLO 2
+#define BLE_MESH_DATA_HEADER_LEN 13
+#define BLE_MESH_MAX_PROTO_LEN                                                                                                   \
+    (BLE_MESH_ADV_TOTAL_MAX - BLE_MESH_ADV_OVERHEAD - BLE_MESH_DATA_HEADER_LEN - MESHTASTIC_PKC_OVERHEAD)
+
+#ifndef BLE_MESH_MAX_PAIRED_NODES
+#define BLE_MESH_MAX_PAIRED_NODES 3
+#endif
+
+#ifndef BLE_MESH_PAIRING_TIMEOUT_MS
+#define BLE_MESH_PAIRING_TIMEOUT_MS 60000
+#endif
+
+#ifndef BLE_MESH_PAIRING_ADV_INTERVAL_MS
+#define BLE_MESH_PAIRING_ADV_INTERVAL_MS 500
+#endif
 
 // Outbound frames waiting for the advertiser. Extended advertising is set-and-repeat, not a packet
 // queue - the instance holds one payload and repeats it - so a burst has to be clocked through one
@@ -45,15 +64,13 @@
 /**
  * Carries mesh frames between nodes over connectionless BLE extended advertisements.
  *
- * A second broadcast transport alongside LoRa, wired the way UdpMulticastHandler is: ingress hands
- * decoded frames to Router::enqueueReceivedMessage, egress is a copy taken in Router::send. It is
- * never the only path to the mesh - Router::send still asserts a LoRa iface.
+ * A second transport alongside LoRa: ingress authenticates the immediate bridge peer before handing
+ * the inner packet to Router::enqueueReceivedMessage, and egress makes one encrypted copy per
+ * approved peer. It is never the only path to the mesh - Router::send still asserts a LoRa iface.
  *
- * Connectionless, not GATT. GATT is point-to-point: reaching N peers costs N writes and no peer
- * overhears another, where one advertisement reaches every neighbour at once - the same one-to-many
- * shape LoRa has. Note this does not yet buy dupe suppression: FloodingRouter::perhapsCancelDupe is
- * gated on TRANSPORT_LORA and Router::cancelSending reaches only iface's TX queue, never this ring.
- * Advertising keeps suppression possible later; it is not active today.
+ * Connectionless, not GATT. Each advertisement is addressed and authenticated for one stored peer;
+ * other scanners can observe its presence and size but cannot decrypt or inject it. Pairing beacons
+ * are accepted only during a user-opened 60-second window, and both displays must show the same code.
  *
  * onSend() only encodes and queues. The advertising itself is clocked by runOnce() on the main
  * thread, because Router::send() is not a place to block: an implementation that advertises
@@ -63,6 +80,8 @@
 class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 {
   public:
+    using PairingCandidateCallback = std::function<void(NodeNum, uint32_t)>;
+
     BLEMeshHandler() : concurrency::OSThread("BLEMesh") {}
     virtual ~BLEMeshHandler() {}
 
@@ -78,6 +97,13 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 
     /// Called from Router::send(). Encodes and queues; never transmits inline.
     bool onSend(const meshtastic_MeshPacket *mp) override;
+
+    bool beginPairing(PairingCandidateCallback callback);
+    void cancelPairing();
+    bool approvePairingCandidate();
+    bool forgetPeer(NodeNum nodeNum);
+    bool isPaired(NodeNum nodeNum);
+    uint8_t pairedCount();
 
   protected:
     /// One queued outbound frame, already built into a complete AD payload.
@@ -100,19 +126,32 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 
     int32_t runOnce() override;
 
-    /// Decode a received advertisement payload and enqueue it into the router.
+    /// Authenticate a received v2 frame and enqueue its inner packet into the router.
     void deliverToRouter(const uint8_t *data, size_t len, int8_t rssi);
 
     /// Hand an accepted packet on. Virtual only so the native tests can observe what survives the
     /// ingress guards without standing up a live Router; production always takes the default.
     virtual void enqueueReceived(meshtastic_MeshPacket *p);
 
-    /// Build the complete AD payload (flags + manufacturer data) for `mp`. Returns 0 on refusal.
-    uint8_t buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t *out, size_t outCap);
+    /// Build a complete authenticated AD payload for one approved peer. Returns 0 on refusal.
+    uint8_t buildAdvPayload(const meshtastic_MeshPacket *mp, NodeNum peer, uint8_t *out, size_t outCap);
+
+#ifdef PIO_UNIT_TESTING
+    bool addPairForTest(NodeNum nodeNum, const uint8_t publicKey[32]);
+#endif
 
     bool isRunning = false;
 
   private:
+    struct PairingCandidate {
+        bool valid = false;
+        bool notified = false;
+        NodeNum nodeNum = 0;
+        uint64_t nonce = 0;
+        int8_t rssi = -128;
+        uint8_t publicKey[32] = {0};
+    };
+
     // No lock. Both ends of this ring run on the main task: onSend() is reached from Router::send(),
     // and runOnce() is an OSThread on the same task. The BLE callbacks (NimBLE host task on ESP32,
     // SoftDevice on nRF52) only ever reach deliverToRouter(), which touches the packet pool and the
@@ -132,6 +171,30 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     // ready" forever while the stack was already up. runOnce() polls platformReady() instead and
     // calls onBluetoothReady() itself, exactly once, whenever readiness actually arrives.
     bool readyHandled = false;
+
+    std::array<NodeNum, BLE_MESH_MAX_PAIRED_NODES> pairs{};
+    uint8_t pairCount = 0;
+    bool pairsLoaded = false;
+    concurrency::Lock pairLock;
+
+    bool pairingActive = false;
+    uint32_t pairingStartedMs = 0;
+    uint32_t lastPairingAdvertisementMs = 0;
+    uint64_t pairingNonce = 0;
+    PairingCandidate pairingCandidate;
+    PairingCandidateCallback pairingCallback;
+
+    void ensurePairsLoaded();
+    void loadPairs();
+    bool savePairs();
+    int findPair(NodeNum nodeNum);
+    bool addPair(NodeNum nodeNum, const uint8_t publicKey[32]);
+    bool validateIdentity(NodeNum nodeNum, const uint8_t publicKey[32]);
+    bool deriveBridgeKey(const uint8_t peerKey[32], uint8_t out[32]);
+    uint8_t buildPairingAdvertisement(uint8_t *out, size_t outCap);
+    void handlePairingHello(const uint8_t *data, size_t len, int8_t rssi);
+    void handleAuthenticatedData(const uint8_t *data, size_t len, int8_t rssi);
+    uint32_t pairingVerificationCode(const PairingCandidate &candidate);
 };
 
 extern BLEMeshHandler *bleMeshHandler;

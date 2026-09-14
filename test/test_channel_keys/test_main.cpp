@@ -1,8 +1,11 @@
 // Channel key derivation and hash layer: getKey() PSK expansion, generateHash() golden values,
 // onConfigChanged() primary restore, setChannel() demotion, and perhapsDecode()'s hash fall-through.
+// BLE cases additionally pin bridging between public default channels on different presets without
+// allowing a private-only receiver to surface public traffic as private-channel data.
 
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "DisplayFormatters.h"
 #include "MeshTypes.h" // Include BEFORE TestUtil.h (provides NodeNum, isBroadcast, etc.)
 #include "NodeDB.h"
 #include "Router.h"
@@ -508,6 +511,48 @@ void test_perhapsdecode_unknown_hash_is_opaque()
     TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, p.which_payload_variant);
 }
 
+#if HAS_BLE_MESH
+static uint8_t defaultPresetHash(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    const char *name = DisplayFormatters::getModemPresetDisplayName(preset, false, true);
+    return refHash(name, defaultpsk, sizeof(defaultpsk));
+}
+
+void test_ble_bridge_decodes_public_packet_from_another_preset()
+{
+    owner.is_licensed = true;
+    const uint8_t mediumFastHash = defaultPresetHash(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    TEST_ASSERT_NOT_EQUAL(channels.getHash(0), mediumFastHash);
+
+    TEST_ASSERT_TRUE(channels.setDefaultPresetCryptoForHash(mediumFastHash));
+    meshtastic_MeshPacket blePacket = makeEncryptedPacket(mediumFastHash, makeProbeData());
+    meshtastic_MeshPacket loraPacket = blePacket;
+    blePacket.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV;
+    loraPacket.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+
+    TEST_ASSERT_EQUAL_INT(DecodeState::DECODE_SUCCESS, perhapsDecode(&blePacket));
+    TEST_ASSERT_EQUAL_UINT8(0, blePacket.channel);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_decoded_tag, blePacket.which_payload_variant);
+    TEST_ASSERT_EQUAL_INT(DecodeState::DECODE_OPAQUE, perhapsDecode(&loraPacket));
+}
+
+void test_ble_bridge_does_not_map_public_data_to_a_private_primary()
+{
+    owner.is_licensed = true;
+    const uint8_t mediumFastHash = defaultPresetHash(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    TEST_ASSERT_TRUE(channels.setDefaultPresetCryptoForHash(mediumFastHash));
+    meshtastic_MeshPacket packet = makeEncryptedPacket(mediumFastHash, makeProbeData());
+    packet.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV;
+
+    static const uint8_t privatePsk[16] = {0x42};
+    setSlot(0, meshtastic_Channel_Role_PRIMARY, "private", privatePsk, sizeof(privatePsk));
+    channels.onConfigChanged();
+
+    TEST_ASSERT_EQUAL_INT(DecodeState::DECODE_OPAQUE, perhapsDecode(&packet));
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, packet.which_payload_variant);
+}
+#endif
+
 #endif // !USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
 
 // --- Unity lifecycle ---
@@ -578,6 +623,10 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_perhapsdecode_collision_selects_matching_psk);
     RUN_TEST(test_perhapsdecode_wrong_key_is_decode_failure);
     RUN_TEST(test_perhapsdecode_unknown_hash_is_opaque);
+#if HAS_BLE_MESH
+    RUN_TEST(test_ble_bridge_decodes_public_packet_from_another_preset);
+    RUN_TEST(test_ble_bridge_does_not_map_public_data_to_a_private_primary);
+#endif
 #endif
 
     exit(UNITY_END());

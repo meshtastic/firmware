@@ -1076,6 +1076,44 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         }
     }
 
+#if HAS_BLE_MESH || HAS_BLE_GATT_MESH
+    const bool arrivedViaBleMesh = p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV ||
+                                   p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT;
+    if (!decrypted && arrivedViaBleMesh) {
+        bool hasLocalDefaultChannel = false;
+        ChannelIndex localDefaultChannel = channels.getPrimaryIndex();
+        for (ChannelIndex i = 0; i < channels.getNumChannels(); ++i) {
+            if (channels.isDefaultChannel(i)) {
+                localDefaultChannel = i;
+                hasLocalDefaultChannel = true;
+                break;
+            }
+        }
+
+        if (hasLocalDefaultChannel && channels.setDefaultPresetCryptoForHash(p->channel)) {
+            memcpy(bytes, p->encrypted.bytes, rawSize);
+            crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+            meshtastic_Data decodedtmp;
+            memset(&decodedtmp, 0, sizeof(decodedtmp));
+            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+#if !(MESHTASTIC_EXCLUDE_PKI)
+                if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+                    LOG_WARN("Rejecting legacy DM");
+                    return DecodeState::DECODE_FAILURE;
+                }
+#endif
+                p->decoded = decodedtmp;
+                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+                chIndex = localDefaultChannel;
+                decrypted = true;
+                LOG_INFO("Decoded BLE mesh packet from another default preset");
+            }
+        }
+    }
+#endif
+
     if (decrypted) {
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash

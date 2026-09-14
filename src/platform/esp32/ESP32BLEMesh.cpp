@@ -24,6 +24,7 @@ void ESP32BLEMesh::start()
         return;
     }
 
+    pairedCount();
     memset(peers, 0, sizeof(peers));
     peerCount = 0;
     isRunning = true;
@@ -55,6 +56,7 @@ void ESP32BLEMesh::stop()
     if (!isRunning)
         return;
 
+    cancelPairing();
     platformEndAdvertising();
     stopScanning();
     isRunning = false;
