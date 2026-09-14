@@ -1249,6 +1249,60 @@ static bool decodeRoutingError(meshtastic_MeshPacket *reply, meshtastic_Routing_
 }
 
 // Handler-level rejection is invisible to a want_response client on its own: with no reply queued,
+
+// is_managed refuses plain local admin and requires PKC instead. The refusal used to be
+// compiled out of lockdown builds entirely (#ifndef MESHTASTIC_PHONEAPI_ACCESS_CONTROL), on the
+// assumption that lockdown's per-connection passphrase gate covered it. It does not while
+// lockdown is inactive: PhoneAPI only drops unauthorized local admin once isLockdownActive(),
+// and getAdminAuthorized() returns true for everyone before that. These two pin the stock
+// behaviour so the gate cannot be removed again.
+static void test_localAdmin_isManaged_refusesSetOwner()
+{
+    primeHamModeTest(); // channels.initDefaults() + deferSaves(); the dispatcher needs a valid channel
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.is_managed = true;
+    config.security.admin_key_count = 1;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0xAA, 32);
+
+    strncpy(owner.long_name, "before", sizeof(owner.long_name) - 1);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
+    strncpy(m.set_owner.long_name, "after", sizeof(m.set_owner.long_name) - 1);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0; // local client
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("before", owner.long_name, "is_managed must refuse plain local admin");
+    testAdmin->drainReply();
+}
+
+// The paired positive: with is_managed clear, the same request is applied. Without this, a
+// handler that refused everything would pass the test above.
+static void test_localAdmin_notManaged_appliesSetOwner()
+{
+    primeHamModeTest();
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.is_managed = false;
+
+    strncpy(owner.long_name, "before", sizeof(owner.long_name) - 1);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
+    strncpy(m.set_owner.long_name, "after", sizeof(m.set_owner.long_name) - 1);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("after", owner.long_name, "local admin must apply when is_managed is clear");
+    testAdmin->drainReply();
+}
+
 // handleReceivedProtobuf() falls through to its generic "ACK" and answers Routing_Error_NONE, so the
 // app reports ham mode as enabled on a node that changed nothing. The dispatcher has to say
 // BAD_REQUEST before that fallback runs.
@@ -2546,6 +2600,8 @@ void setup()
     RUN_TEST(test_handleSetHamMode_blankLongNameIsIgnoredNotRejected);
     RUN_TEST(test_handleSetHamMode_blankShortNameKeepsTheExistingOne);
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
+    RUN_TEST(test_localAdmin_isManaged_refusesSetOwner);
+    RUN_TEST(test_localAdmin_notManaged_appliesSetOwner);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
