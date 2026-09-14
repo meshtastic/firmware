@@ -1224,17 +1224,23 @@ static bool signedDataFits(meshtastic_Data *d)
 }
 #endif
 
-/// A PKC_ALWAYS port with a destination must never fall back to the channel cipher, however PKI is unavailable.
+/// A PKC_ALWAYS port with a destination must never fall back to the channel cipher, however PKI is
+/// unavailable. Our own sends only: a packet we relay carries someone else's policy, not ours.
 static bool pkcRequiredByPolicy(const meshtastic_MeshPacket *p)
 {
     uint32_t flags = 0;
-    return p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !isBroadcast(p->to) &&
+    return isFromUs(p) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !isBroadcast(p->to) &&
            portPolicyFlags(p->decoded.portnum, flags) && (flags & meshtastic_PortPolicyFlags_PKC_ALWAYS);
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
+    // Only packets we originate: a relayed copy is re-encoded through here and carries the sender's
+    // choices, not our policy.
+    if (!isFromUs(p))
+        return false;
+
     // Per-port crypto policy, routine sends and replies alike. With both bits set PKC_ALWAYS applies.
     uint32_t flags = 0;
     bool alwaysPkc = false;
@@ -1243,37 +1249,38 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
         alwaysPkc = flags & meshtastic_PortPolicyFlags_PKC_ALWAYS;
         if ((flags & meshtastic_PortPolicyFlags_PKC_NEVER) && !alwaysPkc)
             return false;
-        // No key for the destination: use the channel PSK rather than send nothing, unless PKC_ALWAYS
-        // forbids it or the client asked for PKI itself.
-        if (!haveDestKey && !alwaysPkc && !p->pki_encrypted) {
+        // No key for the destination: a routine send to the port's own destination, or a reply to
+        // whoever polled us, uses the channel PSK rather than going nowhere. A unicast the client
+        // composed keeps the upstream refusal - the phone asked for a node, not for a downgrade.
+        const bool ourRoutineTraffic = p->decoded.request_id != 0 || isRoutineDest(p->decoded.portnum, p->to);
+        if (!haveDestKey && !alwaysPkc && !p->pki_encrypted && ourRoutineTraffic) {
             LOG_INFO("No key for 0x%08x, portnum %u goes channel-PSK", p->to, p->decoded.portnum);
             return false;
         }
     }
 
-    // First, only PKC encrypt packets we are originating
-    return isFromUs(p) &&
+    return
 #if ARCH_PORTDUINO
-           // Sim radio via the cli flag skips PKC
-           !portduino_config.force_simradio &&
+        // Sim radio via the cli flag skips PKC
+        !portduino_config.force_simradio &&
 #endif
-           // Don't use PKC with Ham mode
-           !owner.is_licensed &&
-           // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
-           !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
-                                          strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
-           // Check for valid keys and single node destination
-           config.security.private_key.size == 32 && !isBroadcast(p->to) &&
-           // Some portnums either make no sense to send with PKC; a position policy of PKC_ALWAYS overrides.
-           p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-           p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
-           !(p->decoded.portnum == meshtastic_PortNum_POSITION_APP && !alwaysPkc) &&
-           // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
-           // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
-           // uses the pending key resolved into haveDestKey/destKey above.
-           // Though possible the first packet each direction should go non-pkc
-           // to handle the case where the remote node has our key, but we don't have theirs.
-           !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey);
+        // Don't use PKC with Ham mode
+        !owner.is_licensed &&
+        // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
+        !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
+                                       strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
+        // Check for valid keys and single node destination
+        config.security.private_key.size == 32 && !isBroadcast(p->to) &&
+        // Some portnums either make no sense to send with PKC; a position policy of PKC_ALWAYS overrides.
+        p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
+        p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
+        !(p->decoded.portnum == meshtastic_PortNum_POSITION_APP && !alwaysPkc) &&
+        // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
+        // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
+        // uses the pending key resolved into haveDestKey/destKey above.
+        // Though possible the first packet each direction should go non-pkc
+        // to handle the case where the remote node has our key, but we don't have theirs.
+        !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey);
 }
 
 /**

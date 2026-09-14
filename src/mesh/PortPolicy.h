@@ -52,6 +52,26 @@ static inline bool portPolicyFlags(meshtastic_PortNum port, uint32_t &flags)
     }
 }
 
+/// Is `to` a routine destination configured for `port`? Telemetry's sub-types share one port, so any
+/// of the five counts. Used to tell our own routine traffic from a unicast the client composed.
+static inline bool isRoutineDest(meshtastic_PortNum port, NodeNum to)
+{
+    if (!to || isBroadcast(to))
+        return false;
+    switch (port) {
+    case meshtastic_PortNum_POSITION_APP:
+        return config.position.position_dest == to;
+    case meshtastic_PortNum_TELEMETRY_APP:
+        return moduleConfig.telemetry.device_dest == to || moduleConfig.telemetry.environment_dest == to ||
+               moduleConfig.telemetry.air_quality_dest == to || moduleConfig.telemetry.power_dest == to ||
+               moduleConfig.telemetry.health_dest == to;
+    case meshtastic_PortNum_PAXCOUNTER_APP:
+        return moduleConfig.paxcounter.paxcounter_dest == to;
+    default:
+        return false; // neighbour info has no destination: only its replies fall back
+    }
+}
+
 /// May we answer a want_response request from `from` under `flags`? Ignored nodes are refused
 /// regardless; every bit only restricts. `dest` is the port's routine destination, 0 when none.
 static inline bool replyPolicyAllows(uint32_t flags, NodeNum from, NodeNum dest)
