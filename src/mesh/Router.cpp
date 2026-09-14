@@ -177,7 +177,8 @@ bool willUsePki(const meshtastic_MeshPacket *p)
     uint32_t unused;
     if (p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP || portPolicyFlags(p->decoded.portnum, unused)) {
         meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
-        haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
+        if (nodeDB)
+            haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
         if (!haveDestKey && p->pki_encrypted)
             haveDestKey = crypto->getPendingPublicKey(p->to, destKey);
     }
