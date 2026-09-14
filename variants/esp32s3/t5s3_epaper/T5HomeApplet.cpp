@@ -86,14 +86,31 @@ void InkHUD::T5HomeApplet::begin()
     hud->systemApplets.push_back(tracker);
 }
 
+InkHUD::T5HomeApplet::T5HomeApplet() : concurrency::OSThread("T5HomeApplet")
+{
+    OSThread::disable();
+}
+
 void InkHUD::T5HomeApplet::onActivate()
 {
     textMessageObserver.observe(textMessageModule);
+    OSThread::enabled = true;
+    OSThread::setIntervalFromNow(60 * 1000UL);
 }
 
 void InkHUD::T5HomeApplet::onDeactivate()
 {
     textMessageObserver.unobserve(textMessageModule);
+    OSThread::disable();
+}
+
+// While shown, redraw on each minute boundary: the finest step of anything Home shows (clock, ages, 60 s channel load).
+// Skipped under a notification banner, which our redraw would erase while it still takes input; dismissing it redraws all
+int32_t InkHUD::T5HomeApplet::runOnce()
+{
+    if (isForeground() && !inkhud->getSystemApplet("Notification")->isForeground())
+        requestUpdate(); // UNSPECIFIED: DisplayHealth folds the FULL refreshes the panel owes into these
+    return (60 - getValidTime(RTCQuality::RTCQualityDevice, true) % 60) * 1000UL;
 }
 
 // Only messages received after boot can be NEW

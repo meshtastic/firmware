@@ -14,14 +14,16 @@ One applet, two compositions picked from the live dimensions: Carry (portrait) a
 #include "./T5Applet.h"
 
 #include "MessageStore.h"
+#include "concurrency/OSThread.h"
 #include "modules/TextMessageModule.h"
 
 namespace NicheGraphics::InkHUD
 {
 
-class T5HomeApplet : public T5Applet
+class T5HomeApplet : public T5Applet, public concurrency::OSThread
 {
   public:
+    T5HomeApplet();
     static void begin(); // Call after InkHUD::begin(), which loads saved settings over the addApplet() defaults
 
     void onActivate() override;
@@ -30,6 +32,8 @@ class T5HomeApplet : public T5Applet
     bool onTouchPoint(uint16_t x, uint16_t y, bool longPress) override;
 
   private:
+    int32_t runOnce() override;
+
     struct HeardRow {
         std::string shortName, longName, distance, hops;
     };
