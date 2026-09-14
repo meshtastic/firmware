@@ -21,6 +21,9 @@
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
+#include "PowerFSM.h"
+#include "modules/ExternalNotificationModule.h"
+
 #include "T5Applet.h"
 
 // TEMPORARY touch calibration overlay: crosshair + coordinates at the last tap. Remove after hardware validation.
@@ -78,6 +81,16 @@ class TouchCalibrationApplet : public NicheGraphics::InkHUD::SystemApplet
     uint8_t markedRotation = 0xFF;
 };
 
+// True while a system applet (Menu, Keyboard, App Switcher, a notification...) takes input ahead of user applets
+static bool systemAppletOwnsInput()
+{
+    for (const NicheGraphics::InkHUD::SystemApplet *sa : NicheGraphics::InkHUD::InkHUD::getInstance()->systemApplets) {
+        if (sa->handleInput)
+            return true;
+    }
+    return false;
+}
+
 // Bridges touch events from TouchScreenImpl1 directly into InkHUD,
 // bypassing the InputBroker (which is excluded in InkHUD builds).
 // Routing mirrors the mini-epaper-s3 two-way rocker pattern:
@@ -95,13 +108,7 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
         inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
 
         // Check whether a system applet (e.g. menu) is currently handling input
-        bool systemHandlingInput = false;
-        for (const NicheGraphics::InkHUD::SystemApplet *sa : inkhud->systemApplets) {
-            if (sa->handleInput) {
-                systemHandlingInput = true;
-                break;
-            }
-        }
+        const bool systemHandlingInput = systemAppletOwnsInput();
 
         switch (e->inputEvent) {
         case INPUT_BROKER_USER_PRESS:
@@ -164,6 +171,32 @@ void t5SetMode(T5Mode mode)
 void t5ToggleMode()
 {
     t5SetMode(t5CurrentMode() == T5Mode::CARRY ? T5Mode::CONSOLE : T5Mode::CARRY);
+}
+
+// Capacitive Home: temporary system UI takes the press through the shared EXIT path, an external notification is
+// silenced in place, otherwise T5 Home. Runs inside GT911 polling, so only asynchronous requests here
+static void t5HomeKey()
+{
+    using namespace NicheGraphics::InkHUD;
+    InkHUD *inkhud = InkHUD::getInstance();
+    if (systemAppletOwnsInput()) {
+        inkhud->exitShort(); // Menu closes, Keyboard cancels, App Switcher dismisses...
+        return;
+    }
+
+    // What exitShort() does before its App Switcher fallback
+    powerFSM.trigger(EVENT_INPUT);
+    playChirp();
+    if (moduleConfig.external_notification.enabled && externalNotificationModule->nagging()) {
+        externalNotificationModule->stopNow();
+        return; // The next press goes Home
+    }
+
+    const int8_t home = T5Applet::indexOf("Home");
+    if (home >= 0 && inkhud->getActiveApplet() == inkhud->userApplets[home])
+        return; // Already there: no refresh
+    if (!inkhud->showApplet(home))
+        inkhud->openAppSwitcher(); // Home deactivated through the menu: still a way out
 }
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
@@ -772,11 +805,7 @@ void lateInitVariant()
                 }
                 lastHomeMs = now;
 
-                auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
-                if (inkhud) {
-                    // Route through InkHUD EXIT/HOME path (menu close, etc).
-                    inkhud->exitShort();
-                }
+                t5HomeKey();
 #else
                 (void)user_data;
 #endif
