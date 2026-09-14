@@ -508,7 +508,7 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
         meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
         bluetoothStatus->updateStatus(&newConnectedStatus);
     } else {
-        LOG_INFO("BLE pair failed");
+        LOG_INFO("BLE pair failed, status 0x%02x", auth_status);
         // Notify UI (or any other interested firmware components)
         meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newDisconnectedStatus);

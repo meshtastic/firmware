@@ -373,6 +373,9 @@ extern "C" void lfs_assert(const char *reason)
     NVIC_SystemReset();
 }
 
+// Defined by the core's InternalFileSystem, completes a pending sd_flash_write()
+extern "C" void flash_nrf5x_event_cb(uint32_t event);
+
 void checkSDEvents()
 {
     if (useSoftDevice) {
@@ -381,6 +384,11 @@ void checkSDEvents()
             switch (evt) {
             case NRF_EVT_POWER_FAILURE_WARNING:
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
+                break;
+            // Bluefruit's SoC task polls the same queue; an event taken here must still reach the flash driver
+            case NRF_EVT_FLASH_OPERATION_SUCCESS:
+            case NRF_EVT_FLASH_OPERATION_ERROR:
+                flash_nrf5x_event_cb(evt);
                 break;
 #ifdef ARCH_NRF54L
             case NRF_EVT_RAND_SEED_REQUEST: // seeded unconditionally by Bluefruit.begin()
