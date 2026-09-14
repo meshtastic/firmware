@@ -4,7 +4,7 @@
 #define VARIANT_MCK (64000000ul)
 #define USE_LFXO
 
-#include "WVariant.h"
+#include "../WVariant.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +34,7 @@ extern "C" {
 #define PIN_BUTTON_TOUCH (0 + 11) // capacitive touch
 #define BUTTON_TOUCH_ACTIVE_LOW true
 #define BUTTON_TOUCH_ACTIVE_PULLUP true
+
 #define BUTTON_CLICK_MS 400
 #define BUTTON_TOUCH_MS 200
 
@@ -52,16 +53,13 @@ static const uint8_t A0 = PIN_A0;
 // NFC
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
+
 // I2C (IMU BHI260AP, RTC, etc.)
 #define WIRE_INTERFACES_COUNT 1
 #define PIN_WIRE_SDA (0 + 26)
 #define PIN_WIRE_SCL (0 + 27)
-#define HAS_BHI260AP 1
-// After SensorLib's TOP_LAYER_BOTTOM_RIGHT_CORNER remap, use +Y as the
-// forward direction (top of the display) for the short speed bridge.
-// If a real-world test shows acceleration inverted, change sign to -1.0f.
-#define BHI260AP_FORWARD_AXIS 1
-#define BHI260AP_FORWARD_SIGN 1.0f
+#define HAS_BHI260AP
+
 #define TP_SER_IO (0 + 11)
 
 // RTC interrupt
@@ -78,6 +76,7 @@ static const uint8_t A0 = PIN_A0;
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
 #define EXTERNAL_FLASH_USE_QSPI
+
 // LoRa SX1262
 #define USE_SX1262
 #define USE_SX1268
@@ -89,7 +88,9 @@ static const uint8_t A0 = PIN_A0;
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #define TCXO_OPTIONAL
+
 #define SPI_INTERFACES_COUNT 2
+
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
@@ -104,8 +105,10 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_EINK_RES (0 + 2)
 #define PIN_EINK_SCLK (0 + 31)
 #define PIN_EINK_MOSI (0 + 29) // also called SDI
+
 // Power control
 #define PIN_POWER_EN (0 + 12)
+
 #define PIN_SPI1_MISO (32 + 7) // Placeholder MISO; keep off QSPI pins to avoid contention
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
 #define PIN_SPI1_SCK PIN_EINK_SCLK
@@ -118,6 +121,7 @@ static const uint8_t A0 = PIN_A0;
 #define GPS_TX_PIN (32 + 8)
 #define GPS_RX_PIN (32 + 9)
 #define GPS_THREAD_INTERVAL 50
+
 #define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_SERIAL1_TX GPS_TX_PIN
 
