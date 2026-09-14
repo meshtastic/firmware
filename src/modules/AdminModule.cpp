@@ -944,8 +944,14 @@ bool AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     } // case meshtastic_Config_device_tag
     case meshtastic_Config_position_tag:
         LOG_INFO("Set config: Position");
-        if (!pkcAlwaysDestsHaveKeys(c.payload_variant.position.policy_flags, &c.payload_variant.position.position_dest, 1))
-            return false; // refused: nothing applied, nothing saved
+        {
+            char why[128] = {0};
+            if (!pkcAlwaysDestsHaveKeys(c.payload_variant.position.policy_flags, &c.payload_variant.position.position_dest, 1,
+                                        why, sizeof(why))) {
+                sendWarning("%s", why); // a BAD_REQUEST alone leaves the user guessing which key is missing
+                return false;           // refused: nothing applied, nothing saved
+            }
+        }
         config.has_position = true;
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
         // clear the stored position since it may not get updated
@@ -1263,12 +1269,18 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
     // Refuse before the BLE shutdown below: a rejected request neither saves nor reboots, so BLE would stay down.
+    char why[128] = {0};
     if (c.which_payload_variant == meshtastic_ModuleConfig_telemetry_tag &&
-        !BaseTelemetryModule::pkcOnlyDestsHaveKeys(c.payload_variant.telemetry))
+        !BaseTelemetryModule::pkcOnlyDestsHaveKeys(c.payload_variant.telemetry, why, sizeof(why))) {
+        sendWarning("%s", why);
         return false;
+    }
     if (c.which_payload_variant == meshtastic_ModuleConfig_paxcounter_tag &&
-        !pkcAlwaysDestsHaveKeys(c.payload_variant.paxcounter.policy_flags, &c.payload_variant.paxcounter.paxcounter_dest, 1))
+        !pkcAlwaysDestsHaveKeys(c.payload_variant.paxcounter.policy_flags, &c.payload_variant.paxcounter.paxcounter_dest, 1, why,
+                                sizeof(why))) {
+        sendWarning("%s", why);
         return false;
+    }
     // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
     // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
     // next PowerFSM transition. Everything else reboots, so take BLE down before the phone interferes.

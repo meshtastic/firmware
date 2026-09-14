@@ -12,20 +12,28 @@
 // whether a packet with a destination goes as a unicast or a directed broadcast.
 //
 // The reply bits run in the module's allocReply() before any throttle, so a refused request costs no
-// airtime and no "no response" NAK (ignoreRequest). The crypto bits run in the Router
-// (wouldEncryptWithPKC) for every from-us packet with a destination on the port: routine sends,
-// replies to pollers and phone-originated sends alike.
+// airtime and no "no response" NAK (ignoreRequest). Under PKC_ALWAYS a poller whose key we do not
+// hold is refused there too: the reply could only be built and then fail at encode. The crypto bits
+// run in the Router (wouldEncryptWithPKC) for every from-us packet with a destination on the port:
+// routine sends, replies to pollers and phone-originated sends alike. Never for a packet we relay -
+// that carries its sender's policy, not ours.
 //
 // The policy is per port, not per payload: every telemetry sub-type shares TelemetryConfig.policy_flags
 // because they all ride TELEMETRY_APP and the Router never decodes payloads. Never read one port's
-// flags from another port's config. REPLY_ONLY_TO_DEST compares against the port's routine
-// destination, so a port with no or an unset destination admits nobody on the mesh, on purpose. The
+// flags from another port's config. Destinations are the exception: each telemetry sub-type keeps its
+// own, so REPLY_ONLY_TO_DEST admits the device-metrics destination to device metrics alone.
+// REPLY_ONLY_TO_DEST compares against the destination for that packet, so a sub-type with no or an
+// unset destination admits nobody on the mesh, on purpose. The
 // phone reaches its node as a request from our own node number and is admitted before any bit is
 // read; ignored nodes are refused before any bit is read. PKC_ALWAYS with PKC_NEVER resolves to
 // PKC_ALWAYS. The Router never unicasts POSITION_APP unless PKC_ALWAYS is set on the position port,
-// and then the destination's own channel sets the precision (PositionModule::directedSendChannel).
-// With neither crypto bit set, a destination whose key is not held gets a directed broadcast rather
-// than nothing; that fallback is for these metric ports only, not a pattern for text or admin.
+// and then the precision comes from the channel the destination's NodeInfo last arrived on
+// (NodeDB::updateUser), which is the primary channel for most contacts
+// (PositionModule::directedSendChannel).
+// With neither crypto bit set, a routine send to the port's own destination, or a reply to whoever
+// polled us, goes as a directed broadcast when the key is not held, rather than going nowhere; a
+// unicast the client composed keeps the PKI refusal, since the client asked for that node by key.
+// That fallback is for these metric ports only, not a pattern for text or admin.
 
 #include "NodeDB.h"
 #include "mesh-pb-constants.h"
@@ -86,6 +94,13 @@ static inline bool replyPolicyAllows(uint32_t flags, NodeNum from, NodeNum dest)
     }
     if (flags & meshtastic_PortPolicyFlags_NO_ADHOC_REPLY)
         return false;
+    // PKC_ALWAYS means the reply can only go encrypted to that node. Without its key the reply would
+    // be built and then refused at encode, costing the phone a NAK per poll; refuse it here instead.
+    if (flags & meshtastic_PortPolicyFlags_PKC_ALWAYS) {
+        meshtastic_NodeInfoLite_public_key_t key;
+        if (!nodeDB || !nodeDB->copyPublicKey(from, key))
+            return false;
+    }
     if ((flags & meshtastic_PortPolicyFlags_REPLY_ONLY_TO_DEST) && (!dest || from != dest))
         return false;
     if ((flags & meshtastic_PortPolicyFlags_REPLY_TO_FAVOURITES_ONLY) && nodeDB && !nodeDB->isFavorite(from))
@@ -94,17 +109,32 @@ static inline bool replyPolicyAllows(uint32_t flags, NodeNum from, NodeNum dest)
 }
 
 /// Admin gate: PKC_ALWAYS means unicast only, so every routine destination must have a public key
-/// in NodeDB or the routine send fails at encode on every interval.
-static inline bool pkcAlwaysDestsHaveKeys(uint32_t flags, const uint32_t *dests, size_t count)
+/// in NodeDB or the routine send fails at encode on every interval. `why`, when given, receives the
+/// refusal text for the caller to put in front of the user; the header stays clear of MeshService.
+static inline bool pkcAlwaysDestsHaveKeys(uint32_t flags, const uint32_t *dests, size_t count, char *why = nullptr,
+                                          size_t whyLen = 0)
 {
     if (!(flags & meshtastic_PortPolicyFlags_PKC_ALWAYS))
         return true;
+#if MESHTASTIC_EXCLUDE_PKI
+    // Keys arrive by NodeInfo whether or not this build can use them, so the loop below would pass
+    // and every routine send would then fail at encode. Refuse the setting outright.
+    (void)dests;
+    (void)count;
+    LOG_WARN("PKC_ALWAYS refused: this build has no PKI support");
+    if (why && whyLen)
+        snprintf(why, whyLen, "PKC_ALWAYS needs PKI, which this firmware build does not include");
+    return false;
+#else
     for (size_t i = 0; i < count; i++) {
         meshtastic_NodeInfoLite_public_key_t key;
         if (dests[i] && !(nodeDB && nodeDB->copyPublicKey(dests[i], key))) {
             LOG_WARN("PKC_ALWAYS refused: no public key for destination 0x%08x", dests[i]);
+            if (why && whyLen)
+                snprintf(why, whyLen, "PKC_ALWAYS refused: no public key for destination !%08x", dests[i]);
             return false;
         }
     }
     return true;
+#endif
 }

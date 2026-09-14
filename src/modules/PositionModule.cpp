@@ -448,8 +448,8 @@ bool PositionModule::sendOurPositionToPhone()
     return true;
 }
 
-/// Under PKC_ALWAYS a directed position is readable by `dest` alone, so the channel we heard it on
-/// sets its precision, not the first sharing channel. Anything else keeps `fallback`.
+/// Under PKC_ALWAYS a directed position is readable by `dest` alone, so its precision comes from the
+/// channel that node's NodeInfo last arrived on (NodeDB::updateUser), not the first sharing channel.
 uint8_t PositionModule::directedSendChannel(NodeNum dest, uint8_t fallback)
 {
     if (isBroadcast(dest) || !(config.position.policy_flags & meshtastic_PortPolicyFlags_PKC_ALWAYS) || !nodeDB)
