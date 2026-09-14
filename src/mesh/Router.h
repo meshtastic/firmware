@@ -139,7 +139,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
 
     /** Relay an opaque packet without admitting it to local routing/history state. */
-    bool relayOpaquePacket(const meshtastic_MeshPacket *p);
+    bool relayOpaquePacket(const meshtastic_MeshPacket *p, bool seen);
 
     /** rebroadcast_mode for a packet we cannot read; the port list and sender are inside the ciphertext. */
     bool opaqueAllowedByMode(const meshtastic_MeshPacket *p);
@@ -147,11 +147,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     // Return true if we are a rebroadcaster. Reads config only, so every relay path can ask.
     bool isRebroadcaster();
 
-    /** Phone delivery and NAK for an opaque packet addressed to us (or a broadcast we cannot read). */
-    void handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable);
+    /** Phone delivery and NAK for an opaque packet addressed to us (or a broadcast we cannot read).
+     *  `repeat` marks the sender's own retransmission: NAK again at hop 0, nothing else. */
+    void handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable, bool repeat);
 
     /** MQTT uplink of an opaque PKI unicast between other nodes, when encrypted uplink is enabled. */
-    void uplinkOpaqueUnicast(const meshtastic_MeshPacket *p);
+    void uplinkOpaqueUnicast(const meshtastic_MeshPacket *p, bool unreadable);
 
     /**
      * Generate the implicit ACK for our own transmission overheard being rebroadcast, using header
@@ -302,8 +303,9 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 void capEventRelayHops(meshtastic_MeshPacket *packet);
 #endif
 
-/** Apply receive authentication before routing state mutation; unknown-channel packets may remain opaque relay-only.
- *  `decodeState`, when given, receives the attempt's DecodeState (DECODE_SUCCESS if nothing needed decoding). */
+/** Apply receive authentication before routing state mutation. A packet we cannot read is handled from its
+ *  header alone - relayed, NAKed, shown to the phone or uplinked per `rebroadcast_mode` - and never admitted
+ *  to local state. `decodeState`, when given, receives the attempt's DecodeState. */
 RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p, DecodeState *decodeState = nullptr);
 #ifdef PIO_UNIT_TESTING
 uint32_t routingAuthEvaluationCount();

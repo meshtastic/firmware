@@ -141,16 +141,9 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                         // stop the immediate relayer's retransmissions.
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
-                } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
-                           (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->public_key.size == 0)) {
-                    LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
-                    sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
-                               routingModule->getHopLimitForResponse(*p));
-                } else {
-                    // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
-                    sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(),
-                               routingModule->getHopLimitForResponse(*p));
                 }
+                // No arm for an undecoded frame: the auth gate answers those in
+                // Router::handleOpaqueForUs() and never lets one reach a module.
             } else if (p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum()) && p->hop_limit > 0) {
                 // No wantAck, but we need to ACK with hop limit of 0 if we were the next hop to stop their retransmissions
                 sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);

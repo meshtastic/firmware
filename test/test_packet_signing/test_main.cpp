@@ -1079,7 +1079,8 @@ void test_C6_opaque_unknown_channel_is_relay_only(void)
         TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
         TEST_ASSERT_EQUAL(0, pipelineModule->calls);
         TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
-        expectEncryptedPhoneDeliveries(1); // unreadable to us or broadcast: the phone still sees the frame
+        // LOCAL_ONLY / KNOWN_ONLY ignore what they cannot read, phone included; NONE only declines to relay.
+        expectEncryptedPhoneDeliveries(mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE ? 1 : 0);
         TEST_ASSERT_FALSE(pipelineRouter->historyContains(&blocked));
     }
 }
@@ -1905,6 +1906,31 @@ void test_C18_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void
         TEST_ASSERT_FALSE(pipelineRouter->historyContains(&copy));
         TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(ADMIN_NODE), "an unverified sender must not be added to NodeDB");
     }
+
+    // Once per frame, not once per copy: three neighbours rebroadcasting the same DM owe the sender
+    // one NAK and the phone one frame.
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    pipelineRadio->reset();
+    pipelineRouting->reset();
+    drainPhoneQueue();
+    meshtastic_MeshPacket first = dm;
+    first.id = 0xADA5F005;
+    runPipelineIngress(first);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    expectEncryptedPhoneDeliveries(1);
+
+    runPipelineIngress(makeRelayedCopy(first));
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRouting->ackCalls, "a relayed copy of a frame we answered owes nothing");
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "and the phone has it already");
+
+    // The sender's own retransmission says it heard no answer, so answer again - at hop 0, since only
+    // a direct neighbour ever sees hop_start == hop_limit.
+    meshtastic_MeshPacket retx = first;
+    retx.hop_limit = retx.hop_start;
+    runPipelineIngress(retx);
+    TEST_ASSERT_EQUAL_MESSAGE(2, pipelineRouting->ackCalls, "the sender's own retransmission is answered again");
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouting->lastHopLimit, "the second answer goes back one hop only");
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "but the phone is not shown the frame twice");
 }
 
 // C19: the same frame claiming to be from us is a forgery and gets nothing - no NAK, no phone,
@@ -1983,6 +2009,33 @@ void test_C21_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt(void)
     again.id++;
     runPipelineIngress(again);
     TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+
+    // Once per frame: a gateway that hears the same DM from three neighbours publishes it once.
+    moduleConfig.mqtt.enabled = true;
+    meshtastic_MeshPacket carried = p;
+    carried.id = 0xADA8F008;
+    runPipelineIngress(carried);
+    TEST_ASSERT_EQUAL(1, pipelineMqtt->queueSize());
+    runPipelineIngress(makeRelayedCopy(carried));
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "a second copy of the same frame is not a second publish");
+
+    // And only for a PKI unicast between other nodes: never a broadcast, never one addressed to us,
+    // never one that arrived over MQTT in the first place.
+    pipelineMqtt->clearQueue();
+    meshtastic_MeshPacket broadcast = p;
+    broadcast.id = 0xADA8F108;
+    broadcast.to = NODENUM_BROADCAST;
+    runPipelineIngress(broadcast);
+    meshtastic_MeshPacket toUs = p;
+    toUs.id = 0xADA8F208;
+    toUs.to = LOCAL_NODE;
+    runPipelineIngress(toUs);
+    meshtastic_MeshPacket viaMqtt = p;
+    viaMqtt.id = 0xADA8F308;
+    viaMqtt.via_mqtt = true;
+    runPipelineIngress(viaMqtt);
+    drainPhoneQueue();
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineMqtt->queueSize(), "only a PKI DM between other nodes is carried for the mesh");
 }
 
 // C22: an unreadable broadcast on a channel we do not hold reaches the phone without touching
@@ -2047,13 +2100,195 @@ void test_C24_known_only_stranger_on_held_channel_is_withheld_from_phone(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "KNOWN_ONLY does not carry an opaque broadcast");
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
 
-    // The same stranger on a channel we do not hold is unreadable, and the phone does see that.
+    // The same stranger on a channel we do not hold is unreadable - and KNOWN_ONLY ignores that too,
+    // exactly as it declines to relay it. The mode is the whole rule, not just the relay half.
     meshtastic_MeshPacket foreign = makeUnknownChannelBroadcast(0xADAD001D);
     foreign.from = REMOTE_NODE;
     runPipelineIngress(foreign);
-    meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
-    TEST_ASSERT_NOT_NULL(toPhone);
-    packetPool.release(toPhone);
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "KNOWN_ONLY does not hand a stranger's ciphertext to the phone");
+
+    // Under ALL the same frame reaches the phone, so it is the mode deciding and not the frame.
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    meshtastic_MeshPacket carried = makeUnknownChannelBroadcast(0xADAD002D);
+    carried.from = REMOTE_NODE;
+    runPipelineIngress(carried);
+    expectEncryptedPhoneDeliveries(1);
+}
+
+// C25: a frame heard three times is relayed once. The originator's own retransmission is the one
+// exception - it means our first relay never reached it - and even that is skipped while our copy
+// is still waiting in the TX queue. The uplink happens once regardless.
+void test_C25_duplicate_opaque_frame_is_relayed_once_but_an_originator_retx_is_carried_again(void)
+{
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    const meshtastic_MeshPacket dm = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADB10011);
+    channels.getByIndex(0).settings.uplink_enabled = true;
+    moduleConfig.mqtt.enabled = true;
+    moduleConfig.mqtt.encryption_enabled = true;
+
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sentCountFor(ADMIN_NODE, dm.id), "first copy is relayed");
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "and uplinked");
+
+    runPipelineIngress(makeRelayedCopy(dm));
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sentCountFor(ADMIN_NODE, dm.id), "a neighbour's copy is not relayed again");
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "nor uplinked again");
+
+    meshtastic_MeshPacket retx = dm;
+    retx.hop_limit = retx.hop_start; // only a direct neighbour of the sender sees this
+    runPipelineIngress(retx);
+    TEST_ASSERT_EQUAL_MESSAGE(2, pipelineRadio->sentCountFor(ADMIN_NODE, dm.id), "the sender's own retransmission is carried");
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "but the uplink stays once per frame");
+
+    pipelineRadio->holdInTxQueue(ADMIN_NODE, dm.id); // our copy has not gone out yet
+    runPipelineIngress(retx);
+    TEST_ASSERT_EQUAL_MESSAGE(2, pipelineRadio->sentCountFor(ADMIN_NODE, dm.id),
+                              "no second copy while the first is still queued");
+}
+
+// C26: channel 0 is where PKI lives, but a frame too short to hold the PKI overhead never had a key
+// to miss. It gets NO_CHANNEL, and the phone still sees a frame we could not read.
+void test_C26_short_channel0_frame_to_us_naks_no_channel(void)
+{
+    TEST_ASSERT_FALSE_MESSAGE(channels.hasHash(0), "fixture assumes no configured channel hashes to 0");
+    meshtastic_MeshPacket runt = meshtastic_MeshPacket_init_zero;
+    runt.from = REMOTE_NODE;
+    runt.to = LOCAL_NODE;
+    runt.id = 0xADB20012;
+    runt.channel = 0;
+    runt.hop_limit = 2;
+    runt.hop_start = 3;
+    runt.want_ack = true;
+    runt.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    runt.encrypted.size = 8; // <= MESHTASTIC_PKC_OVERHEAD, so perhapsDecode never called it a PKI candidate
+    memset(runt.encrypted.bytes, 0x5A, runt.encrypted.size);
+
+    runPipelineIngress(runt);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NO_CHANNEL, pipelineRouting->lastErr,
+                              "too short to be PKI, so the reason is the channel, not a missing key");
+    expectEncryptedPhoneDeliveries(1);
+}
+
+// C27: a licensed station transmits in the clear, so it must not answer a node it knows to be
+// unlicensed - not even to say it could not read them. A peer of unknown status still gets a NAK.
+void test_C27_licensed_node_does_not_nak_a_known_unlicensed_sender(void)
+{
+    const RelayIdentity us = installOurIdentity();
+    markOurselvesLicensed();
+    const RelayIdentity unlicensed = makeIdentity(ADMIN_NODE);
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->markLicenseStatus(ADMIN_NODE, false);
+    useDHKey(us.priv);
+
+    const meshtastic_MeshPacket fromUnlicensed =
+        makePkiUnicastBetween(unlicensed, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADB30013, /*wantAck=*/true);
+    runPipelineIngress(fromUnlicensed);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouting->ackCalls, "a licensed station does not answer a known unlicensed node");
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "and has no lawful use for its ciphertext either");
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+
+    // Same frame shape from a node whose licence status we do not know: answered, as before. A
+    // licensed node declines the PKI decrypt itself, so this is a failed attempt, not a missing key.
+    const RelayIdentity unknown = makeIdentity(REMOTE_NODE);
+    const meshtastic_MeshPacket fromUnknown =
+        makePkiUnicastBetween(unknown, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADB30023, /*wantAck=*/true);
+    runPipelineIngress(fromUnknown);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NO_CHANNEL, pipelineRouting->lastErr);
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "a decrypt we declined is not something the phone can use");
+}
+
+// C28: the NAK goes back the way the request came - the response hop budget, on the primary channel
+// index - and a frame that arrived with no hops left is still answered. The relay gate is not the
+// NAK gate.
+void test_C28_nak_uses_the_response_hop_limit_on_the_primary_channel(void)
+{
+    const RelayIdentity us = installOurIdentity();
+    const RelayIdentity stranger = makeIdentity(ADMIN_NODE);
+    useDHKey(us.priv);
+    meshtastic_MeshPacket dm = makePkiUnicastBetween(stranger, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADB40014, true);
+    dm.hop_start = 3;
+    dm.hop_limit = 1;
+
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL_MESSAGE(routingModule->getHopLimitForResponse(dm), pipelineRouting->lastHopLimit,
+                              "the NAK gets the same budget any response to this packet would");
+    TEST_ASSERT_EQUAL_MESSAGE(channels.getPrimaryIndex(), pipelineRouting->lastChIndex,
+                              "an unreadable frame is answered on the primary channel");
+
+    meshtastic_MeshPacket spent = dm;
+    spent.id++;
+    spent.hop_limit = 0; // would stop a relay dead; the sender is still owed an answer
+    runPipelineIngress(spent);
+    TEST_ASSERT_EQUAL_MESSAGE(2, pipelineRouting->ackCalls, "a frame with no hops left is still NAKed");
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+}
+
+/// Rename channel 0 until its wire hash is 0 - the collision a PKI frame's hash 0 can run into.
+static void forceChannel0HashZero()
+{
+    meshtastic_Channel &ch = channels.getByIndex(0);
+    for (int len = 1; len <= 2; len++) {
+        for (int c = 1; c < 256; c++) {
+            memset(ch.settings.name, 0, sizeof(ch.settings.name));
+            for (int i = 0; i < len; i++)
+                ch.settings.name[i] = (char)c;
+            channels.onConfigChanged();
+            if (channels.getHash(0) == 0)
+                return;
+        }
+    }
+    TEST_FAIL_MESSAGE("could not force channel 0 to hash 0");
+}
+
+// C29: holding a channel whose hash happens to be 0 must not make a stranger's PKI DM look like
+// channel traffic. Under KNOWN_ONLY the sender is refused before any decrypt, and the frame is still
+// classified from what was attempted, not from the hash it carries.
+void test_C29_known_only_pki_dm_to_us_is_opaque_even_when_a_held_channel_hashes_to_0(void)
+{
+    const RelayIdentity us = installOurIdentity();
+    const RelayIdentity stranger = makeIdentity(ADMIN_NODE); // never added to NodeDB
+    useDHKey(us.priv);
+    const meshtastic_MeshPacket dm =
+        makePkiUnicastBetween(stranger, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADB50015, /*wantAck=*/true);
+    forceChannel0HashZero();
+    TEST_ASSERT_TRUE_MESSAGE(channels.hasHash(0), "fixture must hold a channel on hash 0");
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY;
+
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, pipelineRouting->lastErr,
+                              "a PKI DM to us is opaque whatever our channels hash to");
+    expectEncryptedPhoneDeliveries(1); // a DM to us satisfies KNOWN_ONLY: we are the known party
+    TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
+}
+
+// C30: the mirror case. A channel-0 unicast between other nodes, on that same hash-0 channel, is one
+// we did try and fail to decrypt - so it is not PKI ciphertext and must not be published as such.
+void test_C30_failed_decrypt_on_a_held_hash0_channel_is_not_uplinked_as_pki(void)
+{
+    forceChannel0HashZero();
+    channels.getByIndex(0).settings.uplink_enabled = true;
+    moduleConfig.mqtt.enabled = true;
+    moduleConfig.mqtt.encryption_enabled = true;
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_NONE; // uplink is not relay
+
+    meshtastic_MeshPacket junk = meshtastic_MeshPacket_init_zero;
+    junk.from = ADMIN_NODE;
+    junk.to = TARGET_NODE;
+    junk.id = 0xADB60016;
+    junk.channel = 0; // matches the held channel, so the decrypt is attempted and fails
+    junk.hop_limit = 2;
+    junk.hop_start = 3;
+    junk.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    junk.encrypted.size = 24;
+    memset(junk.encrypted.bytes, 0xC3, junk.encrypted.size);
+
+    runPipelineIngress(junk);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineMqtt->queueSize(), "a failed decrypt is not a PKI frame to carry for others");
 }
 
 void setup()
@@ -2126,6 +2361,12 @@ void setup()
     RUN_TEST(test_C22_unknown_channel_broadcast_reaches_phone_without_nodedb);
     RUN_TEST(test_C23_hash0_broadcast_from_keyed_sender_is_unreadable_and_reaches_phone);
     RUN_TEST(test_C24_known_only_stranger_on_held_channel_is_withheld_from_phone);
+    RUN_TEST(test_C25_duplicate_opaque_frame_is_relayed_once_but_an_originator_retx_is_carried_again);
+    RUN_TEST(test_C26_short_channel0_frame_to_us_naks_no_channel);
+    RUN_TEST(test_C27_licensed_node_does_not_nak_a_known_unlicensed_sender);
+    RUN_TEST(test_C28_nak_uses_the_response_hop_limit_on_the_primary_channel);
+    RUN_TEST(test_C29_known_only_pki_dm_to_us_is_opaque_even_when_a_held_channel_hashes_to_0);
+    RUN_TEST(test_C30_failed_decrypt_on_a_held_hash0_channel_is_not_uplinked_as_pki);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

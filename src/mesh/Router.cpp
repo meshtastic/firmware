@@ -1651,14 +1651,15 @@ void capEventRelayHops(meshtastic_MeshPacket *packet)
 }
 #endif
 
-/// rebroadcast_mode for a packet we cannot read. The port list and sender identity are inside the
-/// ciphertext, so CORE_PORTNUMS_ONLY relays; KNOWN/LOCAL relay a PKI-shaped unicast with one known party.
 bool Router::isRebroadcaster()
 {
     return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
            config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
 }
 
+/// rebroadcast_mode for a packet we cannot read. The port list and sender identity are inside the
+/// ciphertext, so CORE_PORTNUMS_ONLY relays; KNOWN/LOCAL relay a PKI-shaped unicast with one known party
+/// (`to` is us for a DM to us).
 bool Router::opaqueAllowedByMode(const meshtastic_MeshPacket *p)
 {
     switch (config.device.rebroadcast_mode) {
@@ -1675,7 +1676,7 @@ bool Router::opaqueAllowedByMode(const meshtastic_MeshPacket *p)
     }
 }
 
-bool Router::relayOpaquePacket(const meshtastic_MeshPacket *p)
+bool Router::relayOpaquePacket(const meshtastic_MeshPacket *p, bool seen)
 {
     // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, or ACK handling. Relay
     // only from the immutable outer routing header and let hop exhaustion bound it.
@@ -1684,14 +1685,11 @@ bool Router::relayOpaquePacket(const meshtastic_MeshPacket *p)
         (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
         return false;
 
-    // Dedup opaque relays. Opaque frames deliberately never enter PacketHistory (so unauthenticated
-    // traffic can't influence routing/ACK/next-hop) - but with NO dedup at all, a dense mesh re-relays
-    // every copy of every frame, multiplying at each hop into an unbounded broadcast storm ("let hop
-    // exhaustion bound it" caps depth, not count). Suppress duplicate opaque rebroadcasts with a small,
-    // routing-isolated seen-set. Genuine originator (re)transmissions (hop_start == hop_limit) are
-    // always relayed so reliable opaque unicast still propagates (mirrors FloodingRouter's isRepeated).
+    // `seen` comes from the branch head, which records every opaque frame once for all four consumers.
+    // A genuine originator retransmission is relayed again unless our first copy is still queued, which
+    // is the rule the decoded path applies in NextHopRouter::shouldFilterReceived().
     const bool isOriginatorTx = p->hop_start > 0 && p->hop_start == p->hop_limit;
-    if (opaqueWasSeenRecently(getFrom(p), p->id) && !isOriginatorTx) {
+    if (seen && (!isOriginatorTx || findInTxQueue(getFrom(p), p->id))) {
         LOG_TRACE("Drop duplicate opaque relay from 0x%08x id 0x%08x", getFrom(p), p->id);
         return false;
     }
@@ -1733,18 +1731,33 @@ bool Router::opaqueWasSeenRecently(NodeNum from, PacketId id)
 /// Undecryptable and addressed to us (or broadcast): NAK a want_ack unicast with the reason, and hand
 /// a frame we had no way to read to the phone. `unreadable` is the auth gate's DECODE_OPAQUE (no key,
 /// no channel) as opposed to a frame we matched and failed on. Header-only; nothing enters NodeDB.
-void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable)
+void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable, bool repeat)
 {
     if (isFromUs(p) || p->from == 0)
         return;
+    // A licensed station transmits in the clear and may not answer, or hand on, traffic to or from a
+    // node it knows to be unlicensed. Same rule RoutingModule applies to the decoded path.
+    if (owner.is_licensed && (nodeDB->getLicenseStatus(p->from) == UserLicenseStatus::NotLicensed ||
+                              nodeDB->getLicenseStatus(p->to) == UserLicenseStatus::NotLicensed))
+        return;
     if (isToUs(p) && p->want_ack && !isBroadcast(p->to) && routingModule) {
-        const auto err =
-            (p->channel == 0 && unreadable) ? meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY : meshtastic_Routing_Error_NO_CHANNEL;
+        // PKI_UNKNOWN_PUBKEY only if the frame could have been PKI at all: the same size test
+        // perhapsDecode() uses to pick a candidate. Anything shorter never had a key to miss.
+        const bool pkiShaped = p->channel == 0 && unreadable && p->encrypted.size > MESHTASTIC_PKC_OVERHEAD;
+        const auto err = pkiShaped ? meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY : meshtastic_Routing_Error_NO_CHANNEL;
         LOG_INFO("Cannot decrypt 0x%08x from 0x%08x, NAK %d", p->id, p->from, (int)err);
-        sendAckNak(err, getFrom(p), p->id, channels.getPrimaryIndex(), routingModule->getHopLimitForResponse(*p));
+        // A repeat is the sender's own retransmission, so it is a direct neighbour: answer at hop 0,
+        // as the decoded path re-ACKs, and stop there - the phone already has this frame.
+        sendAckNak(err, getFrom(p), p->id, channels.getPrimaryIndex(), repeat ? 0 : routingModule->getHopLimitForResponse(*p));
     }
+    if (repeat)
+        return;
     // Straight to the phone queue: handleFromRadio() would updateFrom() NodeDB for an unverified sender.
-    if (unreadable && (isToUs(p) || isBroadcast(p->to)) && service) {
+    // The mode rule that gates relay gates this too - LOCAL_ONLY / KNOWN_ONLY mean "ignore what I
+    // cannot read", not just "do not carry it". NONE is "do not relay", not "do not listen".
+    const bool modeAllowsPhone =
+        config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE || opaqueAllowedByMode(p);
+    if (unreadable && modeAllowsPhone && (isToUs(p) || isBroadcast(p->to)) && service) {
         if (meshtastic_MeshPacket *toPhone = packetPool.allocCopy(*p)) {
             stampRxTime(toPhone);
             service->sendToPhone(toPhone);
@@ -1754,17 +1767,19 @@ void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable)
 
 /// A PKI DM between two other nodes goes to MQTT as ciphertext when encrypted uplink is on, so a
 /// gateway carries traffic it cannot read. The uplink marks it pki_encrypted for the broker side.
-void Router::uplinkOpaqueUnicast(const meshtastic_MeshPacket *p)
+void Router::uplinkOpaqueUnicast(const meshtastic_MeshPacket *p, bool unreadable)
 {
 #if !MESHTASTIC_EXCLUDE_MQTT
-    if (!mqtt || !moduleConfig.mqtt.enabled || !moduleConfig.mqtt.encryption_enabled || p->channel != 0 || isBroadcast(p->to) ||
-        isToUs(p) || isFromUs(p))
+    // Only a frame we had no way to read: a failed decrypt on a channel we hold is not PKI ciphertext.
+    if (!unreadable || !mqtt || !moduleConfig.mqtt.enabled || !moduleConfig.mqtt.encryption_enabled || p->channel != 0 ||
+        isBroadcast(p->to) || isToUs(p) || isFromUs(p))
         return;
     meshtastic_MeshPacket copy = *p;
     copy.pki_encrypted = true;
     mqtt->onSend(copy, copy, p->channel);
 #else
     (void)p;
+    (void)unreadable;
 #endif
 }
 
@@ -1830,9 +1845,16 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         // generate it here from the still-encrypted packet before opaque relay.
         if (isFromUs(p))
             perhapsGenerateImplicitAckForOwnOverheard(p);
-        handleOpaqueForUs(p, gateState == DecodeState::DECODE_OPAQUE);
-        relayOpaquePacket(p);
-        uplinkOpaqueUnicast(p);
+        // One dedup for every consumer below, not just relay: three neighbours rebroadcasting a
+        // stranger's DM to us must still cost one NAK, one phone frame and one uplink.
+        const bool seen = p->id != 0 && opaqueWasSeenRecently(getFrom(p), p->id); // id 0 is the ring's empty slot
+        const bool retx = p->hop_start > 0 && p->hop_start == p->hop_limit;       // the originator's own resend
+        const bool unreadable = gateState == DecodeState::DECODE_OPAQUE;
+        if (!seen || retx)
+            handleOpaqueForUs(p, unreadable, /*repeat=*/seen);
+        if (!seen)
+            uplinkOpaqueUnicast(p, unreadable);
+        relayOpaquePacket(p, seen);
         packetPool.release(p);
         return;
     }
