@@ -91,7 +91,7 @@ bool GeofenceModule::ensureCrossingCapacity()
     void *probe = malloc(target * sizeof(CrossingState));
     if (!probe)
         return false;
-    *static_cast<volatile char *>(probe) = 0; // observable, so LTO cannot delete the question
+    static_cast<volatile char *>(probe)[0] = 0; // observable, so LTO cannot delete the question
     free(probe);
 
     crossingInside.reserve(target);
