@@ -43,6 +43,18 @@ class MQTT : private concurrency::OSThread
      */
     void onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
+    /**
+     * Publish a locally-generated packet straight to our own MQTT broker connection,
+     * bypassing the mesh/Router entirely. Used for uplink cadences faster than the mesh
+     * broadcast interval (e.g. buffered telemetry) so they don't cost LoRa airtime.
+     * Sent on the primary channel; encrypted the same way Router::send() encrypts on-air
+     * packets iff moduleConfig.mqtt.encryption_enabled, otherwise plaintext (unlike
+     * perhapsReportToMap(), which is unconditionally plaintext map-report metadata).
+     * Returns false if not connected (proxied or direct), or if encryption is enabled but no
+     * usable channel key was found.
+     */
+    bool publishOwnPacket(meshtastic_MeshPacket &mp);
+
     bool isConnectedDirectly();
 
     bool publish(const char *topic, const char *payload, bool retained);
