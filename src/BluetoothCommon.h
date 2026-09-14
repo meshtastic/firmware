@@ -34,4 +34,6 @@ class BluetoothApi
     virtual bool isConnected();
     virtual int getRssi() = 0;
     virtual void sendLog(const uint8_t *logMessage, size_t length);
+    virtual void startAdvertising();
+
 };

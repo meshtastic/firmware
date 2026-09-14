@@ -12,7 +12,7 @@ class NimbleBluetooth : public BluetoothApi
     bool isConnected() override;
     int getRssi() override;
     void sendLog(const uint8_t *logMessage, size_t length) override;
-    void startAdvertising();
+    void startAdvertising() override;
     virtual ~NimbleBluetooth() {}
     bool isDeInit = false;
 

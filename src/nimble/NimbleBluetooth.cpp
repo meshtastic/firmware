@@ -230,8 +230,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                 pendingStartAdvertising = false; // a new physical connection beat us to it; nothing to do
             } else if (ble_hs_synced()) {
                 pendingStartAdvertising = false;
-                if (nimbleBluetooth) {
-                    nimbleBluetooth->startAdvertising();
+                if (bluetoothApi) {
+                    bluetoothApi->startAdvertising();
                 }
             } else {
                 return 200; // host still re-syncing after a reset; retry shortly
@@ -1074,7 +1074,7 @@ void updateBatteryLevel(uint8_t level)
 
     // Cache the value so a READ works without a subscriber; notify only when connected.
     BatteryCharacteristic->setValue(&level, 1);
-    if (nimbleBluetooth && nimbleBluetooth->isConnected())
+    if (bluetoothApi && bluetoothApi->isConnected())
         BatteryCharacteristic->notify();
 }
 

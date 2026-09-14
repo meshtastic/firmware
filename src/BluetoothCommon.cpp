@@ -34,6 +34,7 @@ void BluetoothApi::sendLog(const uint8_t *logMessage, size_t length)
     (void)length;
 }
 
+void startAdvertising() {}
 void updateBatteryLevel(uint8_t level) __attribute__((weak));
 void updateBatteryLevel(uint8_t level)
 {
