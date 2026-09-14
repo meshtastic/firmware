@@ -1,49 +1,31 @@
 #pragma once
 
 // Per-port policy for the packets this node sends on request or on a timer: position, telemetry,
-// paxcounter and neighbour info. Each of those ports keeps a `policy_flags` (a PortPolicyFlags
-// bitfield) in its own config message, next to that port's routine destination, and the helpers
-// here are the only readers. Every bit restricts, so 0 is exactly the behaviour with no policy.
+// paxcounter and neighbour info. Each port keeps a `policy_flags` (PortPolicyFlags) in its own config
+// message next to its routine destination, and the helpers here are the only readers. Every bit
+// restricts, so 0 is exactly the behaviour with no policy.
 //
-// Terminology. A packet with no destination is a broadcast: channel PSK, read by every member. A
-// packet with a destination is either a unicast - PKI-encrypted to that node's public key, readable
-// by it alone - or a directed broadcast: addressed to one node but encrypted with the channel PSK,
-// so every channel member can still read it and only the addressee acts on it.
+// A packet with no destination is a broadcast: channel PSK, read by every member. A packet with a
+// destination is either a unicast (PKI to that node's key, readable by it alone) or a directed
+// broadcast (addressed to one node, channel PSK, so every member can read it and only the addressee
+// acts on it). Bits 0-3 say who may pull the packet with a want_response request; bits 4-7 say
+// whether a packet with a destination goes as a unicast or a directed broadcast.
 //
-// Bits 0-3 say who may pull the packet with a want_response request; bits 4-7 say whether a packet
-// with a destination goes as a unicast or a directed broadcast. The reply bits run in the module's
-// allocReply(), before any throttle, so a refused request costs no airtime and no "no response" NAK
-// (ignoreRequest is set). The crypto bits run in the Router (wouldEncryptWithPKC) for every from-us
-// packet with a destination on the port: routine sends, replies to pollers, and phone-originated
-// sends alike.
+// The reply bits run in the module's allocReply() before any throttle, so a refused request costs no
+// airtime and no "no response" NAK (ignoreRequest). The crypto bits run in the Router
+// (wouldEncryptWithPKC) for every from-us packet with a destination on the port: routine sends,
+// replies to pollers and phone-originated sends alike.
 //
-// Pitfalls:
-//  - The policy is per port, not per payload type. Every telemetry sub-type (device, environment,
-//    health, ...) shares TelemetryConfig.policy_flags because they all ride TELEMETRY_APP and the
-//    Router never decodes payloads. Health cannot be locked down harder than battery level here.
-//  - Do not read a port's flags from another port's config. Paxcounter and telemetry look alike
-//    (both are metrics) but each has its own; a port that borrows another's is a coupling a client
-//    cannot see in the config it is editing.
-//  - REPLY_ONLY_TO_DEST compares against the port's routine destination. A port with no
-//    destination (neighbour info) or an unset one admits nobody on the mesh, on purpose: the
-//    operator asked for "only the collector" and there is no collector. Never widen it to "anyone".
-//  - The phone reaches its own node as a request from our own node number (MeshModule answers
-//    those deliberately). replyPolicyAllows() lets it through before any bit is read; a gate that
-//    checks the bits first locks the phone out of its own device.
-//  - Ignored nodes are refused before the bits are read, so "ignored" is never a policy choice a
-//    flag can undo.
-//  - PKC_ALWAYS (unicast only) to a destination whose key is not held fails at encode on every
-//    interval; the admin setters refuse such a config via pkcAlwaysDestsHaveKeys(). Check the
-//    config being *set*, with its own destinations, not the stored one.
-//  - PKC_ALWAYS and PKC_NEVER together resolve to PKC_ALWAYS: a directed broadcast is readable by
-//    the whole channel, so it is the one not to fall into by accident.
-//  - The Router never unicasts POSITION_APP; a position with a destination is a directed broadcast
-//    unless PKC_ALWAYS is set on the position port, and then the destination's own channel sets the
-//    precision (PositionModule::directedSendChannel). Do not unicast position anywhere else.
-//  - With neither crypto bit set, a destination whose key is not held gets a directed broadcast
-//    rather than nothing. Every other port refuses such a send outright (PKI_SEND_FAIL_PUBLIC_KEY),
-//    and PKC_ALWAYS restores that. The fallback is intended for these ports (a collector can be
-//    behind a key-less node); it is not a pattern to copy to text messages or admin.
+// The policy is per port, not per payload: every telemetry sub-type shares TelemetryConfig.policy_flags
+// because they all ride TELEMETRY_APP and the Router never decodes payloads. Never read one port's
+// flags from another port's config. REPLY_ONLY_TO_DEST compares against the port's routine
+// destination, so a port with no or an unset destination admits nobody on the mesh, on purpose. The
+// phone reaches its node as a request from our own node number and is admitted before any bit is
+// read; ignored nodes are refused before any bit is read. PKC_ALWAYS with PKC_NEVER resolves to
+// PKC_ALWAYS. The Router never unicasts POSITION_APP unless PKC_ALWAYS is set on the position port,
+// and then the destination's own channel sets the precision (PositionModule::directedSendChannel).
+// With neither crypto bit set, a destination whose key is not held gets a directed broadcast rather
+// than nothing; that fallback is for these metric ports only, not a pattern for text or admin.
 
 #include "NodeDB.h"
 #include "mesh-pb-constants.h"
