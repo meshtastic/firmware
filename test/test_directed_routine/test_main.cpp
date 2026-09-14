@@ -16,6 +16,7 @@
 // getHopLimitForResponse() being trimmed a second time.
 #include "Default.h"
 #include "TestUtil.h"
+#include "mesh/Channels.h"
 #include "mesh/NodeDB.h"
 #include "mesh/PortPolicy.h"
 #include "mesh/Router.h"
@@ -224,12 +225,52 @@ void test_pkc_unsetUsesKeyWhenKnown()
     TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/true));
 }
 
-// The row that used to be a silent failure: no key and no flags now means PSK, not nothing.
-void test_pkc_unsetFallsBackToPskWithoutKey()
+// A plain unicast the client composed is not ours to downgrade: no key still means the upstream
+// PKI refusal, as it does for a text DM. The fallback is for our own routine traffic only.
+void test_pkc_unsetKeepsTheRefusalForAClientUnicast()
 {
     clearFlags();
     armPki();
     meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// A reply to whoever polled us carries their request_id, and goes channel-PSK rather than nowhere.
+void test_pkc_fallbackForReply()
+{
+    clearFlags();
+    armPki();
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    p.decoded.request_id = 0x1234;
+    TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// So does a routine send to the destination the user configured for that port. Telemetry's sub-types
+// share the port, so any of the five destinations counts.
+void test_pkc_fallbackForRoutineDest()
+{
+    clearFlags();
+    armPki();
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TELEMETRY_APP);
+    moduleConfig.telemetry.device_dest = DEST;
+    TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+    moduleConfig.telemetry.device_dest = 0;
+    moduleConfig.telemetry.power_dest = DEST;
+    TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+    moduleConfig.telemetry.power_dest = OTHER; // a destination, but not this packet's
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// Position keeps its own destination field, read from config rather than moduleConfig.
+void test_pkc_positionDestFallsBack()
+{
+    clearFlags();
+    armPki();
+    config.position.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS; // else POSITION is never a PKC candidate
+    meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_POSITION_APP);
+    config.position.position_dest = DEST;
+    TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false)); // PKC_ALWAYS forbids the downgrade
+    config.position.policy_flags = 0;
     TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
 }
 
@@ -304,6 +345,7 @@ void test_pkc_paxcounterFollowsFlags()
     armPki();
     meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_PAXCOUNTER_APP);
     TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/true));
+    moduleConfig.paxcounter.paxcounter_dest = DEST; // its own routine destination, so the fallback applies
     TEST_ASSERT_FALSE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
     moduleConfig.paxcounter.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
     TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
@@ -316,6 +358,48 @@ void test_pkc_fallbackScopedToTelemetryPorts()
     armPki();
     meshtastic_MeshPacket p = unicastOnPort(meshtastic_PortNum_TEXT_MESSAGE_APP);
     TEST_ASSERT_TRUE(wouldEncryptWithPKC(&p, 0, /*haveDestKey=*/false));
+}
+
+// --- perhapsEncode: the policy applied to a real send ------------------------------------------
+//
+// wouldEncryptWithPKC decides; pkcRequiredByPolicy is the other half, refusing a PKC_ALWAYS packet
+// that cannot go PKI rather than letting it out under the channel key. Neither may touch a packet we
+// are relaying: a relay re-encodes the decoded copy through the same call, and refusing there NAKs
+// the original sender over the air.
+
+meshtastic_MeshPacket decodedOnPort(meshtastic_PortNum port, NodeNum from, NodeNum to)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from;
+    p.to = to;
+    p.id = 0x4242;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = port;
+    p.decoded.payload.size = 4;
+    memset(p.decoded.payload.bytes, 0xA5, p.decoded.payload.size);
+    return p;
+}
+
+void test_encode_relayCopyIsNotPolicyGated()
+{
+    channels.initDefaults();
+    channels.onConfigChanged();
+    armPki();
+    moduleConfig.telemetry.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
+    meshtastic_MeshPacket p = decodedOnPort(meshtastic_PortNum_TELEMETRY_APP, OTHER, DEST);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, perhapsEncode(&p));
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, p.which_payload_variant);
+}
+
+void test_encode_pkcAlwaysWithoutLocalKeyIsPkiFailed()
+{
+    channels.initDefaults();
+    channels.onConfigChanged();
+    armPki();
+    config.security.private_key.size = 0; // no PKI of our own, so the policy cannot be honoured
+    moduleConfig.telemetry.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
+    meshtastic_MeshPacket p = decodedOnPort(meshtastic_PortNum_TELEMETRY_APP, LOCAL_NODE, DEST);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_FAILED, perhapsEncode(&p));
 }
 
 // --- pkcOnlyDestsHaveKeys: the admin gate ------------------------------------------------------
@@ -520,7 +604,10 @@ void setup()
     RUN_TEST(test_hop_mqttDistanceIsNotTrusted);
     RUN_TEST(test_position_directedChannelOnlyUnderAlwaysPkc);
     RUN_TEST(test_pkc_unsetUsesKeyWhenKnown);
-    RUN_TEST(test_pkc_unsetFallsBackToPskWithoutKey);
+    RUN_TEST(test_pkc_unsetKeepsTheRefusalForAClientUnicast);
+    RUN_TEST(test_pkc_fallbackForReply);
+    RUN_TEST(test_pkc_fallbackForRoutineDest);
+    RUN_TEST(test_pkc_positionDestFallsBack);
     RUN_TEST(test_pkc_alwaysPkcRefusesToDowngrade);
     RUN_TEST(test_pkc_neverPkcUsesPskEvenWithKey);
     RUN_TEST(test_pkc_alwaysBeatsNever);
@@ -529,6 +616,8 @@ void setup()
     RUN_TEST(test_pkc_clientExplicitPkiIsNotDowngraded);
     RUN_TEST(test_pkc_paxcounterFollowsFlags);
     RUN_TEST(test_pkc_fallbackScopedToTelemetryPorts);
+    RUN_TEST(test_encode_relayCopyIsNotPolicyGated);
+    RUN_TEST(test_encode_pkcAlwaysWithoutLocalKeyIsPkiFailed);
     RUN_TEST(test_gate_noAlwaysPkcAcceptsAnything);
     RUN_TEST(test_gate_alwaysPkcAcceptsKeyedDest);
     RUN_TEST(test_gate_alwaysPkcRefusesKeylessDest);
