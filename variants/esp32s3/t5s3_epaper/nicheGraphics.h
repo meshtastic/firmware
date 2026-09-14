@@ -68,10 +68,10 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
 
     // Customize default settings
-    inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
-    inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
-    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
-    inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
+    inkhud->persistence->settings.userTiles.maxCount = 2;                         // How many tiles can the display handle?
+    inkhud->persistence->settings.rotation = static_cast<uint8_t>(T5Mode::CARRY); // First-boot default: Carry (portrait)
+    inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = false; // T5 UI draws its own battery status
     inkhud->persistence->settings.optionalMenuItems.backlight = false;
 
     // Alignment must cancel rotation for visual-frame touch input: (rotation + alignment) % 4 == 0.

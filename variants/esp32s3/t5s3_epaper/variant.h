@@ -56,6 +56,18 @@ void t5TouchHandleUserInput();
 // Gate GT911 capacitive-home callback delivery until InkHUD startup is complete.
 void t5SetHomeCapButtonEventsEnabled(bool enabled);
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+// InkHUD Carry (portrait, 508x928) / Console (landscape, 928x508) mode. Value is the InkHUD rotation.
+// Rotations 0 and 2 are both landscape: confirm on hardware which is upright for CONSOLE.
+enum class T5Mode : uint8_t {
+    CARRY = 3,
+    CONSOLE = 2,
+};
+T5Mode t5CurrentMode();
+void t5SetMode(T5Mode mode);
+void t5ToggleMode();
+#endif
+
 #define PCF8563_RTC 0x51
 #define HAS_RTC 1
 #define PCF8563_INT 2

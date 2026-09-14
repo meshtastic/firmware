@@ -78,6 +78,34 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
 };
 
 static TouchInkHUDBridge touchBridge;
+
+T5Mode t5CurrentMode()
+{
+    return (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation % 2) ? T5Mode::CARRY : T5Mode::CONSOLE;
+}
+
+void t5SetMode(T5Mode mode)
+{
+    auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
+    uint8_t &rotation = inkhud->persistence->settings.rotation;
+    if (rotation == static_cast<uint8_t>(mode))
+        return;
+
+    LOG_INFO("T5 mode: rotation %u -> %u", rotation, static_cast<uint8_t>(mode));
+    rotation = static_cast<uint8_t>(mode);
+    // No joystick.alignment sync needed: TouchInkHUDBridge re-derives it from rotation on every event.
+    inkhud->updateLayout(); // Rebuilds tiles, then queues an async FAST redraw
+    // Every pixel moved. A blocking FULL merges with that queued FAST (DisplayHealth::prioritize),
+    // so the panel does exactly one FULL update and the async render finds nothing left to do.
+    inkhud->forceUpdate(NicheGraphics::Drivers::EInk::UpdateTypes::FULL, true, false);
+    // InkHUD otherwise only saves settings on clean shutdown / reboot.
+    inkhud->persistence->saveSettings();
+}
+
+void t5ToggleMode()
+{
+    t5SetMode(t5CurrentMode() == T5Mode::CARRY ? T5Mode::CONSOLE : T5Mode::CARRY);
+}
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 TouchDrvGT911 touch;
@@ -228,7 +256,13 @@ class SideKeyInterruptThread : public concurrency::OSThread
                 // Fire long-press action as soon as threshold is reached, without waiting for release.
                 if (!longPressFired && (uint32_t)(now - pressStartMs) >= LONG_PRESS_MIN_MS &&
                     (uint32_t)(now - lastActionMs) >= ACTION_COOLDOWN_MS) {
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+                    // TEMPORARY Phase 1 validation hook: long press toggles Carry/Console instead of backlight.
+                    // Remove when the T5 UI owns mode switching.
+                    t5ToggleMode();
+#else
                     t5BacklightToggleUser();
+#endif
                     longPressFired = true;
                     lastActionMs = now;
                 }
