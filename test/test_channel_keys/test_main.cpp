@@ -287,6 +287,61 @@ void test_recursion_guard_primary_slot_marked_secondary()
 }
 
 // =====================================================================================
+// Group 3b: use_aead consistency
+// =====================================================================================
+
+void test_aead_flag_changes_the_hash()
+{
+    // Same name and PSK on both slots, AEAD on one of them. The hashes must differ, or a
+    // receiver with AEAD off would match the hash and then CTR-decrypt an AEAD frame.
+    static const uint8_t psk[16] = {0x42};
+    setSlot(1, meshtastic_Channel_Role_SECONDARY, "alpha", psk, sizeof(psk));
+    const int16_t plainHash = channels.getHash(1);
+    TEST_ASSERT_FALSE(channels.isAEADEnabled(1));
+
+    setSlot(2, meshtastic_Channel_Role_SECONDARY, "alpha", psk, sizeof(psk)).settings.use_aead = true;
+    channels.fixupChannel(2);
+    TEST_ASSERT_TRUE(channels.isAEADEnabled(2));
+    TEST_ASSERT_NOT_EQUAL(plainHash, channels.getHash(2));
+    TEST_ASSERT_EQUAL_INT16((uint8_t)(plainHash ^ 0xAE), channels.getHash(2));
+}
+
+void test_aead_without_key_material_is_cleared()
+{
+    // PSK index 0 means encryption off. Leaving use_aead set there would still produce a
+    // valid-looking hash while every encode returns BAD_REQUEST and every decode drops.
+    static const uint8_t pskOff[1] = {0x00};
+    meshtastic_Channel &ch = setSlot(0, meshtastic_Channel_Role_PRIMARY, "plain", pskOff, sizeof(pskOff));
+    const int16_t plainHash = channels.getHash(0);
+
+    ch.settings.use_aead = true;
+    channels.fixupChannel(0);
+    TEST_ASSERT_FALSE(ch.settings.use_aead);
+    TEST_ASSERT_FALSE(channels.isAEADEnabled(0));
+    TEST_ASSERT_EQUAL_INT16(plainHash, channels.getHash(0)); // and no stray 0xAE in the hash
+}
+
+void test_onconfigchanged_resolves_primary_before_hashing()
+{
+    // The primary moves to slot 2 while slot 0 becomes a keyless secondary. onConfigChanged()
+    // has to settle primaryIndex before it fixes anything up: hashing slot 0 against the old
+    // primary (itself) trips getKey()'s recursion guard, which yields a name-only hash and
+    // clears use_aead against key material the channel does in fact inherit.
+    static const uint8_t movedPsk[16] = {0x5A};
+    setSlot(0, meshtastic_Channel_Role_SECONDARY, "second", nullptr, 0);
+    channels.getByIndex(0).settings.use_aead = true;
+    setSlot(2, meshtastic_Channel_Role_PRIMARY, "moved", movedPsk, sizeof(movedPsk));
+
+    channels.onConfigChanged();
+
+    TEST_ASSERT_EQUAL_UINT8(2, channels.getPrimaryIndex());
+    TEST_ASSERT_TRUE(channels.isAEADEnabled(0)); // the key is inherited, not absent
+    TEST_ASSERT_EQUAL_INT16((uint8_t)(refHash("second", movedPsk, sizeof(movedPsk)) ^ 0xAE), channels.getHash(0));
+    TEST_ASSERT_TRUE(channels.setActiveByIndex(0) >= 0);
+    expectCryptoKey(movedPsk, sizeof(movedPsk));
+}
+
+// =====================================================================================
 // Group 4: onConfigChanged() no-primary restore and setChannel() demotion
 // =====================================================================================
 
@@ -561,6 +616,11 @@ CK_TEST_ENTRY void setup()
     printf("\n=== secondary inheritance and recursion guard ===\n");
     RUN_TEST(test_secondary_empty_psk_inherits_primary_key);
     RUN_TEST(test_recursion_guard_primary_slot_marked_secondary);
+
+    printf("\n=== use_aead consistency ===\n");
+    RUN_TEST(test_aead_flag_changes_the_hash);
+    RUN_TEST(test_aead_without_key_material_is_cleared);
+    RUN_TEST(test_onconfigchanged_resolves_primary_before_hashing);
 
     printf("\n=== onConfigChanged restore and setChannel ===\n");
     RUN_TEST(test_onconfigchanged_promotes_demoted_primary_slot_keeping_key);
