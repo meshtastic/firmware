@@ -139,7 +139,13 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
 
     /** Relay an opaque packet without admitting it to local routing/history state. */
-    virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
+    bool relayOpaquePacket(const meshtastic_MeshPacket *p);
+
+    /** rebroadcast_mode for a packet we cannot read; the port list and sender are inside the ciphertext. */
+    bool opaqueAllowedByMode(const meshtastic_MeshPacket *p);
+
+    // Return true if we are a rebroadcaster. Reads config only, so every relay path can ask.
+    bool isRebroadcaster();
 
     /** Phone delivery and NAK for an opaque packet addressed to us (or a broadcast we cannot read). */
     void handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable);
@@ -178,6 +184,27 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr);
+
+    static constexpr uint8_t OPAQUE_SEEN_MAX = 32; // opaque dedup slots (see relayOpaquePacket); ~8B/slot -> ~256B
+
+    /**
+     * Recently-seen opaque (undecryptable) frames, keyed on the outer (from,id) header. A second,
+     * isolated PacketHistory-style dedup: it bounds broadcast amplification of frames we can't decrypt
+     * WITHOUT admitting them to the real PacketHistory/NodeDB, so unauthenticated traffic can never
+     * influence routing / ACK / next-hop decisions. Fixed-size ring, round-robin (FIFO) eviction, no
+     * timestamps (a stale (from,id) can't false-match: packet ids are effectively random, and a real
+     * entry never has id 0 - relayOpaquePacket drops id 0 before this). RAM-only.
+     */
+    struct OpaqueSeen {
+        NodeNum sender = 0;
+        PacketId id = 0; // 0 == empty/unused slot
+    };
+    OpaqueSeen opaqueSeen[OPAQUE_SEEN_MAX] = {};
+    uint8_t opaqueSeenNext = 0; // ring write cursor (round-robin eviction)
+
+    // Dedup helper for relayOpaquePacket: true if (from,id) is already recorded; otherwise records it
+    // (round-robin eviction) and returns false. Pure function of the table - no clock.
+    bool opaqueWasSeenRecently(NodeNum from, PacketId id);
 
   private:
     /**
@@ -269,6 +296,11 @@ enum class RoutingAuthVerdict { ACCEPT, OPAQUE_RELAY_ONLY, REJECT };
  * @return true for success, false for corrupt packet.
  */
 DecodeState perhapsDecode(meshtastic_MeshPacket *p);
+
+#if USERPREFS_EVENT_MODE
+/** Cap a relay copy's hop budget to the event-mode limit, keeping hop_start consistent. */
+void capEventRelayHops(meshtastic_MeshPacket *packet);
+#endif
 
 /** Apply receive authentication before routing state mutation; unknown-channel packets may remain opaque relay-only.
  *  `decodeState`, when given, receives the attempt's DecodeState (DECODE_SUCCESS if nothing needed decoding). */

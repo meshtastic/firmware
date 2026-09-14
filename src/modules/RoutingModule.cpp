@@ -11,7 +11,7 @@ RoutingModule *routingModule;
 bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Routing *r)
 {
     // Packets we cannot decrypt never reach a module; their rebroadcast_mode rule lives in
-    // NextHopRouter::relayOpaquePacket().
+    // Router::relayOpaquePacket().
     if (owner.is_licensed && ((nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) ||
                               (nodeDB->getLicenseStatus(mp.to) == UserLicenseStatus::NotLicensed))) {
         // Don't let licensed users to rebroadcast packets to or from unlicensed users

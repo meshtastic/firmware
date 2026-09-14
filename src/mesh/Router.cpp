@@ -1638,6 +1638,98 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
 }
 
+#if USERPREFS_EVENT_MODE
+// Shared with NextHopRouter::perhapsRebroadcast(): every relay path caps hops the same way.
+void capEventRelayHops(meshtastic_MeshPacket *packet)
+{
+    if (packet->hop_limit <= Default::eventModeRelayHopLimit)
+        return;
+
+    const uint8_t reduction = packet->hop_limit - Default::eventModeRelayHopLimit;
+    packet->hop_start = reduction <= packet->hop_start ? packet->hop_start - reduction : 0;
+    packet->hop_limit = Default::eventModeRelayHopLimit;
+}
+#endif
+
+/// rebroadcast_mode for a packet we cannot read. The port list and sender identity are inside the
+/// ciphertext, so CORE_PORTNUMS_ONLY relays; KNOWN/LOCAL relay a PKI-shaped unicast with one known party.
+bool Router::isRebroadcaster()
+{
+    return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+           config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
+}
+
+bool Router::opaqueAllowedByMode(const meshtastic_MeshPacket *p)
+{
+    switch (config.device.rebroadcast_mode) {
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL:
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING:
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY:
+        return true;
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY:
+    case meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY:
+        return p->channel == 0 && !isBroadcast(p->to) &&
+               (nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from)) || nodeInfoLiteHasUser(nodeDB->getMeshNode(p->to)));
+    default:
+        return false;
+    }
+}
+
+bool Router::relayOpaquePacket(const meshtastic_MeshPacket *p)
+{
+    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, or ACK handling. Relay
+    // only from the immutable outer routing header and let hop exhaustion bound it.
+    if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
+        !opaqueAllowedByMode(p) ||
+        (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
+        return false;
+
+    // Dedup opaque relays. Opaque frames deliberately never enter PacketHistory (so unauthenticated
+    // traffic can't influence routing/ACK/next-hop) - but with NO dedup at all, a dense mesh re-relays
+    // every copy of every frame, multiplying at each hop into an unbounded broadcast storm ("let hop
+    // exhaustion bound it" caps depth, not count). Suppress duplicate opaque rebroadcasts with a small,
+    // routing-isolated seen-set. Genuine originator (re)transmissions (hop_start == hop_limit) are
+    // always relayed so reliable opaque unicast still propagates (mirrors FloodingRouter's isRepeated).
+    const bool isOriginatorTx = p->hop_start > 0 && p->hop_start == p->hop_limit;
+    if (opaqueWasSeenRecently(getFrom(p), p->id) && !isOriginatorTx) {
+        LOG_TRACE("Drop duplicate opaque relay from 0x%08x id 0x%08x", getFrom(p), p->id);
+        return false;
+    }
+
+    meshtastic_MeshPacket *relay = packetPool.allocCopy(*p);
+    if (!relay)
+        return false;
+    relay->hop_limit--;
+#if USERPREFS_EVENT_MODE
+    capEventRelayHops(relay);
+#endif
+    relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
+    // The interface declines some packets (NODENUM_BROADCAST_NO_LORA) with ERRNO_SHOULD_RELEASE,
+    // which leaves the copy ours to free. Dropping it here would leak a pool slot per opaque frame.
+    ErrorCode res = Router::send(relay);
+    if (res == ERRNO_SHOULD_RELEASE)
+        packetPool.release(relay);
+    return res == ERRNO_OK;
+}
+
+// Isolated dedup for opaque relays (see relayOpaquePacket). Returns true if (from,id) is already in the
+// ring; otherwise records it (round-robin eviction) and returns false. A separate table from
+// PacketHistory on purpose: opaque frames must never influence routing/ACK/next-hop. No timestamps -
+// a stale (from,id) can't false-match a later packet because ids are effectively random.
+bool Router::opaqueWasSeenRecently(NodeNum from, PacketId id)
+{
+    for (uint8_t i = 0; i < OPAQUE_SEEN_MAX; i++) {
+        if (opaqueSeen[i].sender == from && opaqueSeen[i].id == id)
+            return true;
+    }
+    // Not seen: record it, overwriting the oldest-written slot (FIFO). Empty slots hold id 0, which a
+    // real entry never has (relayOpaquePacket drops id 0), so they simply never match above.
+    opaqueSeen[opaqueSeenNext].sender = from;
+    opaqueSeen[opaqueSeenNext].id = id;
+    opaqueSeenNext = (uint8_t)((opaqueSeenNext + 1) % OPAQUE_SEEN_MAX);
+    return false;
+}
+
 /// Undecryptable and addressed to us (or broadcast): NAK a want_ack unicast with the reason, and hand
 /// a frame we had no way to read to the phone. `unreadable` is the auth gate's DECODE_OPAQUE (no key,
 /// no channel) as opposed to a frame we matched and failed on. Header-only; nothing enters NodeDB.
