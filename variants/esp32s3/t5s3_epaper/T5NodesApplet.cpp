@@ -1,6 +1,7 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./T5NodesApplet.h"
+#include "./T5NodeDetailApplet.h"
 
 #include "gps/GeoCoord.h"
 #include "mesh/NodeDB.h"
@@ -44,15 +45,15 @@ ProcessMessage InkHUD::T5NodesApplet::handleReceived(const meshtastic_MeshPacket
     if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && mp.has_rx_rssi &&
         getHopsAway(mp) == 0) {
         const SignalStrength signal = getSignalStrength(mp.rx_snr, mp.rx_rssi);
-        auto it = std::find_if(signals.begin(), signals.end(), [&mp](const auto &s) { return s.first == mp.from; });
+        auto it = std::find_if(signals.begin(), signals.end(), [&mp](const Reception &s) { return s.from == mp.from; });
         if (it == signals.end()) {
             if (signals.size() >= MAX_NUM_NODES)
                 signals.erase(signals.begin()); // Sender ids are unauthenticated: stay bounded
-            signals.emplace_back(mp.from, signal);
+            signals.push_back({mp.from, signal, mp.rx_rssi});
             signalChanged = true;
         } else {
-            signalChanged = it->second != signal;
-            it->second = signal;
+            signalChanged = it->signal != signal;
+            *it = {mp.from, signal, mp.rx_rssi};
         }
     }
 
@@ -97,9 +98,11 @@ InkHUD::T5NodesApplet::Row InkHUD::T5NodesApplet::readRow(meshtastic_NodeInfoLit
         row.snr = snr;
     }
     if (row.hops == 0) {
-        for (const auto &s : signals) {
-            if (s.first == node->num)
-                row.signal = s.second;
+        for (const Reception &s : signals) {
+            if (s.from == node->num) {
+                row.signal = s.signal;
+                row.rssi = to_string(s.rssi);
+            }
         }
     }
 
@@ -110,8 +113,9 @@ InkHUD::T5NodesApplet::Row InkHUD::T5NodesApplet::readRow(meshtastic_NodeInfoLit
         const double ourLat = ourPos.latitude_i * 1e-7, ourLon = ourPos.longitude_i * 1e-7;
         const double theirLat = theirPos.latitude_i * 1e-7, theirLon = theirPos.longitude_i * 1e-7;
         row.distance = localizeDistance(GeoCoord::latLongToMeter(theirLat, theirLon, ourLat, ourLon));
-        const unsigned degrees = lround(GeoCoord::toDegrees(GeoCoord::bearing(ourLat, ourLon, theirLat, theirLon)) + 360) % 360;
-        row.bearing = std::string(GeoCoord::degreesToBearing(degrees)) + " " + to_string(degrees) + "\xB0"; // Win-1253 degree
+        row.degrees = lround(GeoCoord::toDegrees(GeoCoord::bearing(ourLat, ourLon, theirLat, theirLon)) + 360) % 360;
+        row.bearing =
+            std::string(GeoCoord::degreesToBearing(row.degrees)) + " " + to_string(row.degrees) + "\xB0"; // Win-1253 degree
     }
     return row;
 }
@@ -281,10 +285,10 @@ bool InkHUD::T5NodesApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
     if (handleNavTap(tx, ty))
         return true;
 
-    // Node detail doesn't exist yet: a row tap only remembers its node, and changes nothing on screen
     if (ty >= rowsTop() && (ty - rowsTop()) / rowHeight() < (int16_t)shown.size()) {
-        selected = shown[(ty - rowsTop()) / rowHeight()];
-        LOG_DEBUG("T5 Nodes: selected 0x%08x", selected);
+        const NodeNum selected = shown[(ty - rowsTop()) / rowHeight()];
+        if (!T5NodeDetailApplet::open(selected))
+            LOG_WARN("T5 Nodes: can't open Node detail for 0x%08x", selected); // Stay on Nodes
     }
 
     // Consume every tap: the button fallback would cycle applets

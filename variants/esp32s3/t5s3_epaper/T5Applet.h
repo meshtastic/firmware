@@ -41,7 +41,6 @@ class T5Applet : public Applet
     static std::string agoString(uint32_t secs);   // "now", "5 min ago", ...
     static std::string join(const std::string &a, const std::string &b);
 
-  private:
     int8_t destinationApplet(Destination d); // Applet index a destination opens, or -1 if unavailable
 };
 
