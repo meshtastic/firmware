@@ -60,6 +60,17 @@ static inline bool portPolicyFlags(meshtastic_PortNum port, uint32_t &flags)
     }
 }
 
+/// Can this node use PKI at all? PKC_ALWAYS cannot be honoured without it, whatever key we hold for
+/// the far end: the encoder needs our own private key, and licensed mode does not encrypt.
+static inline bool localPkiUsable()
+{
+#if MESHTASTIC_EXCLUDE_PKI
+    return false;
+#else
+    return config.security.private_key.size == 32 && !owner.is_licensed;
+#endif
+}
+
 /// Is `to` a routine destination configured for `port`? Telemetry's sub-types share one port, so any
 /// of the five counts. Used to tell our own routine traffic from a unicast the client composed.
 static inline bool isRoutineDest(meshtastic_PortNum port, NodeNum to)
@@ -94,12 +105,17 @@ static inline bool replyPolicyAllows(uint32_t flags, NodeNum from, NodeNum dest)
     }
     if (flags & meshtastic_PortPolicyFlags_NO_ADHOC_REPLY)
         return false;
-    // PKC_ALWAYS means the reply can only go encrypted to that node. Without its key the reply would
-    // be built and then refused at encode, costing the phone a NAK per poll; refuse it here instead.
+    // PKC_ALWAYS means the reply can only go encrypted to that node. Without an identity of our own,
+    // or without its key, the reply would be built and then refused at encode, costing the phone a
+    // NAK per poll; refuse it here instead.
     if (flags & meshtastic_PortPolicyFlags_PKC_ALWAYS) {
+        if (!localPkiUsable())
+            return false;
+#if !MESHTASTIC_EXCLUDE_PKI
         meshtastic_NodeInfoLite_public_key_t key;
         if (!nodeDB || !nodeDB->copyPublicKey(from, key))
             return false;
+#endif
     }
     if ((flags & meshtastic_PortPolicyFlags_REPLY_ONLY_TO_DEST) && (!dest || from != dest))
         return false;
@@ -116,16 +132,22 @@ static inline bool pkcAlwaysDestsHaveKeys(uint32_t flags, const uint32_t *dests,
 {
     if (!(flags & meshtastic_PortPolicyFlags_PKC_ALWAYS))
         return true;
+    // Destination keys arrive by NodeInfo whether or not this node can use them, so checking them
+    // alone would accept a setting that then fails at encode on every interval.
+    if (!localPkiUsable()) {
+        (void)dests;
+        (void)count;
 #if MESHTASTIC_EXCLUDE_PKI
-    // Keys arrive by NodeInfo whether or not this build can use them, so the loop below would pass
-    // and every routine send would then fail at encode. Refuse the setting outright.
-    (void)dests;
-    (void)count;
-    LOG_WARN("PKC_ALWAYS refused: this build has no PKI support");
-    if (why && whyLen)
-        snprintf(why, whyLen, "PKC_ALWAYS needs PKI, which this firmware build does not include");
-    return false;
+        const char *lack = "this firmware build does not include PKI";
 #else
+        const char *lack = owner.is_licensed ? "licensed mode does not encrypt" : "this node has no PKI identity";
+#endif
+        LOG_WARN("PKC_ALWAYS refused: %s", lack);
+        if (why && whyLen)
+            snprintf(why, whyLen, "PKC_ALWAYS refused: %s", lack);
+        return false;
+    }
+#if !MESHTASTIC_EXCLUDE_PKI
     for (size_t i = 0; i < count; i++) {
         meshtastic_NodeInfoLite_public_key_t key;
         if (dests[i] && !(nodeDB && nodeDB->copyPublicKey(dests[i], key))) {
@@ -135,6 +157,6 @@ static inline bool pkcAlwaysDestsHaveKeys(uint32_t flags, const uint32_t *dests,
             return false;
         }
     }
-    return true;
 #endif
+    return true;
 }

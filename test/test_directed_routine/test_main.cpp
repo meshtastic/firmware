@@ -24,6 +24,7 @@
 #include "mesh/Router.h"
 #include "modules/PositionModule.h"
 #include "modules/Telemetry/BaseTelemetryModule.h"
+#include <cstring>
 #include <unity.h>
 
 static NodeDB *testNodeDB = nullptr;
@@ -433,6 +434,7 @@ void test_gate_noAlwaysPkcAcceptsAnything()
 
 void test_gate_alwaysPkcAcceptsKeyedDest()
 {
+    armPki(); // the gate also requires an identity of our own; this case is about the far end
     giveKey(DEST);
     meshtastic_ModuleConfig_TelemetryConfig t = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
     t.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
@@ -457,12 +459,56 @@ void test_gate_alwaysPkcRefusesKeylessDest()
 // Paxcounter and position carry their own policy and destination, checked with the generic gate.
 void test_gate_alwaysPkcCoversPaxcounterAndPosition()
 {
+    armPki();
     const uint32_t unknown = 0x5a5a5a5a;
     TEST_ASSERT_FALSE(pkcAlwaysDestsHaveKeys(meshtastic_PortPolicyFlags_PKC_ALWAYS, &unknown, 1));
     TEST_ASSERT_TRUE(pkcAlwaysDestsHaveKeys(0, &unknown, 1));
     giveKey(DEST);
     const uint32_t keyed = DEST;
     TEST_ASSERT_TRUE(pkcAlwaysDestsHaveKeys(meshtastic_PortPolicyFlags_PKC_ALWAYS, &keyed, 1));
+}
+
+// PKC_ALWAYS is a promise to encrypt to one node. Holding that node's key is not enough: without an
+// identity of our own the send fails at encode on every interval, so the gate refuses the config,
+// and the reply gate refuses the poll rather than building a reply that cannot go out.
+void test_gate_alwaysPkcRefusedWithoutLocalIdentity()
+{
+    giveKey(DEST);
+    meshtastic_ModuleConfig_TelemetryConfig t = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    t.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
+    t.device_dest = DEST;
+
+    char why[128] = {0};
+    TEST_ASSERT_FALSE_MESSAGE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, why, sizeof(why)),
+                              "no private key of ours means PKC_ALWAYS can never be honoured");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(why, "identity") != nullptr, "the refusal says an identity is missing");
+
+    armPki();
+    TEST_ASSERT_TRUE_MESSAGE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t), "with an identity the same config is accepted");
+}
+
+// Licensed mode transmits in the clear, so PKC_ALWAYS is equally unhonourable there.
+void test_gate_licensedModeRefusesAlwaysPkc()
+{
+    armPki();
+    giveKey(DEST);
+    owner.is_licensed = true;
+    meshtastic_ModuleConfig_TelemetryConfig t = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    t.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
+    t.device_dest = DEST;
+
+    char why[128] = {0};
+    TEST_ASSERT_FALSE(BaseTelemetryModule::pkcOnlyDestsHaveKeys(t, why, sizeof(why)));
+    TEST_ASSERT_TRUE_MESSAGE(strstr(why, "licensed") != nullptr, "the refusal names licensed mode");
+}
+
+void test_reply_alwaysPkcRefusesPollWithoutLocalIdentity()
+{
+    giveKey(POLLER); // we hold the poller's key, but have none of our own
+    TEST_ASSERT_FALSE(replyPolicyAllows(meshtastic_PortPolicyFlags_PKC_ALWAYS, POLLER, 0));
+    armPki();
+    TEST_ASSERT_TRUE_MESSAGE(replyPolicyAllows(meshtastic_PortPolicyFlags_PKC_ALWAYS, POLLER, 0),
+                             "with both keys on hand the poll is answered");
 }
 
 // --- hopLimitForDirected -----------------------------------------------------------------------
@@ -666,6 +712,9 @@ void setup()
     RUN_TEST(test_gate_noAlwaysPkcAcceptsAnything);
     RUN_TEST(test_gate_alwaysPkcAcceptsKeyedDest);
     RUN_TEST(test_gate_alwaysPkcRefusesKeylessDest);
+    RUN_TEST(test_gate_alwaysPkcRefusedWithoutLocalIdentity);
+    RUN_TEST(test_gate_licensedModeRefusesAlwaysPkc);
+    RUN_TEST(test_reply_alwaysPkcRefusesPollWithoutLocalIdentity);
     RUN_TEST(test_gate_alwaysPkcCoversPaxcounterAndPosition);
     RUN_TEST(test_budget_trimsUnicastAtDefault);
     RUN_TEST(test_budget_leavesAlreadySizedPacketAlone);
