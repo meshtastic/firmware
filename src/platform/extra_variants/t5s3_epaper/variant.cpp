@@ -11,6 +11,7 @@
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh/Throttle.h"
+#include "meshUtils.h"
 #include "sleep.h"
 #include "touch/TouchDrvGT911.hpp"
 #include <cstring>
@@ -654,9 +655,10 @@ bool readTouch(int16_t *x, int16_t *y)
             const int16_t raw_x = static_cast<int16_t>(points.getPoint(0).x);
             const int16_t raw_y = static_cast<int16_t>(points.getPoint(0).y);
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+            auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
             // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
             // rotation=3 is the physical identity (device's default orientation).
-            switch (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation) {
+            switch (inkhud->persistence->settings.rotation) {
             default:
             case 3:
                 *x = raw_x;
@@ -675,6 +677,12 @@ bool readTouch(int16_t *x, int16_t *y)
                 *y = (EPD_HEIGHT - 1) - raw_x;
                 break; // 90° CCW tilt
             }
+            // The above is the full 960x540 panel, but InkHUD draws into ED047TC1's 928x508 safe area, placed at
+            // physical (+16,+16) with 16 px margins on all four sides. Equal margins make the safe-area origin
+            // (16,16) in every rotation's visual frame, so one translation covers all rotations.
+            constexpr int16_t SAFE_AREA_INSET = 16;
+            *x = clamp(*x - SAFE_AREA_INSET, 0, inkhud->width() - 1);
+            *y = clamp(*y - SAFE_AREA_INSET, 0, inkhud->height() - 1);
 #else
             *x = raw_x;
             *y = raw_y;
