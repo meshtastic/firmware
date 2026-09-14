@@ -2,6 +2,8 @@
 
 #include "./T5Applet.h"
 
+#include "mesh/NodeDB.h"
+
 #include <initializer_list>
 
 using namespace NicheGraphics;
@@ -14,6 +16,39 @@ int8_t InkHUD::T5Applet::indexOf(const char *name)
             return i;
     }
     return -1;
+}
+
+// Heard within the last 10 minutes: the HEARD 10M count, on every T5 screen
+bool InkHUD::T5Applet::heardRecently(const meshtastic_NodeInfoLite *node)
+{
+    return node->last_heard && sinceLastSeen(node) < 10 * 60;
+}
+
+std::string InkHUD::T5Applet::hopsString(uint8_t hops)
+{
+    return hops == 0 ? "direct" : to_string(hops) + (hops == 1 ? " hop" : " hops");
+}
+
+std::string InkHUD::T5Applet::sinceString(uint32_t secs)
+{
+    if (secs < 60)
+        return "now";
+    if (secs < 60 * 60)
+        return to_string(secs / 60) + " min";
+    if (secs < 24 * 60 * 60)
+        return to_string(secs / (60 * 60)) + " h";
+    return to_string(secs / (24 * 60 * 60)) + " d";
+}
+
+std::string InkHUD::T5Applet::agoString(uint32_t secs)
+{
+    return secs < 60 ? sinceString(secs) : sinceString(secs) + " ago";
+}
+
+// Non-empty parts only, separated by a Win-1253 middle dot
+std::string InkHUD::T5Applet::join(const std::string &a, const std::string &b)
+{
+    return a.empty() ? b : b.empty() ? a : a + " \xB7 " + b;
 }
 
 // A destination opens the first active applet of its kind, in registration order
@@ -29,11 +64,15 @@ int8_t InkHUD::T5Applet::destinationApplet(Destination d)
     };
 
     switch (d) {
+    case HOME:
+        return firstActive({"Home"});
     case MSGS:
         return firstActive({"All Messages", "DMs", "Channel 0", "Channel 1"});
+    case NODES:
+        return firstActive({"Nodes"});
     case MAP:
         return firstActive({"Positions", "Favorites Map"});
-    default:
+    default: // MENU and APPS open system applets
         return -1;
     }
 }
@@ -65,7 +104,7 @@ void InkHUD::T5Applet::drawNav(Destination current)
             drawLine(left, top, left, height() - 1, BLACK);
         printAt(centerX, centerY, labels[i], CENTER, MIDDLE);
 
-        const bool available = (i == MSGS || i == MAP) ? destinationApplet((Destination)i) >= 0 : i != NODES;
+        const bool available = i == MENU || i == APPS || destinationApplet((Destination)i) >= 0;
         if (!available)
             fillRect(left + 14, centerY - 1, cellW - 28, 2, BLACK);
     }
@@ -82,21 +121,19 @@ bool InkHUD::T5Applet::handleNavTap(uint16_t x, uint16_t y)
 
     const Destination d = (Destination)(x * 6 / navWidth());
     switch (d) {
-    case MSGS:
-    case MAP: {
-        const int8_t target = destinationApplet(d);
-        if (target >= 0)
-            inkhud->showApplet(target);
-        break;
-    }
     case MENU:
         inkhud->openMenu();
         break;
     case APPS:
         inkhud->openAppSwitcher();
         break;
-    default: // HOME: already here, as Home is the only T5 screen. NODES: unavailable until T5 Nodes exists
+    default: {
+        // The screen already shown stays put, without a refresh
+        const int8_t target = destinationApplet(d);
+        if (target >= 0 && !inkhud->userApplets[target]->isForeground())
+            inkhud->showApplet(target);
         break;
+    }
     }
     return true;
 }

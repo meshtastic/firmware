@@ -22,7 +22,6 @@ using namespace NicheGraphics;
 namespace
 {
 constexpr int16_t MARGIN = 16;
-constexpr uint32_t HEARD_WINDOW_SECS = 10 * 60;
 
 // Session-local NEW counts: zero at boot, so conversations that already exist start as seen
 uint16_t newDMs = 0;
@@ -57,17 +56,6 @@ int32_t ageSecs(const StoredMessage &m)
     const uint32_t now = m.isBootRelative ? Time::getUptimeSecs() : getValidTime(RTCQuality::RTCQualityDevice, true);
     return (now && now >= m.timestamp) ? now - m.timestamp : -1;
 }
-
-std::string agoString(int32_t secs)
-{
-    if (secs < 60)
-        return "now";
-    if (secs < 60 * 60)
-        return std::to_string(secs / 60) + " min ago";
-    if (secs < 24 * 60 * 60)
-        return std::to_string(secs / (60 * 60)) + " h ago";
-    return std::to_string(secs / (24 * 60 * 60)) + " d ago";
-}
 } // namespace
 
 void InkHUD::T5HomeApplet::begin()
@@ -75,15 +63,17 @@ void InkHUD::T5HomeApplet::begin()
     InkHUD *hud = InkHUD::getInstance();
     Persistence::Settings &saved = hud->persistence->settings;
 
-    // Home is appended after the shared applets, so their saved indices are untouched.
-    // Settings saved before Home existed have it inactive; Home must always be available and shown at boot.
+    // T5 applets are appended after the shared applets, so their saved indices are untouched.
+    // Settings saved before a T5 applet existed have it inactive; all must be available, and Home shown at boot.
+    for (const char *name : {"Home", "Nodes"}) {
+        const int8_t i = indexOf(name);
+        assert(i >= 0);
+        saved.userApplets.active[i] = true;
+        if (!hud->userApplets[i]->isActive())
+            hud->userApplets[i]->activate();
+    }
     const int8_t index = indexOf("Home");
-    assert(index >= 0);
-    Applet *home = hud->userApplets[index];
-    saved.userApplets.active[index] = true;
-    if (!home->isActive())
-        home->activate();
-    if (!home->isForeground()) {
+    if (!hud->userApplets[index]->isForeground()) {
         saved.userTiles.focused = 0;
         hud->showApplet(index);
     }
@@ -123,11 +113,6 @@ int InkHUD::T5HomeApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 
     requestUpdate();
     return 0;
-}
-
-std::string InkHUD::T5HomeApplet::join(const std::string &a, const std::string &b)
-{
-    return a.empty() ? b : b.empty() ? a : a + " \xB7 " + b;
 }
 
 std::string InkHUD::T5HomeApplet::senderName(NodeNum num)
@@ -197,7 +182,7 @@ InkHUD::T5HomeApplet::Status InkHUD::T5HomeApplet::readStatus()
             else
                 s.multiHop++;
         }
-        if (node->last_heard && sinceLastSeen(node) < HEARD_WINDOW_SECS)
+        if (heardRecently(node))
             heard.push_back(node);
     }
     std::sort(heard.begin(), heard.end(),
@@ -216,7 +201,7 @@ InkHUD::T5HomeApplet::Status InkHUD::T5HomeApplet::readStatus()
             row.distance = localizeDistance(GeoCoord::latLongToMeter(theirPos.latitude_i * 1e-7, theirPos.longitude_i * 1e-7,
                                                                      ourPos.latitude_i * 1e-7, ourPos.longitude_i * 1e-7));
         if (node->has_hops_away)
-            row.hops = node->hops_away == 0 ? "direct" : to_string(node->hops_away) + (node->hops_away == 1 ? " hop" : " hops");
+            row.hops = hopsString(node->hops_away);
         s.heard.push_back(row);
     }
 
@@ -525,6 +510,8 @@ bool InkHUD::T5HomeApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
             t5ToggleMode();
         else if (ty >= 76 && ty < 292 && tx < 386)
             openLatest();
+        else if (ty >= 76 && ty < 292 && tx >= 666)
+            openApplet("Nodes");
         else if (ty >= 316 && ty < 404)
             openApplet(tx < 464 ? "Channel 0" : "DMs");
     } else {
@@ -536,9 +523,11 @@ bool InkHUD::T5HomeApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
             openApplet("Channel 0");
         else if (ty >= 372 && ty < 456)
             openApplet("DMs");
+        else if (ty >= 468 && ty < 748)
+            openApplet("Nodes");
     }
 
-    // Consume every tap, including unavailable NODES rows: the button fallback would cycle applets
+    // Consume every tap: the button fallback would cycle applets
     return true;
 }
 

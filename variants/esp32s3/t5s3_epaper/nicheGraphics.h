@@ -25,6 +25,7 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 
 // Applets
 #include "T5HomeApplet.h"
+#include "T5NodesApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
@@ -91,6 +92,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // Not Active, not autoshown
     // T5 applets go last: InkHUD saves applet choices by index, so appending keeps existing saved indices valid
     inkhud->addApplet("Home", new InkHUD::T5HomeApplet, true, false, 0); // Activated, not autoshown, default on tile 0
+    inkhud->addApplet("Nodes", new InkHUD::T5NodesApplet, true, false);  // Activated, not autoshown
 
     // Enable reusable InkHUD touch status indicator for this touch-capable board.
     inkhud->setTouchEnabledProvider(isTouchInputEnabled);

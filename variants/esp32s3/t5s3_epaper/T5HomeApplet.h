@@ -52,7 +52,6 @@ class T5HomeApplet : public T5Applet
                           uint16_t unseen);
     void drawModeControl(int16_t x, int16_t y, uint16_t w, uint16_t h);
     void printClipped(int16_t left, int16_t top, uint16_t w, int16_t bottom, const std::string &text);
-    std::string join(const std::string &a, const std::string &b);
     std::string senderName(NodeNum num);
     const StoredMessage *latestIncoming();
     void openLatest();

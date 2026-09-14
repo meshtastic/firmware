@@ -35,6 +35,12 @@ class T5Applet : public Applet
     bool handleNavTap(uint16_t x, uint16_t y); // True if the tap hit one of the six cells
     void printBold(int16_t x, int16_t y, const std::string &text, HorizontalAlignment ha = LEFT); // Top-aligned
 
+    static bool heardRecently(const meshtastic_NodeInfoLite *node);
+    static std::string hopsString(uint8_t hops);   // "direct", "1 hop", "3 hops"
+    static std::string sinceString(uint32_t secs); // "now", "5 min", "3 h", "2 d"
+    static std::string agoString(uint32_t secs);   // "now", "5 min ago", ...
+    static std::string join(const std::string &a, const std::string &b);
+
   private:
     int8_t destinationApplet(Destination d); // Applet index a destination opens, or -1 if unavailable
 };
