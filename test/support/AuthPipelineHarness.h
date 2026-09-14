@@ -470,9 +470,11 @@ static void pipelineHarnessCreate()
     mqtt = pipelineMqtt = new AuthPipelineMqtt();
 }
 
-/// Put back the AirTime and NodeStatus the harness replaced.
+/// Free the AirTime and NodeStatus the harness installed, then put back the originals.
 static void pipelineHarnessDestroy()
 {
+    delete airTime;
+    delete nodeStatus;
     airTime = harnessSavedAirTime;
     nodeStatus = harnessSavedNodeStatus;
 }
