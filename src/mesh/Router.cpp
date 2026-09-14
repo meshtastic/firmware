@@ -978,7 +978,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
         bool viaPendingKey = false;
-        // pkiAttempted means a key was tried: without one the frame is opaque, not a failed decrypt.
+        // pkiAttempted means the sender's own key was tried. Without one the frame is opaque, not a failed
+        // decrypt; an admin key that fails says nothing about the sender, so it does not count.
         pkiAttempted = haveRemoteKey;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
@@ -988,7 +989,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             for (int i = 0; i < 3 && !decrypted; i++) {
                 if (config.security.admin_key[i].size != 32)
                     continue;
-                pkiAttempted = true;
                 remotePublic.size = 32;
                 memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
 
