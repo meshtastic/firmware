@@ -25,7 +25,7 @@
     "maximum_ram_size": 512000,
     "maximum_size": 16777216,
     "require_upload_port": true,
-    "speed": 1500000
+    "speed": 921600
   },
   "url": "https://www.elecrow.com/crowpanel-advanced-5inch-esp32-p4-hmi-ai-display-800x480-ips-touch-screen-with-wifi-6.html",
   "vendor": "Elecrow"
