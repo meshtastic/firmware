@@ -2266,9 +2266,11 @@ void test_C29_known_only_pki_dm_to_us_is_opaque_even_when_a_held_channel_hashes_
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
 }
 
-// C30: the mirror case. A channel-0 unicast between other nodes, on that same hash-0 channel, is one
-// we did try and fail to decrypt - so it is not PKI ciphertext and must not be published as such.
-void test_C30_failed_decrypt_on_a_held_hash0_channel_is_not_uplinked_as_pki(void)
+// C30: the relay-side mirror of C29, and the limit of it. A held channel that hashes to 0 matches
+// every PKI DM on the mesh and fails every one, so it is no evidence about a PKI-shaped unicast
+// between two other nodes: the gateway still carries it. A channel-0 unicast too short to have been
+// PKI is the opposite case - that one really was channel traffic we tried and failed on.
+void test_C30_a_held_hash0_channel_does_not_make_a_relayed_dm_look_like_channel_traffic(void)
 {
     forceChannel0HashZero();
     channels.getByIndex(0).settings.uplink_enabled = true;
@@ -2276,19 +2278,101 @@ void test_C30_failed_decrypt_on_a_held_hash0_channel_is_not_uplinked_as_pki(void
     moduleConfig.mqtt.encryption_enabled = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_NONE; // uplink is not relay
 
-    meshtastic_MeshPacket junk = meshtastic_MeshPacket_init_zero;
-    junk.from = ADMIN_NODE;
-    junk.to = TARGET_NODE;
-    junk.id = 0xADB60016;
-    junk.channel = 0; // matches the held channel, so the decrypt is attempted and fails
-    junk.hop_limit = 2;
-    junk.hop_start = 3;
-    junk.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    junk.encrypted.size = 24;
-    memset(junk.encrypted.bytes, 0xC3, junk.encrypted.size);
+    meshtastic_MeshPacket dm = meshtastic_MeshPacket_init_zero;
+    dm.from = ADMIN_NODE;
+    dm.to = TARGET_NODE;
+    dm.id = 0xADB60016;
+    dm.channel = 0; // the PKI sentinel, which this fixture's channel also hashes to
+    dm.hop_limit = 2;
+    dm.hop_start = 3;
+    dm.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    dm.encrypted.size = 24; // > MESHTASTIC_PKC_OVERHEAD: this could have been a PKI DM
+    memset(dm.encrypted.bytes, 0xC3, dm.encrypted.size);
 
-    runPipelineIngress(junk);
-    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineMqtt->queueSize(), "a failed decrypt is not a PKI frame to carry for others");
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "one channel hash must not withhold every PKI DM from the broker");
+
+    meshtastic_MeshPacket tooShort = dm;
+    tooShort.id = 0xADB60026;
+    tooShort.encrypted.size = MESHTASTIC_PKC_OVERHEAD; // never a PKI candidate, so the channel attempt counts
+    runPipelineIngress(tooShort);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "a failed decrypt is not a PKI frame to carry for others");
+}
+
+// C31: the dedup ring is keyed on (from,id), so id 0 cannot be deduped and every copy heard would be
+// answered again. No consumer acts on it - and a NAK carrying request_id 0 is unmatchable anyway.
+void test_C31_an_opaque_frame_with_id_0_is_answered_by_nobody(void)
+{
+    channels.getByIndex(0).settings.uplink_enabled = true;
+    moduleConfig.mqtt.enabled = true;
+    moduleConfig.mqtt.encryption_enabled = true;
+
+    meshtastic_MeshPacket idless = meshtastic_MeshPacket_init_zero;
+    idless.from = REMOTE_NODE;
+    idless.to = LOCAL_NODE;
+    idless.id = 0;
+    idless.channel = 0;
+    idless.hop_limit = 2;
+    idless.hop_start = 3;
+    idless.want_ack = true;
+    idless.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    idless.encrypted.size = 24;
+    memset(idless.encrypted.bytes, 0x7E, idless.encrypted.size);
+
+    for (int i = 0; i < 3; i++)
+        runPipelineIngress(idless);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouting->ackCalls, "an unmatchable NAK, once per copy heard, is pure amplification");
+    TEST_ASSERT_NULL(pipelineService->getForPhone());
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+}
+
+// C32: the uplink is gated by MQTT's own switches, not by rebroadcast_mode - a gateway that declines
+// to put a stranger's ciphertext back on the air still carries it over IP, as it did before #10967.
+// The licensed-station rule is not a link-layer rule, so it does apply.
+void test_C32_uplink_follows_mqtt_policy_not_rebroadcast_mode(void)
+{
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE); // neither party in NodeDB
+    const meshtastic_MeshPacket dm = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADB70017);
+    channels.getByIndex(0).settings.uplink_enabled = true;
+    moduleConfig.mqtt.enabled = true;
+    moduleConfig.mqtt.encryption_enabled = true;
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY;
+
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "KNOWN_ONLY does not relay two strangers' ciphertext");
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "but the broker is not the air, and MQTT gates itself");
+
+    markOurselvesLicensed();
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->markLicenseStatus(ADMIN_NODE, false);
+    runPipelineIngress(makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADB70027));
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(),
+                              "a licensed station does not carry a known unlicensed node's ciphertext anywhere");
+}
+
+// C33: the ring bounds amplification of frames we cannot read, so a frame no consumer can act on must
+// not spend a slot. Our own overheard rebroadcasts are the clearest case: the implicit ACK sits above
+// the ring and never consults it, so recording them would evict live entries for nothing.
+void test_C33_frames_no_consumer_acts_on_do_not_evict_the_ring(void)
+{
+    const RelayIdentity us = installOurIdentity();
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    useDHKey(us.priv);
+
+    const meshtastic_MeshPacket dm = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADB80018);
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sentCountFor(ADMIN_NODE, dm.id), "first copy is relayed");
+
+    // More than OPAQUE_SEEN_MAX frames of our own, overheard being rebroadcast, between the two copies.
+    for (int i = 0; i < 40; i++)
+        runPipelineIngress(makeRelayedCopy(makePkiUnicastBetween(us, target, meshtastic_PortNum_ADMIN_APP, 0xADB90000 + i)));
+
+    runPipelineIngress(makeRelayedCopy(dm));
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sentCountFor(ADMIN_NODE, dm.id),
+                              "the stranger's frame is still remembered, so its second copy is not carried");
 }
 
 void setup()
@@ -2366,7 +2450,10 @@ void setup()
     RUN_TEST(test_C27_licensed_node_does_not_nak_a_known_unlicensed_sender);
     RUN_TEST(test_C28_nak_uses_the_response_hop_limit_on_the_primary_channel);
     RUN_TEST(test_C29_known_only_pki_dm_to_us_is_opaque_even_when_a_held_channel_hashes_to_0);
-    RUN_TEST(test_C30_failed_decrypt_on_a_held_hash0_channel_is_not_uplinked_as_pki);
+    RUN_TEST(test_C30_a_held_hash0_channel_does_not_make_a_relayed_dm_look_like_channel_traffic);
+    RUN_TEST(test_C31_an_opaque_frame_with_id_0_is_answered_by_nobody);
+    RUN_TEST(test_C32_uplink_follows_mqtt_policy_not_rebroadcast_mode);
+    RUN_TEST(test_C33_frames_no_consumer_acts_on_do_not_evict_the_ring);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

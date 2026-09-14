@@ -189,12 +189,11 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     static constexpr uint8_t OPAQUE_SEEN_MAX = 32; // opaque dedup slots (see relayOpaquePacket); ~8B/slot -> ~256B
 
     /**
-     * Recently-seen opaque (undecryptable) frames, keyed on the outer (from,id) header. A second,
-     * isolated PacketHistory-style dedup: it bounds broadcast amplification of frames we can't decrypt
-     * WITHOUT admitting them to the real PacketHistory/NodeDB, so unauthenticated traffic can never
-     * influence routing / ACK / next-hop decisions. Fixed-size ring, round-robin (FIFO) eviction, no
-     * timestamps (a stale (from,id) can't false-match: packet ids are effectively random, and a real
-     * entry never has id 0 - relayOpaquePacket drops id 0 before this). RAM-only.
+     * Recently-seen opaque (undecryptable) frames, keyed on the outer (from,id) header. Deliberately
+     * separate from PacketHistory: it bounds amplification of frames we cannot decrypt without ever
+     * letting them influence routing / ACK / next-hop. Fixed-size RAM ring, FIFO eviction, no
+     * timestamps (ids are effectively random). Records only frames some consumer can act on; id 0 is
+     * never recorded and never acted on, so an empty slot cannot false-match.
      */
     struct OpaqueSeen {
         NodeNum sender = 0;

@@ -147,9 +147,8 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                     sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
                                routingModule->getHopLimitForResponse(*p));
                 } else {
-                    // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded.
-                    // Radio ingress never arrives here - the auth gate answers an unreadable frame in
-                    // Router::handleOpaqueForUs() and returns - but a local or SimRadio caller still reaches it.
+                    // NO_CHANNEL on the primary channel for an undecodable want_ack packet for us. Radio
+                    // ingress answers in Router::handleOpaqueForUs(); a local/SimRadio caller still lands here.
                     sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(),
                                routingModule->getHopLimitForResponse(*p));
                 }
