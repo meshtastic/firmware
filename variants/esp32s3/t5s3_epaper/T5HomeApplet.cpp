@@ -127,7 +127,7 @@ int InkHUD::T5HomeApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 
 std::string InkHUD::T5HomeApplet::join(const std::string &a, const std::string &b)
 {
-    return a.empty() ? b : b.empty() ? a : a + parse(" · ") + b;
+    return a.empty() ? b : b.empty() ? a : a + " \xB7 " + b;
 }
 
 std::string InkHUD::T5HomeApplet::senderName(NodeNum num)
@@ -168,7 +168,7 @@ InkHUD::T5HomeApplet::Status InkHUD::T5HomeApplet::readStatus()
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED || !gpsStatus->getIsConnected())
         s.gps = "GPS OFF";
     else if (gpsStatus->getHasLock())
-        s.gps = parse("GPS FIX · ") + to_string(gpsStatus->getNumSatellites());
+        s.gps = "GPS FIX \xB7 " + to_string(gpsStatus->getNumSatellites());
     else
         s.gps = "GPS NO FIX";
 
@@ -373,7 +373,7 @@ void InkHUD::T5HomeApplet::renderCarry(const Status &s)
 
     // Heard: three most recent
     setFont(fontSmall);
-    printBold(MARGIN, 468, parse("HEARD · 10 MIN"));
+    printBold(MARGIN, 468, "HEARD \xB7 10 MIN");
     printBold(right, 468, to_string(s.heardCount), RIGHT);
     for (uint8_t i = 0; i < 3 && i < s.heard.size(); i++) {
         const HeardRow &row = s.heard[i];
@@ -474,7 +474,7 @@ void InkHUD::T5HomeApplet::renderConsole(const Status &s)
 
     // Heard: six most recent
     constexpr int16_t heardLeft = 666, heardW = 246;
-    printBold(heardLeft, 76, parse("HEARD · 10 MIN"));
+    printBold(heardLeft, 76, "HEARD \xB7 10 MIN");
     printBold(heardLeft + heardW, 76, to_string(s.heardCount), RIGHT);
     for (uint8_t i = 0; i < s.heard.size(); i++) {
         const int16_t top = 105 + i * rowH;
