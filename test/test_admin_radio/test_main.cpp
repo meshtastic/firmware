@@ -2517,6 +2517,8 @@ static void test_handleSetConfig_positionPkcAlwaysWithoutKeyRefused()
 {
     config.position = meshtastic_Config_PositionConfig_init_zero;
     config.position.position_dest = 0;
+    config.security.private_key.size = 32; // so the refusal is about the destination, not our own identity
+    memset(config.security.private_key.bytes, 0x22, 32);
     meshtastic_Config c = meshtastic_Config_init_zero;
     c.which_payload_variant = meshtastic_Config_position_tag;
     c.payload_variant.position.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
@@ -2532,6 +2534,8 @@ static void test_handleSetConfig_positionPkcAlwaysWithoutKeyRefused()
 static void test_handleSetModuleConfig_telemetryPkcAlwaysWithoutKeyRefused()
 {
     moduleConfig.telemetry = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    config.security.private_key.size = 32; // as above: pin the refusal to the missing destination key
+    memset(config.security.private_key.bytes, 0x22, 32);
     meshtastic_ModuleConfig c = meshtastic_ModuleConfig_init_zero;
     c.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
     c.payload_variant.telemetry.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
@@ -2547,6 +2551,10 @@ static void test_handleSetModuleConfig_telemetryPkcAlwaysWithoutKeyRefused()
 static void test_handleSetConfig_positionPkcAlwaysWithKeyAccepted()
 {
     config.position = meshtastic_Config_PositionConfig_init_zero;
+    // Say it rather than inherit it from the NodeDB constructor: the gate needs an identity of ours
+    // as well as the destination's key, and this case is about the destination's.
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x22, 32);
     constexpr NodeNum keyed = 0x1234abcd;
     meshtastic_NodeInfoLite *n = nodeDB->getOrCreateMeshNode(keyed);
     TEST_ASSERT_NOT_NULL(n);
