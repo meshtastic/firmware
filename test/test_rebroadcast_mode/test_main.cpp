@@ -141,8 +141,7 @@ void test_licensed_node_never_relays_opaque_traffic(void)
         meshtastic_MeshPacket copy = foreign;
         copy.id += (uint32_t)mode;
         runPipelineIngress(copy);
-        while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
-            packetPool.release(queued);
+        drainPhoneQueue();
         TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "a licensed node does not carry an unreadable broadcast either");
     }
 }
@@ -173,11 +172,10 @@ void test_licensed_node_relays_decoded_unless_a_party_is_known_unlicensed(void)
     uint32_t n = 0;
     for (const auto &c : cases) {
         pipelineRadio->reset();
-        pipelineRouting->ackCalls = 0;
+        pipelineRouting->reset();
         const meshtastic_MeshPacket p = makeChannelBroadcastFrom(c.from, c.to, 0xADAC0100 + ++n);
         runPipelineIngress(p);
-        while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
-            packetPool.release(queued);
+        drainPhoneQueue();
         TEST_ASSERT_EQUAL_MESSAGE(c.relayed ? 1 : 0, pipelineRadio->sendCalls, c.why);
     }
 }

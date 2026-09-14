@@ -28,6 +28,7 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <unity.h>
+#include <vector>
 
 // Test fixture identifiers
 // ---------------------------------------------------------------------------
@@ -115,36 +116,81 @@ class MockNodeDB : public NodeDB
 
 static MockNodeDB *mockNodeDB = nullptr;
 
-/// Counts sends, cancels and queue lookups instead of touching hardware; `failSend` simulates a full queue.
+/// Stands in for the radio: records what was sent instead of transmitting it, and models the TX
+/// queue the router consults. `failSend` simulates a full queue.
 class AuthPipelineRadio : public RadioInterface
 {
   public:
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sendCalls++;
+        sent.push_back(*p);
         packetPool.release(p);
         return failSend ? ERRNO_DISABLED : ERRNO_OK;
     }
-    bool cancelSending(NodeNum, PacketId) override
+    bool cancelSending(NodeNum from, PacketId id) override
     {
         cancelCalls++;
+        releaseFromTxQueue(from, id);
         return true;
     }
-    bool findInTxQueue(NodeNum, PacketId) override
+    bool findInTxQueue(NodeNum from, PacketId id) override
     {
         findCalls++;
-        return false;
+        return txQueueHolds(from, id);
     }
-    bool removePendingTXPacket(NodeNum, PacketId, uint32_t) override
+    bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t) override
     {
         removeCalls++;
+        releaseFromTxQueue(from, id);
         return true;
     }
     uint32_t getPacketTime(uint32_t, bool = false) override { return 7; }
+
+    // The TX queue the router asks about. A test loads it to say "this one has not gone out yet";
+    // cancelSending() and removePendingTXPacket() take entries back out, as the real queue does.
+    void holdInTxQueue(NodeNum from, PacketId id)
+    {
+        if (!txQueueHolds(from, id))
+            txQueue.push_back({from, id});
+    }
+    void releaseFromTxQueue(NodeNum from, PacketId id)
+    {
+        for (size_t i = 0; i < txQueue.size(); i++) {
+            if (txQueue[i].from == from && txQueue[i].id == id) {
+                txQueue.erase(txQueue.begin() + i);
+                return;
+            }
+        }
+    }
+    bool txQueueHolds(NodeNum from, PacketId id) const
+    {
+        for (const auto &e : txQueue)
+            if (e.from == from && e.id == id)
+                return true;
+        return false;
+    }
+    size_t txQueueSize() const { return txQueue.size(); }
+
+    // What actually went out, in order, so a test can assert on the frame and not just the count.
+    const std::vector<meshtastic_MeshPacket> &sentPackets() const { return sent; }
+    const meshtastic_MeshPacket *lastSent() const { return sent.empty() ? nullptr : &sent.back(); }
+    /// How many of the sends carried this (from,id) - one relay of a frame heard twice, say.
+    uint32_t sentCountFor(NodeNum from, PacketId id) const
+    {
+        uint32_t n = 0;
+        for (const auto &p : sent)
+            if (getFrom(&p) == from && p.id == id)
+                n++;
+        return n;
+    }
+
     void reset()
     {
         sendCalls = cancelCalls = findCalls = removeCalls = 0;
         failSend = false;
+        sent.clear();
+        txQueue.clear();
     }
 
     bool failSend = false;
@@ -152,6 +198,14 @@ class AuthPipelineRadio : public RadioInterface
     uint32_t cancelCalls = 0;
     uint32_t findCalls = 0;
     uint32_t removeCalls = 0;
+
+  private:
+    struct TxQueueEntry {
+        NodeNum from;
+        PacketId id;
+    };
+    std::vector<TxQueueEntry> txQueue;
+    std::vector<meshtastic_MeshPacket> sent;
 };
 
 /// The production router with its protected state (history, pending retransmissions, upgrades) exposed.
@@ -182,6 +236,15 @@ class AuthPipelineRouter : public ReliableRouter
         return entry ? entry->initialNumRetransmissions + 1 : 0;
     }
     size_t pendingCount() const { return pending.size(); }
+    /// Forget every opaque (from,id): the router outlives a test, so the dedup ring must not.
+    void clearOpaqueSeen()
+    {
+        for (auto &slot : opaqueSeen) {
+            slot.sender = 0;
+            slot.id = 0;
+        }
+        opaqueSeenNext = 0;
+    }
     void clearPending()
     {
         for (auto &entry : pending)
@@ -190,18 +253,54 @@ class AuthPipelineRouter : public ReliableRouter
     }
 };
 
-/// Records ACK/NAK sends and the last error reason instead of transmitting them.
+/// Records every ACK/NAK the router asks for instead of transmitting it.
 class AuthPipelineRoutingModule : public RoutingModule
 {
   public:
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false,
-                    const meshtastic_MeshPacket * = nullptr) override
+    struct AckNak {
+        meshtastic_Routing_Error err;
+        NodeNum to;
+        PacketId id;
+        ChannelIndex chIndex;
+        uint8_t hopLimit;
+    };
+
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId id, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool = false, const meshtastic_MeshPacket * = nullptr) override
     {
         ackCalls++;
+        sentAckNaks.push_back({err, to, id, chIndex, hopLimit});
         lastErr = err;
+        lastChIndex = chIndex;
+        lastHopLimit = hopLimit;
     }
+
+    /// The n-th ACK/NAK of this test, or nullptr - so a test can pin a second NAK without losing the first.
+    const AckNak *ackNakAt(size_t n) const { return n < sentAckNaks.size() ? &sentAckNaks[n] : nullptr; }
+    /// How many ACK/NAKs answered this (to,id) pair.
+    uint32_t ackNakCountFor(NodeNum to, PacketId id) const
+    {
+        uint32_t n = 0;
+        for (const auto &a : sentAckNaks)
+            if (a.to == to && a.id == id)
+                n++;
+        return n;
+    }
+    void reset()
+    {
+        sentAckNaks.clear();
+        ackCalls = 0;
+        lastErr = meshtastic_Routing_Error_NONE;
+        lastChIndex = 0;
+        lastHopLimit = 0;
+    }
+
+    std::vector<AckNak> sentAckNaks;
     uint32_t ackCalls = 0;
+    // The last of each field, kept because most cases send exactly one and read it directly.
     meshtastic_Routing_Error lastErr = meshtastic_Routing_Error_NONE;
+    ChannelIndex lastChIndex = 0;
+    uint8_t lastHopLimit = 0;
 };
 
 /// A POSITION_APP module that counts how often ingress reaches module dispatch.
@@ -320,7 +419,8 @@ static constexpr NodeNum ADMIN_NODE = 0x0C0C0C0C;  // the operator's node, sendi
 static constexpr NodeNum TARGET_NODE = 0x0D0D0D0D; // the node being administered
 
 /// A genuine PKI-encrypted packet on `port` from one remote identity to another, as it would be
-/// heard off the air by a third node (us). Leaves the engine holding a fresh key of its own.
+/// heard off the air by a third node (us). The engine is left holding whatever DH key it held on
+/// entry, so a caller may install its own key before or after building the frame.
 static meshtastic_MeshPacket makePkiUnicastBetween(const RelayIdentity &from, const RelayIdentity &to, meshtastic_PortNum port,
                                                    PacketId id, bool wantAck = false)
 {
@@ -346,12 +446,13 @@ static meshtastic_MeshPacket makePkiUnicastBetween(const RelayIdentity &from, co
 
     meshtastic_NodeInfoLite_public_key_t toKey = {32, {0}};
     memcpy(toKey.bytes, to.pub, 32);
-    uint8_t ourPub[32], ourPriv[32];
-    crypto->generateKeyPair(ourPub, ourPriv);
+    // Borrow the sender's key for the encrypt only. private_key is public under PIO_UNIT_TESTING.
+    uint8_t savedPriv[32];
+    memcpy(savedPriv, crypto->private_key, sizeof(savedPriv));
     useDHKey(from.priv);
     TEST_ASSERT_TRUE(crypto->encryptCurve25519(p.to, p.from, toKey, p.id, plainSize, plain, p.encrypted.bytes));
     p.encrypted.size = plainSize + MESHTASTIC_PKC_OVERHEAD;
-    crypto->setDHPrivateKey(ourPriv);
+    crypto->setDHPrivateKey(savedPriv);
     return p;
 }
 
@@ -384,13 +485,36 @@ static const char *modeName(meshtastic_Config_DeviceConfig_RebroadcastMode m)
     }
 }
 
+/// Empty the phone queue, returning how many frames it held.
+static int drainPhoneQueue()
+{
+    int seen = 0;
+    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
+        packetPool.release(queued);
+        seen++;
+    }
+    return seen;
+}
+
+/// Drain the phone queue, asserting exactly `n` frames arrived and every one is still ciphertext.
+static void expectEncryptedPhoneDeliveries(int n)
+{
+    int seen = 0;
+    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
+        TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, queued->which_payload_variant);
+        packetPool.release(queued);
+        seen++;
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(n, seen, "encrypted frames delivered to the phone");
+}
+
 /// Feed `p` through ingress under `mode` and assert it was, or was not, handed to the radio - and
 /// that nothing else happened to it either way.
 static void assertOpaqueRelay(const meshtastic_MeshPacket &p, meshtastic_Config_DeviceConfig_RebroadcastMode mode,
                               bool expectRelay, const char *why)
 {
     pipelineRadio->reset();
-    pipelineRouting->ackCalls = 0;
+    pipelineRouting->reset();
     pipelineModule->calls = 0;
     config.device.rebroadcast_mode = mode;
     meshtastic_MeshPacket copy = p;
@@ -427,7 +551,19 @@ static RelayIdentity installOurIdentity()
     RelayIdentity us = makeIdentity(LOCAL_NODE);
     mockNodeDB->addNode(LOCAL_NODE);
     mockNodeDB->setPublicKey(LOCAL_NODE, us.pub);
+    // NodeDB always holds a User for our own node, and the rebroadcast_mode predicates read that bit.
+    mockNodeDB->markHasUser(LOCAL_NODE);
     return us;
+}
+
+/// Put this node into licensed mode the way the device does: `owner` and our own NodeDB record agree,
+/// so getLicenseStatus(us) says Licensed rather than NotLicensed.
+static void markOurselvesLicensed()
+{
+    owner.is_licensed = true;
+    if (!mockNodeDB->getMeshNode(LOCAL_NODE))
+        mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->markLicenseStatus(LOCAL_NODE, true);
 }
 
 /// A decodable, unsigned channel broadcast from `from` to `to`, as a plain-text relay would see it.
@@ -439,6 +575,16 @@ static meshtastic_MeshPacket makeChannelBroadcastFrom(NodeNum from, NodeNum to, 
     p.hop_start = 2;
     p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     return channelEncode(p);
+}
+
+/// The second copy of `p` a neighbour would put back on the air: same (from,id), one hop spent.
+static meshtastic_MeshPacket makeRelayedCopy(const meshtastic_MeshPacket &p)
+{
+    meshtastic_MeshPacket copy = p;
+    if (copy.hop_limit > 0)
+        copy.hop_limit--;
+    copy.relay_node = 0x42;
+    return copy;
 }
 
 // ---------------------------------------------------------------------------
@@ -506,19 +652,27 @@ static void pipelineHarnessSetUp()
     channels.initDefaults();
     channels.onConfigChanged();
 
+    // The router, radio, routing module and crypto engine are built once per process, so every
+    // piece of state they carry has to be cleared here or it decides the next test's outcome.
     pipelineRouter->clearPending();
+    pipelineRouter->clearOpaqueSeen();
     pipelineRouter->rxDupe = 0;
     pipelineRouter->txRelayCanceled = 0;
     pipelineRadio->reset();
-    pipelineRouting->ackCalls = 0;
-    pipelineRouting->lastErr = meshtastic_Routing_Error_NONE;
+    pipelineRouting->reset();
     pipelineModule->calls = 0;
     pipelineMqtt->clearQueue();
-    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
-        packetPool.release(queued);
+    drainPhoneQueue();
     while (meshtastic_QueueStatus *queued = pipelineService->getQueueStatusForPhone())
         pipelineService->releaseQueueStatusToPool(queued);
-    resetRoutingAuthEvaluationCount();
+    resetRoutingAuthEvaluationCount(); // also invalidates the single-slot auth cache
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // No DH key and no in-flight handshake key: a test that wants either installs its own.
+    uint8_t noKey[32] = {0};
+    crypto->setDHPrivateKey(noKey);
+    crypto->clearPendingPublicKey();
+    resetAdminKeyFallbackBudget(); // a suite that drains the bucket must not starve the next one
+#endif
 }
 
 /// Drop the NodeDB and put the clock and region back. Runs here, not at the end of a test body:

@@ -889,18 +889,6 @@ static void preparePipelineSigner(NodeNum sender)
     mockNodeDB->setPublicKey(sender, pub);
 }
 
-/// Drain the phone queue, asserting exactly `n` still-encrypted frames were delivered.
-static void expectEncryptedPhoneDeliveries(int n)
-{
-    int seen = 0;
-    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
-        TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, queued->which_payload_variant);
-        packetPool.release(queued);
-        seen++;
-    }
-    TEST_ASSERT_EQUAL_MESSAGE(n, seen, "encrypted frames delivered to the phone");
-}
-
 static void assertNoRejectedPipelineEffects(NodeNum sender, uint32_t lastHeardBefore)
 {
     TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
@@ -1175,7 +1163,7 @@ void test_C9_known_channel_junk_broadcast_is_relayed_not_delivered(void)
                                       meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
                                       meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY);
         pipelineRadio->reset();
-        pipelineRouting->ackCalls = 0;
+        pipelineRouting->reset();
         config.device.rebroadcast_mode = mode;
         meshtastic_MeshPacket copy = junk;
         copy.id += (uint32_t)mode;
@@ -1898,7 +1886,7 @@ void test_C18_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void
 
     for (const auto mode : ALL_MODES) {
         pipelineRadio->reset();
-        pipelineRouting->ackCalls = 0;
+        pipelineRouting->reset();
         config.device.rebroadcast_mode = mode;
         meshtastic_MeshPacket copy = dm;
         copy.id += (uint32_t)mode;
@@ -1924,12 +1912,21 @@ void test_C18_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void
 // must REJECT (from-us decode failure), not hand it to the opaque path.
 void test_C19_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction(void)
 {
-    const RelayIdentity us = installOurIdentity();
-    useDHKey(us.priv);
     const RelayIdentity target = makeIdentity(TARGET_NODE);
     const RelayIdentity forger = makeIdentity(LOCAL_NODE);
     meshtastic_MeshPacket p = makePkiUnicastBetween(forger, target, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA60006, true);
     p.to = LOCAL_NODE; // to us, "from" us
+
+    // Control: with no identity of ours in NodeDB the frame is not a PKI candidate, so nothing is
+    // attempted and it is merely unreadable. The REJECT below is therefore the from-us decode-failure
+    // arm and not the key mismatch, which is present in both cases.
+    meshtastic_MeshPacket controlCopy = p;
+    TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY),
+                              static_cast<int>(passesRoutingAuthGate(&controlCopy)),
+                              "without our key the same frame is opaque, not rejected");
+
+    const RelayIdentity us = installOurIdentity();
+    useDHKey(us.priv);
     meshtastic_MeshPacket verdictCopy = p;
     TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&verdictCopy)));
     runPipelineIngress(p);
