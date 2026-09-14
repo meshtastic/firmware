@@ -248,6 +248,17 @@ assert "IRQ on DIO5 with the table elsewhere is clean" 0 rfswitch-lr2021-irq-cle
 assert "IRQ pin listed but never driven HIGH" 1 rfswitch-lr2021-irq-all-low.yaml check \
 	"Lora.IRQ_DIO_NUM is DIO5, which Lora.rfswitch_table.pins also drives" \
 	"Result: 1 error, 0 warnings"
+# Out of range is discarded at load, so the merged view sees an absent key: only the per-file
+# pass still knows a value was written at all.
+assert "IRQ DIO outside DIO5-DIO11" 1 rfswitch-lr2021-irq-out-of-range.yaml check \
+	"Lora.IRQ_DIO_NUM is 3, outside DIO5-DIO11" \
+	"IRQ DIO           : DIO5 (radio default)" \
+	"Result: 1 error, 0 warnings"
+# The older spelling is accepted, but never over the generic key.
+assert "LR2021_IRQ_DIO_NUM is shadowed by IRQ_DIO_NUM" 0 rfswitch-lr2021-irq-alias.yaml check \
+	"Lora.LR2021_IRQ_DIO_NUM is the older spelling" \
+	"IRQ DIO           : DIO9" \
+	"Result: 0 errors, 1 warning"
 # The collision check is gated on there being a table, so only the missing table is reported.
 assert "LR20x0 without a table cannot transmit" 0 rfswitch-lr2021-no-table.yaml check \
 	"Module is lr2021 but no Lora.rfswitch_table is set" \

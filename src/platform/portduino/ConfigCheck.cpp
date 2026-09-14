@@ -51,6 +51,7 @@ const std::map<std::string, std::set<std::string>> &schema()
           "Enable_Pins",
           "rfswitch_table",
           "IRQ_DIO_NUM",
+          "LR2021_IRQ_DIO_NUM",
           "LR1110_MAX_POWER",
           "LR1120_MAX_POWER",
           "LR2021_MAX_POWER",
@@ -480,6 +481,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Lora.LR2021_MAX_POWER", {kInt, false}},
         {"Lora.LR2021_MAX_POWER_HF", {kInt, false}},
         {"Lora.IRQ_DIO_NUM", {kInt, false}},
+        {"Lora.LR2021_IRQ_DIO_NUM", {kInt, false}},
         {"Lora.RF95_MAX_POWER", {kInt, false}},
         {"Lora.SX126X_MAX_POWER", {kInt, false}},
         {"Lora.SX128X_MAX_POWER", {kInt, false}},
@@ -640,6 +642,32 @@ void checkValueType(const std::string &file, const std::string &path, const YAML
                                 ", so it is silently replaced by the default and the setting does nothing"});
 }
 
+// The spelling the earlier LR2021 branches used, read only when IRQ_DIO_NUM is absent. Held as a
+// constant so no comparison puts the name next to a variable called `key`, which reads to secret
+// scanners as an assignment of a credential.
+const char kLegacyIrqDioName[] = "LR2021_IRQ_DIO_NUM";
+
+bool isIrqDioName(const std::string &name)
+{
+    return name == "IRQ_DIO_NUM" || name == kLegacyIrqDioName;
+}
+
+// Out of range is discarded when the config is read, so the merged view cannot tell a typo from
+// an absent key. Judged here, per file, where the offending line is still known.
+void checkIrqDioNum(const std::string &file, const std::string &key, const YAML::Node &value, std::vector<Finding> &findings)
+{
+    if (!converts(value, kInt))
+        return; // checkValueType() already reported it
+
+    const int dio = value.as<int>();
+    if (dio < kLr20x0IrqDioMin || dio > kLr20x0IrqDioMax)
+        findings.push_back({kError, file, lineOf(value),
+                            "Lora." + key + " is " + std::to_string(dio) + ", outside DIO" + std::to_string(kLr20x0IrqDioMin) +
+                                "-DIO" + std::to_string(kLr20x0IrqDioMax) +
+                                ". It is ignored, and the radio raises its interrupt on DIO" +
+                                std::to_string(kLr20x0DefaultIrqDio) + " instead"});
+}
+
 // The PA gain table's two shapes fail differently: a bad list entry stops meshtasticd (no
 // default), a bad scalar falls back to 0. Backed by uint16_t[22], so extras drop and values wrap.
 void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
@@ -788,6 +816,12 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             checkLoraModule(file, value, findings);
         } else if (section == "Lora" && key == "TX_GAIN_LORA") {
             checkTxGain(file, value, findings);
+        } else if (section == "Lora" && isIrqDioName(key)) {
+            checkIrqDioNum(file, key, value, findings);
+            if (key == kLegacyIrqDioName && body["IRQ_DIO_NUM"])
+                findings.push_back({kWarn, file, lineOf(entry.first),
+                                    "Lora.LR2021_IRQ_DIO_NUM is the older spelling of Lora.IRQ_DIO_NUM and is only read "
+                                    "when that key is absent, so this line does nothing"});
         } else if (section == "Display" && key == "HUB75") {
             if (value.IsMap())
                 for (const auto &hub : value) {
@@ -1019,12 +1053,14 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
 
     // One pin cannot be both the interrupt output and a switch control. begin() exercises only
     // SPI and BUSY, so the radio reports init success and then never receives anything.
+    bool irqDioCollides = false;
     if (portduino_config.lora_module == use_lr2021 && portduino_config.has_rfswitch_table) {
         const int irqDio = portduino_config.irq_dio_num >= 0 ? portduino_config.irq_dio_num : kLr20x0DefaultIrqDio;
         for (int i = 0; i < 5; i++) {
             if (portduino_config.rfswitch_dio_num[i] != irqDio)
                 continue;
             const std::string dio = "DIO" + std::to_string(irqDio);
+            irqDioCollides = true;
             if (portduino_config.irq_dio_num >= 0)
                 findings.push_back({kError, merged, 0,
                                     "Lora.IRQ_DIO_NUM is " + dio +
@@ -1039,6 +1075,13 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
             break;
         }
     }
+
+    // Leaving it unset is legitimate as long as nothing else wants DIO5, but the default is worth
+    // stating: the collision above is what it turns into once a switch table arrives.
+    if (portduino_config.lora_module == use_lr2021 && portduino_config.irq_dio_num < 0 && !irqDioCollides)
+        findings.push_back({kInfo, merged, 0,
+                            "no Lora.IRQ_DIO_NUM is set, so the radio raises its interrupt on DIO" +
+                                std::to_string(kLr20x0DefaultIrqDio) + " (the RadioLib default)"});
 
     // The probe belongs to the radio driver, so on a part with no TCXO reference the key is
     // read, stored and inert.

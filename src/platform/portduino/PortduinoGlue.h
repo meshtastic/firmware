@@ -73,6 +73,11 @@ extern const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT];
 extern const int8_t kLr11x0SwitchDios[5];
 extern const int8_t kLr20x0SwitchDios[7];
 
+// DIOs an LR20x0 can raise its interrupt on. Anything outside this is refused when the config is
+// read and again before it reaches RadioLib, which would otherwise route the IRQ into the void.
+constexpr int kLr20x0IrqDioMin = 5;
+constexpr int kLr20x0IrqDioMax = 11;
+
 // A module's switch-capable DIO numbers, nullptr if it applies no table; count gets the length.
 const int8_t *rfSwitchDiosFor(lora_module_enum module, size_t *count);
 

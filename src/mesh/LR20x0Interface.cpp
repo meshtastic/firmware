@@ -127,12 +127,16 @@ template <typename T> bool LR20x0Interface<T>::init()
     lora.irqDioNum = IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
 #elif defined(ARCH_PORTDUINO)
-    // Unset keeps RadioLib's default of DIO5, which many carriers also drive as a switch line.
-    if (portduino_config.irq_dio_num >= 0) {
+    // Unset keeps RadioLib's default of DIO5, which many carriers also drive as a switch line. The
+    // range is checked again here because a DIO the radio cannot drive is a silently dead receiver.
+    if (portduino_config.irq_dio_num < 0) {
+        LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+    } else if (portduino_config.irq_dio_num >= kLr20x0IrqDioMin && portduino_config.irq_dio_num <= kLr20x0IrqDioMax) {
         lora.irqDioNum = portduino_config.irq_dio_num;
         LOG_DEBUG("Set irqDioNum %d from config", lora.irqDioNum);
     } else {
-        LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+        LOG_WARN("Config irqDioNum %d outside DIO%d-DIO%d, using default irqDioNum %d", portduino_config.irq_dio_num,
+                 kLr20x0IrqDioMin, kLr20x0IrqDioMax, lora.irqDioNum);
     }
 #else
     LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);

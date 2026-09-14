@@ -1133,9 +1133,19 @@ bool loadConfig(const char *configPath)
                     portduino_config.rfswitch_mode_high[m] = high;
                 }
             }
-            // IRQ DIO for the LR20x0 driver; unset leaves RadioLib's default of DIO5.
-            if (yamlConfig["Lora"]["IRQ_DIO_NUM"])
-                portduino_config.irq_dio_num = yamlConfig["Lora"]["IRQ_DIO_NUM"].as<int>(-1);
+            // IRQ DIO for the LR20x0 driver; unset leaves RadioLib's default of DIO5. LR2021_IRQ_DIO_NUM
+            // is the older spelling, read only when the generic key is absent.
+            const char *irqDioKey = yamlConfig["Lora"]["IRQ_DIO_NUM"]
+                                        ? "IRQ_DIO_NUM"
+                                        : (yamlConfig["Lora"]["LR2021_IRQ_DIO_NUM"] ? "LR2021_IRQ_DIO_NUM" : nullptr);
+            if (irqDioKey) {
+                const int irqDio = yamlConfig["Lora"][irqDioKey].as<int>(-1);
+                if (irqDio >= kLr20x0IrqDioMin && irqDio <= kLr20x0IrqDioMax)
+                    portduino_config.irq_dio_num = irqDio;
+                else
+                    LOG_WARN("Lora.%s is %d, outside DIO%d-DIO%d; ignoring it and using the radio default", irqDioKey, irqDio,
+                             kLr20x0IrqDioMin, kLr20x0IrqDioMax);
+            }
         }
         readGPIOFromYaml(yamlConfig["GPIO"]["User"], portduino_config.userButtonPin);
         if (yamlConfig["GPS"]) {
