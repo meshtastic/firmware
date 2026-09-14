@@ -800,11 +800,13 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 }
 #endif
 
-RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
+RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p, DecodeState *decodeState)
 {
     // Routing still needs the original encrypted representation for byte-for-byte relay and for
     // MQTT uplink. Authenticate a copy here; handleReceived() performs the normal in-place decode
     // only after stateful routing filters have completed.
+    if (decodeState)
+        *decodeState = DecodeState::DECODE_SUCCESS;
     if (routingAuthCacheMatches(*p))
         return RoutingAuthVerdict::ACCEPT;
 
@@ -829,6 +831,8 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         return RoutingAuthVerdict::ACCEPT;
     }
     const DecodeState state = perhapsDecode(&authCandidate);
+    if (decodeState)
+        *decodeState = state;
     if (state == DecodeState::DECODE_POLICY_REJECT) {
         LOG_WARN("Packet rejected by signature policy");
         return RoutingAuthVerdict::REJECT;
@@ -923,6 +927,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
         LOG_DEBUG("Node 0x%08x not in nodeDB, Rebroadcast KNOWN_ONLY ignores packet", p->from);
+        // Declined before any attempt: a stranger's PKI DM has no key to try, a held channel does.
+        if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
+            ((p->channel == 0 && isToUs(p) && !isBroadcast(p->to)) || !channels.hasHash(p->channel)))
+            return DecodeState::DECODE_OPAQUE;
         return DecodeState::DECODE_FAILURE;
     }
 
@@ -951,7 +959,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     if (pkiCandidate && owner.is_licensed) {
         licensedPkiCandidate = true;
     } else if (pkiCandidate) {
-        pkiAttempted = true;
         LOG_TRACE("Attempt PKI decryption");
         // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
         // packet: copyPublicKeyForDecrypt() can fall through to a linear scan of TrafficManagement's large
@@ -971,6 +978,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
         bool viaPendingKey = false;
+        // pkiAttempted means a key was tried: without one the frame is opaque, not a failed decrypt.
+        pkiAttempted = haveRemoteKey;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
             viaPendingKey = havePendingKey;
@@ -979,6 +988,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             for (int i = 0; i < 3 && !decrypted; i++) {
                 if (config.security.admin_key[i].size != 32)
                     continue;
+                pkiAttempted = true;
                 remotePublic.size = 32;
                 memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
 
@@ -1628,27 +1638,13 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
 }
 
-/// A packet we had no way to read: PKI without the sender's key, or a channel we do not hold. A
-/// packet we matched and failed on (bad key, tampering, junk) is not one of these.
-static bool isUnreadableToUs(const meshtastic_MeshPacket *p)
-{
-    if (p->channel == 0) {
-        meshtastic_NodeInfoLite_public_key_t senderKey;
-        return !nodeDB->copyPublicKeyForDecrypt(p->from, senderKey);
-    }
-    for (ChannelIndex i = 0; i < channels.getNumChannels(); i++)
-        if (channels.getHash(i) == p->channel)
-            return false;
-    return true;
-}
-
 /// Undecryptable and addressed to us (or broadcast): NAK a want_ack unicast with the reason, and hand
-/// a frame we had no way to read to the phone. Header-only; nothing enters NodeDB or history.
-void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p)
+/// a frame we had no way to read to the phone. `unreadable` is the auth gate's DECODE_OPAQUE (no key,
+/// no channel) as opposed to a frame we matched and failed on. Header-only; nothing enters NodeDB.
+void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable)
 {
     if (isFromUs(p) || p->from == 0)
         return;
-    const bool unreadable = isUnreadableToUs(p);
     if (isToUs(p) && p->want_ack && !isBroadcast(p->to) && routingModule) {
         const auto err =
             (p->channel == 0 && unreadable) ? meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY : meshtastic_Routing_Error_NO_CHANNEL;
@@ -1729,7 +1725,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 
     // Decrypt and authenticate before Reliable/Flooding/NextHop filters can update retry timers,
     // history, ACK state or relay queues. An unreadable packet touches no local state at all.
-    const auto authVerdict = passesRoutingAuthGate(p);
+    DecodeState gateState;
+    const auto authVerdict = passesRoutingAuthGate(p, &gateState);
     if (authVerdict == RoutingAuthVerdict::REJECT) {
         packetPool.release(p);
         return;
@@ -1741,7 +1738,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         // generate it here from the still-encrypted packet before opaque relay.
         if (isFromUs(p))
             perhapsGenerateImplicitAckForOwnOverheard(p);
-        handleOpaqueForUs(p);
+        handleOpaqueForUs(p, gateState == DecodeState::DECODE_OPAQUE);
         relayOpaquePacket(p);
         uplinkOpaqueUnicast(p);
         packetPool.release(p);
