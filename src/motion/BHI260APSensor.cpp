@@ -62,10 +62,10 @@ bool BHI260APSensor::init()
         LOG_INFO("Product ID     : %02x\n", info.product_id);
         LOG_INFO("Kernel version : %04u\n", info.kernel_version);
         LOG_INFO("User version   : %04u\n", info.user_version);
-        LOG_INFO("ROM version    : %04u\n", info.getRomVersion());
-        LOG_INFO("Power state    : %s\n", (info.getHostStatus() & BHY2_HST_POWER_STATE) ? "sleeping" : "active");
-        LOG_INFO("Host interface : %s\n", (info.getHostStatus() & BHY2_HST_HOST_PROTOCOL) ? "SPI" : "I2C");
-        LOG_INFO("Feature status : 0x%02x\n", info.getFeatStatus());
+        LOG_INFO("ROM version    : %04u\n", info.rom_version);
+        LOG_INFO("Power state    : %s\n", (info.host_status & BHY2_HST_POWER_STATE) ? "sleeping" : "active");
+        LOG_INFO("Host interface : %s\n", (info.host_status & BHY2_HST_HOST_PROTOCOL) ? "SPI" : "I2C");
+        LOG_INFO("Feature status : 0x%02x\n", info.feat_status);
 
         stepCounter = new SensorStepCounter(sensor);
         gameRotation = new SensorQuaternion(sensor);
@@ -191,8 +191,6 @@ int32_t BHI260APSensor::runOnce()
     if (stepCounter && stepCounter->hasUpdated()) {
         steps = stepCounter->getStepCount();
         LOG_WARN("Step count updated: %u", steps);
-        if (screen)
-            screen->steps = steps;
     }
     if (wakeRequested) {
         wakeRequested = false;
