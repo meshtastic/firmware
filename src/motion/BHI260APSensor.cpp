@@ -55,9 +55,8 @@ bool BHI260APSensor::init()
     sensor.setFirmware(bosch_firmware_image, bosch_firmware_size, bosch_firmware_type);
     sensor.setBootFromFlash(bosch_firmware_type);
     if (sensor.begin(Wire, deviceAddress())) {
-        // Existing T-Echo Plus mounting remap. The navigation assist below uses
-        // the already-remapped axes, so no second board-orientation transform is applied.
-        sensor.setRemapAxes(SensorRemap::TOP_LAYER_BOTTOM_RIGHT_CORNER);
+        // Keep the library's default axis mapping. SensorRemap is not part of
+        // the SensorBHI260AP API used by this build.
         BoschSensorInfo info = sensor.getSensorInfo();
         LOG_INFO("Product ID     : %02x\n", info.getProductId());
         LOG_INFO("Kernel version : %04u\n", info.getKernelVersion());
