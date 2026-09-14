@@ -13,6 +13,7 @@
 #ifdef ARCH_NRF54L
 // The nRF54L core compiles the nrfx drivers itself (nrfx 3: errno-style returns, 0 is success);
 // POWER/RESET registers are split differently.
+#include <nRF54Crypto.h>
 #include <nrfx_wdt.h>
 #define NRFX_OK 0
 #define GPREGRET_REG NRF_POWER->GPREGRET[0]
@@ -391,8 +392,14 @@ void checkSDEvents()
                 flash_nrf5x_event_cb(evt);
                 break;
 #ifdef ARCH_NRF54L
-            case NRF_EVT_RAND_SEED_REQUEST: // seeded unconditionally by Bluefruit.begin()
+            case NRF_EVT_RAND_SEED_REQUEST: {
+                uint8_t seed[SD_RAND_SEED_SIZE];
+                nRF54Crypto.begin();
+                if (nRF54Crypto.random(seed, sizeof(seed)))
+                    sd_rand_seed_set(seed);
+                nRF54Crypto.end();
                 break;
+            }
 #endif
 
             default:

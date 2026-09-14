@@ -475,22 +475,6 @@ std::unique_ptr<RadioInterface> initLoRa()
     }
 #endif
 
-// Probed before the SX126x family: boards that accept either module route the SX126x control
-// lines over pins the LR2021 leaves alone (see xiao_nrf54l15).
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
-    if (!rIf) {
-        rIf = std::unique_ptr<LR2021Interface>(
-            new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
-        if (!rIf->init()) {
-            LOG_WARN("No LR2021 radio");
-            rIf = nullptr;
-        } else {
-            LOG_INFO("LR2021 init success");
-            radioType = LR2021_RADIO;
-        }
-    }
-#endif
-
 #if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL) && RADIOLIB_EXCLUDE_SX126X != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         auto sxIf =
@@ -618,6 +602,20 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             LOG_INFO("LR1121 init success");
             radioType = LR1121_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+    if (!rIf) {
+        rIf = std::unique_ptr<LR2021Interface>(
+            new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
+        if (!rIf->init()) {
+            LOG_WARN("No LR2021 radio");
+            rIf = nullptr;
+        } else {
+            LOG_INFO("LR2021 init success");
+            radioType = LR2021_RADIO;
         }
     }
 #endif
