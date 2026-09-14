@@ -186,7 +186,8 @@ bool willUsePki(const meshtastic_MeshPacket *p)
         meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
         if (nodeDB)
             haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
-        if (!haveDestKey && p->pki_encrypted)
+        // Same condition as perhapsEncode(), or the two disagree about a pending handshake key.
+        if (!haveDestKey && p->pki_encrypted && p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP)
             haveDestKey = crypto->getPendingPublicKey(p->to, destKey);
     }
     return wouldEncryptWithPKC(p, getEffectiveChannelIndex(p), haveDestKey);

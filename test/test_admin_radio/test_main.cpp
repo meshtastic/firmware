@@ -2510,6 +2510,59 @@ static void test_presetForRegionSelection_ignoresNodesOnRawModemSettings()
 // Test runner
 // -----------------------------------------------------------------------
 
+// PKC_ALWAYS means every routine send on that port is a unicast to a key we must already hold. If the
+// key is missing the setting would save and then fail at encode on every interval, so the handler
+// refuses it - and says which key, because a bare BAD_REQUEST leaves the user guessing.
+static void test_handleSetConfig_positionPkcAlwaysWithoutKeyRefused()
+{
+    config.position = meshtastic_Config_PositionConfig_init_zero;
+    config.position.position_dest = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
+    c.payload_variant.position.position_dest = 0x1234abcd; // no such node, so no key for it
+
+    TEST_ASSERT_FALSE(testAdmin->handleSetConfig(c, false));
+    TEST_ASSERT_EQUAL_MESSAGE(0, config.position.position_dest, "a refused config applies nothing");
+    TEST_ASSERT_EQUAL(0, config.position.policy_flags);
+    TEST_ASSERT_EQUAL_MESSAGE(1, capturedWarnings.size(), "the user is told why, not just that it failed");
+    TEST_ASSERT_TRUE(capturedWarnings[0].find("1234abcd") != std::string::npos);
+}
+
+static void test_handleSetModuleConfig_telemetryPkcAlwaysWithoutKeyRefused()
+{
+    moduleConfig.telemetry = meshtastic_ModuleConfig_TelemetryConfig_init_zero;
+    meshtastic_ModuleConfig c = meshtastic_ModuleConfig_init_zero;
+    c.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
+    c.payload_variant.telemetry.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
+    c.payload_variant.telemetry.environment_dest = 0x5678ef01; // any one sub-type destination is enough
+
+    TEST_ASSERT_FALSE(testAdmin->handleSetModuleConfig(c));
+    TEST_ASSERT_EQUAL_MESSAGE(0, moduleConfig.telemetry.environment_dest, "a refused config applies nothing");
+    TEST_ASSERT_EQUAL(1, capturedWarnings.size());
+    TEST_ASSERT_TRUE(capturedWarnings[0].find("5678ef01") != std::string::npos);
+}
+
+// The same setting with a key on file is accepted, so the gate is the key and not the flag.
+static void test_handleSetConfig_positionPkcAlwaysWithKeyAccepted()
+{
+    config.position = meshtastic_Config_PositionConfig_init_zero;
+    constexpr NodeNum keyed = 0x1234abcd;
+    meshtastic_NodeInfoLite *n = nodeDB->getOrCreateMeshNode(keyed);
+    TEST_ASSERT_NOT_NULL(n);
+    n->public_key.size = 32;
+    memset(n->public_key.bytes, 0x5a, 32);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position.policy_flags = meshtastic_PortPolicyFlags_PKC_ALWAYS;
+    c.payload_variant.position.position_dest = keyed;
+
+    testAdmin->handleSetConfig(c, false);
+    TEST_ASSERT_EQUAL(keyed, config.position.position_dest);
+    TEST_ASSERT_EQUAL_MESSAGE(0, capturedWarnings.size(), "nothing to warn about when the key is held");
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -2625,6 +2678,9 @@ void setup()
     RUN_TEST(test_channelSpacingCalculation_placeholder);
 
     // handleSetConfig fromOthers dispatch
+    RUN_TEST(test_handleSetConfig_positionPkcAlwaysWithoutKeyRefused);
+    RUN_TEST(test_handleSetConfig_positionPkcAlwaysWithKeyAccepted);
+    RUN_TEST(test_handleSetModuleConfig_telemetryPkcAlwaysWithoutKeyRefused);
     RUN_TEST(test_handleSetConfig_fromOthers_invalidPresetRejected);
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);

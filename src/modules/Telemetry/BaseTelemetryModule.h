@@ -19,10 +19,10 @@ class BaseTelemetryModule
     static NodeNum routineDest(uint32_t configured) { return configured ? (NodeNum)configured : NODENUM_BROADCAST; }
 
     /// Admin gate for a telemetry config: PKC_ALWAYS needs a key for every routine destination.
-    static bool pkcOnlyDestsHaveKeys(const meshtastic_ModuleConfig_TelemetryConfig &t)
+    static bool pkcOnlyDestsHaveKeys(const meshtastic_ModuleConfig_TelemetryConfig &t, char *why = nullptr, size_t whyLen = 0)
     {
         const uint32_t dests[] = {t.device_dest, t.environment_dest, t.air_quality_dest, t.power_dest, t.health_dest};
-        return pkcAlwaysDestsHaveKeys(t.policy_flags, dests, sizeof(dests) / sizeof(dests[0]));
+        return pkcAlwaysDestsHaveKeys(t.policy_flags, dests, sizeof(dests) / sizeof(dests[0]), why, whyLen);
     }
 
   protected:
