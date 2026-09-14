@@ -21,11 +21,20 @@
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
+#include "T5Applet.h"
+
 // TEMPORARY touch calibration overlay: crosshair + coordinates at the last tap. Remove after hardware validation.
 // Renders only on full re-renders (never clears its fullscreen tile) and skips drawing after a rotation change.
 class TouchCalibrationApplet : public NicheGraphics::InkHUD::SystemApplet
 {
   public:
+    // Nav cell 1-6 as T5Applet hit-tests it, or 0 in the Console mode slot
+    static int navCell(int16_t x, uint16_t w, uint16_t h)
+    {
+        const uint16_t navW = w > h ? w - NicheGraphics::InkHUD::T5Applet::CONSOLE_SLOT_W : w;
+        return x < navW ? x * 6 / navW + 1 : 0;
+    }
+
     static void mark(int16_t tx, int16_t ty)
     {
         using namespace NicheGraphics::InkHUD;
@@ -44,7 +53,7 @@ class TouchCalibrationApplet : public NicheGraphics::InkHUD::SystemApplet
         applet->y = ty;
         applet->markedRotation = inkhud->persistence->settings.rotation;
         LOG_INFO("T5 touch cal: (%d, %d) in %ux%u, nav cell %d/6", tx, ty, inkhud->width(), inkhud->height(),
-                 tx * 6 / inkhud->width() + 1);
+                 navCell(tx, inkhud->width(), inkhud->height()));
         inkhud->forceUpdate(NicheGraphics::Drivers::EInk::UpdateTypes::FAST, true, true);
     }
 
@@ -57,7 +66,7 @@ class TouchCalibrationApplet : public NicheGraphics::InkHUD::SystemApplet
         drawLine(x - 24, y, x + 24, y, BLACK);
         drawLine(x, y - 24, x, y + 24, BLACK);
         char buf[40];
-        snprintf(buf, sizeof(buf), "%d,%d %dx%d c%d", x, y, width(), height(), x * 6 / width() + 1);
+        snprintf(buf, sizeof(buf), "%d,%d %dx%d c%d", x, y, width(), height(), navCell(x, width(), height()));
         setFont(fontSmall);
         const bool left = x < width() / 2, top = y < height() / 2;
         printAt(left ? x + 30 : x - 30, top ? y + 30 : y - 30, buf, left ? LEFT : RIGHT, top ? TOP : BOTTOM);
