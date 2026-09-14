@@ -254,6 +254,12 @@ assert "IRQ DIO outside DIO5-DIO11" 1 rfswitch-lr2021-irq-out-of-range.yaml chec
 	"Lora.IRQ_DIO_NUM is 3, outside DIO5-DIO11" \
 	"IRQ DIO           : DIO5 (radio default)" \
 	"Result: 1 error, 0 warnings"
+# A rejected override must not leave the earlier file's value in place: the warning promises the
+# radio default, so the merged view has to show it.
+assert "out-of-range override drops back to the radio default" 1 irq-stale-override/config.yaml check \
+	"Lora.IRQ_DIO_NUM is 3, outside DIO5-DIO11" \
+	"IRQ DIO           : DIO5 (radio default)" \
+	"!IRQ DIO           : DIO9"
 # The older spelling is accepted, but never over the generic key.
 assert "LR2021_IRQ_DIO_NUM is shadowed by IRQ_DIO_NUM" 0 rfswitch-lr2021-irq-alias.yaml check \
 	"Lora.LR2021_IRQ_DIO_NUM is the older spelling" \

@@ -1142,9 +1142,13 @@ bool loadConfig(const char *configPath)
                 const int irqDio = yamlConfig["Lora"][irqDioKey].as<int>(-1);
                 if (irqDio >= kLr20x0IrqDioMin && irqDio <= kLr20x0IrqDioMax)
                     portduino_config.irq_dio_num = irqDio;
-                else
+                else {
+                    // Back to unset, or a valid value from an earlier config.d file would survive the
+                    // warning and be used in place of the default it promises.
+                    portduino_config.irq_dio_num = -1;
                     LOG_WARN("Lora.%s is %d, outside DIO%d-DIO%d; ignoring it and using the radio default", irqDioKey, irqDio,
                              kLr20x0IrqDioMin, kLr20x0IrqDioMax);
+                }
             }
         }
         readGPIOFromYaml(yamlConfig["GPIO"]["User"], portduino_config.userButtonPin);
