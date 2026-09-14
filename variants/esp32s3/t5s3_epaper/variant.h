@@ -58,10 +58,10 @@ void t5SetHomeCapButtonEventsEnabled(bool enabled);
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 // InkHUD Carry (portrait, 508x928) / Console (landscape, 928x508) mode. Value is the InkHUD rotation.
-// Rotations 0 and 2 are both landscape: confirm on hardware which is upright for CONSOLE.
+// Console uses rotation 0 (not 2) so the side key sits on the right edge.
 enum class T5Mode : uint8_t {
     CARRY = 3,
-    CONSOLE = 2,
+    CONSOLE = 0,
 };
 T5Mode t5CurrentMode();
 void t5SetMode(T5Mode mode);
