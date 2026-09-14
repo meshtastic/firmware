@@ -256,7 +256,7 @@ static std::string jsonNum(double v)
 
 // mbedtls_ssl_write() takes one TLS record per call and short-counts the rest; neither the server
 // library nor Print::print() loops on that, so a longer body was silently cut at the record edge.
-static void writeAll(HTTPResponse *res, const std::string &body)
+static bool writeAll(HTTPResponse *res, const std::string &body)
 {
     size_t sent = 0;
     while (sent < body.size()) {
@@ -264,9 +264,10 @@ static void writeAll(HTTPResponse *res, const std::string &body)
         const size_t written = res->write(reinterpret_cast<const uint8_t *>(body.data()) + sent, remaining);
         // An error code arrives as a huge count, write() returning mbedtls' int through a size_t.
         if (written == 0 || written > remaining)
-            return;
+            return false;
         sent += written;
     }
+    return true;
 }
 
 // Build a serialized JSON array string listing files in `dirname`.
@@ -765,7 +766,8 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     // an operator new that aborts rather than throws.
     std::string out;
     out.reserve(320);
-    writeAll(res, "{\"data\":{\"nodes\":[");
+    if (!writeAll(res, "{\"data\":{\"nodes\":["))
+        return;
 
     bool firstNode = true;
     uint32_t readIndex = 0;
@@ -818,7 +820,8 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
             out += ",\"via_mqtt\":";
             out += jsonEscape(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
             out += "}";
-            writeAll(res, out);
+            if (!writeAll(res, out))
+                return;
         }
         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     }
