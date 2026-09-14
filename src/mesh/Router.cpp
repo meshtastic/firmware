@@ -838,9 +838,8 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
-        // One-byte hash collisions are indistinguishable from tampering, so treat as opaque instead of
-        // blackholing: relayed if not for us, NAKed and shown to the phone if it is. isFromUs stays
-        // REJECT to keep forged senders off the ACK path.
+        // A hash collision is indistinguishable from tampering, so treat it as opaque: relayed if not for
+        // us, NAKed and shown to the phone if it is. isFromUs stays REJECT to keep forgeries off the ACK path.
         if (!isFromUs(p)) {
             LOG_WARN("Decryptable packet failed decoding, handle as opaque");
             return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
@@ -1643,9 +1642,8 @@ static bool isUnreadableToUs(const meshtastic_MeshPacket *p)
     return true;
 }
 
-/// An undecryptable packet addressed to us, or a broadcast on a channel we lack. A want_ack unicast
-/// gets the NAK that tells the sender why (PKI_UNKNOWN_PUBKEY makes it send us its NodeInfo), and a
-/// frame we had no way to read still reaches the phone. Header-only; nothing enters NodeDB or history.
+/// Undecryptable and addressed to us (or broadcast): NAK a want_ack unicast with the reason, and hand
+/// a frame we had no way to read to the phone. Header-only; nothing enters NodeDB or history.
 void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p)
 {
     if (isFromUs(p) || p->from == 0)
@@ -1729,10 +1727,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
-    // Decrypt and authenticate before Reliable/Flooding/NextHop filters can update retry
-    // timers, packet history, implicit ACK state, cancellation, or relay queues. A packet we
-    // cannot read touches no local state: it is relayed per rebroadcast_mode, handed to the phone
-    // if addressed here or broadcast, NAKed if it wanted an ACK, and uplinked if it is a PKI DM.
+    // Decrypt and authenticate before Reliable/Flooding/NextHop filters can update retry timers,
+    // history, ACK state or relay queues. An unreadable packet touches no local state at all.
     const auto authVerdict = passesRoutingAuthGate(p);
     if (authVerdict == RoutingAuthVerdict::REJECT) {
         packetPool.release(p);

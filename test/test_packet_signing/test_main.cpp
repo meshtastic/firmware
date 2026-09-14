@@ -10,256 +10,27 @@
 //   Group C  routing pipeline ordering (authenticate before duplicate/retry/relay state)
 //   Group D  encoding invariants the routing gates depend on
 //   Group E  decoded-ingress policy (checkXeddsaReceivePolicy, the plaintext-MQTT trust boundary)
+//
+// What a relay carries per rebroadcast_mode lives in test_rebroadcast_mode; the ingress harness
+// both suites share is test/support/AuthPipelineHarness.h.
 
-#include "MeshTypes.h" // include BEFORE TestUtil.h
-#include "NodeStatus.h"
-#include "TestUtil.h"
-#include "airtime.h"
-#include "support/MockMeshService.h"
-#include <unity.h>
+#include "support/AuthPipelineHarness.h"
 
 // The whole suite exercises XEdDSA sign/verify and checkXeddsaReceivePolicy, all of which are
 // compiled out unless both PKI and XEdDSA are enabled (e.g. stm32 sets MESHTASTIC_EXCLUDE_XEDDSA).
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
-#include "UptimeClock.h"
-#include "mesh/Channels.h"
-#include "mesh/CryptoEngine.h"
-#include "mesh/MeshRadio.h"
-#include "mesh/MeshService.h"
-#include "mesh/NodeDB.h"
-#include "mesh/ReliableRouter.h"
-#include "mesh/Router.h"
-#include "mesh/SinglePortModule.h"
 #include "modules/NodeInfoModule.h"
-#include "modules/RoutingModule.h"
-#include "mqtt/MQTT.h"
+#include "support/MockMeshService.h"
 #include <ErriezCRC32.h>
-#include <cstdio>
-#include <cstring>
-#include <memory>
-#include <pb_decode.h>
-#include <pb_encode.h>
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Test fixture identifiers
-// ---------------------------------------------------------------------------
-static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
-static constexpr NodeNum REMOTE_NODE = 0x0B0B0B0B;
-
-// A "small" broadcast payload whose signed encoding easily fits a LoRa frame, and an "oversized"
-// one whose signed encoding does not, yet still encodes within a LoRa frame unsigned.
-static constexpr size_t SMALL_PAYLOAD = 16;
-static constexpr size_t OVERSIZED_PAYLOAD = 180;
-
-// ---------------------------------------------------------------------------
-// MockNodeDB - inject nodes with controlled public keys / signer bits.
-// Mirrors the pattern in test/test_hop_scaling. meshNodes/numMeshNodes are public on NodeDB.
-// ---------------------------------------------------------------------------
-class MockNodeDB : public NodeDB
-{
-  public:
-    void installDefaultsPreservingIdentity() { installDefaultConfig(true); }
-
-    void clearTestNodes()
-    {
-        testNodes.clear();
-        meshNodes = &testNodes;
-        numMeshNodes = 0;
-    }
-
-    // Add a bare node and return a stable handle (fetch via getMeshNode so the pointer stays valid
-    // even if the vector reallocates after later adds).
-    void addNode(NodeNum num)
-    {
-        meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_zero;
-        node.num = num;
-        testNodes.push_back(node);
-        meshNodes = &testNodes;
-        numMeshNodes = testNodes.size();
-    }
-
-    void setPublicKey(NodeNum num, const uint8_t *pubKey)
-    {
-        meshtastic_NodeInfoLite *n = getMeshNode(num);
-        TEST_ASSERT_NOT_NULL(n);
-        n->public_key.size = 32;
-        memcpy(n->public_key.bytes, pubKey, 32);
-    }
-
-    void setSignerBit(NodeNum num, bool value)
-    {
-        meshtastic_NodeInfoLite *n = getMeshNode(num);
-        TEST_ASSERT_NOT_NULL(n);
-        nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, value);
-    }
-
-    void markHasUser(NodeNum num)
-    {
-        meshtastic_NodeInfoLite *n = getMeshNode(num);
-        TEST_ASSERT_NOT_NULL(n);
-        nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
-    }
-
-    void setLongName(NodeNum num, const char *name)
-    {
-        meshtastic_NodeInfoLite *n = getMeshNode(num);
-        TEST_ASSERT_NOT_NULL(n);
-        strncpy(n->long_name, name, sizeof(n->long_name) - 1);
-        n->long_name[sizeof(n->long_name) - 1] = '\0';
-    }
-
-    const char *longName(NodeNum num)
-    {
-        meshtastic_NodeInfoLite *n = getMeshNode(num);
-        TEST_ASSERT_NOT_NULL(n);
-        return n->long_name;
-    }
-
-    std::vector<meshtastic_NodeInfoLite> testNodes;
-};
-
-static MockNodeDB *mockNodeDB = nullptr;
-
-class AuthPipelineRadio : public RadioInterface
-{
-  public:
-    ErrorCode send(meshtastic_MeshPacket *p) override
-    {
-        sendCalls++;
-        packetPool.release(p);
-        return failSend ? ERRNO_DISABLED : ERRNO_OK;
-    }
-    bool cancelSending(NodeNum, PacketId) override
-    {
-        cancelCalls++;
-        return true;
-    }
-    bool findInTxQueue(NodeNum, PacketId) override
-    {
-        findCalls++;
-        return false;
-    }
-    bool removePendingTXPacket(NodeNum, PacketId, uint32_t) override
-    {
-        removeCalls++;
-        return true;
-    }
-    uint32_t getPacketTime(uint32_t, bool = false) override { return 7; }
-    void reset()
-    {
-        sendCalls = cancelCalls = findCalls = removeCalls = 0;
-        failSend = false;
-    }
-
-    bool failSend = false;
-    uint32_t sendCalls = 0;
-    uint32_t cancelCalls = 0;
-    uint32_t findCalls = 0;
-    uint32_t removeCalls = 0;
-};
-
-class AuthPipelineRouter : public ReliableRouter
-{
-  public:
-    bool filter(meshtastic_MeshPacket *p) { return ReliableRouter::shouldFilterReceived(p); }
-    bool historyContains(const meshtastic_MeshPacket *p) { return wasSeenRecently(p, false); }
-    void remember(const meshtastic_MeshPacket *p) { wasSeenRecently(p, true); }
-    void forgetRelayer(uint8_t relay, PacketId id, NodeNum from) { removeRelayer(relay, id, from); }
-    bool handleUpgrade(meshtastic_MeshPacket *p) { return perhapsHandleUpgradedPacket(p); }
-    void addPending(const meshtastic_MeshPacket &p, uint32_t nextTx)
-    {
-        auto *copy = packetPool.allocCopy(p);
-        TEST_ASSERT_NOT_NULL(copy);
-        const GlobalPacketId key(copy);
-        pending.emplace(key, PendingPacket(copy, NUM_INTERMEDIATE_RETX));
-        pending.at(key).nextTxMsec = nextTx;
-    }
-    uint32_t pendingNextTx(NodeNum from, PacketId id)
-    {
-        PendingPacket *entry = findPendingPacket(from, id);
-        return entry ? entry->nextTxMsec : 0;
-    }
-    uint8_t pendingTotalAttempts(NodeNum from, PacketId id)
-    {
-        PendingPacket *entry = findPendingPacket(from, id);
-        return entry ? entry->initialNumRetransmissions + 1 : 0;
-    }
-    size_t pendingCount() const { return pending.size(); }
-    void clearPending()
-    {
-        for (auto &entry : pending)
-            packetPool.release(entry.second.packet);
-        pending.clear();
-    }
-};
-
-class AuthPipelineRoutingModule : public RoutingModule
-{
-  public:
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false,
-                    const meshtastic_MeshPacket * = nullptr) override
-    {
-        ackCalls++;
-        lastErr = err;
-    }
-    uint32_t ackCalls = 0;
-    meshtastic_Routing_Error lastErr = meshtastic_Routing_Error_NONE;
-};
-
-class AuthPipelineModule : public SinglePortModule
-{
-  public:
-    AuthPipelineModule() : SinglePortModule("authPipeline", meshtastic_PortNum_POSITION_APP) {}
-    ProcessMessage handleReceived(const meshtastic_MeshPacket &) override
-    {
-        calls++;
-        return ProcessMessage::CONTINUE;
-    }
-    uint32_t calls = 0;
-};
-
-class AuthPipelineMqtt : public MQTT
-{
-  public:
-    int queueSize() { return mqttQueue.numUsed(); }
-    void clearQueue()
-    {
-        while (QueueEntry *entry = mqttQueue.dequeuePtr(0))
-            delete entry;
-    }
-};
-
-static AuthPipelineRouter *pipelineRouter = nullptr;
-static AuthPipelineRadio *pipelineRadio = nullptr;
-static AuthPipelineRoutingModule *pipelineRouting = nullptr;
-static AuthPipelineModule *pipelineModule = nullptr;
-static AuthPipelineMqtt *pipelineMqtt = nullptr;
-static MeshService *pipelineService = nullptr;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Build a decoded packet with a deterministic payload of the requested size.
-static meshtastic_MeshPacket makeDecoded(NodeNum from, NodeNum to, meshtastic_PortNum port, size_t payloadLen)
-{
-    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
-    p.from = from;
-    p.to = to;
-    p.id = 0x12345678;
-    p.channel = 0; // primary channel index (perhapsEncode rewrites this to the channel hash)
-    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    p.decoded.portnum = port;
-    p.decoded.payload.size = payloadLen;
-    for (size_t i = 0; i < payloadLen; i++)
-        p.decoded.payload.bytes[i] = (uint8_t)(i & 0xff);
-    return p;
-}
-
-// Sign a decoded packet with the CryptoEngine's current key - used to simulate a *remote* signer,
-// because perhapsEncode only auto-signs packets that originate from us.
 static void signWithCurrentKey(meshtastic_MeshPacket *p)
 {
     bool ok = crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
@@ -276,21 +47,6 @@ static DecodeState roundTrip(meshtastic_MeshPacket *p)
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_MeshPacket_encrypted_tag, p->which_payload_variant,
                               "perhapsEncode left packet unencrypted");
     return perhapsDecode(p);
-}
-
-static meshtastic_MeshPacket channelEncode(meshtastic_MeshPacket p)
-{
-    uint8_t encoded[MAX_LORA_PAYLOAD_LEN + 1] = {};
-    const size_t encodedSize = pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_Data_msg, &p.decoded);
-    TEST_ASSERT_GREATER_THAN(0, encodedSize);
-    const int16_t hash = channels.setActiveByIndex(p.channel);
-    TEST_ASSERT_GREATER_OR_EQUAL(0, hash);
-    crypto->encryptPacket(p.from, p.id, encodedSize, encoded);
-    memcpy(p.encrypted.bytes, encoded, encodedSize);
-    p.encrypted.size = encodedSize;
-    p.channel = hash;
-    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    return p;
 }
 
 static meshtastic_MeshPacket makeSignedWirePacket(NodeNum from, NodeNum to, PacketId id, uint8_t hopLimit = 1,
@@ -313,11 +69,6 @@ static meshtastic_MeshPacket makeSignedWirePacket(NodeNum from, NodeNum to, Pack
 static bool remoteSignerBit()
 {
     return nodeInfoLiteHasXeddsaSigned(mockNodeDB->getMeshNode(REMOTE_NODE));
-}
-
-static void setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy policy)
-{
-    config.security.packet_signature_policy = policy;
 }
 
 // Size a Data message exactly as the wire encoder would.
@@ -394,45 +145,11 @@ static meshtastic_MeshPacket makeBroadcastWithUnknownFields()
 // ---------------------------------------------------------------------------
 void setUp(void)
 {
-    service = pipelineService;
-
-    // Construct the mock FIRST: the NodeDB constructor can reload persisted state from the
-    // host filesystem (portduino VFS) and repopulate the globals - a saved private key
-    // re-enables the PKI encrypt path and fails the unicast tests on hosts with leftover prefs.
-    mockNodeDB = new MockNodeDB();
-    mockNodeDB->clearTestNodes();
-#if WARM_NODE_COUNT > 0
-    mockNodeDB->warmStore.clear();
-#endif
-    nodeDB = mockNodeDB;
-
-    // Clean global config/owner AFTER the ctor; zeroed config => rebroadcast ALL (no KNOWN_ONLY
-    // drop) and security.private_key.size == 0 (PKI encrypt path skipped => simple channel crypto).
-    config = meshtastic_LocalConfig_init_zero;
-    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
-    owner = meshtastic_User_init_zero;
+    pipelineHarnessSetUp();
     // Exercise the downgrade-protection matrix by default. Production defaults to
     // COMPATIBLE so existing meshes remain interoperable; tests that cover that
     // mode opt in explicitly.
     setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
-    myNodeInfo.my_node_num = LOCAL_NODE; // drives isFromUs()/getFrom()/isToUs()
-
-    // Working primary channel with the default PSK so encrypt/decrypt round-trips.
-    channels.initDefaults();
-    channels.onConfigChanged();
-
-    pipelineRouter->clearPending();
-    pipelineRouter->rxDupe = 0;
-    pipelineRouter->txRelayCanceled = 0;
-    pipelineRadio->reset();
-    pipelineRouting->ackCalls = 0;
-    pipelineModule->calls = 0;
-    pipelineMqtt->clearQueue();
-    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
-        packetPool.release(queued);
-    while (meshtastic_QueueStatus *queued = pipelineService->getQueueStatusForPhone())
-        pipelineService->releaseQueueStatusToPool(queued);
-    resetRoutingAuthEvaluationCount();
 }
 
 // Set while C14's saturated AirTime is installed; see useDutyCycleSaturatedAirTime() below.
@@ -440,17 +157,9 @@ static AirTime *c14SavedAirTime = nullptr;
 
 void tearDown(void)
 {
-    delete mockNodeDB;
-    mockNodeDB = nullptr;
-    nodeDB = nullptr;
-
-    // Restore globals here, not at the end of a test body: an assertion aborts the body, and these
-    // would otherwise leak into every later case. The injected clock is the one the N8-N11
-    // suppression-window cases drive; the region and the AirTime swap are C14's duty-cycle setup.
-    Time::useRealClock();
-    Time::resetMonotonicForTests();
-    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    initRegion();
+    pipelineHarnessTearDown();
+    // The AirTime swap is C14's duty-cycle setup; restore it here for the same reason the harness
+    // restores the clock: an assertion aborts the body before any in-test restore.
     if (c14SavedAirTime) {
         airTime = c14SavedAirTime;
         c14SavedAirTime = nullptr;
@@ -1180,14 +889,6 @@ static void preparePipelineSigner(NodeNum sender)
     mockNodeDB->setPublicKey(sender, pub);
 }
 
-static void runPipelineIngress(const meshtastic_MeshPacket &p)
-{
-    meshtastic_MeshPacket *copy = packetPool.allocCopy(p);
-    TEST_ASSERT_NOT_NULL(copy);
-    pipelineRouter->enqueueReceivedMessage(copy);
-    pipelineRouter->runOnce();
-}
-
 /// Drain the phone queue, asserting exactly `n` still-encrypted frames were delivered.
 static void expectEncryptedPhoneDeliveries(int n)
 {
@@ -1371,7 +1072,8 @@ void test_C6_opaque_unknown_channel_is_relay_only(void)
     expectEncryptedPhoneDeliveries(1); // unreadable to us or broadcast: the phone still sees the frame
     TEST_ASSERT_FALSE(pipelineRouter->historyContains(&addressed));
 
-    // An unknown-channel broadcast is not PKI-shaped, so KNOWN/LOCAL decline it; CORE relays it (R4).
+    // An unknown-channel broadcast is not PKI-shaped, so KNOWN/LOCAL decline it; CORE relays it
+    // (test_rebroadcast_mode pins the full mode table).
     const meshtastic_Config_DeviceConfig_RebroadcastMode blockedModes[] = {
         meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
         meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
@@ -1417,45 +1119,90 @@ void test_C8_trusted_local_decoded_delivery_is_not_filtered(void)
     packetPool.release(local);
 }
 
-void test_C9_known_channel_malformed_plaintext_has_no_pipeline_effects(void)
+/// Outcome for a frame we matched but could not use (junk plaintext, a rejected legacy DM): exactly
+/// one NO_CHANNEL NAK if it asked for one, never the phone, relayed only if `relayed`, nothing
+/// learned.
+static void assertMatchedFailureOutcome(const meshtastic_MeshPacket &p, bool wantAck, bool relayed, NodeNum sender,
+                                        uint32_t lastHeardBefore)
 {
-    meshtastic_MeshPacket malformed = meshtastic_MeshPacket_init_zero;
-    malformed.from = REMOTE_NODE;
-    malformed.to = NODENUM_BROADCAST;
-    malformed.id = 0xC9000009;
-    malformed.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    malformed.encrypted.size = 3;
-    malformed.encrypted.bytes[0] = 0xFF;
-    malformed.encrypted.bytes[1] = 0xFF;
-    malformed.encrypted.bytes[2] = 0xFF;
-    malformed.channel = channels.setActiveByIndex(0);
-    crypto->encryptPacket(malformed.from, malformed.id, malformed.encrypted.size, malformed.encrypted.bytes);
+    TEST_ASSERT_EQUAL_MESSAGE(wantAck ? 1 : 0, pipelineRouting->ackCalls, "a want_ack frame to us we cannot use is NAKed once");
+    if (wantAck)
+        TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NO_CHANNEL, pipelineRouting->lastErr,
+                                  "we held what we needed and it still failed: NO_CHANNEL, not PKI_UNKNOWN_PUBKEY");
+    TEST_ASSERT_EQUAL_MESSAGE(relayed ? 1 : 0, pipelineRadio->sendCalls, "relay decision for a matched-but-unusable frame");
+    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "junk we could not parse is not delivered to the phone");
+    TEST_ASSERT_EQUAL(0, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&p));
+    const meshtastic_NodeInfoLite *node = mockNodeDB->getMeshNode(sender);
+    TEST_ASSERT_NOT_NULL(node);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(lastHeardBefore, node->last_heard, "an unusable frame must not update last_heard");
+}
 
-    // Verdict is opaque-relay-eligible now (see test_C17); hop_limit 0 is what keeps this a no-op.
-    meshtastic_MeshPacket verdictCopy = malformed;
+// C9: junk on a channel we hold, broadcast, with hops left. A colliding foreign channel is
+// indistinguishable from tampering and must be carried, so it relays in every mode that carries
+// opaque broadcasts; the phone never sees it and nothing is learned about the sender.
+void test_C9_known_channel_junk_broadcast_is_relayed_not_delivered(void)
+{
+    meshtastic_MeshPacket junk = meshtastic_MeshPacket_init_zero;
+    junk.from = REMOTE_NODE;
+    junk.to = NODENUM_BROADCAST;
+    junk.id = 0xC9000009;
+    junk.hop_limit = 1;
+    junk.hop_start = 2;
+    junk.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    junk.encrypted.size = 3;
+    memset(junk.encrypted.bytes, 0xFF, junk.encrypted.size);
+    junk.channel = channels.setActiveByIndex(0);
+    crypto->encryptPacket(junk.from, junk.id, junk.encrypted.size, junk.encrypted.bytes);
+
+    meshtastic_MeshPacket verdictCopy = junk;
     TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY),
                       static_cast<int>(passesRoutingAuthGate(&verdictCopy)));
 
     mockNodeDB->addNode(REMOTE_NODE);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(REMOTE_NODE)->last_heard;
-    runPipelineIngress(malformed);
-    assertNoRejectedPipelineEffects(REMOTE_NODE, lastHeard);
-    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&malformed));
+    const meshtastic_Config_DeviceConfig_RebroadcastMode modes[] = {
+        meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_NONE,
+    };
+    for (const auto mode : modes) {
+        const bool expect = IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
+                                      meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+                                      meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY);
+        pipelineRadio->reset();
+        pipelineRouting->ackCalls = 0;
+        config.device.rebroadcast_mode = mode;
+        meshtastic_MeshPacket copy = junk;
+        copy.id += (uint32_t)mode;
+        runPipelineIngress(copy);
+        assertMatchedFailureOutcome(copy, /*wantAck=*/false, expect, REMOTE_NODE, lastHeard);
+    }
 }
 
-void test_C10_legacy_channel_dm_failure_has_no_pipeline_effects(void)
+// C10: a legacy channel-PSK DM to us (rejected on purpose since PKI) that asked for an ACK. The
+// sender must learn the DM did not land: NO_CHANNEL. Nothing is relayed, delivered or learned.
+void test_C10_legacy_channel_dm_is_naked_no_channel_and_nothing_else(void)
 {
     meshtastic_MeshPacket legacyDm = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    legacyDm.want_ack = true;
+    legacyDm.hop_limit = 1;
+    legacyDm.hop_start = 2;
     legacyDm = channelEncode(legacyDm);
     mockNodeDB->addNode(REMOTE_NODE);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(REMOTE_NODE)->last_heard;
     moduleConfig.mqtt.enabled = true;
     runPipelineIngress(legacyDm);
-    assertNoRejectedPipelineEffects(REMOTE_NODE, lastHeard);
-    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&legacyDm));
+    assertMatchedFailureOutcome(legacyDm, /*wantAck=*/true, /*relayed=*/false, REMOTE_NODE, lastHeard);
 }
 
-void test_C11_malformed_pki_plaintext_has_no_pipeline_effects(void)
+// C11: PKI to us with the right key, AEAD passes, plaintext is not a Data message. The ciphertext
+// authenticated the sender, so its want_ack gets a NO_CHANNEL NAK; the junk goes nowhere.
+void test_C11_malformed_pki_plaintext_is_naked_no_channel_and_nothing_else(void)
 {
     uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
     crypto->generateKeyPair(localPub, localPriv);
@@ -1473,6 +1220,9 @@ void test_C11_malformed_pki_plaintext_has_no_pipeline_effects(void)
     malformed.to = LOCAL_NODE;
     malformed.id = 0xCB00000B;
     malformed.channel = 0;
+    malformed.want_ack = true;
+    malformed.hop_limit = 1;
+    malformed.hop_start = 2;
     malformed.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     crypto->setDHPrivateKey(remotePriv);
     TEST_ASSERT_TRUE(crypto->encryptCurve25519(malformed.to, malformed.from, localKey, malformed.id, sizeof(malformedPlaintext),
@@ -1483,8 +1233,7 @@ void test_C11_malformed_pki_plaintext_has_no_pipeline_effects(void)
     const uint32_t lastHeard = mockNodeDB->getMeshNode(REMOTE_NODE)->last_heard;
     moduleConfig.mqtt.enabled = true;
     runPipelineIngress(malformed);
-    assertNoRejectedPipelineEffects(REMOTE_NODE, lastHeard);
-    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&malformed));
+    assertMatchedFailureOutcome(malformed, /*wantAck=*/true, /*relayed=*/false, REMOTE_NODE, lastHeard);
 }
 
 void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass(void)
@@ -2132,244 +1881,10 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
-// ===========================================================================
-// Group R - what a relay does with traffic it cannot read, per rebroadcast_mode
-// ===========================================================================
-//
-// A PKI unicast between two other nodes is opaque to a relay: the port, the payload and the
-// signature are inside the ciphertext. rebroadcast_mode is the only knob that governs whether
-// such a packet is carried, and these cases pin what each value means. The signature policy
-// is deliberately varied across them to show it plays no part.
-
-struct RelayIdentity {
-    NodeNum num;
-    uint8_t pub[32];
-    uint8_t priv[32];
-};
-
-// CryptoEngine::setDHPrivateKey takes a mutable pointer; the identities above are const.
-static void useDHKey(const uint8_t *priv)
-{
-    uint8_t k[32];
-    memcpy(k, priv, sizeof(k));
-    crypto->setDHPrivateKey(k);
-}
-
-static RelayIdentity makeIdentity(NodeNum num)
-{
-    RelayIdentity id;
-    id.num = num;
-    crypto->generateKeyPair(id.pub, id.priv);
-    return id;
-}
-
-static constexpr NodeNum ADMIN_NODE = 0x0C0C0C0C;  // the operator's node, sending remote admin
-static constexpr NodeNum TARGET_NODE = 0x0D0D0D0D; // the node being administered
-
-/// A genuine PKI-encrypted packet on `port` from one remote identity to another, as it would be
-/// heard off the air by a third node (us). Leaves the engine holding a fresh key of its own.
-static meshtastic_MeshPacket makePkiUnicastBetween(const RelayIdentity &from, const RelayIdentity &to, meshtastic_PortNum port,
-                                                   PacketId id, bool wantAck = false)
-{
-    meshtastic_Data d = meshtastic_Data_init_zero;
-    d.portnum = port;
-    d.payload.size = SMALL_PAYLOAD;
-    for (size_t i = 0; i < SMALL_PAYLOAD; i++)
-        d.payload.bytes[i] = (uint8_t)(0xA0 + i);
-    uint8_t plain[MAX_LORA_PAYLOAD_LEN + 1];
-    const size_t plainSize = pb_encode_to_bytes(plain, sizeof(plain), &meshtastic_Data_msg, &d);
-    TEST_ASSERT_GREATER_THAN(0, plainSize);
-
-    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
-    p.from = from.num;
-    p.to = to.num;
-    p.id = id;
-    p.channel = 0; // PKI packets carry channel hash 0 on the wire
-    p.hop_limit = 2;
-    p.hop_start = 3;
-    p.want_ack = wantAck;
-    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
-    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-
-    meshtastic_NodeInfoLite_public_key_t toKey = {32, {0}};
-    memcpy(toKey.bytes, to.pub, 32);
-    uint8_t ourPub[32], ourPriv[32];
-    crypto->generateKeyPair(ourPub, ourPriv);
-    useDHKey(from.priv);
-    TEST_ASSERT_TRUE(crypto->encryptCurve25519(p.to, p.from, toKey, p.id, plainSize, plain, p.encrypted.bytes));
-    p.encrypted.size = plainSize + MESHTASTIC_PKC_OVERHEAD;
-    crypto->setDHPrivateKey(ourPriv);
-    return p;
-}
-
-static const meshtastic_Config_DeviceConfig_RebroadcastMode ALL_MODES[] = {
-    meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
-    meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
-    meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY,
-    meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
-    meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
-    meshtastic_Config_DeviceConfig_RebroadcastMode_NONE,
-};
-
-static const char *modeName(meshtastic_Config_DeviceConfig_RebroadcastMode m)
-{
-    switch (m) {
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL:
-        return "ALL";
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING:
-        return "ALL_SKIP_DECODING";
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY:
-        return "CORE_PORTNUMS_ONLY";
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY:
-        return "KNOWN_ONLY";
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY:
-        return "LOCAL_ONLY";
-    default:
-        return "NONE";
-    }
-}
-
-/// Feed `p` through ingress under `mode` and assert it was, or was not, handed to the radio - and
-/// that nothing else happened to it either way.
-static void assertOpaqueRelay(const meshtastic_MeshPacket &p, meshtastic_Config_DeviceConfig_RebroadcastMode mode,
-                              bool expectRelay, const char *why)
-{
-    pipelineRadio->reset();
-    pipelineRouting->ackCalls = 0;
-    pipelineModule->calls = 0;
-    config.device.rebroadcast_mode = mode;
-    meshtastic_MeshPacket copy = p;
-    copy.id += (uint32_t)mode; // a fresh id per mode so the opaque dedup does not decide the outcome
-    runPipelineIngress(copy);
-    char msg[200];
-    snprintf(msg, sizeof(msg), "%s: %s", modeName(mode), why);
-    TEST_ASSERT_EQUAL_MESSAGE(expectRelay ? 1 : 0, pipelineRadio->sendCalls, msg);
-    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouting->ackCalls, "an opaque packet not for us must never be ACKed");
-    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineModule->calls, "an opaque packet must not reach modules");
-    TEST_ASSERT_NULL_MESSAGE(pipelineService->getForPhone(), "an opaque unicast for someone else is not the phone's business");
-    TEST_ASSERT_FALSE_MESSAGE(pipelineRouter->historyContains(&copy), "an opaque packet must not enter PacketHistory");
-}
-
-// R1: remote admin from the operator's node to a node behind us, both of them known to us. This
-// is what a router in the field does all day. Anyone who makes this assertion fail in any mode but
-// NONE is turning a stock ROUTER (whose default is CORE_PORTNUMS_ONLY) into a black hole for
-// remote administration, direct messages and key verification, and owes an explanation in the PR.
-void test_R1_remote_admin_between_other_nodes_relays_in_every_rebroadcast_mode(void)
-{
-    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
-    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
-    const RelayIdentity target = makeIdentity(TARGET_NODE);
-    mockNodeDB->addNode(ADMIN_NODE);
-    mockNodeDB->setPublicKey(ADMIN_NODE, admin.pub);
-    mockNodeDB->markHasUser(ADMIN_NODE);
-    mockNodeDB->addNode(TARGET_NODE);
-    mockNodeDB->setPublicKey(TARGET_NODE, target.pub);
-    mockNodeDB->markHasUser(TARGET_NODE);
-    const meshtastic_MeshPacket adminPacket =
-        makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADA10001, /*wantAck=*/true);
-
-    // Sanity: the frame really is opaque to us, not merely undecodable.
-    meshtastic_MeshPacket probe = adminPacket;
-    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&probe)));
-
-    for (const auto mode : ALL_MODES) {
-        const bool expect = mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
-        assertOpaqueRelay(adminPacket, mode, expect,
-                          expect ? "a relay must carry remote admin it cannot read - justify any change to this in the PR"
-                                 : "NONE relays nothing");
-    }
-    // NodeDB is untouched by all of it: no last_heard, no new entries.
-    TEST_ASSERT_EQUAL(0, mockNodeDB->getMeshNode(ADMIN_NODE)->last_heard);
-}
-
-// R2: the same admin packet between two nodes we have never heard of. Modes that key on identity
-// (KNOWN_ONLY, LOCAL_ONLY) decline; the port-based and unconditional modes still carry it.
-void test_R2_pki_unicast_between_strangers_relays_unless_mode_needs_identity(void)
-{
-    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
-    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
-    const RelayIdentity target = makeIdentity(TARGET_NODE);
-    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADA20002);
-
-    for (const auto mode : ALL_MODES) {
-        const bool needsIdentity = IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
-                                             meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY);
-        const bool expect = mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE && !needsIdentity;
-        assertOpaqueRelay(p, mode, expect,
-                          expect ? "a PKI unicast between strangers is still carried by a port- or unconditional-mode relay"
-                                 : "this mode only carries PKI traffic with a party we know");
-    }
-}
-
-// R3: one party known is enough for KNOWN_ONLY / LOCAL_ONLY - the rule 6eabbaf43 added in 2024.
-// The known party is the destination here, so the sender is a stranger and KNOWN_ONLY's decode
-// short-circuit fires; the packet must still reach the relay decision.
-void test_R3_known_destination_satisfies_known_only_and_local_only(void)
-{
-    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
-    const RelayIdentity target = makeIdentity(TARGET_NODE);
-    mockNodeDB->addNode(TARGET_NODE);
-    mockNodeDB->setPublicKey(TARGET_NODE, target.pub);
-    mockNodeDB->markHasUser(TARGET_NODE);
-    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA30003);
-
-    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY, true,
-                      "KNOWN_ONLY carries a PKI unicast to a node we know, whoever sent it");
-    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY, true,
-                      "LOCAL_ONLY carries a PKI unicast to a node we know, whoever sent it");
-}
-
-static meshtastic_MeshPacket makeUnknownChannelBroadcast(PacketId id)
-{
-    meshtastic_MeshPacket foreign = meshtastic_MeshPacket_init_zero;
-    foreign.from = ADMIN_NODE;
-    foreign.to = NODENUM_BROADCAST;
-    foreign.id = id;
-    foreign.channel = 0xFE;
-    foreign.hop_limit = 1;
-    foreign.hop_start = 2;
-    foreign.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    foreign.encrypted.size = 16;
-    memset(foreign.encrypted.bytes, 0x5A, foreign.encrypted.size);
-    return foreign;
-}
-
-// R4: an opaque *broadcast* (a channel we do not hold) is not PKI-shaped. CORE relays it - the
-// port list cannot apply to a packet with no readable port - and only KNOWN/LOCAL/NONE decline.
-void test_R4_unknown_channel_broadcast_relays_in_core_portnums_only(void)
-{
-    const meshtastic_MeshPacket foreign = makeUnknownChannelBroadcast(0xADA40004);
-    for (const auto mode : ALL_MODES) {
-        const bool expect = IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
-                                      meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
-                                      meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY);
-        pipelineRadio->reset();
-        config.device.rebroadcast_mode = mode;
-        meshtastic_MeshPacket copy = foreign;
-        copy.id += (uint32_t)mode;
-        runPipelineIngress(copy);
-        while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) // R9 covers the phone side
-            packetPool.release(queued);
-        char msg[120];
-        snprintf(msg, sizeof(msg), "%s: %s", modeName(mode),
-                 expect ? "an unreadable broadcast is carried" : "an unreadable broadcast is not PKI-shaped, so declined");
-        TEST_ASSERT_EQUAL_MESSAGE(expect ? 1 : 0, pipelineRadio->sendCalls, msg);
-        TEST_ASSERT_FALSE(pipelineRouter->historyContains(&copy));
-    }
-}
-
-static RelayIdentity installOurIdentity()
-{
-    RelayIdentity us = makeIdentity(LOCAL_NODE);
-    mockNodeDB->addNode(LOCAL_NODE);
-    mockNodeDB->setPublicKey(LOCAL_NODE, us.pub);
-    return us;
-}
-
-// R5: a PKI DM to us from a node whose key we do not hold. We cannot read it, but the sender must
+// C18: a PKI DM to us from a node whose key we do not hold. We cannot read it, but the sender must
 // find out why: a PKI_UNKNOWN_PUBKEY NAK makes it send us its NodeInfo, after which its retry
 // decrypts. The phone also gets the encrypted frame. Nothing is relayed and NodeDB is untouched.
-void test_R5_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void)
+void test_C18_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void)
 {
     const RelayIdentity us = installOurIdentity();
     const RelayIdentity stranger = makeIdentity(ADMIN_NODE); // not added to NodeDB
@@ -2391,7 +1906,7 @@ void test_R5_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void)
                                   "the NAK must say PKI_UNKNOWN_PUBKEY so the sender answers with its NodeInfo");
         TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "a packet addressed to us is never relayed");
         meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
-        TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "the phone must see the encrypted frame, as before #10967");
+        TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "the phone must see a frame to us that we had no way to read");
         TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, toPhone->which_payload_variant);
         packetPool.release(toPhone);
         TEST_ASSERT_NULL(pipelineService->getForPhone());
@@ -2400,9 +1915,9 @@ void test_R5_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone(void)
     }
 }
 
-// R6: the same frame claiming to be from us is a forgery and gets nothing - no NAK, no phone,
-// no relay (#11544's isFromUs guard).
-void test_R6_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction(void)
+// C19: the same frame claiming to be from us is a forgery and gets nothing - no NAK, no phone,
+// no relay.
+void test_C19_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction(void)
 {
     const RelayIdentity target = makeIdentity(TARGET_NODE);
     const RelayIdentity forger = makeIdentity(LOCAL_NODE);
@@ -2414,9 +1929,9 @@ void test_R6_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction(void)
     TEST_ASSERT_NULL(pipelineService->getForPhone());
 }
 
-// R7: sender key known, decrypt fails anyway (tampered or rotated key): NAK NO_CHANNEL, the reason
-// the pre-#10967 code gave for "want_ack packet destined for us cannot be decoded".
-void test_R7_pki_to_us_with_known_key_that_fails_naks_no_channel(void)
+// C20: sender key known, decrypt fails anyway (tampered or rotated key): NAK NO_CHANNEL - we had a
+// key and it did not work, which is not the same as not having one.
+void test_C20_pki_to_us_with_known_key_that_fails_naks_no_channel(void)
 {
     const RelayIdentity us = installOurIdentity();
     const RelayIdentity sender = makeIdentity(ADMIN_NODE);
@@ -2434,9 +1949,9 @@ void test_R7_pki_to_us_with_known_key_that_fails_naks_no_channel(void)
     TEST_ASSERT_NULL(pipelineService->getForPhone());
 }
 
-// R8: an MQTT gateway carries PKI DMs between other nodes as ciphertext when encrypted uplink is
+// C21: an MQTT gateway carries PKI DMs between other nodes as ciphertext when encrypted uplink is
 // on, and never uplinks them in plaintext mode. Relay and uplink are independent of each other.
-void test_R8_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt(void)
+void test_C21_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt(void)
 {
     const RelayIdentity admin = makeIdentity(ADMIN_NODE);
     const RelayIdentity target = makeIdentity(TARGET_NODE);
@@ -2464,9 +1979,9 @@ void test_R8_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt(void)
     TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
 }
 
-// R9: an unreadable broadcast on a channel we do not hold still reaches the phone (it did before
-// #10967) without touching NodeDB, in every mode - relay and phone delivery are separate decisions.
-void test_R9_unknown_channel_broadcast_reaches_phone_without_nodedb(void)
+// C22: an unreadable broadcast on a channel we do not hold reaches the phone without touching
+// NodeDB, in every mode - relay and phone delivery are separate decisions.
+void test_C22_unknown_channel_broadcast_reaches_phone_without_nodedb(void)
 {
     const meshtastic_MeshPacket foreign = makeUnknownChannelBroadcast(0xADA90009);
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
@@ -2479,49 +1994,9 @@ void test_R9_unknown_channel_broadcast_reaches_phone_without_nodedb(void)
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
 }
 
-// R10: none of the above depends on packet_signature_policy. R1 ran STRICT, R2 COMPATIBLE; here
-// the same admin packet under every policy, pinning that the relay decision is policy-blind.
-void test_R10_relay_decision_ignores_signature_policy(void)
-{
-    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
-    const RelayIdentity target = makeIdentity(TARGET_NODE);
-    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_ADMIN_APP, 0xADAA000A);
-    const meshtastic_Config_SecurityConfig_PacketSignaturePolicy policies[] = {
-        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE,
-        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED,
-        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
-    };
-    uint32_t salt = 0;
-    for (const auto policy : policies) {
-        setPolicy(policy);
-        meshtastic_MeshPacket copy = p;
-        copy.id += 0x100 * ++salt;
-        assertOpaqueRelay(copy, meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY, true,
-                          "the signature policy governs what we admit, not what we carry");
-    }
-}
-
 void setup()
 {
-    initializeTestEnvironment();
-    AirTime *savedAirTime = airTime;
-    meshtastic::NodeStatus *savedNodeStatus = nodeStatus;
-    AirTime testAirTime;
-    meshtastic::NodeStatus testNodeStatus;
-    airTime = &testAirTime;
-    nodeStatus = &testNodeStatus;
-
-    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    initRegion();
-    pipelineRouter = new AuthPipelineRouter();
-    auto pipelineRadioOwner = std::make_unique<AuthPipelineRadio>();
-    pipelineRadio = pipelineRadioOwner.get();
-    pipelineRouter->addInterface(std::move(pipelineRadioOwner));
-    router = pipelineRouter;
-    routingModule = pipelineRouting = new AuthPipelineRoutingModule();
-    pipelineModule = new AuthPipelineModule();
-    service = pipelineService = new MeshService();
-    mqtt = pipelineMqtt = new AuthPipelineMqtt();
+    pipelineHarnessCreate();
 
     UNITY_BEGIN();
 
@@ -2573,25 +2048,20 @@ void setup()
     RUN_TEST(test_C6_opaque_unknown_channel_is_relay_only);
     RUN_TEST(test_C7_strict_rejects_unsigned_decoded_simradio_ingress);
     RUN_TEST(test_C8_trusted_local_decoded_delivery_is_not_filtered);
-    RUN_TEST(test_C9_known_channel_malformed_plaintext_has_no_pipeline_effects);
-    RUN_TEST(test_C10_legacy_channel_dm_failure_has_no_pipeline_effects);
-    RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
+    RUN_TEST(test_C9_known_channel_junk_broadcast_is_relayed_not_delivered);
+    RUN_TEST(test_C10_legacy_channel_dm_is_naked_no_channel_and_nothing_else);
+    RUN_TEST(test_C11_malformed_pki_plaintext_is_naked_no_channel_and_nothing_else);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
     RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
-    RUN_TEST(test_R1_remote_admin_between_other_nodes_relays_in_every_rebroadcast_mode);
-    RUN_TEST(test_R2_pki_unicast_between_strangers_relays_unless_mode_needs_identity);
-    RUN_TEST(test_R3_known_destination_satisfies_known_only_and_local_only);
-    RUN_TEST(test_R4_unknown_channel_broadcast_relays_in_core_portnums_only);
-    RUN_TEST(test_R5_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone);
-    RUN_TEST(test_R6_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction);
-    RUN_TEST(test_R7_pki_to_us_with_known_key_that_fails_naks_no_channel);
-    RUN_TEST(test_R8_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt);
-    RUN_TEST(test_R9_unknown_channel_broadcast_reaches_phone_without_nodedb);
-    RUN_TEST(test_R10_relay_decision_ignores_signature_policy);
+    RUN_TEST(test_C18_undecryptable_pki_to_us_naks_unknown_pubkey_and_reaches_phone);
+    RUN_TEST(test_C19_undecryptable_frame_claiming_to_be_from_us_gets_no_reaction);
+    RUN_TEST(test_C20_pki_to_us_with_known_key_that_fails_naks_no_channel);
+    RUN_TEST(test_C21_opaque_pki_unicast_is_uplinked_only_with_encrypted_mqtt);
+    RUN_TEST(test_C22_unknown_channel_broadcast_reaches_phone_without_nodedb);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
@@ -2629,8 +2099,7 @@ void setup()
     RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
 
     const int result = UNITY_END();
-    airTime = savedAirTime;
-    nodeStatus = savedNodeStatus;
+    pipelineHarnessDestroy();
     exit(result);
 }
 
