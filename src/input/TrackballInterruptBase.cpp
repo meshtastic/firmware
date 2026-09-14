@@ -260,7 +260,7 @@ void TrackballInterruptBase::intDownHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_DOWN;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
     down_counter++;
@@ -271,7 +271,7 @@ void TrackballInterruptBase::intUpHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_UP;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
     up_counter++;
@@ -282,7 +282,7 @@ void TrackballInterruptBase::intLeftHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_LEFT;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
     left_counter++;
 #endif
@@ -292,7 +292,7 @@ void TrackballInterruptBase::intRightHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_RIGHT;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
     right_counter++;
 #endif

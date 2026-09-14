@@ -1,8 +1,9 @@
 // Unit tests for src/UptimeClock.{h,cpp} - the monotonic uptime seam.
-// Covers: test-clock injection, stepping the injected clock, the real-clock fallback, and the
-// single-writer wrap carry (readers derive, serviceMonotonic() publishes). getMillis() itself is a
-// plain 32-bit read with no wrap handling of its own - its consumers' wrap arithmetic is tested in
-// test_throttle/.
+// Covers: test-clock injection, stepping the injected clock, the real-clock fallback, the
+// single-writer wrap carry (readers derive, serviceMonotonic() publishes), and the 0-sentinel dodge
+// helpers (skipZero/timerEndsAtMillis). getMillis() itself is a plain 32-bit read with no wrap
+// handling of its own beyond those helpers - deadline/throttle wrap arithmetic built on top of it
+// is tested in test_throttle/.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
@@ -68,6 +69,39 @@ void test_advanceTestMillis_wraps_like_millis()
     Time::setTestMillis(0xFFFFFF00u);
     Time::advanceTestMillis(0x200u);
     TEST_ASSERT_EQUAL_UINT32(0x00000100u, Time::getMillis());
+}
+
+// --- skipZero() / timerEndsAtMillis(): dodging the wrap tick that lands on 0 ---
+
+void test_skipZero_maps_zero_to_one()
+{
+    TEST_ASSERT_EQUAL_UINT32(1u, Time::skipZero(0));
+}
+
+void test_skipZero_leaves_nonzero_values_alone()
+{
+    TEST_ASSERT_EQUAL_UINT32(5u, Time::skipZero(5));
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, Time::skipZero(0xFFFFFFFFu));
+}
+
+void test_timerEndsAtMillis_is_an_ordinary_sum_away_from_the_wrap()
+{
+    Time::setTestMillis(1000);
+    TEST_ASSERT_EQUAL_UINT32(1500u, Time::timerEndsAtMillis(500));
+}
+
+// The sum is what has to dodge 0, not the read: a non-zero getMillis() plus a delay can still land
+// exactly on the wrap, which is why this is not skipZero(getMillis()) + delayMs.
+void test_timerEndsAtMillis_dodges_a_sum_that_wraps_to_zero()
+{
+    Time::setTestMillis(0xFFFFFF00u);
+    TEST_ASSERT_EQUAL_UINT32(1u, Time::timerEndsAtMillis(0x100u)); // 0xFFFFFF00 + 0x100 wraps to 0
+}
+
+void test_timerEndsAtMillis_dodges_the_wrap_tick_itself()
+{
+    Time::setTestMillis(0);
+    TEST_ASSERT_EQUAL_UINT32(1u, Time::timerEndsAtMillis(0)); // getMillis()==0, delayMs==0: sum is 0
 }
 
 // --- getMillisMonotonic(): the published wrap carry ---
@@ -337,6 +371,11 @@ void setup()
     RUN_TEST(test_getMillis_returns_injected_value);
     RUN_TEST(test_advanceTestMillis_steps_clock);
     RUN_TEST(test_advanceTestMillis_wraps_like_millis);
+    RUN_TEST(test_skipZero_maps_zero_to_one);
+    RUN_TEST(test_skipZero_leaves_nonzero_values_alone);
+    RUN_TEST(test_timerEndsAtMillis_is_an_ordinary_sum_away_from_the_wrap);
+    RUN_TEST(test_timerEndsAtMillis_dodges_a_sum_that_wraps_to_zero);
+    RUN_TEST(test_timerEndsAtMillis_dodges_the_wrap_tick_itself);
     RUN_TEST(test_monotonic_matches_millis_before_any_wrap);
     RUN_TEST(test_monotonic_counts_a_wrap);
     RUN_TEST(test_monotonic_reader_crosses_the_wrap_without_a_publish);

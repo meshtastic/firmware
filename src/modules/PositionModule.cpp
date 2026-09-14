@@ -292,7 +292,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     meshtastic_MeshPacket *reply = allocPositionPacket(precision);
     if (reply) {
-        lastSentReply = Time::getMillis(); // Track when we sent this reply
+        lastSentReply = Time::skipZero(Time::getMillis()); // Track when we sent this reply
     }
     return reply;
 }
