@@ -41,6 +41,8 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 #include "graphics/niche/Drivers/EInk/ED047TC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
+#include "T5Screenshot.h" // TEMPORARY SD screenshot capture
+
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
@@ -50,7 +52,7 @@ void setupNicheGraphics()
     // The ED047TC1 is a parallel display - no SPI bus setup needed.
     // begin() args are part of the EInk interface but are ignored for parallel displays.
 
-    Drivers::EInk *driver = new Drivers::ED047TC1;
+    Drivers::EInk *driver = new T5Screenshot::Driver; // TEMPORARY: was new Drivers::ED047TC1
     driver->begin(nullptr, 0, 0, 0);
 
     // InkHUD
@@ -102,6 +104,7 @@ void setupNicheGraphics()
     // Start running InkHUD
     inkhud->begin();
     InkHUD::T5HomeApplet::begin(); // Saved settings loaded by begin() override the defaults above
+    T5Screenshot::begin();         // TEMPORARY SD screenshot capture
     // Arm GT911 capacitive-home callback only after InkHUD startup is complete.
     t5SetHomeCapButtonEventsEnabled(true);
 
@@ -120,8 +123,15 @@ void setupNicheGraphics()
 #else
     buttons->setWiring(0, BUTTON_PIN);
 #endif
-    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
-    buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
+    // TEMPORARY: was plain inkhud->shortpress() / longpress(); the screenshot chord consumes its BOOT press
+    buttons->setHandlerShortPress(0, [inkhud]() {
+        if (!T5Screenshot::swallowBoot())
+            inkhud->shortpress();
+    });
+    buttons->setHandlerLongPress(0, [inkhud]() {
+        if (!T5Screenshot::swallowBoot())
+            inkhud->longpress();
+    });
 
     buttons->start();
 }

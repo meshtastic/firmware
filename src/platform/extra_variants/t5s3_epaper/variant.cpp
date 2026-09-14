@@ -25,6 +25,7 @@
 #include "modules/ExternalNotificationModule.h"
 
 #include "T5Applet.h"
+#include "T5Screenshot.h" // TEMPORARY SD screenshot capture
 
 // TEMPORARY touch calibration overlay: crosshair + coordinates at the last tap. Remove after hardware validation.
 // Renders only on full re-renders (never clears its fullscreen tile) and skips drawing after a rotation change.
@@ -322,6 +323,13 @@ class SideKeyInterruptThread : public concurrency::OSThread
 
         // Ignore side-key handling while BOOT/user button is held.
         if (digitalRead(BUTTON_PIN) == LOW) {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+            // TEMPORARY screenshot chord: debounced side-key press while BOOT is held, before the side long-press
+            if (state == State::IRQ_PENDING && (uint32_t)(now - irqAtMs) < DEBOUNCE_MS)
+                return SAMPLE_MS;
+            if (!longPressFired && isPca9535SideKeyPressed())
+                T5Screenshot::chord();
+#endif
             resetStateAndStop();
             return OSThread::disable();
         }
