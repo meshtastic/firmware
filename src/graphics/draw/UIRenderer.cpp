@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CompassRenderer.h"
@@ -2212,12 +2213,12 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (navBarVisible && !navBarPrevVisible) {
         EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when showing nav bar
         cosmeticRefreshDone = false;
-        navBarLastShown = millis();
+        navBarLastShown = Time::skipZero(Time::getMillis());
     }
 
     if (!navBarVisible && navBarPrevVisible) {
-        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when hiding nav bar
-        navBarLastShown = millis();               // Mark when it disappeared
+        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST);            // Fast refresh when hiding nav bar
+        navBarLastShown = Time::skipZero(Time::getMillis()); // Mark when it disappeared
     }
 
     if (!navBarVisible && navBarLastShown != 0 && !cosmeticRefreshDone) {

@@ -245,7 +245,7 @@ static void clearAuthSlot_LH(const PhoneAPI *p)
 
 PhoneAPI::PhoneAPI()
 {
-    lastContactMsec = millis();
+    lastContactMsec = Time::skipZero(Time::getMillis());
     std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
 }
 
@@ -437,7 +437,7 @@ bool PhoneAPI::checkConnectionTimeout()
 bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
-    lastContactMsec = millis();
+    lastContactMsec = Time::skipZero(Time::getMillis());
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
