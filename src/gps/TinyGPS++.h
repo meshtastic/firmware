@@ -32,13 +32,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <limits.h>
 
 /********************----- Options -----********************/
-<<<<<<< HEAD
 // #define TINYGPSPLUS_OPTION_NO_CUSTOM_FIELDS
 // #define TINYGPSPLUS_OPTION_NO_STATISTICS
-=======
-//#define TINYGPSPLUS_OPTION_NO_CUSTOM_FIELDS
-//#define TINYGPSPLUS_OPTION_NO_STATISTICS
->>>>>>> d6bcf23be (t-echo-plus)
 /**************************************************/
 
 #define _GPS_VERSION "1.0.3" // software version of this library
@@ -54,7 +49,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define _GPS_MAX_FIELD_SIZE 15
 #endif
 
-<<<<<<< HEAD
 enum {
     GPS_SENTENCE_GGA,
     GPS_SENTENCE_RMC,
@@ -63,11 +57,9 @@ enum {
     GPS_SENTENCE_GLL,
     GPS_SENTENCE_ZDA,
     GPS_SENTENCE_TXT,
+    GPS_SENTENCE_VTG,
     GPS_SENTENCE_OTHER
 };
-=======
-enum {GPS_SENTENCE_GGA, GPS_SENTENCE_RMC, GPS_SENTENCE_GSV, GPS_SENTENCE_GSA, GPS_SENTENCE_GLL, GPS_SENTENCE_ZDA, GPS_SENTENCE_TXT, GPS_SENTENCE_OTHER};
->>>>>>> d6bcf23be (t-echo-plus)
 
 // Backward-compatible names used by older code.
 static const uint8_t GPS_SENTENCE_GPGGA = GPS_SENTENCE_GGA;
@@ -76,7 +68,6 @@ static const uint8_t GPS_SENTENCE_GPGSV = GPS_SENTENCE_GSV;
 
 // GNSS constellation stored for every tracked GSV satellite.
 // Kept as uint8_t-compatible values to keep the tracked-satellite structure compact.
-<<<<<<< HEAD
 enum TinyGPSGnssSystem {
     TINYGPS_GNSS_UNKNOWN = 0,
     TINYGPS_GNSS_GPS,
@@ -90,11 +81,16 @@ enum TinyGPSGnssSystem {
 struct TinyGPSGSAInfo {
     uint8_t system = TINYGPS_GNSS_UNKNOWN;
     uint8_t satellitesUsed = 0;
+    // NMEA GSA can explicitly report at most 12 SVIDs per system. Keep the
+    // checksum-valid IDs so the UI can distinguish satellites merely in view
+    // from satellites actually used in the navigation solution.
+    uint16_t satelliteIds[12] = {};
     uint8_t fixType = 0; // 1=no fix, 2=2D, 3=3D
     uint16_t pdop = 0;   // scaled by 100
     uint16_t hdop = 0;   // scaled by 100
     uint16_t vdop = 0;   // scaled by 100
     bool valid = false;
+    uint32_t lastUpdate = 0; // millis() of last checksum-valid GSA sentence
 };
 
 enum TinyGPSAntennaStatus { TINYGPS_ANT_UNKNOWN = 0, TINYGPS_ANT_OK, TINYGPS_ANT_OPEN, TINYGPS_ANT_SHORT };
@@ -120,6 +116,12 @@ struct TinyGPSANTInfo {
     TinyGPSAntennaStatus status = TINYGPS_ANT_UNKNOWN;
     bool valid = false;
     uint32_t lastUpdate = 0;
+};
+
+struct TinyGPSVTGInfo {
+    bool valid = false;
+    char mode = 'N';
+    uint32_t lastUpdate = 0; // millis() of last checksum-valid VTG sentence
 };
 
 struct RawDegrees {
@@ -156,6 +158,10 @@ template <typename T> struct TinyGPSDatum {
         flags &= (~FLAG_UPDATED);
         return val;
     }
+
+    // Read the last checksum-committed value without consuming FLAG_UPDATED.
+    // UI/diagnostic fallbacks must never change the parser state seen by GPS.cpp.
+    T peekValue() const { return val; }
 
     TinyGPSDatum() : flags(FLAG_DEFAULT), val(T()) {}
 
@@ -272,235 +278,11 @@ struct TinyGPSTrackedSattelites {
     uint16_t azimuth;  // degrees from true north: 0..359
     uint8_t strength;  // C/N0 (commonly shown as SNR) in dB-Hz
     bool tracked;      // true if the GSV SNR/CN0 field is present
+    uint32_t lastUpdate; // millis() of last checksum-valid GSV sentence for this satellite
 };
 
 struct TinyGPSHDOP : TinyGPSDecimal {
     double hdop() { return value() / 100.0; }
-=======
-enum TinyGPSGnssSystem
-{
-   TINYGPS_GNSS_UNKNOWN = 0,
-   TINYGPS_GNSS_GPS,
-   TINYGPS_GNSS_GLONASS,
-   TINYGPS_GNSS_GALILEO,
-   TINYGPS_GNSS_BEIDOU,
-   TINYGPS_GNSS_QZSS,
-   TINYGPS_GNSS_MIXED
-};
-
-struct TinyGPSGSAInfo
-{
-   uint8_t system = TINYGPS_GNSS_UNKNOWN;
-   uint8_t satellitesUsed = 0;
-   uint8_t fixType = 0; // 1=no fix, 2=2D, 3=3D
-   uint16_t pdop = 0;   // scaled by 100
-   uint16_t hdop = 0;   // scaled by 100
-   uint16_t vdop = 0;   // scaled by 100
-   bool valid = false;
-};
-
-enum TinyGPSAntennaStatus
-{
-   TINYGPS_ANT_UNKNOWN = 0,
-   TINYGPS_ANT_OK,
-   TINYGPS_ANT_OPEN,
-   TINYGPS_ANT_SHORT
-};
-
-struct TinyGPSGLLInfo
-{
-   bool valid = false;
-   char status = 'V';
-   char mode = 'N';
-   uint32_t lastUpdate = 0;
-};
-
-struct TinyGPSZDAInfo
-{
-   bool valid = false;
-   uint16_t year = 0;
-   uint8_t month = 0;
-   uint8_t day = 0;
-   int8_t localZoneHours = 0;
-   uint8_t localZoneMinutes = 0;
-   uint32_t lastUpdate = 0;
-};
-
-struct TinyGPSANTInfo
-{
-   TinyGPSAntennaStatus status = TINYGPS_ANT_UNKNOWN;
-   bool valid = false;
-   uint32_t lastUpdate = 0;
-};
-
-struct RawDegrees
-{
-   uint16_t deg;
-   uint32_t billionths;
-   bool negative;
-public:
-   RawDegrees() : deg(0), billionths(0), negative(false)
-   {}
-};
-
-struct LatLong
-{
-   RawDegrees lat;
-   RawDegrees lng;
-};
-
-template<typename T>
-struct TinyGPSDatum
-{
-   friend class TinyGPSPlus;
-public:
-   uint32_t age() const    { return this->isValid() ? millis() - createTime : static_cast<uint32_t>(ULONG_MAX); }
-   bool isValid() const    { return (flags & FLAG_VALID) != 0; }
-   bool isUpdated() const  { return (flags & FLAG_UPDATED) != 0; }
-   bool isNotEmpty() const  { return (flags & FLAG_NOT_EMPTY) != 0; }
-   void setNotEmpty(bool notEmpty) { 
-      if (notEmpty)
-         flags |= (FLAG_NOT_EMPTY);
-      else
-         flags &= (~FLAG_NOT_EMPTY);
-   }
-   T value()               { flags &= (~FLAG_UPDATED); return val; }
-
-   TinyGPSDatum() : flags(FLAG_DEFAULT), val(T())
-   {}
-
-protected:
-   enum {FLAG_DEFAULT=0, FLAG_VALID=(1<<0), FLAG_UPDATED=(1<<1), FLAG_NOT_EMPTY=(1<<2)};
-   uint8_t flags;
-   T val, newval;
-   uint32_t createTime;
-};
-
-struct TinyGPSLocation : public TinyGPSDatum<LatLong>
-{
-   friend class TinyGPSPlus;
-public:
-   RawDegrees rawLat() { return value().lat; }
-   RawDegrees rawLng() { return value().lng; }
-   double lat();
-   double lng();
-
-   TinyGPSLocation()
-   {}
-
-private:
-   void commit(uint32_t timestamp);
-   void setLatitude(const char *term);
-   void setLongitude(const char *term);
-};
-
-struct TinyGPSDate : public TinyGPSDatum<uint32_t>
-{
-   friend class TinyGPSPlus;
-public:
-   uint16_t year();
-   uint8_t month();
-   uint8_t day();
-
-   TinyGPSDate()
-   {}
-
-private:
-   void commit(uint32_t timestamp);
-   void setDate(const char *term);
-   bool isNotNull = false;
-};
-
-struct TinyGPSTime : public TinyGPSDatum<uint32_t>
-{
-   friend class TinyGPSPlus;
-public:
-   uint8_t hour();
-   uint8_t minute();
-   uint8_t second();
-   uint8_t centisecond();
-
-   TinyGPSTime()
-   {}
-
-private:
-   void commit(uint32_t timestamp);
-   void setTime(const char *term);
-   bool isNotNull;
-};
-
-struct TinyGPSDecimal : public TinyGPSDatum<uint32_t>
-{
-   friend class TinyGPSPlus;
-public:
-
-   TinyGPSDecimal()
-   {}
-
-private:
-   void commit(uint32_t timestamp);
-   void set(const char *term);
-};
-
-struct TinyGPSInteger : public TinyGPSDatum<uint32_t>
-{
-   friend class TinyGPSPlus;
-public:
-
-   TinyGPSInteger()
-   {}
-
-private:
-   void commit(uint32_t timestamp);
-   void set(const char *term);
-};
-
-struct TinyGPSSpeed : public TinyGPSDecimal
-{
-   double knots()    { return value() / 100.0; }
-   double mph()      { return _GPS_MPH_PER_KNOT * value() / 100.0; }
-   double mps()      { return _GPS_MPS_PER_KNOT * value() / 100.0; }
-   double kmph()     { return _GPS_KMPH_PER_KNOT * value() / 100.0; }
-};
-
-struct TinyGPSCourse : public TinyGPSDecimal
-{
-   double deg()      { return value() / 100.0; }
-};
-
-struct TinyGPSAltitude : public TinyGPSDatum<int32_t>
-{
-   friend class TinyGPSPlus;
-public:
-
-   TinyGPSAltitude()
-   {}
-
-   double meters()       { return value() / 100.0; }
-   double miles()        { return _GPS_MILES_PER_METER * value() / 100.0; }
-   double kilometers()   { return _GPS_KM_PER_METER * value() / 100.0; }
-   double feet()         { return _GPS_FEET_PER_METER * value() / 100.0; }
-
-private:
-   void commit(uint32_t timestamp);
-   void set(const char *term);
-};
-
-
-struct TinyGPSTrackedSattelites
-{
-   uint8_t system;       // TinyGPSGnssSystem
-   uint16_t prn;         // Satellite ID / SVID
-   uint8_t elevation;    // degrees above horizon: 0..90
-   uint16_t azimuth;     // degrees from true north: 0..359
-   uint8_t strength;     // C/N0 (commonly shown as SNR) in dB-Hz
-   bool tracked;         // true if the GSV SNR/CN0 field is present
-};
-
-struct TinyGPSHDOP : TinyGPSDecimal
-{
-   double hdop() { return value() / 100.0; }
->>>>>>> d6bcf23be (t-echo-plus)
 };
 
 class TinyGPSPlus;
@@ -508,7 +290,6 @@ class TinyGPSPlus;
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
 class TinyGPSCustom : public TinyGPSDatum<uint8_t>
 {
-<<<<<<< HEAD
   public:
     TinyGPSCustom(){};
     TinyGPSCustom(TinyGPSPlus &gps, const char *sentenceName, int termNumber);
@@ -530,25 +311,6 @@ class TinyGPSCustom : public TinyGPSDatum<uint8_t>
     int termNumber = 0;
     friend class TinyGPSPlus;
     TinyGPSCustom *next = nullptr;
-=======
-public:
-   TinyGPSCustom() {};
-   TinyGPSCustom(TinyGPSPlus &gps, const char *sentenceName, int termNumber);
-   void begin(TinyGPSPlus &gps, const char *_sentenceName, int _termNumber);
-
-   const char *value() { flags &= (~FLAG_UPDATED); return buffer; }
-
-private:
-   void commit(uint32_t timestamp);
-   void set(const char *term);
-
-   char stagingBuffer[_GPS_MAX_FIELD_SIZE + 1] = {0};
-   char buffer[_GPS_MAX_FIELD_SIZE + 1] = {0};
-   const char *sentenceName = nullptr;
-   int termNumber = 0;
-   friend class TinyGPSPlus;
-   TinyGPSCustom *next = nullptr;
->>>>>>> d6bcf23be (t-echo-plus)
 };
 #endif
 
@@ -558,7 +320,6 @@ private:
 
 class TinyGPSPlus
 {
-<<<<<<< HEAD
   public:
     TinyGPSPlus();
     bool encode(char c); // process one character received from GPS
@@ -573,6 +334,11 @@ class TinyGPSPlus
     TinyGPSTime time;
     TinyGPSSpeed speed;
     TinyGPSCourse course;
+    // Separate VTG navigation data. RMC remains the primary source; these are
+    // only used as a read-only Course/Speed fallback when fresh RMC is absent.
+    TinyGPSSpeed vtgSpeed;
+    TinyGPSCourse vtgCourse;
+    TinyGPSVTGInfo vtgInfo;
     TinyGPSAltitude altitude;
     TinyGPSInteger satellites;
     TinyGPSTrackedSattelites trackedSatellites[TINYGPS_MAX_SATS];
@@ -588,16 +354,158 @@ class TinyGPSPlus
 
     TinyGPSANTInfo antInfo;
 
-    uint8_t gsaSatellitesUsed(uint8_t system) const
+    // GSA/GSV are live receiver-state data. Do not expose an old snapshot
+    // indefinitely if those sentence types stop arriving.
+    static constexpr uint32_t AUX_DATA_MAX_AGE_MS = 5000U;
+
+    bool isFreshAuxTimestamp(uint32_t timestamp) const
+    {
+        return timestamp != 0 && (uint32_t)(millis() - timestamp) <= AUX_DATA_MAX_AGE_MS;
+    }
+
+    bool isTrackedSatelliteFresh(const TinyGPSTrackedSattelites &sat) const
+    {
+        return sat.prn != 0 && isFreshAuxTimestamp(sat.lastUpdate);
+    }
+
+    uint32_t gsvAge() const
+    {
+        return lastGSVUpdate ? (uint32_t)(millis() - lastGSVUpdate) : static_cast<uint32_t>(ULONG_MAX);
+    }
+
+    uint32_t ggaAge() const
+    {
+        return lastGGAUpdate ? (uint32_t)(millis() - lastGGAUpdate) : static_cast<uint32_t>(ULONG_MAX);
+    }
+
+    // Raw last-valid GSA/GSV snapshot helpers. These deliberately ignore age.
+    // They are for UI/diagnostics while the receiver is IDLE/SLEEPING only;
+    // navigation/fix logic must keep using the age-filtered getters below.
+    uint32_t gsaAge() const
+    {
+        uint32_t best = static_cast<uint32_t>(ULONG_MAX);
+        for (uint8_t sys = TINYGPS_GNSS_GPS; sys <= TINYGPS_GNSS_QZSS; ++sys) {
+            if (gsaInfo[sys].valid && gsaInfo[sys].lastUpdate != 0) {
+                const uint32_t age = (uint32_t)(millis() - gsaInfo[sys].lastUpdate);
+                if (age < best)
+                    best = age;
+            }
+        }
+        return best;
+    }
+
+    uint8_t gsaSatellitesUsedSnapshot(uint8_t system) const
     {
         return system < 7 && gsaInfo[system].valid ? gsaInfo[system].satellitesUsed : 0;
+    }
+
+    uint16_t gsaSatellitesUsedTotalSnapshot() const
+    {
+        uint16_t total = 0;
+        for (uint8_t sys = TINYGPS_GNSS_GPS; sys <= TINYGPS_GNSS_QZSS; ++sys)
+            if (gsaInfo[sys].valid)
+                total += gsaInfo[sys].satellitesUsed;
+        return total;
+    }
+
+    bool gsaSatelliteUsedSnapshot(uint8_t system, uint16_t prn) const
+    {
+        if (system < TINYGPS_GNSS_GPS || system > TINYGPS_GNSS_QZSS || !gsaInfo[system].valid || prn == 0)
+            return false;
+        for (uint8_t i = 0; i < 12; ++i)
+            if (gsaInfo[system].satelliteIds[i] == prn)
+                return true;
+        return false;
+    }
+
+    uint8_t gsaFixTypeSnapshot() const
+    {
+        uint8_t best = 0;
+        for (uint8_t sys = TINYGPS_GNSS_GPS; sys <= TINYGPS_GNSS_QZSS; ++sys)
+            if (gsaInfo[sys].valid && gsaInfo[sys].fixType > best)
+                best = gsaInfo[sys].fixType;
+        return best;
+    }
+
+    uint16_t gsaPDOPSnapshot() const
+    {
+        uint16_t best = 0;
+        for (uint8_t sys = TINYGPS_GNSS_GPS; sys <= TINYGPS_GNSS_QZSS; ++sys) {
+            const uint16_t value = gsaInfo[sys].valid ? gsaInfo[sys].pdop : 0;
+            if (value > 0 && (best == 0 || value < best))
+                best = value;
+        }
+        return best;
+    }
+
+    uint16_t gsaHDOPSnapshot() const
+    {
+        uint16_t best = 0;
+        for (uint8_t sys = TINYGPS_GNSS_GPS; sys <= TINYGPS_GNSS_QZSS; ++sys) {
+            const uint16_t value = gsaInfo[sys].valid ? gsaInfo[sys].hdop : 0;
+            if (value > 0 && (best == 0 || value < best))
+                best = value;
+        }
+        return best;
+    }
+
+    uint16_t gsaVDOPSnapshot() const
+    {
+        uint16_t best = 0;
+        for (uint8_t sys = TINYGPS_GNSS_GPS; sys <= TINYGPS_GNSS_QZSS; ++sys) {
+            const uint16_t value = gsaInfo[sys].valid ? gsaInfo[sys].vdop : 0;
+            if (value > 0 && (best == 0 || value < best))
+                best = value;
+        }
+        return best;
+    }
+
+    uint16_t satellitesInViewSnapshot() const
+    {
+        uint16_t total = 0;
+        for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
+            if (trackedSatellites[i].prn != 0)
+                ++total;
+        return total;
+    }
+
+    uint16_t satellitesTrackedSnapshot() const
+    {
+        uint16_t total = 0;
+        for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
+            if (trackedSatellites[i].prn != 0 && trackedSatellites[i].tracked)
+                ++total;
+        return total;
+    }
+
+    uint16_t satellitesInViewSnapshot(uint8_t system) const
+    {
+        uint16_t total = 0;
+        for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
+            if (trackedSatellites[i].prn != 0 && trackedSatellites[i].system == system)
+                ++total;
+        return total;
+    }
+
+    uint8_t gsaSatellitesUsed(uint8_t system) const
+    {
+        return system < 7 && gsaInfo[system].valid && isFreshAuxTimestamp(gsaInfo[system].lastUpdate)
+                   ? gsaInfo[system].satellitesUsed
+                   : 0;
+    }
+
+    bool gsaSatelliteUsed(uint8_t system, uint16_t prn) const
+    {
+        return system >= TINYGPS_GNSS_GPS && system <= TINYGPS_GNSS_QZSS &&
+               gsaInfo[system].valid && isFreshAuxTimestamp(gsaInfo[system].lastUpdate) &&
+               gsaSatelliteUsedSnapshot(system, prn);
     }
 
     uint16_t gsaSatellitesUsedTotal() const
     {
         uint16_t total = 0;
         for (uint8_t system = TINYGPS_GNSS_GPS; system <= TINYGPS_GNSS_QZSS; ++system)
-            if (gsaInfo[system].valid)
+            if (gsaInfo[system].valid && isFreshAuxTimestamp(gsaInfo[system].lastUpdate))
                 total += gsaInfo[system].satellitesUsed;
         return total;
     }
@@ -607,7 +515,7 @@ class TinyGPSPlus
         uint8_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
         {
-            if (gsaInfo[s].valid && gsaInfo[s].fixType > best)
+            if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].fixType > best)
                 best = gsaInfo[s].fixType;
         }
         return best;
@@ -618,7 +526,8 @@ class TinyGPSPlus
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
         {
-            if (gsaInfo[s].valid && gsaInfo[s].pdop > 0 && (best == 0 || gsaInfo[s].pdop < best))
+            if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].pdop > 0 &&
+                (best == 0 || gsaInfo[s].pdop < best))
             {
                 best = gsaInfo[s].pdop;
             }
@@ -631,19 +540,22 @@ class TinyGPSPlus
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
         {
-            if (gsaInfo[s].valid && gsaInfo[s].hdop > 0 && (best == 0 || gsaInfo[s].hdop < best))
+            if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].hdop > 0 &&
+                (best == 0 || gsaInfo[s].hdop < best))
             {
                 best = gsaInfo[s].hdop;
             }
         }
         return best;
     }
+
     uint16_t gsaVDOP() const
     {
         uint16_t best = 0;
         for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
         {
-            if (gsaInfo[s].valid && gsaInfo[s].vdop > 0 && (best == 0 || gsaInfo[s].vdop < best))
+            if (gsaInfo[s].valid && isFreshAuxTimestamp(gsaInfo[s].lastUpdate) && gsaInfo[s].vdop > 0 &&
+                (best == 0 || gsaInfo[s].vdop < best))
             {
                 best = gsaInfo[s].vdop;
             }
@@ -655,7 +567,7 @@ class TinyGPSPlus
     {
         uint16_t total = 0;
         for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
-            if (trackedSatellites[i].prn != 0)
+            if (isTrackedSatelliteFresh(trackedSatellites[i]))
                 ++total;
         return total;
     }
@@ -664,7 +576,7 @@ class TinyGPSPlus
     {
         uint16_t total = 0;
         for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
-            if (trackedSatellites[i].prn != 0 && trackedSatellites[i].tracked)
+            if (isTrackedSatelliteFresh(trackedSatellites[i]) && trackedSatellites[i].tracked)
                 ++total;
         return total;
     }
@@ -673,13 +585,16 @@ class TinyGPSPlus
     {
         uint16_t total = 0;
         for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
-            if (trackedSatellites[i].prn != 0 && trackedSatellites[i].system == system)
+            if (isTrackedSatelliteFresh(trackedSatellites[i]) && trackedSatellites[i].system == system)
                 ++total;
         return total;
     }
 
-    bool hasValidGLL() const { return gllInfo.valid && gllLocation.isValid() && gllTime.isValid(); }
-    bool hasValidZDA() const { return zdaInfo.valid && zdaTime.isValid(); }
+    bool hasValidGLL() const
+    {
+        return gllInfo.valid && isFreshAuxTimestamp(gllInfo.lastUpdate) && gllLocation.isValid() && gllTime.isValid();
+    }
+    bool hasValidZDA() const { return zdaInfo.valid && isFreshAuxTimestamp(zdaInfo.lastUpdate) && zdaTime.isValid(); }
     TinyGPSAntennaStatus antennaStatus() const { return antInfo.status; }
 
     TinyGPSHDOP hdop;
@@ -698,6 +613,11 @@ class TinyGPSPlus
     // done so caller must ensure that buf is large enough to hold the string.
     // Returns number of bytes written, excluding the 0 terminator.
     int GGA(char *buf);
+
+    // Return the GGA fix-quality value parsed by TinyGPS++.
+    // 0 = invalid/no fix, 1 = GPS fix, 2 = DGPS, 3 = PPS,
+    // 4 = RTK fixed, 5 = RTK float, etc.
+    uint8_t fixQuality() const { return fixQ; }
 
     enum
     {
@@ -728,11 +648,32 @@ class TinyGPSPlus
     uint8_t curTermOffset = 0;
     int8_t trackedSatellitesIndex = -1; // current GSV satellite slot, -1 means invalid
     uint8_t currentGSVSystem = TINYGPS_GNSS_UNKNOWN;
+    bool currentGSVTalkerIsGP = false; // L76K uses GP for both GPS and QZSS GSV
+
+    // GSV/NMEA 4.x state. The optional signal ID is used to keep multiple
+    // $GNGSV signal groups from erasing each other.
+    uint8_t currentGSVTotalMessages = 0;
+    uint8_t currentGSVMessageNumber = 0;
+    uint8_t currentGSVTotalSatellites = 0;
+    uint8_t currentGSVSignalId = 0;
+    int8_t currentGSVSentenceSlots[4] = {-1, -1, -1, -1};
+    uint32_t lastGSVUpdate = 0;
+    uint32_t mixedGSVSignalMask = 0;
+    bool gsvHasSignalId = false;
+
+    // GSV parsing updates the working snapshot term-by-term. Keep a rollback
+    // copy so a checksum-failed GSV sentence cannot clear or corrupt the last
+    // checksum-valid satellite snapshot.
+    TinyGPSTrackedSattelites gsvRollbackSatellites[TINYGPS_MAX_SATS] = {};
+    uint32_t gsvRollbackMixedSignalMask = 0;
+    bool gsvRollbackHasSignalId = false;
+    bool gsvRollbackValid = false;
 
     // GSA values are staged until checksum validation.
     uint8_t currentGSATalkerSystem = TINYGPS_GNSS_UNKNOWN;
     uint8_t pendingGSASystem = TINYGPS_GNSS_UNKNOWN;
     uint8_t pendingGSAUsed = 0;
+    uint16_t pendingGSAIds[12] = {};
     uint8_t pendingGSAFixType = 0;
     uint16_t pendingGSAPDOP = 0;
     uint16_t pendingGSAHDOP = 0;
@@ -740,6 +681,7 @@ class TinyGPSPlus
 
     char pendingGLLStatus = 'V';
     char pendingGLLMode = 'N';
+    char pendingVTGMode = 'N';
 
     uint8_t pendingZDADay = 0;
     uint8_t pendingZDAMonth = 0;
@@ -750,6 +692,8 @@ class TinyGPSPlus
     TinyGPSAntennaStatus pendingAntennaStatus = TINYGPS_ANT_UNKNOWN;
 
     uint32_t sentenceTime = 0;
+    uint32_t lastGGAUpdate = 0;
+    uint8_t pendingFixQ = 0;
     uint8_t fixQ = 0; /* From Eric S. Raymond's website:
                          http://www.catb.org/gpsd/NMEA.html#_gga_global_positioning_system_fix_data 0 - fix not available, 1 - GPS
                          fix, 2 - Differential GPS fix (values above 2 are 2.3 features) 3 = PPS fix 4 = Real Time Kinematic 5 =
@@ -775,206 +719,6 @@ class TinyGPSPlus
     // internal utilities
     int fromHex(char a);
     bool endOfTermHandler(bool termIsNotEmpty);
-=======
-public:
-  TinyGPSPlus();
-  bool encode(char c); // process one character received from GPS
-  TinyGPSPlus &operator << (char c) {encode(c); return *this;}
-
-  TinyGPSLocation location;
-  TinyGPSDate date;
-  TinyGPSTime time;
-  TinyGPSSpeed speed;
-  TinyGPSCourse course;
-  TinyGPSAltitude altitude;
-  TinyGPSInteger satellites;
-  TinyGPSTrackedSattelites trackedSatellites[TINYGPS_MAX_SATS];
-  TinyGPSGSAInfo gsaInfo[7];
-
-  // Additional L76K NMEA data.
-  TinyGPSLocation gllLocation;
-  TinyGPSTime gllTime;
-  TinyGPSGLLInfo gllInfo;
-
-  TinyGPSTime zdaTime;
-  TinyGPSZDAInfo zdaInfo;
-
-  TinyGPSANTInfo antInfo;
-
-  uint8_t gsaSatellitesUsed(uint8_t system) const
-  {
-    return system < 7 && gsaInfo[system].valid ? gsaInfo[system].satellitesUsed : 0;
-  }
-
-  uint16_t gsaSatellitesUsedTotal() const
-  {
-    uint16_t total = 0;
-    for (uint8_t system = TINYGPS_GNSS_GPS; system <= TINYGPS_GNSS_QZSS; ++system)
-      if (gsaInfo[system].valid)
-        total += gsaInfo[system].satellitesUsed;
-    return total;
-  }
-
-  uint8_t gsaFixType() const
-  {
-    uint8_t best = 0;
-    for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s)
-      if (gsaInfo[s].valid && gsaInfo[s].fixType > best) best = gsaInfo[s].fixType;
-    return best;
-  }
-
-  uint16_t gsaPDOP() const
-  {
-    for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) if (gsaInfo[s].valid && gsaInfo[s].pdop) return gsaInfo[s].pdop;
-    return 0;
-  }
-  uint16_t gsaHDOP() const
-  {
-    for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) if (gsaInfo[s].valid && gsaInfo[s].hdop) return gsaInfo[s].hdop;
-    return 0;
-  }
-  uint16_t gsaVDOP() const
-  {
-    for (uint8_t s = TINYGPS_GNSS_GPS; s <= TINYGPS_GNSS_QZSS; ++s) if (gsaInfo[s].valid && gsaInfo[s].vdop) return gsaInfo[s].vdop;
-    return 0;
-  }
-
-  uint16_t satellitesInView() const
-  {
-    uint16_t total = 0;
-    for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
-      if (trackedSatellites[i].prn != 0)
-        ++total;
-    return total;
-  }
-
-  uint16_t satellitesTracked() const
-  {
-    uint16_t total = 0;
-    for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
-      if (trackedSatellites[i].prn != 0 && trackedSatellites[i].tracked)
-        ++total;
-    return total;
-  }
-
-  uint16_t satellitesInView(uint8_t system) const
-  {
-    uint16_t total = 0;
-    for (size_t i = 0; i < TINYGPS_MAX_SATS; ++i)
-      if (trackedSatellites[i].prn != 0 && trackedSatellites[i].system == system)
-        ++total;
-    return total;
-  }
-
-  bool hasValidGLL() const { return gllInfo.valid && gllLocation.isValid() && gllTime.isValid(); }
-  bool hasValidZDA() const { return zdaInfo.valid && zdaTime.isValid(); }
-  TinyGPSAntennaStatus antennaStatus() const { return antInfo.status; }
-
-  TinyGPSHDOP hdop;
-  TinyGPSAltitude geoidHeight;
-
-  static const char *libraryVersion() { return _GPS_VERSION; }
-
-  static double distanceBetween(double lat1, double long1, double lat2, double long2);
-  static double courseTo(double lat1, double long1, double lat2, double long2);
-  static const char *cardinal(double course);
-
-  static int32_t parseDecimal(const char *term);
-  static void parseDegrees(const char *term, RawDegrees &deg);
-
-  // Get current data as GGA string, including newline. No bounds checking is
-  // done so caller must ensure that buf is large enough to hold the string.
-  // Returns number of bytes written, excluding the 0 terminator.
-  int GGA(char* buf);
-
-#ifndef TINYGPS_OPTION_NO_STATISTICS
-  uint32_t charsProcessed()   const { return encodedCharCount; }
-  uint32_t sentencesWithFix() const { return sentencesWithFixCount; }
-  uint32_t failedChecksum()   const { return failedChecksumCount; }
-  uint32_t passedChecksum()   const { return passedChecksumCount; }
-#endif
-
-  uint8_t  fixQuality()        const { return fixQ; }
-  uint8_t  sentenceType()      const { return curSentenceType; }
-
-private:
-  bool sentenceHasFix() const
-  {
-    return (flags & FLAG_SENTENCE_HAS_FIX)!=0;
-  }
-  void setSentenceHasFix(bool const i_value)
-  {
-    if(i_value) {
-      flags |= FLAG_SENTENCE_HAS_FIX;
-    } else {
-      flags &= ~FLAG_IS_CHECKSUM_TERM;
-    }
-  }
-  enum {FLAG_DEFAULT=0, FLAG_IS_CHECKSUM_TERM=(1<<0), FLAG_SENTENCE_HAS_FIX=(1<<1)};
-
-  // parsing state variables
-  uint8_t parity = 0;
-  uint8_t flags = 0;
-  char term[_GPS_MAX_FIELD_SIZE] = {0};
-  uint8_t curSentenceType = 0;
-  uint8_t curTermNumber = 0;
-  uint8_t curTermOffset = 0;
-  int8_t trackedSatellitesIndex = -1; // current GSV satellite slot, -1 means invalid
-  uint8_t currentGSVSystem = TINYGPS_GNSS_UNKNOWN;
-
-  // GSA values are staged until checksum validation.
-  uint8_t currentGSATalkerSystem = TINYGPS_GNSS_UNKNOWN;
-  uint8_t pendingGSASystem = TINYGPS_GNSS_UNKNOWN;
-  uint8_t pendingGSAUsed = 0;
-  uint8_t pendingGSAFixType = 0;
-  uint16_t pendingGSAPDOP = 0;
-  uint16_t pendingGSAHDOP = 0;
-  uint16_t pendingGSAVDOP = 0;
-
-  char pendingGLLStatus = 'V';
-  char pendingGLLMode = 'N';
-
-  uint8_t pendingZDADay = 0;
-  uint8_t pendingZDAMonth = 0;
-  uint16_t pendingZDAYear = 0;
-  int8_t pendingZDAZoneHours = 0;
-  uint8_t pendingZDAZoneMinutes = 0;
-
-  TinyGPSAntennaStatus pendingAntennaStatus = TINYGPS_ANT_UNKNOWN;
-
-  uint32_t sentenceTime = 0;
-  uint8_t fixQ = 0;  /* From Eric S. Raymond's website: http://www.catb.org/gpsd/NMEA.html#_gga_global_positioning_system_fix_data
-    				0 - fix not available,
-    				1 - GPS fix,
-    				2 - Differential GPS fix (values above 2 are 2.3 features)
-    				3 = PPS fix
-    				4 = Real Time Kinematic
-    				5 = Float RTK
-    				6 = estimated (dead reckoning)
-    				7 = Manual input mode
-    				8 = Simulation mode
-   	   	   	   	  */
-
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-  // custom element support
-  friend class TinyGPSCustom;
-  TinyGPSCustom *customElts = nullptr;
-  TinyGPSCustom *customCandidates = nullptr;
-  void insertCustom(TinyGPSCustom *pElt, const char *sentenceName, int index);
-#endif
-
-#ifndef TINYGPS_OPTION_NO_STATISTICS
-  // statistics
-  uint32_t encodedCharCount = 0;
-  uint32_t sentencesWithFixCount = 0;
-  uint32_t failedChecksumCount = 0;
-  uint32_t passedChecksumCount = 0;
-#endif
-
-  // internal utilities
-  int fromHex(char a);
-  bool endOfTermHandler(bool termIsNotEmpty);
->>>>>>> d6bcf23be (t-echo-plus)
 };
 
 #endif // def(__TinyGPSPlus_h)

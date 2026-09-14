@@ -7,6 +7,7 @@
 
 #include <SensorBHI260AP.hpp>
 #include <Wire.h>
+#include <bosch/bhy2_parse.h>
 #include <bosch/BoschSensorDataHelper.hpp>
 
 class BHI260APSensor : public MotionSensor
