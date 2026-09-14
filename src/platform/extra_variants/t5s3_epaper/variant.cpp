@@ -21,6 +21,54 @@
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
+// TEMPORARY touch calibration overlay: crosshair + coordinates at the last tap. Remove after hardware validation.
+// Renders only on full re-renders (never clears its fullscreen tile) and skips drawing after a rotation change.
+class TouchCalibrationApplet : public NicheGraphics::InkHUD::SystemApplet
+{
+  public:
+    static void mark(int16_t tx, int16_t ty)
+    {
+        using namespace NicheGraphics::InkHUD;
+        static TouchCalibrationApplet *applet = nullptr;
+        auto *inkhud = InkHUD::getInstance();
+        if (!applet) {
+            applet = new TouchCalibrationApplet;
+            applet->name = "TouchCalibration";
+            (new Tile)->assignApplet(applet);
+            applet->activate();
+            applet->bringToForeground();
+            inkhud->systemApplets.push_back(applet);
+        }
+        applet->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
+        applet->x = tx;
+        applet->y = ty;
+        applet->markedRotation = inkhud->persistence->settings.rotation;
+        LOG_INFO("T5 touch cal: (%d, %d) in %ux%u, nav cell %d/6", tx, ty, inkhud->width(), inkhud->height(),
+                 tx * 6 / inkhud->width() + 1);
+        inkhud->forceUpdate(NicheGraphics::Drivers::EInk::UpdateTypes::FAST, true, true);
+    }
+
+    void onRender(bool full) override
+    {
+        (void)full;
+        if (markedRotation != settings->rotation)
+            return; // Stale point from the previous rotation's frame
+        using NicheGraphics::InkHUD::BLACK;
+        drawLine(x - 24, y, x + 24, y, BLACK);
+        drawLine(x, y - 24, x, y + 24, BLACK);
+        char buf[40];
+        snprintf(buf, sizeof(buf), "%d,%d %dx%d c%d", x, y, width(), height(), x * 6 / width() + 1);
+        setFont(fontSmall);
+        const bool left = x < width() / 2, top = y < height() / 2;
+        printAt(left ? x + 30 : x - 30, top ? y + 30 : y - 30, buf, left ? LEFT : RIGHT, top ? TOP : BOTTOM);
+    }
+
+  private:
+    int16_t x = 0;
+    int16_t y = 0;
+    uint8_t markedRotation = 0xFF;
+};
+
 // Bridges touch events from TouchScreenImpl1 directly into InkHUD,
 // bypassing the InputBroker (which is excluded in InkHUD builds).
 // Routing mirrors the mini-epaper-s3 two-way rocker pattern:
@@ -48,6 +96,7 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
 
         switch (e->inputEvent) {
         case INPUT_BROKER_USER_PRESS:
+            TouchCalibrationApplet::mark(e->touchX, e->touchY); // TEMPORARY touch calibration
             inkhud->touchTap(e->touchX, e->touchY);
             break;
         case INPUT_BROKER_SELECT:
