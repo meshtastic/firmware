@@ -100,6 +100,9 @@ void applyDirectedHopBudget(meshtastic_MeshPacket *p)
 {
     if (!isFromUs(p) || isBroadcast(p->to) || p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
         return;
+    // A reply was already sized from the request's own hop count (setReplyTo), which beats NodeDB distance.
+    if (p->decoded.request_id != 0)
+        return;
     if (!IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
                    meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_NEIGHBORINFO_APP, meshtastic_PortNum_PAXCOUNTER_APP))
         return;
@@ -1221,6 +1224,14 @@ static bool signedDataFits(meshtastic_Data *d)
 }
 #endif
 
+/// A PKC_ALWAYS port with a destination must never fall back to the channel cipher, however PKI is unavailable.
+static bool pkcRequiredByPolicy(const meshtastic_MeshPacket *p)
+{
+    uint32_t flags = 0;
+    return p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !isBroadcast(p->to) &&
+           portPolicyFlags(p->decoded.portnum, flags) && (flags & meshtastic_PortPolicyFlags_PKC_ALWAYS);
+}
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
@@ -1424,8 +1435,9 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         } else
 #endif
         {
-            if (p->pki_encrypted == true) {
-                // Client specifically requested PKI encryption
+            // Client specifically requested PKI encryption, or the port's policy demands it (ham, no
+            // local key, or a build without PKI at all).
+            if (p->pki_encrypted == true || pkcRequiredByPolicy(p)) {
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
             const bool useAead = channels.isAEADEnabled(chIndex);
