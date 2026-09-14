@@ -90,6 +90,10 @@ uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
     // hops_away has no via_mqtt guard at the store, so an MQTT-learned distance may not be a LoRa path.
     if (nodeInfoLiteViaMqtt(n))
         return configured;
+    // A distance we have not confirmed lately may describe a path that no longer exists, and a directed
+    // broadcast has no ACK to reveal the loss. NextHopRouter trusts a neighbour on the same window.
+    if (sinceLastSeen(n) >= NEXTHOP_NEIGHBOR_FRESH_SECS)
+        return configured;
     const uint32_t want = (uint32_t)n->hops_away + 2;
     return want < configured ? (uint8_t)want : configured;
 }
