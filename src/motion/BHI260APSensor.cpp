@@ -4,6 +4,7 @@
 // Use the normal APP30 image. KLIO is not needed for GNSS/IMU stabilization.
 #define BOSCH_APP30_SHUTTLE_BHI260_FW
 
+#include <SensorBHI260AP.hpp>
 #include "mesh/Throttle.h"
 #include <BoschFirmware.h>
 
@@ -58,8 +59,8 @@ bool BHI260APSensor::init()
         // Keep the library's default axis mapping. SensorRemap is not part of
         // the SensorBHI260AP API used by this build.
         BoschSensorInfo info = sensor.getSensorInfo();
-        LOG_INFO("Product ID     : %02x\n", info.getProductId());
-        LOG_INFO("Kernel version : %04u\n", info.getKernelVersion());
+        LOG_INFO("Product ID     : %02x\n", info.product_id);
+        LOG_INFO("Kernel version : %04u\n", info.kernel_version);
         LOG_INFO("User version   : %04u\n", info.getUserVersion());
         LOG_INFO("ROM version    : %04u\n", info.getRomVersion());
         LOG_INFO("Power state    : %s\n", (info.getHostStatus() & BHY2_HST_POWER_STATE) ? "sleeping" : "active");
@@ -88,8 +89,17 @@ bool BHI260APSensor::init()
 #endif
 
         // Keep the existing wrist-tilt wake and step counter behavior.
-        constexpr uint8_t wristTilt = static_cast<uint8_t>(BoschSensorID::WRIST_TILT_GESTURE);
-        if (sensor.onResultEvent(wristTilt, onWristTilt, this) && sensor.configure(wristTilt, 1.0f, 0)) {
+        // The event API requires the Bosch virtual-sensor ID enum rather than
+        // its underlying byte value.
+        constexpr BoschVirtualSensor::BoschSensorID wristTilt =
+            static_cast<BoschVirtualSensor::BoschSensorID>(SensorBHI260AP::WRIST_TILT_GESTURE);
+        // SensorDataParseCallback provides a mutable payload pointer, while
+        // the event handler does not modify the payload.
+        auto wristTiltCallback = [](uint8_t eventId, uint8_t *data, uint32_t dataLen, uint64_t *timestamp,
+                                    void *userData) {
+            onWristTilt(eventId, data, dataLen, timestamp, userData);
+        };
+        if (sensor.onResultEvent(wristTilt, wristTiltCallback, this) && sensor.configure(wristTilt, 1.0f, 0)) {
             LOG_DEBUG("BHI260AP wrist tilt wake enabled");
         } else {
             LOG_WARN("BHI260AP firmware has no wrist tilt gesture, motion wake unavailable");
