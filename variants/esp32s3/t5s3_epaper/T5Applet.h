@@ -24,6 +24,8 @@ class T5Applet : public Applet
 
     static int8_t indexOf(const char *name); // Index in InkHUD::userApplets by registered name, or -1
 
+    void onForeground() override; // Hides the shared battery icon: every T5 screen draws its own battery status
+
   protected:
     enum Destination : uint8_t { HOME, MSGS, NODES, MAP, MENU, APPS };
 

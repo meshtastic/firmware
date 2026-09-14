@@ -25,7 +25,6 @@ class T5NodesApplet : public T5Applet, public MeshModule
 
     void onActivate() override;
     void onDeactivate() override;
-    void onForeground() override;
     void onRender(bool full) override;
     bool onTouchPoint(uint16_t x, uint16_t y, bool longPress) override;
     void onNavUp() override;

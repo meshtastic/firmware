@@ -27,6 +27,19 @@ bool InkHUD::T5NodeDetailApplet::open(NodeNum num)
     return hud->showApplet(i);
 }
 
+// Live while shown: the node's own packets change its last heard, signal and SNR / RSSI facts
+bool InkHUD::T5NodeDetailApplet::wantPacket(const meshtastic_MeshPacket *p)
+{
+    return isForeground() && p->from == node;
+}
+
+ProcessMessage InkHUD::T5NodeDetailApplet::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    (void)mp;
+    requestUpdate();
+    return ProcessMessage::CONTINUE;
+}
+
 void InkHUD::T5NodeDetailApplet::onRender(bool full)
 {
     (void)full;

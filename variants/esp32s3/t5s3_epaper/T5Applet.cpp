@@ -2,6 +2,7 @@
 
 #include "./T5Applet.h"
 
+#include "graphics/niche/InkHUD/SystemApplet.h"
 #include "mesh/NodeDB.h"
 
 #include <initializer_list>
@@ -16,6 +17,13 @@ int8_t InkHUD::T5Applet::indexOf(const char *name)
             return i;
     }
     return -1;
+}
+
+// The menu can re-enable the shared icon, which would overlap T5 headers: switched back off whenever a T5 screen shows
+void InkHUD::T5Applet::onForeground()
+{
+    settings->optionalFeatures.batteryIcon = false;
+    inkhud->getSystemApplet("BatteryIcon")->sendToBackground();
 }
 
 // Heard within the last 10 minutes: the HEARD 10M count, on every T5 screen

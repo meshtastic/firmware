@@ -28,11 +28,6 @@ void InkHUD::T5NodesApplet::onDeactivate()
     signals.clear();
 }
 
-void InkHUD::T5NodesApplet::onForeground()
-{
-    firstRow = 0;
-}
-
 bool InkHUD::T5NodesApplet::wantPacket(const meshtastic_MeshPacket *p)
 {
     return isActive() && !isFromUs(p);

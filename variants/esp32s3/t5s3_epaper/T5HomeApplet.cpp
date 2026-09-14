@@ -78,10 +78,6 @@ void InkHUD::T5HomeApplet::begin()
         hud->showApplet(index);
     }
 
-    // Home draws its own battery status: the shared icon would sit on its header
-    saved.optionalFeatures.batteryIcon = false;
-    hud->getSystemApplet("BatteryIcon")->sendToBackground();
-
     SeenTracker *tracker = new SeenTracker;
     tracker->name = "T5SeenTracker";
     (new Tile)->assignApplet(tracker); // Zero-size tile: Renderer never clears any pixels for it
