@@ -104,6 +104,61 @@ void test_timerEndsAtMillis_dodges_the_wrap_tick_itself()
     TEST_ASSERT_EQUAL_UINT32(1u, Time::timerEndsAtMillis(0)); // getMillis()==0, delayMs==0: sum is 0
 }
 
+// --- stampMillis(): one value for storing a stamp AND measuring against it ---
+
+void test_stampMillis_matches_getMillis_away_from_the_wrap()
+{
+    Time::setTestMillis(123456u);
+    TEST_ASSERT_EQUAL_UINT32(123456u, Time::stampMillis());
+}
+
+void test_stampMillis_calls_the_zero_tick_one()
+{
+    Time::setTestMillis(0);
+    TEST_ASSERT_EQUAL_UINT32(1u, Time::stampMillis());
+}
+
+// The regression this helper exists for. Applying skipZero() at the STORE while a reader measures
+// elapsed time against a raw clock splits the two sides apart on the wrap tick: the stamp is 1 while
+// now is still 0, so `now - stamp` is UINT32_MAX and a brand new stamp reads as ~49.7 days old. Any
+// elapsed-since guard - a cooldown, a debounce, a long-press threshold - then fires when it must not.
+void test_store_side_dodge_alone_makes_a_fresh_stamp_read_as_ancient()
+{
+    Time::setTestMillis(0);
+    const uint32_t rawNow = Time::getMillis();              // what an un-normalised reader holds: 0
+    const uint32_t stampedAtStore = Time::skipZero(rawNow); // the old shape: dodge only at the store
+    TEST_ASSERT_EQUAL_UINT32(0u, rawNow);
+    TEST_ASSERT_EQUAL_UINT32(1u, stampedAtStore);
+    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, (uint32_t)(rawNow - stampedAtStore)); // the whole problem
+}
+
+void test_reading_through_stampMillis_keeps_elapsed_at_zero_on_the_wrap_tick()
+{
+    Time::setTestMillis(0);
+    const uint32_t now = Time::stampMillis(); // read once, used for the store AND the comparison
+    const uint32_t stamp = now;               // store it as-is; no second dodge needed
+    TEST_ASSERT_EQUAL_UINT32(1u, now);
+    TEST_ASSERT_EQUAL_UINT32(0u, (uint32_t)(now - stamp)); // fresh reads as fresh
+
+    // Once the clock moves on, the measured age is short by exactly the 1 ms the dodge introduced:
+    // the stamp was taken at tick 0 and recorded as 1, so 400 ticks later it reads as 399 old. That
+    // is the whole cost of the scheme, and it is the same 1 ms skew skipZero() already documents -
+    // pinned here so nobody "corrects" it to 400 and reintroduces a raw read on one side.
+    Time::advanceTestMillis(400u);
+    TEST_ASSERT_EQUAL_UINT32(399u, (uint32_t)(Time::stampMillis() - stamp));
+}
+
+// A stamp stored one tick BEFORE the wrap, read one tick after, must still measure 1 ms - the dodge
+// must not disturb ordinary wrap-crossing arithmetic.
+void test_stampMillis_measures_across_the_wrap_boundary()
+{
+    Time::setTestMillis(0xFFFFFFFFu);
+    const uint32_t stamp = Time::stampMillis();
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, stamp);
+    Time::advanceTestMillis(1u); // wraps to 0, which stampMillis reports as 1
+    TEST_ASSERT_EQUAL_UINT32(2u, (uint32_t)(Time::stampMillis() - stamp));
+}
+
 // --- getMillisMonotonic(): the published wrap carry ---
 
 void test_monotonic_matches_millis_before_any_wrap()
@@ -373,6 +428,11 @@ void setup()
     RUN_TEST(test_advanceTestMillis_wraps_like_millis);
     RUN_TEST(test_skipZero_maps_zero_to_one);
     RUN_TEST(test_skipZero_leaves_nonzero_values_alone);
+    RUN_TEST(test_stampMillis_matches_getMillis_away_from_the_wrap);
+    RUN_TEST(test_stampMillis_calls_the_zero_tick_one);
+    RUN_TEST(test_store_side_dodge_alone_makes_a_fresh_stamp_read_as_ancient);
+    RUN_TEST(test_reading_through_stampMillis_keeps_elapsed_at_zero_on_the_wrap_tick);
+    RUN_TEST(test_stampMillis_measures_across_the_wrap_boundary);
     RUN_TEST(test_timerEndsAtMillis_is_an_ordinary_sum_away_from_the_wrap);
     RUN_TEST(test_timerEndsAtMillis_dodges_a_sum_that_wraps_to_zero);
     RUN_TEST(test_timerEndsAtMillis_dodges_the_wrap_tick_itself);

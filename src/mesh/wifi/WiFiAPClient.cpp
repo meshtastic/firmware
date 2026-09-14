@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 #if HAS_WIFI
 #include "NodeDB.h"
@@ -313,7 +314,7 @@ static int32_t reconnectWiFi()
             tv.tv_usec = 0;
 
             perhapsSetRTC(RTCQualityNTP, &tv);
-            lastrun_ntp = millis();
+            lastrun_ntp = Time::skipZero(Time::getMillis());
         } else {
             LOG_DEBUG("NTP Update failed");
         }
