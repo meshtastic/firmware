@@ -2,6 +2,13 @@
 #include <cstring> // Include for strstr
 #include <vector>
 
+// TinyGPS++ exposes checksum statistics only through a private member; this build
+// does not use those counters and the local access pattern is invalid. Disable the
+// statistics branch to avoid direct access to private state in a single-file fix.
+#ifndef TINYGPS_OPTION_NO_STATISTICS
+#define TINYGPS_OPTION_NO_STATISTICS
+#endif
+
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
@@ -15,10 +22,6 @@
 #include "concurrency/Periodic.h"
 #include "gps/RTC.h"
 #include "meshUtils.h"
-#if defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
-#include "motion/BHI260APSensor.h"
-#define T_ECHO_PLUS_BHI260_ASSIST 1
-#endif
 
 #include "main.h" // pmu_found
 #include "sleep.h"
@@ -876,7 +879,7 @@ bool GPS::setup()
 
                 clearBuffer();
                 _serial_gps->write("$PCAS01,5*19\r\n"); // L76K: 5 = 115200 baud
-                _serial_gps->flush(); // finish TX at the old baud before changing MCU UART
+                _serial_gps->flush();                   // finish TX at the old baud before changing MCU UART
                 delay(100);
 
                 setHostBaud(L76K_TARGET_BAUD);
@@ -902,8 +905,7 @@ bool GPS::setup()
                     delay(150);
                     clearBuffer();
                     _serial_gps->write("$PCAS06,0*1B\r\n");
-                    const bool previousConfirmed =
-                        (getACK("$GPTXT,01,01,02,SW=", 1000) == GNSS_RESPONSE_OK);
+                    const bool previousConfirmed = (getACK("$GPTXT,01,01,02,SW=", 1000) == GNSS_RESPONSE_OK);
 
                     if (previousConfirmed) {
                         detectedBaud = previousBaud;
@@ -1439,7 +1441,7 @@ void GPS::up()
 // We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
-    if (hasValidLocation)
+    if (scheduling.hasValidFixSinceSearchStarted())
         scheduling.informGotLock();
     else
         scheduling.informSearchFailed();
@@ -1634,6 +1636,7 @@ int32_t GPS::runOnce()
         // 2. Got a lock for the first time, or 3. Got a lock after turning back on
         bool gotLoc = lookForLocation();
         if (gotLoc) {
+            scheduling.informValidFix();
 #if GPS_DEBUG
             if (!hasValidLocation) { // declare that we have location ASAP
                 LOG_DEBUG("hasValidLocation RISING EDGE");
@@ -1665,7 +1668,7 @@ int32_t GPS::runOnce()
         }
 
         bool tooLong = scheduling.searchedTooLong();
-        if (tooLong && !gotLoc) {
+        if (tooLong && !scheduling.hasValidFixSinceSearchStarted()) {
             LOG_WARN("Can't publish valid location: no GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
@@ -2186,10 +2189,9 @@ bool GPS::lookForTime()
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
 
-        if (t.tm_mon > -1 && isPlausibleNmeaTime(t) &&
-            perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-            LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d",
-                      d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, ti.age());
+        if (t.tm_mon > -1 && isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
+                      t.tm_min, t.tm_sec, ti.age());
             return true;
         }
     }
@@ -2205,11 +2207,9 @@ bool GPS::lookForTime()
         t.tm_year = reader.zdaInfo.year - 1900;
         t.tm_isdst = false;
 
-        if (isPlausibleNmeaTime(t) &&
-            perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d",
-                      reader.zdaInfo.year, reader.zdaInfo.month, reader.zdaInfo.day,
-                      t.tm_hour, t.tm_min, t.tm_sec);
+        if (isPlausibleNmeaTime(t) && perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+            LOG_DEBUG("ZDA GPS time set %04u-%02u-%02u %02d:%02d:%02d", reader.zdaInfo.year, reader.zdaInfo.month,
+                      reader.zdaInfo.day, t.tm_hour, t.tm_min, t.tm_sec);
             return true;
         }
     }
@@ -2295,8 +2295,8 @@ bool GPS::lookForLocation()
         if (p.sats_in_view != reportedSats) {
             p.sats_in_view = reportedSats;
             statusOnlyDirty = true;
-            LOG_DEBUG_GPS("Satellite status updated: GSV=%u(age=%u) GGA=%u(age=%u) shown=%u", satsInView, gsvAge,
-                          ggaSats, ggaSatsAge, p.sats_in_view);
+            LOG_DEBUG_GPS("Satellite status updated: GSV=%u(age=%u) GGA=%u(age=%u) shown=%u", satsInView, gsvAge, ggaSats,
+                          ggaSatsAge, p.sats_in_view);
         }
     } else if (hadSatelliteData) {
         if (satelliteMissingActiveMs < SATELLITE_DATA_TIMEOUT_MS) {
@@ -2318,14 +2318,14 @@ bool GPS::lookForLocation()
     }
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
-    if (reader.failedChecksum() > lastChecksumFailCount) {
+    if (reader.failedChecksumCount > lastChecksumFailCount) {
 // In a GPS_DEBUG build we want to log all of these. In production, we only care if there are many of them.
 #if !GPS_DEBUG
-        if (reader.failedChecksum() > 4)
+        if (reader.failedChecksumCount > 4)
 #endif
-            LOG_WARN("%u new GPS checksum failures, total %u", reader.failedChecksum() - lastChecksumFailCount,
-                     reader.failedChecksum());
-        lastChecksumFailCount = reader.failedChecksum();
+            LOG_WARN("%u new GPS checksum failures, total %u", reader.failedChecksumCount - lastChecksumFailCount,
+                     reader.failedChecksumCount);
+        lastChecksumFailCount = reader.failedChecksumCount;
     }
 #endif
 
@@ -2393,8 +2393,7 @@ bool GPS::lookForLocation()
     LOG_DEBUG_GPS("GNSS used=%u tracked=%u view=%u GPS=%u GLO=%u BDS=%u GGA=%u fixType=%u PDOP=%u HDOP=%u VDOP=%u",
                   reader.gsaSatellitesUsedTotal(), reader.satellitesTracked(), reader.satellitesInView(),
                   reader.gsaSatellitesUsed(TINYGPS_GNSS_GPS), reader.gsaSatellitesUsed(TINYGPS_GNSS_GLONASS),
-                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU),
-                  reader.satellites.isValid() ? reader.satellites.value() : 0,
+                  reader.gsaSatellitesUsed(TINYGPS_GNSS_BEIDOU), reader.satellites.isValid() ? reader.satellites.value() : 0,
                   parsedFixType, reader.gsaPDOP(), reader.gsaHDOP(), reader.gsaVDOP());
 
     if (reader.hasValidGLL()) {
@@ -2438,28 +2437,8 @@ bool GPS::lookForLocation()
     }
 
     if (reader.speed.isUpdated() && reader.speed.isValid()) {
-        // L76K is always the absolute speed reference. Every fresh GNSS speed
-        // sample re-anchors the BHI260 short-term integrator.
-        const float gpsSpeedKmph = reader.speed.kmph();
-        p.ground_speed = gpsSpeedKmph;
-#ifdef T_ECHO_PLUS_BHI260_ASSIST
-        BHI260APSensor::setGnssSpeedAnchor(gpsSpeedKmph);
-#endif
+        p.ground_speed = reader.speed.kmph();
     }
-#ifdef T_ECHO_PLUS_BHI260_ASSIST
-    else {
-        // If this otherwise-valid GNSS position did not contain a fresh speed
-        // sample, allow the BHI260 to bridge from the last L76K speed for at
-        // most three seconds. The estimator is bounded internally and cannot
-        // become the long-term speed source.
-        float bridgedSpeedKmph = 0.0f;
-        uint32_t bridgeAgeMs = 0;
-        if (BHI260APSensor::getBridgedSpeedKmph(bridgedSpeedKmph, bridgeAgeMs)) {
-            p.ground_speed = bridgedSpeedKmph;
-            LOG_DEBUG_GPS("BHI260 speed bridge %.2f km/h (anchor age=%ums)", bridgedSpeedKmph, bridgeAgeMs);
-        }
-    }
-#endif
 
     return true;
 }
