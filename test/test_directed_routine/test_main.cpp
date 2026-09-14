@@ -16,6 +16,8 @@
 // getHopLimitForResponse() being trimmed a second time.
 #include "Default.h"
 #include "TestUtil.h"
+#include "UptimeClock.h"
+#include "gps/RTC.h"
 #include "mesh/Channels.h"
 #include "mesh/NodeDB.h"
 #include "mesh/PortPolicy.h"
@@ -48,7 +50,15 @@ meshtastic_NodeInfoLite *ensureNode(NodeNum num, bool favorite = false, bool ign
     nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_VIA_MQTT_MASK, false);
     n->has_hops_away = false;
     n->hops_away = 0;
+    n->last_heard = getTime(); // heard just now: say so rather than leaning on the clock starting at 0
     return n;
+}
+
+/// Move the clock past `secs` so a stamp taken before the jump reads as that old. last_heard cannot
+/// express age on its own: sinceLastSeen() clamps a future stamp to 0.
+void ageTheClockBy(uint32_t secs)
+{
+    Time::advanceTestMillis(secs * 1000);
 }
 } // namespace
 
@@ -491,6 +501,8 @@ void test_hop_neverExceedsConfigured()
     n->has_hops_away = true;
     n->hops_away = 6;
     TEST_ASSERT_EQUAL_UINT8(3, hopLimitForDirected(DEST, 3));
+    n->hops_away = 255; // + 2 must not wrap the uint8 back under the cap
+    TEST_ASSERT_EQUAL_UINT8(3, hopLimitForDirected(DEST, 3));
 }
 
 // hops_away is stored without a via_mqtt guard, so a distance learned over MQTT may not describe a
@@ -518,6 +530,18 @@ meshtastic_MeshPacket packetAtDefaultHops(meshtastic_PortNum port, NodeNum to)
     return p;
 }
 
+// A distance we have not confirmed in hours may describe a path that is gone, and a directed
+// broadcast has no ACK to reveal it. Trust it only inside the window NextHopRouter uses.
+void test_hop_staleDistanceIsNotTrusted()
+{
+    meshtastic_NodeInfoLite *n = ensureNode(DEST);
+    n->has_hops_away = true;
+    n->hops_away = 0;
+    TEST_ASSERT_EQUAL_UINT8(2, hopLimitForDirected(DEST, 5)); // fresh: trimmed as before
+    ageTheClockBy(NEXTHOP_NEIGHBOR_FRESH_SECS + 60);
+    TEST_ASSERT_EQUAL_UINT8(5, hopLimitForDirected(DEST, 5));
+}
+
 void test_budget_trimsUnicastAtDefault()
 {
     meshtastic_NodeInfoLite *n = ensureNode(DEST);
@@ -539,6 +563,20 @@ void test_budget_leavesAlreadySizedPacketAlone()
     p.hop_limit = 4; // off the default: a reply or a client choice
     applyDirectedHopBudget(&p);
     TEST_ASSERT_EQUAL_UINT8(4, p.hop_limit);
+}
+
+// The request_id arm of the same guard: a reply sized by getHopLimitForResponse() that happens to
+// land on the configured default must still not be trimmed a second time.
+void test_budget_leavesReplyAloneAtDefault()
+{
+    meshtastic_NodeInfoLite *n = ensureNode(DEST);
+    n->has_hops_away = true;
+    n->hops_away = 0;
+    config.lora.hop_limit = 5;
+    meshtastic_MeshPacket p = packetAtDefaultHops(meshtastic_PortNum_TELEMETRY_APP, DEST);
+    p.decoded.request_id = 1;
+    applyDirectedHopBudget(&p);
+    TEST_ASSERT_EQUAL_UINT8(5, p.hop_limit);
 }
 
 void test_budget_ignoresBroadcastAndOtherPorts()
@@ -578,7 +616,13 @@ void setUp(void)
     nodeDB = testNodeDB;
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{
+    // A case that aged the clock must not age every case after it, and moving the clock backwards
+    // leaves a counted wrap behind.
+    Time::useRealClock();
+    Time::resetMonotonicForTests();
+}
 
 void setup()
 {
@@ -602,6 +646,7 @@ void setup()
     RUN_TEST(test_hop_boundaryAtConfiguredLimit);
     RUN_TEST(test_hop_neverExceedsConfigured);
     RUN_TEST(test_hop_mqttDistanceIsNotTrusted);
+    RUN_TEST(test_hop_staleDistanceIsNotTrusted);
     RUN_TEST(test_position_directedChannelOnlyUnderAlwaysPkc);
     RUN_TEST(test_pkc_unsetUsesKeyWhenKnown);
     RUN_TEST(test_pkc_unsetKeepsTheRefusalForAClientUnicast);
@@ -624,6 +669,7 @@ void setup()
     RUN_TEST(test_gate_alwaysPkcCoversPaxcounterAndPosition);
     RUN_TEST(test_budget_trimsUnicastAtDefault);
     RUN_TEST(test_budget_leavesAlreadySizedPacketAlone);
+    RUN_TEST(test_budget_leavesReplyAloneAtDefault);
     RUN_TEST(test_budget_ignoresBroadcastAndOtherPorts);
     RUN_TEST(test_budget_coversPhoneOriginatedSends);
     exit(UNITY_END());
