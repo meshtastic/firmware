@@ -306,13 +306,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
                 // Fire long-press action as soon as threshold is reached, without waiting for release.
                 if (!longPressFired && (uint32_t)(now - pressStartMs) >= LONG_PRESS_MIN_MS &&
                     (uint32_t)(now - lastActionMs) >= ACTION_COOLDOWN_MS) {
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-                    // TEMPORARY Phase 1 validation hook: long press toggles Carry/Console instead of backlight.
-                    // Remove when the T5 UI owns mode switching.
-                    t5ToggleMode();
-#else
                     t5BacklightToggleUser();
-#endif
                     longPressFired = true;
                     lastActionMs = now;
                 }

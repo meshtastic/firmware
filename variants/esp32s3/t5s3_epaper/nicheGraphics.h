@@ -24,6 +24,7 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 #include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
+#include "T5HomeApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
@@ -86,14 +87,17 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false);           // Activated, not autoshown
     inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet, false, false);       // Not Active, not autoshown
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false);      // Activated, not autoshown
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
-    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // Not Active, not autoshown
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false);                   // Activated, not autoshown
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // Not Active, not autoshown
+    // T5 applets go last: InkHUD saves applet choices by index, so appending keeps existing saved indices valid
+    inkhud->addApplet("Home", new InkHUD::T5HomeApplet, true, false, 0); // Activated, not autoshown, default on tile 0
 
     // Enable reusable InkHUD touch status indicator for this touch-capable board.
     inkhud->setTouchEnabledProvider(isTouchInputEnabled);
 
     // Start running InkHUD
     inkhud->begin();
+    InkHUD::T5HomeApplet::begin(); // Saved settings loaded by begin() override the defaults above
     // Arm GT911 capacitive-home callback only after InkHUD startup is complete.
     t5SetHomeCapButtonEventsEnabled(true);
 
