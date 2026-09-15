@@ -32,7 +32,7 @@ int32_t DeviceTelemetryModule::runOnce()
         airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
         moduleConfig.telemetry.device_telemetry_enabled) {
-        sendTelemetry();
+        sendTelemetry(routineDest(moduleConfig.telemetry.device_dest));
         if (transmitHistory)
             transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_DEVICE_TELEMETRY);
     } else if (service->isToPhoneQueueEmpty()) {
@@ -66,6 +66,10 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 {
     if (currentRequest) {
         if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
+        if (!wouldReplyToPoll(getFrom(currentRequest), moduleConfig.telemetry.device_dest)) {
             ignoreRequest = true;
             return NULL;
         }

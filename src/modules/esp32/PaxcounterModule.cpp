@@ -3,6 +3,7 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "PaxcounterModule.h"
+#include "PortPolicy.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
@@ -101,6 +102,11 @@ bool PaxcounterModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 
 meshtastic_MeshPacket *PaxcounterModule::allocReply()
 {
+    if (currentRequest && !replyPolicyAllows(moduleConfig.paxcounter.policy_flags, getFrom(currentRequest),
+                                             moduleConfig.paxcounter.paxcounter_dest)) {
+        ignoreRequest = true;
+        return nullptr;
+    }
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
     pl.wifi = count_from_libpax.wifi_count;
     pl.ble = count_from_libpax.ble_count;
@@ -140,7 +146,8 @@ int32_t PaxcounterModule::runOnce()
             libpax_counter_start();
             startWifiChannelTimer(configuration.LIBPAX_WIFI_CHANNEL_switch_interval);
         } else {
-            sendInfo(NODENUM_BROADCAST);
+            sendInfo(moduleConfig.paxcounter.paxcounter_dest ? (NodeNum)moduleConfig.paxcounter.paxcounter_dest
+                                                             : NODENUM_BROADCAST);
         }
         return Default::getConfiguredOrDefaultMsScaled(moduleConfig.paxcounter.paxcounter_update_interval,
                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes);

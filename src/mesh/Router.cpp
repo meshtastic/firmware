@@ -8,6 +8,7 @@
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 
+#include "PortPolicy.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -77,6 +78,48 @@ Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
+/// hops_away + 2 for a from-us unicast, the same return-path margin as getHopLimitForResponse().
+/// Only trims: an unknown or untrustworthy distance keeps `configured`.
+uint8_t hopLimitForDirected(NodeNum dest, uint8_t configured)
+{
+    if (!nodeDB)
+        return configured;
+    const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(dest);
+    if (!n || !n->has_hops_away)
+        return configured; // no basis to trim
+    // hops_away has no via_mqtt guard at the store, so an MQTT-learned distance may not be a LoRa path.
+    if (nodeInfoLiteViaMqtt(n))
+        return configured;
+    // A distance we have not confirmed lately may describe a path that no longer exists, and a directed
+    // broadcast has no ACK to reveal the loss. NextHopRouter trusts a neighbour on the same window.
+    if (sinceLastSeen(n) >= NEXTHOP_NEIGHBOR_FRESH_SECS)
+        return configured;
+    const uint32_t want = (uint32_t)n->hops_away + 2;
+    return want < configured ? (uint8_t)want : configured;
+}
+
+// Hop scaling is broadcast-only. Any from-us unicast on these ports (phone-originated too) is sized
+// from the destination distance, unless something already moved it off the configured default.
+void applyDirectedHopBudget(meshtastic_MeshPacket *p)
+{
+    if (!isFromUs(p) || isBroadcast(p->to) || p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return;
+    // A reply was already sized from the request's own hop count (setReplyTo), which beats NodeDB distance.
+    if (p->decoded.request_id != 0)
+        return;
+    if (!IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+                   meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_NEIGHBORINFO_APP, meshtastic_PortNum_PAXCOUNTER_APP))
+        return;
+    const uint8_t configured = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+    if (p->hop_limit != configured)
+        return; // already sized by someone with better information
+    const uint8_t want = hopLimitForDirected(p->to, configured);
+    if (want < p->hop_limit) {
+        LOG_DEBUG("Directed hop_limit %u -> %u for 0x%08x portnum %u", p->hop_limit, want, p->to, p->decoded.portnum);
+        p->hop_limit = want;
+    }
+}
+
 static ChannelIndex getEffectiveChannelIndex(const meshtastic_MeshPacket *p)
 {
     ChannelIndex chIndex = p->channel;
@@ -142,10 +185,14 @@ bool willUsePki(const meshtastic_MeshPacket *p)
     if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag || !isFromUs(p))
         return false;
     bool haveDestKey = false;
-    if (p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP) {
+    // The key lookup only changes the answer for key verification and the policy ports.
+    uint32_t unused;
+    if (p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP || portPolicyFlags(p->decoded.portnum, unused)) {
         meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
-        haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
-        if (!haveDestKey && p->pki_encrypted)
+        if (nodeDB)
+            haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
+        // Same condition as perhapsEncode(), or the two disagree about a pending handshake key.
+        if (!haveDestKey && p->pki_encrypted && p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP)
             haveDestKey = crypto->getPendingPublicKey(p->to, destKey);
     }
     return wouldEncryptWithPKC(p, getEffectiveChannelIndex(p), haveDestKey);
@@ -546,6 +593,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
     }
 #endif
+
+    applyDirectedHopBudget(p);
 
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
@@ -1181,31 +1230,63 @@ static bool signedDataFits(meshtastic_Data *d)
 }
 #endif
 
+/// A PKC_ALWAYS port with a destination must never fall back to the channel cipher, however PKI is
+/// unavailable. Our own sends only: a packet we relay carries someone else's policy, not ours.
+static bool pkcRequiredByPolicy(const meshtastic_MeshPacket *p)
+{
+    uint32_t flags = 0;
+    return isFromUs(p) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !isBroadcast(p->to) &&
+           portPolicyFlags(p->decoded.portnum, flags) && (flags & meshtastic_PortPolicyFlags_PKC_ALWAYS);
+}
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
 bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
-    // First, only PKC encrypt packets we are originating
-    return isFromUs(p) &&
+    // Only packets we originate: a relayed copy is re-encoded through here and carries the sender's
+    // choices, not our policy.
+    if (!isFromUs(p))
+        return false;
+
+    // Per-port crypto policy, routine sends and replies alike. With both bits set PKC_ALWAYS applies.
+    uint32_t flags = 0;
+    bool alwaysPkc = false;
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !isBroadcast(p->to) &&
+        portPolicyFlags(p->decoded.portnum, flags)) {
+        alwaysPkc = flags & meshtastic_PortPolicyFlags_PKC_ALWAYS;
+        if ((flags & meshtastic_PortPolicyFlags_PKC_NEVER) && !alwaysPkc)
+            return false;
+        // No key for the destination: a routine send to the port's own destination, or a reply to
+        // whoever polled us, uses the channel PSK rather than going nowhere. A unicast the client
+        // composed keeps the upstream refusal - the phone asked for a node, not for a downgrade.
+        const bool ourRoutineTraffic = p->decoded.request_id != 0 || isRoutineDest(p->decoded.portnum, p->to);
+        if (!haveDestKey && !alwaysPkc && !p->pki_encrypted && ourRoutineTraffic) {
+            LOG_INFO("No key for 0x%08x, portnum %u goes channel-PSK", p->to, p->decoded.portnum);
+            return false;
+        }
+    }
+
+    return
 #if ARCH_PORTDUINO
-           // Sim radio via the cli flag skips PKC
-           !portduino_config.force_simradio &&
+        // Sim radio via the cli flag skips PKC
+        !portduino_config.force_simradio &&
 #endif
-           // Don't use PKC with Ham mode
-           !owner.is_licensed &&
-           // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
-           !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
-                                          strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
-           // Check for valid keys and single node destination
-           config.security.private_key.size == 32 && !isBroadcast(p->to) &&
-           // Some portnums either make no sense to send with PKC
-           p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-           p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
-           // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
-           // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
-           // uses the pending key resolved into haveDestKey/destKey above.
-           // Though possible the first packet each direction should go non-pkc
-           // to handle the case where the remote node has our key, but we don't have theirs.
-           !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey);
+        // Don't use PKC with Ham mode
+        !owner.is_licensed &&
+        // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
+        !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
+                                       strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
+        // Check for valid keys and single node destination
+        config.security.private_key.size == 32 && !isBroadcast(p->to) &&
+        // Some portnums either make no sense to send with PKC; a position policy of PKC_ALWAYS overrides.
+        p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
+        p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
+        !(p->decoded.portnum == meshtastic_PortNum_POSITION_APP && !alwaysPkc) &&
+        // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
+        // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
+        // uses the pending key resolved into haveDestKey/destKey above.
+        // Though possible the first packet each direction should go non-pkc
+        // to handle the case where the remote node has our key, but we don't have theirs.
+        !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey);
 }
 #endif
 
@@ -1328,8 +1409,9 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         } else
 #endif
         {
-            if (p->pki_encrypted == true) {
-                // Client specifically requested PKI encryption
+            // Client specifically requested PKI encryption, or the port's policy demands it (ham, no
+            // local key, or a build without PKI at all).
+            if (p->pki_encrypted == true || pkcRequiredByPolicy(p)) {
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
             const bool useAead = channels.isAEADEnabled(chIndex);

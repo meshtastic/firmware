@@ -5,6 +5,7 @@
 #include "GeofenceModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PortPolicy.h"
 #include "PositionPrecision.h"
 #include "Router.h"
 #include "TransmitHistory.h"
@@ -282,8 +283,18 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
     return allocDataProtobuf(p);
 }
 
+/// Who may poll our position; replyOnPositionChannel() answers outside module dispatch, so it asks too.
+bool PositionModule::mayReplyTo(NodeNum from)
+{
+    return replyPolicyAllows(config.position.policy_flags, from, config.position.position_dest);
+}
+
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
+    if (currentRequest && !mayReplyTo(getFrom(currentRequest))) {
+        ignoreRequest = true;
+        return nullptr;
+    }
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
         Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
         LOG_DEBUG("Skip Position reply: sent one <3min ago");
@@ -305,7 +316,7 @@ void PositionModule::replyOnPositionChannel(const meshtastic_MeshPacket &req)
         LOG_DEBUG("Skip position reply to 0x%08x: position sharing disabled on all channels", getFrom(&req));
         return;
     }
-    if (!service)
+    if (!service || !mayReplyTo(getFrom(&req)))
         return;
 
     precision = getPositionPrecisionForChannel(positionChannel);
@@ -400,13 +411,15 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 
 bool PositionModule::sendOurPosition()
 {
+    // Fresh install only: radioGeneration is bumped solely by resetRadioConfig(is_fresh_install).
+    // A broadcast want_response asks every node in earshot to reply, so it must stay this rare.
     bool requestReplies = currentGeneration != radioGeneration;
 
-    // If we changed channels, ask everyone else for their latest info
     uint8_t positionChannel;
     if (findPositionChannel(positionChannel)) {
         LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-        if (!sendOurPosition(NODENUM_BROADCAST, requestReplies, positionChannel))
+        const NodeNum positionDest = config.position.position_dest ? (NodeNum)config.position.position_dest : NODENUM_BROADCAST;
+        if (!sendOurPosition(positionDest, requestReplies, positionChannel))
             return false;
         currentGeneration = radioGeneration; // only a send that went out consumes the channel change
         return true;
@@ -435,10 +448,25 @@ bool PositionModule::sendOurPositionToPhone()
     return true;
 }
 
+/// Under PKC_ALWAYS a directed position is readable by `dest` alone, so its precision comes from the
+/// channel that node's NodeInfo last arrived on (NodeDB::updateUser), not the first sharing channel.
+uint8_t PositionModule::directedSendChannel(NodeNum dest, uint8_t fallback)
+{
+    if (isBroadcast(dest) || !(config.position.policy_flags & meshtastic_PortPolicyFlags_PKC_ALWAYS) || !nodeDB)
+        return fallback;
+    const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(dest);
+    return n ? n->channel : fallback;
+}
+
 bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
 {
     if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
         LOG_DEBUG("Skip position send; no fresh position since boot");
+        return false;
+    }
+    channel = directedSendChannel(dest, channel);
+    if (getPositionPrecisionForChannel(channel) == 0) {
+        LOG_DEBUG("Skip position send to 0x%08x; sharing disabled on its channel %u", dest, channel);
         return false;
     }
 
