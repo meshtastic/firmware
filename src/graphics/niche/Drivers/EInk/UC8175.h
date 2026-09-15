@@ -6,6 +6,8 @@
 
 #include "configuration.h"
 
+#include <memory>
+
 #include "./EInk.h"
 
 namespace NicheGraphics::Drivers
@@ -45,7 +47,7 @@ class UC8175 : public EInk
     uint16_t bufferRowSize = 0;
     uint32_t bufferSize = 0;
     uint8_t *buffer = nullptr;
-    uint8_t *previousBuffer = nullptr;
+    std::unique_ptr<uint8_t[]> previousBuffer;
     bool hasPreviousBuffer = false;
     UpdateTypes updateType = UpdateTypes::UNSPECIFIED;
 

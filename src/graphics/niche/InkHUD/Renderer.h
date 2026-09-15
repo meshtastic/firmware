@@ -14,6 +14,8 @@ Orchestrates updating of the display image
 
 #include "configuration.h"
 
+#include <memory>
+
 #include "./DisplayHealth.h"
 #include "./InkHUD.h"
 #include "./Persistence.h"
@@ -76,7 +78,7 @@ class Renderer : protected concurrency::OSThread
     Drivers::EInk *driver = nullptr; // Interacts with your variants display hardware
     DisplayHealth displayHealth;     // Manages display health by controlling type of update
 
-    uint8_t *imageBuffer = nullptr; // Fed into driver
+    std::unique_ptr<uint8_t[]> imageBuffer; // Fed into driver
     uint16_t imageBufferHeight = 0;
     uint16_t imageBufferWidth = 0;
     uint32_t imageBufferSize = 0; // Bytes

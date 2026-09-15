@@ -40,6 +40,20 @@ InkHUD::Tile::Tile()
     Tile::highlightShown = false;
 }
 
+InkHUD::Tile::~Tile()
+{
+    // Break the reciprocal Tile<->Applet link, so an applet orphaned by a layout rebuild is not
+    // left holding a dangling pointer to this tile
+    if (assignedApplet && assignedApplet->getTile() == this)
+        assignedApplet->setTile(nullptr);
+
+    // Same for the pending-highlight target
+    if (Tile::highlightTarget == this) {
+        Tile::highlightTarget = nullptr;
+        Tile::highlightShown = false;
+    }
+}
+
 InkHUD::Tile::Tile(int16_t left, int16_t top, uint16_t width, uint16_t height)
 {
     assert(width > 0 && height > 0);
