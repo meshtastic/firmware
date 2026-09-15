@@ -122,6 +122,94 @@ void test_serialConfigVariousModesWithoutOverrideAreValid(void)
     TEST_ASSERT_TRUE(serialConfigIsValid(config));
 }
 
+// --- TEXTMSG payload sanitizing ---
+
+void test_textMsgCrLfOnlyIsNotSent(void)
+{
+    char buf[8] = "\r\n";
+
+    TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 2));
+}
+
+void test_textMsgWhitespaceOnlyIsNotSent(void)
+{
+    char buf[16] = "  \t \r\n";
+
+    TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 6));
+}
+
+// The floating RX pin at boot: one noise byte must not become a message.
+void test_textMsgLoneNoiseByteIsNotSent(void)
+{
+    char buf[8] = "\xFF";
+
+    TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 1));
+}
+
+void test_textMsgPlainTextUnchanged(void)
+{
+    char buf[16] = "hello";
+
+    TEST_ASSERT_EQUAL_size_t(5, sanitizeTextMessagePayload(buf, 5));
+    TEST_ASSERT_EQUAL_MEMORY("hello", buf, 5);
+}
+
+// The CR/LF a terminal appends to the line goes with the surrounding whitespace.
+void test_textMsgSurroundingWhitespaceTrimmed(void)
+{
+    char buf[16] = "  hello \r\n";
+
+    TEST_ASSERT_EQUAL_size_t(5, sanitizeTextMessagePayload(buf, 10));
+    TEST_ASSERT_EQUAL_MEMORY("hello", buf, 5);
+}
+
+void test_textMsgControlCharsStripped(void)
+{
+    char buf[16] = "a\x01"
+                   "b\x7F"
+                   "c";
+
+    TEST_ASSERT_EQUAL_size_t(3, sanitizeTextMessagePayload(buf, 5));
+    TEST_ASSERT_EQUAL_MEMORY("abc", buf, 3);
+}
+
+// Interior newline and tab survive, so pasted multi-line input stays readable.
+void test_textMsgInteriorNewlineAndTabKept(void)
+{
+    char buf[16] = "a\n\tb";
+
+    TEST_ASSERT_EQUAL_size_t(4, sanitizeTextMessagePayload(buf, 4));
+    TEST_ASSERT_EQUAL_MEMORY("a\n\tb", buf, 4);
+}
+
+// Text in someone's own language must still send, so valid multi-byte UTF-8 survives.
+void test_textMsgValidUtf8Preserved(void)
+{
+    // "café 🌍" - é is C3 A9, the globe is F0 9F 8C 8D
+    char buf[24] = "caf\xC3\xA9 \xF0\x9F\x8C\x8D";
+
+    TEST_ASSERT_EQUAL_size_t(10, sanitizeTextMessagePayload(buf, 10));
+    TEST_ASSERT_EQUAL_MEMORY("caf\xC3\xA9 \xF0\x9F\x8C\x8D", buf, 10);
+}
+
+void test_textMsgInvalidUtf8BytesDropped(void)
+{
+    // 0xC3 without its continuation byte, then a bare continuation byte.
+    char buf[16] = "a\xC3"
+                   "b\x80"
+                   "c";
+
+    TEST_ASSERT_EQUAL_size_t(3, sanitizeTextMessagePayload(buf, 5));
+    TEST_ASSERT_EQUAL_MEMORY("abc", buf, 3);
+}
+
+void test_textMsgEmptyPayloadIsNotSent(void)
+{
+    char buf[8] = "";
+
+    TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 0));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -137,6 +225,16 @@ void setup()
     RUN_TEST(test_serialConfigWithOverrideConsoleTextMsgModeIsInvalid);
     RUN_TEST(test_serialConfigWithOverrideConsoleProtoModeIsInvalid);
     RUN_TEST(test_serialConfigVariousModesWithoutOverrideAreValid);
+    RUN_TEST(test_textMsgCrLfOnlyIsNotSent);
+    RUN_TEST(test_textMsgWhitespaceOnlyIsNotSent);
+    RUN_TEST(test_textMsgLoneNoiseByteIsNotSent);
+    RUN_TEST(test_textMsgPlainTextUnchanged);
+    RUN_TEST(test_textMsgSurroundingWhitespaceTrimmed);
+    RUN_TEST(test_textMsgControlCharsStripped);
+    RUN_TEST(test_textMsgInteriorNewlineAndTabKept);
+    RUN_TEST(test_textMsgValidUtf8Preserved);
+    RUN_TEST(test_textMsgInvalidUtf8BytesDropped);
+    RUN_TEST(test_textMsgEmptyPayloadIsNotSent);
     exit(UNITY_END());
 }
 #else
