@@ -142,6 +142,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
+                           p->encrypted.size > MESHTASTIC_PKC_OVERHEAD && // too short to be PKI: no key was missing
                            (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->public_key.size == 0)) {
                     LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
                     sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),

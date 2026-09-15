@@ -147,6 +147,11 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     // Return true if we are a rebroadcaster. Reads config only, so every relay path can ask.
     bool isRebroadcaster();
 
+#if USERPREFS_EVENT_MODE
+    /** Cap a relay copy's hop budget to the event-mode limit, keeping hop_start consistent. */
+    static void capEventRelayHops(meshtastic_MeshPacket *packet);
+#endif
+
     /** Phone delivery for an opaque packet addressed to us (or a broadcast we cannot read). Never a NAK. */
     void handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable);
 
@@ -296,11 +301,6 @@ enum class RoutingAuthVerdict { ACCEPT, OPAQUE_RELAY_ONLY, REJECT };
  */
 DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
-#if USERPREFS_EVENT_MODE
-/** Cap a relay copy's hop budget to the event-mode limit, keeping hop_start consistent. */
-void capEventRelayHops(meshtastic_MeshPacket *packet);
-#endif
-
 /** Apply receive authentication before routing state mutation. A packet we cannot read is handled from its
  *  header alone - relayed, shown to the phone or uplinked per `rebroadcast_mode`, never answered - and never
  *  admitted to local state. `decodeState`, when given, receives the attempt's DecodeState. */
@@ -310,6 +310,7 @@ uint32_t routingAuthEvaluationCount();
 void resetRoutingAuthEvaluationCount();
 /** Refill the admin-key fallback budget and re-stamp it against the clock in use right now. */
 void resetAdminKeyFallbackBudget();
+uint32_t adminKeyFallbackTokensRemaining();
 #endif
 
 /** Return 0 for success or a Routing_Error code for failure

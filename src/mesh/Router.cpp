@@ -883,6 +883,11 @@ void resetAdminKeyFallbackBudget()
     adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
     adminKeyFallbackRefillMs = Time::getMillis();
 }
+
+uint32_t adminKeyFallbackTokensRemaining()
+{
+    return adminKeyFallbackTokens;
+}
 #endif
 
 static bool adminKeyFallbackAllowed()
@@ -1672,7 +1677,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
 
 #if USERPREFS_EVENT_MODE
 // Shared with NextHopRouter::perhapsRebroadcast(): every relay path caps hops the same way.
-void capEventRelayHops(meshtastic_MeshPacket *packet)
+void Router::capEventRelayHops(meshtastic_MeshPacket *packet)
 {
     if (packet->hop_limit <= Default::eventModeRelayHopLimit)
         return;
@@ -1776,7 +1781,7 @@ void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable)
     if (unreadable && modeAllowsPhone && (isToUs(p) || isBroadcast(p->to)) && service) {
         if (meshtastic_MeshPacket *toPhone = packetPool.allocCopy(*p)) {
             stampRxTime(toPhone);
-            service->sendToPhone(toPhone);
+            service->sendToPhone(toPhone, /*alreadyClassified=*/true); // the gate already spent the fallback budget
         }
     }
 }

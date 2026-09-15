@@ -2323,6 +2323,30 @@ void test_C33_frames_no_consumer_acts_on_do_not_evict_the_ring(void)
                               "the stranger's frame is still remembered, so its second copy is not carried");
 }
 
+// C34: the gate already ran the admin-key fallback on an unreadable DM to us and found nothing, so
+// handing the frame to the phone must not run it again. The budget is global and attacker-facing;
+// a second spend per frame halves it.
+void test_C34_phone_delivery_does_not_spend_the_admin_key_budget_again(void)
+{
+    Time::setTestMillis(60 * 1000); // frozen clock: no refill between the two reads below
+    Time::serviceMonotonic();
+    resetAdminKeyFallbackBudget();
+    const RelayIdentity us = installOurIdentity();
+    const RelayIdentity stranger = makeIdentity(ADMIN_NODE); // not in NodeDB: no key to try but the admin ones
+    const meshtastic_MeshPacket dm =
+        makePkiUnicastBetween(stranger, us, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADB90019, /*wantAck=*/true);
+    useDHKey(us.priv);
+    const RelayIdentity admin = makeIdentity(TARGET_NODE);
+    config.security.admin_key[0].size = 32;
+    memcpy(config.security.admin_key[0].bytes, admin.pub, 32);
+
+    const uint32_t before = adminKeyFallbackTokensRemaining();
+    runPipelineIngress(dm);
+    expectEncryptedPhoneDeliveries(1);
+    TEST_ASSERT_EQUAL_MESSAGE(before - 1, adminKeyFallbackTokensRemaining(),
+                              "one fallback attempt per frame - the gate's; the phone path must not re-decode");
+}
+
 void setup()
 {
     pipelineHarnessCreate();
@@ -2401,6 +2425,7 @@ void setup()
     RUN_TEST(test_C31_an_opaque_frame_with_id_0_is_answered_by_nobody);
     RUN_TEST(test_C32_uplink_follows_mqtt_policy_not_rebroadcast_mode);
     RUN_TEST(test_C33_frames_no_consumer_acts_on_do_not_evict_the_ring);
+    RUN_TEST(test_C34_phone_delivery_does_not_spend_the_admin_key_budget_again);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
