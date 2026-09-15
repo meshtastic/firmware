@@ -507,6 +507,7 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
+<<<<<<< HEAD
     static float positionHeading = -1.0f;
     static uint32_t lastPositionHeadingAtMs = 0;
 
@@ -518,6 +519,11 @@ float Screen::estimatedHeading(double lat, double lon)
     static uint32_t lastRmcSampleMs = 0;
 
     const uint32_t now = millis();
+=======
+    static float b = -1.0f;
+    static uint32_t lastHeadingAtMs = 0;
+    const uint32_t now = Time::stampMillis();
+>>>>>>> 9d27b276aa87d956c64a4c76da5f01321a65f337
     const uint32_t gpsUpdateIntervalSecs =
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
     uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
