@@ -125,6 +125,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
 
+#ifdef PIO_UNIT_TESTING
+    void handleReceivedAfterRoutingGateForTest(meshtastic_MeshPacket *p) { handleReceived(p, RX_SRC_RADIO, true); }
+#endif
+
   protected:
     friend class RoutingModule;
 
@@ -188,14 +192,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * Called from perhapsHandleReceived() for radio ingress and from deliverLocal() for our own
      * loopback, so p may be locally generated. Does NOT free p; the caller still owns it.
      */
-    void handleReceived(meshtastic_MeshPacket *p, RxSource src = RX_SRC_RADIO);
+    void handleReceived(meshtastic_MeshPacket *p, RxSource src = RX_SRC_RADIO, bool routingAuthRequired = false);
 
     /**
      * The body of handleReceived(): decode, run modules, publish to MQTT. Split out so the
      * depth-guarded drain in handleReceived() can process a deferred packet without re-entering
      * the drain (and without touching handleDepth) - keeping the stack flat.
      */
-    void dispatchReceived(meshtastic_MeshPacket *p, RxSource src);
+    void dispatchReceived(meshtastic_MeshPacket *p, RxSource src, bool routingAuthRequired = false);
 
     /**
      * Route a packet addressed to us (or a local broadcast we loop back) into handleReceived().
@@ -265,7 +269,7 @@ enum class RoutingAuthVerdict { ACCEPT, OPAQUE_RELAY_ONLY, REJECT };
 DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
 /** Apply receive authentication before routing state mutation; unknown-channel packets may remain opaque relay-only. */
-RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p);
+RoutingAuthVerdict passesRoutingAuthGate(const meshtastic_MeshPacket *p);
 #ifdef PIO_UNIT_TESTING
 uint32_t routingAuthEvaluationCount();
 void resetRoutingAuthEvaluationCount();
