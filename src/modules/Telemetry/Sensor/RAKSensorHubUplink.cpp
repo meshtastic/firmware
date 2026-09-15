@@ -5,6 +5,7 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKHUB)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "UptimeClock.h"
 #include <onewire_master_api.h>
 
 #include <cstdint>
@@ -158,7 +159,7 @@ static inline void setScalar(ScalarReading &r, float v, uint32_t nowMs)
 {
     r.value = v;
     r.valid = true;
-    r.lastUpdateMs = nowMs;
+    r.lastUpdateMs = Time::skipZero(nowMs);
 }
 
 static void setHpHumidity(float v, uint32_t nowMs, uint8_t pid)
@@ -193,7 +194,7 @@ static bool parseDigitalIpso(uint8_t ipso, uint8_t *msg, uint16_t len, const cha
 {
     if (len < 2)
         return false;
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     const uint8_t raw = msg[1];
     if (ipso == RAK_IPSO_DIGITAL_INPUT) {
         setScalar(env.digital_input, (float)raw, now);
@@ -229,7 +230,7 @@ static bool parseCo2Ipso(uint8_t *msg, uint16_t len, const char *via)
     }
     if (raw == 0 || raw > 5000)
         return false;
-    setScalar(env.co2, (float)raw, millis());
+    setScalar(env.co2, (float)raw, Time::stampMillis());
     LOG_INFO("CO2: %.0f ppm", env.co2.value);
     return true;
 }
@@ -400,7 +401,7 @@ static bool parseConfiguredModbusReading(uint8_t pid, uint8_t taskId, uint8_t *m
               (unsigned)modbus[5], (unsigned)modbus[6]);
 
     uint16_t raw = ((uint16_t)modbus[3] << 8) | modbus[4];
-    uint32_t now = millis();
+    uint32_t now = Time::stampMillis();
 
     switch (taskId) {
     case 0:   // Pass-through immediate read; same mapping as task 1.
@@ -468,7 +469,7 @@ static void logIpsoRawIfNeeded(const char *via, uint8_t *msg, uint16_t len)
 
 static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, uint16_t len)
 {
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     switch (msg[0]) {
     case RAK_IPSO_DIGITAL_INPUT:
     case RAK_IPSO_DIGITAL_OUTPUT:
@@ -622,7 +623,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
         power.percent = msg[1];
         if (power.percent > 100)
             power.percent = 100;
-        power.percentMs = now;
+        power.percentMs = Time::skipZero(now);
         LOG_INFO("Battery capacity: %u %%", (unsigned)power.percent);
         return true;
     case RAK_IPSO_DC_CURRENT: {
@@ -635,7 +636,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             return false;
         }
         power.curMa = (int16_t)(amps * 1000.0f);
-        power.curMs = now;
+        power.curMs = Time::skipZero(now);
         LOG_INFO("Battery current: %.3f A", (float)power.curMa / 1000.0f);
         return true;
     }
@@ -649,7 +650,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             return false;
         }
         power.volMv = (uint16_t)(volts * 1000.0f);
-        power.volMs = now;
+        power.volMs = Time::skipZero(now);
         LOG_INFO("Battery voltage: %.2f V", volts);
         return true;
     }
@@ -693,7 +694,7 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
         env.accel.y = y / 1000.0f;
         env.accel.z = z / 1000.0f;
         env.accel.valid = true;
-        env.accel.lastUpdateMs = now;
+        env.accel.lastUpdateMs = Time::skipZero(now);
         LOG_INFO("Accelerometer (0x71): X=%.3f Y=%.3f Z=%.3f", env.accel.x, env.accel.y, env.accel.z);
         return true;
     }
@@ -885,7 +886,7 @@ bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, ui
 bool getMetrics(meshtastic_Telemetry *measurement)
 {
     bool any = false;
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     // Allow cached readings to be reused for a while because 1-Wire frames can be
     // missed under BLE/app load. Five minutes keeps outdoor use stable.
     const uint32_t maxAgeMs = 5 * 60 * 1000;
@@ -990,7 +991,7 @@ bool getMetrics(meshtastic_Telemetry *measurement)
 uint16_t getBusVoltageMv()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     return (powerFieldFresh(power.volMs, now, maxAgeMs) && power.volMv > 0) ? power.volMv : 0;
 }
 
@@ -998,21 +999,21 @@ uint16_t getBusVoltageMv()
 int16_t getCurrentMa()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    return powerFieldFresh(power.curMs, millis(), maxAgeMs) ? power.curMa : 0;
+    return powerFieldFresh(power.curMs, Time::stampMillis(), maxAgeMs) ? power.curMa : 0;
 }
 
 /** Battery capacity 0..100 % from RAK power module (IPSO 0xB8 CAPACITY). */
 int getBusBatteryPercent()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    return powerFieldFresh(power.percentMs, millis(), maxAgeMs) ? (int)power.percent : -1;
+    return powerFieldFresh(power.percentMs, Time::stampMillis(), maxAgeMs) ? (int)power.percent : -1;
 }
 
 /** True if current > 0 (charging). */
 bool isCharging()
 {
     const uint32_t maxAgeMs = 5 * 60 * 1000;
-    return powerFieldFresh(power.curMs, millis(), maxAgeMs) && (power.curMa > 0);
+    return powerFieldFresh(power.curMs, Time::stampMillis(), maxAgeMs) && (power.curMa > 0);
 }
 
 } // namespace RAKSensorHubUplink
