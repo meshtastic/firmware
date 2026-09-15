@@ -223,6 +223,8 @@ volatile bool touchControllerReady = false;
 volatile bool touchLightSleepActive = false;
 volatile bool touchNeedsWake = false;
 volatile bool touchIndicatorRefreshPending = false;
+// The timeout gate skips GT911 reads, so the controller can still hold a touch or Home report from then
+volatile bool touchDrainPending = false;
 // When the light-sleep resume happened, not when the block expires: an interval bounds a missed
 // 0-check by the settle time, where a stored deadline would block for up to half a wrap cycle.
 constexpr uint32_t TOUCH_RESUME_BLOCK_MS = 150;
@@ -560,6 +562,8 @@ void t5TouchSetForcedByTimeout(bool forced)
     touchForcedByTimeout = forced;
     touchStateEpoch++;
     touchIndicatorRefreshPending = true;
+    if (!forced)
+        touchDrainPending = true;
 
     if (forced) {
         // Timeout only gates touch input in software. Avoid GT911 I2C here because
@@ -738,6 +742,16 @@ bool readTouch(int16_t *x, int16_t *y)
 
     // After a recovery pulse, emit a brief "released" window so gesture state can reset.
     if (suppressFromMs != 0 && Throttle::isWithinTimespanMs(suppressFromMs, TOUCH_WAKE_SUPPRESS_MS)) {
+        return false;
+    }
+
+    // One read discards the stale report; mask Home so a press latched in the dark doesn't fire now.
+    if (touchDrainPending) {
+        touchDrainPending = false;
+        const bool homeEnabled = homeCapButtonEventsEnabled;
+        homeCapButtonEventsEnabled = false;
+        touch.getTouchPoints();
+        homeCapButtonEventsEnabled = homeEnabled;
         return false;
     }
 #endif
