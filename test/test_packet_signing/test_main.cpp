@@ -156,6 +156,13 @@ class AuthPipelineRadio : public RadioInterface
 class AuthPipelineRouter : public ReliableRouter
 {
   public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_NODEINFO_APP)
+            nodeInfoWantResponses.push_back(p->decoded.want_response);
+        return ReliableRouter::send(p);
+    }
     bool filter(meshtastic_MeshPacket *p) { return ReliableRouter::shouldFilterReceived(p); }
     bool historyContains(const meshtastic_MeshPacket *p) { return wasSeenRecently(p, false); }
     void remember(const meshtastic_MeshPacket *p) { wasSeenRecently(p, true); }
@@ -186,6 +193,7 @@ class AuthPipelineRouter : public ReliableRouter
             packetPool.release(entry.second.packet);
         pending.clear();
     }
+    std::vector<bool> nodeInfoWantResponses;
 };
 
 class AuthPipelineRoutingModule : public RoutingModule
@@ -413,6 +421,7 @@ void setUp(void)
     channels.onConfigChanged();
 
     pipelineRouter->clearPending();
+    pipelineRouter->nodeInfoWantResponses.clear();
     pipelineRouter->rxDupe = 0;
     pipelineRouter->txRelayCanceled = 0;
     pipelineRadio->reset();
@@ -1101,6 +1110,7 @@ class NodeInfoTestShim : public NodeInfoModule
     using MeshModule::currentRequest; // allocReply() only suppresses while a request is in flight
     using NodeInfoModule::allocReply;
     using NodeInfoModule::handleReceivedProtobuf;
+    using NodeInfoModule::runOnce;
 };
 
 static meshtastic_MeshPacket makeNodeInfoPacket(bool signed_)
@@ -1781,6 +1791,45 @@ void test_N11_window_still_applies_across_the_wrap(void)
                              "and must still release once 12h have passed across the wrap");
 }
 
+void test_N12_owner_sync_announcement_does_not_request_replies(void)
+{
+    NodeInfoTestShim shim;
+
+    shim.requestOwnerSync();
+    shim.runOnce();
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineRouter->nodeInfoWantResponses.size());
+    TEST_ASSERT_FALSE(pipelineRouter->nodeInfoWantResponses[0]);
+}
+
+void test_N13_owner_sync_retries_admission_without_queuing_a_burst(void)
+{
+    static AirTime saturated;
+    c14SavedAirTime = airTime;
+    airTime = &saturated;
+    saturated.logAirtime(TX_LOG, MS_IN_HOUR);
+
+    NodeInfoTestShim shim;
+    shim.requestOwnerSync();
+    TEST_ASSERT_EQUAL_UINT32(30 * 1000, shim.runOnce());
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineRouter->nodeInfoWantResponses.size());
+
+    airTime = c14SavedAirTime;
+    c14SavedAirTime = nullptr;
+    shim.runOnce();
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineRouter->nodeInfoWantResponses.size());
+    TEST_ASSERT_FALSE(pipelineRouter->nodeInfoWantResponses[0]);
+}
+
+void test_N14_owner_sync_preserves_client_hidden_silence(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN;
+    NodeInfoTestShim shim;
+
+    shim.requestOwnerSync();
+    shim.runOnce();
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineRouter->nodeInfoWantResponses.size());
+}
+
 void test_L1_licensed_nodeinfo_publishes_public_key(void)
 {
     owner.is_licensed = true;
@@ -2203,6 +2252,9 @@ void setup()
     RUN_TEST(test_N9_request_after_the_window_is_answered);
     RUN_TEST(test_N10_stale_stamp_does_not_alias_after_a_full_wrap);
     RUN_TEST(test_N11_window_still_applies_across_the_wrap);
+    RUN_TEST(test_N12_owner_sync_announcement_does_not_request_replies);
+    RUN_TEST(test_N13_owner_sync_retries_admission_without_queuing_a_burst);
+    RUN_TEST(test_N14_owner_sync_preserves_client_hidden_silence);
 
     printf("\n=== Group L: licensed identity and plaintext signing ===\n");
     RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);

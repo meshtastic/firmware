@@ -1215,6 +1215,17 @@ static void test_handleSetHamMode_blankShortNameKeepsTheExistingOne()
     }
 }
 
+static void test_handleSetHamMode_defersOwnerSyncUntilCommit()
+{
+    primeHamModeTest();
+
+    meshtastic_HamParameters p = meshtastic_HamParameters_init_zero;
+    strncpy(p.call_sign, "KD2ABC", sizeof(p.call_sign) - 1);
+    TEST_ASSERT_TRUE(testAdmin->handleSetHamMode(p));
+
+    TEST_ASSERT_TRUE(testAdmin->ownerSyncIsPending());
+}
+
 // A rejection has to reach the client, not just the log: allocErrorResponse() builds the reply
 // through the router, so this is the one ham test that needs one.
 class HamModeMockRouter : public Router
@@ -2545,6 +2556,7 @@ void setup()
     RUN_TEST(test_handleSetHamMode_omittedLongNameKeepsCallSignAlone);
     RUN_TEST(test_handleSetHamMode_blankLongNameIsIgnoredNotRejected);
     RUN_TEST(test_handleSetHamMode_blankShortNameKeepsTheExistingOne);
+    RUN_TEST(test_handleSetHamMode_defersOwnerSyncUntilCommit);
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);

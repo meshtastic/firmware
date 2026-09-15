@@ -45,6 +45,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     static constexpr uint32_t EDIT_TRANSACTION_IDLE_MS = 60 * 1000;
     uint32_t editTransactionActivityMs = 0; // millis() of the last save this transaction deferred
     int deferredEditSegments = 0;           // segments that transaction has touched but not yet saved
+    bool ownerSyncPending = false;
     /// Retire an open edit transaction whose client stopped talking, persisting what it applied.
     void expireStaleEditTransaction();
 #ifdef PIO_UNIT_TESTING
@@ -56,6 +57,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
+    void flushPendingOwnerSync();
 
     /**
      * Getters
