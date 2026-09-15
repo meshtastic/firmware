@@ -247,6 +247,27 @@ result() {
 	exit "$code"
 }
 
+# What the build tree is doing right now, from the processes in the recorded group: PlatformIO
+# alternates single-threaded scons dependency scans, parallel compiles and one long link per
+# suite, and an object counter freezes through the first and the last of those - which reads as a
+# hung build to anyone who cannot run ps.
+phase_of_run() {
+	local pgid comms
+	pgid=$(tsv_get "$RUN_RECORD" pgid)
+	[[ -z $pgid ]] && {
+		echo idle
+		return
+	}
+	comms=" $(ps -eo pgid=,comm= 2>/dev/null | awk -v p="$pgid" '$1 == p { print $2 }' | tr '\n' ' ') "
+	case $comms in
+	*" cc1plus "* | *" cc1 "* | *" as "*) echo compile ;;
+	*" ld "* | *" ld.bfd "* | *" ld.gold "* | *" ld.lld "* | *" mold "* | *" collect2 "*) echo link ;;
+	*" meshtasticd "* | *" program "*) echo test ;;
+	*python*) echo scons ;;
+	*) echo idle ;;
+	esac
+}
+
 status_cmd() {
 	local st
 	st=$(run_state)
@@ -354,27 +375,6 @@ run_pio() {
 	local pid=$!
 	sed -i "s/^pgid\t.*/pgid\t$pid/" "$RUN_RECORD"
 	wait "$pid"
-}
-
-# What the build tree is doing right now, from the processes in the recorded group: PlatformIO
-# alternates single-threaded scons dependency scans, parallel compiles and one long link per
-# suite, and an object counter freezes through the first and the last of those - which reads as a
-# hung build to anyone who cannot run ps.
-phase_of_run() {
-	local pgid comms
-	pgid=$(tsv_get "$RUN_RECORD" pgid)
-	[[ -z $pgid ]] && {
-		echo idle
-		return
-	}
-	comms=" $(ps -eo pgid=,comm= 2>/dev/null | awk -v p="$pgid" '$1 == p { print $2 }' | tr '\n' ' ') "
-	case $comms in
-	*" cc1plus "* | *" cc1 "* | *" as "*) echo compile ;;
-	*" ld "* | *" ld.bfd "* | *" ld.gold "* | *" ld.lld "* | *" mold "* | *" collect2 "*) echo link ;;
-	*" meshtasticd "* | *" program "*) echo test ;;
-	*python*) echo scons ;;
-	*) echo idle ;;
-	esac
 }
 
 abort_run() {
