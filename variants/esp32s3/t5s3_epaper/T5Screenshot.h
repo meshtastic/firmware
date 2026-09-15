@@ -2,7 +2,7 @@
 
 /*
 
-TEMPORARY design-QA tooling. Remove before merge.
+Optional design-QA tooling, compiled in only with -D T5_INKHUD_SCREENSHOT.
 
 Hold BOOT and press the side key: saves the T5 Home / Nodes / Node Detail screen on display to
 /t5shots/NNN-<carry|console>-<screen>.pbm (binary PBM, logical orientation, 1 = black), without system overlays.
