@@ -75,6 +75,28 @@ meshtastic_MeshPacket encryptedPacket(uint32_t from = 0x3061b02e, uint32_t id = 
     return p;
 }
 
+/// What Router::send actually hands a transport, as opposed to the minimal fixture above.
+///
+/// fixPriority() runs before encryption and never leaves priority UNSET (Router.cpp:562), and
+/// FloodingRouter::send stamps relay_node on everything we send (FloodingRouter.cpp:22). A relay
+/// carries transport_mechanism and the reception metadata it was received with. Measuring the
+/// ceiling against the minimal fixture measures the fixture, not the bearer.
+meshtastic_MeshPacket productionPacket(size_t payload = 32, bool relayed = false)
+{
+    meshtastic_MeshPacket p = encryptedPacket(0x3061b02e, 0x04050b6e, payload);
+    p.priority = meshtastic_MeshPacket_Priority_DEFAULT;
+    p.relay_node = 0x2e;
+    if (relayed) {
+        p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+        p.rx_rssi = -113;
+        p.has_rx_rssi = true;
+        p.rx_snr = -7.25f;
+        p.rx_time = 1757808000;
+        p.has_rx_time = true;
+    }
+    return p;
+}
+
 /// Largest ciphertext a MeshPacket can carry, i.e. one guaranteed not to fit an advertisement.
 constexpr size_t MAX_ENCRYPTED_FOR_TEST = sizeof(meshtastic_MeshPacket().encrypted.bytes);
 
@@ -168,38 +190,70 @@ size_t largestCiphertextThatFits(meshtastic_MeshPacket shape)
 
 void test_the_advertisement_ceiling_is_below_the_lora_ceiling(void)
 {
-    auto p = encryptedPacket();
-    const size_t fits = largestCiphertextThatFits(p);
+    const size_t fits = largestCiphertextThatFits(productionPacket());
 
     // The bearer is not a full bearer and never has been: one unfragmented extended advertisement
-    // cannot hold what one LoRa frame holds, and nothing fragments. Everything above this rides
-    // LoRa only, counted by txDroppedTooLarge. Pinned so a change to the envelope - a field added to
-    // MeshPacket, an AD structure added to the payload - shows up here rather than as quietly
-    // shorter reach.
-    TEST_ASSERT_EQUAL_size_t(219, fits);
+    // cannot hold what one LoRa frame holds, and nothing fragments - the nRF52 SoftDevice caps both
+    // the advertising data and the scan buffer at 255, so chaining is not available in either
+    // direction. Everything above this rides LoRa only, counted by txDroppedTooLarge.
+    // 216, not the 219 the minimal fixture reaches: relay_node costs 3 (field 19, so a two-byte
+    // tag). priority costs nothing because strippedForAir drops it, which is also why node-kmp's
+    // BleAdvertCeilingTest measures 214 for the same packet - it has no equivalent strip yet.
+    TEST_ASSERT_EQUAL_size_t(216, fits);
     TEST_ASSERT_LESS_THAN_size_t_MESSAGE(MAX_RADIO_PAYLOAD_LEN, fits, "BLE carries less than LoRa");
 }
 
-void test_a_relayed_packet_pays_for_its_reception_metadata(void)
+void test_relaying_no_longer_costs_budget(void)
 {
-    auto local = encryptedPacket();
-    auto relayed = encryptedPacket();
-    // What Router::send hands a transport when it is relaying something heard on the air.
-    // buildAdvPayload encodes the packet as it stands, so these ride over the air: rx_rssi is a
-    // negative int32, which nanopb spends ten bytes on.
-    relayed.rx_rssi = -113;
-    relayed.has_rx_rssi = true;
-    relayed.rx_snr = -7.25f;
-    relayed.rx_time = 1757808000;
-    relayed.has_rx_time = true;
+    // Before the egress strip a relay reached 21 bytes less far than the originator did, because
+    // the packet went out carrying the rx_rssi, rx_snr and rx_time it arrived with. It now reaches
+    // exactly as far: the receiver overwrites all three, so they were never worth sending.
+    TEST_ASSERT_EQUAL_size_t(largestCiphertextThatFits(productionPacket()),
+                             largestCiphertextThatFits(productionPacket(32, true)));
+}
 
-    const size_t localFits = largestCiphertextThatFits(local);
-    const size_t relayedFits = largestCiphertextThatFits(relayed);
+void test_the_air_copy_drops_everything_the_receiver_overwrites(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = productionPacket(32, true);
+    p.via_mqtt = true;
+    p.tx_after = 4242;
+    p.pki_encrypted = true;
+    p.public_key.size = 32;
+    for (size_t i = 0; i < 32; i++)
+        p.public_key.bytes[i] = (uint8_t)(0xA0 + i);
 
-    // A relay therefore reaches less far up the payload range than the originator did, and leaks the
-    // relayer's own link quality while doing it. Both are fixable by encoding a stripped copy.
-    TEST_ASSERT_LESS_THAN_size_t_MESSAGE(localFits, relayedFits, "relaying costs budget");
-    TEST_ASSERT_EQUAL_size_t(198, relayedFits);
+    uint8_t adv[BLE_MESH_ADV_TOTAL_MAX];
+    const uint8_t len = h.build(&p, adv, sizeof(adv));
+    TEST_ASSERT_TRUE(len > BLE_MESH_ADV_OVERHEAD);
+
+    meshtastic_MeshPacket air = meshtastic_MeshPacket_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(adv + BLE_MESH_ADV_OVERHEAD, len - BLE_MESH_ADV_OVERHEAD, &meshtastic_MeshPacket_msg, &air));
+
+    // Exactly the set deliverToRouter rewrites, plus rx_time which Router::handleReceived stamps.
+    // A sender that omits them loses nothing and stops publishing its own link quality; one that
+    // sends them is paying for bytes the far side discards.
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL, air.transport_mechanism);
+    TEST_ASSERT_FALSE(air.via_mqtt);
+    TEST_ASSERT_EQUAL_UINT32(0, air.tx_after);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_Priority_UNSET, air.priority);
+    TEST_ASSERT_FALSE(air.pki_encrypted);
+    TEST_ASSERT_EQUAL_UINT16(0, air.public_key.size);
+    TEST_ASSERT_FALSE(air.has_rx_rssi);
+    TEST_ASSERT_FALSE(air.has_rx_time);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, air.rx_snr);
+
+    // And nothing routing needs went with them.
+    TEST_ASSERT_EQUAL_UINT32(p.from, air.from);
+    TEST_ASSERT_EQUAL_UINT32(p.to, air.to);
+    TEST_ASSERT_EQUAL_UINT32(p.id, air.id);
+    TEST_ASSERT_EQUAL_UINT8(p.hop_limit, air.hop_limit);
+    TEST_ASSERT_EQUAL_UINT8(p.hop_start, air.hop_start);
+    TEST_ASSERT_EQUAL_UINT8(p.relay_node, air.relay_node);
+    TEST_ASSERT_EQUAL_UINT32(p.channel, air.channel);
+    TEST_ASSERT_EQUAL_UINT16(p.encrypted.size, air.encrypted.size);
 }
 
 void test_an_oversized_packet_is_counted_not_just_logged(void)
@@ -459,7 +513,8 @@ void setup()
     RUN_TEST(test_refuses_a_packet_with_no_sender);
     RUN_TEST(test_drops_a_packet_too_large_for_one_advertisement);
     RUN_TEST(test_the_advertisement_ceiling_is_below_the_lora_ceiling);
-    RUN_TEST(test_a_relayed_packet_pays_for_its_reception_metadata);
+    RUN_TEST(test_relaying_no_longer_costs_budget);
+    RUN_TEST(test_the_air_copy_drops_everything_the_receiver_overwrites);
     RUN_TEST(test_an_oversized_packet_is_counted_not_just_logged);
     RUN_TEST(test_a_dupe_heard_on_ble_cancels_our_queued_copy);
     RUN_TEST(test_a_dupe_heard_on_lora_leaves_the_ble_queue_alone);

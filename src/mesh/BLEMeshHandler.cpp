@@ -13,6 +13,38 @@ BLEMeshHandler *bleMeshHandler = nullptr;
 #define BLE_MESH_AD_TYPE_MFG_DATA 0xFF
 #define BLE_MESH_AD_FLAGS_LE_GENERAL_DISC_BREDR_UNSUP 0x06
 
+namespace
+{
+/**
+ * The packet as it should go on the air: everything the far side is going to overwrite, removed.
+ *
+ * deliverToRouter() rewrites transport_mechanism, via_mqtt, tx_after, priority, pki_encrypted,
+ * public_key, rx_snr and rx_rssi on every arrival, and Router::handleReceived stamps rx_time
+ * (Router.cpp:1493). Every one of those is budget spent on bytes the receiver throws away, and this
+ * bearer has 243 of them against LoRa's 239 of ciphertext. rx_rssi is the worst of them twice over:
+ * a negative int32 is a ten-byte varint, and it publishes the relayer's own link quality.
+ *
+ * Keep this in step with the ingress guards. A field added to one belongs in the other, and the
+ * native suite asserts the two agree.
+ */
+meshtastic_MeshPacket strippedForAir(const meshtastic_MeshPacket &mp)
+{
+    meshtastic_MeshPacket out = mp;
+    out.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL;
+    out.via_mqtt = false;
+    out.tx_after = 0;
+    out.priority = meshtastic_MeshPacket_Priority_UNSET;
+    out.pki_encrypted = false;
+    out.public_key.size = 0;
+    out.rx_snr = 0;
+    out.rx_rssi = 0;
+    out.has_rx_rssi = false;
+    out.rx_time = 0;
+    out.has_rx_time = false;
+    return out;
+}
+} // namespace
+
 uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t *out, size_t outCap)
 {
     // Router::send() encrypts before it reaches any transport, so an unencrypted packet here is a
@@ -26,13 +58,28 @@ uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t
         return 0;
     }
 
-    uint8_t proto[BLE_MESH_MAX_PROTO_LEN];
-    size_t protoLen = pb_encode_to_bytes(proto, sizeof(proto), &meshtastic_MeshPacket_msg, mp);
-    if (protoLen == 0) {
-        // pb_encode_to_bytes returns 0 both for a genuine encode failure and for a packet that does
-        // not fit the buffer. Either way it cannot ride BLE; it still goes out over LoRa.
+    const meshtastic_MeshPacket air = strippedForAir(*mp);
+
+    // Sized before encoding rather than inferred from a short buffer, because pb_encode_to_bytes
+    // returns 0 for a genuine encode failure and for an over-budget packet alike - and the two want
+    // different answers. Over-budget is routine and countable; an encode failure is a bug.
+    size_t needed = 0;
+    if (!pb_get_encoded_size(&needed, &meshtastic_MeshPacket_msg, &air)) {
+        LOG_ERROR("BLE mesh: cannot size packet 0x%08x", mp->id);
+        return 0;
+    }
+    if (needed > BLE_MESH_MAX_PROTO_LEN) {
+        // It still goes out over LoRa; Router::send handed it to the radio before reaching us.
         txDroppedTooLarge++;
-        LOG_WARN("BLE mesh: drop 0x%08x, does not fit %u-byte advertisement budget", mp->id, (unsigned)BLE_MESH_MAX_PROTO_LEN);
+        LOG_WARN("BLE mesh: drop 0x%08x, %u bytes over the %u-byte advertisement budget", mp->id,
+                 (unsigned)(needed - BLE_MESH_MAX_PROTO_LEN), (unsigned)BLE_MESH_MAX_PROTO_LEN);
+        return 0;
+    }
+
+    uint8_t proto[BLE_MESH_MAX_PROTO_LEN];
+    size_t protoLen = pb_encode_to_bytes(proto, sizeof(proto), &meshtastic_MeshPacket_msg, &air);
+    if (protoLen == 0) {
+        LOG_ERROR("BLE mesh: encode failed for 0x%08x at %u bytes", mp->id, (unsigned)needed);
         return 0;
     }
 
