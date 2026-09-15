@@ -254,7 +254,7 @@ status_cmd() {
 	RUNNING | ORPHANED)
 		local progress
 		progress=$(tail -n1 "$(tsv_get "$RUN_RECORD" progress)" 2>/dev/null)
-		echo "STATUS: $st pid=$(tsv_get "$RUN_RECORD" pid) pgid=$(tsv_get "$RUN_RECORD" pgid) since=$(elapsed_since "$(tsv_get "$RUN_RECORD" started)") head=$(tsv_get "$RUN_RECORD" head) args=\"$(tsv_get "$RUN_RECORD" args)\""
+		echo "STATUS: $st pid=$(tsv_get "$RUN_RECORD" pid) pgid=$(tsv_get "$RUN_RECORD" pgid) since=$(elapsed_since "$(tsv_get "$RUN_RECORD" started)") now=$(phase_of_run) head=$(tsv_get "$RUN_RECORD" head) args=\"$(tsv_get "$RUN_RECORD" args)\""
 		echo "    progress: ${progress:-none yet}  (tail -f $(tsv_get "$RUN_RECORD" progress))"
 		if [[ $st == ORPHANED ]]; then
 			echo "    the wrapper died but its build tree is still running: ./bin/run-tests.sh --abort to stop it, or --wait for it to finish (no verdict will be recorded)"
@@ -356,6 +356,27 @@ run_pio() {
 	wait "$pid"
 }
 
+# What the build tree is doing right now, from the processes in the recorded group: PlatformIO
+# alternates single-threaded scons dependency scans, parallel compiles and one long link per
+# suite, and an object counter freezes through the first and the last of those - which reads as a
+# hung build to anyone who cannot run ps.
+phase_of_run() {
+	local pgid comms
+	pgid=$(tsv_get "$RUN_RECORD" pgid)
+	[[ -z $pgid ]] && {
+		echo idle
+		return
+	}
+	comms=" $(ps -eo pgid=,comm= 2>/dev/null | awk -v p="$pgid" '$1 == p { print $2 }' | tr '\n' ' ') "
+	case $comms in
+	*" cc1plus "* | *" cc1 "* | *" as "*) echo compile ;;
+	*" ld "* | *" ld.bfd "* | *" ld.gold "* | *" ld.lld "* | *" mold "* | *" collect2 "*) echo link ;;
+	*" meshtasticd "* | *" program "*) echo test ;;
+	*python*) echo scons ;;
+	*) echo idle ;;
+	esac
+}
+
 abort_run() {
 	local pgid
 	pgid=$(tsv_get "$RUN_RECORD" pgid)
@@ -429,24 +450,32 @@ BASELINE_FILE=".pio/build/${ENV}/.runtests-objcount"
 # check on a backgrounded run); also live-updates the tty when $5=1 (interactive --quiet). Never
 # touches $LOG, which is parsed for the verdict, so piped/CI captures stay clean.
 progress_monitor() {
-	local marker="$1" objtotal="$2" testtotal="$3" pfile="$4" totty="$5" start now el done ran eta line
+	local marker="$1" objtotal="$2" testtotal="$3" pfile="$4" totty="$5" start now el done ran eta line phase
 	start=$(date +%s)
 	while :; do
 		now=$(date +%s)
 		el=$((now - start))
+		phase=$(phase_of_run)
 		if grep -q 'Testing\.\.\.' "$LOG" 2>/dev/null; then
 			ran=$(grep -cE "${ENV}:test_[a-z0-9_]+ \[(PASSED|FAILED|ERRORED)\]" "$LOG" 2>/dev/null)
-			line=$(printf '[test] %s/%s suites done - %dm%02ds' "$ran" "$testtotal" $((el / 60)) $((el % 60)))
+			line=$(printf '[test] %s/%s suites done - %dm%02ds - now: %s' "$ran" "$testtotal" $((el / 60)) $((el % 60)) "$phase")
 		else
 			done=$(find ".pio/build/${ENV}" -name '*.o' -newer "$marker" 2>/dev/null | wc -l)
-			if ((objtotal > 0 && done > 0)); then
-				eta=$((objtotal > done ? (objtotal - done) * el / done : 0))
-				line=$(printf '[build] %d/%d objs - %dm%02ds - ETA ~%dm%02ds' \
-					"$done" "$objtotal" $((el / 60)) $((el % 60)) $((eta / 60)) $((eta % 60)))
-			else
-				# done==0 (incremental: nothing to rebuild yet) or no cached baseline - no ETA yet.
-				line=$(printf '[build] %d objs compiled - %dm%02ds' "$done" $((el / 60)) $((el % 60)))
-			fi
+			case $phase in
+			compile)
+				if ((objtotal > 0 && done > 0)); then
+					eta=$((objtotal > done ? (objtotal - done) * el / done : 0))
+					line=$(printf '[compile] %d/%d objs - %dm%02ds - ETA ~%dm%02ds' \
+						"$done" "$objtotal" $((el / 60)) $((el % 60)) $((eta / 60)) $((eta % 60)))
+				else
+					# done==0 (incremental: nothing to rebuild yet) or no cached baseline - no ETA yet.
+					line=$(printf '[compile] %d objs so far - %dm%02ds' "$done" $((el / 60)) $((el % 60)))
+				fi
+				;;
+			link) line=$(printf '[link] %d objs compiled, linking - %dm%02ds' "$done" $((el / 60)) $((el % 60))) ;;
+			scons) line=$(printf '[scons] dependency scan (single-threaded; the counter is expected to sit) - %d objs so far - %dm%02ds' "$done" $((el / 60)) $((el % 60))) ;;
+			*) line=$(printf '[build] %d objs so far - %dm%02ds - now: %s' "$done" $((el / 60)) $((el % 60)) "$phase") ;;
+			esac
 		fi
 		printf '%s\n' "$line" >>"$pfile" 2>/dev/null                           # file trail (always)
 		[[ $totty == 1 ]] && printf '\r\033[K%s' "$line" >/dev/tty 2>/dev/null # live line (human)
@@ -498,22 +527,33 @@ if $SHUFFLE; then
 	echo "suite order: shuffled with --seed $SEED (${#RUN_ORDER[@]} suites)"
 fi
 
-# Warm the shared src objects before running any suite, the way .github/workflows/test_native.yml
-# does. Fused build+run makes whichever suite PlatformIO's directory walk reaches first absorb the
-# whole src compile and report it as its own duration - that is how a 35s suite once reported 13
-# minutes, and it hides the build cost from every timing the summary prints.
+# Warm the shared src objects before running any suite. Fused build+run makes whichever suite
+# PlatformIO's directory walk reaches first absorb the whole src compile and report it as its own
+# duration - that is how a 35s suite once reported 13 minutes, and it hides the build cost from
+# every timing the summary prints.
+#
+# ONE suite, not the whole set: `--without-testing` with no filter builds AND LINKS every suite -
+# 78 links, 39 minutes, measured - and prints a full "[PASSED]" table for programs that never ran.
+# The shared src objects are the same whichever suite links them, so the filtered suite when there
+# is one, else the cheapest to link, warms everything the run below needs.
 #
 # This is a WARM-UP ONLY: the run below must still build. PlatformIO links every test program to
 # the one $BUILD_DIR/$PROGNAME path, so a `--without-building` run executes whichever suite was
 # linked last - every suite, under its own name, all PASSED. The warm-up keeps the src compile out
 # of the suite timings; the per-suite step is then just one test_main.cpp plus a link.
+WARM_SUITE="$FILTER"
+if [[ -z $WARM_SUITE ]]; then
+	WARM_SUITE="test_utf8"
+	[[ -d test/$WARM_SUITE ]] || WARM_SUITE="${ALL_SUITES[0]}"
+fi
 BUILD_SECS=0
 build_started=$SECONDS
 if $QUIET; then
-	run_pio test -e "$ENV" "${PASSTHRU[@]}" --without-testing >"$BUILD_LOG" 2>&1
+	run_pio test -e "$ENV" "${EXTRA_ARGS[@]}" -f "$WARM_SUITE" --without-testing >"$BUILD_LOG" 2>&1
 	BUILD_RC=$?
 else
-	run_pio test -e "$ENV" "${PASSTHRU[@]}" --without-testing 2>&1 | tee "$BUILD_LOG"
+	echo "warm-up: building src + linking $WARM_SUITE (a [PASSED] line below means built, not run)"
+	run_pio test -e "$ENV" "${EXTRA_ARGS[@]}" -f "$WARM_SUITE" --without-testing 2>&1 | tee "$BUILD_LOG"
 	BUILD_RC=${PIPESTATUS[0]}
 fi
 BUILD_SECS=$((SECONDS - build_started))
