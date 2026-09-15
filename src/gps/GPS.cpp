@@ -23,6 +23,13 @@
 #include "gps/RTC.h"
 #include "meshUtils.h"
 
+#if defined(TTGO_T_ECHO_PLUS) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
+#include "motion/ICM20948Sensor.h"
+#define T_ECHO_PLUS_ICM20948_GNSS_ASSIST 1
+#else
+#define T_ECHO_PLUS_ICM20948_GNSS_ASSIST 0
+#endif
+
 #include "main.h" // pmu_found
 #include "sleep.h"
 
@@ -2436,9 +2443,48 @@ bool GPS::lookForLocation()
         }
     }
 
+#if T_ECHO_PLUS_ICM20948_GNSS_ASSIST
+    bool haveFreshGnssSpeed = false;
+    float freshGnssSpeedKmph = 0.0f;
+
+    // L76K remains the primary speed source. Prefer RMC; if RMC speed is
+    // missing for this solution, accept a new checksum-valid VTG speed before
+    // considering any IMU estimate.
+    if (reader.speed.isUpdated() && reader.speed.isValid()) {
+        freshGnssSpeedKmph = reader.speed.kmph();
+        p.ground_speed = freshGnssSpeedKmph;
+        haveFreshGnssSpeed = true;
+    } else if (reader.vtgInfo.valid && reader.vtgSpeed.isUpdated() && reader.vtgSpeed.isValid() &&
+               reader.vtgSpeed.age() < GPS_SOL_EXPIRY_MS) {
+        freshGnssSpeedKmph = reader.vtgSpeed.kmph();
+        p.ground_speed = freshGnssSpeedKmph;
+        haveFreshGnssSpeed = true;
+    }
+
+    if (haveFreshGnssSpeed) {
+        // Arm the IMU bridge only from a current GNSS speed+course pair.
+        // Course-over-ground is not trustworthy near standstill, so the ICM
+        // is deliberately not allowed to integrate speed below 1.5 km/h.
+        float courseDeg = 0.0f;
+        float courseSpeedKmph = 0.0f;
+        uint32_t courseSampleMs = 0;
+        if (getFreshCourseOverGround(courseDeg, courseSpeedKmph, courseSampleMs) && courseSpeedKmph >= 1.5f) {
+            ICM20948Sensor::setGnssMotionAnchor(freshGnssSpeedKmph, courseDeg);
+        } else {
+            ICM20948Sensor::invalidateGnssMotionAnchor();
+        }
+    } else {
+        float bridgedSpeedKmph = 0.0f;
+        uint32_t bridgeAgeMs = 0;
+        if (ICM20948Sensor::getBridgedSpeedKmph(bridgedSpeedKmph, bridgeAgeMs)) {
+            p.ground_speed = bridgedSpeedKmph;
+        }
+    }
+#else
     if (reader.speed.isUpdated() && reader.speed.isValid()) {
         p.ground_speed = reader.speed.kmph();
     }
+#endif
 
     return true;
 }

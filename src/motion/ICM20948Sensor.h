@@ -93,6 +93,14 @@ class ICM20948Sensor : public MotionSensor
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 #endif
 
+    // 9-DoF fusion state. The existing calibrated magnetometer heading remains
+    // the absolute reference; gyro only predicts the fast motion between those
+    // absolute corrections.
+    FusionAhrs ahrs = {};
+    FusionBias gyroBias = {};
+    bool fusionInitialised = false;
+    uint32_t lastFusionUpdateMs = 0;
+
   public:
     explicit ICM20948Sensor(ScanI2C::FoundDevice foundDevice);
 
@@ -103,6 +111,13 @@ class ICM20948Sensor : public MotionSensor
     virtual int32_t runOnce() override;
     virtual void calibrate(uint16_t forSeconds) override;
     virtual bool providesHeading() const override { return true; }
+
+    // The L76K is always the primary speed source. A fresh GNSS speed+course
+    // sample arms a maximum 3 s IMU bridge; the bridge is used only when the
+    // next GNSS speed sample is temporarily missing.
+    static void setGnssMotionAnchor(float speedKmph, float courseDeg);
+    static void invalidateGnssMotionAnchor();
+    static bool getBridgedSpeedKmph(float &speedKmph, uint32_t &anchorAgeMs);
 };
 
 #endif
