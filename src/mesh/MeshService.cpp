@@ -479,10 +479,9 @@ bool MeshService::phonePayloadIsDecodable(const meshtastic_Data &d)
     }
 }
 
-void MeshService::sendToPhone(meshtastic_MeshPacket *p, bool alreadyClassified)
+void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
-    if (!alreadyClassified)
-        perhapsDecode(p);
+    perhapsDecode(p);
 
     // Withhold decoded nested payloads a strict phone decoder would reject; still-encrypted packets
     // pass through (the phone may hold the key).

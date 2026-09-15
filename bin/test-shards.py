@@ -38,7 +38,7 @@ REPO = Path(__file__).resolve().parent.parent
 AREA_RULES = [
     ("admin", r"^test_(admin|pki)_"),
     ("crypto", r"^test_(crypto|packet_signing)$"),
-    ("routing", r"^test_(mesh|nexthop|traceroute|hop|traffic|nodedb|warm|rebroadcast)_"),
+    ("routing", r"^test_(mesh|nexthop|traceroute|hop|traffic|nodedb|warm)_"),
     ("position", r"^test_position_"),
     ("fuzz", r"^test_fuzz_"),
     ("packets", r"^test_(packet|transmit|meshpacket)_"),

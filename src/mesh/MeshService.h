@@ -208,9 +208,8 @@ class MeshService
     /// Pull the latest power and time info into my nodeinfo
     meshtastic_NodeInfoLite *refreshLocalMeshNode();
 
-    /// Send a packet to the phone. `alreadyClassified`: the auth gate already ran perhapsDecode() on this
-    /// frame and found no key to try, so do not spend the admin-key fallback budget on it again.
-    void sendToPhone(meshtastic_MeshPacket *p, bool alreadyClassified = false);
+    /// Send a packet to the phone
+    void sendToPhone(meshtastic_MeshPacket *p);
 
     /// Send an MQTT message to the phone for client proxying
     virtual void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);

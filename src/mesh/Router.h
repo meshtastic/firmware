@@ -139,24 +139,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
 
     /** Relay an opaque packet without admitting it to local routing/history state. */
-    bool relayOpaquePacket(const meshtastic_MeshPacket *p, bool seen);
-
-    /** rebroadcast_mode for a packet we cannot read; the port list and sender are inside the ciphertext. */
-    bool opaqueAllowedByMode(const meshtastic_MeshPacket *p);
-
-    // Return true if we are a rebroadcaster. Reads config only, so every relay path can ask.
-    bool isRebroadcaster();
-
-#if USERPREFS_EVENT_MODE
-    /** Cap a relay copy's hop budget to the event-mode limit, keeping hop_start consistent. */
-    static void capEventRelayHops(meshtastic_MeshPacket *packet);
-#endif
-
-    /** Phone delivery for an opaque packet addressed to us (or a broadcast we cannot read). Never a NAK. */
-    void handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable);
-
-    /** MQTT uplink of an opaque PKI unicast between other nodes, when encrypted uplink is enabled. */
-    void uplinkOpaqueUnicast(const meshtastic_MeshPacket *p, bool unreadable);
+    virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
 
     /**
      * Generate the implicit ACK for our own transmission overheard being rebroadcast, using header
@@ -189,32 +172,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr);
-
-    // Opaque dedup slots (see relayOpaquePacket), 8 B each in .bss. Sized like PACKETHISTORY_MAX: every ROUTER
-    // relays opaque frames now, so the churn through this ring is what bounds a storm on the backbone.
-#if defined(ARCH_STM32WL)
-    static constexpr uint8_t OPAQUE_SEEN_MAX = 32;
-#else
-    static constexpr uint8_t OPAQUE_SEEN_MAX = 128;
-#endif
-
-    /**
-     * Recently-seen opaque (undecryptable) frames, keyed on the outer (from,id) header. Deliberately
-     * separate from PacketHistory: it bounds amplification of frames we cannot decrypt without ever
-     * letting them influence routing / ACK / next-hop. Fixed-size RAM ring, FIFO eviction, no
-     * timestamps (ids are effectively random). Records only frames some consumer can act on; id 0 is
-     * never recorded and never acted on, so an empty slot cannot false-match.
-     */
-    struct OpaqueSeen {
-        NodeNum sender = 0;
-        PacketId id = 0; // 0 == empty/unused slot
-    };
-    OpaqueSeen opaqueSeen[OPAQUE_SEEN_MAX] = {};
-    uint8_t opaqueSeenNext = 0; // ring write cursor (round-robin eviction)
-
-    // Dedup helper for relayOpaquePacket: true if (from,id) is already recorded; otherwise records it
-    // (round-robin eviction) and returns false. Pure function of the table - no clock.
-    bool opaqueWasSeenRecently(NodeNum from, PacketId id);
 
   private:
     /**
@@ -307,16 +264,13 @@ enum class RoutingAuthVerdict { ACCEPT, OPAQUE_RELAY_ONLY, REJECT };
  */
 DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
-/** Apply receive authentication before routing state mutation. A packet we cannot read is handled from its
- *  header alone - relayed, shown to the phone or uplinked per `rebroadcast_mode`, never answered - and never
- *  admitted to local state. `decodeState`, when given, receives the attempt's DecodeState. */
-RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p, DecodeState *decodeState = nullptr);
+/** Apply receive authentication before routing state mutation; unknown-channel packets may remain opaque relay-only. */
+RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p);
 #ifdef PIO_UNIT_TESTING
 uint32_t routingAuthEvaluationCount();
 void resetRoutingAuthEvaluationCount();
 /** Refill the admin-key fallback budget and re-stamp it against the clock in use right now. */
 void resetAdminKeyFallbackBudget();
-uint32_t adminKeyFallbackTokensRemaining();
 #endif
 
 /** Return 0 for success or a Routing_Error code for failure

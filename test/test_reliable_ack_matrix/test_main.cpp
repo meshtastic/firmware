@@ -463,20 +463,6 @@ void test_pki_known_key_sender_gets_no_channel_nak(void)
                        /*ackWantsAck=*/false);
 }
 
-void test_short_channel0_frame_from_unknown_sender_gets_no_channel_nak(void)
-{
-    // Channel 0 from an unknown sender, but too short to carry the PKI overhead: it was never a PKI
-    // frame, so no key was missing. NO_CHANNEL, the same verdict Router's opaque classification gives it.
-    auto p = makeEncryptedToUs(/*channel=*/0, /*wantAck=*/true);
-    p.encrypted.size = MESHTASTIC_PKC_OVERHEAD;
-    uint8_t expectedHop = mockRoutingModule->getHopLimitForResponse(p);
-
-    reliableShim->sniffForTest(&p, nullptr);
-
-    expectSingleAckNak(meshtastic_Routing_Error_NO_CHANNEL, kRemoteNode, p.id, channels.getPrimaryIndex(), expectedHop,
-                       /*ackWantsAck=*/false);
-}
-
 void test_unknown_channel_hash_gets_no_channel_nak(void)
 {
     // Nonzero channel hash we cannot decode -> NO_CHANNEL on the primary channel (not the hash).
@@ -883,7 +869,6 @@ void setup()
     RUN_TEST(test_pki_unknown_sender_gets_pki_unknown_pubkey_nak);
     RUN_TEST(test_pki_keyless_sender_record_gets_pki_unknown_pubkey_nak);
     RUN_TEST(test_pki_known_key_sender_gets_no_channel_nak);
-    RUN_TEST(test_short_channel0_frame_from_unknown_sender_gets_no_channel_nak);
     RUN_TEST(test_unknown_channel_hash_gets_no_channel_nak);
 
     printf("\n=== next-hop 0-hop ACK without want_ack ===\n");

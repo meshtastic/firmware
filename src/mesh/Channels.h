@@ -119,15 +119,6 @@ class Channels
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
-    /// True if any configured channel has this wire hash, i.e. we hold a key to try on it.
-    bool hasHash(ChannelHash h)
-    {
-        for (ChannelIndex i = 0; i < getNumChannels(); i++)
-            if (getHash(i) == h)
-                return true;
-        return false;
-    }
-
     /** Return true if the channel has AEAD (authenticated encryption) enabled */
     bool isAEADEnabled(ChannelIndex chIndex);
 

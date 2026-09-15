@@ -805,13 +805,11 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 }
 #endif
 
-RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p, DecodeState *decodeState)
+RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 {
     // Routing still needs the original encrypted representation for byte-for-byte relay and for
     // MQTT uplink. Authenticate a copy here; handleReceived() performs the normal in-place decode
     // only after stateful routing filters have completed.
-    if (decodeState)
-        *decodeState = DecodeState::DECODE_SUCCESS;
     if (routingAuthCacheMatches(*p))
         return RoutingAuthVerdict::ACCEPT;
 
@@ -836,8 +834,6 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p, DecodeState *
         return RoutingAuthVerdict::ACCEPT;
     }
     const DecodeState state = perhapsDecode(&authCandidate);
-    if (decodeState)
-        *decodeState = state;
     if (state == DecodeState::DECODE_POLICY_REJECT) {
         LOG_WARN("Packet rejected by signature policy");
         return RoutingAuthVerdict::REJECT;
@@ -847,10 +843,10 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p, DecodeState *
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
-        // A hash collision is indistinguishable from tampering, so treat it as opaque and relay it. To us
-        // or from us stays REJECT: we answer nothing we matched and failed on, and forgeries stay off the ACK path.
+        // One-byte hash collisions are indistinguishable from tampering, so relay opaquely
+        // instead of blackholing; isFromUs stays REJECT to keep forged senders off the ACK path.
         if (!isToUs(p) && !isFromUs(p)) {
-            LOG_WARN("Decryptable packet failed decoding, handle as opaque");
+            LOG_WARN("Decryptable packet failed decoding, relay opaquely");
             return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
         }
         LOG_WARN("Decryptable packet failed decoding, drop");
@@ -882,11 +878,6 @@ void resetAdminKeyFallbackBudget()
 {
     adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
     adminKeyFallbackRefillMs = Time::getMillis();
-}
-
-uint32_t adminKeyFallbackTokensRemaining()
-{
-    return adminKeyFallbackTokens;
 }
 #endif
 
@@ -930,14 +921,6 @@ static void adminKeyFallbackRefund()
 }
 #endif
 
-/// Hash 0 on a unicast is the PKI sentinel: every PKI DM carries it and fails any channel holding it,
-/// so only key material says whether we could have read one. perhapsDecode()'s candidate shape, minus our identity.
-static bool isPkiShapedUnicast(const meshtastic_MeshPacket *p)
-{
-    return p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 && p->to > 0 &&
-           !isBroadcast(p->to) && p->encrypted.size > MESHTASTIC_PKC_OVERHEAD;
-}
-
 DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
@@ -945,10 +928,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
         LOG_DEBUG("Node 0x%08x not in nodeDB, Rebroadcast KNOWN_ONLY ignores packet", p->from);
-        // Declined before any attempt: a stranger's PKI DM has no key to try, a held channel does.
-        if (isPkiShapedUnicast(p) ||
-            (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && !channels.hasHash(p->channel)))
-            return DecodeState::DECODE_OPAQUE;
         return DecodeState::DECODE_FAILURE;
     }
 
@@ -977,6 +956,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     if (pkiCandidate && owner.is_licensed) {
         licensedPkiCandidate = true;
     } else if (pkiCandidate) {
+        pkiAttempted = true;
         LOG_TRACE("Attempt PKI decryption");
         // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
         // packet: copyPublicKeyForDecrypt() can fall through to a linear scan of TrafficManagement's large
@@ -996,9 +976,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
         bool viaPendingKey = false;
-        // pkiAttempted means the sender's own key was tried. Without one the frame is opaque, not a failed
-        // decrypt; an admin key that fails says nothing about the sender, so it does not count.
-        pkiAttempted = haveRemoteKey;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
             viaPendingKey = havePendingKey;
@@ -1185,10 +1162,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         return DecodeState::DECODE_SUCCESS;
     } else {
         LOG_WARN("No channel found for decoding, hash 0x%x", p->channel);
-        // A channel hashing to 0 matches every PKI DM and fails every one, so it is not "we tried".
-        const bool channelEvidence = matchedChannel && !isPkiShapedUnicast(p);
-        return (channelEvidence || pkiAttempted || licensedPkiCandidate) ? DecodeState::DECODE_FAILURE
-                                                                         : DecodeState::DECODE_OPAQUE;
+        return (matchedChannel || pkiAttempted || licensedPkiCandidate) ? DecodeState::DECODE_FAILURE
+                                                                        : DecodeState::DECODE_OPAQUE;
     }
 }
 
@@ -1641,8 +1616,14 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         if (p_encrypted == nullptr) {
             LOG_WARN("p_encrypted null, skip MQTT publish");
         } else {
-            // Opaque PKI DMs never reach here (uplinkOpaqueUnicast handles them); this path is decoded only.
-            if (decodedState == DecodeState::DECODE_SUCCESS && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt) {
+            // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
+            // to us (because we would be able to decrypt it)
+            if (decodedState == DecodeState::DECODE_OPAQUE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
+                !isBroadcast(p->to) && !isToUs(p))
+                p_encrypted->pki_encrypted = true;
+            // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
+            if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
+                !isFromUs(p) && mqtt) {
                 if (decodedState == DecodeState::DECODE_SUCCESS && p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP &&
                     moduleConfig.mqtt.encryption_enabled) {
                     // For TRACEROUTE_APP packets release the original encrypted packet and encrypt a new from the changed packet
@@ -1673,138 +1654,6 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
-}
-
-#if USERPREFS_EVENT_MODE
-// Shared with NextHopRouter::perhapsRebroadcast(): every relay path caps hops the same way.
-void Router::capEventRelayHops(meshtastic_MeshPacket *packet)
-{
-    if (packet->hop_limit <= Default::eventModeRelayHopLimit)
-        return;
-
-    const uint8_t reduction = packet->hop_limit - Default::eventModeRelayHopLimit;
-    packet->hop_start = reduction <= packet->hop_start ? packet->hop_start - reduction : 0;
-    packet->hop_limit = Default::eventModeRelayHopLimit;
-}
-#endif
-
-bool Router::isRebroadcaster()
-{
-    return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
-           config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
-}
-
-/// rebroadcast_mode for a packet we cannot read. The port list and sender identity are inside the
-/// ciphertext, so CORE_PORTNUMS_ONLY relays; KNOWN/LOCAL relay a PKI-shaped unicast with one known party
-/// (`to` is us for a DM to us).
-bool Router::opaqueAllowedByMode(const meshtastic_MeshPacket *p)
-{
-    switch (config.device.rebroadcast_mode) {
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL:
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING:
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY:
-        return true;
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY:
-    case meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY:
-        return p->channel == 0 && !isBroadcast(p->to) &&
-               (nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from)) || nodeInfoLiteHasUser(nodeDB->getMeshNode(p->to)));
-    default:
-        return false;
-    }
-}
-
-bool Router::relayOpaquePacket(const meshtastic_MeshPacket *p, bool seen)
-{
-    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, or ACK handling. Relay
-    // only from the immutable outer routing header and let hop exhaustion bound it.
-    if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
-        !opaqueAllowedByMode(p) ||
-        (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
-        return false;
-
-    // An originator retransmission is relayed again unless our first copy is still queued, as the
-    // decoded path does in NextHopRouter::shouldFilterReceived().
-    const bool isOriginatorTx = p->hop_start > 0 && p->hop_start == p->hop_limit;
-    if (seen && (!isOriginatorTx || findInTxQueue(getFrom(p), p->id))) {
-        LOG_TRACE("Drop duplicate opaque relay from 0x%08x id 0x%08x", getFrom(p), p->id);
-        return false;
-    }
-
-    meshtastic_MeshPacket *relay = packetPool.allocCopy(*p);
-    if (!relay)
-        return false;
-    relay->hop_limit--;
-#if USERPREFS_EVENT_MODE
-    capEventRelayHops(relay);
-#endif
-    relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
-    // The interface declines some packets (NODENUM_BROADCAST_NO_LORA) with ERRNO_SHOULD_RELEASE,
-    // which leaves the copy ours to free. Dropping it here would leak a pool slot per opaque frame.
-    ErrorCode res = Router::send(relay);
-    if (res == ERRNO_SHOULD_RELEASE)
-        packetPool.release(relay);
-    return res == ERRNO_OK;
-}
-
-// True if (from,id) is already in the ring, else records it (round-robin). Contract in Router.h.
-bool Router::opaqueWasSeenRecently(NodeNum from, PacketId id)
-{
-    for (uint8_t i = 0; i < OPAQUE_SEEN_MAX; i++) {
-        if (opaqueSeen[i].sender == from && opaqueSeen[i].id == id)
-            return true;
-    }
-    // Not seen: record it, overwriting the oldest-written slot (FIFO). Empty slots hold id 0, which a
-    // real entry never has (every consumer declines id 0), so they simply never match above.
-    opaqueSeen[opaqueSeenNext].sender = from;
-    opaqueSeen[opaqueSeenNext].id = id;
-    opaqueSeenNext = (uint8_t)((opaqueSeenNext + 1) % OPAQUE_SEEN_MAX);
-    return false;
-}
-
-/// Undecryptable and addressed to us (or broadcast): hand a frame we had no way to read to the phone.
-/// `unreadable` is the auth gate's DECODE_OPAQUE (no key, no channel) as opposed to a frame we matched
-/// and failed on. No NAK: a reply to an unauthenticated header is a reflector. Nothing enters NodeDB.
-void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable)
-{
-    // id 0 cannot be deduped; relayOpaquePacket() declines it too.
-    if (isFromUs(p) || p->from == 0 || p->id == 0)
-        return;
-    // A licensed station transmits in the clear and may not hand on traffic to or from a node it
-    // knows to be unlicensed. Same rule RoutingModule applies to the decoded path.
-    if (owner.is_licensed && (nodeDB->getLicenseStatus(p->from) == UserLicenseStatus::NotLicensed ||
-                              nodeDB->getLicenseStatus(p->to) == UserLicenseStatus::NotLicensed))
-        return;
-    // Straight to the phone queue: handleFromRadio() would updateFrom() NodeDB for an unverified sender.
-    // The relay mode gates this too; NONE is "do not relay", not "do not listen". MQTT gates itself.
-    const bool modeAllowsPhone =
-        config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE || opaqueAllowedByMode(p);
-    if (unreadable && modeAllowsPhone && (isToUs(p) || isBroadcast(p->to)) && service) {
-        if (meshtastic_MeshPacket *toPhone = packetPool.allocCopy(*p)) {
-            stampRxTime(toPhone);
-            service->sendToPhone(toPhone, /*alreadyClassified=*/true); // the gate already spent the fallback budget
-        }
-    }
-}
-
-/// A PKI DM between two other nodes, uplinked as ciphertext when encrypted uplink is on and marked
-/// pki_encrypted. MQTT gates itself, so rebroadcast_mode does not apply here; the licensed rule does.
-void Router::uplinkOpaqueUnicast(const meshtastic_MeshPacket *p, bool unreadable)
-{
-#if !MESHTASTIC_EXCLUDE_MQTT
-    // Only a frame we had no way to read: a failed decrypt on a channel we hold is not PKI ciphertext.
-    if (!unreadable || !mqtt || !moduleConfig.mqtt.enabled || !moduleConfig.mqtt.encryption_enabled || p->channel != 0 ||
-        p->id == 0 || isBroadcast(p->to) || isToUs(p) || isFromUs(p))
-        return;
-    if (owner.is_licensed && (nodeDB->getLicenseStatus(p->from) == UserLicenseStatus::NotLicensed ||
-                              nodeDB->getLicenseStatus(p->to) == UserLicenseStatus::NotLicensed))
-        return;
-    meshtastic_MeshPacket copy = *p;
-    copy.pki_encrypted = true;
-    mqtt->onSend(copy, copy, p->channel);
-#else
-    (void)p;
-    (void)unreadable;
-#endif
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
@@ -1854,10 +1703,10 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
-    // Decrypt and authenticate before Reliable/Flooding/NextHop filters can update retry timers,
-    // history, ACK state or relay queues. An unreadable packet touches no local state at all.
-    DecodeState gateState = DecodeState::DECODE_SUCCESS; // the gate sets this; do not rely on it having done so
-    const auto authVerdict = passesRoutingAuthGate(p, &gateState);
+    // Decrypt and authenticate before Reliable/Flooding/NextHop filters can update retry
+    // timers, packet history, implicit ACK state, cancellation, or relay queues. A packet for
+    // an unknown channel passes as opaque traffic and retains the existing relay behavior.
+    const auto authVerdict = passesRoutingAuthGate(p);
     if (authVerdict == RoutingAuthVerdict::REJECT) {
         packetPool.release(p);
         return;
@@ -1869,17 +1718,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         // generate it here from the still-encrypted packet before opaque relay.
         if (isFromUs(p))
             perhapsGenerateImplicitAckForOwnOverheard(p);
-        // One dedup for every consumer below, not just relay. Only frames some consumer can act on take
-        // a slot, so the bound #11522 added is not spent on ones none can (test_C33).
-        const bool couldMatter = !isFromUs(p) && (isToUs(p) || isBroadcast(p->to) || p->hop_limit > 0 || p->channel == 0);
-        // id 0 is the ring's empty slot, and every consumer declines it
-        const bool seen = p->id != 0 && couldMatter && opaqueWasSeenRecently(getFrom(p), p->id);
-        const bool unreadable = gateState == DecodeState::DECODE_OPAQUE;
-        if (!seen) {
-            handleOpaqueForUs(p, unreadable);
-            uplinkOpaqueUnicast(p, unreadable);
-        }
-        relayOpaquePacket(p, seen);
+        relayOpaquePacket(p);
         packetPool.release(p);
         return;
     }
