@@ -3409,13 +3409,45 @@ bool NodeDB::saveToDisk(int saveWhat)
 
     bool success = saveToDiskNoRetry(saveWhat);
 
+    // A failed write is far more often a busy SoftDevice or a sagging rail than a corrupt filesystem,
+    // and the format below takes every file with it, so retry first and never format on a low rail.
+    for (int attempt = 1; !success && attempt <= 2; attempt++) {
+        delay(150);
+#ifdef ARCH_RP2040
+        watchdog_update();
+#endif
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+        LOG_WARN("Save to disk failed, retry %d", attempt);
+        success = saveToDiskNoRetry(saveWhat);
+    }
+
     if (!success) {
-        LOG_ERROR("Save to disk failed, retry");
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+        LOG_ERROR("Save to disk failed after retries, formatting");
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        // The format takes the DEK with it, and without it the resave below would land the keys in plaintext.
+        const bool lockdownWasActive = EncryptedStorage::isLockdownActive();
+#else
+        const bool lockdownWasActive = false;
+#endif
         spiLock->lock();
-        fsFormat();
+        const bool formatted = fsFormat();
         spiLock->unlock();
 
-        success = saveToDiskNoRetry(saveWhat);
+        // The format took every segment, not just the ones asked for, so all of them must land again.
+        if (!formatted)
+            LOG_ERROR("Filesystem format failed");
+        else if (lockdownWasActive)
+            LOG_ERROR("Lockdown DEK formatted away, not resaving in plaintext");
+        else
+            success = saveToDiskNoRetry(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                                        SEGMENT_NODEDATABASE);
 
         RECORD_CRITICALERROR(success ? meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE
                                      : meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
