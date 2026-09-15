@@ -10,6 +10,10 @@
 #define ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE 0
 #endif
 
+#ifndef MESHTASTIC_ENABLE_ONCHIP_TEMPERATURE_SENSOR
+#define MESHTASTIC_ENABLE_ONCHIP_TEMPERATURE_SENSOR 1
+#endif
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
