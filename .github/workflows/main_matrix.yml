@@ -816,6 +816,15 @@ jobs:
             --hintro "$RUNNER_TEMP/hintro.html" \
             --houtro "$GITHUB_WORKSPACE/.github/nightly/houtro.html" \
             > index.html
+          # tree exits 0 having silently skipped an intro/outro file it could not
+          # open, so a bad path yields a listing with no page chrome around it.
+          # Check a stable marker from each half rather than trusting the exit code.
+          for marker in 'Nightly Firmware' '</footer>'; do
+            if ! grep -qF "$marker" index.html; then
+              echo "::error::nightly index is missing $marker; check the hintro/houtro paths"
+              exit 1
+            fi
+          done
 
       # Mirror the staged directory to Cloudflare R2. --delete at the bucket root
       # clears stale nightly binaries, and is in scope for the whole bucket because
