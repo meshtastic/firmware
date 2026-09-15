@@ -269,7 +269,7 @@ void InkHUD::AppSwitcherApplet::rebuildActiveAppletList()
 
     for (uint8_t i = 0; i < inkhud->userApplets.size(); i++) {
         Applet *a = inkhud->userApplets.at(i);
-        if (a && a->isActive() && !occupiedOnOtherTiles[i])
+        if (a && a->isActive() && !a->hideFromAppSwitcher && !occupiedOnOtherTiles[i])
             activeAppletIndices.push_back(i);
     }
 }
