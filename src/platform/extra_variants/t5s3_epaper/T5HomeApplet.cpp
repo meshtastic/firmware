@@ -134,10 +134,21 @@ std::string InkHUD::T5HomeApplet::senderName(NodeNum num)
     return node ? parseShortName(node) : hexifyNodeNum(num);
 }
 
-const StoredMessage *InkHUD::T5HomeApplet::latestIncoming()
+const StoredMessage *InkHUD::T5HomeApplet::latestIncoming(bool dmOnly)
 {
-    const StoredMessage &m = latestMessage->wasBroadcast ? latestMessage->broadcast : latestMessage->dm;
-    return (m.sender && messageStore.isMessageVisible(m)) ? &m : nullptr;
+    // The cache also holds broadcasts on channels with no active ThreadedMessageApplet, which never reach the store
+    const StoredMessage &m = (latestMessage->wasBroadcast && !dmOnly) ? latestMessage->broadcast : latestMessage->dm;
+    if (m.sender && messageStore.isMessageVisible(m))
+        return &m;
+
+    // Cached message hidden (sender ignored since): newest visible incoming one in the store, which is oldest first
+    const std::deque<StoredMessage> &stored = messageStore.getLiveMessages();
+    for (auto it = stored.rbegin(); it != stored.rend(); ++it) {
+        if (it->sender && it->sender != nodeDB->getNodeNum() && (!dmOnly || it->type == MessageType::DM_TO_US) &&
+            messageStore.isMessageVisible(*it))
+            return &*it;
+    }
+    return nullptr;
 }
 
 InkHUD::T5HomeApplet::Status InkHUD::T5HomeApplet::readStatus()
@@ -245,10 +256,9 @@ InkHUD::T5HomeApplet::Status InkHUD::T5HomeApplet::readStatus()
     s.channel0Title = join("Channel 0", parse(channels.getName(0)));
     s.channel0Subtitle = to_string(channel0LastHour) + (channel0LastHour == 1 ? " message this hour" : " messages this hour");
 
-    const StoredMessage &dm = latestMessage->dm;
-    if (dm.sender && messageStore.isMessageVisible(dm)) {
-        const int32_t age = ageSecs(dm);
-        s.dmSubtitle = join(senderName(dm.sender), age >= 0 ? agoString(age) : "");
+    if (const StoredMessage *dm = latestIncoming(true)) {
+        const int32_t age = ageSecs(*dm);
+        s.dmSubtitle = join(senderName(dm->sender), age >= 0 ? agoString(age) : "");
     }
 
     return s;
@@ -532,7 +542,7 @@ bool InkHUD::T5HomeApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
         else if (ty >= 316 && ty < 404)
             openApplet(tx < 464 ? "Channel 0" : "DMs");
     } else {
-        if (ty >= navTop() - 84 && tx >= width() / 2)
+        if (ty >= navTop() - 68 && ty < navTop() - 18 && tx >= width() - MARGIN - 168 && tx < width() - MARGIN) // Mode control
             t5ToggleMode();
         else if (ty >= 152 && ty < 268)
             openLatest();

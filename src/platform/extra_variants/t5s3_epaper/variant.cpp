@@ -783,8 +783,11 @@ bool readTouch(int16_t *x, int16_t *y)
             // physical (+16,+16) with 16 px margins on all four sides. Equal margins make the safe-area origin
             // (16,16) in every rotation's visual frame, so one translation covers all rotations.
             constexpr int16_t SAFE_AREA_INSET = 16;
-            *x = clamp(*x - SAFE_AREA_INSET, 0, inkhud->width() - 1);
-            *y = clamp(*y - SAFE_AREA_INSET, 0, inkhud->height() - 1);
+            if (*x < SAFE_AREA_INSET || *x >= SAFE_AREA_INSET + inkhud->width() || *y < SAFE_AREA_INSET ||
+                *y >= SAFE_AREA_INSET + inkhud->height())
+                return false; // In the margin: no InkHUD control there
+            *x -= SAFE_AREA_INSET;
+            *y -= SAFE_AREA_INSET;
 #else
             *x = raw_x;
             *y = raw_y;
