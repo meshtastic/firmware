@@ -551,7 +551,10 @@ int32_t NextHopRouter::doRetransmissions()
 
 void NextHopRouter::setNextTx(PendingPacket *pending)
 {
-    assert(iface);
+    if (!iface) {
+        LOG_WARN("setNextTx: no interface, cannot schedule retransmission");
+        return;
+    }
     auto d = iface->getRetransmissionMsec(pending->packet);
     pending->nextTxMsec = Time::getMillis() + d;
     LOG_TRACE("Next retransmission in %u msecs", d);
