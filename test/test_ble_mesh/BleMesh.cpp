@@ -75,6 +75,14 @@ meshtastic_MeshPacket encryptedPacket(uint32_t from = 0x3061b02e, uint32_t id = 
     return p;
 }
 
+/// A packet at a chosen priority, for the queue-order tests.
+meshtastic_MeshPacket packetAt(meshtastic_MeshPacket_Priority priority, uint32_t id)
+{
+    meshtastic_MeshPacket p = encryptedPacket(0x3061b02e, id);
+    p.priority = priority;
+    return p;
+}
+
 /// What Router::send actually hands a transport, as opposed to the minimal fixture above.
 ///
 /// fixPriority() runs before encryption and never leaves priority UNSET (Router.cpp:562), and
@@ -264,6 +272,98 @@ void test_an_oversized_packet_is_counted_not_just_logged(void)
 
     TEST_ASSERT_FALSE(h.onSend(&p));
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, h.txDroppedTooLarge, "the loss is countable");
+}
+
+void test_an_urgent_frame_overtakes_one_already_queued(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto background = packetAt(meshtastic_MeshPacket_Priority_BACKGROUND, 0x11111111);
+    auto ack = packetAt(meshtastic_MeshPacket_Priority_ACK, 0x22222222);
+    TEST_ASSERT_TRUE(h.onSend(&background));
+    TEST_ASSERT_TRUE(h.onSend(&ack));
+
+    // Extended advertising is set-and-repeat, so whatever leaves first holds the radio for a whole
+    // burst. Arrival order would put a position update ahead of an ack that a sender is timing out
+    // waiting for.
+    uint8_t expected[BLE_MESH_ADV_TOTAL_MAX];
+    const uint8_t len = h.build(&ack, expected, sizeof(expected));
+
+    h.pump();
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.sent.size(), "one frame on air");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, h.sent[0].data(), len);
+}
+
+void test_equal_priorities_leave_in_arrival_order(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto first = packetAt(meshtastic_MeshPacket_Priority_DEFAULT, 0x11111111);
+    auto second = packetAt(meshtastic_MeshPacket_Priority_DEFAULT, 0x22222222);
+    TEST_ASSERT_TRUE(h.onSend(&first));
+    TEST_ASSERT_TRUE(h.onSend(&second));
+
+    uint8_t expected[BLE_MESH_ADV_TOTAL_MAX];
+    const uint8_t len = h.build(&first, expected, sizeof(expected));
+
+    // Priority orders the queue; it does not reorder within a priority. Without this a burst of
+    // same-priority traffic would leave in an order nothing defines.
+    h.pump();
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, h.sent[0].data(), len);
+}
+
+void test_a_full_queue_makes_room_only_for_something_more_important(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    for (size_t i = 0; i < BLE_MESH_TX_QUEUE_SIZE; i++) {
+        auto p = packetAt(meshtastic_MeshPacket_Priority_BACKGROUND, (uint32_t)(0x1000 + i));
+        TEST_ASSERT_TRUE(h.onSend(&p));
+    }
+
+    // Full of the least important work there is, so an ack displaces one.
+    auto ack = packetAt(meshtastic_MeshPacket_Priority_ACK, 0x22222222);
+    TEST_ASSERT_TRUE_MESSAGE(h.onSend(&ack), "an ack gets in");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, h.txDroppedQueueFull, "and the displacement is counted");
+
+    // Now full again, and a second frame of the same priority as the rest has nothing to displace:
+    // shuffling equals would only change which packet is lost.
+    auto peer = packetAt(meshtastic_MeshPacket_Priority_BACKGROUND, 0x33333333);
+    TEST_ASSERT_FALSE_MESSAGE(h.onSend(&peer), "an equal is refused");
+    TEST_ASSERT_EQUAL_UINT32(2, h.txDroppedQueueFull);
+
+    uint8_t expected[BLE_MESH_ADV_TOTAL_MAX];
+    const uint8_t len = h.build(&ack, expected, sizeof(expected));
+    h.pump();
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, h.sent[0].data(), len);
+}
+
+void test_the_frame_displaced_is_the_newest_of_the_least_important(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto oldest = packetAt(meshtastic_MeshPacket_Priority_BACKGROUND, 0x11111111);
+    TEST_ASSERT_TRUE(h.onSend(&oldest));
+    for (size_t i = 1; i < BLE_MESH_TX_QUEUE_SIZE; i++) {
+        auto p = packetAt(meshtastic_MeshPacket_Priority_BACKGROUND, (uint32_t)(0x2000 + i));
+        TEST_ASSERT_TRUE(h.onSend(&p));
+    }
+    auto ack = packetAt(meshtastic_MeshPacket_Priority_ACK, 0x33333333);
+    TEST_ASSERT_TRUE(h.onSend(&ack));
+
+    // A frame that has already waited its turn is not the one to throw away, so the displaced slot
+    // is the newest of the least important rather than the first one found.
+    uint8_t expectedAck[BLE_MESH_ADV_TOTAL_MAX];
+    uint8_t expectedOldest[BLE_MESH_ADV_TOTAL_MAX];
+    const uint8_t ackLen = h.build(&ack, expectedAck, sizeof(expectedAck));
+    const uint8_t oldestLen = h.build(&oldest, expectedOldest, sizeof(expectedOldest));
+
+    h.pump();
+    h.advertising = false;
+    h.pump();
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.sent.size(), "two frames went out");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAck, h.sent[0].data(), ackLen);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedOldest, h.sent[1].data(), oldestLen);
 }
 
 void test_a_dupe_heard_on_ble_cancels_our_queued_copy(void)
@@ -522,6 +622,10 @@ void setup()
     RUN_TEST(test_canceling_cuts_a_burst_already_on_air);
     RUN_TEST(test_send_queues_rather_than_transmitting);
     RUN_TEST(test_tx_queue_is_bounded);
+    RUN_TEST(test_an_urgent_frame_overtakes_one_already_queued);
+    RUN_TEST(test_equal_priorities_leave_in_arrival_order);
+    RUN_TEST(test_a_full_queue_makes_room_only_for_something_more_important);
+    RUN_TEST(test_the_frame_displaced_is_the_newest_of_the_least_important);
     RUN_TEST(test_a_relayed_packet_is_re_advertised);
     RUN_TEST(test_ingress_accepts_a_well_formed_frame);
     RUN_TEST(test_ingress_drops_a_frame_with_no_sender);

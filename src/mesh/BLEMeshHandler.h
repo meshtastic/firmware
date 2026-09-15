@@ -83,6 +83,11 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     /// ciphertext is that minus the envelope - well under LoRa's MAX_RADIO_PAYLOAD_LEN.
     uint32_t txDroppedTooLarge = 0;
 
+    /// Frames refused because the queue was full of work at least as important. Distinct from
+    /// txDroppedTooLarge: that one says the bearer cannot carry this packet at all, this one says it
+    /// could not carry it right now.
+    uint32_t txDroppedQueueFull = 0;
+
     /// Called from Router::send(). Encodes and queues; never transmits inline.
     bool onSend(const meshtastic_MeshPacket *mp) override;
 
@@ -92,12 +97,15 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 
   protected:
     /// One queued outbound frame, already built into a complete AD payload. `from`/`id` are kept
-    /// alongside the bytes so a cancel does not have to decode its own queue back out again.
+    /// alongside the bytes so a cancel does not have to decode its own queue back out again, and
+    /// `priority` because the air copy no longer carries it - strippedForAir() drops it, since it is
+    /// a local scheduling property that the receiver overwrites anyway.
     struct AdvSlot {
         std::array<uint8_t, BLE_MESH_ADV_TOTAL_MAX> data;
         uint8_t len;
         NodeNum from;
         PacketId id;
+        uint8_t priority;
     };
 
     // --- platform hooks ---------------------------------------------------------------------
@@ -113,6 +121,11 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     virtual bool platformReady() = 0;
 
     int32_t runOnce() override;
+
+    /// Queue order, kept out of runOnce() so the policy is one readable thing.
+    size_t highestPrioritySlot() const;
+    size_t lowestPrioritySlot() const;
+    void removeSlot(size_t index);
 
     /// Decode a received advertisement payload and enqueue it into the router.
     void deliverToRouter(const uint8_t *data, size_t len, int8_t rssi);
@@ -134,9 +147,11 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     //
     // <mutex>/<atomic> are also actively harmful here: they pull in <chrono>, which does not survive
     // Arduino's round()/abs() macros on the nRF52 arm-none-eabi toolchain.
+    // A bag, not a ring. Frames leave in priority order rather than arrival order, so there is no
+    // head to advance: runOnce() picks the best slot and closes the gap. Eight slots of 256 bytes
+    // makes the worst-case compaction under 2 KB on the main task, once per burst, which is cheaper
+    // than the index arithmetic an ordered ring would need.
     std::array<AdvSlot, BLE_MESH_TX_QUEUE_SIZE> txQueue{};
-    size_t txHead = 0;
-    size_t txTail = 0;
     size_t txCount = 0;
     bool advertising = false;
 

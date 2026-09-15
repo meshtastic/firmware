@@ -131,17 +131,58 @@ bool BLEMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     slot.from = mp->from;
     slot.id = mp->id;
 
+    slot.priority = (uint8_t)mp->priority;
+
     if (txCount >= BLE_MESH_TX_QUEUE_SIZE) {
-        LOG_WARN("BLE mesh: TX queue full, dropping 0x%08x", mp->id);
-        return false;
+        // Make room only by displacing something strictly less important, the same trade
+        // MeshPacketQueue::replaceLowerPriorityPacket makes for the LoRa queue. A queue full of work
+        // at least as important refuses the newcomer rather than shuffling equals.
+        const size_t worst = lowestPrioritySlot();
+        if (txQueue[worst].priority >= slot.priority) {
+            txDroppedQueueFull++;
+            LOG_WARN("BLE mesh: TX queue full of priority >= %u, dropping 0x%08x", (unsigned)slot.priority, mp->id);
+            return false;
+        }
+        LOG_WARN("BLE mesh: dropping queued 0x%08x (priority %u) for 0x%08x (priority %u)", txQueue[worst].id,
+                 (unsigned)txQueue[worst].priority, mp->id, (unsigned)slot.priority);
+        txDroppedQueueFull++;
+        removeSlot(worst);
     }
-    txQueue[txTail] = slot;
-    txTail = (txTail + 1) % BLE_MESH_TX_QUEUE_SIZE;
-    txCount++;
+    txQueue[txCount++] = slot;
 
     setIntervalFromNow(0);
     concurrency::mainDelay.interrupt();
     return true;
+}
+
+/// The slot that should go out next: highest priority, oldest first within a priority.
+size_t BLEMeshHandler::highestPrioritySlot() const
+{
+    size_t best = 0;
+    for (size_t i = 1; i < txCount; i++) {
+        if (txQueue[i].priority > txQueue[best].priority)
+            best = i;
+    }
+    return best;
+}
+
+/// The slot to displace when a more important frame arrives: lowest priority, newest first, so a
+/// frame that has already waited is not the one thrown away.
+size_t BLEMeshHandler::lowestPrioritySlot() const
+{
+    size_t worst = 0;
+    for (size_t i = 1; i < txCount; i++) {
+        if (txQueue[i].priority <= txQueue[worst].priority)
+            worst = i;
+    }
+    return worst;
+}
+
+void BLEMeshHandler::removeSlot(size_t index)
+{
+    for (size_t i = index + 1; i < txCount; i++)
+        txQueue[i - 1] = txQueue[i];
+    txCount--;
 }
 
 int32_t BLEMeshHandler::runOnce()
@@ -163,9 +204,9 @@ int32_t BLEMeshHandler::runOnce()
 
     if (txCount == 0)
         return 100;
-    AdvSlot slot = txQueue[txHead];
-    txHead = (txHead + 1) % BLE_MESH_TX_QUEUE_SIZE;
-    txCount--;
+    const size_t next = highestPrioritySlot();
+    AdvSlot slot = txQueue[next];
+    removeSlot(next);
 
     if (platformBeginAdvertising(slot.data.data(), slot.len)) {
         advertising = true;
@@ -184,21 +225,18 @@ bool BLEMeshHandler::onCancelSending(meshtastic_MeshPacket_TransportMechanism me
 
     bool canceled = false;
 
-    // Compact the ring in place, keeping order. A cancel is rare and the ring is eight deep, so a
-    // copy costs less than threading a tombstone through runOnce().
+    // Compact in place, keeping arrival order so equal priorities still leave oldest-first.
     size_t kept = 0;
     for (size_t i = 0; i < txCount; i++) {
-        const AdvSlot &slot = txQueue[(txHead + i) % BLE_MESH_TX_QUEUE_SIZE];
-        if (slot.from == from && slot.id == id) {
+        if (txQueue[i].from == from && txQueue[i].id == id) {
             canceled = true;
             continue;
         }
         if (kept != i)
-            txQueue[(txHead + kept) % BLE_MESH_TX_QUEUE_SIZE] = slot;
+            txQueue[kept] = txQueue[i];
         kept++;
     }
     txCount = kept;
-    txTail = (txHead + kept) % BLE_MESH_TX_QUEUE_SIZE;
 
     // Cut a burst already on air short too. Extended advertising repeats one payload for
     // BLE_MESH_ADV_EVENTS events, so the copies still to come are exactly what the overhear says are
