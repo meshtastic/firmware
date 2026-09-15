@@ -46,12 +46,10 @@ bool t5BacklightIsUserEnabled();
 void t5BacklightToggleUser();
 void t5BacklightSetForcedByTimeout(bool forced);
 void t5BacklightSetForcedBySleep(bool forced);
-void t5BacklightHandleUserInput();
 
 // Touch timeout/wake helpers for this variant
 void t5TouchSetForcedByTimeout(bool forced);
 bool t5TouchIsForcedByTimeout();
-void t5TouchHandleUserInput();
 
 // Gate GT911 capacitive-home callback delivery until InkHUD startup is complete.
 void t5SetHomeCapButtonEventsEnabled(bool enabled);

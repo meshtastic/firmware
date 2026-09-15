@@ -546,13 +546,6 @@ void t5BacklightSetForcedBySleep(bool forced)
     applyBacklightState();
 }
 
-void t5BacklightHandleUserInput()
-{
-    // Screen-timeout should be lifted by direct user interaction.
-    backlightForcedByTimeout = false;
-    applyBacklightState();
-}
-
 void t5TouchSetForcedByTimeout(bool forced)
 {
     if (touchForcedByTimeout == forced) {
@@ -584,11 +577,6 @@ void t5TouchSetForcedByTimeout(bool forced)
 bool t5TouchIsForcedByTimeout()
 {
     return touchForcedByTimeout;
-}
-
-void t5TouchHandleUserInput()
-{
-    t5TouchSetForcedByTimeout(false);
 }
 
 void t5SetHomeCapButtonEventsEnabled(bool enabled)
