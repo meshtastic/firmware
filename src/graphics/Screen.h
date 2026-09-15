@@ -67,6 +67,8 @@ class Screen
     };
 
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
+    // These are empty stubs, but they mirror the real Screen's instance API, so they can't become static.
+    // cppcheck-suppress-begin functionStatic
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -87,6 +89,7 @@ class Screen
     bool getIsI2cScreen() const { return false; }
     uint32_t getI2cFrequency() const { return 0; }
     ScanI2C::I2CPort getI2CPort() const { return ScanI2C::I2CPort::NO_I2C; }
+    // cppcheck-suppress-end functionStatic
 };
 } // namespace graphics
 #else

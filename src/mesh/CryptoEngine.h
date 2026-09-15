@@ -57,7 +57,6 @@ class CryptoEngine
     virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
-    virtual void hash(uint8_t *bytes, size_t numBytes);
 
     // Temporary holder for a peer's not-yet-verified public key, learned in-band during an
     // in-progress key-verification handshake before it is committed to NodeDB. Lets the Router
@@ -69,13 +68,26 @@ class CryptoEngine
     void clearPendingPublicKey();
     // Fills `out` (size set to 32) and returns true iff a pending key is held for `node`.
     bool getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out);
+#endif
+
+    // Plain SHA256; outside the guard because PortduinoGlue uses it on EXCLUDE_PKI builds.
+    virtual void hash(uint8_t *bytes, size_t numBytes);
 
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    std::unique_ptr<AESSmall256> aes = nullptr;
+    std::unique_ptr<BlockCipher> aes = nullptr;
 
-#endif
+    static constexpr size_t AEAD_TAG_SIZE = 12;
+    // Sender and destination IDs are authenticated as associated data: the nonce already binds
+    // `from` and the packet id, and the hop fields are left out because relays rewrite them.
+    static constexpr size_t AEAD_AAD_SIZE = 2 * sizeof(uint32_t);
+
+    virtual bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                                  const uint8_t *plaintext, uint8_t *ciphertextWithTag);
+
+    virtual bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t totalBytes,
+                                  const uint8_t *ciphertextWithTag, uint8_t *plaintext);
 
     /**
      * Set the key used for encrypt, decrypt.
