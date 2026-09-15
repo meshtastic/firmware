@@ -847,9 +847,9 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p, DecodeState *
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
-        // A hash collision is indistinguishable from tampering, so treat it as opaque: relayed if not for
-        // us, NAKed and shown to the phone if it is. isFromUs stays REJECT to keep forgeries off the ACK path.
-        if (!isFromUs(p)) {
+        // A hash collision is indistinguishable from tampering, so treat it as opaque and relay it. To us
+        // or from us stays REJECT: we answer nothing we matched and failed on, and forgeries stay off the ACK path.
+        if (!isToUs(p) && !isFromUs(p)) {
             LOG_WARN("Decryptable packet failed decoding, handle as opaque");
             return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
         }
@@ -1756,30 +1756,18 @@ bool Router::opaqueWasSeenRecently(NodeNum from, PacketId id)
     return false;
 }
 
-/// Undecryptable and addressed to us (or broadcast): NAK a want_ack unicast with the reason, and hand
-/// a frame we had no way to read to the phone. `unreadable` is the auth gate's DECODE_OPAQUE (no key,
-/// no channel) as opposed to a frame we matched and failed on. Header-only; nothing enters NodeDB.
-void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable, bool repeat)
+/// Undecryptable and addressed to us (or broadcast): hand a frame we had no way to read to the phone.
+/// `unreadable` is the auth gate's DECODE_OPAQUE (no key, no channel) as opposed to a frame we matched
+/// and failed on. No NAK: a reply to an unauthenticated header is a reflector. Nothing enters NodeDB.
+void Router::handleOpaqueForUs(const meshtastic_MeshPacket *p, bool unreadable)
 {
-    // id 0 cannot be deduped, and a NAK for it is unmatchable; relayOpaquePacket() declines it too.
+    // id 0 cannot be deduped; relayOpaquePacket() declines it too.
     if (isFromUs(p) || p->from == 0 || p->id == 0)
         return;
-    // A licensed station transmits in the clear and may not answer, or hand on, traffic to or from a
-    // node it knows to be unlicensed. Same rule RoutingModule applies to the decoded path.
+    // A licensed station transmits in the clear and may not hand on traffic to or from a node it
+    // knows to be unlicensed. Same rule RoutingModule applies to the decoded path.
     if (owner.is_licensed && (nodeDB->getLicenseStatus(p->from) == UserLicenseStatus::NotLicensed ||
                               nodeDB->getLicenseStatus(p->to) == UserLicenseStatus::NotLicensed))
-        return;
-    if (isToUs(p) && p->want_ack && !isBroadcast(p->to) && routingModule) {
-        // PKI_UNKNOWN_PUBKEY only if the frame could have been PKI at all. With no keypair of our own it
-        // reads as "no usable key pair for this DM", either end, rather than "I do not know yours".
-        const bool pkiShaped = unreadable && isPkiShapedUnicast(p);
-        const auto err = pkiShaped ? meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY : meshtastic_Routing_Error_NO_CHANNEL;
-        LOG_INFO("Cannot decrypt 0x%08x from 0x%08x, NAK %d", p->id, p->from, (int)err);
-        // A repeat is the sender's own retransmission, so it is a direct neighbour: answer at hop 0,
-        // as the decoded path re-ACKs, and stop there - the phone already has this frame.
-        sendAckNak(err, getFrom(p), p->id, channels.getPrimaryIndex(), repeat ? 0 : routingModule->getHopLimitForResponse(*p));
-    }
-    if (repeat)
         return;
     // Straight to the phone queue: handleFromRadio() would updateFrom() NodeDB for an unverified sender.
     // The relay mode gates this too; NONE is "do not relay", not "do not listen". MQTT gates itself.
@@ -1881,12 +1869,11 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         const bool couldMatter = !isFromUs(p) && (isToUs(p) || isBroadcast(p->to) || p->hop_limit > 0 || p->channel == 0);
         // id 0 is the ring's empty slot, and every consumer declines it
         const bool seen = p->id != 0 && couldMatter && opaqueWasSeenRecently(getFrom(p), p->id);
-        const bool retx = p->hop_start > 0 && p->hop_start == p->hop_limit; // the originator's own resend
         const bool unreadable = gateState == DecodeState::DECODE_OPAQUE;
-        if (!seen || retx)
-            handleOpaqueForUs(p, unreadable, /*repeat=*/seen);
-        if (!seen)
+        if (!seen) {
+            handleOpaqueForUs(p, unreadable);
             uplinkOpaqueUnicast(p, unreadable);
+        }
         relayOpaquePacket(p, seen);
         packetPool.release(p);
         return;

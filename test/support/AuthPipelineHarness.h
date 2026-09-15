@@ -253,54 +253,18 @@ class AuthPipelineRouter : public ReliableRouter
     }
 };
 
-/// Records every ACK/NAK the router asks for instead of transmitting it.
+/// Counts every ACK/NAK the router asks for instead of transmitting it. The opaque path sends none.
 class AuthPipelineRoutingModule : public RoutingModule
 {
   public:
-    struct AckNak {
-        meshtastic_Routing_Error err;
-        NodeNum to;
-        PacketId id;
-        ChannelIndex chIndex;
-        uint8_t hopLimit;
-    };
-
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId id, ChannelIndex chIndex, uint8_t hopLimit = 0,
-                    bool = false, const meshtastic_MeshPacket * = nullptr) override
+    void sendAckNak(meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false,
+                    const meshtastic_MeshPacket * = nullptr) override
     {
         ackCalls++;
-        sentAckNaks.push_back({err, to, id, chIndex, hopLimit});
-        lastErr = err;
-        lastChIndex = chIndex;
-        lastHopLimit = hopLimit;
     }
+    void reset() { ackCalls = 0; }
 
-    /// The n-th ACK/NAK of this test, or nullptr - so a test can pin a second NAK without losing the first.
-    const AckNak *ackNakAt(size_t n) const { return n < sentAckNaks.size() ? &sentAckNaks[n] : nullptr; }
-    /// How many ACK/NAKs answered this (to,id) pair.
-    uint32_t ackNakCountFor(NodeNum to, PacketId id) const
-    {
-        uint32_t n = 0;
-        for (const auto &a : sentAckNaks)
-            if (a.to == to && a.id == id)
-                n++;
-        return n;
-    }
-    void reset()
-    {
-        sentAckNaks.clear();
-        ackCalls = 0;
-        lastErr = meshtastic_Routing_Error_NONE;
-        lastChIndex = 0;
-        lastHopLimit = 0;
-    }
-
-    std::vector<AckNak> sentAckNaks;
     uint32_t ackCalls = 0;
-    // The last of each field, kept because most cases send exactly one and read it directly.
-    meshtastic_Routing_Error lastErr = meshtastic_Routing_Error_NONE;
-    ChannelIndex lastChIndex = 0;
-    uint8_t lastHopLimit = 0;
 };
 
 /// A POSITION_APP module that counts how often ingress reaches module dispatch.

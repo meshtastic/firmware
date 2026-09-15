@@ -120,7 +120,7 @@ void test_unknown_channel_broadcast_relays_in_core_portnums_only(void)
 
 // A licensed (ham) node must not relay traffic it cannot read - encryption is not permitted
 // on its band, and it cannot tell what it is carrying. Every mode, no exceptions; its own inbound
-// handling (NAK, phone) is unaffected because those are about what was sent *to* it.
+// handling (phone delivery) is unaffected because that is about what was sent *to* it.
 void test_licensed_node_never_relays_opaque_traffic(void)
 {
     owner.is_licensed = true;
