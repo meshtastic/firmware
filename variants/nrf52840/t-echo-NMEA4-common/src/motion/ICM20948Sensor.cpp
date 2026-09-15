@@ -1,9 +1,9 @@
 #include "ICM20948Sensor.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
+#include "concurrency/LockGuard.h"
 #include "detect/ScanI2CTwoWire.h"
 #include "mesh/Throttle.h"
-#include "concurrency/LockGuard.h"
 #include <math.h>
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
@@ -74,8 +74,7 @@ void updateSpeedBridgeFromEarthAcceleration(const FusionVector &earthAcceleratio
 
     // Never integrate the first sample after an anchor/restart, and never
     // integrate while the AHRS is still in its high-gain startup phase.
-    const uint32_t dtMs =
-        (icmSpeedBridge.integrationMs == 0U) ? 0U : (uint32_t)(now - icmSpeedBridge.integrationMs);
+    const uint32_t dtMs = (icmSpeedBridge.integrationMs == 0U) ? 0U : (uint32_t)(now - icmSpeedBridge.integrationMs);
     icmSpeedBridge.integrationMs = now;
     if (!fusionUsable || dtMs == 0U || dtMs > 200U)
         return;
@@ -93,13 +92,11 @@ void updateSpeedBridgeFromEarthAcceleration(const FusionVector &earthAcceleratio
 
     // Mild low-pass before integration; the deadband suppresses residual
     // gravity/tilt noise so it cannot slowly walk the speed estimate.
-    icmSpeedBridge.filteredForwardAccelMps2 =
-        0.60f * icmSpeedBridge.filteredForwardAccelMps2 + 0.40f * forwardAccelMps2;
+    icmSpeedBridge.filteredForwardAccelMps2 = 0.60f * icmSpeedBridge.filteredForwardAccelMps2 + 0.40f * forwardAccelMps2;
     if (fabsf(icmSpeedBridge.filteredForwardAccelMps2) < ICM_SPEED_ACCEL_DEADBAND_MPS2)
         icmSpeedBridge.filteredForwardAccelMps2 = 0.0f;
 
-    float estimate =
-        icmSpeedBridge.estimateKmph + icmSpeedBridge.filteredForwardAccelMps2 * (dtMs * 0.001f) * 3.6f;
+    float estimate = icmSpeedBridge.estimateKmph + icmSpeedBridge.filteredForwardAccelMps2 * (dtMs * 0.001f) * 3.6f;
     if (estimate < 0.0f)
         estimate = 0.0f;
 
@@ -224,7 +221,7 @@ int32_t ICM20948Sensor::runOnce()
         magZ -= (highestZ + lowestZ) / 2.0f;
 
         FusionVector accel;
-        accel.axis.x = sensor->accX() * 0.001f;  // SparkFun API returns milli-g
+        accel.axis.x = sensor->accX() * 0.001f; // SparkFun API returns milli-g
         accel.axis.y = -sensor->accY() * 0.001f;
         accel.axis.z = -sensor->accZ() * 0.001f;
 
@@ -371,8 +368,7 @@ bool ICM20948Sensor::getBridgedSpeedKmph(float &speedKmph, uint32_t &anchorAgeMs
         return false;
     }
 
-    if (icmSpeedBridge.accelerationMs == 0U ||
-        (uint32_t)(now - icmSpeedBridge.accelerationMs) > ICM_SPEED_ACCEL_MAX_AGE_MS)
+    if (icmSpeedBridge.accelerationMs == 0U || (uint32_t)(now - icmSpeedBridge.accelerationMs) > ICM_SPEED_ACCEL_MAX_AGE_MS)
         return false;
 
     speedKmph = icmSpeedBridge.estimateKmph;

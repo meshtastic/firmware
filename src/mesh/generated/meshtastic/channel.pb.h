@@ -134,12 +134,12 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_ChannelSettings_init_default  {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default, 0}
-#define meshtastic_ModuleSettings_init_default   {0, 0}
-#define meshtastic_Channel_init_default          {0, false, meshtastic_ChannelSettings_init_default, _meshtastic_Channel_Role_MIN}
-#define meshtastic_ChannelSettings_init_zero     {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero, 0}
-#define meshtastic_ModuleSettings_init_zero      {0, 0}
-#define meshtastic_Channel_init_zero             {0, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Channel_Role_MIN}
+static const meshtastic_ModuleSettings meshtastic_ModuleSettings_init_default = {0, 0};
+static const meshtastic_ChannelSettings meshtastic_ChannelSettings_init_default = {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default, 0};
+static const meshtastic_Channel meshtastic_Channel_init_default = {0, false, {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_default, 0}, _meshtastic_Channel_Role_MIN};
+static const meshtastic_ModuleSettings meshtastic_ModuleSettings_init_zero = {0, 0};
+static const meshtastic_ChannelSettings meshtastic_ChannelSettings_init_zero = {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero, 0};
+static const meshtastic_Channel meshtastic_Channel_init_zero = {0, false, {0, {0, {0}}, "", 0, 0, 0, false, meshtastic_ModuleSettings_init_zero, 0}, _meshtastic_Channel_Role_MIN};
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_ModuleSettings_position_precision_tag 1

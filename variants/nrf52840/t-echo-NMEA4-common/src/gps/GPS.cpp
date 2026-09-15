@@ -23,11 +23,11 @@
 #include "gps/RTC.h"
 #include "meshUtils.h"
 
-#if defined(TTGO_T_ECHO_PLUS) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
+#if defined(T_ECHO_NMEA4_FAMILY) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
 #include "motion/ICM20948Sensor.h"
-#define T_ECHO_PLUS_ICM20948_GNSS_ASSIST 1
+#define T_ECHO_NMEA4_ICM20948_GNSS_ASSIST 1
 #else
-#define T_ECHO_PLUS_ICM20948_GNSS_ASSIST 0
+#define T_ECHO_NMEA4_ICM20948_GNSS_ASSIST 0
 #endif
 
 #include "main.h" // pmu_found
@@ -2443,7 +2443,7 @@ bool GPS::lookForLocation()
         }
     }
 
-#if T_ECHO_PLUS_ICM20948_GNSS_ASSIST
+#if T_ECHO_NMEA4_ICM20948_GNSS_ASSIST
     bool haveFreshGnssSpeed = false;
     float freshGnssSpeedKmph = 0.0f;
 

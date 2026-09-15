@@ -1,11 +1,11 @@
 #pragma once
+#include "NMEA4Config.h"
 
 #include "configuration.h"
 
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
-#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -47,8 +47,6 @@ struct BannerOverlayOptions {
 
 bool shouldWakeOnReceivedMessage();
 
-class MeshModule;
-
 #if !HAS_SCREEN
 #include "Power.h"
 namespace graphics
@@ -67,8 +65,6 @@ class Screen
     };
 
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
-    // These are empty stubs, but they mirror the real Screen's instance API, so they can't become static.
-    // cppcheck-suppress-begin functionStatic
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -78,10 +74,6 @@ class Screen
     void increaseBrightness() {}
     void decreaseBrightness() {}
     void startAlert(const char *) {}
-    void setModalModule(const MeshModule *) {}
-    void clearModalModule(const MeshModule *) {}
-    bool hasModalModule() const { return false; }
-    bool isShowingModuleFrame(const MeshModule *) const { return false; }
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
@@ -89,7 +81,6 @@ class Screen
     bool getIsI2cScreen() const { return false; }
     uint32_t getI2cFrequency() const { return 0; }
     ScanI2C::I2CPort getI2CPort() const { return ScanI2C::I2CPort::NO_I2C; }
-    // cppcheck-suppress-end functionStatic
 };
 } // namespace graphics
 #else
@@ -287,9 +278,6 @@ class Screen : public concurrency::OSThread
 
     bool isOverlayBannerShowing();
 
-    // Thread-safe snapshot of whether the text-message frame is currently shown.
-    bool isTextMessageFrameShown() const;
-
     // True if the always-present games frame is the one currently on screen. Lets the games module
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
@@ -347,20 +335,6 @@ class Screen : public concurrency::OSThread
         cmd.cmd = Cmd::STOP_ALERT_FRAME;
         enqueueCmd(cmd);
     }
-
-    // Holds the screen against the carousel, the new-message banner and a foreign endAlert().
-    // Only the owner can release it, unlike endAlert(), which any caller can fire.
-    void setModalModule(const MeshModule *owner) { modalModule = owner; }
-    void clearModalModule(const MeshModule *owner)
-    {
-        if (modalModule == owner)
-            modalModule = nullptr;
-    }
-    bool hasModalModule() const { return modalModule != nullptr; }
-
-    // True while this module's own frame is on screen. Modules observe input before Screen does,
-    // so one handling keys needs this or it takes them from the frame the user is looking at.
-    bool isShowingModuleFrame(const MeshModule *m) const;
 
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);
     void showOverlayBanner(BannerOverlayOptions);
@@ -704,9 +678,6 @@ class Screen : public concurrency::OSThread
     uint16_t displayHeight = 0;
 
   private:
-    // nullptr for every build with no modal module, which is why the three sites are unchanged.
-    const MeshModule *modalModule = nullptr;
-
     FrameCallback alertFrames[1];
     struct ScreenCmd {
         Cmd cmd;
@@ -759,8 +730,10 @@ class Screen : public concurrency::OSThread
             uint8_t deviceFocused = 255;
             uint8_t system = 255;
             uint8_t gps = 255;
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#if NMEA4_HAS_SATELLITES_PAGE
             uint8_t satellites = 255;
+#endif
+#if NMEA4_HAS_FAVORITES_MAP
             uint8_t favoritesMap = 255;
 #endif
             uint8_t home = 255;
@@ -832,7 +805,6 @@ class Screen : public concurrency::OSThread
     // Whether we are showing the regular screen (as opposed to booth screen or
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
-    std::atomic<bool> textMessageFrameShown{false};
     /// Track USB power state to only wake screen on actual power state changes
     bool lastPowerUSBState = false;
 

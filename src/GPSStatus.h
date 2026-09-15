@@ -16,11 +16,14 @@ class GPSStatus : public Status
     CallbackObserver<GPSStatus, const GPSStatus *> statusObserver =
         CallbackObserver<GPSStatus, const GPSStatus *>(this, &GPSStatus::updateStatus);
 
-    bool hasLock = false;     // default to false, until we complete our first read
-    bool isConnected = false; // Do we have a GPS we are talking to
-    bool hasTime = false;     // GPS has decoded a valid time this acquisition, even without a position fix
+    bool hasLock = false;               // default to false, until we complete our first read
+    bool isConnected = false;           // Do we have a GPS we are talking to
+    bool hasTime = false;               // GPS has decoded a valid time this acquisition, even without a position fix
+    bool isSearching = false;           // Internal GNSS is ACTIVE and reading/searching
+    bool isSleeping = false;            // Internal GNSS is intentionally in SOFT/HARD sleep
+    bool hasFreshSatelliteData = false; // Fresh internal GGA/GSV seen in the current ACTIVE period
 
-    bool isPowerSaving = false; // Are we in power saving state
+    bool isPowerSaving = false; // Configured GPS mode is power-saving/disabled
 
     meshtastic_Position p = meshtastic_Position_init_default;
 
@@ -31,12 +34,18 @@ class GPSStatus : public Status
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
     // preferred method
-    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const meshtastic_Position &pos, bool hasTime = false) : Status()
+    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const meshtastic_Position &pos, bool hasTime = false,
+              bool isSearching = false, bool isSleeping = false, bool hasFreshSatelliteData = false)
+        : Status()
     {
+        statusType = STATUS_TYPE_GPS;
         this->hasLock = hasLock;
         this->isConnected = isConnected;
         this->isPowerSaving = isPowerSaving;
         this->hasTime = hasTime;
+        this->isSearching = isSearching;
+        this->isSleeping = isSleeping;
+        this->hasFreshSatelliteData = hasFreshSatelliteData;
 
         // all-in-one struct copy
         this->p = pos;
@@ -54,6 +63,12 @@ class GPSStatus : public Status
     bool getIsPowerSaving() const { return isPowerSaving; }
 
     bool getHasTime() const { return hasTime; }
+
+    bool getIsSearching() const { return isSearching; }
+
+    bool getIsSleeping() const { return isSleeping; }
+
+    bool getHasFreshSatelliteData() const { return hasFreshSatelliteData; }
 
     int32_t getLatitude() const
     {
@@ -95,19 +110,27 @@ class GPSStatus : public Status
     {
         LOG_DEBUG_GPS("GPSStatus.match() new pos@%x to old pos@%x", newStatus->p.timestamp, p.timestamp);
         return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected || newStatus->hasTime != hasTime ||
-                newStatus->isPowerSaving != isPowerSaving || newStatus->p.latitude_i != p.latitude_i ||
-                newStatus->p.longitude_i != p.longitude_i || newStatus->p.altitude != p.altitude ||
-                newStatus->p.altitude_hae != p.altitude_hae || newStatus->p.PDOP != p.PDOP ||
-                newStatus->p.ground_track != p.ground_track || newStatus->p.ground_speed != p.ground_speed ||
-                newStatus->p.sats_in_view != p.sats_in_view);
+                newStatus->isSearching != isSearching || newStatus->isSleeping != isSleeping ||
+                newStatus->hasFreshSatelliteData != hasFreshSatelliteData || newStatus->isPowerSaving != isPowerSaving ||
+                newStatus->p.latitude_i != p.latitude_i || newStatus->p.longitude_i != p.longitude_i ||
+                newStatus->p.altitude != p.altitude || newStatus->p.altitude_hae != p.altitude_hae ||
+                newStatus->p.PDOP != p.PDOP || newStatus->p.ground_track != p.ground_track ||
+                newStatus->p.ground_speed != p.ground_speed || newStatus->p.sats_in_view != p.sats_in_view);
     }
 
     int updateStatus(const GPSStatus *newStatus)
     {
-        // Only update the status if values have actually changed
-        bool isDirty = matches(newStatus);
+        // Only update the status if values have actually changed.
+        const bool isDirty = matches(newStatus);
 
-        if (isDirty && p.timestamp && (newStatus->p.timestamp == p.timestamp)) {
+        // Satellite/power/time status is allowed to change independently of a
+        // position fix. Only flag an unchanged positional timestamp when the
+        // actual position itself changed.
+        const bool positionChanged = newStatus->p.latitude_i != p.latitude_i || newStatus->p.longitude_i != p.longitude_i ||
+                                     newStatus->p.altitude != p.altitude || newStatus->p.altitude_hae != p.altitude_hae;
+        const bool hasNewFix = newStatus->hasLock && (!hasLock || newStatus->p.timestamp != p.timestamp);
+
+        if (isDirty && positionChanged && p.timestamp && (newStatus->p.timestamp == p.timestamp)) {
             // We can NEVER be in two locations at the same time! (also PR #886)
             LOG_ERROR("BUG: Positional timestamp unchanged from prev solution");
         }
@@ -115,19 +138,29 @@ class GPSStatus : public Status
         initialized = true;
         hasLock = newStatus->hasLock;
         isConnected = newStatus->isConnected;
+        isPowerSaving = newStatus->isPowerSaving;
         hasTime = newStatus->hasTime;
+        isSearching = newStatus->isSearching;
+        isSleeping = newStatus->isSleeping;
+        hasFreshSatelliteData = newStatus->hasFreshSatelliteData;
 
         p = newStatus->p;
 
         if (isDirty) {
             if (hasLock) {
-                // Record time of last valid GPS fix
-                lastFixMillis = millis();
+                // A satellite-only/status-only update is not a new position
+                // fix and must not reset the "Last GPS Fix" age.
+                if (hasNewFix)
+                    lastFixMillis = millis();
 
-                // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
-                LOG_DEBUG("New GPS pos@%x:3 lat=%f lon=%f alt=%d pdop=%.2f track=%.2f speed=%.2f sats=%d", p.timestamp,
-                          p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,
-                          p.ground_speed * 1e-2, p.sats_in_view);
+                if (hasNewFix) {
+                    // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
+                    LOG_DEBUG("New GPS pos@%x:3 lat=%f lon=%f alt=%d pdop=%.2f track=%.2f speed=%.2f sats=%d", p.timestamp,
+                              p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,
+                              p.ground_speed * 1e-2, p.sats_in_view);
+                } else {
+                    LOG_DEBUG_GPS("GPS status changed without a new position fix: sats=%d", p.sats_in_view);
+                }
             } else {
                 LOG_DEBUG("No GPS lock");
             }

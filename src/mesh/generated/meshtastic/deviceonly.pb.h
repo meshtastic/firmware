@@ -221,29 +221,49 @@ typedef struct _meshtastic_BackupPreferences {
 extern "C" {
 #endif
 
+static inline meshtastic_ChannelFile meshtastic_ChannelFile_init_default_value(void) {
+    meshtastic_ChannelFile value = {0};
+    value.channels_count = 0;
+    for (pb_size_t i = 0; i < 8; ++i) {
+        value.channels[i] = meshtastic_Channel_init_default;
+    }
+    value.version = 0;
+    return value;
+}
+
+static inline meshtastic_ChannelFile meshtastic_ChannelFile_init_zero_value(void) {
+    meshtastic_ChannelFile value = {0};
+    value.channels_count = 0;
+    for (pb_size_t i = 0; i < 8; ++i) {
+        value.channels[i] = meshtastic_Channel_init_zero;
+    }
+    value.version = 0;
+    return value;
+}
+
 /* Initializer values for message structs */
-#define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
-#define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
-#define meshtastic_NodeInfoLite_init_default     {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0}
-#define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
-#define meshtastic_NodePositionEntry_init_default {0, false, meshtastic_PositionLite_init_default}
-#define meshtastic_NodeTelemetryEntry_init_default {0, false, meshtastic_DeviceMetrics_init_default}
-#define meshtastic_NodeEnvironmentEntry_init_default {0, false, meshtastic_EnvironmentMetrics_init_default}
-#define meshtastic_NodeStatusEntry_init_default  {0, false, meshtastic_StatusMessage_init_default}
-#define meshtastic_NodeDatabase_init_default     {0, {0}, {0}, {0}, {0}, {0}}
-#define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
-#define meshtastic_BackupPreferences_init_default {0, 0, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_ChannelFile_init_default, false, meshtastic_User_init_default}
-#define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
-#define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
-#define meshtastic_NodeInfoLite_init_zero        {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0}
-#define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
-#define meshtastic_NodePositionEntry_init_zero   {0, false, meshtastic_PositionLite_init_zero}
-#define meshtastic_NodeTelemetryEntry_init_zero  {0, false, meshtastic_DeviceMetrics_init_zero}
-#define meshtastic_NodeEnvironmentEntry_init_zero {0, false, meshtastic_EnvironmentMetrics_init_zero}
-#define meshtastic_NodeStatusEntry_init_zero     {0, false, meshtastic_StatusMessage_init_zero}
-#define meshtastic_NodeDatabase_init_zero        {0, {0}, {0}, {0}, {0}, {0}}
-#define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
-#define meshtastic_BackupPreferences_init_zero   {0, 0, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero, false, meshtastic_ChannelFile_init_zero, false, meshtastic_User_init_zero}
+#define meshtastic_PositionLite_init_default     ((meshtastic_PositionLite){0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0})
+#define meshtastic_UserLite_init_default         ((meshtastic_UserLite){{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0})
+#define meshtastic_NodeInfoLite_init_default     ((meshtastic_NodeInfoLite){0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0})
+#define meshtastic_DeviceState_init_default      ((meshtastic_DeviceState){false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}})
+#define meshtastic_NodePositionEntry_init_default ((meshtastic_NodePositionEntry){0, false, meshtastic_PositionLite_init_default})
+#define meshtastic_NodeTelemetryEntry_init_default ((meshtastic_NodeTelemetryEntry){0, false, meshtastic_DeviceMetrics_init_default})
+#define meshtastic_NodeEnvironmentEntry_init_default ((meshtastic_NodeEnvironmentEntry){0, false, meshtastic_EnvironmentMetrics_init_default})
+#define meshtastic_NodeStatusEntry_init_default  ((meshtastic_NodeStatusEntry){0, false, meshtastic_StatusMessage_init_default})
+#define meshtastic_NodeDatabase_init_default     ((meshtastic_NodeDatabase){0, {0}, {0}, {0}, {0}, {0}})
+#define meshtastic_ChannelFile_init_default      meshtastic_ChannelFile_init_default_value()
+#define meshtastic_BackupPreferences_init_default ((meshtastic_BackupPreferences){0, 0, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_ChannelFile_init_default, false, meshtastic_User_init_default})
+#define meshtastic_PositionLite_init_zero        ((meshtastic_PositionLite){0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0})
+#define meshtastic_UserLite_init_zero            ((meshtastic_UserLite){{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0})
+#define meshtastic_NodeInfoLite_init_zero        ((meshtastic_NodeInfoLite){0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0})
+#define meshtastic_DeviceState_init_zero         ((meshtastic_DeviceState){false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}})
+#define meshtastic_NodePositionEntry_init_zero   ((meshtastic_NodePositionEntry){0, false, meshtastic_PositionLite_init_zero})
+#define meshtastic_NodeTelemetryEntry_init_zero  ((meshtastic_NodeTelemetryEntry){0, false, meshtastic_DeviceMetrics_init_zero})
+#define meshtastic_NodeEnvironmentEntry_init_zero ((meshtastic_NodeEnvironmentEntry){0, false, meshtastic_EnvironmentMetrics_init_zero})
+#define meshtastic_NodeStatusEntry_init_zero     ((meshtastic_NodeStatusEntry){0, false, meshtastic_StatusMessage_init_zero})
+#define meshtastic_NodeDatabase_init_zero        ((meshtastic_NodeDatabase){0, {0}, {0}, {0}, {0}, {0}})
+#define meshtastic_ChannelFile_init_zero         meshtastic_ChannelFile_init_zero_value()
+#define meshtastic_BackupPreferences_init_zero   ((meshtastic_BackupPreferences){0, 0, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero, false, meshtastic_ChannelFile_init_zero, false, meshtastic_User_init_zero})
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_PositionLite_latitude_i_tag   1

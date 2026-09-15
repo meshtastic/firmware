@@ -764,11 +764,9 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         } else {
             LOG_WARN("[AW35615] not found at 0x22");
         }
-        getBattVoltage(); // initial read cached_mv
         return true;
     }
 
-    virtual bool isBatteryConnect() override { return true; }
     virtual uint16_t getBattVoltage() override
     {
         if (!initialized)
@@ -810,14 +808,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
     {
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-
-            bool vbus = _aw35615.isVbusPresent();
-            if (!vbus) {
-                // VBUS just went away (or has been away) - make sure the CC
-                // toggle engine is re-armed so the next attach gets detected.
-                _aw35615.rearmToggle();
-            }
-            return vbus;
+            return _aw35615.isVbusPresent();
         }
         // Fallback to base GPIO/board checks (or false) if CC chip is absent
         return false;
@@ -830,10 +821,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
-            // Charging == VBUS present AND we're attached as a sink.
-            // (isSinkAttached() is a latched result - safe to trust here since
-            // isVbusIn() above keeps re-arming toggle on every detach.)
-            return _aw35615.isVbusPresent() && _aw35615.isSinkAttached();
+            return _aw35615.isSinkAttached();
         }
         return isVbusIn();
     }
@@ -1109,7 +1097,7 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
 
     if (counter < UINT8_MAX)
         counter++;
-    return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
+    return counter >= LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
 /// Reads power status to powerStatus singleton.

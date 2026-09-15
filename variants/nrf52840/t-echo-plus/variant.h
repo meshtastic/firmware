@@ -4,7 +4,7 @@
 #define VARIANT_MCK (64000000ul)
 #define USE_LFXO
 
-#include "WVariant.h"
+#include "../WVariant.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,7 +20,6 @@ extern "C" {
 #define PIN_LED1 (0 + 14)
 #define PIN_LED2 (0 + 15)
 #define PIN_LED3 (0 + 13)
-
 #define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
 #define LED_GREEN PIN_LED2
@@ -59,7 +58,7 @@ static const uint8_t A0 = PIN_A0;
 #define WIRE_INTERFACES_COUNT 1
 #define PIN_WIRE_SDA (0 + 26)
 #define PIN_WIRE_SCL (0 + 27)
-// #define HAS_BHI260AP ; lewisxhe/SensorLib too big for nrf52
+#define HAS_BHI260AP
 
 #define TP_SER_IO (0 + 11)
 

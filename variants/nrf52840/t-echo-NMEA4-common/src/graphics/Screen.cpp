@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
+#include "NMEA4Config.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
@@ -44,9 +45,11 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "TimeFormatters.h"
 #include "draw/ClockRenderer.h"
 #include "draw/DebugRenderer.h"
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
-#include "draw/FavoritesMapRenderer.h"
+#if NMEA4_HAS_SATELLITES_PAGE
 #include "draw/SatellitesRenderer.h"
+#endif
+#if NMEA4_HAS_FAVORITES_MAP
+#include "draw/FavoritesMapRenderer.h"
 #endif
 #include "draw/MenuHandler.h"
 #include "draw/MessageRenderer.h"
@@ -120,16 +123,12 @@ namespace graphics
 #define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
-#define T_ECHO_PLUS_EXTRA_FRAMES 2 // Satellites + Favorites Map
-#else
-#define T_ECHO_PLUS_EXTRA_FRAMES 0
-#endif
+#define NMEA4_EXTRA_FRAMES (NMEA4_HAS_SATELLITES_PAGE + NMEA4_HAS_FAVORITES_MAP)
 
 #if BASEUI_HAS_GAMES
-#define NUM_EXTRA_FRAMES (4 + T_ECHO_PLUS_EXTRA_FRAMES)
+#define NUM_EXTRA_FRAMES (4 + NMEA4_EXTRA_FRAMES)
 #else
-#define NUM_EXTRA_FRAMES (3 + T_ECHO_PLUS_EXTRA_FRAMES)
+#define NUM_EXTRA_FRAMES (3 + NMEA4_EXTRA_FRAMES)
 #endif
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
@@ -507,7 +506,6 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-<<<<<<< HEAD
     static float positionHeading = -1.0f;
     static uint32_t lastPositionHeadingAtMs = 0;
 
@@ -519,11 +517,6 @@ float Screen::estimatedHeading(double lat, double lon)
     static uint32_t lastRmcSampleMs = 0;
 
     const uint32_t now = millis();
-=======
-    static float b = -1.0f;
-    static uint32_t lastHeadingAtMs = 0;
-    const uint32_t now = Time::stampMillis();
->>>>>>> 9d27b276aa87d956c64a4c76da5f01321a65f337
     const uint32_t gpsUpdateIntervalSecs =
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
     uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
@@ -555,8 +548,7 @@ float Screen::estimatedHeading(double lat, double lon)
                 if (rmcSampleMs != lastRmcSampleMs) {
                     // After a long sleep/outage, adopt the first new course
                     // directly instead of slowly blending from an hours-old heading.
-                    if (filteredRmcHeading < 0.0f || lastRmcSampleMs == 0 ||
-                        (uint32_t)(now - lastRmcSampleMs) > 10000U) {
+                    if (filteredRmcHeading < 0.0f || lastRmcSampleMs == 0 || (uint32_t)(now - lastRmcSampleMs) > 10000U) {
                         filteredRmcHeading = wrapHeading360(rmcCourseDeg);
                     } else {
                         const float delta = wrapDelta180(rmcCourseDeg - filteredRmcHeading);
@@ -1187,7 +1179,6 @@ int32_t Screen::runOnce()
 
     // If we don't have a screen, don't ever spend any CPU for us.
     if (!useDisplay) {
-        textMessageFrameShown = false;
         enabled = false;
         return RUN_SAME;
     }
@@ -1307,11 +1298,7 @@ int32_t Screen::runOnce()
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
-            // Cleared even while a module holds the screen: START_ALERT_FRAME set it and nothing
-            // else would, so swallowing it here would leave banners suppressed for good.
             NotificationRenderer::pauseBanner = false;
-            if (hasModalModule())
-                break; // only the owning module may take the screen back off its own frame
             // Return from one-off alert mode back to regular frames.
             if (!showingNormalScreen && NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
                 setFrames();
@@ -1332,7 +1319,6 @@ int32_t Screen::runOnce()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
-        textMessageFrameShown = false;
         enabled = false;
         return 0;
     }
@@ -1370,7 +1356,7 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (config.display.auto_screen_carousel_secs > 0 && !hasModalModule() &&
+        if (config.display.auto_screen_carousel_secs > 0 &&
             NotificationRenderer::current_notification_type != notificationTypeEnum::text_input &&
             !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
@@ -1385,9 +1371,6 @@ int32_t Screen::runOnce()
             handleOnPress();
         }
     }
-
-    textMessageFrameShown = showingNormalScreen && framesetInfo.positions.textMessage != 255 && ui &&
-                            ui->getUiState()->currentFrame == framesetInfo.positions.textMessage;
 
     // LOG_DEBUG("want fps %d, fixed=%d", targetFramerate,
     // ui->getUiState()->frameState); If we are scrolling we need to be called
@@ -1428,10 +1411,6 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     if (einkScreensaver != NULL) {
         screensaverFrame = einkScreensaver;
         ui->setFrames(&screensaverFrame, 1);
-
-        // Hide the nav bar before the sleep / shutdown screen is rendered
-        static OverlayCallback screensaverOverlays[] = {NotificationRenderer::drawBannercallback};
-        ui->setOverlays(screensaverOverlays, 1);
     }
 
     // Else, display the usual "overlay" screensaver
@@ -1602,7 +1581,7 @@ void Screen::setFrames(FrameFocus focus)
         PUSH_FRAME_TITLE("GPS");
     }
 
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#if NMEA4_HAS_SATELLITES_PAGE
     fsi.positions.satellites = numframes;
     normalFrames[numframes++] = graphics::SatellitesRenderer::drawFrame;
     indicatorIcons.push_back(icon_compass);
@@ -1610,7 +1589,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#if NMEA4_HAS_FAVORITES_MAP
     fsi.positions.favoritesMap = numframes;
     normalFrames[numframes++] = graphics::FavoritesMapRenderer::drawFrame;
     indicatorIcons.push_back(icon_distance);
@@ -1980,19 +1959,6 @@ void Screen::applyHiddenFramesMask(uint32_t mask)
     hiddenFrames.chirpy = getBit(mask, FVBIT_CHIRPY);
 }
 
-bool Screen::isShowingModuleFrame(const MeshModule *m) const
-{
-    if (!m || !showingNormalScreen)
-        return false;
-    // Same effective frame drawModuleFrame() picks: mid-transition the incoming frame is the one
-    // being rendered, so comparing currentFrame would report false while the module is on screen.
-    const OLEDDisplayUiState *state = ui->getUiState();
-    uint8_t frame = state->currentFrame;
-    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == TransitionRelationship_INCOMING)
-        frame = state->transitionFrameTarget;
-    return frame < moduleFrames.size() && moduleFrames.at(frame) == m;
-}
-
 void Screen::loadFrameVisibility()
 {
 #ifdef FSCom
@@ -2273,8 +2239,8 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         lastGpsDisplayFreshSats = currentFreshSats;
 
         if (showingNormalScreen && screenOn) {
-            if (availabilityChanged || lockChanged || connectionChanged || hasTimeChanged || searchingChanged || sleepingChanged ||
-                freshSatsChanged) {
+            if (availabilityChanged || lockChanged || connectionChanged || hasTimeChanged || searchingChanged ||
+                sleepingChanged || freshSatsChanged) {
                 // Important semantic transitions (especially >0 -> 0 sats)
                 // must reach a physical E-Ink panel immediately.
                 forceDisplay(true);
@@ -2410,7 +2376,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         }
     }
 
-#if defined(TTGO_T_ECHO_PLUS) && defined(USE_EINK)
+#if NMEA4_HAS_FAVORITES_MAP
     // Favorites Map: use UP/DOWN for zoom while this frame has focus.
     if (framesetInfo.positions.favoritesMap != 255 && ui->getUiState()->currentFrame == framesetInfo.positions.favoritesMap) {
         if (event->inputEvent == INPUT_BROKER_UP) {
@@ -2497,8 +2463,7 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
             if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
                 showFrame(FrameDirection::PREVIOUS);
-            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS ||
-                       (event->inputEvent == INPUT_BROKER_ANYKEY && event->kbchar == ' ')) {
+            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
                 this->ui->switchToFrame(0);
@@ -2627,11 +2592,6 @@ int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
 bool Screen::isOverlayBannerShowing()
 {
     return NotificationRenderer::isOverlayBannerShowing();
-}
-
-bool Screen::isTextMessageFrameShown() const
-{
-    return textMessageFrameShown.load();
 }
 
 bool Screen::isGamesFrameShown()
