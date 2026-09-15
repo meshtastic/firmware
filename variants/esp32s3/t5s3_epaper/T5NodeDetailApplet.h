@@ -21,7 +21,7 @@ namespace NicheGraphics::InkHUD
 class T5NodeDetailApplet : public T5Applet, public MeshModule
 {
   public:
-    T5NodeDetailApplet() : MeshModule("T5NodeDetailApplet") {}
+    T5NodeDetailApplet() : MeshModule("T5NodeDetailApplet") { hideFromAppSwitcher = true; } // Drill-down from Nodes
 
     static bool open(NodeNum num); // Show a nodeDB node. False, and nothing shown, if that isn't possible
 

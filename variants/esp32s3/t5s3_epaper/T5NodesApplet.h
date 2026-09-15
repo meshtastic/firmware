@@ -21,7 +21,7 @@ namespace NicheGraphics::InkHUD
 class T5NodesApplet : public T5Applet, public MeshModule
 {
   public:
-    T5NodesApplet() : MeshModule("T5NodesApplet") {}
+    T5NodesApplet() : MeshModule("T5NodesApplet") { hideFromAppSwitcher = true; } // Reached from the NODES nav cell
 
     void onActivate() override;
     void onDeactivate() override;

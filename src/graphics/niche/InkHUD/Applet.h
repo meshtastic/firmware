@@ -135,8 +135,9 @@ class Applet : public GFX
 
     static AppletFont fontSmall, fontMedium, fontLarge; // The general purpose fonts, used by all applets
 
-    const char *name = nullptr; // Shown in applet selection menu. Also used as an identifier by InkHUD::getSystemApplet
-    bool hideFromMenu = false;  // Omit from the Menu's Applets and Auto-show pages.
+    const char *name = nullptr;       // Shown in applet selection menu. Also used as an identifier by InkHUD::getSystemApplet
+    bool hideFromMenu = false;        // Omit from the Menu's Applets and Auto-show pages.
+    bool hideFromAppSwitcher = false; // Omit from the App Switcher.
 
   protected:
     void drawPixel(int16_t x, int16_t y, uint16_t color) override; // Place a single pixel. All drawing output passes through here
