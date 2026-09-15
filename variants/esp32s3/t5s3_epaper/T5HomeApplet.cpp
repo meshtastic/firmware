@@ -224,8 +224,12 @@ InkHUD::T5HomeApplet::Status InkHUD::T5HomeApplet::readStatus()
         s.latestKind = m.type == MessageType::DM_TO_US ? "DM" : parse(channels.getName(m.channelIndex));
         s.latestSender = senderName(m.sender);
         meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(m.sender);
-        if (nodeInfoLiteHasUser(sender))
-            s.latestSenderLong = parse(sender->long_name);
+        if (nodeInfoLiteHasUser(sender)) {
+            // Drop what the font can't draw (emoji, variation selectors): parse() marks each with a SUB, which prints as a box
+            std::string name = parse(sender->long_name);
+            name.erase(std::remove(name.begin(), name.end(), '\x1A'), name.end());
+            s.latestSenderLong = name.substr(0, name.find_last_not_of(' ') + 1); // All-emoji name: empty, so join() skips it
+        }
         if (!m.isBootRelative)
             s.latestClock = getTimeString(m.timestamp);
         s.latestText = parse(MessageStore::getText(m));

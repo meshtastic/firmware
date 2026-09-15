@@ -247,7 +247,7 @@ void InkHUD::T5NodesApplet::renderConsole(const std::vector<Row> &rows, uint16_t
         setFont(fontMedium);
         setCrop(nameX, top, longX - nameX - 8, rowHeight());
         printBold(nameX, mid - fontMedium.lineHeight() / 2, row.shortName);
-        setCrop(longX, top, heardX - longX - 8, rowHeight());
+        setCrop(longX, top, heardX - longX - 24, rowHeight()); // Wider than a word space: a cut name can't run into HEARD
         printAt(longX, mid, row.longName, LEFT, MIDDLE);
         resetCrop();
         printAt(width() - MARGIN, mid, CHEVRON, RIGHT, MIDDLE);
