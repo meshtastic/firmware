@@ -66,6 +66,11 @@ const pb_size_t kExpectedModuleConfigVariants[] = {
 #else
     0, // beacon compiled out: the slot still ships, as an empty ModuleConfig
 #endif
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+    meshtastic_ModuleConfig_router_retirement_tag,
+#else
+    0,
+#endif
 };
 static_assert(sizeof(kExpectedModuleConfigVariants) / sizeof(kExpectedModuleConfigVariants[0]) == NUM_MODULE_CONFIG_MESSAGES,
               "AdminMessage ModuleConfigType enum and ModuleConfig oneof diverged - update STATE_SEND_MODULECONFIG and this "
