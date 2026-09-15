@@ -72,8 +72,8 @@ bool NRF52BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
     if (len > sizeof(advBuf))
         return false;
 
-    // Copy into our own storage: sd_ble_gap_adv_set_configure retains the pointer rather than
-    // copying, so the caller's buffer must not be the one the SoftDevice reads from.
+    // sd_ble_gap_adv_set_configure retains this pointer rather than copying, so the payload lives in
+    // this object for the whole burst, not in the caller's buffer.
     memcpy(advBuf, adv, len);
     advBufLen = (uint8_t)len;
 
@@ -94,7 +94,6 @@ bool NRF52BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
     advParams.max_adv_evts = BLE_MESH_ADV_EVENTS;
 
     if (!ownsDedicatedSet && advHandle == BLE_GAP_ADV_SET_HANDLE_NOT_SET) {
-        // First attempt: ask the SoftDevice for a set of our own.
         uint8_t handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
         uint32_t err = sd_ble_gap_adv_set_configure(&handle, &gapAdvData, &advParams);
         if (err == NRF_SUCCESS) {
@@ -102,8 +101,8 @@ bool NRF52BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
             ownsDedicatedSet = true;
             LOG_INFO("BLE mesh using dedicated adv set %u", advHandle);
         } else {
-            // No spare set. Share handle 0 with the phone advertisement, which means suspending it
-            // for the length of each burst and restoring it afterwards.
+            // Sharing handle 0 means suspending the phone advertisement for each burst and
+            // restoring it afterwards.
             LOG_WARN("BLE mesh: no spare adv set (0x%x), sharing the phone's", err);
             advHandle = 0;
             ownsDedicatedSet = false;
@@ -175,8 +174,8 @@ void NRF52BLEMesh::startScanning()
     } else if (err == NRF_ERROR_INVALID_STATE) {
         LOG_DEBUG("BLE mesh scanning already active");
     } else {
-        // NRF_ERROR_NOT_SUPPORTED / INVALID_STATE here usually means the central role is not
-        // enabled: Bluefruit.begin() defaults to zero central links, and scanning needs one.
+        // Scanning needs a central link and Bluefruit.begin() defaults to zero, which surfaces here
+        // as NRF_ERROR_NOT_SUPPORTED.
         LOG_WARN("BLE mesh scan start failed: 0x%x", err);
     }
 }
@@ -277,7 +276,7 @@ void NRF52BLEMesh::updatePeer(const ble_gap_addr_t &addr, int8_t rssi)
         peers[peerCount].addr = addr;
         peers[peerCount].rssi = rssi;
         peers[peerCount].lastSeenMs = now;
-        peers[peerCount].nodeNum = 0; // unknown until we decode a packet from them
+        peers[peerCount].nodeNum = 0; // unknown until a packet from them decodes
         peerCount++;
         LOG_DEBUG("BLE mesh new peer (%u total)", peerCount);
     }

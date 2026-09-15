@@ -9,7 +9,7 @@
 #define BLE_MESH_MAX_PEERS 8
 #endif
 
-// Scan interval and window in units of 0.625ms. Continuous, for the same reason as ESP32.
+// Units of 0.625ms. Window equals interval: continuous, as on ESP32.
 #ifndef BLE_MESH_SCAN_INTERVAL
 #define BLE_MESH_SCAN_INTERVAL 160 // 100ms
 #endif
@@ -54,11 +54,9 @@ class NRF52BLEMesh : public BLEMeshHandler
     BLEMeshPeer peers[BLE_MESH_MAX_PEERS];
     uint8_t peerCount = 0;
 
-    // The SoftDevice advertising set this handler owns. Allocated once by passing
-    // BLE_GAP_ADV_SET_HANDLE_NOT_SET, so mesh advertising gets its own set rather than reusing
-    // handle 0 - which is Bluefruit's, i.e. the phone's. Reusing it means tearing the phone
-    // advertisement down and restoring it around every single frame. If the SoftDevice has no spare
-    // set (Bluefruit's default configuration allows one), we fall back to exactly that.
+    // A SoftDevice advertising set of its own, allocated by passing BLE_GAP_ADV_SET_HANDLE_NOT_SET.
+    // Handle 0 is Bluefruit's phone advertisement; sharing it means tearing that down and restoring
+    // it around every frame, which is the fallback when the SoftDevice has no spare set.
     uint8_t advHandle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
     bool ownsDedicatedSet = false;
     bool advActive = false;

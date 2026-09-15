@@ -19,7 +19,7 @@ bool BLEGattMeshHandler::parseFragment(const uint8_t *chunk, size_t len, Fragmen
     hdr.index = chunk[3];
     hdr.total = chunk[4];
     // A total of zero describes nothing and an index outside it can never complete; either would sit
-    // in the table until expiry, which is exactly the buffer a hostile peer wants to fill.
+    // in the table until expiry, which is the buffer a hostile peer wants to fill.
     return hdr.total != 0 && hdr.index < hdr.total;
 }
 
@@ -339,15 +339,14 @@ void BLEGattMeshHandler::deliverToRouter(BLEGattPeerId peer, const uint8_t *data
     if (!isRunning || !nodeDB || !data)
         return;
 
-    // Validate before relay: nothing is forwarded that did not decode as a whole packet.
     meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
     if (!pb_decode_from_bytes(data, len, &meshtastic_MeshPacket_msg, &mp))
         return;
     if (mp.which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
         return;
 
-    // The same guards the UDP and advertisement transports apply. A spoofed local origin would let a
-    // peer reach paths that trust isFromUs; an out-of-range hop count is not relayable.
+    // The same guards the UDP and advertisement transports apply: a spoofed local origin reaches
+    // paths that trust isFromUs, and an out-of-range hop count is not relayable.
     if (mp.from == 0) {
         LOG_WARN("BLE GATT mesh: packet with no sender from peer %u, dropping", peer);
         return;
@@ -366,9 +365,8 @@ void BLEGattMeshHandler::deliverToRouter(BLEGattPeerId peer, const uint8_t *data
     // or schedule our transmit.
     mp.via_mqtt = false;
     mp.tx_after = 0;
-    // Same reason as the advertisement bearer: priority is not on the LoRa wire, so this is the
-    // first path that lets a sender pick it, and priority MAX outranks the ACK ceiling fixPriority
-    // assigns locally.
+    // priority is not carried in the LoRa header, so here a sender can choose it, and priority MAX
+    // outranks the ACK ceiling fixPriority assigns locally.
     mp.priority = meshtastic_MeshPacket_Priority_UNSET;
 
     // Authentication metadata is local-only; the Router re-establishes it after a PKI decrypt.

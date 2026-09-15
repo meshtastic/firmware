@@ -7,8 +7,8 @@
 
 BLEMeshHandler *bleMeshHandler = nullptr;
 
-// AD type constants, spelled locally so this file does not have to pick between the NimBLE and
-// SoftDevice headers - the values are from the Bluetooth Core Supplement, not from either stack.
+// AD type constants from the Bluetooth Core Supplement, spelled locally so this file need not pick
+// between the NimBLE and SoftDevice headers.
 #define BLE_MESH_AD_TYPE_FLAGS 0x01
 #define BLE_MESH_AD_TYPE_MFG_DATA 0xFF
 #define BLE_MESH_AD_FLAGS_LE_GENERAL_DISC_BREDR_UNSUP 0x06
@@ -16,16 +16,12 @@ BLEMeshHandler *bleMeshHandler = nullptr;
 namespace
 {
 /**
- * The packet as it should go on the air: everything the far side is going to overwrite, removed.
+ * The packet as it goes on the air: every field the receiver overwrites, removed.
  *
- * deliverToRouter() rewrites transport_mechanism, via_mqtt, tx_after, priority, pki_encrypted,
- * public_key, rx_snr and rx_rssi on every arrival, and Router::handleReceived stamps rx_time
- * (Router.cpp:1493). Every one of those is budget spent on bytes the receiver throws away, and this
- * bearer has 243 of them against LoRa's 239 of ciphertext. rx_rssi is the worst of them twice over:
- * a negative int32 is a ten-byte varint, and it publishes the relayer's own link quality.
+ * deliverToRouter() rewrites all of these on arrival and Router::handleReceived stamps rx_time.
+ * rx_rssi would additionally publish this node's own link quality.
  *
- * Keep this in step with the ingress guards. A field added to one belongs in the other, and the
- * native suite asserts the two agree.
+ * Keep in step with the ingress guards: a field added to one belongs in the other.
  */
 meshtastic_MeshPacket strippedForAir(const meshtastic_MeshPacket &mp)
 {
@@ -60,9 +56,8 @@ uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t
 
     const meshtastic_MeshPacket air = strippedForAir(*mp);
 
-    // Sized before encoding rather than inferred from a short buffer, because pb_encode_to_bytes
-    // returns 0 for a genuine encode failure and for an over-budget packet alike - and the two want
-    // different answers. Over-budget is routine and countable; an encode failure is a bug.
+    // Sized before encoding: pb_encode_to_bytes returns 0 for an encode failure and for an
+    // over-budget packet alike, and only one of those is a bug.
     size_t needed = 0;
     if (!pb_get_encoded_size(&needed, &meshtastic_MeshPacket_msg, &air)) {
         LOG_ERROR("BLE mesh: cannot size packet 0x%08x", mp->id);
@@ -90,12 +85,11 @@ uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t
     }
 
     uint8_t *p = out;
-    // Flags AD structure.
     *p++ = 2;
     *p++ = BLE_MESH_AD_TYPE_FLAGS;
     *p++ = BLE_MESH_AD_FLAGS_LE_GENERAL_DISC_BREDR_UNSUP;
 
-    // Manufacturer-specific data AD structure: length covers everything after the length byte.
+    // Manufacturer-specific data: the length byte covers everything after itself.
     *p++ = (uint8_t)(1 /* type */ + 2 /* company */ + 1 /* version */ + protoLen);
     *p++ = BLE_MESH_AD_TYPE_MFG_DATA;
     *p++ = (uint8_t)(BLE_MESH_COMPANY_ID & 0xFF);
@@ -113,12 +107,10 @@ bool BLEMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     if (!isRunning || !mp)
         return false;
 
-    // Deliberately NOT the guard UdpMulticastHandler carries. A packet that arrived over BLE and
-    // comes back through Router::send is a rebroadcast: NextHopRouter::perhapsRebroadcast allocCopy()s
-    // the received packet, and nothing on the TX path rewrites transport_mechanism (RadioInterface
-    // stamps TRANSPORT_LORA in deliverToReceiver, which is RX-only). Refusing it caps the BLE mesh at
-    // a single hop. Loop protection is the same as LoRa's: PacketHistory drops a packet seen
-    // recently, hop_limit decrements per relay, and deliverToRouter ignores frames sent by us.
+    // Deliberately NOT the "arrived on this medium" guard UdpMulticastHandler carries: a rebroadcast
+    // still carries TRANSPORT_BLE_ADV, because nothing on the TX path rewrites transport_mechanism,
+    // so refusing it would cap the BLE mesh at one hop. Loop protection is LoRa's: PacketHistory,
+    // hop_limit, and deliverToRouter ignoring frames this node sent.
     if (mp->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV)
         LOG_DEBUG("BLE mesh: re-advertising relayed packet 0x%08x", mp->id);
 
@@ -126,17 +118,15 @@ bool BLEMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     slot.len = buildAdvPayload(mp, slot.data.data(), slot.data.size());
     if (slot.len == 0)
         return false;
-    // mp->from, not getFrom(mp): buildAdvPayload has already refused from == 0, and this has to be
-    // the same key perhapsCancelDupe cancels with.
+    // mp->from, not getFrom(mp): the same key perhapsCancelDupe cancels with.
     slot.from = mp->from;
     slot.id = mp->id;
 
     slot.priority = (uint8_t)mp->priority;
 
     if (txCount >= BLE_MESH_TX_QUEUE_SIZE) {
-        // Make room only by displacing something strictly less important, the same trade
-        // MeshPacketQueue::replaceLowerPriorityPacket makes for the LoRa queue. A queue full of work
-        // at least as important refuses the newcomer rather than shuffling equals.
+        // Displace only something strictly less important, as
+        // MeshPacketQueue::replaceLowerPriorityPacket does for LoRa.
         const size_t worst = lowestPrioritySlot();
         if (txQueue[worst].priority >= slot.priority) {
             txDroppedQueueFull++;
@@ -155,7 +145,7 @@ bool BLEMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     return true;
 }
 
-/// The slot that should go out next: highest priority, oldest first within a priority.
+/// Highest priority, oldest first within a priority.
 size_t BLEMeshHandler::highestPrioritySlot() const
 {
     size_t best = 0;
@@ -166,8 +156,7 @@ size_t BLEMeshHandler::highestPrioritySlot() const
     return best;
 }
 
-/// The slot to displace when a more important frame arrives: lowest priority, newest first, so a
-/// frame that has already waited is not the one thrown away.
+/// Lowest priority, newest first, so a frame that has already waited is not the one displaced.
 size_t BLEMeshHandler::lowestPrioritySlot() const
 {
     size_t worst = 0;
@@ -225,7 +214,7 @@ bool BLEMeshHandler::onCancelSending(meshtastic_MeshPacket_TransportMechanism me
 
     bool canceled = false;
 
-    // Compact in place, keeping arrival order so equal priorities still leave oldest-first.
+    // Arrival order is kept, so equal priorities still leave oldest-first.
     size_t kept = 0;
     for (size_t i = 0; i < txCount; i++) {
         if (txQueue[i].from == from && txQueue[i].id == id) {
@@ -238,9 +227,7 @@ bool BLEMeshHandler::onCancelSending(meshtastic_MeshPacket_TransportMechanism me
     }
     txCount = kept;
 
-    // Cut a burst already on air short too. Extended advertising repeats one payload for
-    // BLE_MESH_ADV_EVENTS events, so the copies still to come are exactly what the overhear says are
-    // unnecessary. runOnce() pops before it advertises, so this frame is no longer in the ring.
+    // runOnce() pops before it advertises, so a frame already on air is no longer in the queue.
     if (advertising && advertisingFrom == from && advertisingId == id) {
         platformEndAdvertising();
         advertising = false;
@@ -265,8 +252,8 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
     if (mp.which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
         return;
 
-    // Guard 1 (mirrors UdpMulticastHandler): spoofed local origin. Nothing legitimate advertises
-    // from=0, and our own advertisement echoing back into our own scanner would loop.
+    // Guard 1 (mirrors UdpMulticastHandler): nothing legitimate advertises from=0, and our own
+    // advertisement echoing back into our own scanner would loop.
     if (mp.from == 0) {
         LOG_WARN("BLE mesh: advertisement with no sender, dropping");
         return;
@@ -285,22 +272,19 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
     // or schedule our transmit.
     mp.via_mqtt = false;
     mp.tx_after = 0;
-    // priority is local-only too, and unlike want_ack/next_hop/relay_node it is NOT a field the LoRa
-    // header carries - so fixPriority() always derives it locally for a LoRa arrival, and this bearer
-    // is the first that lets a sender choose it. Left as sent, a crafted frame with priority MAX
-    // outranks ACK (the ceiling fixPriority assigns) and, once perhapsRebroadcast copies it into the
-    // TX queue, replaceLowerPriorityPacket evicts one of ours to make room for it.
+    // priority is local-only and, unlike want_ack/next_hop/relay_node, is NOT carried in the LoRa
+    // header, so here a sender can choose it. Left as sent, MAX outranks the ceiling fixPriority
+    // assigns, and replaceLowerPriorityPacket evicts one of ours once perhapsRebroadcast queues it.
     mp.priority = meshtastic_MeshPacket_Priority_UNSET;
 
-    // Guard 3 (mirrors UdpMulticastHandler): authentication metadata is local-only. The Router
-    // re-establishes it after a successful PKI decrypt; carrying it in from the wire would let a
-    // sender assert its own packet was PKI-authenticated.
+    // Guard 3 (mirrors UdpMulticastHandler): authentication metadata is local-only, or a sender
+    // could assert its own packet was PKI-authenticated. The Router re-establishes it after decrypt.
     mp.pki_encrypted = false;
     mp.public_key.size = 0;
     memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
 
-    // Guard 4: no LoRa measurement exists for a BLE arrival. Unlike the UDP case there IS a real
-    // measurement of this hop, so rx_rssi is populated and has_rx_rssi set rather than cleared.
+    // Guard 4: no LoRa measurement exists for a BLE arrival, but the BLE hop itself is measured, so
+    // rx_rssi is populated rather than cleared as in the UDP case.
     mp.rx_snr = 0;
     mp.rx_rssi = rssi;
     mp.has_rx_rssi = true;

@@ -4,18 +4,15 @@
 
 #include "mesh/BLEMeshHandler.h"
 
-// The tree's NimBLE comes from the ESP-IDF component, so the host headers are on the include path
-// directly - the same form src/nimble/NimbleBluetooth.cpp uses.
+// NimBLE comes from the ESP-IDF component, so the host headers are on the include path directly.
 #include "host/ble_gap.h"
 
-// Max number of BLE mesh peers we can track
 #ifndef BLE_MESH_MAX_PEERS
 #define BLE_MESH_MAX_PEERS 8
 #endif
 
-// Scan interval and window in units of 0.625ms.
-// Continuous scan (100% duty) to maximise packet capture: unlike LoRa there is no
-// retransmit-until-heard, only the fixed BLE_MESH_ADV_EVENTS repeats the sender emits.
+// Units of 0.625ms. Window equals interval: a sender emits only BLE_MESH_ADV_EVENTS repeats and
+// nothing retransmits until heard, so a gap in the duty cycle can only lose frames.
 #ifndef BLE_MESH_SCAN_INTERVAL
 #define BLE_MESH_SCAN_INTERVAL 160 // 100ms
 #endif
@@ -23,7 +20,7 @@
 #define BLE_MESH_SCAN_WINDOW 160 // 100ms
 #endif
 
-// Advertising interval for mesh data in units of 0.625ms
+// Units of 0.625ms.
 #ifndef BLE_MESH_ADV_INTERVAL
 #define BLE_MESH_ADV_INTERVAL 48 // 30ms
 #endif
@@ -33,7 +30,6 @@
 #define BLE_MESH_ADV_INSTANCE 1
 #endif
 
-// How long before a peer is considered stale (ms)
 #ifndef BLE_MESH_PEER_TIMEOUT_MS
 #define BLE_MESH_PEER_TIMEOUT_MS 300000 // 5 minutes
 #endif

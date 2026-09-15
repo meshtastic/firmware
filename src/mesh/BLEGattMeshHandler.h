@@ -12,8 +12,7 @@
 #include <array>
 
 // The mesh-peer service a phone connects to. Private UUIDs shared with the client library
-// (node-transport-ble-gatt); deliberately not the phone-API service, which a stock app would
-// otherwise mistake this node for.
+// (node-transport-ble-gatt); deliberately not the phone-API service, which a stock app dials.
 #define BLE_GATT_MESH_SERVICE_UUID "4d657368-4e6f-6465-4741-545400000001"
 #define BLE_GATT_MESH_CHARACTERISTIC_UUID "4d657368-4e6f-6465-4741-545400000002"
 
@@ -64,18 +63,18 @@ struct BLEGattMeshPeer {
 };
 
 /**
- * Carries mesh frames between this node and phones connected over a BLE GATT link - the SIG Mesh
+ * Carries mesh frames between this node and phones connected over a BLE GATT link, the SIG Mesh
  * "GATT proxy" role. The node is the GATT server; each phone is a central that writes fragments to
- * the mesh characteristic and subscribes to it for what the node sends. Firmware never dials out.
+ * the mesh characteristic and subscribes to it. Firmware never dials out.
  *
  * Point-to-point where LoRa and the advertisement transport are one-to-many: a broadcast here is N
- * notifies to N peers. Egress skips the peer a relayed packet arrived from. Everything a stranger
- * can influence - framing, reassembly bounds, ingress sanitising - lives here in platform-neutral
- * code so the native suite covers it; the platform half only moves opaque chunks.
+ * notifies to N peers. Egress skips the peer a relayed packet arrived from. Framing, reassembly
+ * bounds and ingress sanitising live here in platform-neutral code so the native suite covers them;
+ * the platform half only moves opaque chunks.
  *
  * Both ends of every ring run on the main task: onSend() is reached from Router::send(), runOnce()
- * is an OSThread on the same task, and the platform hands received chunks over via
- * platformPollInbound() from runOnce(). The BLE stack's own task never touches this class.
+ * is an OSThread on the same task, and platformPollInbound() is called from runOnce(). The BLE
+ * stack's own task never touches this class.
  */
 class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBase
 {
@@ -86,7 +85,6 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     virtual void start() = 0;
     virtual void stop() = 0;
 
-    // Registry gate: this transport carries outgoing packets only while mesh peers are served.
     bool isEnabled() const override
     {
         return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER;
@@ -180,7 +178,7 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     size_t txTail = 0;
     size_t txCount = 0;
 
-    // The send in progress: the peer snapshot taken when it started, and where we are in it.
+    // The send in progress: the peer snapshot taken when it started, and the position within it.
     bool txActive = false;
     std::array<BLEGattMeshPeer, BLE_GATT_MESH_MAX_PEERS> txPeers{};
     size_t txPeerCount = 0;

@@ -138,10 +138,8 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
     if (roleAllowsCancelingDupe(p)) {
-        // Cancel rebroadcast of this message *if* there was already one, unless we're a router.
-        // Strictly same-medium: overhearing a neighbour relay this on BLE is evidence that our BLE
-        // neighbours have it, and no evidence at all about who heard us on LoRa. Cancelling across
-        // media would silently thin the LoRa flood.
+        // Strictly same-medium: an overhear on one medium is no evidence about who heard this node
+        // on another.
         switch (p->transport_mechanism) {
         case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA:
             if (Router::cancelSending(p->from, p->id))

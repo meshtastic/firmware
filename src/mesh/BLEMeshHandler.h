@@ -12,18 +12,15 @@
 
 #include <array>
 
-// Meshtastic BLE mesh manufacturer data identifier.
-// 0xFFFF is the SIG-reserved "internal/test" company ID. A shipping build needs either a member
-// company ID or - better, because iOS can only scan in the background when filtering by service
-// UUID - an assigned 16-bit service UUID with the payload as service data.
+// Meshtastic BLE mesh manufacturer data identifier. 0xFFFF is the SIG-reserved "internal/test"
+// company ID, not usable in a shipping build.
 #define BLE_MESH_COMPANY_ID 0xFFFF
 #define BLE_MESH_PROTOCOL_VERSION 1
 
-// A single unfragmented extended advertising payload is capped at 251 bytes, not the 254 an
-// AUX_ADV_IND could hold: the HCI LE Set Extended Advertising Data command spends four of its 255
-// parameter bytes on handle, operation, fragment preference and length. Each platform static_asserts
-// this against its own stack's constant (NimBLE's BLE_HCI_MAX_EXT_ADV_DATA_LEN, the SoftDevice's
-// BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED).
+// One unfragmented extended advertising payload caps at 251 bytes, not the 254 an AUX_ADV_IND
+// holds: HCI LE Set Extended Advertising Data spends four of its 255 parameter bytes on handle,
+// operation, fragment preference and length. Each platform static_asserts this against its own
+// stack's constant.
 #define BLE_MESH_ADV_TOTAL_MAX 251
 
 // Flags AD structure (3) + manufacturer-data AD header (2) + company ID (2) + version (1).
@@ -31,13 +28,12 @@
 #define BLE_MESH_MAX_PROTO_LEN (BLE_MESH_ADV_TOTAL_MAX - BLE_MESH_ADV_OVERHEAD)
 
 // Outbound frames waiting for the advertiser. Extended advertising is set-and-repeat, not a packet
-// queue - the instance holds one payload and repeats it - so a burst has to be clocked through one
-// frame at a time.
+// queue, so a burst has to be clocked through one frame at a time.
 #ifndef BLE_MESH_TX_QUEUE_SIZE
 #define BLE_MESH_TX_QUEUE_SIZE 8
 #endif
 
-// Repeats per queued frame, standing in for the natural redundancy LoRa gets from its own retries.
+// Repeats per queued frame, standing in for the redundancy LoRa gets from its own retries.
 #ifndef BLE_MESH_ADV_EVENTS
 #define BLE_MESH_ADV_EVENTS 3
 #endif
@@ -45,21 +41,14 @@
 /**
  * Carries mesh frames between nodes over connectionless BLE extended advertisements.
  *
- * A second broadcast transport alongside LoRa, wired the way UdpMulticastHandler is: ingress hands
- * decoded frames to Router::enqueueReceivedMessage, egress is a copy taken in Router::send. It is
- * never the only path to the mesh - Router::send still asserts a LoRa iface.
+ * A second broadcast transport alongside LoRa, wired as UdpMulticastHandler is. Never the only path
+ * to the mesh: Router::send() still asserts a LoRa iface.
  *
- * Connectionless, not GATT. GATT is point-to-point: reaching N peers costs N writes and no peer
- * overhears another, where one advertisement reaches every neighbour at once - the same one-to-many
- * shape LoRa has. That one-to-many shape is what makes dupe suppression possible, and
- * onCancelSending() is where it lands: a duplicate overheard on BLE drops our own queued copy, the
- * same way FloodingRouter cancels a queued LoRa rebroadcast. Strictly same-medium - hearing a
- * neighbour on BLE says nothing about who heard us on LoRa.
+ * One advertisement reaches every neighbour at once, the same one-to-many shape LoRa has, which is
+ * what makes onCancelSending() dupe suppression possible. Strictly same-medium.
  *
- * onSend() only encodes and queues. The advertising itself is clocked by runOnce() on the main
- * thread, because Router::send() is not a place to block: an implementation that advertises
- * synchronously stalls the router - and therefore LoRa timing and the whole main loop - for the
- * length of every burst.
+ * onSend() only encodes and queues; runOnce() clocks the advertising on the main thread. Advertising
+ * inline would stall Router::send(), and with it LoRa timing and the whole main loop.
  */
 class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 {
@@ -71,21 +60,17 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     virtual void stop() = 0;
     virtual void onBluetoothReady() {}
 
-    // Registry gate: this transport carries outgoing packets only while BLE mesh is enabled.
     bool isEnabled() const override
     {
         return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
     }
 
-    /// Packets refused because they do not fit one unfragmented advertisement. Counted rather than
-    /// only logged: this is a routine, silent loss of the top of the payload range, not an anomaly.
-    /// The ceiling is BLE_MESH_MAX_PROTO_LEN for the whole encoded MeshPacket, so the usable
-    /// ciphertext is that minus the envelope - well under LoRa's MAX_RADIO_PAYLOAD_LEN.
+    /// Packets refused for not fitting one unfragmented advertisement. The ceiling is
+    /// BLE_MESH_MAX_PROTO_LEN for the whole encoded MeshPacket, below LoRa's MAX_RADIO_PAYLOAD_LEN.
     uint32_t txDroppedTooLarge = 0;
 
-    /// Frames refused because the queue was full of work at least as important. Distinct from
-    /// txDroppedTooLarge: that one says the bearer cannot carry this packet at all, this one says it
-    /// could not carry it right now.
+    /// Frames lost to a full TX queue, refused or displaced. txDroppedTooLarge means the bearer
+    /// cannot carry the packet at all; this means not right now.
     uint32_t txDroppedQueueFull = 0;
 
     /// Called from Router::send(). Encodes and queues; never transmits inline.
@@ -96,10 +81,8 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     bool onCancelSending(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id) override;
 
   protected:
-    /// One queued outbound frame, already built into a complete AD payload. `from`/`id` are kept
-    /// alongside the bytes so a cancel does not have to decode its own queue back out again, and
-    /// `priority` because the air copy no longer carries it - strippedForAir() drops it, since it is
-    /// a local scheduling property that the receiver overwrites anyway.
+    /// One queued outbound frame, built into a complete AD payload. `from`/`id` let a cancel match
+    /// without decoding the queue; `priority` is here because strippedForAir() keeps it off the air.
     struct AdvSlot {
         std::array<uint8_t, BLE_MESH_ADV_TOTAL_MAX> data;
         uint8_t len;
@@ -116,13 +99,11 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     /// Tear the burst down and hand the radio back to scanning / phone advertising.
     virtual void platformEndAdvertising() = 0;
     /// True once the stack is up and it is safe to touch the GAP API. Must query the BLE stack
-    /// itself, NOT a flag set by onBluetoothReady() - the whole point is that this works no matter
-    /// which of the two was constructed first.
+    /// itself, NOT a flag set by onBluetoothReady(): either may be constructed first.
     virtual bool platformReady() = 0;
 
     int32_t runOnce() override;
 
-    /// Queue order, kept out of runOnce() so the policy is one readable thing.
     size_t highestPrioritySlot() const;
     size_t lowestPrioritySlot() const;
     void removeSlot(size_t index);
@@ -140,31 +121,25 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     bool isRunning = false;
 
   private:
-    // No lock. Both ends of this ring run on the main task: onSend() is reached from Router::send(),
-    // and runOnce() is an OSThread on the same task. The BLE callbacks (NimBLE host task on ESP32,
-    // SoftDevice on nRF52) only ever reach deliverToRouter(), which touches the packet pool and the
-    // router's FreeRTOS queue - both explicitly safe from other contexts - and never this ring.
-    //
-    // <mutex>/<atomic> are also actively harmful here: they pull in <chrono>, which does not survive
-    // Arduino's round()/abs() macros on the nRF52 arm-none-eabi toolchain.
-    // A bag, not a ring. Frames leave in priority order rather than arrival order, so there is no
-    // head to advance: runOnce() picks the best slot and closes the gap. Eight slots of 256 bytes
-    // makes the worst-case compaction under 2 KB on the main task, once per burst, which is cheaper
-    // than the index arithmetic an ordered ring would need.
+    // No lock. Both ends run on the main task: onSend() is reached from Router::send(), runOnce() is
+    // an OSThread on the same task, and the BLE callbacks only ever reach deliverToRouter(), which
+    // touches the packet pool and the router's FreeRTOS queue, never this array. <mutex>/<atomic>
+    // also pull in <chrono>, which does not survive Arduino's round()/abs() macros on the nRF52
+    // arm-none-eabi toolchain.
+    // A bag, not a ring: frames leave in priority order, so runOnce() picks the best slot and closes
+    // the gap rather than advancing a head.
     std::array<AdvSlot, BLE_MESH_TX_QUEUE_SIZE> txQueue{};
     size_t txCount = 0;
     bool advertising = false;
 
-    // runOnce() pops a slot before it begins the burst, so a frame already on air is no longer in
-    // the ring. Its identity is kept here so a cancel can cut a live burst short as well.
+    // runOnce() pops before advertising, so a frame on air is no longer queued; its identity lives
+    // here so a cancel can end a live burst.
     NodeNum advertisingFrom = 0;
     PacketId advertisingId = 0;
 
-    // The BLE stack is brought up by setBluetoothEnable(), which on ESP32 runs *before* main()
-    // constructs this handler - so a one-shot "bluetooth is ready" callback into the handler is a
-    // race, and lost the coin flip about half the time: the handler sat in "waiting for Bluetooth
-    // ready" forever while the stack was already up. runOnce() polls platformReady() instead and
-    // calls onBluetoothReady() itself, exactly once, whenever readiness actually arrives.
+    // setBluetoothEnable() can bring the stack up before main() constructs this handler, so a
+    // one-shot readiness callback would race. runOnce() polls platformReady() and calls
+    // onBluetoothReady() itself, exactly once.
     bool readyHandled = false;
 };
 

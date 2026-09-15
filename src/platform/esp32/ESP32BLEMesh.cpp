@@ -32,12 +32,9 @@ void ESP32BLEMesh::start()
 
 bool ESP32BLEMesh::platformReady()
 {
-    // Poll rather than wait for a callback, so this does not depend on whether NimbleBluetooth or
-    // this handler was constructed first.
-    //
-    // isActive(), not ble_hs_synced(): the host syncs well before NimbleBluetooth::setup() has
-    // registered its service and started advertising, and starting a scan in that window races the
-    // stack's own GAP configuration. Wait for the PhoneAPI side to be fully up.
+    // Polled, not a callback: construction order against NimbleBluetooth is not fixed.
+    // isActive(), not ble_hs_synced() - the host syncs before NimbleBluetooth::setup() registers its
+    // service, and starting a scan in that window races the stack's own GAP configuration.
     return nimbleBluetooth && nimbleBluetooth->isActive();
 }
 
@@ -68,8 +65,8 @@ bool ESP32BLEMesh::configureAdvInstance()
         return true;
 
     struct ble_gap_ext_adv_params params = {};
-    // Non-connectable, non-scannable, non-legacy: a pure broadcast. legacy_pdu must stay 0 or we are
-    // back to the 31-byte limit, which cannot hold a mesh frame at all.
+    // legacy_pdu must stay 0, or the payload is back to the 31-byte limit, which cannot hold a mesh
+    // frame at all.
     params.connectable = 0;
     params.scannable = 0;
     params.directed = 0;
@@ -94,8 +91,8 @@ bool ESP32BLEMesh::configureAdvInstance()
         return false;
     }
 
-    // Configured once and left in place. Reconfiguring per packet costs a full GAP round trip on
-    // every send for no benefit - only the data changes between frames.
+    // Left configured: only the data changes between frames, so reconfiguring per packet is a GAP
+    // round trip for nothing.
     advInstanceConfigured = true;
     return true;
 }
@@ -124,9 +121,8 @@ bool ESP32BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
         return false;
     }
 
-    // (instance, duration, max_events). Bounded by max_events, NOT by duration: duration is in 10ms
-    // units, so passing the event count there advertises for 30ms and then stops, which is not what
-    // a repeat count means.
+    // Bounded by max_events, not by duration: duration is the middle argument and is in 10ms units,
+    // not a repeat count.
     rc = ble_gap_ext_adv_start(BLE_MESH_ADV_INSTANCE, 0, BLE_MESH_ADV_EVENTS);
     if (rc != 0) {
         LOG_WARN("BLE mesh ext adv start failed: %d", rc);
@@ -134,9 +130,8 @@ bool ESP32BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
     }
     return true;
 #else
-    // Legacy advertising fallback (ESP32 classic - BLE 4.2, 31 bytes total). A mesh frame is far
-    // larger than that, so this path effectively never carries one; it exists so the build is
-    // uniform across ESP32 parts rather than because classic ESP32 can join a BLE mesh.
+    // Legacy advertising (BLE 4.2, 31 bytes total) cannot hold a mesh frame. This path exists to
+    // keep the build uniform across ESP32 parts, not because classic ESP32 can join a BLE mesh.
     if (len > 31) {
         LOG_DEBUG("BLE mesh: %u bytes exceeds legacy advertising capacity, not sent", (unsigned)len);
         return false;
@@ -181,8 +176,6 @@ void ESP32BLEMesh::startScanning()
         return;
 
 #ifdef BLE_MESH_TX_ONLY
-    // Broadcast-only node: never scan. Also the isolation switch for the ESP32 fault - if the
-    // build is stable with this set and boot-loops without it, the fault is in the scan start.
     LOG_INFO("BLE mesh: TX-only build, not scanning");
     return;
 #endif
@@ -193,9 +186,8 @@ void ESP32BLEMesh::startScanning()
     uncodedParams.window = BLE_MESH_SCAN_WINDOW;
     uncodedParams.passive = 1; // never scan-request; the payload is all in the advertisement
 
-    // filter_duplicates MUST stay 0. The controller de-duplicates on advertiser address, not on
-    // payload, so enabling it would deliver one report per neighbour and then go silent - every
-    // subsequent mesh frame from that node filtered away as a "duplicate" advertisement.
+    // filter_duplicates MUST stay 0: the controller de-duplicates on advertiser address, not on
+    // payload, so every frame after a neighbour's first would be filtered away.
     int rc = ble_gap_ext_disc(BLE_OWN_ADDR_PUBLIC, 0 /* duration: forever */, 0 /* period */, 0 /* filter_duplicates */,
                               BLE_HCI_SCAN_FILT_NO_WL, 0 /* limited */, &uncodedParams, NULL, onGapEvent, this);
 #else
@@ -242,7 +234,6 @@ int ESP32BLEMesh::onGapEvent(struct ble_gap_event *event, void *arg)
         break;
 #endif
     case BLE_GAP_EVENT_DISC_COMPLETE:
-        // Scanning timed out or was stopped - restart if still running
         if (self->isRunning) {
             self->startScanning();
         }
@@ -268,7 +259,7 @@ void ESP32BLEMesh::handleExtendedAdvertisement(const struct ble_gap_ext_disc_des
     if (!isRunning || !desc)
         return;
 
-    // We never chain on send, so anything flagged INCOMPLETE is some other advertiser's.
+    // Nothing chains on send, so anything flagged INCOMPLETE is another advertiser's.
     if (desc->data_status != BLE_GAP_EXT_ADV_DATA_STATUS_COMPLETE || !desc->data)
         return;
 
@@ -281,7 +272,7 @@ void ESP32BLEMesh::handleAdvertisementData(const ble_addr_t &addr, int8_t rssi, 
     if (!isRunning || !data)
         return;
 
-    // Walk AD structures looking for ours; advertisements routinely carry several.
+    // An advertisement carries several AD structures, and the mesh one is not necessarily first.
     uint16_t offset = 0;
     while (offset + 1 < len) {
         uint8_t adLen = data[offset];

@@ -6,7 +6,7 @@ std::vector<MeshTransportBase *> *MeshTransportBase::preEncodeTransports;
 
 MeshTransportBase::MeshTransportBase(HookPoint hook) : hookPoint(hook)
 {
-    // Can't trust static initializer order, so we check each time (same as MeshModule).
+    // Static initializer order is not guaranteed, so the list is created on first use (as MeshModule does).
     std::vector<MeshTransportBase *> *&list = (hook == PreEncode) ? preEncodeTransports : postEncodeTransports;
     if (!list)
         list = new std::vector<MeshTransportBase *>();
@@ -29,7 +29,6 @@ void MeshTransportBase::callTransports(const meshtastic_MeshPacket *mp)
     if (!postEncodeTransports)
         return;
 
-    // Every enabled transport gets every packet; a transport accepting it never suppresses another.
     for (auto *t : *postEncodeTransports) {
         if (t->isEnabled())
             t->onSend(mp);
@@ -41,8 +40,7 @@ bool MeshTransportBase::cancelTransportsOn(meshtastic_MeshPacket_TransportMechan
     if (!postEncodeTransports)
         return false;
 
-    // No isEnabled() gate: a transport disabled since the packet was queued still holds it, and a
-    // frame we have decided not to relay should not go out when it is re-enabled.
+    // No isEnabled() gate: a transport disabled since queueing still holds the frame.
     bool canceled = false;
     for (auto *t : *postEncodeTransports)
         canceled |= t->onCancelSending(medium, from, id);
@@ -55,8 +53,7 @@ void MeshTransportBase::callTransportsPreEncode(const meshtastic_MeshPacket &mp_
     if (!preEncodeTransports)
         return;
 
-    // No isEnabled() gate here (see header): the call site applies the transport-specific gate, each
-    // transport applies the rest of its policy inside onSendPreEncode.
+    // No isEnabled() gate: the call site applies the transport-specific gate.
     for (auto *t : *preEncodeTransports)
         t->onSendPreEncode(mp_encrypted, mp_decoded, chIndex);
 }

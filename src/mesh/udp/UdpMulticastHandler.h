@@ -25,7 +25,6 @@ class UdpMulticastHandler final : public MeshTransportBase
   public:
     UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(239, 0, 0, 69); }
 
-    // Registry gate: this transport carries outgoing packets only while UDP multicast is enabled.
     bool isEnabled() const override
     {
         return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
@@ -96,13 +95,18 @@ class UdpMulticastHandler final : public MeshTransportBase
             // Authentication metadata is local-only; Router re-establishes it after successful PKI decryption.
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
+            // Wire-carried flags only the local stack may set. A sender must not suppress our MQTT
+            // uplink or schedule our transmit, and priority is not in the LoRa header, so fixPriority
+            // derives it locally for a radio arrival: left as sent, MAX outranks the ACK ceiling and
+            // replaceLowerPriorityPacket evicts one of ours once perhapsRebroadcast queues it.
+            mp.via_mqtt = false;
+            mp.tx_after = 0;
+            mp.priority = meshtastic_MeshPacket_Priority_UNSET;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             if (!p)
                 return;
-            // Unset received SNR/RSSI - no local RF measurement exists for a UDP arrival. rx_rssi
-            // has explicit presence, so also clear has_rx_rssi: `mp` may have arrived already
-            // carrying a real measurement from whichever node forwarded it onto UDP, and leaving
-            // the presence bit set would misrepresent that stale value as "0 dBm over UDP".
+            // No local RF measurement exists for a UDP arrival. rx_rssi has explicit presence, so
+            // clear has_rx_rssi too, or a value forwarded in reads as "0 dBm over UDP".
             p->rx_snr = 0;
             p->rx_rssi = 0;
             p->has_rx_rssi = false;
