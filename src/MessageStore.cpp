@@ -40,8 +40,7 @@ static inline void resetMessagePool()
     memset(g_messagePool, 0, MESSAGE_TEXT_POOL_SIZE);
 }
 
-// Allocate text in pool and return offset
-// If not enough space remains, wrap around (ring buffer style)
+// Raw pool write; only MessageStore::allocText() may call this
 static inline uint16_t storeTextInPool(const char *src, size_t len)
 {
     // Pool allocation can fail at boot; getTextFromPool() already maps offset 0 to "" in that case
@@ -52,7 +51,7 @@ static inline uint16_t storeTextInPool(const char *src, size_t len)
         len = MAX_MESSAGE_SIZE - 1;
 
     // Wrap pool if out of space
-    if (g_poolWritePos + len + 1 >= MESSAGE_TEXT_POOL_SIZE) {
+    if (g_poolWritePos + len + 1 > MESSAGE_TEXT_POOL_SIZE) {
         g_poolWritePos = 0;
     }
 
@@ -61,6 +60,23 @@ static inline uint16_t storeTextInPool(const char *src, size_t len)
     g_messagePool[g_poolWritePos + len] = '\0';
     g_poolWritePos += (len + 1);
     return offset;
+}
+
+template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessage> &deque, Predicate pred)
+{
+    for (auto it = deque.begin(); it != deque.end();) {
+        if (pred(*it)) {
+            it = deque.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Pool bytes [begin, end) are about to be rewritten: does this record's text overlap them?
+static inline bool textOverlaps(const StoredMessage &m, uint32_t begin, uint32_t end)
+{
+    return m.textOffset < end && (uint32_t)m.textOffset + m.textLength + 1 > begin;
 }
 
 // Retrieve a const pointer to message text by offset
@@ -224,7 +240,7 @@ const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket 
     if (avail > MAX_MESSAGE_SIZE - 1)
         avail = MAX_MESSAGE_SIZE - 1;
     size_t len = strnlen(payload, avail);
-    sm.textOffset = storeTextInPool(payload, len);
+    sm.textOffset = allocText(payload, len);
     sm.textLength = len;
 
     // Determine sender
@@ -290,7 +306,7 @@ static inline void writeMessageRecord(SafeFile &f, const StoredMessage &m)
 }
 
 // Deserialize one StoredMessage from flash; returns false on short read
-static inline bool readMessageRecord(File &f, StoredMessage &m)
+static inline bool readMessageRecord(File &f, StoredMessage &m, MessageStore &store)
 {
     StoredMessageRecord rec = {};
     if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
@@ -308,7 +324,7 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
 
     // 💡 Re-store text into pool and update offset
     m.textLength = strnlen(rec.text, MAX_MESSAGE_SIZE - 1);
-    m.textOffset = storeTextInPool(rec.text, m.textLength);
+    m.textOffset = store.allocText(rec.text, m.textLength);
 
     return true;
 }
@@ -365,7 +381,7 @@ void MessageStore::loadFromFlash()
 
         for (uint8_t i = 0; i < count; ++i) {
             StoredMessage m;
-            if (!readMessageRecord(f, m))
+            if (!readMessageRecord(f, m, *this))
                 break;
             liveMessages.push_back(m);
         }
@@ -423,17 +439,6 @@ template <typename Predicate> static bool eraseFirstMatch(std::deque<StoredMessa
         }
     }
     return false;
-}
-
-template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessage> &deque, Predicate pred)
-{
-    for (auto it = deque.begin(); it != deque.end();) {
-        if (pred(*it)) {
-            it = deque.erase(it);
-        } else {
-            ++it;
-        }
-    }
 }
 
 bool MessageStore::pruneHiddenMessages()
@@ -569,7 +574,30 @@ const char *MessageStore::getText(const StoredMessage &msg)
 
 uint16_t MessageStore::storeText(const char *src, size_t len)
 {
-    // Wrapper around the internal helper
+    return messageStore.allocText(src, len);
+}
+
+// Reserve pool bytes for new text, evicting any live record they still back. Only records already
+// in liveMessages are protected: allocate and push in one step, never allocate for a record held elsewhere.
+uint16_t MessageStore::allocText(const char *src, size_t len)
+{
+    if (!g_messagePool)
+        return 0;
+    if (len >= MAX_MESSAGE_SIZE)
+        len = MAX_MESSAGE_SIZE - 1;
+    uint32_t begin = g_poolWritePos;
+    if (begin + len + 1 > MESSAGE_TEXT_POOL_SIZE)
+        begin = 0;
+    const uint32_t end = begin + len + 1;
+    eraseAllMatches(liveMessages, [&](const StoredMessage &m) {
+        if (!textOverlaps(m, begin, end))
+            return false;
+        LOG_WARN("MessageStore: text pool reuse evicts message from 0x%08x", m.sender);
+#if ENABLE_MESSAGE_PERSISTENCE
+        markMessageStoreUnsaved(); // otherwise autosave skips and the record returns from flash
+#endif
+        return true;
+    });
     return storeTextInPool(src, len);
 }
 
