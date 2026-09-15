@@ -1,0 +1,410 @@
+#pragma once
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
+
+#include <memory>
+
+#include "GPSStatus.h"
+#include "GpioLogic.h"
+#include "Observer.h"
+#include "TinyGPS++.h"
+#include "concurrency/OSThread.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/UpDownInterruptImpl1.h"
+#include "modules/PositionModule.h"
+
+#ifdef SENSECAP_INDICATOR
+#include "mesh/comms/UARTProxy.h"
+#endif
+
+// Allow defining the polarity of the ENABLE output.  default is active high
+#ifndef GPS_EN_ACTIVE
+#define GPS_EN_ACTIVE 1
+#endif
+
+// Allow defining the polarity of the STANDBY output.  default is LOW for standby
+#ifndef GPS_STANDBY_ACTIVE
+#define GPS_STANDBY_ACTIVE LOW
+#endif
+
+// Allow defining the polarity of an external GPS RF front-end enable. Default is active high.
+#ifndef GPS_RF_EN_ACTIVE
+#define GPS_RF_EN_ACTIVE HIGH
+#endif
+
+static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
+static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
+
+typedef enum {
+    GNSS_MODEL_ATGM336H,
+    GNSS_MODEL_MTK,
+    GNSS_MODEL_UBLOX6,
+    GNSS_MODEL_UBLOX7,
+    GNSS_MODEL_UBLOX8,
+    GNSS_MODEL_UBLOX9,
+    GNSS_MODEL_UBLOX10,
+    GNSS_MODEL_UC6580,
+    GNSS_MODEL_UNKNOWN,
+    GNSS_MODEL_MTK_L76B,
+    GNSS_MODEL_MTK_PA1010D,
+    GNSS_MODEL_MTK_PA1616S,
+    GNSS_MODEL_AG3335,
+    GNSS_MODEL_AG3352,
+    GNSS_MODEL_LS20031,
+    GNSS_MODEL_CM121,
+    GNSS_MODEL_LC760CA,
+    // Keep GNSS_MODEL_GENERIC_NMEA last: isValidGnssModel() uses it as the exclusive upper bound
+    // for values the probe cache is allowed to hold.
+    GNSS_MODEL_GENERIC_NMEA // generic NMEA source (e.g. gpsd); skips chip-specific probe and init
+} GnssModel_t;
+
+typedef enum {
+    GNSS_RESPONSE_NONE,
+    GNSS_RESPONSE_NAK,
+    GNSS_RESPONSE_FRAME_ERRORS,
+    GNSS_RESPONSE_OK,
+} GPS_RESPONSE;
+
+enum GPSPowerState : uint8_t {
+    GPS_ACTIVE,    // Awake and want a position
+    GPS_IDLE,      // Awake, but not wanting another position yet
+    GPS_SOFTSLEEP, // Physically powered on, but soft-sleeping
+    GPS_HARDSLEEP, // Physically powered off, but scheduled to wake
+    GPS_OFF        // Powered off indefinitely
+};
+
+struct ChipInfo {
+    String chipName;        // The name of the chip (for logging)
+    String detectionString; // The string to match in the response
+    GnssModel_t driver;     // The driver to use
+};
+/**
+ * A gps class that only reads from the GPS periodically and keeps the gps powered down except when reading
+ *
+ * When new data is available it will notify observers.
+ */
+class GPS : private concurrency::OSThread
+{
+  public:
+    meshtastic_Position p = meshtastic_Position_init_default;
+
+    /** This is normally bound to config.position.gps_en_gpio but some rare boards (like heltec tracker) need more advanced
+     * implementations. Those boards will set this public variable to a custom implementation.
+     *
+     * Normally set by GPS::createGPS()
+     */
+    GpioVirtPin *enablePin = NULL;
+
+    virtual ~GPS();
+
+    /** We will notify this observable anytime GPS state has changed meaningfully */
+    Observable<const meshtastic::GPSStatus *> newStatus;
+
+    /**
+     * Returns true if we succeeded
+     */
+    virtual bool setup();
+
+    // re-enable the thread
+    void enable();
+
+    // Disable the thread
+    int32_t disable() override;
+
+    // Returns if the thread is enabled
+    bool isEnabled();
+
+    // toggle between enabled/disabled
+    void toggleGpsMode();
+
+    // Change the power state of the GPS - for power saving / shutdown
+    void setPowerState(GPSPowerState newState, uint32_t sleepMs = 0);
+
+    /// Returns true if we have acquired GPS lock.
+    virtual bool hasLock();
+
+    /// Return true if we are connected to a GPS
+    bool isConnected() const { return hasGPS; }
+
+    bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
+
+    // Runtime receiver state is separate from the configured GPS mode.
+    // UI code can use this to distinguish intentional sleep from missing NMEA.
+    GPSPowerState getPowerState() const { return powerState; }
+    bool isActivelySearching() const { return powerState == GPS_ACTIVE; }
+    bool isRuntimeSleeping() const { return powerState == GPS_SOFTSLEEP || powerState == GPS_HARDSLEEP; }
+
+    // Empty the input buffer as quickly as possible
+    void clearBuffer();
+
+    // Creates an instance of the GPS class.
+    // Returns the new instance or null if the GPS is not present.
+    static std::unique_ptr<GPS> createGps();
+
+    // Wake the GPS hardware - ready for an update
+    void up();
+
+    // Let the GPS hardware save power between updates
+    void down();
+
+    // Multi-GNSS diagnostics.
+    const TinyGPSTrackedSattelites *getTrackedSatellites() const { return reader.trackedSatellites; }
+    size_t getTrackedSatelliteCapacity() const { return TINYGPS_MAX_SATS; }
+    bool isTrackedSatelliteFresh(const TinyGPSTrackedSattelites &sat) const { return reader.isTrackedSatelliteFresh(sat); }
+    bool isSatelliteUsed(const TinyGPSTrackedSattelites &sat) const { return reader.gsaSatelliteUsed(sat.system, sat.prn); }
+    bool isSatelliteUsedSnapshot(const TinyGPSTrackedSattelites &sat) const
+    {
+        return reader.gsaSatelliteUsedSnapshot(sat.system, sat.prn);
+    }
+
+    uint16_t getSatellitesUsed() const { return reader.gsaSatellitesUsedTotal(); }
+    uint16_t getSatellitesTracked() const { return reader.satellitesTracked(); }
+    uint16_t getSatellitesInView() const { return reader.satellitesInView(); }
+
+    // Last checksum-valid snapshots. These intentionally ignore age and are
+    // only for UI/diagnostics while the receiver is not ACTIVE.
+    uint16_t getSatellitesUsedSnapshot() const { return reader.gsaSatellitesUsedTotalSnapshot(); }
+    uint16_t getSatellitesTrackedSnapshot() const { return reader.satellitesTrackedSnapshot(); }
+    uint16_t getSatellitesInViewSnapshot() const { return reader.satellitesInViewSnapshot(); }
+    uint16_t getSatellitesUsedBySystemSnapshot(uint8_t system) const { return reader.gsaSatellitesUsedSnapshot(system); }
+    uint8_t getGsaFixTypeSnapshot() const { return reader.gsaFixTypeSnapshot(); }
+    uint16_t getGsaPDOPSnapshot() const { return reader.gsaPDOPSnapshot(); }
+    uint16_t getGsaHDOPSnapshot() const { return reader.gsaHDOPSnapshot(); }
+    uint16_t getGsaVDOPSnapshot() const { return reader.gsaVDOPSnapshot(); }
+    uint32_t getGsvAgeMs() const { return reader.gsvAge(); }
+    uint32_t getGsaAgeMs() const { return reader.gsaAge(); }
+
+    uint16_t getSatellitesUsedBySystem(uint8_t system) const { return reader.gsaSatellitesUsed(system); }
+    uint16_t getSatellitesInViewBySystem(uint8_t system) const { return reader.satellitesInView(system); }
+
+    uint8_t getGsaFixType() const { return reader.gsaFixType(); }
+    uint16_t getGsaPDOP() const { return reader.gsaPDOP(); }
+    uint16_t getGsaHDOP() const { return reader.gsaHDOP(); }
+    uint16_t getGsaVDOP() const { return reader.gsaVDOP(); }
+
+    // Fresh Course-over-Ground for the compass fallback. RMC is always the
+    // primary source. Only if a complete fresh RMC Course+Speed pair is absent
+    // do we use a checksum-valid fresh VTG pair. This helper is read-only and
+    // cannot affect TinyGPS++ update flags, GPS publishing, or power scheduling.
+    bool getFreshCourseOverGround(float &courseDeg, float &speedKmph, uint32_t &sampleMillis)
+    {
+        constexpr uint32_t COURSE_MAX_AGE_MS = 5000U;
+
+        // A sleeping receiver has no live course, even if old values remain
+        // stored. Require the same valid internal GNSS lock as the rest of the
+        // navigation path.
+        if (powerState != GPS_ACTIVE || !hasLock())
+            return false;
+
+        // Priority 1: RMC.
+        if (reader.course.isValid() && reader.speed.isValid()) {
+            const uint32_t courseAge = reader.course.age();
+            const uint32_t speedAge = reader.speed.age();
+            if (courseAge <= COURSE_MAX_AGE_MS && speedAge <= COURSE_MAX_AGE_MS) {
+                const uint32_t rawCourse = reader.course.peekValue(); // 1/100 degree
+                if (rawCourse < 36000U) {
+                    courseDeg = rawCourse * 0.01f;
+                    speedKmph = reader.speed.peekValue() * (0.01f * _GPS_KMPH_PER_KNOT);
+                    sampleMillis = millis() - ((courseAge > speedAge) ? courseAge : speedAge);
+                    return true;
+                }
+            }
+        }
+
+        // Priority 2: VTG fallback. Never overwrite or modify RMC state.
+        if (!reader.vtgInfo.valid || !reader.vtgCourse.isValid() || !reader.vtgSpeed.isValid())
+            return false;
+
+        const uint32_t vtgCourseAge = reader.vtgCourse.age();
+        const uint32_t vtgSpeedAge = reader.vtgSpeed.age();
+        if (vtgCourseAge > COURSE_MAX_AGE_MS || vtgSpeedAge > COURSE_MAX_AGE_MS)
+            return false;
+
+        const uint32_t rawVtgCourse = reader.vtgCourse.peekValue();
+        if (rawVtgCourse >= 36000U)
+            return false;
+
+        courseDeg = rawVtgCourse * 0.01f;
+        speedKmph = reader.vtgSpeed.peekValue() * (0.01f * _GPS_KMPH_PER_KNOT);
+        sampleMillis = millis() - ((vtgCourseAge > vtgSpeedAge) ? vtgCourseAge : vtgSpeedAge);
+        return true;
+    }
+
+    bool hasValidGLL() const { return reader.hasValidGLL(); }
+    double getGLLLatitude() { return reader.gllLocation.isValid() ? reader.gllLocation.lat() : 0.0; }
+    double getGLLLongitude() { return reader.gllLocation.isValid() ? reader.gllLocation.lng() : 0.0; }
+    char getGLLStatus() const { return reader.gllInfo.status; }
+    char getGLLMode() const { return reader.gllInfo.mode; }
+
+    bool hasValidZDA() const { return reader.hasValidZDA(); }
+    uint16_t getZDAYear() const { return reader.zdaInfo.year; }
+    uint8_t getZDAMonth() const { return reader.zdaInfo.month; }
+    uint8_t getZDADay() const { return reader.zdaInfo.day; }
+
+    TinyGPSAntennaStatus getAntennaStatus() const { return reader.antennaStatus(); }
+
+  private:
+    GPS() : concurrency::OSThread("GPS") {}
+
+    /// Record that we have a GPS
+    void setConnected();
+
+    /** Subclasses should look for serial rx characters here and feed it to their GPS parser
+     *
+     * Return true if we received a valid message from the GPS
+     */
+    virtual bool whileActive();
+
+    /**
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a time
+     */
+    virtual bool lookForTime();
+
+    /**
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a new location
+     */
+    virtual bool lookForLocation();
+    // Load persisted GPS model+baud from /prefs.
+    bool loadProbeCache();
+    // Clear persisted GPS model+baud cache.
+    void clearProbeCache();
+    // Persist the currently detected GPS model+baud.
+    bool saveProbeCache() const;
+    // Verify the cached model+baud still maps to a live GPS device.
+    bool verifyCachedProbePresence();
+
+    GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
+    int32_t detectedBaud = GPS_BAUDRATE;
+    int32_t cachedProbeBaud = 0;
+    GnssModel_t cachedProbeModel = GNSS_MODEL_UNKNOWN;
+
+    TinyGPSPlus reader;
+    uint8_t fixQual = 0; // fix quality from GPGGA
+    uint8_t currentStep = 0;
+    int32_t currentDelay = 2000;
+    bool gotTime = false;
+
+    // #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    //  (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
+    //  via optional feature "custom fields", currently disabled (bug #525)
+    // TinyGPSCustom gsafixtype; // custom extract fix type from GPGSA
+    // TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
+    // uint8_t fixType = 0;      // fix type from GPGSA
+    // #endif
+
+    uint32_t fixHoldEnds = 0;
+    uint32_t rx_gpio = 0;
+    uint32_t tx_gpio = 0;
+
+    uint8_t speedSelect = 0;
+    uint8_t probeTries = 0;
+    // Cache file is successfully loaded.
+    bool hasProbeCache = false;
+    // Ensures cached probe is attempted once per boot.
+    bool triedProbeCache = false;
+
+    /**
+     * hasValidLocation - indicates that the position variables contain a complete
+     *   GPS location, valid and fresh (< gps_update_interval + position_broadcast_secs)
+     */
+    bool hasValidLocation = false; // default to false, until we complete our first read
+
+    bool shouldPublish = false; // Upstream publish path: position/connection/time state.
+
+    // Satellite/UI-only changes must never feed the upstream publish/hold state
+    // machine. Keeping this separate prevents a GSV count change from clearing
+    // fixHoldEnds or otherwise changing when the receiver sleeps/wakes.
+    bool statusOnlyDirty = false;
+
+    // Start of the current ACTIVE acquisition window. Used only to distinguish
+    // NMEA received after wake from a still-young sentence left by the previous
+    // cycle; it has no role in scheduler decisions.
+    uint32_t activeCycleStartedMs = 0;
+    bool activeCycleFreshSatelliteSeen = false;
+
+    bool hasGPS = false; // Do we have a GPS we are talking to
+
+    bool GPSInitFinished = false; // Init thread finished?
+    bool GPSInitStarted = false;  // Init thread finished?
+
+    GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
+
+    uint8_t numSatellites = 0;
+
+    CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
+
+    /** If !NULL we will use this serial port to construct our GPS */
+#if defined(SENSECAP_INDICATOR)
+    static UARTProxy *_serial_gps;
+#elif defined(ARCH_RP2040)
+    static SerialUART *_serial_gps;
+#elif defined(ARCH_NRF52)
+    static Uart *_serial_gps;
+#else
+    static HardwareSerial *_serial_gps;
+#endif
+
+    // Create a ublox packet for editing in memory
+    uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
+    uint8_t makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
+
+    // scratch space for creating ublox packets
+    uint8_t UBXscratch[250] = {0};
+
+    int rebootsSeen = 0;
+
+    int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
+    GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
+    GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
+
+    GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
+
+    /// Prepare the GPS for the cpu entering deep sleep, expect to be gone for at least 100s of msecs
+    /// always returns 0 to indicate okay to sleep
+    int prepareDeepSleep(void *unused);
+
+    /** Set power with EN pin, if relevant
+     */
+    void writePinEN(bool on);
+
+    /** Set the value of the STANDBY pin, if relevant
+     */
+    void writePinStandby(bool standby);
+
+    /** Set the external RF front-end enable pin, if relevant
+     */
+    void writePinRFEN(bool on);
+
+    /** Set GPS power with PMU, if relevant
+     */
+    void setPowerPMU(bool on);
+
+    /** Set UBLOX power, if relevant
+     */
+    void setPowerUBLOX(bool on, uint32_t sleepMs = 0);
+
+    /**
+     * Tell users we have new GPS readings
+     */
+    void notifyStatusObservers();
+    void publishUpdate();
+
+    virtual int32_t runOnce() override;
+
+    GnssModel_t getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap, int serialSpeed);
+
+    // Get GNSS model
+    GnssModel_t probe(int serialSpeed);
+
+    // delay counter to allow more sats before fixed position stops GPS thread
+    uint8_t fixeddelayCtr = 0;
+};
+
+extern std::unique_ptr<GPS> gps;
+#endif // Exclude GPS
