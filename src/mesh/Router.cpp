@@ -33,6 +33,9 @@
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
+#ifdef USE_SERIAL_PACKET_IO
+#include "modules/SerialModule.h"
+#endif
 
 // The size checks below budget for the tag that encryptPacketCCM actually appends, so the
 // two constants must not drift apart.
@@ -600,7 +603,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #endif
         packetPool.release(p_decoded);
     }
-
+#ifdef USE_SERIAL_PACKET_IO
+    if (moduleConfig.serial.enabled) {
+        serialModuleRadio->onSend(p);
+    }
+#endif
 #if HAS_UDP_MULTICAST
     if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
         udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
