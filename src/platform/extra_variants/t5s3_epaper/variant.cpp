@@ -4,6 +4,7 @@
 #ifdef T5_S3_EPAPER_PRO
 
 #include "Observer.h"
+#include "PowerFSM.h"
 #include "Wire.h"
 #include "buzz.h"
 #include "concurrency/OSThread.h"
@@ -21,7 +22,6 @@
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
-#include "PowerFSM.h"
 #include "modules/ExternalNotificationModule.h"
 
 #include "T5Applet.h"
@@ -356,6 +356,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
                 // Fire long-press action as soon as threshold is reached, without waiting for release.
                 if (!longPressFired && (uint32_t)(now - pressStartMs) >= LONG_PRESS_MIN_MS &&
                     (uint32_t)(now - lastActionMs) >= ACTION_COOLDOWN_MS) {
+                    powerFSM.trigger(EVENT_PRESS); // User activity, like the short press
                     t5BacklightToggleUser();
                     longPressFired = true;
                     lastActionMs = now;
@@ -366,11 +367,11 @@ class SideKeyInterruptThread : public concurrency::OSThread
             // Released: if long-press already fired, do nothing. Otherwise classify short press.
             const uint32_t heldMs = now - pressStartMs;
             if (!longPressFired && heldMs >= SHORT_PRESS_MIN_MS && (uint32_t)(now - lastActionMs) >= ACTION_COOLDOWN_MS) {
-                // If timeout forced touch/backlight off, short-press acts as a wake action first.
-                if (t5TouchIsForcedByTimeout()) {
-                    t5TouchHandleUserInput();
-                    t5BacklightHandleUserInput();
-                } else {
+                // A press while the screen timeout gates touch only wakes. Snapshot first: EVENT_PRESS leaves DARK,
+                // which clears that gate. Without the event PowerFSM stays DARK and re-applies the gate on its next pass
+                const bool wake = t5TouchIsForcedByTimeout();
+                powerFSM.trigger(EVENT_PRESS);
+                if (!wake) {
                     toggleTouchInputEnabled();
                 }
                 lastActionMs = now;
