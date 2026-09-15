@@ -161,7 +161,7 @@ inline void chord()
 }
 
 // BOOT short / long press handlers: true for the one BOOT action belonging to the chord's press.
-// ponytail: 1 s window drops the stamp when that press fired neither (<50 ms tap); a BOOT press
+// The 1 s window drops the stamp when that press fired neither (<50 ms tap); a BOOT press
 // released and re-pressed within it after such a tap is swallowed once
 inline bool swallowBoot()
 {

@@ -3,7 +3,7 @@
 /*
 
 Base for the T5-only InkHUD applets.
-Draws and hit-tests the frozen six-destination nav bar: HOME · MSGS · NODES · MAP · MENU · APPS
+Draws and hit-tests the six-destination nav bar: HOME · MSGS · NODES · MAP · MENU · APPS
 
 */
 

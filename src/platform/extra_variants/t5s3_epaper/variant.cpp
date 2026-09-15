@@ -203,7 +203,7 @@ static void t5HomeKey()
     if (home >= 0 && inkhud->getActiveApplet() == inkhud->userApplets[home])
         return; // Already there: no refresh
     if (!inkhud->showApplet(home))
-        inkhud->openAppSwitcher(); // Home deactivated through the menu: still a way out
+        inkhud->openAppSwitcher(); // Defensive: Home unavailable, still a way out
 }
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
