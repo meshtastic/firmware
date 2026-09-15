@@ -190,7 +190,13 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr);
 
-    static constexpr uint8_t OPAQUE_SEEN_MAX = 32; // opaque dedup slots (see relayOpaquePacket); ~8B/slot -> ~256B
+    // Opaque dedup slots (see relayOpaquePacket), 8 B each in .bss. Sized like PACKETHISTORY_MAX: every ROUTER
+    // relays opaque frames now, so the churn through this ring is what bounds a storm on the backbone.
+#if defined(ARCH_STM32WL)
+    static constexpr uint8_t OPAQUE_SEEN_MAX = 32;
+#else
+    static constexpr uint8_t OPAQUE_SEEN_MAX = 128;
+#endif
 
     /**
      * Recently-seen opaque (undecryptable) frames, keyed on the outer (from,id) header. Deliberately

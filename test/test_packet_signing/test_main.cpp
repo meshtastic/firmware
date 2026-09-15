@@ -2314,8 +2314,7 @@ void test_C33_frames_no_consumer_acts_on_do_not_evict_the_ring(void)
     runPipelineIngress(dm);
     TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sentCountFor(ADMIN_NODE, dm.id), "first copy is relayed");
 
-    // More than OPAQUE_SEEN_MAX frames of our own, overheard being rebroadcast, between the two copies.
-    for (int i = 0; i < 40; i++)
+    for (int i = 0; i < 136; i++) // OPAQUE_SEEN_MAX (128 on native) plus a margin
         runPipelineIngress(makeRelayedCopy(makePkiUnicastBetween(us, target, meshtastic_PortNum_ADMIN_APP, 0xADB90000 + i)));
 
     runPipelineIngress(makeRelayedCopy(dm));
