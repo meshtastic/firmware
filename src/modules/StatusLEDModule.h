@@ -90,9 +90,7 @@ class StatusLEDModule : private concurrency::OSThread
     uint32_t LORA_LED_starttime = 0;
 #endif
 
-    enum PowerState { discharging, charging, charged, critical };
-
-    PowerState power_state = discharging;
+    meshtastic::PowerState power_state = meshtastic::PowerState::Unknown;
 
     enum BLEState { unpaired, pairing, connected };
 

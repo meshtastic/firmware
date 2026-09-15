@@ -11,6 +11,9 @@ namespace meshtastic
  */
 enum OptionalBool { OptFalse = 0, OptTrue = 1, OptUnknown = 2 };
 
+/// Explicitly numbered so a future protobuf mapping doesn't shift under a reorder.
+enum class PowerState { Unknown = 0, Discharging = 1, Charging = 2, Charged = 3, Critical = 4 };
+
 /// Describes the state of the Power system.
 class PowerStatus : public Status
 {
@@ -52,6 +55,16 @@ class PowerStatus : public Status
     bool getHasUSB() const { return hasUSB == OptTrue; }
 
     bool getIsCharging() const { return isCharging == OptTrue; }
+
+    /// Returns Unknown before the first real reading, rather than guessing from default fields.
+    PowerState getPowerState() const
+    {
+        if (!isInitialized())
+            return PowerState::Unknown;
+        if (getHasUSB() || getIsCharging())
+            return getBatteryChargePercent() >= 100 ? PowerState::Charged : PowerState::Charging;
+        return getBatteryChargePercent() > 5 ? PowerState::Discharging : PowerState::Critical;
+    }
 
     int getBatteryVoltageMv() const { return batteryVoltageMv; }
 
