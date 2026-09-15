@@ -21,7 +21,8 @@
 #include "TestUtil.h"
 #include "graphics/draw/MenuHandler.h"
 #include "mesh/Channels.h"
-#include "mesh/Router.h" // router global: allocErrorResponse() allocates the reply through it
+#include "mesh/CryptoEngine.h" // crypto global: the tests swap in a stub engine to drive key derivation
+#include "mesh/Router.h"       // router global: allocErrorResponse() allocates the reply through it
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include <ErriezCRC32.h> // crc32Buffer(), for the my_node_num == crc32(public_key) invariant
@@ -1022,8 +1023,13 @@ static void replaceAdminRadioGlobals()
     nodeDB = replacementNodeDB;
 }
 
+// Defined with the crypto stub below; tearDown must undo an install even when a failed assertion
+// longjmped out of the test body before it could.
+static void dropRestoreCryptoStub();
+
 static void restoreAdminRadioGlobals()
 {
+    dropRestoreCryptoStub();
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
     router = savedRouter;
@@ -1701,6 +1707,241 @@ static void test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged()
 
     TEST_ASSERT_EQUAL_UINT(0, config.security.admin_key_count);
     TEST_ASSERT_EQUAL_UINT(0, config.security.admin_key[0].size);
+}
+
+// No low-entropy private key is published, so stand in for the engine to derive a blacklisted public
+// key on demand. hash() is left real: the blacklist lookup runs through it.
+static const uint8_t COMPROMISED_PUBLIC_KEY[32] = {0xac, 0xaf, 0x8c, 0x1c, 0x3c, 0x1c, 0x37, 0xac, 0x4f, 0x03, 0xa1,
+                                                   0xe9, 0xfc, 0x37, 0x23, 0x29, 0xc8, 0xa3, 0x5d, 0x7f, 0x05, 0x26,
+                                                   0xeb, 0x00, 0xbd, 0x26, 0xb8, 0x2e, 0xb1, 0x94, 0x7d, 0x24};
+
+class RestoreDerivingCryptoEngine : public CryptoEngine
+{
+  public:
+    bool regenerateSucceeds = true;
+    bool derivesLowEntropy = true;
+    bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey) override
+    {
+        if (!regenerateSucceeds)
+            return false;
+        if (derivesLowEntropy)
+            memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
+        else
+            memset(pubKey, 0x7C, 32);
+        return true;
+    }
+    bool mintsLowEntropy = false;
+    void generateKeyPair(uint8_t *pubKey, uint8_t *privKey) override
+    {
+        if (mintsLowEntropy)
+            memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
+        else
+            memset(pubKey, 0x5E, 32);
+        memset(privKey, 0x5F, 32);
+    }
+};
+
+static CryptoEngine *savedCrypto;
+static RestoreDerivingCryptoEngine *restoreCrypto;
+
+// Installed here and torn down in restoreAdminRadioGlobals(), not at the end of the test body: a failed
+// TEST_ASSERT longjmps straight out, which would leave later tests running against a freed stub.
+static RestoreDerivingCryptoEngine *installRestoreCrypto()
+{
+    savedCrypto = crypto;
+    restoreCrypto = new RestoreDerivingCryptoEngine();
+    crypto = restoreCrypto;
+    return restoreCrypto;
+}
+
+static void dropRestoreCryptoStub()
+{
+    if (!restoreCrypto)
+        return;
+    crypto = savedCrypto;
+    delete restoreCrypto;
+    restoreCrypto = nullptr;
+}
+
+// Arms a bare private-key restore: region set so keygen runs, private key present, public key absent.
+static meshtastic_Config makeBareKeyRestoreConfig()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+    return c;
+}
+
+static bool capturedWarningsContain(const char *needle)
+{
+    for (const std::string &w : capturedWarnings)
+        if (w.find(needle) != std::string::npos)
+            return true;
+    return false;
+}
+
+// A restored private key deriving a blacklisted public key is rejected and rotated at set time, and
+// the client is told why - not left to discover it after the next reboot.
+static void test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates()
+{
+    installRestoreCrypto();
+
+    const meshtastic_Config c = makeBareKeyRestoreConfig();
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_TRUE(nodeDB->keyIsLowEntropy);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// A restore carrying a whole blacklisted pair must not skip validation just because it populated the
+// public key too - that path reaches neither keygen branch, so the weak identity used to be kept.
+static void test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected()
+{
+    installRestoreCrypto();
+
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+    c.payload_variant.security.public_key.size = 32;
+    memcpy(c.payload_variant.security.public_key.bytes, COMPROMISED_PUBLIC_KEY, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_TRUE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// A blacklisted public key whose private key derives a clean one is only re-derived - the user's key
+// does stick, so the "a new secure key was generated" warning would be a lie here.
+static void test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn()
+{
+    installRestoreCrypto()->derivesLowEntropy = false;
+
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+    c.payload_variant.security.public_key.size = 32;
+    memcpy(c.payload_variant.security.public_key.bytes, COMPROMISED_PUBLIC_KEY, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    // The supplied private key survives, and the blacklisted public key is replaced by its derivation.
+    uint8_t expectedPriv[32];
+    memset(expectedPriv, 0x11, 32);
+    TEST_ASSERT_EQUAL_MEMORY(expectedPriv, config.security.private_key.bytes, 32);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// A replacement that is itself blacklisted leaves no identity behind - persisting a known-weak key
+// would defeat the rejection this whole path exists for.
+static void test_handleSetConfig_security_blacklistedMintLeavesNoKey()
+{
+    installRestoreCrypto()->mintsLowEntropy = true;
+
+    const meshtastic_Config c = makeBareKeyRestoreConfig();
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// factory_reset_config keeps the private key and clears the public one, so the entry check sees no key
+// and the boot-time derive path used to adopt whatever it produced - including a known-weak key.
+static void test_generateCryptoKeyPair_derivedFromStoredPrivateIsChecked()
+{
+    installRestoreCrypto();
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 0; // as installDefaultConfig(preserveKey = true) leaves it
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_TRUE(nodeDB->keyIsLowEntropy);
+    TEST_ASSERT_TRUE(memcmp(COMPROMISED_PUBLIC_KEY, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_FALSE(nodeDB->checkLowEntropyPublicKey(config.security.public_key));
+}
+
+// Same clear-and-fail on the boot path: a stored private key that derives nothing must not leave both
+// sizes at 32, claiming a pair the node never got.
+static void test_generateCryptoKeyPair_failedDerivationFromStoredPrivateClearsKeySizes()
+{
+    installRestoreCrypto()->regenerateSucceeds = false;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 0;
+
+    TEST_ASSERT_FALSE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+}
+
+// keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
+// an unset region without clearing it. The restore warning must stay gated on this keygen running.
+static void test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+    nodeDB->keyIsLowEntropy = true;
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
+}
+
+// A private key that derives nothing usable must not leave sizes claiming a 32-byte pair behind:
+// that state gets persisted, and every later keygen re-derives from the same dead key.
+static void test_handleSetConfig_security_failedDerivationClearsKeySizes()
+{
+    installRestoreCrypto()->regenerateSucceeds = false;
+
+    const meshtastic_Config c = makeBareKeyRestoreConfig();
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+    TEST_ASSERT_FALSE(capturedWarningsContain(LOW_ENTROPY_RESTORE_WARNING));
 }
 
 static void test_regionInfo_supportsPreset()
@@ -2397,6 +2638,14 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_acceptsSuppliedKeypair);
     RUN_TEST(test_handleSetConfig_security_rotationPreservesAdminKeys);
     RUN_TEST(test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged);
+    RUN_TEST(test_handleSetConfig_security_lowEntropyRestoreWarnsAndRotates);
+    RUN_TEST(test_handleSetConfig_security_lowEntropyFullKeypairRestoreIsRejected);
+    RUN_TEST(test_handleSetConfig_security_reDerivedCleanKeyDoesNotWarn);
+    RUN_TEST(test_handleSetConfig_security_blacklistedMintLeavesNoKey);
+    RUN_TEST(test_generateCryptoKeyPair_derivedFromStoredPrivateIsChecked);
+    RUN_TEST(test_generateCryptoKeyPair_failedDerivationFromStoredPrivateClearsKeySizes);
+    RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
+    RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
     RUN_TEST(test_checkConfigRegion_allowsProspectiveLicensedOwner);

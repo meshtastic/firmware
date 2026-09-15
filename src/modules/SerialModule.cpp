@@ -408,17 +408,14 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                        HAS_GPS) {
                 // Decode the Payload some more
                 meshtastic_Position scratch;
-                meshtastic_Position *decoded = NULL;
                 if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
                     memset(&scratch, 0, sizeof(scratch));
+                    // A payload that fails to decode leaves nothing to report, so say nothing.
                     if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Position_msg, &scratch)) {
-                        decoded = &scratch;
-                    }
-                    // send position packet as WPL to the serial port
-                    {
-                        meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
+                        // send position packet as WPL to the serial port
+                        const meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
                         const char *senderName = senderNode ? senderNode->long_name : "";
-                        printWPL(outbuf, sizeof(outbuf), *decoded, senderName,
+                        printWPL(outbuf, sizeof(outbuf), scratch, senderName,
                                  moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
                         serialPrint->printf("%s", outbuf);
                     }
@@ -666,6 +663,7 @@ void SerialModule::processWXSerial()
         if (dirAvg < 0) {
             dirAvg += 360.0;
         }
+        // unset-sentinel-ok: gotwind carries the armed state; no read tests this for 0
         lastAveraged = millis();
 
         // make a telemetry packet with the data

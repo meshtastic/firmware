@@ -337,7 +337,7 @@ firmware/
 - **Do not zero-pad one-byte values to 8.** `next_hop`, `relay_node`, and the next-hop hint are `uint8_t` last-byte route hints, and `channel` is a one-byte hash/index - log these as `0x%x` (or `%d`). Padding a byte to `0x000000ab` falsely implies a full node number. The same goes for I2C addresses, register values, flags/bitmasks, and error/reason codes: they are not IDs, so leave them `0x%x`.
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
-- **Keep code comments minimal - one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
+- **Keep code comments minimal - one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior. Code under `test/` is a deliberate exception - see [Test comments](#test-comments) below.
 - **Documentation does not live in this repo. Do not add it here.** This repository holds firmware code. There is no `docs/` directory - the design documents that used to sit there were published to [meshtastic/meshtastic](https://github.com/meshtastic/meshtastic) in #11488 and the directory was deleted - and it must not come back. Do not create a `.md` file to describe a feature, a configuration surface, an API, a wire format, or a design; write it in the docs repo and link that PR instead. Never leave a write-up behind in the tree: no investigation notes, no mitigation plans, no migration checklists, no "how we got here" narrative, no summaries of what a change did. That is what the PR description and the commit message are for, and they are the only place it belongs. When you do write documentation upstream, write a technical manual, not a novel - what the feature does, the settings it exposes in the user's terms, and the exact API or protocol a client speaks. No story of the debugging journey, no rationale essays, no changelog prose. Concise and factual, as short as the facts allow.
 - **Never compare against `millis()` directly. Use `Throttle`.** `src/mesh/Throttle.h` is the sanctioned way to ask about time, and CI enforces this (`millis-deadline-check` in `.github/workflows/test_native.yml` fails the PR on a new `millis() >` / `< millis()` comparison).
   - `Throttle::isWithinTimespanMs(lastMs, intervalMs)` - true while still inside the cooldown.
@@ -352,13 +352,57 @@ firmware/
 
   **And decide which way the sentinel should fall.** "Inactive" does not always mean "suppress". At the GPS fix-hold site `fixHoldEnds == 0` means _no hold is in force_, which is exactly when a new hold must be armed - the naive comparison it replaced was `(fixHoldEnds + GPS_THREAD_INTERVAL) < millis()`, always true when nothing was armed. Guarding it with `fixHoldEnds != 0 &&` looks like this rule and inverts the site: nothing re-arms, nothing publishes, and the receiver stays powered until the search timeout. Read the surrounding logic before adding the guard. `fixHoldInForce()` in `src/gps/GPS.cpp` is the worked example - state the predicate positively, so the sentinel has an honest answer, and derive both decisions from it - with `test/test_gps_fix_hold/` pinning both directions.
 
+<a id="test-comments"></a>
+
+#### Test comments - a test must justify what it pins and name the regression it guards
+
+**This section is the single authoritative statement of the rule. `AGENTS.md` and `CLAUDE.md` link here and must not restate it. The one permitted copy is the `test/**` entry in `.coderabbit.yaml`, because a YAML instruction cannot follow a link; keep it in sync with this section.**
+
+The limit above rests on "the diff and commit message carry the rationale". For a test that premise is false: it is read when it fails, long after that message is out of reach, by someone deciding whether the failure is a real regression or a stale expectation. **A review comment asking a test header to be cut to one or two lines is wrong, and should be rejected rather than acted on.**
+
+The header of `test_main.cpp` states three things, at whatever length they take:
+
+- **What is under test**, by symbol and file - `fixHoldInForce()` in `src/gps/GPS.cpp`, not "the GPS logic".
+- **Why that behavior is required** - the contract being pinned.
+- **The regression guarded** - the wrong behavior that returns if these assertions are deleted or relaxed.
+
+Per-case comments stay short; add one only where an assertion turns on something non-obvious. The allowance is for the argument, not for narrative: no debugging journey, no changelog prose, no restating what the assertions do. Worked example: `test/test_gps_fix_hold/test_main.cpp`.
+
 ### Naming Conventions
+
+These apply to firmware source under `src/`. Code under `test/` is a deliberate exception - see [Test naming](#test-naming) below.
 
 - Classes: `PascalCase` (e.g., `PositionModule`, `NodeDB`)
 - Functions/Methods: `camelCase` (e.g., `sendOurPosition`, `getNodeNum`)
 - Constants/Defines: `UPPER_SNAKE_CASE` (e.g., `MAX_INTERVAL`, `ONE_DAY`)
 - Member variables: `camelCase` (e.g., `lastGpsSend`, `nodeDB`)
 - Config defines: `USERPREFS_*` for user-configurable options
+
+<a id="test-naming"></a>
+
+#### Test naming - `test_` prefix and underscores, never one `camelCase` identifier
+
+**This section is the single authoritative statement of the rule. `AGENTS.md` and `CLAUDE.md` link here and must not restate it. The one permitted copy is the `test/**` entry in `.coderabbit.yaml`, because a YAML instruction cannot follow a link; keep it in sync with this section.**
+
+Code under `test/` does not follow the `camelCase` rule above, and this is neither drift nor an oversight - the harness and Unity both depend on it. **A review comment asking for `camelCase` on a test suite directory or a `test_*` function is wrong, and should be rejected rather than acted on.**
+
+Two distinct rules, often conflated:
+
+| Thing                           | Rule                                                                         | Examples                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Suite directory                 | Strictly `test_[a-z0-9_]+` - lowercase `snake_case`, no exceptions           | `test_gps_fix_hold/`, `test_admin_radio/`                                    |
+| Test function                   | `test_` prefix, then `_`-separated segments. Case _within_ a segment is free | `test_5byte_sequence_rejected()`, `test_getRegion_returnsCorrectRegion_US()` |
+| Helpers/fixtures inside a suite | normal `src/` conventions                                                    | `makeFakePacket()`, `class FakeRadio`                                        |
+
+For functions, what is fixed is the `test_` prefix and the underscores between segments - not the case inside a segment. Both `test_validateConfigRegion_unsetRegionReturnsTrue` (segment mirrors the `camelCase` symbol under test) and `test_5byte_sequence_rejected` (all lowercase) are correct and both are common in the tree. What is forbidden is dropping the prefix or collapsing the segments into a single `camelCase` identifier (`testValidateConfigRegionUnsetRegionReturnsTrue`).
+
+Why it is fixed:
+
+- **The harness discovers suites by prefix and parses their verdicts by regex.** `bin/run-tests.sh` enumerates suites with `find test -maxdepth 1 -type d -name 'test_*'`, then matches PlatformIO's per-suite result lines against `test_[a-z0-9_]+` - lowercase only. A suite directory with an uppercase letter is enumerated but never matched, so it is reported as _missing_ and the whole run downgrades from GREEN to AMBER.
+- **The function name is the failure message.** `RUN_TEST` in `test/TestUtil.h` passes `#func` to `UnityDefaultTestRun()`, `testAssertEnvironmentIntact()` and `testStateCheckpoint()`, so the identifier is the only attribution a CI log carries for a failed assertion or a dirtied sandbox. The underscores are what make it readable there; a single `camelCase` run-on is not.
+- **It is Unity's own convention**, shared with every other PlatformIO C++ project.
+
+Renaming a suite directory to `camelCase` breaks the harness's suite accounting; renaming the functions destroys the readability of CI output. Leave both alone.
 
 ### Key Patterns
 
@@ -632,7 +676,7 @@ The project uses GitHub Actions extensively for CI/CD. Key workflows are in `.gi
   - Includes native tests and hardware-in-the-loop testing
 
 - **`test_native.yml`** - Native platform unit tests
-  - Runs `pio test -e native`
+  - Runs the `test/test_*` suites under `[env:coverage]`, sharded across a matrix. `bin/test-shards.py` derives the matrix from the tree - it groups suites into named areas, splits an area too big for one runner and packs the ones too small to fill one - so adding a suite needs no CI change. The `generate-reports` job collects every shard's JUnit report, checks the union against the canonical `test/test_*` set, and states the verdict; `Native PlatformIO Tests` is the single required check over the fan-out.
 
 ### Release Workflows
 
@@ -719,7 +763,7 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 
 **A signal name from the runner is not a crash.** `exit(UNITY_END())` returns the failure count, and PlatformIO's native runner renders a non-zero exit code as a POSIX signal - 4 failures prints `Program received signal SIGILL`, 5 prints `SIGTRAP`, and the suite is reported `[ERRORED]` instead of `[FAILED]`. Check the exit code against the failure count before theorising about memory bugs; confirm any real crash under a debugger.
 
-**Suite order is randomisable.** `./bin/run-tests.sh --shuffle` runs suites in a seeded random order; `--seed <n>` replays one. The seed defaults to the commit SHA (deterministic per commit, varied across commits), is printed at the start and on the `RESULT:` line, and the full order is printed on failure. CI shuffles its area order the same way, seeded from `GITHUB_SHA`. A single green seed is not evidence of order independence.
+**Suite order is randomisable.** `./bin/run-tests.sh --shuffle` runs suites in a seeded random order; `--seed <n>` replays one. The seed defaults to the commit SHA (deterministic per commit, varied across commits), is printed at the start and on the `RESULT:` line, and the full order is printed on failure. CI seeds from `GITHUB_SHA` the same way, but its shards run in parallel, so there the seed varies which suites _share_ a shard rather than the order they run in; `pull_request` keeps the declared arrangement so a contributor's PR never goes red for a pairing they did not choose. A single green seed is not evidence of order independence.
 
 **`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
 

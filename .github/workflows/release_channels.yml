@@ -93,11 +93,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # Always use master branch for version bumps
-          ref: master
+          # Always use the default branch for version bumps
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: 3.x
 

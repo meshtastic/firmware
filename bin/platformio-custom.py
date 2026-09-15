@@ -41,8 +41,11 @@ def infer_architecture(board_cfg):
         return "rp2350"
     if "nrf52" in mcu_l or "nrf52840" in mcu_l:
         return "nrf52840"
+    if "nrf54l15" in mcu_l:
+        return "nrf54l15"
     if "stm32" in mcu_l:
         return "stm32"
+    print(f"mtjson: could not infer architecture from MCU '{mcu_l}'")
     return None
 
 def run_size_tool(env, flag, purpose):
@@ -255,8 +258,12 @@ def manifest_write(files, env, ram_bytes=None, flash_bytes=None):
         if parsed is not None and parsed != "":
             device_meta[manifest_key] = parsed
 
-    # Determine architecture once; if we can't infer it, skip manifest generation
-    board_arch = device_meta.get("architecture") or infer_architecture(env.BoardConfig())
+    # Board MCU wins over a hand-typed custom_meshtastic_architecture: only the
+    # spellings infer_architecture emits are recognized downstream.
+    declared = device_meta.get("architecture")
+    board_arch = infer_architecture(env.BoardConfig()) or declared
+    if declared and declared != board_arch:
+        print(f"{pioenv}: architecture '{declared}' overridden with '{board_arch}'")
     if not board_arch:
         print(f"Skipping mtjson write for unknown architecture (env={env.get('PIOENV')})")
         return

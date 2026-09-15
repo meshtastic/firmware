@@ -444,6 +444,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             LaunchWithDestination(NODENUM_BROADCAST);
             return 1;
         }
+        // Space is reserved for advancing frames (handled by Screen), so it must not open the composer
+        if (event->kbchar == ' ')
+            return 0;
         // Printable char (ASCII) opens free text compose
         if (event->kbchar >= 32 && event->kbchar <= 126) {
             updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);

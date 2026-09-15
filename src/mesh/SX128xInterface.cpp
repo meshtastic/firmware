@@ -62,6 +62,20 @@ template <typename T> bool SX128xInterface<T>::init()
 
     RadioLibInterface::init();
 
+    if (!reinitChip(/*fromInit=*/true))
+        return false;
+
+    startReceive(); // start receiving
+
+    return true;
+}
+
+// begin() and the chip-side setup that a reset chip loses. Shared by init() and by reconfigure()'s
+// recovery of a chip that lost its state.
+template <typename T> bool SX128xInterface<T>::reinitChip(bool fromInit)
+{
+    // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
+    // config value, and the recovery path reaches begin() without passing through the params clamp
     limitPower(SX128X_MAX_POWER);
 
     preambleLength = 12; // 12 is the default for this chip, 32 does not RX at all
@@ -73,6 +87,12 @@ template <typename T> bool SX128xInterface<T>::init()
         return false;
 
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
+        // Boot-time only: rebooting out of a runtime recovery would reintroduce exactly the crash this
+        // recovery path exists to avoid, and would do it while a config save is still pending.
+        if (!fromInit) {
+            LOG_ERROR("SX128x rejected the frequency during recovery; leaving region alone");
+            return false;
+        }
         LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
@@ -104,52 +124,84 @@ template <typename T> bool SX128xInterface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
-    if (res == RADIOLIB_ERR_NONE)
-        startReceive(); // start receiving
-
+    if (res != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128x re-init failed %s%d", radioLibErr, res);
     return res == RADIOLIB_ERR_NONE;
+}
+
+template <typename T> int16_t SX128xInterface<T>::programModemParams()
+{
+    // configure publicly accessible settings
+    int16_t err = lora.setSpreadingFactor(sf);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setSpreadingFactor(%u) %s%d", sf, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setBandwidth(bw);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setBandwidth(%.1f) %s%d", bw, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setCodingRate(%u) %s%d", cr, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setPreambleLength(%u) %s%d", preambleLength, radioLibErr, err);
+        return err;
+    }
+
+    err = lora.setFrequency(getFreq());
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setFrequency(%.3f) %s%d", getFreq(), radioLibErr, err);
+        return err;
+    }
+
+    limitPower(SX128X_MAX_POWER);
+
+    err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X setOutputPower(%d) %s%d", power, radioLibErr, err);
+        return err;
+    }
+
+    return RADIOLIB_ERR_NONE;
 }
 
 template <typename T> bool SX128xInterface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
 
-    // set mode to standby
-    setStandby();
+    // set mode to standby - a chip that lost its state to a reset/brownout can time out here,
+    // so don't let setStandby()'s assert fire before the recovery below gets a chance
+    int16_t err = trySetStandby();
+    if (err == RADIOLIB_ERR_NONE)
+        err = programModemParams();
 
-    // configure publicly accessible settings
-    int err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
+        // A chip that fails standby or rejects parameter programming (typically WRONG_MODEM, -20) has
+        // lost its runtime configuration - packet type included - to a chip-internal reset or brownout.
+        // Recover in place: begin() hardware-resets the chip and restores the LoRa packet type. Crashing
+        // here instead would reboot before MeshService persists the config change that triggered us.
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
-
-    err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128X setPreambleLength %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
-
-    err = lora.setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    limitPower(SX128X_MAX_POWER);
-
-    err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128X setOutputPower %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        LOG_ERROR("SX128x rejected modem params, chip state lost? Full re-init");
+        if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("SX128x unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            return false;
+        }
+        LOG_INFO("SX128x recovered after re-init");
+    }
 
     startReceive(); // restart receiving
 
@@ -166,15 +218,14 @@ template <typename T> bool SX128xInterface<T>::wideLora()
     return true;
 }
 
-template <typename T> void SX128xInterface<T>::setStandby()
+template <typename T> int16_t SX128xInterface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
-    int err = lora.standby();
+    int16_t err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
@@ -195,6 +246,13 @@ template <typename T> void SX128xInterface<T>::setStandby()
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> void SX128xInterface<T>::setStandby()
+{
+    int16_t err = trySetStandby();
+    assert(err == RADIOLIB_ERR_NONE);
 }
 
 /**
@@ -242,8 +300,6 @@ template <typename T> void SX128xInterface<T>::startReceive()
     sleep();
 #else
 
-    setStandby();
-
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_rxen_pin.pin, HIGH);
@@ -261,11 +317,22 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 #endif
 
-    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    int16_t err = trySetStandby();
+    if (err == RADIOLIB_ERR_NONE)
+        err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
 
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128X startReceive %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        if (maybeRecoverChipStateLoss())
+            err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    }
+
+    if (err != RADIOLIB_ERR_NONE) {
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
+        LOG_ERROR("SX128X RX offline %s%d", radioLibErr, err);
+        rxOffline = true;
+        return;
+    }
 
     RadioLibInterface::startReceive();
 
@@ -286,17 +353,20 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
                                        .timeout = 0,
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
-    int16_t result;
+    int16_t result = trySetStandby();
+    if (result == RADIOLIB_ERR_NONE) {
+        result = lora.scanChannel(cfg);
+        if (result == RADIOLIB_LORA_DETECTED)
+            return true;
+        if (result != RADIOLIB_CHANNEL_FREE)
+            LOG_ERROR("SX128X scanChannel %s%d", radioLibErr, result);
+        if (result != RADIOLIB_ERR_WRONG_MODEM)
+            return false;
+    }
 
-    setStandby();
-    result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
-        return true;
-    if (result != RADIOLIB_CHANNEL_FREE)
-        LOG_ERROR("SX128X scanChannel %s%d", radioLibErr, result);
-    assert(result != RADIOLIB_ERR_WRONG_MODEM);
-
-    return false;
+    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
+    maybeRecoverChipStateLoss();
+    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
@@ -310,7 +380,7 @@ template <typename T> bool SX128xInterface<T>::sleep()
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_DEBUG("SX128x entering sleep mode"); // (FIXME, don't keep config)
-    setStandby();                            // Stop any pending operations
+    (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct

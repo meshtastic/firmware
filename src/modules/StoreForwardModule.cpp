@@ -45,6 +45,7 @@ int32_t StoreForwardModule::runOnce()
             }
         } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
+            // unset-sentinel-ok: the heartbeat bool gates it and the only read is elapsed math
             lastHeartbeat = millis();
             LOG_INFO("Send heartbeat");
             meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
@@ -535,6 +536,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             if (p->which_variant == meshtastic_StoreAndForward_heartbeat_tag) {
                 heartbeatInterval = p->variant.heartbeat.period;
             }
+            // unset-sentinel-ok: the heartbeat bool gates it and the only read is elapsed math
             lastHeartbeat = millis();
             LOG_INFO("StoreAndForward Heartbeat received");
         }

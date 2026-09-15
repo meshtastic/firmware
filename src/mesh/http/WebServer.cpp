@@ -111,7 +111,7 @@ static void handleWebResponse()
                     static uint32_t lastHeapWarning = 0;
                     if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
                         LOG_WARN("Low heap (%u bytes), not accepting HTTPS connections", freeHeap);
-                        lastHeapWarning = millis();
+                        lastHeapWarning = Time::skipZero(Time::getMillis());
                     }
                 }
             }

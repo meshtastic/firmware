@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "ServiceEnvelope.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
@@ -22,6 +23,9 @@
 #endif
 #if HAS_ETHERNET && defined(ARCH_ESP32)
 #include <ETH.h>
+#if HAS_ETHERNET && defined(ETH_SHARED_SPI)
+#include "platform/esp32/SharedBusEthernet.h"
+#endif
 #endif // HAS_ETHERNET
 #if HAS_ETHERNET && defined(USE_CH390D)
 #include "ESP32_CH390.h"
@@ -867,5 +871,5 @@ void MQTT::perhapsReportToMap()
     packetPool.release(mp);
 
     // Update the last report time
-    last_report_to_map = millis();
+    last_report_to_map = Time::skipZero(Time::getMillis());
 }

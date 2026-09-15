@@ -55,8 +55,12 @@ def collect(paths):
     cases = {}
     for path in paths:
         try:
-            # The input is the JUnit report PlatformIO just wrote in this same run, not untrusted
-            # data, and defusedxml is not installed for this job.
+            # The input is a JUnit report PlatformIO wrote, not untrusted data, and defusedxml is
+            # not installed for this job. In CI the collector reads these back from artifacts
+            # rather than off the same disk that produced them, so what keeps that true is the
+            # upload step naming the one file the shard was told to write instead of globbing:
+            # a test suite can write to the workspace, and under a glob its own XML would ride
+            # along into the merged report. See .github/workflows/test_native.yml.
             # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
             root = ET.parse(path).getroot()
         except (ET.ParseError, OSError) as exc:

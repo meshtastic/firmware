@@ -68,7 +68,7 @@ class PacketHistory
     void setOurTxHopLimit(PacketRecord &r, uint8_t hopLimit);
 
   public:
-    explicit PacketHistory(uint32_t size = -1); // Constructor with size parameter, default is PACKETHISTORY_MAX
+    explicit PacketHistory(uint32_t size = PACKETHISTORY_MAX);
 
     /**
      * Update recentBroadcasts and return true if we have already seen this packet

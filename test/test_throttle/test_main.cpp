@@ -148,8 +148,12 @@ void test_deadlinePassed_reads_disarmed_sentinels_as_passed()
 {
     Time::setTestMillis(6247);
 
-    TEST_ASSERT_TRUE(Throttle::deadlinePassed(0));          // "inactive" for rebootAtMsec et al
-    TEST_ASSERT_TRUE(Throttle::deadlinePassed(UINT32_MAX)); // "inactive" for nagCycleCutoff
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(0)); // "inactive" for rebootAtMsec et al
+
+    // UINT32_MAX is not a usable "far future" either - at a low uptime it is a hair BEHIND now, so
+    // it reads as passed like any other past value. ExternalNotificationModule used to reserve it
+    // for "unarmed" and now keeps that state in its isNagging flag instead.
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(UINT32_MAX));
 
     // The guarded form every caller must use.
     const uint32_t disarmed = 0;

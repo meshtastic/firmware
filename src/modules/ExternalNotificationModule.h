@@ -64,7 +64,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     int handleInputEvent(const InputEvent *arg);
 #endif
 
-    uint32_t nagCycleCutoff = 1;
+    /// When the current nag cycle ends. Meaningful only while isNagging is set; never test it for a
+    /// magic value.
+    uint32_t nagCycleCutoff = 0;
 
     void setExternalState(uint8_t index = 0, bool on = false);
     bool getExternal(uint8_t index = 0);
