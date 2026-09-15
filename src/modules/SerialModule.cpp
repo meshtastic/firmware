@@ -208,6 +208,10 @@ int32_t SerialModule::runOnce()
 #elif SERIAL_PRINT_PORT != 0
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                // begin() assigns PSEL but never configures the GPIO, so a reassigned TX pin
+                // would be left as an input; the UARTE needs it driven and idle-high.
+                pinMode(moduleConfig.serial.txd, OUTPUT);
+                digitalWrite(moduleConfig.serial.txd, HIGH);
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
                 Serial2.setPinout(moduleConfig.serial.txd, moduleConfig.serial.rxd);
