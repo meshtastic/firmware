@@ -1,6 +1,17 @@
 #include "variant.h"
 #include "Arduino.h"
+#include "Wire.h"
 #include <esp32-hal-periman.h>
+
+#ifdef CROWPANEL_ADV_P4_50
+void stc8_gpio_set_level(int gpio, unsigned char level)
+{
+    Wire1.beginTransmission(STC8_I2C_SLAVE_DEV_ADDR);
+    Wire1.write(STC8_REG_ADDR_SET_GPIO + gpio);
+    Wire1.write(level);
+    Wire1.endTransmission();
+}
+#endif
 
 extern "C" void initVariant(void)
 {
@@ -19,5 +30,9 @@ extern "C" void initVariant(void)
         }
         perimanSetPinBusExtraType(BOARD_SDMMC_POWER_PIN, "SDMMC POWER");
     }
+#endif
+#ifdef AUDIO_AMP_CTRL
+    pinMode(AUDIO_AMP_CTRL, OUTPUT);
+    digitalWrite(AUDIO_AMP_CTRL, AUDIO_POWER_DISABLE);
 #endif
 }
