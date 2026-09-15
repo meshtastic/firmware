@@ -3,7 +3,8 @@
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import json
 import sys
-from os.path import isfile
+from os import remove
+from os.path import getmtime, isfile, join
 
 Import("env")
 
@@ -167,3 +168,22 @@ def tag_sdkconfig_cache_key(env):
 
 
 tag_sdkconfig_cache_key(env)
+
+
+# The platform writes its cache-key hash into sdkconfig.defaults before compiling
+# the IDF libs, so an aborted pass leaves it describing libs that were never built.
+def drop_stale_sdkconfig_defaults(env):
+    defaults = join(env.subst("$PROJECT_DIR"), "sdkconfig.defaults")
+    mcu = env.BoardConfig().get("build.mcu", "esp32")
+    try:
+        libs = env.PioPlatform().get_package_dir("framework-arduinoespressif32-libs")
+        # Rewritten last by a completed compile, so it marks "libs built".
+        if getmtime(join(libs, mcu, "sdkconfig")) >= getmtime(defaults):
+            return
+    except (OSError, TypeError):
+        return
+    print("*** Stale %s IDF libs; forcing a HybridCompile rebuild ***" % mcu)
+    remove(defaults)
+
+
+drop_stale_sdkconfig_defaults(env)

@@ -1561,8 +1561,7 @@ int32_t GPS::runOnce()
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
                 // Same clock the Throttle evaluation reads, and never the "no hold" sentinel.
-                const uint32_t holdEnds = Time::getMillis() + holdTime;
-                fixHoldEnds = holdEnds == 0 ? 1 : holdEnds;
+                fixHoldEnds = Time::timerEndsAtMillis(holdTime);
                 LOG_DEBUG_GPS("Holding for %ums after lock", holdTime);
             }
         }
