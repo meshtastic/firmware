@@ -249,3 +249,4 @@ General:
 #  MACAddress: AA:BB:CC:DD:EE:FF
 #  MACAddressSource: eth0
 #  APIPort: 4403
+#  RawModemPort: 4405 # Serve the LoRa radio as a raw KISS modem over TCP instead of running a mesh node on it

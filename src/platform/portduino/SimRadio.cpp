@@ -1,5 +1,6 @@
 #include "SimRadio.h"
 #include "MeshService.h"
+#include "RawModem.h"
 #include "Router.h"
 
 SimRadio::SimRadio() : NotifiedWorkerThread("SimRadio")
@@ -11,6 +12,11 @@ SimRadio *SimRadio::instance;
 
 ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 {
+    if (rawModem) { // raw modem mode keeps the mesh stack off the (simulated) air, as RadioLibInterface::send() does
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+
     printPacket("enqueuing for send", p);
 
     bool dropped = false;

@@ -1,0 +1,9 @@
+# FAULT: General.RawModemPort collides with Webserver.Port. Both listeners bind every
+# interface, so the raw modem could not bind after the web server started; the checker
+# reports it as an error, the same as a collision with the API port.
+Lora:
+  Module: sx1262
+General:
+  RawModemPort: 9443
+Webserver:
+  Port: 9443

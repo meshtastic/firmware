@@ -27,6 +27,7 @@
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
+#include "platform/portduino/RawModem.h"
 #include "platform/portduino/SimRadio.h"
 #include "platform/portduino/USBHal.h"
 #endif
@@ -1282,6 +1283,13 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
  */
 void RadioInterface::applyModemConfig()
 {
+#if ARCH_PORTDUINO
+    if (rawModem && rawModem->getPhy()) {
+        applyRawModemConfig(*rawModem->getPhy());
+        return;
+    }
+#endif
+
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
@@ -1412,6 +1420,27 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
 } // end of applyModemConfig
 
+#if ARCH_PORTDUINO
+/** Raw modem mode: take the PHY settings from the raw modem client instead of the region and channel config */
+void RadioInterface::applyRawModemConfig(const RawModemPhy &phy)
+{
+    myRegion = getRegion(config.lora.region); // still bounds TX power, see limitPower()
+    bw = phy.bwHz / 1000.0f;
+    sf = phy.sf;
+    cr = phy.cr;
+    power = phy.power;
+    syncWord = phy.syncWord;
+    preambleLength = phy.preamble;
+    saveFreq(phy.freqHz / 1e6f);
+
+    slotTimeMsec = computeSlotTimeMsec();
+    preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
+
+    LOG_INFO("Raw modem radio: freq=%.4f MHz, bw=%g kHz, sf=%u, cr=4/%u, power=%d dBm, sync=0x%02x, preamble=%u", getFreq(), bw,
+             sf, cr, power, syncWord, preambleLength);
+}
+#endif
+
 /** Slottime is the time to detect a transmission has started, consisting of:
   - CAD duration;
   - roundtrip air propagation time (assuming max. 30km between nodes);
@@ -1439,7 +1468,11 @@ uint32_t RadioInterface::computeSlotTimeMsec()
 void RadioInterface::limitPower(int8_t loraMaxPower)
 {
     power = config.lora.tx_power; // applyModemConfig() writes the resolved value back here
-    uint8_t maxPower = 255;       // No limit
+#if ARCH_PORTDUINO
+    if (rawModem && rawModem->getPhy())
+        power = rawModem->getPhy()->power; // the raw modem client's request, never written to the config
+#endif
+    uint8_t maxPower = 255; // No limit
 
     if (myRegion->powerLimit)
         maxPower = myRegion->powerLimit;

@@ -74,15 +74,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                          .ldrOptimize = (1 << sf) / bw >= 16}};
     }
 
-    /**
-     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old
-     * loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
-     *
-     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with
-     * this code for a long time.
-     */
-    const uint8_t syncWord = 0x2b;
-
     float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
 #if !defined(USE_STM32WLx)
@@ -239,6 +230,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual bool isSending();
 
+#if ARCH_PORTDUINO
+    /**
+     * Raw modem mode: transmit a complete on-air frame as-is, bypassing the mesh stack.
+     * Returns false if the transmit could not be started, otherwise RawModem::onTxDone() reports how it ended.
+     */
+    bool startSendRaw(const uint8_t *frame, size_t len);
+#endif
+
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
@@ -311,6 +310,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
     uint32_t activeReceiveStart = 0;
 
+#if ARCH_PORTDUINO
+    /// Non-zero while sendingPacket is only a placeholder for a raw modem frame of this length
+    size_t rawSendingLen = 0;
+#endif
+
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
     /** Do any hardware setup needed on entry into send configuration for the radio.
@@ -326,8 +330,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static void isrRxLevel0();
 
     /**
-     * If a send was in progress finish it and return the buffer to the pool */
-    void completeSending();
+     * If a send was in progress finish it and return the buffer to the pool
+     * @param transmitted true when called for the TX-done interrupt rather than an aborted send (raw modem mode reports it)
+     */
+    void completeSending(bool transmitted = false);
 
     /**
      * Add SNR data to received messages

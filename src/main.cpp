@@ -109,6 +109,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "mesh/raspihttp/PiWebServer.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
+#include "platform/portduino/RawModem.h"
 #ifdef _WIN32
 #include "platform/portduino/windows/WindowsService.h"
 #endif
@@ -1212,6 +1213,8 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+    if (portduino_config.raw_modem_port != -1)
+        initRawModem(portduino_config.raw_modem_port);
 #endif
 
     // Start airtime logger thread.

@@ -12,6 +12,10 @@
 #include "LoRaFEMInterface.h"
 #endif
 
+#if ARCH_PORTDUINO
+struct RawModemPhy;
+#endif
+
 // Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
 typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
 
@@ -97,6 +101,15 @@ class RadioInterface
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 5;
+
+    /**
+     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old
+     * loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
+     *
+     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with
+     * this code for a long time. Only a raw modem client (Portduino) changes it.
+     */
+    uint8_t syncWord = 0x2b;
 
     static constexpr uint8_t NUM_SYM_CAD =
         2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
@@ -325,6 +338,10 @@ class RadioInterface
      * These parameters will be pull from the channelSettings global
      */
     void applyModemConfig();
+
+#if ARCH_PORTDUINO
+    void applyRawModemConfig(const RawModemPhy &phy);
+#endif
 
     /// Return 0 if sleep is okay. A non-NULL argument means the radio is about to be powered
     /// down (deep sleep / shutdown), see doPreflightSleep()
