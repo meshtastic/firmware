@@ -1,4 +1,4 @@
-#ifdef MESHTASTIC_INCLUDE_INKHUD
+#if defined(T5_S3_EPAPER_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
 
 #include "./T5NodeDetailApplet.h"
 #include "./T5NodesApplet.h"
