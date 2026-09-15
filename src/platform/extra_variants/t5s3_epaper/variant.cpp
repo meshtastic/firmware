@@ -29,7 +29,8 @@
 #include "T5Screenshot.h"
 #endif
 
-// TEMPORARY touch calibration overlay: crosshair + coordinates at the last tap. Remove after hardware validation.
+#ifdef T5_INKHUD_TOUCH_CALIBRATION
+// Optional touch calibration overlay (-D T5_INKHUD_TOUCH_CALIBRATION): crosshair + coordinates at the last tap.
 // Renders only on full re-renders (never clears its fullscreen tile) and skips drawing after a rotation change.
 class TouchCalibrationApplet : public NicheGraphics::InkHUD::SystemApplet
 {
@@ -83,6 +84,7 @@ class TouchCalibrationApplet : public NicheGraphics::InkHUD::SystemApplet
     int16_t y = 0;
     uint8_t markedRotation = 0xFF;
 };
+#endif
 
 // True while a system applet (Menu, Keyboard, App Switcher, a notification...) takes input ahead of user applets
 static bool systemAppletOwnsInput()
@@ -115,7 +117,9 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
 
         switch (e->inputEvent) {
         case INPUT_BROKER_USER_PRESS:
-            TouchCalibrationApplet::mark(e->touchX, e->touchY); // TEMPORARY touch calibration
+#ifdef T5_INKHUD_TOUCH_CALIBRATION
+            TouchCalibrationApplet::mark(e->touchX, e->touchY);
+#endif
             inkhud->touchTap(e->touchX, e->touchY);
             break;
         case INPUT_BROKER_SELECT:
