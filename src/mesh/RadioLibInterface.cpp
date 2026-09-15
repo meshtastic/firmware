@@ -841,6 +841,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             // unset-sentinel-ok: busyTx/sendingPacket is the armed flag, so 0 is a legal stamp
             lastTxStart = Time::getMillis();
             printPacket("Started Tx", txp);
+            RadioTxHooks::transmitStarted(this, txp);
 #ifdef LED_LORA
             digitalWrite(LED_LORA, LED_STATE_ON);
 #endif
