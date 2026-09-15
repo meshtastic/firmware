@@ -5,7 +5,7 @@
 #define WIFI_LED 5
 #define WIFI_STATE_ON 0
 
-#define LED_PIN 6
+#define LED_LORA 6
 #define LED_STATE_ON 0
 #define BUTTON_PIN 4
 
