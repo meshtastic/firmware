@@ -91,23 +91,26 @@ static void formatDistM(char *buf, size_t len, float metres)
     }
 }
 
-/** Format metres as a number only (no unit suffix) - used for radar ring
- * labels. */
-static void formatDistNum(char *buf, size_t len, float metres)
+/** Format a ring radius as a bare number - used for radar ring labels.
+ *
+ * The unit is chosen once from the outer-ring range so all three labels share
+ * it; picking per value made 500 m and 1.5 km both render as "500"/"1.5" with
+ * no way to tell them apart.  Matches the unit the header title already shows.
+ */
+static void formatRingNum(char *buf, size_t len, float metres, float scale)
 {
     const bool imperial = (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL);
     if (imperial) {
-        const float miles = metres / 1609.34f;
-        if (miles < 0.1f)
-            snprintf(buf, len, "%d", (int)(metres * 3.28084f));
-        else if (miles < 10.0f)
-            snprintf(buf, len, "%.1f", miles);
+        if (scale / 1609.34f < 0.1f)
+            snprintf(buf, len, "%d", (int)(metres * 3.28084f)); // feet
+        else if (scale / 1609.34f < 10.0f)
+            snprintf(buf, len, "%.1f", metres / 1609.34f);
         else
-            snprintf(buf, len, "%d", (int)(miles + 0.5f));
+            snprintf(buf, len, "%d", (int)(metres / 1609.34f + 0.5f));
     } else {
-        if (metres < 1000.0f)
+        if (scale < 1000.0f)
             snprintf(buf, len, "%d", (int)metres);
-        else if (metres < 10000.0f)
+        else if (scale < 10000.0f)
             snprintf(buf, len, "%.1f", metres / 1000.0f);
         else
             snprintf(buf, len, "%d", (int)(metres / 1000.0f + 0.5f));
@@ -118,64 +121,89 @@ static void formatDistNum(char *buf, size_t len, float metres)
 // Node marker shapes
 // ---------------------------------------------------------------------------
 
+/** Half-extent of a marker glyph: bigger stroke on high-res panels. */
+static int markerRadius()
+{
+    return (currentResolution == ScreenResolution::High) ? 4 : 2;
+}
+
+/** Draw a marker stroke, doubled into a 2 px line on high-res panels. */
+static void markerLine(OLEDDisplay *display, int x0, int y0, int x1, int y1, int r)
+{
+    display->drawLine(x0, y0, x1, y1);
+    if (r < 4)
+        return;
+    // Thicken along the shallower axis so the second line never lands on the first.
+    const int dx = (x1 > x0) ? x1 - x0 : x0 - x1;
+    const int dy = (y1 > y0) ? y1 - y0 : y0 - y1;
+    if (dx >= dy)
+        display->drawLine(x0, y0 + 1, x1, y1 + 1);
+    else
+        display->drawLine(x0 + 1, y0, x1 + 1, y1);
+}
+
 /**
- * Draw one of five distinct markers centred at (px, py).
+ * Draw one of ten distinct markers centred at (px, py).
  *
- *   0  ■  filled 3×3 square
- *   1  +  axis-aligned cross
- *   2  ×  diagonal cross (X)
- *   3  □  hollow 5×5 square
- *   4  ◆  diamond (rotated square)
+ *   0  ■  filled square      5  △  triangle up
+ *   1  +  axis-aligned cross 6  ▽  triangle down
+ *   2  ×  diagonal cross     7  -  horizontal bar
+ *   3  □  hollow square      8  ○  hollow circle
+ *   4  ◆  diamond            9+ *  asterisk
  *
- * All shapes fit within a 5×5 pixel bounding box.
+ * Shapes fit within a (2r+1) box, r from markerRadius().
  */
 static void drawMarker(OLEDDisplay *display, int px, int py, uint8_t sym)
 {
+    const int r = markerRadius();
+    const int f = (r + 1) / 2; // filled-square half-extent, kept visually lighter
     switch (sym) {
     case 0: // ■
-        display->fillRect(px - 1, py - 1, 3, 3);
+        display->fillRect(px - f, py - f, 2 * f + 1, 2 * f + 1);
         break;
     case 1: // +
-        display->drawLine(px - 2, py, px + 2, py);
-        display->drawLine(px, py - 2, px, py + 2);
+        markerLine(display, px - r, py, px + r, py, r);
+        markerLine(display, px, py - r, px, py + r, r);
         break;
     case 2: // ×
-        display->drawLine(px - 2, py - 2, px + 2, py + 2);
-        display->drawLine(px + 2, py - 2, px - 2, py + 2);
+        markerLine(display, px - r, py - r, px + r, py + r, r);
+        markerLine(display, px + r, py - r, px - r, py + r, r);
         break;
     case 3: // □
-        display->drawLine(px - 2, py - 2, px + 2, py - 2);
-        display->drawLine(px + 2, py - 2, px + 2, py + 2);
-        display->drawLine(px + 2, py + 2, px - 2, py + 2);
-        display->drawLine(px - 2, py + 2, px - 2, py - 2);
+        markerLine(display, px - r, py - r, px + r, py - r, r);
+        markerLine(display, px + r, py - r, px + r, py + r, r);
+        markerLine(display, px + r, py + r, px - r, py + r, r);
+        markerLine(display, px - r, py + r, px - r, py - r, r);
         break;
     case 4: // ◆ diamond
-        display->drawLine(px, py - 2, px + 2, py);
-        display->drawLine(px + 2, py, px, py + 2);
-        display->drawLine(px, py + 2, px - 2, py);
-        display->drawLine(px - 2, py, px, py - 2);
+        markerLine(display, px, py - r, px + r, py, r);
+        markerLine(display, px + r, py, px, py + r, r);
+        markerLine(display, px, py + r, px - r, py, r);
+        markerLine(display, px - r, py, px, py - r, r);
         break;
     case 5: // △ triangle up
-        display->drawLine(px, py - 2, px + 2, py + 2);
-        display->drawLine(px, py - 2, px - 2, py + 2);
-        display->drawLine(px - 2, py + 2, px + 2, py + 2);
+        markerLine(display, px, py - r, px + r, py + r, r);
+        markerLine(display, px, py - r, px - r, py + r, r);
+        markerLine(display, px - r, py + r, px + r, py + r, r);
         break;
     case 6: // ▽ triangle down
-        display->drawLine(px, py + 2, px + 2, py - 2);
-        display->drawLine(px, py + 2, px - 2, py - 2);
-        display->drawLine(px - 2, py - 2, px + 2, py - 2);
+        markerLine(display, px, py + r, px + r, py - r, r);
+        markerLine(display, px, py + r, px - r, py - r, r);
+        markerLine(display, px - r, py - r, px + r, py - r, r);
         break;
     case 7: // - horizontal bar
-        display->drawLine(px - 2, py, px + 2, py);
+        markerLine(display, px - r, py, px + r, py, r);
         break;
     case 8: // ○ hollow circle
-        display->drawCircle(px, py, 2);
+        display->drawCircle(px, py, r);
+        if (r >= 4)
+            display->drawCircle(px, py, r - 1);
         break;
     default: // * asterisk (+ and × combined)
-        display->drawLine(px - 2, py, px + 2, py);
-        display->drawLine(px, py - 2, px, py + 2);
-        display->drawLine(px - 2, py - 2, px + 2, py + 2);
-        display->drawLine(px + 2, py - 2, px - 2, py + 2);
+        markerLine(display, px - r, py, px + r, py, r);
+        markerLine(display, px, py - r, px, py + r, r);
+        markerLine(display, px - r, py - r, px + r, py + r, r);
+        markerLine(display, px + r, py - r, px - r, py + r, r);
         break;
     }
 }
@@ -188,43 +216,6 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
     const int px = cx + (int)(radius * norm * sinf(rel));
     const int py = cy - (int)(radius * norm * cosf(rel));
     drawMarker(display, px, py, markerIdx);
-}
-
-/**
- * Draw just the BT/API connection icon glyph at the bottom-left, without the
- * full-width black wipe that drawCommonFooter performs.  The wipe was erasing
- * the radar circle's bottom arc and the descender of the last list row even
- * though the icon's actual 5×5 footprint (x=0..4 at scale=1) doesn't overlap
- * the radar (x≈80..126) or the list text (x≥7).
- *
- * Replicates the icon-rendering half of SharedUIDisplay::drawCommonFooter so
- * this overlay can own its own footer behaviour without touching shared UI.
- */
-static void drawConnectionIconNoWipe(OLEDDisplay *display)
-{
-    if (!isAPIConnected(service ? service->api_state : 0))
-        return;
-
-    const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
-    const int iconX = 0;
-    const int iconY = SCREEN_HEIGHT - (connection_icon_height * scale);
-
-    display->setColor(WHITE);
-    if (currentResolution == ScreenResolution::High) {
-        const int bytesPerRow = (connection_icon_width + 7) / 8;
-        for (int yy = 0; yy < connection_icon_height; ++yy) {
-            const uint8_t *rowPtr = connection_icon + yy * bytesPerRow;
-            for (int xx = 0; xx < connection_icon_width; ++xx) {
-                const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
-                const uint8_t bitMask = 1U << (xx & 7); // XBM is LSB-first
-                if (byteVal & bitMask) {
-                    display->fillRect(iconX + xx * scale, iconY + yy * scale, scale, scale);
-                }
-            }
-        }
-    } else {
-        display->drawXbm(iconX, iconY, connection_icon_width, connection_icon_height, connection_icon);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +260,9 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     // Radar circle - right side, 2 px padding on all sides.
     // -----------------------------------------------------------------------
-    const int radarDiam = contentH - 2 * pad;
+    // Clamped against width too: derived from height alone, a square or narrow
+    // panel let the circle eat the width and left the list column unusable.
+    const int radarDiam = std::min(contentH - 2 * pad, sw / 2);
     const int radarRadius = radarDiam / 2;
     const int radarCX = x + sw - pad - radarRadius;
     const int radarCY = y + headerH + pad + radarRadius;
@@ -288,7 +281,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->drawString(x + sw / 2, y + sh / 2 - FONT_HEIGHT_SMALL / 2, "No GPS fix");
-        drawConnectionIconNoWipe(display);
+        graphics::drawCommonFooter(display, x, y, false);
         return;
     }
 
@@ -406,7 +399,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         for (int ring = 1; ring <= 3; ring++) {
             const int ringR = (radarRadius * ring) / 3;
             char ringLabel[12];
-            formatDistNum(ringLabel, sizeof(ringLabel), scale * ring / 3.0f);
+            formatRingNum(ringLabel, sizeof(ringLabel), scale * ring / 3.0f, scale);
             // Centred on the ring arc, opposite N - just inside the line.
             const int lx = radarCX + (int)(ringR * sinf(oppNBrg));
             const int ly = radarCY - (int)(ringR * cosf(oppNBrg)) - kRingFontH;
@@ -452,17 +445,22 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     display->setFont(FONT_SMALL);
 
     constexpr int kListTopPad = 5;
-    const int rowPitch = (listContentH - kListTopPad) / kMaxPlotted;
+    // Glyph ink fills about half the font bbox, so that is the tightest pitch
+    // still legible; flooring here makes a short panel list fewer nodes rather
+    // than stack all of them on top of each other.
+    const int kMinRowPitch = FONT_HEIGHT_SMALL / 2 + 1;
+    const int rowPitch = std::max(kMinRowPitch, (listContentH - kListTopPad) / kMaxPlotted);
+    const int listRows = std::min(plottedCount, std::max(1, (listContentH - kListTopPad) / rowPitch));
 
     // Marker centred to the visible text height (rowY is the top of the
     // glyph bbox; centring on rowPitch/2 read as "top-aligned" because the
     // font's bbox is taller than its visible ink).
     const int symOffsetY = (FONT_HEIGHT_SMALL - 2) / 2;
 
-    for (int i = 0; i < plottedCount; i++) {
+    for (int i = 0; i < listRows; i++) {
         const Entry &e = entries[i];
         const int rowY = y + headerH + kListTopPad + rowPitch * i;
-        const int symCX = x + 6; // 4 px left margin + 2 px to marker centre
+        const int symCX = x + 4 + markerRadius(); // 4 px left margin + marker centre
         const int symCY = rowY + symOffsetY;
 
         drawMarker(display, symCX, symCY, (uint8_t)i);
@@ -477,9 +475,10 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         formatDistM(dist, sizeof(dist), e.distM);
 
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(x + 11, rowY, name); // 3 px gap after marker right edge
+        // 3 px gap after the marker's right edge.
+        display->drawString(x + 7 + 2 * markerRadius(), rowY, name);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(x + listRight, rowY, dist);
+        display->drawString(listRight, rowY, dist); // listRight already carries x
         display->setTextAlignment(TEXT_ALIGN_LEFT);
     }
 
@@ -489,7 +488,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     if (entries.empty()) {
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-        const int panelCX = (x + radarCX - radarRadius) / 2;
+        const int panelCX = x + (radarCX - radarRadius - x) / 2; // keep x outside the division
         const int blockTop = y + headerH + (listContentH - 2 * FONT_HEIGHT_SMALL) / 2;
         display->drawString(panelCX, blockTop, "No active");
         display->drawString(panelCX, blockTop + FONT_HEIGHT_SMALL, "nodes");
@@ -499,7 +498,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // BT/API connection icon - drawn here (no surrounding wipe) so the radar
     // circle and the last list row stay intact.  NodeListRenderer's radar
     // branch deliberately skips drawCommonFooter for the same reason.
-    drawConnectionIconNoWipe(display);
+    graphics::drawCommonFooter(display, x, y, false);
 }
 
 } // namespace RadarRenderer
