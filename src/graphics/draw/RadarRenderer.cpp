@@ -258,14 +258,16 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int pad = (currentResolution == ScreenResolution::High) ? 9 : 4;
 
     // -----------------------------------------------------------------------
-    // Radar circle - right side, 2 px padding on all sides.
+    // Radar circle - right side, padded, centred in the area below the header.
     // -----------------------------------------------------------------------
     // Clamped against width too: derived from height alone, a square or narrow
     // panel let the circle eat the width and left the list column unusable.
     const int radarDiam = std::min(contentH - 2 * pad, sw / 2);
     const int radarRadius = radarDiam / 2;
     const int radarCX = x + sw - pad - radarRadius;
-    const int radarCY = y + headerH + pad + radarRadius;
+    // Centred rather than pinned below the header: once the width clamp bites,
+    // the circle is shorter than the content area and would sit high otherwise.
+    const int radarCY = y + headerH + contentH / 2;
 
     // Node list panel fills the space to the left of the radar circle.
     const int listRight = radarCX - radarRadius - 4; // 4 px gap between list and circle
