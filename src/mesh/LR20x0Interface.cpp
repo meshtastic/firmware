@@ -174,18 +174,7 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         applyDcdcWorkaround();
 
-#ifdef LR2021_CUSTOM_PA_TABLE
-    // Board LF PA table after begin(); pointer retained. HF keeps RadioLib default.
-    if (!isLr20x0HighBand(getFreq())) {
-        lora.setPaTable(lr2021_pa_table_lf, false);
-        int16_t paRes = lora.setOutputPower(power);
-        if (paRes != RADIOLIB_ERR_NONE) {
-            LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
-        } else {
-            LOG_DEBUG("LR2021 custom LF PA table installed");
-        }
-    }
-#endif
+    applyCustomLfPaTable(getFreq());
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
@@ -397,18 +386,7 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             return false;
         }
 
-#ifdef LR2021_CUSTOM_PA_TABLE
-        // Same as init(): log a calibration miss, keep the begin() PA config.
-        if (!isLr20x0HighBand(freq)) {
-            lora.setPaTable(lr2021_pa_table_lf, false);
-            int16_t paRes = lora.setOutputPower(power);
-            if (paRes != RADIOLIB_ERR_NONE) {
-                LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
-            } else {
-                LOG_DEBUG("LR2021 custom LF PA table installed");
-            }
-        }
-#endif
+        applyCustomLfPaTable(freq);
 
         lr20x0LastFreqMHz = freq;
 
@@ -438,6 +416,24 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
 
         return true;
     }
+}
+
+// Board LF PA table after begin(); pointer is retained. HF keeps the RadioLib default.
+// Warn-only: a calibration miss must not fail init/fullBegin, keep the begin() PA config.
+template <typename T> void LR20x0Interface<T>::applyCustomLfPaTable(float freq)
+{
+#ifdef LR2021_CUSTOM_PA_TABLE
+    if (isLr20x0HighBand(freq))
+        return;
+    lora.setPaTable(lr2021_pa_table_lf, false);
+    int16_t paRes = lora.setOutputPower(power);
+    if (paRes != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
+    else
+        LOG_DEBUG("LR2021 custom LF PA table installed");
+#else
+    (void)freq;
+#endif
 }
 
 // Semtech DCDC sensitivity workaround for sub-GHz operation on engineering sample date code 2513.
