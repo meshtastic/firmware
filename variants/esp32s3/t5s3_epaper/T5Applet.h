@@ -19,6 +19,8 @@ namespace NicheGraphics::InkHUD
 class T5Applet : public Applet
 {
   public:
+    T5Applet() { hideFromMenu = true; } // T5 screens stay active via T5HomeApplet::begin(), so the menu can't toggle them
+
     static constexpr uint16_t NAV_H = 88;
     static constexpr uint16_t CONSOLE_SLOT_W = 150; // Console: trailing mode slot, outside the six nav cells
 
