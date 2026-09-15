@@ -9,7 +9,8 @@
 #include "mesh/MeshTypes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
-#include <vector>
+#include <cstdlib>
+#include <memory>
 
 struct GeofenceNotificationEvent {
     uint32_t waypointId = 0;
@@ -51,14 +52,23 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
         bool inside;
     };
 
+    // Grown with realloc(), so it must be released with free(), not delete[].
+    struct CFreeDeleter {
+        void operator()(CrossingState *p) const noexcept { free(p); }
+    };
+
     static uint64_t crossingKey(uint32_t waypointId, NodeNum node) { return ((uint64_t)waypointId << 32) | node; }
 
     CrossingState *findCrossingState(uint64_t key);
+    bool ensureCrossingCapacity();
     void notify(const meshtastic_Waypoint &wp, NodeNum node, bool entered);
     int onWaypointStoreChanged(const WaypointStore *store);
 
     // Bounded (waypointId, nodeNum) state; new pairs are skipped until an old waypoint frees space.
-    std::vector<CrossingState> crossingInside;
+    // Unallocated until the first crossing, so a node with no geofenced waypoints never pays for it.
+    std::unique_ptr<CrossingState[], CFreeDeleter> crossingInside;
+    size_t crossingCount = 0;
+    size_t crossingCapacity = 0;
     CallbackObserver<GeofenceModule, const WaypointStore *> waypointStoreObserver =
         CallbackObserver<GeofenceModule, const WaypointStore *>(this, &GeofenceModule::onWaypointStoreChanged);
 };

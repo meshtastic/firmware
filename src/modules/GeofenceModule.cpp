@@ -6,6 +6,7 @@
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
+#include <cstdlib>
 #include <cstring>
 
 #if HAS_SCREEN
@@ -20,9 +21,11 @@ GeofenceModule *geofenceModule;
 
 static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
 
+// The cap above is a ceiling, not an expectation; ensureCrossingCapacity() doubles from here to it.
+static constexpr size_t GEOFENCE_INITIAL_CROSSING = 8;
+
 GeofenceModule::GeofenceModule()
 {
-    crossingInside.reserve(GEOFENCE_MAX_CROSSING);
     waypointStoreObserver.observe(&waypointStore);
 }
 
@@ -73,11 +76,31 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
     return notifyOnExit ? Crossing::Exit : Crossing::None;
 }
 
+/// Grows with realloc(), which refuses where a vector's operator new would abort on a live heap,
+/// so a refusal falls into the caller's bounded-drop path.
+bool GeofenceModule::ensureCrossingCapacity()
+{
+    if (crossingCount < crossingCapacity)
+        return true;
+
+    size_t target = crossingCapacity ? crossingCapacity * 2 : GEOFENCE_INITIAL_CROSSING;
+    if (target > GEOFENCE_MAX_CROSSING)
+        target = GEOFENCE_MAX_CROSSING;
+
+    auto *grown = static_cast<CrossingState *>(realloc(crossingInside.get(), target * sizeof(CrossingState)));
+    if (!grown)
+        return false;               // the old block is untouched
+    (void)crossingInside.release(); // realloc() already freed or kept the old block
+    crossingInside.reset(grown);
+    crossingCapacity = target;
+    return true;
+}
+
 GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
 {
-    for (auto &state : crossingInside) {
-        if (state.key == key)
-            return &state;
+    for (size_t i = 0; i < crossingCount; i++) {
+        if (crossingInside[i].key == key)
+            return &crossingInside[i];
     }
 
     return nullptr;
@@ -101,8 +124,12 @@ bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint8_t notifica
 
 int GeofenceModule::onWaypointStoreChanged(const WaypointStore *store)
 {
-    (void)store;
-    crossingInside.clear();
+    crossingCount = 0;
+    // Give the block back once nothing can need it again.
+    if (store && store->getWaypoints().empty()) {
+        crossingInside.reset();
+        crossingCapacity = 0;
+    }
     return 0;
 }
 
@@ -138,13 +165,14 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
 
         // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {
-            if (crossingInside.size() < GEOFENCE_MAX_CROSSING) {
-                crossingInside.push_back(CrossingState{key, isInside});
+            if (crossingCount < GEOFENCE_MAX_CROSSING && ensureCrossingCapacity()) {
+                crossingInside[crossingCount++] = CrossingState{key, isInside};
             } else {
                 static bool warnedCrossingFull = false;
                 if (!warnedCrossingFull) {
-                    LOG_WARN("Geofence crossing-state full (%u); new (waypoint,node) pairs will not alert until space frees",
-                             (unsigned)GEOFENCE_MAX_CROSSING);
+                    LOG_WARN("Geofence crossing-state cannot grow (%u tracked, %u max); new (waypoint,node) pairs will "
+                             "not alert until space frees",
+                             (unsigned)crossingCount, (unsigned)GEOFENCE_MAX_CROSSING);
                     warnedCrossingFull = true;
                 }
             }
