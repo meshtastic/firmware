@@ -52,8 +52,12 @@ postfixOperator:*/mqtt/*
 missingOverride
 virtualCallInConstructor
 
+passedByValue:*/RedirectablePrint.h
+
 internalAstError:*/CrossPlatformCryptoEngine.cpp
 uninitMemberVar:*/AudioThread.h
+// False positive
+constVariableReference:*/Channels.cpp
 
 // False positive: make_zeroizing_array() returns unique_ptr<uint8_t[], ...>, so
 // .get() is uint8_t*, not void*. cppcheck can't resolve the custom-deleter alias
@@ -80,12 +84,10 @@ staticFunction
 constParameterPointer
 iterateByValue
 returnByReference
-passedByValue
 uselessOverride
 
 constVariable
 constVariablePointer
-constVariableReference
 constParameterReference
 
 // Single deliberate sites, scoped so a new one elsewhere still fails the gate. Router folds the
