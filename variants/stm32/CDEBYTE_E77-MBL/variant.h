@@ -23,6 +23,11 @@ Do not expect a working Meshtastic device with this target.
 
 #define EBYTE_E77_MBL
 
+// From EBYTE reference firmware:
+// https://www.cdebyte.com/products/E77-900M22S/4#Downloads
+#define HAS_LSE 1
+#define STM32WL_LSE_DRIVE RCC_LSEDRIVE_LOW
+
 // LoRa
 // Hardware varies by unit: SN >= 3202995 has a TCXO, older units have XTAL only -
 // https://github.com/olliw42/mLRS-docu/blob/main/docs/EBYTE_E77_MBL.md
