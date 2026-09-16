@@ -352,14 +352,11 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    std::string fileList;
-    uint64_t total, used;
-    {
-        concurrency::LockGuard g(spiLock);
-        fileList = htmlListDir("/static", 10);
-        total = FSCom.totalBytes();
-        used = FSCom.usedBytes();
-    }
+    concurrency::LockGuard g(spiLock);
+    std::string fileList = htmlListDir("/static", 10);
+
+    uint64_t total = FSCom.totalBytes();
+    uint64_t used = FSCom.usedBytes();
 
     // Key order matches the previous std::map-based emission (alphabetical).
     std::string out;
@@ -388,14 +385,11 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
-        bool removed;
-        {
-            concurrency::LockGuard g(spiLock);
-            removed = FSCom.remove(pathDelete.c_str());
-        }
+        concurrency::LockGuard g(spiLock);
+        const char *status = FSCom.remove(pathDelete.c_str()) ? "ok" : "Error";
         LOG_INFO("%s", pathDelete.c_str());
         std::string out = "{\"status\":";
-        out += jsonEscape(removed ? "ok" : "Error");
+        out += jsonEscape(status);
         out += "}";
         writeAll(res, out);
         return;
