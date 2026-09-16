@@ -28,6 +28,7 @@ enum input_broker_event {
     INPUT_BROKER_FACTORY_RST = 0x9a,
     INPUT_BROKER_SHUTDOWN = 0x9b,
     INPUT_BROKER_GPS_TOGGLE = 0x9e,
+    INPUT_BROKER_PRIVACY_TOGGLE = 0x9f, // GPS and buzzer off together, and back on together
     INPUT_BROKER_SEND_PING = 0xaf,
     INPUT_BROKER_FN_F1 = 0xf1,
     INPUT_BROKER_FN_F2 = 0xf2,

@@ -8,6 +8,7 @@
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "mesh/mesh-pb-constants.h"
@@ -72,6 +73,10 @@ AdminModule *adminModule;
 
 #ifdef PIO_UNIT_TESTING
 uint32_t disableBluetoothCallCountForTest = 0;
+#endif
+#ifdef ARCH_STM32
+// Client detach window before the DFU jump (see the enter_dfu case).
+static constexpr uint32_t STM32_DFU_DETACH_DELAY_MS = 5000;
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
@@ -401,17 +406,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_module_config_tag:
         LOG_DEBUG("Client set module config");
-#if !MESHTASTIC_EXCLUDE_BEACON
-        // broadcast_send_as_node: remote admins may only set this to their own node ID.
-        if (mp.from != 0 && r->set_module_config.which_payload_variant == meshtastic_ModuleConfig_mesh_beacon_tag) {
-            auto &b = r->set_module_config.payload_variant.mesh_beacon;
-            if (b.broadcast_send_as_node != 0 && b.broadcast_send_as_node != mp.from) {
-                LOG_WARN("Beacon: rejecting broadcast_send_as_node 0x%08x from node 0x%08x (must match sender)",
-                         b.broadcast_send_as_node, mp.from);
-                b.broadcast_send_as_node = moduleConfig.mesh_beacon.broadcast_send_as_node;
-            }
-        }
-#endif
         if (!handleSetModuleConfig(r->set_module_config)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
@@ -426,7 +420,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     case meshtastic_AdminMessage_set_ham_mode_tag:
         LOG_DEBUG("Client set ham mode");
-        handleSetHamMode(r->set_ham_mode);
+        // Without this a rejected request falls through to the generic Routing_Error_NONE ack below,
+        // so a client would report ham mode as enabled on a node that changed nothing.
+        if (!handleSetHamMode(r->set_ham_mode))
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         break;
     case meshtastic_AdminMessage_get_ui_config_request_tag: {
         LOG_DEBUG("Client is getting device-ui config");
@@ -494,7 +491,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
         LOG_INFO("Shutdown in %d seconds", s);
-        shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        shutdownAtMsec = (s < 0) ? 0 : Time::timerEndsAtMillis(s * 1000);
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
@@ -703,7 +700,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN
         IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32)
+#if defined(ARCH_STM32)
+        // Delay the jump so this ACK reaches the client and it releases the port before the
+        // STM32WL ROM bootloader takes the UART and autobauds off the next byte it sees.
+        LOG_INFO("Entering DFU in %us - disconnect now", (STM32_DFU_DETACH_DELAY_MS + 999) / 1000);
+        // timerEndsAtMillis() dodges 0, the sentinel powerCommandsCheck() reads as unarmed.
+        enterDfuAtMsec = Time::timerEndsAtMillis(STM32_DFU_DETACH_DELAY_MS);
+#elif defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
         break;
@@ -737,8 +740,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                                        SEGMENT_DEVICESTATE | SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_CHANNELS)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
             LOG_DEBUG("Rebooting after preferences restore");
-            reboot(1000);
             disableBluetooth();
+            reboot(DEFAULT_REBOOT_SECONDS);
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
@@ -1160,8 +1163,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                    if (crypto && !owner.is_licensed) {
-                        crypto->ensurePkiKeys(config.security, owner);
+                    // Minting the key moves our node num with it (my_node_num == crc32(public_key)), so
+                    // persist devicestate + the node DB too - exactly as the licensed branch below does.
+                    if (!owner.is_licensed && nodeDB->ensurePkiIdentity()) {
+                        changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
                     }
 #endif
                     // new region is valid and we're coming from an unset region, so enable tx
@@ -1331,10 +1336,20 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
+        // A supplied public key that is itself blacklisted is re-derived too, so a restore carrying a whole
+        // low-entropy pair cannot skip the check just by populating both fields.
         if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
-        } else if (config.security.public_key.size == 0) {
-            nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+        } else if (config.security.public_key.size == 0 || nodeDB->checkLowEntropyPublicKey(config.security.public_key)) {
+            // Warn at set time, not after the next reboot, and only when the key really was replaced: a
+            // blacklisted public key whose private key derives a clean one is re-derived, and that stuck.
+            uint8_t priorPrivateKey[32];
+            memcpy(priorPrivateKey, config.security.private_key.bytes, 32);
+            const bool keygenSucceeded = nodeDB->generateCryptoKeyPair(priorPrivateKey);
+            const bool keyWasReplaced = memcmp(priorPrivateKey, config.security.private_key.bytes, 32) != 0;
+            if (keygenSucceeded && keyWasReplaced && nodeDB->keyIsLowEntropy) {
+                sendWarning(LOW_ENTROPY_RESTORE_WARNING);
+            }
         }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
@@ -1493,19 +1508,6 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (beaconCfg.broadcast_interval_secs != 0 &&
             beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
             beaconCfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-        // Validate broadcast_on_preset against broadcast_on_region (or current region if unset).
-        if (beaconCfg.has_broadcast_on_preset) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.use_preset = true;
-            probe.modem_preset = beaconCfg.broadcast_on_preset;
-            if (beaconCfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                probe.region = beaconCfg.broadcast_on_region;
-            if (!RadioInterface::validateConfigLora(probe)) {
-                LOG_WARN("Beacon: broadcast_on_preset %d invalid for region, clearing", beaconCfg.broadcast_on_preset);
-                beaconCfg.has_broadcast_on_preset = false;
-                beaconCfg.has_broadcast_on_channel = false;
-            }
-        }
         // Validate broadcast_offer_preset against broadcast_offer_region (or current region if unset).
         if (beaconCfg.has_broadcast_offer_preset) {
             meshtastic_Config_LoRaConfig probe = config.lora;
@@ -1526,8 +1528,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 beaconCfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
             }
         }
-        // Validate each multi-target entry the same way as the single-target broadcast_on_* fields,
-        // so a bad preset/region is cleared on write rather than relying on the runtime TX drop.
+        // Validate each broadcast target so a bad preset/region is cleared on write rather than
+        // relying on the runtime TX drop.
         for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
             auto &t = beaconCfg.broadcast_targets[i];
             // Region must be a known region code (UNSET = use running config at TX time).
@@ -1955,10 +1957,6 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (config.bluetooth.enabled && nrf52Bluetooth) {
         conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
     }
-#elif defined(ARCH_NRF54L15)
-    if (config.bluetooth.enabled && nrf54l15Bluetooth) {
-        conn.bluetooth.is_connected = nrf54l15Bluetooth->isConnected();
-    }
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
@@ -2101,30 +2099,40 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 #endif
 }
 
-void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+// Unset, or set to nothing but whitespace - the two ways a client can leave a name field empty.
+static bool isBlankName(const char *start)
 {
-    // Validate ham parameters before setting since this would bypass validation in the owner struct
-    const char *fieldsToCheck[] = {p.call_sign, p.short_name};
-    const char *fieldNames[] = {"call_sign", "short_name"};
-    for (int i = 0; i < 2; i++) {
-        if (*fieldsToCheck[i]) {
-            const char *start = fieldsToCheck[i];
-            while (*start && isspace((unsigned char)*start))
-                start++;
-            if (*start == '\0') {
-                LOG_WARN("Rejected ham %s: needs 1+ non-whitespace char", fieldNames[i]);
-                return;
-            }
-        }
+    while (*start && isspace((unsigned char)*start))
+        start++;
+    return *start == '\0';
+}
+
+bool AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+{
+    // Validate ham parameters before setting since this would bypass validation in the owner struct.
+
+    // The call sign is the station ID the whole licensed mode is built around, so it is required;
+    // without it we would license a node that never identifies itself on the air.
+    if (isBlankName(p.call_sign)) {
+        LOG_WARN("Rejected ham call_sign: needs 1+ non-whitespace char");
+        return false;
     }
 
-    // Set call sign and override lora limitations for licensed use
-    strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    // Set call sign and override lora limitations for licensed use. An optional long_name rides
+    // behind the call sign with the "//" separator hams already use on the air.
+    // e.g. call_sign "N0CALL" plus long_name "Attic Heltec" becomes "N0CALL//Attic Heltec".
+    if (!isBlankName(p.long_name))
+        snprintf(owner.long_name, sizeof(owner.long_name), "%s//%s", p.call_sign, p.long_name);
+    else
+        strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
     owner.long_name[sizeof(owner.long_name) - 1] = '\0';
-    sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
-    strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
-    owner.short_name[sizeof(owner.short_name) - 1] = '\0';
-    sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
+    clampLongName(owner.long_name);
+    // short_name is optional per the schema, so a blank one keeps the name the node already had
+    if (!isBlankName(p.short_name)) {
+        strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
+        owner.short_name[sizeof(owner.short_name) - 1] = '\0';
+        sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
+    }
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
     config.lora.tx_power = p.tx_power;
@@ -2160,6 +2168,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     // HAM mode rewrites config.lora.tx_enabled and strips channel PSKs - genuinely a radio change.
     saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS, /*shouldReboot=*/true,
                 /*radioAffected=*/true);
+    return true;
 }
 
 AdminModule::AdminModule()
@@ -2682,9 +2691,6 @@ void disableBluetooth()
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
-#elif defined(ARCH_NRF54L15)
-    if (nrf54l15Bluetooth)
-        nrf54l15Bluetooth->shutdown();
 #endif
 #endif
 }

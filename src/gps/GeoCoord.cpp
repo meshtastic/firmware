@@ -522,41 +522,6 @@ float GeoCoord::bearing(double lat1, double lon1, double lat2, double lon2)
 }
 
 /**
- * Ported from http://www.edwilliams.org/avform147.htm#Intro
- * @brief Convert from meters to range in radians on a great circle
- * @param range_meters
- * The range in meters
- * @return range in radians on a great circle
- */
-float GeoCoord::rangeMetersToRadians(double range_meters)
-{
-    // 1 nm is 1852 meters
-    double distance_nm = range_meters * 1852;
-    return (PI / (180 * 60)) * distance_nm;
-}
-
-/**
- * Create a new point based on the passed-in point
- * Ported from http://www.edwilliams.org/avform147.htm#LL
- * @param bearing
- * The bearing in radians
- * @param range_meters
- * range in meters
- * @return GeoCoord object of point at bearing and range from initial point
- */
-std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range_meters)
-{
-    double range_radians = rangeMetersToRadians(range_meters);
-    double lat1 = this->getLatitude() * 1e-7;
-    double lon1 = this->getLongitude() * 1e-7;
-    double lat = asin(sin(lat1) * cos(range_radians) + cos(lat1) * sin(range_radians) * cos(bearing));
-    double dlon = atan2(sin(bearing) * sin(range_radians) * cos(lat1), cos(range_radians) - sin(lat1) * sin(lat));
-    double lon = fmod(lon1 - dlon + PI, 2 * PI) - PI;
-
-    return std::make_shared<GeoCoord>(double(lat), double(lon), this->getAltitude());
-}
-
-/**
  * Convert bearing to degrees
  * @param bearing
  * The bearing in string format

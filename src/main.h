@@ -20,10 +20,6 @@ extern NimbleBluetooth *nimbleBluetooth;
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
-#ifdef ARCH_NRF54L15
-#include "NRF54L15Bluetooth.h"
-extern NRF54L15Bluetooth *nrf54l15Bluetooth;
-#endif
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
 #endif
@@ -92,6 +88,9 @@ extern uint32_t timeLastPowered;
 extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
+#ifdef ARCH_STM32
+extern uint32_t enterDfuAtMsec; // 0 = unset; else millis() deadline for the deferred DFU jump
+#endif
 
 /** Schedule a reboot `seconds` from now. A negative `seconds` *cancels* a pending reboot, matching
  * admin.proto's reboot_seconds ("<0 to cancel reboot") - it does not reboot immediately.

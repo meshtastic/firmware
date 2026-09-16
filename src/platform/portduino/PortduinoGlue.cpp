@@ -62,7 +62,7 @@ portduino_config_struct portduino_config;
 portduino_status_struct portduino_status;
 std::ofstream traceFile;
 std::ofstream JSONFile;
-Ch341Hal *ch341Hal = nullptr;
+std::unique_ptr<Ch341Hal> ch341Hal;
 char *configPath = nullptr;
 char *optionMac = nullptr;
 bool verboseEnabled = false;
@@ -325,15 +325,15 @@ void portduinoSetup()
     {
         extern void wasm_config_apply();
         wasm_config_apply();
-        ch341Hal =
-            new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+        ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                              portduino_config.lora_usb_pid);
     }
     return;
 #endif
 
-    if (portduino_config.force_simradio == true) {
-        portduino_config.lora_module = use_simradio;
-    } else if (configPath != nullptr) {
+    // An explicit -c is honored even under -s: it also carries non-radio settings
+    // (EnableUDP, display, GPIO) that have to survive simulated mode.
+    if (configPath != nullptr) {
         if (loadConfig(configPath)) {
             if (!yamlOnly && !configCheck)
                 std::cout << "Using " << configPath << " as config file" << std::endl;
@@ -343,6 +343,8 @@ void portduinoSetup()
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
+    } else if (portduino_config.force_simradio) {
+        // -s with no -c: the simulator brings its own defaults, so skip config discovery.
     } else if (access("config.yaml", R_OK) == 0) {
         if (loadConfig("config.yaml")) {
             if (!yamlOnly && !configCheck)
@@ -388,6 +390,12 @@ void portduinoSetup()
                 loadConfig(entry.path().string().c_str());
             }
         }
+    }
+
+    // Applied after every config source: ConfigDirectory entries can set Lora.Module
+    // too, and -s must win over all of them, including in --check / --output-yaml.
+    if (portduino_config.force_simradio) {
+        portduino_config.lora_module = use_simradio;
     }
 
 #ifndef ARCH_PORTDUINO_WASM
@@ -650,8 +658,8 @@ void portduinoSetup()
     uint8_t dmac[6] = {0};
     if (portduino_config.lora_spi_dev == "ch341") {
         try {
-            ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                    portduino_config.lora_usb_pid);
+            ch341Hal = std::make_unique<Ch341Hal>(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                                  portduino_config.lora_usb_pid);
         } catch (std::exception &e) {
             std::cerr << e.what() << std::endl;
             std::cerr << "Could not initialize CH341 device!" << std::endl;
@@ -845,10 +853,10 @@ int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     std::cout << "Initializing " << gpio_name << " on chip " << gpioChipName << std::endl;
     try {
-        GPIOPin *csPin;
-        csPin = new LinuxGPIOPin(pinNum, gpioChipName.c_str(), line, gpio_name.c_str());
+        auto csPin = std::make_unique<LinuxGPIOPin>(pinNum, gpioChipName.c_str(), line, gpio_name.c_str());
         csPin->setSilent();
-        gpioBind(csPin);
+        gpioBind(csPin.get());
+        csPin.release(); // owned by the gpio table from here on
         return ERRNO_OK;
     } catch (...) {
         const std::type_info *t = abi::__cxa_current_exception_type();

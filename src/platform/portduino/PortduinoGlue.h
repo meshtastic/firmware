@@ -1,6 +1,7 @@
 #pragma once
 #include <fstream>
 #include <map>
+#include <memory>
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
@@ -64,7 +65,7 @@ struct pinMapping {
 extern std::ofstream traceFile;
 extern std::ofstream JSONFile;
 
-extern Ch341Hal *ch341Hal;
+extern std::unique_ptr<Ch341Hal> ch341Hal;
 int initGPIOPin(int pinNum, const std::string &gpioChipname, int line);
 bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
