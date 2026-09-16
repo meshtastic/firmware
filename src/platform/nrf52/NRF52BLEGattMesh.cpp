@@ -75,11 +75,18 @@ Link *addLink(uint16_t conn)
     return nullptr;
 }
 
+// Counted since boot so a dropped write carries its own denominator: the log reaches a host as a
+// sparse LogRecord stream, and one surviving line has to be enough to compute a rate from.
+uint32_t rxAccepted = 0;
+uint32_t rxDropped = 0;
+
 void pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
 {
     if (rxCount >= rxQueue.size()) {
         if (len) {
-            LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u", len, conn);
+            rxDropped++;
+            LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u (accepted %u, dropped %u)", len, conn,
+                     (unsigned)rxAccepted, (unsigned)rxDropped);
             return;
         }
         // A disconnect marker must land or the pump keeps that handle's half-built packets for the
@@ -94,6 +101,8 @@ void pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
         memcpy(r.data, data, len);
     rxTail = (rxTail + 1) % rxQueue.size();
     rxCount++;
+    if (len)
+        rxAccepted++;
 }
 
 void onWrite(uint16_t conn, BLECharacteristic *, uint8_t *data, uint16_t len)
