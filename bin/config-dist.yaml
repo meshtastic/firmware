@@ -81,6 +81,16 @@ Lora:
 
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
 
+#  TCXO_OPTIONAL: true  # Probe both oscillators (default Vref 1.6V); SX126x/LR20x0/LR11xx only.
+#                       # SX126x and LR20x0 try TCXO first; LR11x0 tries the crystal first.
+
+### DIO the LR2021 raises its interrupt on, DIO5 to DIO11. Defaults to DIO5, which many carriers
+### also drive as an RF switch line -- a pin cannot be both, and the radio will report init
+### success and then receive nothing. Point it at a DIO rfswitch_table does not list.
+### LR2021_IRQ_DIO_NUM is an older spelling of the same setting, read only if IRQ_DIO_NUM is absent.
+#  IRQ_DIO_NUM: 9
+#  LR2021_IRQ_DIO_NUM: 9
+
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
 
