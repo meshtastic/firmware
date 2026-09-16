@@ -5,6 +5,8 @@
 #include "ServerAPI.h"
 #include "Throttle.h"
 #include <Arduino.h>
+#include <cstdlib>
+#include <new>
 
 static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 
@@ -117,7 +119,22 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             openAPI.reset();
         }
 
-        openAPI.reset(new T(client));
+        // A ServerAPI carries the stream rx/tx buffers plus the FromRadio/ToRadio scratch, several
+        // KB in one block. On ESP32 a new that cannot get that block is a reboot (see the note on
+        // openAPI in the header), and std::nothrow does not help there because libstdc++ builds it
+        // on the throwing form. malloc() does return nullptr, so take the block from malloc() and
+        // construct in place; if there is no room drop this connection instead of the node - the
+        // client retries and the next accept gets a fresh look at the heap. The T constructors do
+        // not allocate (default-constructed containers, fixed-size thread table), so nothing inside
+        // the placement new can throw either.
+        void *block = malloc(sizeof(T));
+        if (!block) {
+            LOG_ERROR("No heap for API connection (%u bytes), dropping client", (unsigned)sizeof(T));
+            client.stop();
+        } else {
+            openAPI.reset(new (block) T(client));
+        }
+        // cppcheck-suppress memleak ; block is owned by openAPI via placement new, freed by MallocDeleter
     }
 
 #if RAK_4631

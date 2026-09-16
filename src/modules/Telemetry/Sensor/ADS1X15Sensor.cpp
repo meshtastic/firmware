@@ -14,20 +14,17 @@ bool ADS1X15Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     LOG_INFO("Init sensor: %s (address: 0x%x)", sensorName, dev->address.address);
 
     _bus = bus;
-    _port = dev->address.port;
+
     _address = dev->address.address;
     _deviceType = dev->type;
 
 #ifdef ADS1X15_I2C_CLOCK_SPEED
+    _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-    reClockI2C.setClock(ADS1X15_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, ADS1X15_I2C_CLOCK_SPEED);
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     status = ads1x15.begin(_address, _bus);
-
-#ifdef ADS1X15_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     initI2CSensor();
 
@@ -104,14 +101,10 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     // Done here and not in getMeasurements to avoid the back-and-forth 4-8 times one after the other
 #ifdef ADS1X15_I2C_CLOCK_SPEED
-    reClockI2C.setClock(ADS1X15_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, ADS1X15_I2C_CLOCK_SPEED);
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     struct _ADS1X15Measurements m = getMeasurements();
-
-#ifdef ADS1X15_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     switch (_deviceType) {
     case ScanI2C::DeviceType::ADS1X15: {

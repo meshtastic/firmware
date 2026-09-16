@@ -17,32 +17,23 @@ bool SFA30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef SFA30_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-    reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
     sfa30.begin(*_bus, _address);
     delay(20);
 
     if (this->isError(sfa30.deviceReset())) {
-#ifdef SFA30_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
         return false;
     }
 
     state = State::IDLE;
     if (this->isError(sfa30.startContinuousMeasurement())) {
-#ifdef SFA30_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
         return false;
     }
 
     LOG_INFO("%s starting measurement", sensorName);
-
-#ifdef SFA30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
 
     status = 1;
     state = State::ACTIVE;
@@ -66,17 +57,14 @@ bool SFA30Sensor::isError(uint16_t response)
 void SFA30Sensor::sleep()
 {
 #ifdef SFA30_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
     // Note - not recommended for this sensor on a periodic basis
     if (this->isError(sfa30.stopMeasurement())) {
         LOG_ERROR("%s: Can't stop measurement", sensorName);
     };
-
-#ifdef SFA30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
 
     LOG_DEBUG("%s: stop measurement", sensorName);
     state = State::IDLE;
@@ -86,20 +74,14 @@ void SFA30Sensor::sleep()
 uint32_t SFA30Sensor::wakeUp()
 {
 #ifdef SFA30_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
     LOG_DEBUG("Waking %s", sensorName);
     if (this->isError(sfa30.startContinuousMeasurement())) {
-#ifdef SFA30_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
         return 0;
     }
-
-#ifdef SFA30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
 
     state = State::ACTIVE;
     measureStarted = millis();
@@ -142,20 +124,14 @@ bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature = 0.0;
 
 #ifdef SFA30_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
     if (this->isError(sfa30.readMeasuredValues(hcho, humidity, temperature))) {
         LOG_WARN("%s: No values", sensorName);
-#ifdef SFA30_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
         return false;
     }
-
-#ifdef SFA30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SFA30_I2C_CLOCK_SPEED */
 
     measurement->variant.air_quality_metrics.has_form_temperature = true;
     measurement->variant.air_quality_metrics.has_form_humidity = true;

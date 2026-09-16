@@ -32,6 +32,11 @@ class ReliableRouter : public NextHopRouter
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
 
+    /**
+     * Header-only implicit ACK for our own overheard rebroadcast (also usable before decode).
+     */
+    virtual void perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *p) override;
+
   private:
     /**
      * Should this packet be ACKed with a want_ack for reliable delivery?

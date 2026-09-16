@@ -90,12 +90,9 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
     while (bufLen > index) { // Currently we never want to block
-        int cInt = buf[index++];
-        if (cInt < 0)
-            break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit
-                   // arduino
-
-        uint8_t c = (uint8_t)cInt;
+        // Unlike stream->read(), a buffer byte has no EOF sentinel: bufLen already bounds the loop,
+        // and a signed-char comparison would treat any byte >= 0x80 (START1 included) as EOF.
+        uint8_t c = (uint8_t)buf[index++];
 
         // Use the read pointer for a little state machine, first look for framing, then length bytes, then payload
         size_t ptr = rxPtr;
@@ -118,7 +115,8 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
                 serialHalRxActive.store(true);
                 RedirectablePrint::setSerialHalLogSuppressed(true);
             } else {
-                rxPtr = 0; // unrecognised second byte - not our frame
+                // A stray byte can itself be the START1 of the real frame (0x94 0x94 ...): re-test it.
+                rxPtr = (c == START1) ? 1 : 0;
                 serialHalRxActive.store(false);
                 RedirectablePrint::setSerialHalLogSuppressed(false);
             }
@@ -199,7 +197,8 @@ int32_t StreamAPI::readStream()
                     RedirectablePrint::setSerialHalLogSuppressed(true);
                     LOG_WARN("StreamAPI: Detected SerialHal command frame");
                 } else {
-                    rxPtr = 0; // unrecognised second byte - not our frame
+                    // A stray byte can itself be the START1 of the real frame (0x94 0x94 ...): re-test it.
+                    rxPtr = (c == START1) ? 1 : 0;
                     serialHalRxActive.store(false);
                     RedirectablePrint::setSerialHalLogSuppressed(false);
                 }

@@ -252,8 +252,6 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
-#elif defined(ARCH_NRF54L15)
-        isBleConnected = nrf54l15Bluetooth != nullptr && nrf54l15Bluetooth->isConnected();
 #endif
         if (isBleConnected) {
             auto thread = concurrency::OSThread::currentThread;
@@ -270,8 +268,6 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(buffer.get(), size);
-#elif defined(ARCH_NRF54L15)
-            nrf54l15Bluetooth->sendLog(buffer.get(), size);
 #endif
         }
     }

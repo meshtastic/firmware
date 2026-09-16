@@ -2,6 +2,7 @@
 #include "Default.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "memGet.h"
 #include "mesh-pb-constants.h"
@@ -53,34 +54,43 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     return result;
 }
 
-bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
+void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
-    if (p->from == getNodeNum()) {
-        printPacket("Rx someone rebroadcasting for us", p);
+    if (p->from != getNodeNum())
+        return;
 
-        // We are seeing someone rebroadcast one of our broadcast attempts.
-        // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
-        // the original sending process.
+    printPacket("Rx someone rebroadcasting for us", p);
 
-        // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
-        // from the intended recipient.
-        auto key = GlobalPacketId(getFrom(p), p->id);
-        auto old = findPendingPacket(key);
-        if (old) {
-            LOG_DEBUG("Generate implicit ack");
-            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
-            // marked as wantAck
-            sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+    // We are seeing someone rebroadcast one of our transmissions. If this is the first time we saw
+    // this, cancel any retransmissions we have queued up and generate an internal ack for the
+    // original sending process. Header-only (from/id), so it works even for a packet we cannot
+    // decrypt - notably a PKI DM we originated, which is opaque to us when overheard.
 
-            // Only stop retransmissions if the rebroadcast came via LoRa
-            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-                stopRetransmission(key);
-            }
-        } else {
-            LOG_DEBUG("Didn't find pending packet");
+    // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
+    // from the intended recipient.
+    auto key = GlobalPacketId(getFrom(p), p->id);
+    auto old = findPendingPacket(key);
+    if (old) {
+        LOG_DEBUG("Generate implicit ack");
+        // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
+        // marked as wantAck
+        // Pass the overheard rebroadcast as the relay source so the ack carries the relaying node's id
+        // and the RSSI/SNR we heard it at.
+        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel, 0, false, p);
+
+        // Only stop retransmissions if the rebroadcast came via LoRa
+        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+            stopRetransmission(key);
         }
+    } else {
+        LOG_DEBUG("Didn't find pending packet");
     }
+}
+
+bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
+{
+    perhapsGenerateImplicitAckForOwnOverheard(p);
 
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,
@@ -171,7 +181,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 // M3: an end-to-end ACK proves the directed route to the ACK's sender currently works,
                 // so clear its failure count and refresh freshness (keeps a good route pinned).
                 if (!isBroadcast(getFrom(p)))
-                    noteRouteSuccess(getFrom(p), millis());
+                    noteRouteSuccess(getFrom(p), Time::stampMillis());
             } else {
                 stopRetransmission(p->to, nakId);
             }
