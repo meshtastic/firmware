@@ -70,6 +70,10 @@ const std::string vformat(const char *const zcFormat, ...);
 // Get actual string length for nanopb char array fields.
 size_t pb_string_length(const char *str, size_t max_len);
 
+// Length of the valid UTF-8 sequence starting at buf, or 0 if there is none - bad lead byte, bad
+// continuation, overlong, surrogate half, above U+10FFFF, or running past `remaining` bytes.
+size_t utf8SequenceLength(const char *buf, size_t remaining);
+
 // Sanitize a fixed-size char buffer in-place by replacing invalid UTF-8 sequences with '?'.
 // Ensures the result is null-terminated within bufSize. Returns true if any bytes were replaced.
 bool sanitizeUtf8(char *buf, size_t bufSize);
