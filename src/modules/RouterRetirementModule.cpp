@@ -123,7 +123,7 @@ bool RouterRetirementModule::commitRetirement()
         return false;
     }
     retirementSavePending = false;
-    rebootAtMsec = Time::getMillis() + 5000; // reboot so the new role fully applies
+    rebootAtMsec = Time::timerEndsAtMillis(5000); // reboot so the new role fully applies
     return true;
 }
 
