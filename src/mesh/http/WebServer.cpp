@@ -146,6 +146,14 @@ class MeshHTTPSServer : public HTTPSServer
         timeval immediate = {};
         return select(_socket + 1, &sockfds, nullptr, nullptr, &immediate) > 0;
     }
+
+    /// Turns the waiting client away with a close, so it fails at once instead of timing out in the backlog.
+    void rejectPendingConnection()
+    {
+        int client = accept(_socket, nullptr, nullptr);
+        if (client >= 0)
+            close(client);
+    }
 };
 
 static SSLCert *cert;
@@ -171,8 +179,9 @@ static void handleWebResponse()
                     if (verdict == TlsHeapVerdict::Ok) {
                         secureServer->loop();
                     } else {
-                        // Low heap: accept nothing new, but keep servicing open connections so they can time out
-                        // and free their contexts - skipping them pins the heap below the threshold for good.
+                        // Low heap: turn the new client away, but keep servicing open connections so they can time
+                        // out and free their contexts - skipping them pins the heap below the threshold for good.
+                        secureServer->rejectPendingConnection();
                         secureServer->serviceExistingConnections();
                         static uint32_t lastHeapWarning = 0;
                         if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
