@@ -124,7 +124,7 @@ void HopScalingModule::loadFromDisk()
             entries[restored++] = state.entries[i];
         }
     }
-    count = restored;
+    this->count = restored;
     samplingDenominator = state.samplingDenominator;
     filteringDenominator = state.filteringDenominator;
     filteringDenomHoldRollsRemaining = state.filterDenomHoldRollsRemaining;
