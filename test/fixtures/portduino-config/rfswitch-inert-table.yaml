@@ -1,0 +1,10 @@
+# FAULT, reported once. A partial table on a radio that never applies one. The single
+# useful finding is that the whole table is inert -- rows are not judged against a
+# family's mode list, since that would imply the rest of them are used.
+Lora:
+  Module: sx1262
+  rfswitch_table:
+    pins: [DIO5]
+    MODE_STBY: [LOW]
+    MODE_RX: [HIGH]
+    MODE_RX_HF: [HIGH]
