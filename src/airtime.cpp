@@ -2,7 +2,9 @@
 #include "NodeDB.h"
 #include "UptimeClock.h"
 #include "configuration.h"
+#include <algorithm>
 #include <assert.h>
+#include <cmath>
 #include <string.h>
 
 AirTime *airTime = NULL;
@@ -60,7 +62,7 @@ uint8_t AirTime::Windows::getPeriodUtilHour(const Held &)
     return (secSinceBoot / 60) % MINUTES_IN_HOUR;
 }
 
-void AirTime::Windows::syncNow(const Held &)
+void AirTime::Windows::syncNow(const Held &held)
 {
     // Monotonic uptime, not RTC/network time: a user, GPS, or NTP clock change must not move
     // airtime accounting. Pure read; the main loop publishes the wrap carry it derives from.
@@ -112,13 +114,16 @@ void AirTime::Windows::syncNow(const Held &)
     // Channel utilization is a rolling 60-second view split into six 10-second buckets.
     // Clear every bucket crossed while asleep so old airtime decays by real elapsed time.
     uint32_t elapsedUtilPeriods = (this->secSinceBoot / 10) - (oldSecSinceBoot / 10);
-    if (elapsedUtilPeriods >= CHANNEL_UTILIZATION_PERIODS) {
-        memset(this->channelUtilization, 0, sizeof(this->channelUtilization));
-    } else {
-        for (uint32_t i = 1; i <= elapsedUtilPeriods; i++) {
-            this->channelUtilization[((oldSecSinceBoot / 10) + i) % CHANNEL_UTILIZATION_PERIODS] = 0;
-        }
+    // Fold one reading per crossed bucket, each before that bucket is cleared, so one delayed sync
+    // lands where the same number of 10 s syncs would have. Bounded: six clears empty the window.
+    const uint32_t steppedUtilPeriods = std::min<uint32_t>(elapsedUtilPeriods, CHANNEL_UTILIZATION_PERIODS);
+    for (uint32_t i = 1; i <= steppedUtilPeriods; i++) {
+        foldChannelUtil(channelUtilizationPercentRaw(held), 1, held);
+        this->channelUtilization[((oldSecSinceBoot / 10) + i) % CHANNEL_UTILIZATION_PERIODS] = 0;
     }
+    // Anything past a full window is elapsed time against an already-empty ring, so it folds as
+    // idle in closed form rather than looping over a sleep that may have lasted days.
+    foldChannelUtil(0.0f, elapsedUtilPeriods - steppedUtilPeriods, held);
 
     // TX utilization is a rolling 60-minute view used by duty-cycle checks.
     uint32_t elapsedUtilTXPeriods = (this->secSinceBoot / 60) - (oldSecSinceBoot / 60);
@@ -154,17 +159,50 @@ bool AirTime::Windows::airtimeReport(reportTypes reportType, uint32_t *out, size
     return true;
 }
 
-float AirTime::Windows::channelUtilizationPercent(const Held &held)
+float AirTime::Windows::channelUtilizationPercentRaw(const Held &)
 {
-    // Gate decisions should see buckets that have decayed across light-sleep time.
-    syncNow(held);
-
     uint32_t sum = 0;
     for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
         sum += this->channelUtilization[i];
     }
 
     return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
+}
+
+float AirTime::Windows::channelUtilizationPercent(const Held &held)
+{
+    // Gate decisions should see buckets that have decayed across light-sleep time.
+    syncNow(held);
+
+    return channelUtilizationPercentRaw(held);
+}
+
+void AirTime::Windows::foldChannelUtil(float sample, uint32_t steps, const Held &)
+{
+    if (steps == 0)
+        return;
+
+    if (!hasChannelUtilSample) {
+        // Seed from the first reading, or a node booting onto a busy channel reports it quiet
+        // for a whole time constant.
+        channelUtilAvg = sample;
+        hasChannelUtilSample = true;
+        steps--;
+    }
+
+    if (steps > 0) {
+        const float retained = powf(1.0f - 1.0f / float(CHANNEL_UTILIZATION_EMA_DIVISOR), float(steps));
+        channelUtilAvg = sample + (channelUtilAvg - sample) * retained;
+    }
+}
+
+float AirTime::Windows::smoothedChannelUtilizationPercent(const Held &held)
+{
+    syncNow(held);
+
+    // Nothing folded yet before the first bucket crossing, and 0 would read as an idle channel
+    // rather than as no data.
+    return hasChannelUtilSample ? channelUtilAvg : channelUtilizationPercentRaw(held);
 }
 
 float AirTime::Windows::utilizationTXPercent(const Held &held)
@@ -240,6 +278,12 @@ float AirTime::channelUtilizationPercent()
 {
     Held held(this);
     return w.channelUtilizationPercent(held);
+}
+
+float AirTime::smoothedChannelUtilizationPercent()
+{
+    Held held(this);
+    return w.smoothedChannelUtilizationPercent(held);
 }
 
 float AirTime::utilizationTXPercent()
