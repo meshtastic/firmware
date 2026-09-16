@@ -11,6 +11,22 @@
 
 // ReliableRouter::ReliableRouter() {}
 
+/* Router::send() returns either a meshtastic_Routing_Error or an ERRNO_* code, and the two number
+   spaces collide from 32 up. Report a reason only where it cannot be an ERRNO_*; the FAILED state
+   itself carries the verdict. */
+static meshtastic_Routing_Error sendFailureReason(ErrorCode result)
+{
+    switch (result) {
+    case ERRNO_UNKNOWN:
+    case ERRNO_NO_INTERFACES:
+    case ERRNO_DISABLED:
+    case ERRNO_SHOULD_RELEASE:
+        return meshtastic_Routing_Error_NONE;
+    default:
+        return static_cast<meshtastic_Routing_Error>(result);
+    }
+}
+
 /**
  * If the message is want_ack, then add it to a list of packets to retransmit.
  * If we run out of retransmissions, send a nak packet towards the original client to indicate failure.
@@ -25,6 +41,10 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 
     const GlobalPacketId key(p);
     const bool retransmitting = p->want_ack;
+    // p belongs to the send path below once we hand it over, so snapshot what the notification needs.
+    const PacketId txId = p->id;
+    const NodeNum txTo = p->to;
+    bool trackingOwnTx = false;
 
     if (p->want_ack) {
         DEBUG_HEAP_BEFORE;
@@ -34,6 +54,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         if (copy) {
             const uint8_t totalAttempts = isBroadcast(p->to) ? NUM_RELIABLE_RETX : NUM_RELIABLE_UNICAST_ATTEMPTS;
             startRetransmission(copy, totalAttempts);
+            trackingOwnTx = isFromUs(p);
         }
     }
 
@@ -49,7 +70,9 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     ErrorCode result = isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
     // Duty-cycle rejections may clear before the scheduled retry.
     if (retransmitting && result != ERRNO_OK && result != meshtastic_Routing_Error_DUTY_CYCLE_LIMIT)
-        stopRetransmission(key);
+        resolveOwnTx(key, TxAckState::FAILED, sendFailureReason(result));
+    else if (trackingOwnTx)
+        notifyTxAck(txId, txTo, TxAckState::PENDING);
 
     return result;
 }
@@ -81,7 +104,7 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
 
         // Only stop retransmissions if the rebroadcast came via LoRa
         if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-            stopRetransmission(key);
+            resolveOwnTx(key, TxAckState::ACKNOWLEDGED);
         }
     } else {
         LOG_DEBUG("Didn't find pending packet");
@@ -177,13 +200,14 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
             LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
             if (ackId) {
-                stopRetransmission(p->to, ackId);
+                resolveOwnTx(GlobalPacketId(p->to, ackId), TxAckState::ACKNOWLEDGED);
                 // M3: an end-to-end ACK proves the directed route to the ACK's sender currently works,
                 // so clear its failure count and refresh freshness (keeps a good route pinned).
                 if (!isBroadcast(getFrom(p)))
                     noteRouteSuccess(getFrom(p), Time::stampMillis());
             } else {
-                stopRetransmission(p->to, nakId);
+                // nakId is only set when c carries a non-NONE error_reason, so c is non-null here.
+                resolveOwnTx(GlobalPacketId(p->to, nakId), TxAckState::FAILED, c->error_reason);
             }
         }
     }

@@ -22,6 +22,10 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
 #ifdef LED_LORA
     loraRxObserver.observe(&RadioInterface::loraRxPacketObservable);
 #endif
+#ifdef LED_TX_ACK
+    pinMode(LED_TX_ACK, OUTPUT); // no initial write: LED_TX_ACK may be a pin another status already drives
+    txAckObserver.observe(&txAckStatusObservable);
+#endif
 #ifdef NEOPIXEL_STATUS_POWER_PIN
     powerPixel.begin();
     powerPixel.clear();
@@ -104,6 +108,21 @@ int StatusLEDModule::handleLoRaRx(uint32_t)
     LORA_LED_state = LED_STATE_ON;
     LORA_LED_starttime = millis();
     setIntervalFromNow(LORA_RX_LED_FLASH_MS);
+    return 0;
+}
+#endif
+
+#ifdef LED_TX_ACK
+int StatusLEDModule::handleTxAckStatus(const TxAckEvent *event)
+{
+    // Record the verdict only; runOnce() owns every write to the pin. We are called from the
+    // router, which may share this thread with the radio's receive handler.
+    txAckWaiting = event->outstanding > 0;
+    if (event->state == TxAckState::FAILED) {
+        txAckFailPhases = TX_ACK_FAIL_PHASES;
+        txAckFailPhaseStart = millis();
+    }
+    setIntervalFromNow(0); // show the transition on the next loop pass, not up to a second later
     return 0;
 }
 #endif
@@ -278,6 +297,30 @@ int32_t StatusLEDModule::runOnce()
             LORA_LED_state = LED_STATE_OFF;
         } else if ((uint32_t)my_interval > LORA_RX_LED_FLASH_MS - elapsed) {
             my_interval = LORA_RX_LED_FLASH_MS - elapsed;
+        }
+    }
+#endif
+
+#ifdef LED_TX_ACK
+    // Reliable-delivery indication: solid while one of our reliable sends is unresolved, three
+    // flashes when one fails. It writes LED_TX_ACK last so a variant may point it at an LED that
+    // other status already drives, and only while the indication is active - the regular writes
+    // above resume on the next pass, which every transition wakes immediately.
+    if (config.device.led_heartbeat_disabled) {
+        txAckFailPhases = 0;
+    } else {
+        if (txAckFailPhases && Throttle::hasElapsed(txAckFailPhaseStart, TX_ACK_FAIL_FLASH_MS)) {
+            txAckFailPhases--;
+            txAckFailPhaseStart = millis();
+        }
+        if (txAckFailPhases) {
+            digitalWrite(LED_TX_ACK, (txAckFailPhases % 2) ? LED_STATE_OFF : LED_STATE_ON);
+            uint32_t elapsed = millis() - txAckFailPhaseStart;
+            uint32_t remaining = elapsed >= TX_ACK_FAIL_FLASH_MS ? 1 : TX_ACK_FAIL_FLASH_MS - elapsed;
+            if ((uint32_t)my_interval > remaining)
+                my_interval = remaining;
+        } else if (txAckWaiting) {
+            digitalWrite(LED_TX_ACK, LED_STATE_ON);
         }
     }
 #endif
