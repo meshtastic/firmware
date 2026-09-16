@@ -257,8 +257,15 @@ void setupMeshService(void)
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
+    // ENC_WITH_MITM, not ENC_NO_MITM: the passkey this node displays has to be proven, or it is
+    // decoration. A NoInputNoOutput central degrades pairing to Just Works, which yields an encrypted
+    // but unauthenticated link - enough for ENC_NO_MITM, so the phone API was reachable by a peer
+    // that never saw the passkey at all. The DFU services below have always required MITM; this
+    // brings the phone API to the same level and answers the FIXMEs beside each permission.
+    //
+    // Existing clients paired over Just Works must pair again.
     auto secMode =
-        config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
+        config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_WITH_MITM;
     fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     fromNum.setPermission(secMode, SECMODE_NO_ACCESS); // FIXME, secure this!!!
     fromNum.setFixedLen(
