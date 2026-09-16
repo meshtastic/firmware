@@ -69,7 +69,7 @@
 #define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
 #endif
 
-// printf() in main-nrf54l15.cpp and the hardfault handler write to the RTT console
+// printf() in main-nrf54.cpp and the hardfault handler write to the RTT console
 #include "SEGGER_RTT.h"
 
 #define SEGGER_STDOUT_CH 0
