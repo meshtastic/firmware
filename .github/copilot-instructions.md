@@ -792,10 +792,10 @@ RESULT: RED 1 failed
 RESULT: RED exit-time abort (tests passed; likely sanitizer - see hint above)
 
 # AMBER: a suite silently went missing on a full run
-RESULT: AMBER 23/24 suites ran (missing: test_radio) - all that ran passed
+RESULT: AMBER N-1/N suites ran (missing: test_radio) - all that ran passed
 
 # FILTERED: single suite run completed cleanly
-RESULT: FILTERED 1/24 suites ran (23 not run) - filtered: test_serial
+RESULT: FILTERED 1/N suites ran (N-1 not run) - filtered: test_serial
 ```
 
 The script is written to be driven by a caller that cannot see the terminal: the final `RESULT:` line is the only verdict (pio's own `[PASSED]` and `N succeeded` lines precede it and mean nothing on their own); a second invocation while a run is in progress is refused with `BUSY` rather than started; the last verdict is kept in `.pio/runtests/last-result.tsv` with its log, and `./bin/run-tests.sh --status` prints it, marking it **STALE** when the tree has changed since. Never `pgrep` for a run - ask `--status`.

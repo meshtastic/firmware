@@ -177,6 +177,7 @@ BUILD_LOG=""
 # has stdout redirected into a log file, and the trap runs inside that redirect.
 exec 3>&1
 RUN_START=$(date +%s)
+RUN_ID="$$-$RUN_START" # names this run in current.tsv and last-result.tsv, so --wait cannot follow a later one
 HEAD_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
 # What the verdict was FOR. HEAD alone is not enough - a verdict from before the current edits is
@@ -241,8 +242,9 @@ result() {
 			break
 		fi
 	done
-	printf 'result\tRESULT: %s\ncode\t%s\nhead\t%s\ntree\t%s\nargs\t%s\nenv\t%s\nfinished\t%s\nlog\t%s\n' \
-		"$text" "$code" "$HEAD_SHA" "$TREE_FP" "$ARGS_STR" "$ENV" "$(date +%s)" "$kept" >"$LAST_RESULT"
+	printf 'result\tRESULT: %s\ncode\t%s\nrun\t%s\nhead\t%s\ntree\t%s\nargs\t%s\nenv\t%s\nfinished\t%s\nlog\t%s\n' \
+		"$text" "$code" "$RUN_ID" "$HEAD_SHA" "$TREE_FP" "$ARGS_STR" "$ENV" "$(date +%s)" "$kept" >"$LAST_RESULT.tmp" &&
+		mv -f "$LAST_RESULT.tmp" "$LAST_RESULT"
 	rm -f "$RUN_RECORD"
 	exit "$code"
 }
@@ -298,21 +300,24 @@ status_cmd() {
 }
 
 wait_cmd() {
-	local st
+	local st observed
 	st=$(run_state)
 	[[ $st == IDLE ]] && {
 		status_cmd
 		[[ -f $LAST_RESULT ]] && exit "$(tsv_get "$LAST_RESULT" code)"
 		exit 0
 	}
-	echo "waiting for $st run pid=$(tsv_get "$RUN_RECORD" pid) pgid=$(tsv_get "$RUN_RECORD" pgid)..." >&2
-	while [[ $(run_state) != IDLE ]]; do sleep 5; done
-	if [[ $st == ORPHANED ]]; then
-		echo "RESULT: ABORTED orphaned build tree finished; its wrapper was gone, so no verdict was recorded (log: $KEPT_LOG)"
-		exit 5
+	# Bound to THIS run: if it ends and another starts between polls, its verdict - or the
+	# absence of one - is what gets reported, never the newcomer's.
+	observed=$(tsv_get "$RUN_RECORD" run)
+	echo "waiting for $st run $observed pgid=$(tsv_get "$RUN_RECORD" pgid)..." >&2
+	while [[ -f $RUN_RECORD && $(tsv_get "$RUN_RECORD" run) == "$observed" && $(run_state) != IDLE ]]; do sleep 5; done
+	if [[ -f $LAST_RESULT && $(tsv_get "$LAST_RESULT" run) == "$observed" ]]; then
+		tsv_get "$LAST_RESULT" result
+		exit "$(tsv_get "$LAST_RESULT" code)"
 	fi
-	echo "$(tsv_get "$LAST_RESULT" result)"
-	exit "$(tsv_get "$LAST_RESULT" code)"
+	echo "RESULT: ABORTED run $observed ended without recording a verdict (its wrapper was gone; log, if kept: $KEPT_LOG)"
+	exit 5
 }
 
 abort_cmd() {
@@ -337,8 +342,9 @@ abort_cmd() {
 		[[ -n $pgid ]] && kill -TERM -- "-$pgid" 2>/dev/null
 		sleep 2
 		[[ -n $pgid ]] && kill -KILL -- "-$pgid" 2>/dev/null
-		printf 'result\tRESULT: ABORTED by --abort (wrapper pid %s was already gone)\ncode\t5\nhead\t%s\nargs\t%s\nenv\t%s\nfinished\t%s\nlog\t%s\n' \
-			"$pid" "$(tsv_get "$RUN_RECORD" head)" "$(tsv_get "$RUN_RECORD" args)" "$(tsv_get "$RUN_RECORD" env)" "$(date +%s)" "$KEPT_LOG" >"$LAST_RESULT"
+		printf 'result\tRESULT: ABORTED by --abort (wrapper pid %s was already gone)\ncode\t5\nrun\t%s\nhead\t%s\nargs\t%s\nenv\t%s\nfinished\t%s\nlog\t%s\n' \
+			"$pid" "$(tsv_get "$RUN_RECORD" run)" "$(tsv_get "$RUN_RECORD" head)" "$(tsv_get "$RUN_RECORD" args)" "$(tsv_get "$RUN_RECORD" env)" "$(date +%s)" "$KEPT_LOG" >"$LAST_RESULT.tmp" &&
+			mv -f "$LAST_RESULT.tmp" "$LAST_RESULT"
 		rm -f "$RUN_RECORD"
 	fi
 	status_cmd
@@ -356,16 +362,25 @@ esac
 
 # A run is a run: refuse while one is in progress, whatever env it is for. Two pio jobs share
 # .pio/build/ and libdeps and wipe each other's objects, and the state summary below is per run.
+#
+# The check and the publish are one critical section under a short-lived flock, so two
+# invocations in the same instant cannot both see IDLE; the record itself, published atomically
+# via rename, stays the ownership token (a SIGKILLed holder releases the lock but not the record).
+PROGRESS_FILE=".pio/build/${ENV}/.runtests-progress"
+exec 9>"$RUN_DIR/lock"
+flock 9
 case $(run_state) in
 RUNNING | ORPHANED)
+	flock -u 9
 	status_cmd
 	echo "RESULT: BUSY a run is already in progress - never start a second one (--status, --wait, --abort)"
 	exit 4
 	;;
 esac
-PROGRESS_FILE=".pio/build/${ENV}/.runtests-progress"
-printf 'pid\t%s\npgid\t\nstarted\t%s\nargs\t%s\nenv\t%s\nhead\t%s\nprogress\t%s\n' \
-	"$$" "$RUN_START" "$ARGS_STR" "$ENV" "$HEAD_SHA" "$PROGRESS_FILE" >"$RUN_RECORD"
+printf 'run\t%s\npid\t%s\npgid\t\nstarted\t%s\nargs\t%s\nenv\t%s\nhead\t%s\nprogress\t%s\n' \
+	"$RUN_ID" "$$" "$RUN_START" "$ARGS_STR" "$ENV" "$HEAD_SHA" "$PROGRESS_FILE" >"$RUN_RECORD.tmp" &&
+	mv -f "$RUN_RECORD.tmp" "$RUN_RECORD"
+flock -u 9
 
 # Every pio invocation goes through here: its own process group (setsid), pgid recorded in the run
 # record so a signal to this script - or --abort from another session - takes the whole scons tree
