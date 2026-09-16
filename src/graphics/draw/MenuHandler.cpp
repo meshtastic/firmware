@@ -28,9 +28,6 @@
 #include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
-#if !MESHTASTIC_EXCLUDE_MQTT
-#include "mqtt/MQTT.h"
-#endif
 #include "modules/ExternalNotificationModule.h"
 #include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
@@ -295,10 +292,6 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
         snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
-#if !MESHTASTIC_EXCLUDE_MQTT
-        if (mqtt)
-            mqtt->reinitTopics();
-#endif
     }
 #if !MESHTASTIC_EXCLUDE_GPS
     // Enable gps if it was previously disabled due to region not being set

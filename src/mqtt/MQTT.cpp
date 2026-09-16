@@ -376,6 +376,7 @@ void mqttInit()
 
 void MQTT::reinitTopics()
 {
+    topicRoot = moduleConfig.mqtt.root;
     const std::string root = *moduleConfig.mqtt.root ? moduleConfig.mqtt.root : default_mqtt_root;
     cryptTopic = root + "/2/e/";
     mapTopic = root + "/2/map/";
@@ -580,6 +581,9 @@ int32_t MQTT::runOnce()
 {
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
+    // A region change rewrites the root at runtime, from several call sites
+    if (topicRoot != moduleConfig.mqtt.root)
+        reinitTopics();
     bool wantConnection = wantsLink();
 
     perhapsReportToMap();

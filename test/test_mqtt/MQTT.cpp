@@ -1360,8 +1360,9 @@ void test_customMqttRoot(void)
         [] { return pubsub->subscriptions_.count("custom/2/e/test/+") && pubsub->subscriptions_.count("custom/2/e/PKI/+"); }));
 }
 
-// After a LoRa region change, reinitTopics() updates the publish topic and forces
-// the broker to reconnect with updated subscriptions.
+// A LoRa region change rewrites moduleConfig.mqtt.root without telling MQTT (AdminModule, MenuHandler,
+// InkHUD). runOnce() must pick it up, rebuild the topics and resubscribe; otherwise the node keeps
+// publishing and subscribing under the old region's root until reboot.
 void test_reinitTopicsUpdatesOnRegionChange(void)
 {
     // Start MQTT with a US region root.
@@ -1371,11 +1372,10 @@ void test_reinitTopicsUpdatesOnRegionChange(void)
     TEST_ASSERT_TRUE(loopUntil(
         [] { return pubsub->subscriptions_.count("msh/US/2/e/test/+") && pubsub->subscriptions_.count("msh/US/2/e/PKI/+"); }));
 
-    // Simulate region change: update the root and call reinitTopics().
+    // Simulate region change: only the root changes, nobody notifies MQTT.
     strcpy(moduleConfig.mqtt.root, "msh/EU_868");
     pubsub->subscriptions_.clear();
     pubsub->published_.clear();
-    mqtt->reinitTopics();
 
     // Verify that subscriptions are refreshed with the new region prefix.
     TEST_ASSERT_TRUE(loopUntil([] {
