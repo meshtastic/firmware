@@ -1,5 +1,5 @@
 // Raspberry Pi Pico 2 + external W5500 Ethernet module + EBYTE E22-900M30S
-// RP2350 (4 MB flash) — wire modules to the GPIO pins listed below
+// RP2350 (4 MB flash) - wire modules to the GPIO pins listed below
 //
 // LoRa (SX1262 / E22-900M30S) on SPI1:
 //   SCK=GP10  MOSI=GP11  MISO=GP12  CS=GP13
@@ -11,7 +11,7 @@
 //
 // See wiring.svg in this directory for a complete connection diagram.
 
-// Community/DIY board — no dedicated Meshtastic HardwareModel
+// Community/DIY board - no dedicated Meshtastic HardwareModel
 #define PRIVATE_HW
 
 #define ARDUINO_ARCH_AVR
@@ -20,20 +20,20 @@
 #define LED_POWER PIN_LED
 
 // Power monitoring
-// GP24: VBUS sense – HIGH when USB is present (digital read)
+// GP24: VBUS sense - HIGH when USB is present (digital read)
 // GP29: ADC3 measures VSYS/3 (200 kΩ / 100 kΩ divider, same as standard Pico 2)
 #define EXT_PWR_DETECT 24
 #define BATTERY_PIN 29
 #define ADC_MULTIPLIER 3.0
 #define BATTERY_SENSE_RESOLUTION_BITS 12
-// No real battery — suppress false "battery at 100%" while USB powers VSYS
+// No real battery - suppress false "battery at 100%" while USB powers VSYS
 #define NO_BATTERY_LEVEL_ON_CHARGE
 
-// Optional user button — connect a button between GP6 and GND
+// Optional user button - connect a button between GP6 and GND
 // #define BUTTON_PIN 6
 // #define BUTTON_NEED_PULLUP
 
-// GPS on UART1 (Serial2) — GP8 TX, GP9 RX
+// GPS on UART1 (Serial2) - GP8 TX, GP9 RX
 // GP8/GP9 belong to UART1, so we must use Serial2 (not the default Serial1/UART0).
 // GP0/GP1 (UART0 defaults) are free but the firmware treats pin 0 as "not configured".
 // GP4/GP5 occupied by I2C (SCL/SDA for BMP-280).

@@ -16,13 +16,13 @@
  *
  * Memory layout: 512 bytes total (128 entries × 4 bytes/entry, no padding)
  *   - 16-bit XOR-fold hash of node ID
- *   - 3-bit hops away (0–7)
+ *   - 3-bit hops away (0-7)
  *   - 13-bit hourly seen bitmap
  *   All three fields are packed into a single 32-bit Record; sizeof(Record) == 4.
  *
  * Sampling:
  *   - A node is added only when passesFilter(hashNodeId(nodeId), samplingDenominator),
- *     i.e. (hash16(nodeId) & (samplingDenominator – 1)) == 0  (hash-space subsample, not raw ID)
+ *     i.e. (hash16(nodeId) & (samplingDenominator - 1)) == 0  (hash-space subsample, not raw ID)
  *   - samplingDenominator starts at 1 (sample all), doubles when the list exceeds FILL_HIGH_PCT
  *   - filteringDenominator tracks samplingDenominator upward immediately but does not drop back
  *     down until FILTER_DENOM_HOLD_MS (13 h) have elapsed since the last scale-up
@@ -72,18 +72,18 @@ class HopScalingModule : private concurrency::OSThread
     // This value is deliberately equal to the seenHoursAgo window (13 hours / 13 bits).
     // Invariant: every entry that existed when a scale-up fired had seenHoursAgo != 0 at
     // that moment (trimIfNeeded() evicts stale entries before doubling the denominator),
-    // so it remains seenInLast13h for at most 13 more rollHour() calls — exactly the
+    // so it remains seenInLast13h for at most 13 more rollHour() calls - exactly the
     // hold duration.  That means entries from the scale-up event keep counts.total above
     // the scale-down threshold for the entire hold period under normal (active) mesh
     // conditions.  On a genuinely quieting mesh the scale-down CAN fire before the hold
-    // expires — each firing halves samplingDenominator but filteringDenominator stays
+    // expires - each firing halves samplingDenominator but filteringDenominator stays
     // elevated, so the hop recommendation correctly stays conservative (MAX_HOP) while
     // the cascade runs.  The cascade is bounded at DENOM_MIN (7 halvings from DENOM_MAX);
     //    when the hold finally expires, step 5 of rollHour() halves filteringDenominator
     //    once per hour (rather than jumping directly to samplingDenominator) until the two
     //    converge, giving the hop-walk a gradual, 1-step-per-hour descent.
     static constexpr uint32_t FILTER_DENOM_HOLD_MS = 13UL * 60UL * 60UL * 1000UL; // 13 h (documentation only)
-    // Number of rollHour() calls the hold spans — equals the seenHoursAgo window width.
+    // Number of rollHour() calls the hold spans - equals the seenHoursAgo window width.
     // filteringDenomHoldRollsRemaining is initialised to this value on scale-up and
     // decremented once per rollHour(); step-down begins when it reaches zero.
     static constexpr uint8_t FILTER_DENOM_HOLD_ROLLS = 13u;
@@ -105,15 +105,20 @@ class HopScalingModule : private concurrency::OSThread
     static constexpr uint8_t POLITENESS_DEFAULT = 2u;  // 2/4 = 0.50
     static constexpr uint8_t POLITENESS_STRICT = 1u;   // 1/4 = 0.25
 
-    // Activity weight thresholds (ratio of 0-2 h window vs 1-3 h window).
-    // Cross-multiply form: recent * ACTIVITY_WEIGHT_SCALE vs older * threshold_numer.
-    // GENEROUS if recent*10 < older*9 (ratio < 0.9); STRICT if recent*10 > older*12 (ratio > 1.2)
-    static constexpr uint8_t ACTIVITY_WEIGHT_SCALE = 10u;
-    static constexpr uint8_t ACTIVITY_WEIGHT_GENEROUS_MAX_NUMER = 9u;
-    static constexpr uint8_t ACTIVITY_WEIGHT_STRICT_MIN_NUMER = 12u;
-
     // Scheduling: number of 5-minute runOnce() ticks that make up one hourly rollover
     static constexpr uint8_t RUNS_PER_HOUR = 12;
+
+    // Congestion gate.  Scaling is applied only while the smoothed channel utilization says the
+    // channel is busy; below the release threshold the recommendation is not applied at all.
+    static constexpr uint8_t CONGESTION_ENGAGE_PCT = default_hop_scaling_congestion_engage_pct;
+    static constexpr uint8_t CONGESTION_RELEASE_PCT = default_hop_scaling_congestion_release_pct;
+    static constexpr uint8_t CONGESTION_CONFIRM_RUNS = default_hop_scaling_congestion_confirm_runs;
+    // Upper band for the politeness numerator, which reads the same smoothed utilization as the
+    // gate: STRICT at or above this, DEFAULT from CONGESTION_ENGAGE_PCT, GENEROUS below it.
+    static constexpr uint8_t CONGESTION_STRICT_PCT = default_hop_scaling_congestion_strict_pct;
+
+    // Hop floor for the infrastructure roles, so a remote site's own telemetry still reaches operators.
+    static constexpr uint8_t INFRASTRUCTURE_HOP_FLOOR = default_hop_scaling_infrastructure_hop_floor;
 
     // -----------------------------------------------------------------------
     // Types
@@ -132,15 +137,15 @@ class HopScalingModule : private concurrency::OSThread
     struct MeshTrendStats {
         /// Estimated node count per hour slot (h=0 is the just-completed hour, h=12 is 12 h ago).
         uint16_t scaledPerHour[13] = {};
-        /// Nodes heard only this hour with no prior bitmap history — indicates new arrivals.
+        /// Nodes heard only this hour with no prior bitmap history - indicates new arrivals.
         uint16_t newThisHour = 0;
-        /// Nodes heard this hour that also appeared in at least one older hour — stable regulars.
+        /// Nodes heard this hour that also appeared in at least one older hour - stable regulars.
         uint16_t returningThisHour = 0;
-        /// Nodes heard last hour but silent this hour — potential departures.
+        /// Nodes heard last hour but silent this hour - potential departures.
         uint16_t lapsedSinceLastHour = 0;
-        /// Nodes absent from the last 4 hours but still present in some older hour (5–13 h) — quieting down.
+        /// Nodes absent from the last 4 hours but still present in some older hour (5-13 h) - quieting down.
         uint16_t olderThan4h = 0;
-        /// Nodes whose only remaining history is the 13th hour (bit 12 only) — about to age out entirely.
+        /// Nodes whose only remaining history is the 13th hour (bit 12 only) - about to age out entirely.
         uint16_t agingOut = 0;
     };
 
@@ -179,6 +184,7 @@ class HopScalingModule : private concurrency::OSThread
     const PerHopCounts &getLastPerHopCounts() const { return lastPerHopCounts; }
     uint8_t getLastSuggestedHop() const { return lastSuggestedHop; }
     const MeshTrendStats &getLastTrendStats() const { return lastTrendStats; }
+    bool isCongested() const { return congested; }
 
     // Compatibility accessors used by tests
     uint8_t getCompactHistogramEntryCount() const { return getEntryCount(); }
@@ -200,6 +206,8 @@ class HopScalingModule : private concurrency::OSThread
     // Writable from tests as HopScalingModule::s_testNowMs; drives nowMs() in PIO_UNIT_TESTING builds.
     inline static uint32_t s_testNowMs = 0;
     /// Override the per-session hash seed. Use in tests that need a specific sampling distribution.
+    // Drives channelUtilizationPercent() in PIO_UNIT_TESTING builds, as s_testNowMs drives nowMs().
+    inline static float s_testChannelUtil = 0.0f;
     void setHashSeed(uint16_t seed) { hashSeed = seed; }
     uint16_t getHashSeed() const { return hashSeed; }
     /// Expose hashNodeId for tests that need to compute which node IDs pass a given denominator.
@@ -223,6 +231,19 @@ class HopScalingModule : private concurrency::OSThread
     ///    filteringDenominator once toward samplingDenominator per rollHour() call.
     /// 6. Shifts all seen bitmaps left by one hour slot.
     void rollHour();
+
+    /// Cache the smoothed channel utilization and flip the congestion state once the engage or
+    /// release threshold has held for CONGESTION_CONFIRM_RUNS consecutive runOnce() ticks.
+    void updateCongestion();
+
+    /// Smoothed channel utilization percent, or 0 when AirTime is not up yet.
+    static float channelUtil();
+
+    /// utilizationAvg to the nearest whole percent. The thresholds are whole percents and the
+    /// underlying 60 s window is far coarser than a float ULP, so comparing at full float
+    /// precision only creates dead zones: an EMA converging on a threshold from above settles one
+    /// ULP off it (12.00006103515625 for a sustained 12%) and an inclusive test never fires.
+    uint8_t smoothedUtilPct() const { return static_cast<uint8_t>(std::min(utilizationAvg + 0.5f, 255.0f)); }
     // -----------------------------------------------------------------------
     // Persistence
     // -----------------------------------------------------------------------
@@ -257,11 +278,11 @@ class HopScalingModule : private concurrency::OSThread
     //
     // Two separate denominators control two distinct gates:
     //
-    //   samplingDenominator  — admission gate.  A node is added/updated only when
+    //   samplingDenominator  - admission gate.  A node is added/updated only when
     //     passesFilter(hash, samplingDenominator).  Lower value = more permissive =
     //     more nodes enter = represents recent mesh state.
     //
-    //   filteringDenominator — counting gate.  The hop-walk tally in rollHour() only
+    //   filteringDenominator - counting gate.  The hop-walk tally in rollHour() only
     //     counts entries that pass passesFilter(hash, filteringDenominator).  It moves
     //     up with samplingDenominator immediately (scale-up) but is held at the
     //     elevated value for FILTER_DENOM_HOLD_MS (13 h) after any scale-up before it
@@ -272,20 +293,20 @@ class HopScalingModule : private concurrency::OSThread
     // that also pass F is exactly D/F.  Therefore:
     //   raw_count × F  =  (total × D/F) × F  =  total × D
     // The population estimate is the same whether we count with D or with F.
-    // The hold period is not about accuracy — it is about stability: it prevents the
+    // The hold period is not about accuracy - it is about stability: it prevents the
     // hop recommendation from reacting to recently-admitted nodes that have not yet
     // accumulated enough seenHoursAgo history to be statistically reliable.
     //
-    //   denominatorHistory[h]  — the filteringDenominator used to both gate and scale
+    //   denominatorHistory[h]  - the filteringDenominator used to both gate and scale
     //     hourlyRaw[h].  Invariant: denominatorHistory[h] always equals the
     //     filteringDenominator that was active when seenHoursAgo bit h was set.
     //     rollHour() advances the array at the very start (before the tally loop), then
-    //     gates hourlyRaw[h] per-slot by denominatorHistory[h] — each slot's raw count
+    //     gates hourlyRaw[h] per-slot by denominatorHistory[h] - each slot's raw count
     //     and multiplier are therefore always consistent, even when filteringDenominator
     //     changes between rolls (e.g. hold expiry).  On scale-up (trimIfNeeded()), the
     //     entire array is backfilled uniformly with the new filteringDenominator to
     //     preserve the invariant retroactively for all 13 slots.  Initialised to
-    //     DENOM_MIN (1); scaledPerHour slots that draw from a 1 entry are unscaled —
+    //     DENOM_MIN (1); scaledPerHour slots that draw from a 1 entry are unscaled -
     //     correct for a fresh instance with no prior history.
     // -----------------------------------------------------------------------
     uint8_t samplingDenominator = DENOM_MIN;
@@ -310,6 +331,15 @@ class HopScalingModule : private concurrency::OSThread
     uint8_t histogramRollCount = 0;
 
     // -----------------------------------------------------------------------
+    // Congestion state
+    // -----------------------------------------------------------------------
+    // Cached once per runOnce() from AirTime, so the hourly roll and the status log read one
+    // consistent value without re-taking the AirTime lock.
+    float utilizationAvg = 0.0f;
+    bool congested = false;
+    uint8_t congestionConfirmRuns = 0;
+
+    // -----------------------------------------------------------------------
     // Scheduler state
     // -----------------------------------------------------------------------
     bool hasCompletedInitialRun = false;
@@ -321,7 +351,7 @@ class HopScalingModule : private concurrency::OSThread
 
     // Record field semantics:
     //   nodeHash     → XOR-fold of full 32-bit node ID to 16 bits
-    //   hops_away    → hop distance (0–7)
+    //   hops_away    → hop distance (0-7)
     //   seenHoursAgo → 13-bit per-hour seen bitmap
     //                  bit 0  = seen in the current / most-recent hour
     //                  bit 12 = seen 12 hours ago
@@ -338,7 +368,7 @@ class HopScalingModule : private concurrency::OSThread
     static bool passesFilter(uint16_t nodeHash, uint8_t denom) { return (nodeHash & static_cast<uint16_t>(denom - 1u)) == 0u; }
 
   public:
-    // Clock — public so tests can share the same timebase via HopScalingModule::s_testNowMs
+    // Clock - public so tests can share the same timebase via HopScalingModule::s_testNowMs
 #ifdef PIO_UNIT_TESTING
     static uint32_t nowMs() { return s_testNowMs; }
 #else

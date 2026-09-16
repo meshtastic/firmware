@@ -1,4 +1,15 @@
 #include "GeoCoord.h"
+#include "configuration.h"
+#include <cmath>
+
+// Narrow a UTM meter value to its unsigned field, clamping non-finite/negative/oversized inputs: an
+// extreme (crafted) lat/lon can drive these out of range, and an overflowing double->unsigned cast is UB.
+static uint32_t clampMeters(double m)
+{
+    if (!std::isfinite(m) || m < 0.0)
+        return 0;
+    return m > 4.0e9 ? 4000000000u : (uint32_t)m;
+}
 
 GeoCoord::GeoCoord()
 {
@@ -26,17 +37,50 @@ GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
     GeoCoord::setCoords();
 }
 
-// Initialize all the coordinate systems
+// Initialize DMS eagerly (cheap, most commonly used); UTM/MGRS/OSGR/OLC are computed lazily on
+// first access via their getters (see ensure*() below), since most callers never touch them.
 void GeoCoord::setCoords()
 {
     double lat = _latitude * 1e-7;
     double lon = _longitude * 1e-7;
     GeoCoord::latLongToDMS(lat, lon, _dms);
-    GeoCoord::latLongToUTM(lat, lon, _utm);
-    GeoCoord::latLongToMGRS(lat, lon, _mgrs);
-    GeoCoord::latLongToOSGR(lat, lon, _osgr);
-    GeoCoord::latLongToOLC(lat, lon, _olc);
+    _utmValid = false;
+    _mgrsValid = false;
+    _osgrValid = false;
+    _olcValid = false;
     _dirty = false;
+}
+
+void GeoCoord::ensureUTM() const
+{
+    if (!_utmValid) {
+        GeoCoord::latLongToUTM(_latitude * 1e-7, _longitude * 1e-7, _utm);
+        _utmValid = true;
+    }
+}
+
+void GeoCoord::ensureMGRS() const
+{
+    if (!_mgrsValid) {
+        GeoCoord::latLongToMGRS(_latitude * 1e-7, _longitude * 1e-7, _mgrs);
+        _mgrsValid = true;
+    }
+}
+
+void GeoCoord::ensureOSGR() const
+{
+    if (!_osgrValid) {
+        GeoCoord::latLongToOSGR(_latitude * 1e-7, _longitude * 1e-7, _osgr);
+        _osgrValid = true;
+    }
+}
+
+void GeoCoord::ensureOLC() const
+{
+    if (!_olcValid) {
+        GeoCoord::latLongToOLC(_latitude * 1e-7, _longitude * 1e-7, _olc);
+        _olcValid = true;
+    }
 }
 
 void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt)
@@ -124,8 +168,13 @@ void GeoCoord::latLongToUTM(const double lat, const double lon, UTM &utm)
 {
 
     const std::string latBands = "CDEFGHJKLMNPQRSTUVWXX";
-    utm.zone = int((lon + 180) / 6 + 1);
-    utm.band = latBands[int(lat / 8 + 10)];
+    // A received Position carries raw int32 latitude_i/longitude_i with no range validation, so lat/lon
+    // here can be far outside real geographic bounds. Clamp the derived UTM zone (valid 1..60) and the
+    // latitude-band index so the lookups below cannot read out of bounds (GeoCoord.cpp:128 stack over/
+    // under-read on e.g. latitude_i = INT32_MAX/INT32_MIN).
+    utm.zone = std::min(std::max(int((lon + 180) / 6 + 1), 1), 60);
+    int bandIdx = std::min(std::max(int(lat / 8 + 10), 0), int(latBands.length()) - 1);
+    utm.band = latBands[bandIdx];
     double a = 6378137;                                                // WGS84 - equatorial radius
     double k0 = 0.9996;                                                // UTM point scale on the central meridian
     double eccSquared = 0.00669438;                                    // eccentricity squared
@@ -160,17 +209,22 @@ void GeoCoord::latLongToUTM(const double lat, const double lon, UTM &utm)
                  sin(2 * latRad) +
              (15 * eccSquared * eccSquared / 256 + 45 * eccSquared * eccSquared * eccSquared / 1024) * sin(4 * latRad) -
              (35 * eccSquared * eccSquared * eccSquared / 3072) * sin(6 * latRad));
-    utm.easting = (double)(k0 * N *
-                               (A + (1 - T + C) * pow(A, 3) / 6 +
-                                (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A / 120) +
-                           500000.0);
-    utm.northing =
-        (double)(k0 * (M + N * tan(latRad) *
-                               (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 +
-                                (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A / 720)));
+    double eastingMeters =
+        k0 * N *
+            (A + (1 - T + C) * pow(A, 3) / 6 + (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A / 120) +
+        500000.0;
+    double northingMeters =
+        k0 * (M + N * tan(latRad) *
+                      (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 +
+                       (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A / 720));
 
     if (lat < 0)
-        utm.northing += 10000000.0; // 10000000 meter offset for southern hemisphere
+        northingMeters += 10000000.0; // 10000000 meter offset for southern hemisphere
+
+    // Clamp before narrowing to the unsigned UTM fields (see clampMeters): extreme lat/lon can drive
+    // these negative or past UINT32, and the raw double->unsigned cast would be UB.
+    utm.easting = clampMeters(eastingMeters);
+    utm.northing = clampMeters(northingMeters);
 }
 
 // Converts lat long coordinates to an MGRS.
@@ -182,10 +236,15 @@ void GeoCoord::latLongToMGRS(const double lat, const double lon, MGRS &mgrs)
     latLongToUTM(lat, lon, utm);
     mgrs.zone = utm.zone;
     mgrs.band = utm.band;
-    double col = floor(utm.easting / 100000);
-    mgrs.east100k = e100kLetters[(mgrs.zone - 1) % 3][col - 1];
-    double row = (int32_t)floor(utm.northing / 100000.0) % 20;
-    mgrs.north100k = n100kLetters[(mgrs.zone - 1) % 2][row];
+    // utm.zone is clamped to 1..60 above, but guard every index defensively: the column/row derived
+    // from easting/northing can fall outside the 100km-grid letter tables when lat/lon are extreme.
+    int zoneIdx3 = ((mgrs.zone - 1) % 3 + 3) % 3;
+    int zoneIdx2 = ((mgrs.zone - 1) % 2 + 2) % 2;
+    int colIdx = std::min(std::max(int(floor(utm.easting / 100000)) - 1, 0), int(e100kLetters[zoneIdx3].length()) - 1);
+    mgrs.east100k = e100kLetters[zoneIdx3][colIdx];
+    int rowIdx = ((int32_t)floor(utm.northing / 100000.0) % 20 + 20) % 20;
+    rowIdx = std::min(std::max(rowIdx, 0), int(n100kLetters[zoneIdx2].length()) - 1);
+    mgrs.north100k = n100kLetters[zoneIdx2][rowIdx];
     mgrs.easting = (int32_t)utm.easting % 100000;
     mgrs.northing = (int32_t)utm.northing % 100000;
 }
@@ -375,6 +434,43 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
     //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
 
+#if MESHTASTIC_TRIG_APPROX
+// cos(x) minimax approx for x in [-pi/2, pi/2] ("cos_52"): https://www.ganssle.com/approx.htm
+static double cosLatitudeApprox(double latRad)
+{
+    constexpr double c1 = 0.9999932946, c2 = -0.4999124376, c3 = 0.0414877472, c4 = -0.0012712095;
+    double x2 = latRad * latRad;
+    return c1 + x2 * (c2 + x2 * (c3 + c4 * x2));
+}
+
+/// Approximate distance in meters via equirectangular projection (not exact spherical trig).
+/// <1% error to ~500km, degrading near the poles at long range (see test_geocoord_distance).
+float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
+{
+    // Don't do math if the points are the same
+    if (lat_a == lat_b && lng_a == lng_b)
+        return 0.0;
+
+    double a1 = lat_a / DEG_CONVERT;
+    double a2 = lng_a / DEG_CONVERT;
+    double b1 = lat_b / DEG_CONVERT;
+    double b2 = lng_b / DEG_CONVERT;
+
+    double meanLat = (a1 + b1) / 2;
+    double dLng = b2 - a2;
+    // Wrap to [-PI, PI]: unlike cos()/sin(), a raw longitude difference doesn't handle points that
+    // straddle the antimeridian (e.g. 179.9 and -179.9 are ~0.2 degrees apart, not ~360).
+    if (dLng > PI)
+        dLng -= 2 * PI;
+    else if (dLng < -PI)
+        dLng += 2 * PI;
+    double x = dLng * cosLatitudeApprox(meanLat);
+    double y = b1 - a1;
+    double tt = sqrt(x * x + y * y);
+
+    return (float)(6366000 * tt);
+}
+#else
 /// Ported from my old java code, returns distance in meters along the globe
 /// surface (by Haversine formula)
 float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
@@ -398,6 +494,7 @@ float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double 
 
     return (float)(6366000 * tt);
 }
+#endif
 
 /**
  * Computes the bearing in degrees between two points on Earth.  Ported from my
@@ -422,69 +519,6 @@ float GeoCoord::bearing(double lat1, double lon1, double lat2, double lon2)
     double y = sin(deltaLonRad) * cos(lat2Rad);
     double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
     return atan2(y, x);
-}
-
-/**
- * Ported from http://www.edwilliams.org/avform147.htm#Intro
- * @brief Convert from meters to range in radians on a great circle
- * @param range_meters
- * The range in meters
- * @return range in radians on a great circle
- */
-float GeoCoord::rangeMetersToRadians(double range_meters)
-{
-    // 1 nm is 1852 meters
-    double distance_nm = range_meters * 1852;
-    return (PI / (180 * 60)) * distance_nm;
-}
-
-/**
- * Ported from http://www.edwilliams.org/avform147.htm#Intro
- * @brief Convert from radians to range in meters on a great circle
- * @param range_radians
- * The range in radians
- * @return Range in meters on a great circle
- */
-float GeoCoord::rangeRadiansToMeters(double range_radians)
-{
-    double distance_nm = ((180 * 60) / PI) * range_radians;
-    // 1 meter is 0.000539957 nm
-    return distance_nm * 0.000539957;
-}
-
-// Find distance from point to passed in point
-int32_t GeoCoord::distanceTo(const GeoCoord &pointB)
-{
-    return latLongToMeter(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                          pointB.getLongitude() * 1e-7);
-}
-
-// Find bearing from point to passed in point
-int32_t GeoCoord::bearingTo(const GeoCoord &pointB)
-{
-    return bearing(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                   pointB.getLongitude() * 1e-7);
-}
-
-/**
- * Create a new point based on the passed-in point
- * Ported from http://www.edwilliams.org/avform147.htm#LL
- * @param bearing
- * The bearing in radians
- * @param range_meters
- * range in meters
- * @return GeoCoord object of point at bearing and range from initial point
- */
-std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range_meters)
-{
-    double range_radians = rangeMetersToRadians(range_meters);
-    double lat1 = this->getLatitude() * 1e-7;
-    double lon1 = this->getLongitude() * 1e-7;
-    double lat = asin(sin(lat1) * cos(range_radians) + cos(lat1) * sin(range_radians) * cos(bearing));
-    double dlon = atan2(sin(bearing) * sin(range_radians) * cos(lat1), cos(range_radians) - sin(lat1) * sin(lat));
-    double lon = fmod(lon1 - dlon + PI, 2 * PI) - PI;
-
-    return std::make_shared<GeoCoord>(double(lat), double(lon), this->getAltitude());
 }
 
 /**

@@ -22,9 +22,10 @@ if [[ ! -d bin/_generated/meshtastic ]]; then
 fi
 
 # 2) Pick a Python interpreter that has the meshtastic deps installed.
-#    Prefer the mcp-server venv (most likely to be set up by the operator).
+#    Prefer a local venv; otherwise fall back to system python3 (install the
+#    `meshtastic` package there, or run this under `uv run --with meshtastic`).
 PY="python3"
-for cand in mcp-server/.venv/bin/python3 .venv/bin/python3; do
+for cand in .venv/bin/python3; do
     if [[ -x "$cand" ]]; then
         PY="$cand"
         break
@@ -70,4 +71,5 @@ echo "Done. To load on Portduino native:"
 echo "  cp build/fixtures/nodedb/nodes_v25_1000.proto ~/.portduino/default/prefs/nodes.proto"
 echo ""
 echo "To push to a hardware device:"
-echo "  Use the mcp-server tool: push_fake_nodedb(size=1000, target=\"hardware\", port=\"/dev/cu.usbmodemXXXX\", confirm=True)"
+echo "  Use the meshtastic-mcp tool: push_fake_nodedb(size=1000, target=\"hardware\", port=\"/dev/cu.usbmodemXXXX\", confirm=True)"
+echo "  (MCP server: https://github.com/meshtastic/meshtastic-mcp)"

@@ -1,16 +1,552 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./MapApplet.h"
+#include "./MapTile.h"
+#include "WaypointStore.h"
+#include "WaypointUtils.h"
+
+#include <math.h>
+#include <string.h>
 
 using namespace NicheGraphics;
 
+bool InkHUD::MapApplet::s_zoomLocked = false;
+int InkHUD::MapApplet::s_lockedZoom = -1;
+int InkHUD::MapApplet::s_lastRenderedZoom = -1;
+int InkHUD::MapApplet::s_autoFitZoom = -1;
+
+static bool usesGridTileLayout();
+static int gridTilesPerBlock();
+static int tileZoomAt(int tileIndex);
+static int tileTxAt(int tileIndex);
+static int tileTyAt(int tileIndex);
+static int tileMetadataZoomCount();
+static int tileMetadataZoomAt(int index);
+
+namespace
+{
+
+bool waypointHasAnchor(const meshtastic_Waypoint &waypoint)
+{
+    return waypoint.has_latitude_i && waypoint.has_longitude_i;
+}
+
+bool waypointHasMapGeometry(const meshtastic_Waypoint &waypoint)
+{
+    return waypointHasAnchor(waypoint) || waypoint.has_bounding_box;
+}
+
+void includeMapPoint(float latNode, float lngNode, float lngCenter, float &northernmost, float &southernmost, float &easternmost,
+                     float &westernmost)
+{
+    northernmost = max(northernmost, latNode);
+    southernmost = min(southernmost, latNode);
+
+    const float degEastward = fmodf(((lngNode - lngCenter) + 360.0f), 360.0f);
+    const float degWestward = fabsf(fmodf(((lngNode - lngCenter) - 360.0f), 360.0f));
+    if (degEastward < degWestward)
+        easternmost = max(easternmost, lngCenter + degEastward);
+    else
+        westernmost = min(westernmost, lngCenter - degWestward);
+}
+
+} // namespace
+
+bool InkHUD::MapApplet::mapWaypointIconGlyph(uint32_t codepoint, std::string &glyph)
+{
+    if (!codepoint)
+        return false;
+
+    const std::string utf8 = WaypointUtils::utf8FromCodepoint(codepoint);
+    if (utf8.empty())
+        return false;
+
+    glyph = getFont().decodeUTF8(utf8);
+    return glyph.size() == 1 && glyph[0] != '\x1A' && glyph[0] != '\x7F';
+}
+
+static int16_t markerScreenX(float eastMeters, float metersToPx, uint16_t width)
+{
+    return (width * 0.5f) + (eastMeters * metersToPx);
+}
+
+static int16_t markerScreenY(float northMeters, float metersToPx, uint16_t height)
+{
+    return (height * 0.5f) - (northMeters * metersToPx);
+}
+
+uint8_t InkHUD::MapApplet::fallbackBadgeNumber(const WaypointMarker &entry)
+{
+    uint8_t badge = 0;
+
+    for (auto it = waypointMarkers.rbegin(); it != waypointMarkers.rend(); ++it) {
+        if (!it->hasMarker)
+            continue;
+
+        std::string glyph;
+        if (mapWaypointIconGlyph(it->icon, glyph))
+            continue;
+
+        if (it->id == entry.id)
+            return badge;
+
+        if (badge < 9)
+            ++badge;
+    }
+
+    return 0;
+}
+
+void InkHUD::MapApplet::drawWaypointFallbackMarker(const WaypointMarker &entry, int16_t x, int16_t y)
+{
+    char badgeText[3];
+    snprintf(badgeText, sizeof(badgeText), "%u", (unsigned)fallbackBadgeNumber(entry));
+
+    // Keep fallback digits centered so they read like map markers.
+    setFont(fontSmall);
+    printAt(x, y + 1, badgeText, CENTER, MIDDLE);
+}
+
+InkHUD::MapApplet::MapApplet()
+{
+    if (gpsStatus)
+        gpsStatusObserver.observe(&gpsStatus->onNewStatus);
+    waypointStoreObserver.observe(&waypointStore);
+}
+
+int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
+{
+    if (status->getStatusType() != STATUS_TYPE_GPS)
+        return 0;
+    if (!isActive() || !gpsStatus->getHasLock())
+        return 0;
+
+    requestUpdate();
+    return 0;
+}
+
+int InkHUD::MapApplet::onWaypointStoreChanged(const WaypointStore *store)
+{
+    (void)store;
+
+    if (!isActive())
+        return 0;
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    return 0;
+}
+
+// Zoom in one step from the current display zoom.
+void InkHUD::MapApplet::zoomIn()
+{
+    int baseZoom = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
+    if (baseZoom < 0)
+        return;
+
+    if (map_tile_count == 0) {
+        if (baseZoom < ZOOM_MAX_NO_TILES) {
+            s_lockedZoom = baseZoom + 1;
+            s_zoomLocked = true;
+        }
+        return;
+    }
+
+    // Jump to the next tile zoom strictly above current, not just +1
+    int next = -1;
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
+        if (z > baseZoom && (next < 0 || z < next))
+            next = z;
+    }
+    if (next < 0)
+        return;
+
+    s_lockedZoom = next;
+    s_zoomLocked = true;
+}
+
+void InkHUD::MapApplet::resetZoom()
+{
+    s_zoomLocked = false;
+    s_lockedZoom = -1;
+    focusedWaypointId = 0;
+}
+
+bool InkHUD::MapApplet::focusWaypoint(uint32_t waypointId)
+{
+    const StoredWaypoint *entry = waypointStore.findWaypoint(waypointId);
+    if (!entry || WaypointStore::isExpired(*entry) || !waypointHasMapGeometry(entry->waypoint))
+        return false;
+
+    s_zoomLocked = false;
+    s_lockedZoom = -1;
+    focusedWaypointId = waypointId;
+    return true;
+}
+
+bool InkHUD::MapApplet::canZoomIn() const
+{
+    if (s_lastRenderedZoom < 0)
+        return false;
+    int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
+    if (map_tile_count == 0)
+        return ref < ZOOM_MAX_NO_TILES;
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        if (tileMetadataZoomAt(i) > ref)
+            return true;
+    }
+    return false;
+}
+
+void InkHUD::MapApplet::zoomOut()
+{
+    int baseZoom = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
+    if (baseZoom < 0) {
+        s_zoomLocked = false;
+        s_lockedZoom = -1;
+        return;
+    }
+
+    if (map_tile_count == 0) {
+        int floor = (s_autoFitZoom >= 0) ? s_autoFitZoom : baseZoom;
+        if (baseZoom > floor) {
+            s_lockedZoom = baseZoom - 1;
+            s_zoomLocked = true;
+        } else {
+            s_zoomLocked = false;
+            s_lockedZoom = -1;
+        }
+        return;
+    }
+
+    // Jump to the next tile zoom strictly below current, not just -1
+    int next = -1;
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
+        if (z < baseZoom && (next < 0 || z > next))
+            next = z;
+    }
+    if (next < 0) {
+        s_zoomLocked = false;
+        s_lockedZoom = -1;
+        return;
+    }
+
+    s_lockedZoom = next;
+    s_zoomLocked = true;
+}
+
+bool InkHUD::MapApplet::canZoomOut() const
+{
+    if (s_lastRenderedZoom < 0)
+        return false;
+    int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
+    if (map_tile_count == 0)
+        return s_autoFitZoom >= 0 ? ref > s_autoFitZoom : false;
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        if (tileMetadataZoomAt(i) < ref)
+            return true;
+    }
+    return false;
+}
+
+// Raw LZ4 block decompressor. Returns bytes written, or -1 on error.
+static int lz4_decompress(const uint8_t *src, int src_len, uint8_t *dst, int dst_cap)
+{
+    const uint8_t *s = src;
+    const uint8_t *s_end = src + src_len;
+    uint8_t *d = dst;
+    const uint8_t *d_end = dst + dst_cap;
+    while (s < s_end) {
+        uint8_t token = *s++;
+        int lit_len = (token >> 4) & 0xF;
+        if (lit_len == 15) {
+            uint8_t x;
+            do {
+                x = *s++;
+                lit_len += x;
+            } while (x == 255 && s < s_end);
+        }
+        if (d + lit_len > d_end || s + lit_len > s_end)
+            return -1;
+        memcpy(d, s, lit_len);
+        d += lit_len;
+        s += lit_len;
+        if (s >= s_end)
+            break;
+        if (s + 2 > s_end)
+            return -1;
+        int offset = (int)s[0] | ((int)s[1] << 8);
+        s += 2;
+        if (offset == 0 || d - offset < dst)
+            return -1;
+        int mat_len = (token & 0xF) + 4;
+        if (mat_len == 4 + 15) {
+            uint8_t x;
+            do {
+                x = *s++;
+                mat_len += x;
+            } while (x == 255 && s < s_end);
+        }
+        if (d + mat_len > d_end)
+            return -1;
+        const uint8_t *m = d - offset;
+        for (int i = 0; i < mat_len; i++)
+            *d++ = m[i];
+    }
+    return (int)(d - dst);
+}
+
+// Tiles are 1 bit/pixel, column-major: [bx=0..31][y=0..255], 8 pixels per byte.
+static uint8_t s_tileCacheBuffer[8192];
+static constexpr uint8_t MAP_TILE_LAYOUT_SPARSE = 0;
+static constexpr uint8_t MAP_TILE_LAYOUT_GRID = 1;
+static constexpr uint8_t MAP_TILE_KIND_LZ4 = 0;
+static constexpr uint8_t MAP_TILE_KIND_WHITE = 1;
+static constexpr uint8_t MAP_TILE_KIND_BLACK = 2;
+
+static bool usesGridTileLayout()
+{
+    return map_tile_layout == MAP_TILE_LAYOUT_GRID && map_tile_grid_cols > 0 && map_tile_grid_rows > 0 &&
+           map_tile_block_count > 0;
+}
+
+static int gridTilesPerBlock()
+{
+    return (int)map_tile_grid_cols * (int)map_tile_grid_rows;
+}
+
+static int tileZoomAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_zooms[tileIndex];
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    return map_tile_block_zooms[blockIndex];
+}
+
+static int tileTxAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_tx[tileIndex];
+    int rows = map_tile_grid_rows;
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    int localIndex = tilesPerBlock > 0 ? (tileIndex % tilesPerBlock) : 0;
+    return map_tile_block_tx[blockIndex] + (rows > 0 ? (localIndex / rows) : 0);
+}
+
+static int tileTyAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_ty[tileIndex];
+    int rows = map_tile_grid_rows;
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    int localIndex = tilesPerBlock > 0 ? (tileIndex % tilesPerBlock) : 0;
+    return map_tile_block_ty[blockIndex] + (rows > 0 ? (localIndex % rows) : 0);
+}
+
+static int tileMetadataZoomCount()
+{
+    if (usesGridTileLayout())
+        return map_tile_block_count;
+    return map_tile_count;
+}
+
+static int tileMetadataZoomAt(int index)
+{
+    return usesGridTileLayout() ? map_tile_block_zooms[index] : map_tile_zooms[index];
+}
+
+static const uint8_t *decodeSparseTile(int tileIndex)
+{
+    const uint8_t kind = map_tile_kinds[tileIndex];
+    if (kind == MAP_TILE_KIND_WHITE) {
+        memset(s_tileCacheBuffer, 0x00, sizeof(s_tileCacheBuffer));
+        return s_tileCacheBuffer;
+    }
+    if (kind == MAP_TILE_KIND_BLACK) {
+        memset(s_tileCacheBuffer, 0xFF, sizeof(s_tileCacheBuffer));
+        return s_tileCacheBuffer;
+    }
+    const uint8_t *compressed = map_tile_data + map_tile_offsets[tileIndex];
+    int n = lz4_decompress(compressed, map_tile_sizes[tileIndex], s_tileCacheBuffer, sizeof(s_tileCacheBuffer));
+    return n == sizeof(s_tileCacheBuffer) ? s_tileCacheBuffer : nullptr;
+}
+
+// Draw tiles centered on latCenter/lngCenter. Falls back to the nearest available zoom if
+// no tiles exist at exactly zoom (upsamples), enabling smooth zoom steps.
+void InkHUD::MapApplet::drawMapTileBackground(int zoom)
+{
+    if (map_tile_count == 0 || metersToPx <= 0.0f)
+        return;
+
+    const float R = 6378137.0f;
+    const float latRad = latCenter * DEG_TO_RAD;
+    const float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << zoom))) * cosf(latRad);
+    const float worldPxPerScreenPx = 1.0f / (metersToPx * mpp);
+
+    // Find best tile zoom: highest available <= zoom, or lowest available if none below.
+    int tileZoom = -1;
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
+        if (z <= zoom && (tileZoom < 0 || z > tileZoom))
+            tileZoom = z;
+    }
+    if (tileZoom < 0) {
+        for (int i = 0; i < tileMetadataZoomCount(); i++) {
+            int z = tileMetadataZoomAt(i);
+            if (tileZoom < 0 || z < tileZoom)
+                tileZoom = z;
+        }
+    }
+    if (tileZoom < 0)
+        return;
+
+    // Convert screen-pixel movement into tileZoom coordinate space.
+    // When tileZoom < zoom, tile pixels are upsampled (each tile pixel covers >1 screen px).
+    const float tileWorldPx = worldPxPerScreenPx * ((float)(1 << tileZoom) / (float)(1 << zoom));
+
+    const float sinLat = sinf(latRad);
+    const float gpxX = ((lngCenter + 180.0f) / 360.0f) * (float)(1 << tileZoom) * 256.0f;
+    const float gpxY = (0.5f - logf((1.0f + sinLat) / (1.0f - sinLat)) / (4.0f * M_PI)) * (float)(1 << tileZoom) * 256.0f;
+
+    const float minWx = gpxX - width() * 0.5f * tileWorldPx;
+    const float maxWx = gpxX + width() * 0.5f * tileWorldPx;
+    const float minWy = gpxY - height() * 0.5f * tileWorldPx;
+    const float maxWy = gpxY + height() * 0.5f * tileWorldPx;
+
+    for (int i = 0; i < map_tile_count; i++) {
+        if (tileZoomAt(i) != tileZoom)
+            continue;
+
+        const int tx = tileTxAt(i);
+        const int ty = tileTyAt(i);
+        const float tileMinWx = tx * 256.0f;
+        const float tileMaxWx = tileMinWx + 256.0f;
+        const float tileMinWy = ty * 256.0f;
+        const float tileMaxWy = tileMinWy + 256.0f;
+        if (tileMaxWx < minWx || tileMinWx > maxWx || tileMaxWy < minWy || tileMinWy > maxWy)
+            continue;
+
+        const uint8_t *tile = decodeSparseTile(i);
+        if (!tile)
+            continue;
+
+        const int sxStart = max(0, (int)floorf(((tileMinWx - gpxX) / tileWorldPx) + width() * 0.5f));
+        const int sxEnd = min(width() - 1, (int)ceilf(((tileMaxWx - gpxX) / tileWorldPx) + width() * 0.5f) - 1);
+        const int syStart = max(0, (int)floorf(((tileMinWy - gpxY) / tileWorldPx) + height() * 0.5f));
+        const int syEnd = min(height() - 1, (int)ceilf(((tileMaxWy - gpxY) / tileWorldPx) + height() * 0.5f) - 1);
+
+        for (int sy = syStart; sy <= syEnd; sy++) {
+            const float wy = gpxY + (sy - height() * 0.5f) * tileWorldPx;
+            const int py = (int)(wy - tileMinWy);
+            if (py < 0 || py > 255)
+                continue;
+
+            for (int sx = sxStart; sx <= sxEnd; sx++) {
+                const float wx = gpxX + (sx - width() * 0.5f) * tileWorldPx;
+                const int px = (int)(wx - tileMinWx);
+                if (px < 0 || px > 255)
+                    continue;
+
+                if (!(tile[(px / 8) * 256 + py] & (1 << (px % 8))))
+                    continue;
+
+                drawPixel(sx, sy, BLACK);
+            }
+        }
+    }
+}
+
 void InkHUD::MapApplet::onRender(bool full)
 {
-    // Abort if no markers to render
-    if (!enoughMarkers()) {
+    // Map center is always the node centroid - tiles are background only.
+    getMapCenter(&latCenter, &lngCenter);
+    calculateAllMarkers();
+
+    // Show placeholder only if we have no position at all - no tiles, no own node
+    if (!enoughMarkers() && !centerIsOurNode) {
         printAt(X(0.5), Y(0.5) - (getFont().lineHeight() / 2), "Node positions", CENTER, MIDDLE);
         printAt(X(0.5), Y(0.5) + (getFont().lineHeight() / 2), "will appear here", CENTER, MIDDLE);
         return;
+    }
+
+    // Determine the metersToPx needed to fit all nodes on screen.
+    getMapSize(&widthMeters, &heightMeters);
+    calculateMapScale(); // metersToPx = fit-all-nodes scale
+    const float metersToPxFit = metersToPx;
+
+    // Pick the highest zoom whose native scale fits all nodes (no downsampling, no dither noise).
+    {
+        const float R = 6378137.0f;
+        const float latRad = latCenter * DEG_TO_RAD;
+
+        // Collect unique zooms, sort descending (highest detail first)
+        int zooms[16] = {};
+        int nzooms = 0;
+        for (int i = 0; i < tileMetadataZoomCount() && nzooms < 16; i++) {
+            bool found = false;
+            for (int j = 0; j < nzooms; j++) {
+                if (zooms[j] == tileMetadataZoomAt(i)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                zooms[nzooms++] = tileMetadataZoomAt(i);
+        }
+        for (int i = 0; i < nzooms - 1; i++) {
+            for (int j = i + 1; j < nzooms; j++) {
+                if (zooms[j] > zooms[i]) {
+                    int t = zooms[i];
+                    zooms[i] = zooms[j];
+                    zooms[j] = t;
+                }
+            }
+        }
+
+        int chosenZoom = (nzooms > 0) ? zooms[nzooms - 1] : 13; // fallback: widest zoom
+        float chosenMetersToPx = metersToPxFit;                 // fallback: fit-scale (may downsample)
+
+        if (s_zoomLocked && s_lockedZoom >= 0) {
+            // Use locked zoom at native 1:1 scale - never zoom out for new nodes
+            chosenZoom = s_lockedZoom;
+            float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
+            chosenMetersToPx = 1.0f / mpp;
+        } else if (((markers.empty() && waypointMarkers.empty()) || metersToPxFit <= 0.0f) && nzooms > 0) {
+            // No spread to fit (own node only, or single remote node at map center). Use highest zoom at native scale.
+            chosenZoom = zooms[0];
+            float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
+            chosenMetersToPx = 1.0f / mpp;
+        } else {
+            for (int zi = 0; zi < nzooms; zi++) {
+                float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << zooms[zi]))) * cosf(latRad);
+                float nativeMetersToPx = 1.0f / mpp;
+                if (nativeMetersToPx <= metersToPxFit) {
+                    // This zoom at native scale shows all nodes - use it (highest detail that fits)
+                    chosenZoom = zooms[zi];
+                    chosenMetersToPx = nativeMetersToPx;
+                    break;
+                }
+            }
+        }
+
+        if (!s_zoomLocked)
+            s_autoFitZoom = chosenZoom;
+        metersToPx = chosenMetersToPx;
+        s_lastRenderedZoom = chosenZoom;
+        drawMapTileBackground(chosenZoom);
+
+        char zoomLabel[8];
+        snprintf(zoomLabel, sizeof(zoomLabel), "z%d", chosenZoom);
+        int16_t zoomLabelW = getTextWidth(zoomLabel);
+        int16_t zoomLabelH = getFont().lineHeight();
+        int16_t zoomLabelX = width() - zoomLabelW - 3;
+        int16_t zoomLabelY = 2;
+        fillRect(zoomLabelX - 2, zoomLabelY - 1, zoomLabelW + 4, zoomLabelH + 2, WHITE);
+        printAt(zoomLabelX, zoomLabelY, zoomLabel, LEFT, TOP);
     }
 
     // Helper: draw rounded rectangle centered at x,y
@@ -30,16 +566,10 @@ void InkHUD::MapApplet::onRender(bool full)
         fillCircle(x + w - r - 1, y + h - r - 1, r, color);
     };
 
-    // Find center of map
-    getMapCenter(&latCenter, &lngCenter);
-    calculateAllMarkers();
-    getMapSize(&widthMeters, &heightMeters);
-    calculateMapScale();
-
     // Draw all markers first
     for (Marker m : markers) {
-        int16_t x = X(0.5) + (m.eastMeters * metersToPx);
-        int16_t y = Y(0.5) - (m.northMeters * metersToPx);
+        int16_t x = X(0.5) + (int16_t)(m.eastMeters * metersToPx);
+        int16_t y = Y(0.5) - (int16_t)(m.northMeters * metersToPx);
 
         // Add white halo outline first
         constexpr int outlinePad = 1;
@@ -57,10 +587,8 @@ void InkHUD::MapApplet::onRender(bool full)
         setTextColor(WHITE);
 
         // Draw actual marker on top
-        if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) {
+        if (m.hopsAway > config.lora.hop_limit) {
             printAt(x + 1, y + 1, "X", CENTER, MIDDLE);
-        } else if (!m.hasHopsAway) {
-            printAt(x + 1, y + 1, "?", CENTER, MIDDLE);
         } else {
             char hopStr[4];
             snprintf(hopStr, sizeof(hopStr), "%d", m.hopsAway);
@@ -72,7 +600,51 @@ void InkHUD::MapApplet::onRender(bool full)
         setTextColor(BLACK);
     }
 
+    // Draw waypoint markers after nodes so the boxed icons stay legible.
+    for (const WaypointMarker &m : waypointMarkers) {
+        if (m.hasMarker && m.geofenceRadiusMeters > 0) {
+            const int16_t radiusPx = std::max<int16_t>(1, (int16_t)lroundf(m.geofenceRadiusMeters * metersToPx));
+            const int16_t centerX = markerScreenX(m.eastMeters, metersToPx, width());
+            const int16_t centerY = markerScreenY(m.northMeters, metersToPx, height());
+            drawCircle(centerX, centerY, radiusPx, BLACK);
+        }
+
+        if (m.hasBoundingBox) {
+            const int16_t westX = markerScreenX(m.boxWestMeters, metersToPx, width());
+            const int16_t eastX = markerScreenX(m.boxEastMeters, metersToPx, width());
+            const int16_t northY = markerScreenY(m.boxNorthMeters, metersToPx, height());
+            const int16_t southY = markerScreenY(m.boxSouthMeters, metersToPx, height());
+            const int16_t left = std::min(westX, eastX);
+            const int16_t right = std::max(westX, eastX);
+            const int16_t top = std::min(northY, southY);
+            const int16_t bottom = std::max(northY, southY);
+            drawRect(left, top, std::max<int16_t>(1, right - left + 1), std::max<int16_t>(1, bottom - top + 1), BLACK);
+        }
+
+        if (!m.hasMarker)
+            continue;
+
+        int16_t x = markerScreenX(m.eastMeters, metersToPx, width());
+        int16_t y = markerScreenY(m.northMeters, metersToPx, height());
+        constexpr int outlinePad = 1;
+        const int boxSize = fontSmall.lineHeight() + 2;
+        const int radius = max(2, boxSize / 6);
+
+        fillRoundedRect(x, y, boxSize + (outlinePad * 2), boxSize + (outlinePad * 2), radius + 1, WHITE);
+        drawRoundRect(x - (boxSize / 2), y - (boxSize / 2), boxSize, boxSize, radius, BLACK);
+
+        std::string glyph;
+        if (mapWaypointIconGlyph(m.icon, glyph)) {
+            setFont(fontSmall);
+            printAt(x, y + 1, glyph, CENTER, MIDDLE);
+        } else {
+            drawWaypointFallbackMarker(m, x, y);
+        }
+    }
+
     // Dual map scale bars
+    if (metersToPx <= 0.0f)
+        return;
     int16_t horizPx = width() * 0.25f;
     int16_t vertPx = height() * 0.25f;
     float horizMeters = horizPx / metersToPx;
@@ -136,11 +708,11 @@ void InkHUD::MapApplet::onRender(bool full)
     printAt(vertBarX + (bottomLabelW / 2) + 1, bottomLabelY + (bottomLabelH / 2), vertBottomLabel, CENTER, MIDDLE);
 
     // Draw our node LAST with full white fill + outline
-    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    meshtastic_PositionLite ourSelfPos;
-    if (ourNode && nodeDB->hasValidPosition(ourNode) && nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
-        Marker self = calculateMarker(ourSelfPos.latitude_i * 1e-7, ourSelfPos.longitude_i * 1e-7, false, 0);
-
+    if (centerIsOurNode) {
+        const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        meshtastic_PositionLite ourSelfPos;
+        nodeDB->copyNodePosition(ourNode->num, ourSelfPos);
+        Marker self = calculateMarker(ourSelfPos.latitude_i * 1e-7, ourSelfPos.longitude_i * 1e-7, 0);
         int16_t centerX = X(0.5) + (self.eastMeters * metersToPx);
         int16_t centerY = Y(0.5) - (self.northMeters * metersToPx);
 
@@ -168,13 +740,34 @@ void InkHUD::MapApplet::onRender(bool full)
 
 void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 {
+    if (focusedWaypointId != 0) {
+        const StoredWaypoint *entry = waypointStore.findWaypoint(focusedWaypointId);
+        if (entry && !WaypointStore::isExpired(*entry) && waypointHasMapGeometry(entry->waypoint)) {
+            *lat = waypointHasAnchor(entry->waypoint)
+                       ? entry->waypoint.latitude_i * 1e-7f
+                       : ((float)entry->waypoint.bounding_box.latitude_south_i + entry->waypoint.bounding_box.latitude_north_i) *
+                             0.5e-7f;
+            *lng = waypointHasAnchor(entry->waypoint)
+                       ? entry->waypoint.longitude_i * 1e-7f
+                       : ((float)entry->waypoint.bounding_box.longitude_west_i + entry->waypoint.bounding_box.longitude_east_i) *
+                             0.5e-7f;
+            latCenter = *lat;
+            lngCenter = *lng;
+            centerIsOurNode = false;
+            return;
+        }
+        focusedWaypointId = 0;
+    }
+
     // If we have a valid position for our own node, use that as the anchor
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
     if (ourNode && nodeDB->hasValidPosition(ourNode) && nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
         *lat = ourSelfPos.latitude_i * 1e-7;
         *lng = ourSelfPos.longitude_i * 1e-7;
+        centerIsOurNode = true;
     } else {
+        centerIsOurNode = false;
         // Find mean lat long coords
         // ============================
         // - assigning X, Y and Z values to position on Earth's surface in 3D space, relative to center of planet
@@ -224,7 +817,37 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
             positionCount++;
         }
 
+        for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+            if (WaypointStore::isExpired(entry))
+                continue;
+            if (!waypointHasMapGeometry(entry.waypoint))
+                continue;
+
+            const float latDeg =
+                waypointHasAnchor(entry.waypoint)
+                    ? (entry.waypoint.latitude_i * 1e-7f)
+                    : ((float)entry.waypoint.bounding_box.latitude_south_i + entry.waypoint.bounding_box.latitude_north_i) *
+                          0.5e-7f;
+            const float lngDeg =
+                waypointHasAnchor(entry.waypoint)
+                    ? (entry.waypoint.longitude_i * 1e-7f)
+                    : ((float)entry.waypoint.bounding_box.longitude_west_i + entry.waypoint.bounding_box.longitude_east_i) *
+                          0.5e-7f;
+            float latRad = latDeg * DEG_TO_RAD;
+            float lngRad = lngDeg * DEG_TO_RAD;
+            float x = cos(latRad) * cos(lngRad);
+            float y = cos(latRad) * sin(lngRad);
+            float z = sin(latRad);
+
+            xAvg += x;
+            yAvg += y;
+            zAvg += z;
+            positionCount++;
+        }
+
         // All NodeDB processed, find mean values
+        if (positionCount == 0)
+            return;
         xAvg /= positionCount;
         yAvg /= positionCount;
         zAvg /= positionCount;
@@ -278,18 +901,43 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
     latCenter = *lat;
     lngCenter = *lng;
 
-    // ----------------------------------------------
-    // This has given us either:
-    // - our actual position (preferred), or
-    // - a mean position (fallback if we had no fix)
-    //
-    // What we actually want is to place our center so that our outermost nodes
-    // end up on the border of our map. The only real use of our "center" is to give
-    // us a reference frame: which direction is east, and which is west.
-    //------------------------------------------------
+    // When zoom is locked, keep center exactly on own node / zero-hop centroid.
+    // Skip bounding-box shift so new distant nodes don't move the zoomed view.
+    if (s_zoomLocked) {
+        // Own node has no position - re-center on zero-hop centroid instead.
+        if (!centerIsOurNode) {
+            uint32_t count = 0;
+            float xAvg = 0, yAvg = 0, zAvg = 0;
+            for (uint32_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+                meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+                if (!nodeDB->hasValidPosition(node) || !shouldDrawNode(node))
+                    continue;
+                if (!node->has_hops_away || node->hops_away != 0)
+                    continue;
+                meshtastic_PositionLite pos;
+                if (!nodeDB->copyNodePosition(node->num, pos))
+                    continue;
+                float latRad2 = pos.latitude_i * 1e-7 * DEG_TO_RAD;
+                float lngRad2 = pos.longitude_i * 1e-7 * DEG_TO_RAD;
+                xAvg += cosf(latRad2) * cosf(lngRad2);
+                yAvg += cosf(latRad2) * sinf(lngRad2);
+                zAvg += sinf(latRad2);
+                count++;
+            }
+            if (count > 0) {
+                xAvg /= count;
+                yAvg /= count;
+                zAvg /= count;
+                *lng = atan2f(yAvg, xAvg) * RAD_TO_DEG;
+                *lat = atan2f(zAvg, sqrtf(xAvg * xAvg + yAvg * yAvg)) * RAD_TO_DEG;
+                latCenter = *lat;
+                lngCenter = *lng;
+            }
+        }
+        return; // Do not shift center based on bounding box
+    }
 
-    // Find furthest nodes from our center
-    // ========================================
+    // Find furthest nodes from our center, shift center to midpoint of bounding box
     float northernmost = latCenter;
     float southernmost = latCenter;
     float easternmost = lngCenter;
@@ -298,11 +946,8 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
-        // Skip if no position
         if (!nodeDB->hasValidPosition(node))
             continue;
-
-        // Skip if derived applet doesn't want to show this node on the map
         if (!shouldDrawNode(node))
             continue;
 
@@ -310,19 +955,27 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         if (!nodeDB->copyNodePosition(node->num, pos))
             continue;
 
-        // Check for a new top or bottom latitude
         float latNode = pos.latitude_i * 1e-7;
-        northernmost = max(northernmost, latNode);
-        southernmost = min(southernmost, latNode);
-
-        // Longitude is trickier
         float lngNode = pos.longitude_i * 1e-7;
-        float degEastward = fmod(((lngNode - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
-        float degWestward = abs(fmod(((lngNode - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
-        if (degEastward < degWestward)
-            easternmost = max(easternmost, lngCenter + degEastward);
-        else
-            westernmost = min(westernmost, lngCenter - degWestward);
+
+        includeMapPoint(latNode, lngNode, lngCenter, northernmost, southernmost, easternmost, westernmost);
+    }
+
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (WaypointStore::isExpired(entry))
+            continue;
+        if (waypointHasAnchor(entry.waypoint))
+            includeMapPoint(entry.waypoint.latitude_i * 1e-7f, entry.waypoint.longitude_i * 1e-7f, lngCenter, northernmost,
+                            southernmost, easternmost, westernmost);
+
+        if (entry.waypoint.has_bounding_box) {
+            includeMapPoint(entry.waypoint.bounding_box.latitude_south_i * 1e-7f,
+                            entry.waypoint.bounding_box.longitude_west_i * 1e-7f, lngCenter, northernmost, southernmost,
+                            easternmost, westernmost);
+            includeMapPoint(entry.waypoint.bounding_box.latitude_north_i * 1e-7f,
+                            entry.waypoint.bounding_box.longitude_east_i * 1e-7f, lngCenter, northernmost, southernmost,
+                            easternmost, westernmost);
+        }
     }
 
     // Todo: check for issues with map spans >180 deg. MQTT only..
@@ -342,10 +995,46 @@ void InkHUD::MapApplet::getMapSize(uint32_t *widthMeters, uint32_t *heightMeters
     *widthMeters = 0;
     *heightMeters = 0;
 
+    if (focusedWaypointId != 0) {
+        for (const WaypointMarker &m : waypointMarkers) {
+            if (m.id != focusedWaypointId)
+                continue;
+            if (m.hasMarker && m.geofenceRadiusMeters > 0) {
+                *widthMeters = m.geofenceRadiusMeters * 2;
+                *heightMeters = m.geofenceRadiusMeters * 2;
+            }
+            if (m.hasBoundingBox) {
+                *widthMeters = max(*widthMeters, (uint32_t)std::max(fabsf(m.boxWestMeters), fabsf(m.boxEastMeters)) * 2);
+                *heightMeters = max(*heightMeters, (uint32_t)std::max(fabsf(m.boxSouthMeters), fabsf(m.boxNorthMeters)) * 2);
+            }
+            *widthMeters *= 1.1;
+            *heightMeters *= 1.1;
+            return;
+        }
+    }
+
     // Find the greatest distance horizontally and vertically from map center
     for (Marker m : markers) {
         *widthMeters = max(*widthMeters, (uint32_t)abs(m.eastMeters) * 2);
         *heightMeters = max(*heightMeters, (uint32_t)abs(m.northMeters) * 2);
+    }
+
+    // Waypoints contribute to the fit-all bounding box just like nodes, including geofence extents.
+    for (const WaypointMarker &m : waypointMarkers) {
+        if (m.hasMarker) {
+            *widthMeters = max(*widthMeters, (uint32_t)fabsf(m.eastMeters) * 2);
+            *heightMeters = max(*heightMeters, (uint32_t)fabsf(m.northMeters) * 2);
+        }
+
+        if (m.hasMarker && m.geofenceRadiusMeters > 0) {
+            *widthMeters = max(*widthMeters, (uint32_t)(fabsf(m.eastMeters) + m.geofenceRadiusMeters) * 2);
+            *heightMeters = max(*heightMeters, (uint32_t)(fabsf(m.northMeters) + m.geofenceRadiusMeters) * 2);
+        }
+
+        if (m.hasBoundingBox) {
+            *widthMeters = max(*widthMeters, (uint32_t)std::max(fabsf(m.boxWestMeters), fabsf(m.boxEastMeters)) * 2);
+            *heightMeters = max(*heightMeters, (uint32_t)std::max(fabsf(m.boxSouthMeters), fabsf(m.boxNorthMeters)) * 2);
+        }
     }
 
     // Add padding
@@ -356,7 +1045,7 @@ void InkHUD::MapApplet::getMapSize(uint32_t *widthMeters, uint32_t *heightMeters
 // Convert and store info we need for drawing a marker
 // Lat / long to "meters relative to map center", for position on screen
 // Info about hopsAway, for marker size
-InkHUD::MapApplet::Marker InkHUD::MapApplet::calculateMarker(float lat, float lng, bool hasHopsAway, uint8_t hopsAway)
+InkHUD::MapApplet::Marker InkHUD::MapApplet::calculateMarker(float lat, float lng, uint8_t hopsAway)
 {
     assert(lat != 0 || lng != 0); // Not null island. Applets should check this before calling.
 
@@ -369,11 +1058,9 @@ InkHUD::MapApplet::Marker InkHUD::MapApplet::calculateMarker(float lat, float ln
     float northMeters = cos(bearingFromCenter) * distanceFromCenter;
     float eastMeters = sin(bearingFromCenter) * distanceFromCenter;
 
-    // Store this as a new marker
     Marker m;
     m.eastMeters = eastMeters;
     m.northMeters = northMeters;
-    m.hasHopsAway = hasHopsAway;
     m.hopsAway = hopsAway;
     return m;
 }
@@ -385,11 +1072,7 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     meshtastic_PositionLite pos;
     const bool hasPos = nodeDB->copyNodePosition(node->num, pos);
     assert(hasPos);
-    Marker m = calculateMarker(pos.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
-                               pos.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
-                               node->has_hops_away,    // Is the hopsAway number valid
-                               node->hops_away         // Hops away
-    );
+    Marker m = calculateMarker(pos.latitude_i * 1e-7, pos.longitude_i * 1e-7, node->hops_away);
 
     // Convert to pixel coords
     int16_t markerX = X(0.5) + (m.eastMeters * metersToPx);
@@ -412,8 +1095,6 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     uint8_t markerSize;
 
     bool tooManyHops = node->hops_away > config.lora.hop_limit;
-    bool isOurNode = node->num == nodeDB->getNodeNum();
-    bool unknownHops = !node->has_hops_away && !isOurNode;
 
     // Parse any non-ascii chars in the short name,
     // and use last 4 instead if unknown / can't render
@@ -426,8 +1107,6 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     // Pick emblem style
     if (tooManyHops)
         markerSize = getTextWidth("!");
-    else if (unknownHops)
-        markerSize = markerSizeMin;
     else
         markerSize = map(node->hops_away, 0, config.lora.hop_limit, markerSizeMax, markerSizeMin);
 
@@ -482,27 +1161,25 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     if (tooManyHops)
         printAt(markerX, markerY, "!", CENTER, MIDDLE);
     else
-        drawCross(markerX, markerY, markerSize); // The fewer the hops, the larger the marker. Also handles unknownHops
+        drawCross(markerX, markerY, markerSize);
 }
 
 // Check if we actually have enough nodes which would be shown on the map
-// Need at least two, to draw a sensible map
 bool InkHUD::MapApplet::enoughMarkers()
 {
-    size_t count = 0;
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-
-        // Count nodes
         if (nodeDB->hasValidPosition(node) && shouldDrawNode(node))
-            count++;
-
-        // We need to find two
-        if (count == 2)
-            return true; // Two nodes is enough for a sensible map
+            return true;
     }
 
-    return false; // No nodes would be drawn (or just the one, uselessly at 0,0)
+    // Any live waypoint with a marker or box is enough to justify showing the map.
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (!WaypointStore::isExpired(entry) && waypointHasMapGeometry(entry.waypoint))
+            return true;
+    }
+
+    return false;
 }
 
 // Calculate how far north and east of map center each node is
@@ -511,6 +1188,8 @@ void InkHUD::MapApplet::calculateAllMarkers()
 {
     // Clear old markers
     markers.clear();
+    waypointMarkers.clear();
+    waypointMarkers.reserve(waypointStore.getWaypoints().size());
 
     // For each node in db
     for (uint32_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
@@ -529,36 +1208,61 @@ void InkHUD::MapApplet::calculateAllMarkers()
         if (node->num == nodeDB->getNodeNum())
             continue;
 
+        // Skip nodes with unknown hop count - partial info, not useful to plot
+        if (!node->has_hops_away)
+            continue;
+
         meshtastic_PositionLite pos;
         if (!nodeDB->copyNodePosition(node->num, pos))
             continue;
 
-        // Calculate marker and store it
-        markers.push_back(calculateMarker(pos.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
-                                          pos.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
-                                          node->has_hops_away,    // Is the hopsAway number valid
-                                          node->hops_away         // Hops away
-                                          ));
+        markers.push_back(calculateMarker(pos.latitude_i * 1e-7, pos.longitude_i * 1e-7, node->hops_away));
+    }
+
+    // Cache waypoint markers once per render pass to avoid repeated geo math below.
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (WaypointStore::isExpired(entry))
+            continue;
+        if (!waypointHasMapGeometry(entry.waypoint))
+            continue;
+
+        WaypointMarker marker;
+        marker.id = entry.waypoint.id;
+        marker.icon = entry.waypoint.icon;
+        marker.geofenceRadiusMeters = entry.waypoint.geofence_radius;
+        marker.hasMarker = waypointHasAnchor(entry.waypoint);
+        marker.hasBoundingBox = entry.waypoint.has_bounding_box;
+        if (marker.hasMarker) {
+            Marker base = calculateMarker(entry.waypoint.latitude_i * 1e-7, entry.waypoint.longitude_i * 1e-7, 0);
+            marker.eastMeters = base.eastMeters;
+            marker.northMeters = base.northMeters;
+        }
+        if (entry.waypoint.has_bounding_box) {
+            Marker southWest = calculateMarker(entry.waypoint.bounding_box.latitude_south_i * 1e-7,
+                                               entry.waypoint.bounding_box.longitude_west_i * 1e-7, 0);
+            Marker northEast = calculateMarker(entry.waypoint.bounding_box.latitude_north_i * 1e-7,
+                                               entry.waypoint.bounding_box.longitude_east_i * 1e-7, 0);
+            marker.boxWestMeters = southWest.eastMeters;
+            marker.boxSouthMeters = southWest.northMeters;
+            marker.boxEastMeters = northEast.eastMeters;
+            marker.boxNorthMeters = northEast.northMeters;
+        }
+        waypointMarkers.push_back(marker);
     }
 }
 
-// Determine the conversion factor between metres, and pixels on screen
-// May be overridden by derived applet, if custom scale required (fixed map size?)
 void InkHUD::MapApplet::calculateMapScale()
 {
-    // Aspect ratio of map and screen
-    // - larger = wide, smaller = tall
-    // - used to set scale, so that widest map dimension fits in applet
+    if (widthMeters == 0 || heightMeters == 0) {
+        metersToPx = 0;
+        return;
+    }
     float mapAspectRatio = (float)widthMeters / heightMeters;
     float appletAspectRatio = (float)width() / height();
-
-    // "Shrink to fit"
-    // Scale the map so that the largest dimension is fully displayed
-    // Because aspect ratio will be maintained, the other dimension will appear "padded"
     if (mapAspectRatio > appletAspectRatio)
-        metersToPx = (float)width() / widthMeters; // Too wide for applet. Constrain to fit width.
+        metersToPx = (float)width() / widthMeters;
     else
-        metersToPx = (float)height() / heightMeters; // Too tall for applet. Constrain to fit height.
+        metersToPx = (float)height() / heightMeters;
 }
 
 // Draw an x, centered on a specific point

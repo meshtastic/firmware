@@ -44,7 +44,7 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
     int fd = -1;
     int ret;
     uint8_t report[8];
-    int epollfd;
+    int epollfd = -1;
     struct epoll_event ev;
     uint8_t modifiers = 0;
     std::map<int, char> keymap{

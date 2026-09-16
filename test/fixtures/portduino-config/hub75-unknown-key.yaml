@@ -1,0 +1,11 @@
+# FAULT: Colours is not a HUB75 option (the real ones are listed in ConfigCheck.cpp).
+# On a meshtasticd built without rgbmatrix this also reports the missing HUB75
+# support, so the test asserts only the unknown key -- the second finding depends on
+# how the binary was built.
+Lora:
+  Module: sx1262
+Display:
+  Panel: HUB75
+  HUB75:
+    Rows: 64
+    Colours: 3

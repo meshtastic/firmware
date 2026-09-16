@@ -1,0 +1,6 @@
+# Second of three files. Re-opens "Lora:", which is what resets the keys set in
+# ../config.yaml that are not repeated here.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16

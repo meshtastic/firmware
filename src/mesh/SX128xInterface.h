@@ -19,6 +19,9 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     virtual bool wideLora() override;
 
+    /// SX128x is a 2.4 GHz-only chip; it cannot tune sub-GHz regions
+    virtual bool supportsSubGhz() override { return false; }
+
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
@@ -40,12 +43,12 @@ template <class T> class SX128xInterface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
+    virtual void setRadioIsr(void (*callback)()) override { lora.setDio1Action(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
@@ -71,4 +74,19 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+  private:
+    /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
+    int16_t programModemParams();
+
+    /** begin() and chip-side setup, shared by init() and by reconfigure()'s recovery of a chip that lost its state */
+    /** @param fromInit true only for the boot-time call, which may adjust region and reboot on a
+     *  2.4GHz-only part; a runtime recovery must never reboot the node. */
+    bool reinitChip(bool fromInit = false);
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
+    /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
+    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 };

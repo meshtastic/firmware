@@ -1,86 +1,88 @@
 #pragma once
 
 /*
- * Nordic nRF54L15-DK (PCA10156) — Meshtastic variant
+ * Nordic nRF54L15-DK (PCA10156) with an EBYTE E22-900M30S (SX1262) on the J2 header.
  *
- * ── GPIO voltage domains ─────────────────────────────────────────────────────
- *   P0  (gpio0 @ 0x10A000)  Main domain     3.0 V  ← usable
- *   P1  (gpio1 @ 0xd8200 )  LP domain       1.8 V  ← NOT compatible with E22
- *   P2  (gpio2 @ 0x50400 )  HP domain       3.0 V  ← usable
+ * This header shadows the framework's variants/nrf54l15dk/variant.h, so it carries the core
+ * pin table definitions as well. Arduino pin = physical GPIO: P0.n = n, P1.n = 32+n, P2.n = 64+n.
  *
- * The SX1262 needs VIH ≥ 0.7 × VDD = 2.31 V (VDD = 3.3 V).
- * P1 outputs only 1.8 V → chip stays in reset, BUSY never goes LOW.
- * All E22 signals are therefore on P2 (3.0 V), driven by SPIM00.
+ * GPIO supply domains: P0 3.0 V, P1 1.8 V (too low for the SX1262), P2 3.0 V.
+ * Serial peripherals are port bound: SERIAL00 (UARTE00/SPIM00) -> P2, SERIAL2x -> P1, SERIAL30 -> P0.
  *
- * EBYTE E22-900M30S (SX1262) wiring — J2 header, all P2:
- *
- *   E22 pin    GPIO      pin#  Notes
- *   ─────────────────────────────────────────────────────────────────────
- *   MISO    →  P2.04      36   SPIM00 data in
- *   NSS/CS  →  P2.05      37   SPI chip-select (RadioLib GPIO)
- *   DIO1    →  P2.06      38   IRQ — interrupt via gpiote30
- *   BUSY    →  P2.03      35   GPIO input
- *   NRESET  →  P2.00      32   GPIO output
- *   RXEN    →  P2.07      39   Held HIGH via ANT_SW (LNA always active)
- *   MOSI    →  P2.02      34   SPIM00 data out
- *   SCK     →  P2.01      33   SPIM00 clock
- *
- *   DIO2 → TXEN bridge required on E22 module (solder bridge / wire).
- *   DIO3 drives TCXO reference (1.8 V).
- *
- * Pin numbering convention: P0.n = n, P1.n = 16+n, P2.n = 32+n.
- *
- * Reserved / do-not-use DK pins:
- *   P0.00-P0.02  IMCU VCOM TX/RX/RTS pads (uart30 disabled; pads idle)
- *   P0.03        I2C SDA (TWIM30) — sensor bus
- *   P0.04        I2C SCL (TWIM30) — sensor bus; SW3 button on this pad,
- *                DO NOT press SW3 while I2C is active
- *   P1.00-P1.01  32 kHz crystal
- *   P1.02-P1.03  NFC antenna
- *   P1.10        LED1 (status LED — keep)
- *   P1.13        BTN0 — main user button
- *   P1.14        LED3
- *   P2.01-P2.05  SPIM00 / E22 (see above)
- *   P2.08-P2.10  Trace pins (avoid)
+ * E22 wiring (all P2, SPIM00):
+ *   SCK P2.01, MOSI P2.02, BUSY P2.03, MISO P2.04, NSS P2.05, DIO1 P2.06, RXEN P2.07, NRESET P2.00
+ *   DIO2 -> TXEN bridge on the module, DIO3 drives the TCXO (1.8 V).
  */
 
-#ifndef NRF54L15_DK
-#define NRF54L15_DK
+#define VARIANT_MCK (128000000ul)
+#define USE_LFXO
+
+#include "WVariant.h"
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-// ── SX1262 / E22-900M30S — all P2, HP domain (3.0 V) ────────────────────────
-#define USE_SX1262
-#define SX126X_CS 37    // P2.05 — chip-select
-#define SX126X_DIO1 38  // P2.06 — IRQ (gpiote30 capable)
-#define SX126X_BUSY 35  // P2.03 — BUSY
-#define SX126X_RESET 32 // P2.00 — NRESET
+#define PINS_COUNT (96)
+#define NUM_DIGITAL_PINS (96)
+#define NUM_ANALOG_INPUTS (8)
+#define NUM_ANALOG_OUTPUTS (0)
+#define ADC_RESOLUTION 14
 
-// RXEN (P2.07) held HIGH permanently — LNA always active.
-// RadioLib must NOT toggle it; ANT_SW drives it HIGH before lora.begin().
-#define SX126X_ANT_SW 39 // P2.07 — RXEN driven HIGH at init
+// LEDs (active low): LED1 P1.10 status, LED0 P2.09
+#define PIN_LED1 42
+#define PIN_LED2 73
+#define LED_BUILTIN PIN_LED1
+#define LED_STATE_ON 0
 
-// DIO2 controls TXEN via bridge on E22 module.
-// DIO3 provides 1.8 V TCXO reference.
-#define SX126X_DIO2_AS_RF_SWITCH
-#define SX126X_DIO3_TCXO_VOLTAGE 1.8f
-
-// ── LEDs (active HIGH) ───────────────────────────────────────────────────────
-#define PIN_LED1 26 // P1.10 — LED1 (status LED, LP domain — output only, OK)
-#define PIN_LED2 41 // P2.09 — LED0 on DK (remapped; P2.07 now used for RXEN)
-#define LED_STATE_ON 1
-
-// ── Buttons (active LOW, internal pull-up) ───────────────────────────────────
-// BTN1 (P1.09), BTN2 (P1.08) and BTN3 (P0.04) deleted from DTS — only BTN0
-// remains. BTN3's pad (P0.04) is now I2C SCL.
-#define PIN_BUTTON1 29 // P1.13 — BTN0
+// BTN0 P1.13 (active low)
+#define PIN_BUTTON1 45
 #define BUTTON_NEED_PULLUP
 
-// ── I2C bus (TWIM30, HP domain, 3.0 V) ──────────────────────────────────────
-// SDA=P0.03, SCL=P0.04. Pinctrl + clock-frequency live in the board overlay.
-// External 4.7 kΩ pull-ups required on both lines. Meshtastic's Arduino
-// TwoWire layer (src/platform/nrf54l15/Wire.cpp) resolves the device at
-// compile time via DT_NODELABEL(i2c30); these PIN_WIRE_* defines are kept
-// for parity with the Arduino convention used by other variants.
-#define PIN_WIRE_SDA 3 // P0.03
-#define PIN_WIRE_SCL 4 // P0.04
+// Serial1: VCOM0 of the on-board J-Link (UARTE20): TX P1.04, RX P1.05
+#define PIN_SERIAL1_RX 37
+#define PIN_SERIAL1_TX 36
+#define SERIAL1_UARTE NRF_UARTE20
+#define SERIAL1_IRQN SERIAL20_IRQn
+#define SERIAL1_IRQ_HANDLER SERIAL20_IRQHandler
+
+// Serial2 (UARTE21, serial module): RX P1.15, TX P1.16; only P1 pins can be assigned to it
+#define PIN_SERIAL2_RX 47
+#define PIN_SERIAL2_TX 48
+#define SERIAL2_UARTE NRF_UARTE21
+#define SERIAL2_IRQN SERIAL21_IRQn
+#define SERIAL2_IRQ_HANDLER SERIAL21_IRQHandler
+
+// SPI (SPIM00) for the E22
+#define SPI_INTERFACES_COUNT 1
+#define PIN_SPI_MISO 68
+#define PIN_SPI_MOSI 66
+#define PIN_SPI_SCK 65
+static const uint8_t SS = 69;
+static const uint8_t MOSI = PIN_SPI_MOSI;
+static const uint8_t MISO = PIN_SPI_MISO;
+static const uint8_t SCK = PIN_SPI_SCK;
+
+// I2C (TWIM30): SDA P0.03, SCL P0.04, external 4.7k pull-ups required
 #define WIRE_INTERFACES_COUNT 1
+#define PIN_WIRE_SDA 3
+#define PIN_WIRE_SCL 4
+#define WIRE_TWIM NRF_TWIM30
+#define WIRE_TWIS NRF_TWIS30
+#define WIRE_IRQN SERIAL30_IRQn
+#define WIRE_IRQ_HANDLER SERIAL30_IRQHandler
+
+#ifdef __cplusplus
+}
+#endif
+
+// SX1262 / E22-900M30S
+#define USE_SX1262
+#define SX126X_CS 69
+#define SX126X_DIO1 70
+#define SX126X_BUSY 67
+#define SX126X_RESET 64
+// RXEN is held high permanently (LNA always on); TXEN follows DIO2.
+#define SX126X_ANT_SW 71
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8f

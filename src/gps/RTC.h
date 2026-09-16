@@ -8,6 +8,11 @@
 #include <ArtronShop_RX8130CE.h>
 #endif
 
+#if HAS_LSE
+// True once the STM32WL LSE crystal has locked and the hardware RTC is running (see stm32wlSetup()).
+bool stm32wlRtcAvailable();
+#endif
+
 enum RTCQuality {
 
     /// We haven't had our RTC set yet
@@ -56,6 +61,10 @@ RTCSetResult readFromRTC();
 
 #ifdef PIO_UNIT_TESTING
 void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot);
+void resetRTCStateForTests();
+void setRTCSystemTimeForTests(const struct timeval *tv);
+void clearRTCSystemTimeForTests();
+void setReadFromRTCUseSystemTimeForTests(bool enabled);
 #endif
 
 time_t gm_mktime(const struct tm *tm);

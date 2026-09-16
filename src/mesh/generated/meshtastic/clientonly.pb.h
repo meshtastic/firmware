@@ -17,7 +17,7 @@
 typedef struct _meshtastic_DeviceProfile {
     /* Long name for the node */
     bool has_long_name;
-    char long_name[40];
+    char long_name[25];
     /* Short name of the node */
     bool has_short_name;
     char short_name[5];
@@ -38,6 +38,12 @@ typedef struct _meshtastic_DeviceProfile {
     /* Predefined messages for CannedMessage */
     bool has_canned_messages;
     char canned_messages[201];
+    /* Is the node unmessagable */
+    bool has_is_unmessagable;
+    bool is_unmessagable;
+    /* Is this node in licensed user mode */
+    bool has_is_licensed;
+    bool is_licensed;
 } meshtastic_DeviceProfile;
 
 
@@ -46,8 +52,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceProfile_init_default    {false, "", false, "", {{NULL}, NULL}, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_Position_init_default, false, "", false, ""}
-#define meshtastic_DeviceProfile_init_zero       {false, "", false, "", {{NULL}, NULL}, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero, false, meshtastic_Position_init_zero, false, "", false, ""}
+#define meshtastic_DeviceProfile_init_default    {false, "", false, "", {{NULL}, NULL}, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_Position_init_default, false, "", false, "", false, 0, false, 0}
+#define meshtastic_DeviceProfile_init_zero       {false, "", false, "", {{NULL}, NULL}, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero, false, meshtastic_Position_init_zero, false, "", false, "", false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceProfile_long_name_tag   1
@@ -58,6 +64,8 @@ extern "C" {
 #define meshtastic_DeviceProfile_fixed_position_tag 6
 #define meshtastic_DeviceProfile_ringtone_tag    7
 #define meshtastic_DeviceProfile_canned_messages_tag 8
+#define meshtastic_DeviceProfile_is_unmessagable_tag 9
+#define meshtastic_DeviceProfile_is_licensed_tag 10
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceProfile_FIELDLIST(X, a) \
@@ -68,7 +76,9 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  config,            4) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  module_config,     5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  fixed_position,    6) \
 X(a, STATIC,   OPTIONAL, STRING,   ringtone,          7) \
-X(a, STATIC,   OPTIONAL, STRING,   canned_messages,   8)
+X(a, STATIC,   OPTIONAL, STRING,   canned_messages,   8) \
+X(a, STATIC,   OPTIONAL, BOOL,     is_unmessagable,   9) \
+X(a, STATIC,   OPTIONAL, BOOL,     is_licensed,      10)
 #define meshtastic_DeviceProfile_CALLBACK pb_default_field_callback
 #define meshtastic_DeviceProfile_DEFAULT NULL
 #define meshtastic_DeviceProfile_config_MSGTYPE meshtastic_LocalConfig

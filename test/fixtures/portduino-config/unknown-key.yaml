@@ -1,0 +1,9 @@
+# FAULT: Lora.Frequency is not a key meshtasticd reads, so setting it does nothing.
+# Expect a WARNING and exit 0 -- warnings alone must not fail the run.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  Frequency: 868.0

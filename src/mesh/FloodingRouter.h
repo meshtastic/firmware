@@ -64,7 +64,7 @@ class FloodingRouter : public Router
     bool perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p);
 
     /* Call when we receive a packet that needs some reprocessing, but afterwards should be filtered */
-    void reprocessPacket(const meshtastic_MeshPacket *p);
+    bool reprocessPacket(const meshtastic_MeshPacket *p);
 
     // Return false for roles like ROUTER which should always rebroadcast even when we've heard another rebroadcast of
     // the same packet

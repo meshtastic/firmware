@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <assert.h>
+#include <atomic>
 #include <string>
 
 #include "GPSStatus.h"
@@ -72,8 +73,9 @@ class MeshService
     // This holds the last QueueStatus send
     meshtastic_QueueStatus lastQueueStatus;
 
-    /// The current nonce for the newest packet which has been queued for the phone
-    uint32_t fromNum = 0;
+    /// The current nonce for the newest packet which has been queued for the phone. Bumped from
+    /// whichever task queued it, read by loop(), hence atomic.
+    std::atomic<uint32_t> fromNum{0};
 
     /// Updated in loop() to detect when fromNum changes
     uint32_t oldFromNum = 0;
@@ -100,6 +102,15 @@ class MeshService
                p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
                p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
+
+    /// True if the sender flagged this text as an alert: an ASCII BEL in the payload while at least
+    /// one alert_bell_* output is enabled. Alerts deliberately break through a mute.
+    static bool isAlertPayload(const meshtastic_MeshPacket &p);
+
+    /// Returns false when a decoded NodeInfo/Waypoint payload fails nested protobuf decode (invalid
+    /// UTF-8 under PB_VALIDATE_UTF8, etc.); other portnums pass through. Callers gate on the variant.
+    static bool phonePayloadIsDecodable(const meshtastic_Data &decoded);
+
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
 
@@ -132,6 +143,10 @@ class MeshService
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
 
+    // Rewrite any queued-for-phone packet still carrying an uptime-seconds rx_time placeholder
+    // into a real epoch, now that the wall clock is trustworthy.
+    void reconcilePendingRxTimes();
+
     // Release QueueStatus packet to pool
     void releaseQueueStatusToPool(meshtastic_QueueStatus *p) { queueStatusPool.release(p); }
 
@@ -141,12 +156,32 @@ class MeshService
     /// Release the next ClientNotification packet to pool.
     void releaseClientNotificationToPool(meshtastic_ClientNotification *p) { clientNotificationPool.release(p); }
 
+    /// Bump fromNum to signal connected clients to poll for new FromRadio data.
+    /// Used by code paths (e.g. lockdown status queueing) that surface a new
+    /// FromRadio variant without going through one of the existing pool-backed
+    /// senders.
+    void nudgeFromNum() { fromNum++; }
+
+    /// Bumped with a nudgeFromNum() when our node num changes; the seen counter only advances once a
+    /// notify pass has reached every client, so a move landing during a pass stays pending after it.
+    std::atomic<uint32_t> identityGeneration{0};
+    std::atomic<uint32_t> identityGenerationSeen{0};
+
+    /// True while a node num change still owes connected clients a fresh MyInfo.
+    bool identityMovePending() const { return identityGeneration != identityGenerationSeen; }
+
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
      * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep
      * a reference
      */
     void handleToRadio(meshtastic_MeshPacket &p);
+
+#if MESHTASTIC_ENABLE_FRAME_INJECTION
+    /// Test/debug seam (build-flag gated, off by default): deliver a client-supplied frame into the
+    /// receive pipeline as if it had arrived off the LoRa chip. See the definition for the wire format.
+    void injectAsReceived(meshtastic_MeshPacket &p);
+#endif
 
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
      * @return true if client devices should be sent a new set of radio configs
@@ -164,7 +199,8 @@ class MeshService
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
     /// cache
-    void sendToMesh(meshtastic_MeshPacket *p, RxSource src = RX_SRC_LOCAL, bool ccToPhone = false);
+    /// Returns the router's verdict: ERRNO_OK / ERRNO_SHOULD_RELEASE accepted, anything else released unsent.
+    ErrorCode sendToMesh(meshtastic_MeshPacket *p, RxSource src = RX_SRC_LOCAL, bool ccToPhone = false);
 
     /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
     bool cancelSending(PacketId id);
@@ -188,6 +224,7 @@ class MeshService
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
 
+    /// Seconds since the packet arrived, or SINCE_UNKNOWN if it carries no trustworthy rx_time.
     uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
 
   private:
@@ -200,6 +237,9 @@ class MeshService
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
+#ifdef PIO_UNIT_TESTING
+    friend class MeshServicePhoneDeliveryTest;
+#endif
 };
 
 extern MeshService *service;

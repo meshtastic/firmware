@@ -22,8 +22,14 @@ void InkHUD::Persistence::loadSettings()
 // are immediately available to applets (DMApplet, AllMessageApplet, NotificationApplet).
 void InkHUD::Persistence::loadLatestMessage()
 {
+    latestMessage = LatestMessage();
+
     int lastBroadcastPos = -1, lastDMPos = -1, pos = 0;
     for (const StoredMessage &m : messageStore.getLiveMessages()) {
+        if (!messageStore.isMessageVisible(m)) {
+            pos++;
+            continue;
+        }
         if (m.type == MessageType::BROADCAST) {
             latestMessage.broadcast = m;
             lastBroadcastPos = pos;

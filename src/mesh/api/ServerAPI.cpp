@@ -1,7 +1,12 @@
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "ServerAPI.h"
 #include "Throttle.h"
-#include "configuration.h"
 #include <Arduino.h>
+#include <cstdlib>
+#include <new>
 
 static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 
@@ -22,10 +27,36 @@ template <typename T> void ServerAPI<T>::close()
     StreamAPI::close();
 }
 
-/// Check the current underlying physical link to see if the client is currently connected
+/// Check the current underlying physical link to see if the client is currently
+/// connected
 template <typename T> bool ServerAPI<T>::checkIsConnected()
 {
     return client.connected();
+}
+
+template <typename T> bool ServerAPI<T>::canWriteFrame(size_t)
+{
+    // Only a dropped link is a reason to refuse a write up front. A full transmit
+    // buffer (availableForWrite() == 0) is normal backpressure, not a dead socket,
+    // so we must not close the connection on it. A genuinely failed write is
+    // detected after the fact in onFrameWriteFailed().
+    if (!client.connected()) {
+        canWrite = false;
+        enabled = false;
+        LOG_WARN("TCP client disconnected before write, closing API service");
+        close();
+        return false;
+    }
+
+    return true;
+}
+
+template <typename T> void ServerAPI<T>::onFrameWriteFailed(size_t frameLen, size_t writtenLen)
+{
+    canWrite = false;
+    enabled = false;
+    LOG_WARN("TCP client write short (%lu/%lu bytes), closing API service", (unsigned long)writtenLen, (unsigned long)frameLen);
+    close();
 }
 
 template <class T> int32_t ServerAPI<T>::runOnce()
@@ -88,7 +119,22 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             openAPI.reset();
         }
 
-        openAPI.reset(new T(client));
+        // A ServerAPI carries the stream rx/tx buffers plus the FromRadio/ToRadio scratch, several
+        // KB in one block. On ESP32 a new that cannot get that block is a reboot (see the note on
+        // openAPI in the header), and std::nothrow does not help there because libstdc++ builds it
+        // on the throwing form. malloc() does return nullptr, so take the block from malloc() and
+        // construct in place; if there is no room drop this connection instead of the node - the
+        // client retries and the next accept gets a fresh look at the heap. The T constructors do
+        // not allocate (default-constructed containers, fixed-size thread table), so nothing inside
+        // the placement new can throw either.
+        void *block = malloc(sizeof(T));
+        if (!block) {
+            LOG_ERROR("No heap for API connection (%u bytes), dropping client", (unsigned)sizeof(T));
+            client.stop();
+        } else {
+            openAPI.reset(new (block) T(client));
+        }
+        // cppcheck-suppress memleak ; block is owned by openAPI via placement new, freed by MallocDeleter
     }
 
 #if RAK_4631

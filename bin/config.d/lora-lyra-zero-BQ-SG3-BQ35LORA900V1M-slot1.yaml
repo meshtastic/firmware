@@ -1,0 +1,29 @@
+# Station G3 + BQ35LORA900V1M Primary Slot
+# Board Doc: https://wiki.bqvoy.com/en/devkits/station-g3
+Meta:
+  name: B&Q Station G3 + BQ35LORA900V1M Primary Slot
+  support: official
+  compatible:
+    - luckfox-lyra-zero-w # Armbian
+
+Lora:
+  Module: sx1262
+  IRQ: # GPIO0_A5 (physical 15)
+    pin: 5
+    gpiochip: 0
+    line: 5
+  Reset: # GPIO1_D1 (physical 36)
+    pin: 57
+    gpiochip: 1
+    line: 25
+  Busy: # GPIO0_B4 (physical 18)
+    pin: 12
+    gpiochip: 0
+    line: 12
+  DIO3_TCXO_VOLTAGE: true
+  DIO2_AS_RF_SWITCH: true
+  spidev: spidev0.0
+  # CS: # GPIO0_B2 (physical 24)
+  #   pin: 10
+  #   gpiochip: 0
+  #   line: 10

@@ -12,11 +12,13 @@ meshtastic_MeshPacket *ReplyModule::allocReply()
     auto req = *currentRequest;
     auto &p = req.decoded;
     // The incoming message is in p.payload
-    LOG_INFO("Received message from=0x%0x, id=%d, msg=%.*s", req.from, req.id, p.payload.size, p.payload.bytes);
+    LOG_INFO("Received message from=0x%08x, id=0x%08x, msg=%.*s", req.from, req.id, p.payload.size, p.payload.bytes);
 #endif
 
     const char *replyStr = "Message Received";
-    auto reply = allocDataPacket();                 // Allocate a packet for sending
+    auto reply = allocDataPacket(); // Allocate a packet for sending
+    if (!reply)
+        return nullptr;
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);
 

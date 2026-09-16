@@ -51,7 +51,7 @@
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
-#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+#if !defined(HAS_CUSTOM_CRYPTO_ENGINE) && !defined(ARCH_NRF54L)
 #define HAS_CUSTOM_CRYPTO_ENGINE 1
 #endif
 
@@ -85,8 +85,12 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
 #elif defined(T_ECHO_LITE)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
+#elif defined(T_ECHO_CARD)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_CARD
 #elif defined(TTGO_T_ECHO_PLUS)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO_PLUS
+#elif defined(T_IMPULSE_PLUS)
+#define HW_VENDOR meshtastic_HardwareModel_T_IMPULSE_PLUS
 #elif defined(ELECROW_ThinkNode_M1)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
 #elif defined(ELECROW_ThinkNode_M3)
@@ -95,6 +99,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M6
 #elif defined(ELECROW_ThinkNode_M4)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M4
+#elif defined(ELECROW_ThinkNode_M8)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M8
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)
@@ -109,6 +115,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
 #elif defined(TRACKER_T1000_E)
 #define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
+#elif defined(MESH_TRACKER_X1)
+#define HW_VENDOR meshtastic_HardwareModel_MESH_TRACKER_X1
 #elif defined(ME25LS01_4Y10TD)
 #define HW_VENDOR meshtastic_HardwareModel_ME25LS01_4Y10TD
 #elif defined(MS24SF1)
@@ -129,12 +137,20 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
 #elif defined(SEEED_WIO_TRACKER_L1_EINK)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
+#elif defined(SEEED_WIO_TRACKER_L1_PRO_1W)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W
 #elif defined(SEEED_WIO_TRACKER_L1)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #elif defined(HELTEC_MESH_SOLAR)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
 #elif defined(MUZI_BASE)
 #define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
+#elif defined(HELTEC_MESH_TOWER_V2)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2
+#elif defined(HELTEC_MESH_NODE_T096)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T096
+#elif defined(HELTEC_RC52)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RC52
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
@@ -182,7 +198,7 @@
 
 // If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
 // use SEGGER for debug output
-#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA)
+#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA) && !defined(ARCH_NRF54L)
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif

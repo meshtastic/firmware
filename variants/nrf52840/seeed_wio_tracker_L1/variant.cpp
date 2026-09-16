@@ -22,6 +22,16 @@
 #include "wiring_constants.h"
 #include "wiring_digital.h"
 
+namespace
+{
+void configureWakeOnPress(uint8_t digitalPin)
+{
+    const uint32_t gpioPin = g_ADigitalPinMap[digitalPin];
+    nrf_gpio_cfg_input(gpioPin, NRF_GPIO_PIN_PULLUP);
+    nrf_gpio_cfg_sense_set(gpioPin, NRF_GPIO_PIN_SENSE_LOW);
+}
+} // namespace
+
 /**
  * @brief Digital pin to GPIO port/pin mapping table
  *
@@ -92,5 +102,13 @@ void initVariant()
     digitalWrite(PIN_LED1, LOW);
     pinMode(PIN_LED2, OUTPUT);
     digitalWrite(PIN_LED2, LOW);
-    pinMode(PIN_LED2, OUTPUT);
+
+    // Idle the buzzer; left floating it can whine until the first tone() call.
+    pinMode(PIN_BUZZER, OUTPUT);
+    digitalWrite(PIN_BUZZER, LOW);
+}
+
+void variant_shutdown()
+{
+    configureWakeOnPress(CANCEL_BUTTON_PIN);
 }

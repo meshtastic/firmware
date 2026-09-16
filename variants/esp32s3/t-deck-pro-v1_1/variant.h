@@ -57,7 +57,8 @@
 
 // gyroscope BHI260AP
 // #define BOARD_1V8_EN 38 //Deck-Pro remove 1.8v en pin
-#define HAS_BHI260AP
+// Disabled until a SensorLib replacement is available
+// #define HAS_BHI260AP
 
 // battery charger BQ25896
 #define HAS_PPM 1

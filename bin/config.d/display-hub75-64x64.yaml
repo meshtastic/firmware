@@ -1,0 +1,37 @@
+Meta:
+  name: HUB75 RGB LED Matrix (64x64)
+  support: community
+  compatible:
+    - raspberry-pi
+
+### HUB75 RGB LED matrix panel driven by hzeller/rpi-rgb-led-matrix.
+###
+### Prerequisites:
+###   - Install the rpi-rgb-led-matrix library so `pkg-config rgbmatrix` resolves, and build the
+###     firmware with it present (the HUB75 backend is compiled in automatically when found).
+###   - meshtasticd must run as root (or have /dev/gpiomem access) for the library's direct GPIO.
+###   - Disable on-board audio (dtparam=audio=off in /boot/firmware/config.txt) - it shares the
+###     PWM hardware and causes flicker otherwise.
+###
+### The library owns the GPIO pins; they are selected by HardwareMapping (matching your HAT /
+### wiring), not assigned individually.
+Display:
+  Panel: HUB75
+  HUB75:
+    HardwareMapping: adafruit-hat-pwm
+    Rows: 64
+    Cols: 64
+    ChainLength: 1
+    Parallel: 1
+    Brightness: 80
+    PWMBits: 11
+    GPIOSlowdown: 4
+    RGBSequence: RGB
+    # Uncomment/tune as needed for your specific panel:
+    # ScanMode: 0
+    # RowAddressType: 0
+    # Multiplexing: 0
+    # PanelType: FM6126A
+    # PixelMapper: ""
+    # LimitRefreshRateHz: 0
+    # DisableHardwarePulsing: false

@@ -24,6 +24,8 @@ class PacketHistory
                                           // bit 3-5: our hop limit when we first transmitted it
         uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
     };                                    // 4B + 4B + 4B + 1B + 1B + 6B = 20B
+    static_assert(sizeof(PacketRecord) == 20,
+                  "PacketRecord size feeds the boot-cache budget math in mesh-pb-constants.h - update both together");
 
     uint32_t recentPacketsCapacity =
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
@@ -66,7 +68,7 @@ class PacketHistory
     void setOurTxHopLimit(PacketRecord &r, uint8_t hopLimit);
 
   public:
-    explicit PacketHistory(uint32_t size = -1); // Constructor with size parameter, default is PACKETHISTORY_MAX
+    explicit PacketHistory(uint32_t size = PACKETHISTORY_MAX);
 
     /**
      * Update recentBroadcasts and return true if we have already seen this packet

@@ -15,6 +15,8 @@ int32_t StatusMessageModule::runOnce()
         strncpy(ourStatus.status, moduleConfig.statusmessage.node_status, sizeof(ourStatus.status));
         ourStatus.status[sizeof(ourStatus.status) - 1] = '\0'; // ensure null termination
         meshtastic_MeshPacket *p = allocDataPacket();
+        if (!p)
+            return 1000 * 12 * 60 * 60;
         p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                      meshtastic_StatusMessage_fields, &ourStatus);
         p->to = NODENUM_BROADCAST;

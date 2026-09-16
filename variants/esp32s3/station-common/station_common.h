@@ -34,5 +34,5 @@
 // DIO2 controls an antenna switch and the TCXO voltage is controlled by DIO3
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-// NOTE: SX126X_MAX_POWER is intentionally NOT defined here — each board sets it.
+// NOTE: SX126X_MAX_POWER is intentionally NOT defined here - each board sets it.
 #endif

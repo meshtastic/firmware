@@ -1,4 +1,5 @@
 #include "TestUtil.h"
+#include <cstdlib>
 #include <unity.h>
 
 static void test_placeholder()
@@ -7,6 +8,10 @@ static void test_placeholder()
 }
 
 extern "C" {
+// Required by Unity: PlatformIO's weak defaults do not link on MinGW (PE-COFF weak externals).
+void setUp(void) {}
+void tearDown(void) {}
+
 void setup()
 {
     initializeTestEnvironment();

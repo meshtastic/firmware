@@ -16,8 +16,9 @@ struct TFTColorRegion {
     // Required by ST7789 driver: it scans until the first disabled entry.
     bool enabled = false;
 };
-
+#ifndef MAX_TFT_COLOR_REGIONS
 static constexpr size_t MAX_TFT_COLOR_REGIONS = 48;
+#endif
 extern TFTColorRegion colorRegions[MAX_TFT_COLOR_REGIONS];
 
 enum class TFTColorRole : uint8_t {
@@ -39,9 +40,7 @@ enum class TFTColorRole : uint8_t {
     Count
 };
 
-#if HAS_TFT || defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||                 \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
+#if HAS_TFT || defined(HAS_SPI_TFT) || defined(HAS_HUB75_NATIVE)
 #define GRAPHICS_TFT_COLORING_ENABLED 1
 #else
 #define GRAPHICS_TFT_COLORING_ENABLED 0
@@ -68,6 +67,29 @@ void clearTFTColorRegions();
 uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor);
 // Resolve effective region-mapped OFF color at a coordinate in native-endian RGB565.
 uint16_t resolveTFTOffColorAt(int16_t x, int16_t y, uint16_t defaultOffColor);
+
+// -- Per-row fast path for the hot pixel loops in TFTDisplay::display() --------
+// resolveTFTColorPixel() is O(regions) per pixel; for a full 800x480 repaint that
+// dominates redraw time. Regions are vertically localized, so cull to the regions
+// overlapping the current row once per row, then resolve each pixel against only
+// those (inlined here, so no per-pixel cross-TU call).
+extern uint8_t tftColorRowRegions[MAX_TFT_COLOR_REGIONS]; // indices into colorRegions[], ascending
+extern uint8_t tftColorRowCount;
+
+// Build tftColorRowRegions for row y. Call once per row before resolveTFTColorPixelRow().
+void beginTFTColorRow(int16_t y);
+
+// Resolve one pixel against the current row's active regions (set by beginTFTColorRow()).
+// Highest-index region wins, matching resolveTFTColorPixel()'s precedence.
+inline uint16_t resolveTFTColorPixelRow(int16_t x, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor)
+{
+    for (int j = static_cast<int>(tftColorRowCount) - 1; j >= 0; j--) {
+        const TFTColorRegion &r = colorRegions[tftColorRowRegions[j]];
+        if (x >= r.x && x < r.x + r.width)
+            return isset ? r.onColorBe : r.offColorBe;
+    }
+    return isset ? defaultOnColor : defaultOffColor;
+}
 
 // -- Theme engine ------------------------------------------------------
 // Each theme has four fields that work together:

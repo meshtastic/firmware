@@ -71,8 +71,6 @@ class InkHUD
     void navRight();
     void touchNavUp();
     void touchNavDown();
-    void touchNavLeft();
-    void touchNavRight();
     void touchTap(uint16_t x, uint16_t y);
     void touchLongPress(uint16_t x, uint16_t y);
 

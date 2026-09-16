@@ -31,6 +31,7 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 
 // Shared NicheGraphics components
 // --------------------------------
@@ -43,7 +44,7 @@ void setupNicheGraphics()
 
     // E-Ink Driver
     // -----------------------------
-    // The ED047TC1 is a parallel display — no SPI bus setup needed.
+    // The ED047TC1 is a parallel display - no SPI bus setup needed.
     // begin() args are part of the EInk interface but are ignored for parallel displays.
 
     Drivers::EInk *driver = new Drivers::ED047TC1;
@@ -61,7 +62,7 @@ void setupNicheGraphics()
     // Set how unhealthy additional FAST updates beyond this number are
     inkhud->setDisplayResilience(7, 1.5);
 
-    // Prepare fonts — use larger sizes to suit the 4.7" screen at ~234 DPI
+    // Prepare fonts - use larger sizes to suit the 4.7" screen at ~234 DPI
     InkHUD::Applet::fontLarge = FREESANS_24PT_WIN1253;
     InkHUD::Applet::fontMedium = FREESANS_18PT_WIN1253;
     InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
@@ -83,6 +84,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, true);   // Activated, Autoshown
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1), false, false); // Not Active, not autoshown
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false);           // Activated, not autoshown
+    inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet, false, false);       // Not Active, not autoshown
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false);      // Activated, not autoshown
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // Not Active, not autoshown

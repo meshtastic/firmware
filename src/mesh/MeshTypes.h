@@ -45,6 +45,11 @@ enum RxSource {
 // For old firmware there is no relay node set
 #define NO_RELAY_NODE 0
 
+// How recently we must have heard a direct neighbor for its single-byte relay id to be trusted as a
+// unique next hop. Mirrors NUM_ONLINE_SECS (NodeDB.cpp). Used by NodeDB::resolveLastByte() to scope
+// last-byte collision resolution to currently-reachable neighbors.
+#define NEXTHOP_NEIGHBOR_FRESH_SECS (60 * 60 * 2) // 2 hrs
+
 typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool

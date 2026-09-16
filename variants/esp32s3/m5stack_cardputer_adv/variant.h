@@ -1,5 +1,5 @@
 #define USE_ST7789
-
+#define HAS_SPI_TFT 1
 #define ST7789_NSS 37
 #define ST7789_RS 34  // DC
 #define ST7789_SDA 35 // MOSI

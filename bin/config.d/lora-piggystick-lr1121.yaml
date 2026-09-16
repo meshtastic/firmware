@@ -1,5 +1,5 @@
 Meta:
-  name: Lora Meshstick SX1262
+  name: PiggyStick LR1121
   support: community
   compatible:
     - usb
@@ -12,6 +12,6 @@ Lora:
   Busy: 4
   spidev: ch341
   DIO3_TCXO_VOLTAGE: 1.8
-#  USB_Serialnum: 12345678
+  #  USB_Serialnum: 12345678
   USB_PID: 0x5512
   USB_VID: 0x1A86

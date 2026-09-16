@@ -2,6 +2,7 @@
 #if RADIOLIB_EXCLUDE_SX126X != 1
 
 #include "RadioLibInterface.h"
+#include "configuration.h"
 
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.
@@ -46,12 +47,16 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
+    virtual void setRadioIsr(void (*callback)()) override;
+
+#ifdef LORA_DIO1_SOFTWARE_POLL
+    void handleSoftwareLoraIrqPoll() override;
+#endif
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
@@ -79,7 +84,23 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
   private:
+#ifdef LORA_DIO1_SOFTWARE_POLL
+    bool irqPollingActive = false;
+    bool pollTxMode = false;
+#endif
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
+
+    /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
+    int16_t programModemParams();
+
+    /** begin() and chip-side setup, shared by init() and by reconfigure()'s recovery of a chip that lost its state */
+    bool reinitChip();
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
+    /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
+    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 };
 #endif

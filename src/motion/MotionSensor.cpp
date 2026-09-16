@@ -2,6 +2,9 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
+#include "concurrency/LockGuard.h"
 #include "graphics/draw/CompassRenderer.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
@@ -30,10 +33,24 @@ bool isRangeValid(float highest, float lowest)
     // NaN/Inf guard without pulling in extra math helpers.
     return (highest == highest) && (lowest == lowest) && (highest > lowest);
 }
+
+struct CompassAccelSample {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    uint32_t sampledAtMs = 0;
+    bool valid = false;
+};
+
+concurrency::Lock latestCompassAccelLock;
+CompassAccelSample latestCompassAccelSample;
+
+concurrency::Lock latestCompassMagLock;
+CompassAccelSample latestCompassMagSample;
 } // namespace
 
 // screen is defined in main.cpp
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 MotionSensor::MotionSensor(ScanI2C::FoundDevice foundDevice)
 {
@@ -134,8 +151,7 @@ void MotionSensor::beginCalibrationDisplay(bool &showingScreen)
 void MotionSensor::finishCalibrationIfExpired(bool &showingScreen, const char *filePath, float highestX, float lowestX,
                                               float highestY, float lowestY, float highestZ, float lowestZ)
 {
-    const uint32_t now = millis();
-    if ((int32_t)(now - endCalibrationAt) < 0)
+    if (!Throttle::deadlinePassed(endCalibrationAt))
         return;
 
     doCalibration = false;
@@ -155,7 +171,7 @@ void MotionSensor::startCalibrationWindow(uint16_t forSeconds)
 {
     doCalibration = true;
     const uint32_t calibrateFor = static_cast<uint32_t>(forSeconds) * 1000U;
-    endCalibrationAt = millis() + calibrateFor;
+    endCalibrationAt = Time::timerEndsAtMillis(calibrateFor);
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     if (screen)
         screen->setEndCalibration(endCalibrationAt);
@@ -204,6 +220,64 @@ float MotionSensor::applyCompassOrientation(float heading)
     }
 }
 
+void MotionSensor::publishCompassAccelSample(float x, float y, float z)
+{
+    concurrency::LockGuard guard(&latestCompassAccelLock);
+    latestCompassAccelSample.x = x;
+    latestCompassAccelSample.y = y;
+    latestCompassAccelSample.z = z;
+    latestCompassAccelSample.sampledAtMs = millis();
+    latestCompassAccelSample.valid = true;
+}
+
+bool MotionSensor::getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs)
+{
+    uint32_t sampledAtMs = 0;
+    {
+        concurrency::LockGuard guard(&latestCompassAccelLock);
+        if (!latestCompassAccelSample.valid) {
+            return false;
+        }
+
+        x = latestCompassAccelSample.x;
+        y = latestCompassAccelSample.y;
+        z = latestCompassAccelSample.z;
+        sampledAtMs = latestCompassAccelSample.sampledAtMs;
+    }
+
+    ageMs = millis() - sampledAtMs;
+    return true;
+}
+
+void MotionSensor::publishCompassMagSample(float x, float y, float z)
+{
+    concurrency::LockGuard guard(&latestCompassMagLock);
+    latestCompassMagSample.x = x;
+    latestCompassMagSample.y = y;
+    latestCompassMagSample.z = z;
+    latestCompassMagSample.sampledAtMs = millis();
+    latestCompassMagSample.valid = true;
+}
+
+bool MotionSensor::getLatestCompassMagSample(float &x, float &y, float &z, uint32_t &ageMs)
+{
+    uint32_t sampledAtMs = 0;
+    {
+        concurrency::LockGuard guard(&latestCompassMagLock);
+        if (!latestCompassMagSample.valid) {
+            return false;
+        }
+
+        x = latestCompassMagSample.x;
+        y = latestCompassMagSample.y;
+        z = latestCompassMagSample.z;
+        sampledAtMs = latestCompassMagSample.sampledAtMs;
+    }
+
+    ageMs = millis() - sampledAtMs;
+    return true;
+}
+
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
 void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -215,11 +289,14 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     const bool compactLayout = (height <= 80);
     const int16_t margin = 4;
 
-    const uint32_t now = millis();
+    const uint32_t now = Time::getMillis();
     const uint32_t endCalibrationAt = screen->getEndCalibration();
     uint32_t timeRemaining = 0;
-    if (endCalibrationAt > now) {
-        timeRemaining = (endCalibrationAt - now + 999) / 1000;
+    // Signed delta, as in finishCalibrationIfExpired(): this needs the remaining magnitude, not
+    // just whether the deadline passed, so it cannot use Throttle::deadlinePassed().
+    const int32_t remainingMs = (int32_t)(endCalibrationAt - now);
+    if (remainingMs > 0) {
+        timeRemaining = ((uint32_t)remainingMs + 999) / 1000;
     }
 
     int16_t compassX = 0, compassY = 0;

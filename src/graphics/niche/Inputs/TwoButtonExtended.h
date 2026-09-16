@@ -49,11 +49,8 @@ class TwoButtonExtended : protected concurrency::OSThread
     void setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs);
     void setJoystickDebounce(uint32_t debounceMs);
     void setHandlerDown(uint8_t whichButton, Callback onDown);
-    void setHandlerUp(uint8_t whichButton, Callback onUp);
     void setHandlerShortPress(uint8_t whichButton, Callback onShortPress);
     void setHandlerLongPress(uint8_t whichButton, Callback onLongPress);
-    void setJoystickDownHandlers(Callback uDown, Callback dDown, Callback ldown, Callback rDown);
-    void setJoystickUpHandlers(Callback uUp, Callback dUp, Callback lUp, Callback rUp);
     void setJoystickPressHandlers(Callback uPress, Callback dPress, Callback lPress, Callback rPress);
     void setTwoWayRockerPressHandlers(Callback lPress, Callback rPress);
 

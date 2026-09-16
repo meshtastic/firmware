@@ -792,6 +792,20 @@ void clearTFTColorRegions()
     colorRegionCount = 0;
 }
 
+// Per-row culling fast path (see TFTColorRegions.h / resolveTFTColorPixelRow()).
+uint8_t tftColorRowRegions[MAX_TFT_COLOR_REGIONS];
+uint8_t tftColorRowCount = 0;
+
+void beginTFTColorRow(int16_t y)
+{
+    tftColorRowCount = 0;
+    for (uint8_t i = 0; i < colorRegionCount; i++) {
+        const TFTColorRegion &r = colorRegions[i];
+        if (y >= r.y && y < r.y + r.height)
+            tftColorRowRegions[tftColorRowCount++] = i;
+    }
+}
+
 uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor)
 {
     for (int i = static_cast<int>(colorRegionCount) - 1; i >= 0; i--) {
