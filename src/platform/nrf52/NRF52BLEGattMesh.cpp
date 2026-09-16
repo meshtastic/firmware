@@ -18,7 +18,8 @@ concurrency::Lock lock;
 struct Link {
     bool used;
     uint16_t conn;
-    bool subscribed; // wrote the CCCD: a notify target, and the mark of a mesh peer
+    bool subscribed;     // wrote the CCCD: a notify target, and the mark of a mesh peer
+    bool everSubscribed; // subscribed at any point, which outlives an unsubscribe
 };
 std::array<Link, 4> links{};
 
@@ -68,6 +69,7 @@ Link *addLink(uint16_t conn)
         l.used = true;
         l.conn = conn;
         l.subscribed = false;
+        l.everSubscribed = false;
         return &l;
     }
     return nullptr;
@@ -117,6 +119,7 @@ void onCccd(uint16_t conn, BLECharacteristic *, uint16_t value)
         concurrency::LockGuard guard(&lock);
         if (Link *l = addLink(conn))
             l->subscribed = subscribed;
+        l->everSubscribed |= subscribed;
     }
     LOG_INFO("BLE GATT mesh: conn %u %s (chunk %u)", conn, subscribed ? "subscribed" : "unsubscribed", chunkFor(conn));
     if (bleGattMeshHandler)
@@ -183,7 +186,7 @@ bool NRF52BLEGattMesh::onDisconnect(uint16_t conn)
     {
         concurrency::LockGuard guard(&lock);
         if (Link *l = findLink(conn)) {
-            subscribed = l->subscribed;
+            subscribed = l->everSubscribed;
             l->used = false;
             pushRx(conn, nullptr, 0); // the pump drops its half-built packets
         }

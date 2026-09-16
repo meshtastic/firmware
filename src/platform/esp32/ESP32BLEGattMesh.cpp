@@ -32,7 +32,8 @@ struct Link {
     bool used;
     uint16_t conn;
     uint16_t chunk;
-    bool subscribed; // wrote the CCCD: a notify target
+    bool subscribed;     // wrote the CCCD: a notify target
+    bool everSubscribed; // subscribed at any point, which outlives an unsubscribe
     // Arrived through the mesh-peer advertisement (instance 2). Set in onGapEvent CONNECT and nowhere
     // else: it is the slot accounting for that advertisement and the "not the phone's session" signal
     // NimbleBluetooth's onDisconnect keys off, so it must mean exactly "came in on instance 2". It used
@@ -94,6 +95,7 @@ Link *addLink(uint16_t conn, bool viaMeshAdv)
         l.conn = conn;
         l.chunk = chunkFor(conn);
         l.subscribed = false;
+        l.everSubscribed = false;
         l.viaMeshAdv = viaMeshAdv;
         return &l;
     }
@@ -191,6 +193,7 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
             std::lock_guard<std::mutex> guard(lock);
             if (Link *l = addLink(desc->conn_handle, false)) {
                 l->subscribed = subscribed;
+                l->everSubscribed |= subscribed;
                 l->chunk = chunkFor(desc->conn_handle);
                 viaMeshAdv = l->viaMeshAdv;
             }
@@ -361,7 +364,7 @@ bool ESP32BLEGattMesh::onDisconnect(uint16_t connHandle)
         std::lock_guard<std::mutex> guard(lock);
         if (Link *l = findLink(connHandle)) {
             viaMeshAdv = l->viaMeshAdv;
-            subscribed = l->subscribed;
+            subscribed = l->everSubscribed;
             l->used = false;
             pushRx(connHandle, nullptr, 0); // the pump drops its half-built packets
         }
