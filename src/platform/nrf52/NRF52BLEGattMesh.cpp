@@ -77,6 +77,7 @@ Link *addLink(uint16_t conn)
 
 // Counted since boot so a dropped write carries its own denominator: the log reaches a host as a
 // sparse LogRecord stream, and one surviving line has to be enough to compute a rate from.
+uint32_t rxArrived = 0;
 uint32_t rxAccepted = 0;
 uint32_t rxDropped = 0;
 
@@ -108,13 +109,21 @@ void pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
 void onWrite(uint16_t conn, BLECharacteristic *, uint8_t *data, uint16_t len)
 {
     // Bluefruit's callback task: copy the value out and wake the pump. Nothing here touches the mesh.
-    if (len == 0 || len > BLE_GATT_MESH_MAX_CHUNK)
+    if (len == 0 || len > BLE_GATT_MESH_MAX_CHUNK) {
+        LOG_WARN("BLE GATT mesh: write from conn %u refused at the door, %u bytes", conn, len);
         return;
+    }
     {
         concurrency::LockGuard guard(&lock);
         addLink(conn);
         pushRx(conn, data, len);
     }
+    // After the lock, never inside it: a LOG_ that takes one deadlocks against this same mutex.
+    // Every arrival is logged because the question this answers is whether writes reach the door at
+    // all - pushRx speaks only when it turns one away.
+    rxArrived++;
+    LOG_DEBUG("BLE GATT mesh: write %u bytes from conn %u (arrived %u, accepted %u, dropped %u)", len, conn, (unsigned)rxArrived,
+              (unsigned)rxAccepted, (unsigned)rxDropped);
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
 }
