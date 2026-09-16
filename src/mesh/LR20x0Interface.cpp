@@ -31,6 +31,10 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 };
 #endif
 
+#ifdef LR2021_CUSTOM_PA_TABLE
+#include "pa_table.h"
+#endif
+
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and LR20x0 power config forgotten)
 #if ARCH_PORTDUINO
@@ -169,6 +173,8 @@ template <typename T> bool LR20x0Interface<T>::init()
     // packet type and modulation params. reconfigure() reapplies it after its own modulation changes.
     if (res == RADIOLIB_ERR_NONE)
         applyDcdcWorkaround();
+
+    applyCustomLfPaTable(getFreq());
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
@@ -379,6 +385,9 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
+
+        applyCustomLfPaTable(freq);
+
         lr20x0LastFreqMHz = freq;
 
         res = lora.setCRC(2);
@@ -407,6 +416,24 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
 
         return true;
     }
+}
+
+// Board LF PA table after begin(); pointer is retained. HF keeps the RadioLib default.
+// Warn-only: a calibration miss must not fail init/fullBegin, keep the begin() PA config.
+template <typename T> void LR20x0Interface<T>::applyCustomLfPaTable(float freq)
+{
+#ifdef LR2021_CUSTOM_PA_TABLE
+    if (isLr20x0HighBand(freq))
+        return;
+    lora.setPaTable(lr2021_pa_table_lf, false);
+    int16_t paRes = lora.setOutputPower(power);
+    if (paRes != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
+    else
+        LOG_DEBUG("LR2021 custom LF PA table installed");
+#else
+    (void)freq;
+#endif
 }
 
 // Semtech DCDC sensitivity workaround for sub-GHz operation on engineering sample date code 2513.
