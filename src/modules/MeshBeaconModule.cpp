@@ -547,6 +547,10 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         if (switchDepth > 1)
             LOG_WARN("Beacon: switching again with no restore between; home preset=%d slot=%u region=%d still held",
                      originalModemPreset, originalLoraChannel, originalRegion);
+        // Before config.lora stops describing the config we are committed to, so the committed slot
+        // stays pinned to ours while we key up on someone else's preset.
+        if (nodeDB)
+            nodeDB->setLoraSlotTransient(true);
         // Only the RF fields: the sidecar's copy of the rest is a snapshot of this same config, and
         // installing it wholesale would undo any edit made while the beacon was in flight.
         config.lora.modem_preset = target.modem_preset;
@@ -577,6 +581,10 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         config.lora.use_preset = originalUsePreset;
         config.lora.channel_num = originalLoraChannel;
         config.lora.region = originalRegion;
+        if (nodeDB) { // config.lora describes the committed config again
+            nodeDB->setLoraSlotTransient(false);
+            nodeDB->refreshCommittedLoraSlot();
+        }
         radioSwitched = false; // cleared before reconfigure(), so the flag never lags the radio it describes
         switchDepth = 0;
         switchedForId = 0;

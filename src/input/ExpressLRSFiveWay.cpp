@@ -80,7 +80,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
     if (keyInProcess == NO_PRESS) {
         // New key down
         if (newKey != NO_PRESS) {
-            keyDownStart = Time::getMillis();
+            keyDownStart = Time::skipZero(Time::getMillis());
             // DBGLN("down=%u", newKey);
         }
     } else {

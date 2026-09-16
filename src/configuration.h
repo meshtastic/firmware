@@ -642,6 +642,33 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// -----------------------------------------------------------------------------
+// Motion sensor wake
+// -----------------------------------------------------------------------------
+
+/* The motion driver that owns this pin attaches the ISR. sleep.cpp reuses it as a
+   light-sleep wake source and PowerFSM attributes the resulting GPIO wake to motion.
+   Must stay below the exclusion cascade: MESHTASTIC_MINIMIZE_BUILD derives
+   MESHTASTIC_EXCLUDE_I2C above, and no motion driver is built when it is set. */
+#if !MESHTASTIC_EXCLUDE_I2C
+#if defined(BMA4XX_INT) && defined(HAS_BMA423)
+#define MOTION_WAKE_INT_PIN BMA4XX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(BHI260AP_INT) && defined(HAS_BHI260AP)
+#define MOTION_WAKE_INT_PIN BHI260AP_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(STK8XXX_INT) && defined(HAS_STK8XXX)
+#define MOTION_WAKE_INT_PIN STK8XXX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(ICM_20948_INT_PIN) && defined(HAS_ICM20948)
+#define MOTION_WAKE_INT_PIN ICM_20948_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#elif defined(QMA_6100P_INT_PIN) && defined(HAS_QMA6100P)
+#define MOTION_WAKE_INT_PIN QMA_6100P_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#endif
+#endif
+
 #ifndef USE_ETHERNET_DEFAULT
 #define USE_ETHERNET_DEFAULT 0
 #endif
