@@ -642,6 +642,16 @@ The mesh network has limited bandwidth. When modifying broadcast intervals:
 - Use `Default::getConfiguredOrMinimumValue()` to enforce minimums
 - Consider `numOnlineNodes` scaling for congestion control
 
+### NodeInfo storm suppression
+
+A NodeInfo exchange is cheap for the sender and expensive for the mesh, so `NodeInfoModule::allocReply()` refuses one class of request outright, and it sets `ignoreRequest`, which also stops `MeshModule::callModules` from sending a `NO_RESPONSE` NAK - a refusal is silent, not an error.
+
+**Broadcast requests are never answered.** A `want_response` NodeInfo addressed to `NODENUM_BROADCAST` asks every node in earshot to answer one packet; that is amplification, and it is how NodeInfo storms start. Senders still set the bit (`runOnce` on a channel change, the phone/TCP heartbeat), and older firmware still answers it, so don't read the bit as dead - just don't answer it here.
+
+What deliberately survives: our scheduled `runOnce` broadcast, and the handshakes driven by traffic we could not otherwise handle - `ReliableRouter`'s `PKI_UNKNOWN_PUBKEY` response to an undecryptable DM, `KeyVerificationModule`, and the phone-triggered sends. Those call `sendOurNodeInfo()` directly while `currentRequest` points at a non-NodeInfo packet (or nothing), so `isReplyingToExternalRequest` is false and no suppression applies. Keep new urgent paths on `sendOurNodeInfo()` rather than routing them through the reply machinery.
+
+Discovery still converges without broadcast replies: a node that hears an unknown peer unicasts it a NodeInfo with `want_response`, and that unicast is answered. Covered by `test/test_nodeinfo_storm/`.
+
 ### Power Management
 
 Many devices are battery-powered:
@@ -735,6 +745,7 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 - `test_mqtt/` - MQTT integration
 - `test_nexthop_routing/` - Next-hop routing logic
 - `test_nodedb_blocked/` - NodeDB blocked-node handling
+- `test_nodeinfo_storm/` - the NodeInfo reply-refusal policy
 - `test_packet_history/` - Packet history tracking
 - `test_packet_signing/` - Packet signing
 - `test_position_module/` - Position module behaviour
@@ -983,7 +994,7 @@ House rules for agents running these prompts:
 Two firmware changes exist specifically so the test harness works reliably. **Keep these in mind when touching related code.**
 
 - **`src/mesh/StreamAPI.cpp` + `StreamAPI.h`** - `emitLogRecord` uses a dedicated `fromRadioScratchLog` + `txBufLog` pair and a `concurrency::Lock streamLock`. Before this fix, `debug_log_api_enabled=true` would tear `FromRadio` protobufs on the serial transport because `emitTxBuffer` and `emitLogRecord` shared a single scratch buffer. The conftest enables the log stream session-wide; without this fix the device would corrupt its own FromRadio replies mid-session.
-- **`src/mesh/PhoneAPI.cpp`** - `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion.
+- **`src/mesh/PhoneAPI.cpp`** - `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion. The `wantReplies` argument no longer earns a reply from current firmware (see **NodeInfo storm suppression**); the peer learns us from the broadcast itself and then unicasts its own NodeInfo back through the unknown-node path, so discovery still completes.
 
 If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` flow, run `./run-tests.sh` (from a meshtastic-mcp checkout, with `MESHTASTIC_FIRMWARE_ROOT` pointed here) at minimum before asking for review.
 
