@@ -20,10 +20,8 @@
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
+#include <mbedtls/platform.h>
 #include <mbedtls/ssl.h>
-extern "C" {
-#include <esp_mem.h>
-}
 #endif
 
 // Persistent Data Storage
@@ -79,11 +77,11 @@ static bool canAllocateTlsSession()
         return false;
 
     // Held together, through mbedTLS's own allocator, as setup() does: one can fit where two do not.
-    void *in = esp_mbedtls_mem_calloc(1, TLS_IN_BUFFER_BYTES);
-    void *out = in ? esp_mbedtls_mem_calloc(1, TLS_OUT_BUFFER_BYTES) : nullptr;
+    void *in = mbedtls_calloc(1, TLS_IN_BUFFER_BYTES);
+    void *out = in ? mbedtls_calloc(1, TLS_OUT_BUFFER_BYTES) : nullptr;
     const bool fits = in && out;
-    esp_mbedtls_mem_free(out);
-    esp_mbedtls_mem_free(in);
+    mbedtls_free(out);
+    mbedtls_free(in);
     return fits;
 }
 
