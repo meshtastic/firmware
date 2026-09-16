@@ -1191,11 +1191,22 @@ void NimbleBluetooth::setup()
             LOG_INFO("Use fixed passkey");
             security.setPassKey(true, config.bluetooth.fixed_pin);
         }
-        // Enable authorization requirements:
-        // - bonding: true (for persistent storage of the keys)
-        // - MITM: true (enables Man-In-The-Middle protection for password prompts)
-        // - secure connection: true (enables secure connection for encryption)
+        // setAuthenticationMode(bonding, MITM, secure connections): bonding persists the keys, MITM
+        // demands the passkey be proven, secure connections is LE SC pairing.
+#ifdef HAS_BLE_GATT_MESH
+        // Without MITM, matching what the nRF52 build has always required of the phone API
+        // (SECMODE_ENC_NO_MITM). Demanding it here is a property of the *device*, so it reaches a
+        // mesh peer that never touches the phone API: the central is pushed into passkey pairing on
+        // connect, cannot answer, and the ACL is gone before the unauthenticated mesh-peer
+        // characteristic can be subscribed. Measured on a Cardputer: 13 declined authorizations and
+        // no frames, against zero once the requirement is dropped.
+        //
+        // Gated for the same reason as the NO_PIN branch below: a build without the mesh-peer
+        // characteristic keeps develop's pairing behaviour exactly.
+        security.setAuthenticationMode(true, false, true);
+#else
         security.setAuthenticationMode(true, true, true);
+#endif
     } else {
         // No IO capability for no PIN mode
         security.setCapability(ESP_IO_CAP_NONE);
@@ -1251,18 +1262,24 @@ void NimbleBluetooth::setupService()
         logRadioCharacteristic = bleService->createCharacteristic(LOGRADIO_UUID, BLECharacteristic::PROPERTY_NOTIFY |
                                                                                      BLECharacteristic::PROPERTY_READ);
     } else {
-        ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, BLECharacteristic::PROPERTY_WRITE |
-                                                                                   BLECharacteristic::PROPERTY_WRITE_AUTHEN |
-                                                                                   BLECharacteristic::PROPERTY_WRITE_ENC);
-        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, BLECharacteristic::PROPERTY_READ |
-                                                                                       BLECharacteristic::PROPERTY_READ_AUTHEN |
-                                                                                       BLECharacteristic::PROPERTY_READ_ENC);
+        // An encrypted link, and on a mesh build not an authenticated one: the device no longer
+        // demands MITM (see setupService's security block), so an AUTHEN attribute could never be
+        // reached. This is the level the nRF52 build has always used - SECMODE_ENC_NO_MITM.
+#ifdef HAS_BLE_GATT_MESH
+        const uint32_t readProtected = BLECharacteristic::PROPERTY_READ_ENC;
+        const uint32_t writeProtected = BLECharacteristic::PROPERTY_WRITE_ENC;
+#else
+        const uint32_t readProtected = BLECharacteristic::PROPERTY_READ_AUTHEN | BLECharacteristic::PROPERTY_READ_ENC;
+        const uint32_t writeProtected = BLECharacteristic::PROPERTY_WRITE_AUTHEN | BLECharacteristic::PROPERTY_WRITE_ENC;
+#endif
+        ToRadioCharacteristic =
+            bleService->createCharacteristic(TORADIO_UUID, BLECharacteristic::PROPERTY_WRITE | writeProtected);
+        FromRadioCharacteristic =
+            bleService->createCharacteristic(FROMRADIO_UUID, BLECharacteristic::PROPERTY_READ | readProtected);
         fromNumCharacteristic = bleService->createCharacteristic(
-            FROMNUM_UUID, BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ |
-                              BLECharacteristic::PROPERTY_READ_AUTHEN | BLECharacteristic::PROPERTY_READ_ENC);
+            FROMNUM_UUID, BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ | readProtected);
         logRadioCharacteristic = bleService->createCharacteristic(
-            LOGRADIO_UUID, BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ |
-                               BLECharacteristic::PROPERTY_READ_AUTHEN | BLECharacteristic::PROPERTY_READ_ENC);
+            LOGRADIO_UUID, BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ | readProtected);
     }
     // setupService() re-runs on BLE re-enable; a fresh BluetoothPhoneAPI here would leak
     // the old one as a still-scheduled zombie OSThread, so reuse it and reset its state
