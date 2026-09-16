@@ -100,7 +100,9 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
                !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
-               !nodeDB->isFull()) {
+               !nodeInfoLiteIsOnProbation(nodeDB->getMeshNode(mp->from))) {
+        // A probation entry (heard once on a full store) is never greeted; the packet that promotes
+        // it arrives here with the flag already clear, so a recurring node is greeted then.
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {

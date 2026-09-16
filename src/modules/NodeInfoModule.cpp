@@ -161,6 +161,14 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
             suppressReplyForCurrentRequest = false;
             return NULL;
         }
+
+        // Heard once on a full store: defer to our scheduled broadcast. This request is addressed to
+        // us, so updateFrom() promotes the requester right after this and its next one is answered.
+        if (nodeInfoLiteIsOnProbation(nodeDB->getMeshNode(getFrom(currentRequest)))) {
+            LOG_DEBUG("Skip send NodeInfo reply to 0x%08x: requester on probation", getFrom(currentRequest));
+            ignoreRequest = true;
+            return NULL;
+        }
     }
 
     if (!airTime->isTxAllowedChannelUtil(false)) {

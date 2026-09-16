@@ -3517,6 +3517,113 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 #include "MeshModule.h"
 #include "Throttle.h"
 
+uint32_t NodeDB::probationGapSecs() const
+{
+    return clamp<uint32_t>(probationResidencyEmaSecs / 2, NODEDB_PROBATION_GAP_MIN_SECS, NODEDB_PROBATION_GAP_MAX_SECS);
+}
+
+int NodeDB::probationCount() const
+{
+    int count = 0;
+    for (int i = 1; i < numMeshNodes; i++)
+        if (nodeInfoLiteIsOnProbation(&meshNodes->at(i)))
+            count++;
+    return count;
+}
+
+int NodeDB::oldestProbationIndex() const
+{
+    EvictionRecency oldest = {UINT32_MAX, true};
+    int index = -1;
+    for (int i = 1; i < numMeshNodes; i++) {
+        const meshtastic_NodeInfoLite *cand = &meshNodes->at(i);
+        if (!nodeInfoLiteIsOnProbation(cand))
+            continue;
+        const EvictionRecency recency = evictionRecency(cand);
+        if (index == -1 || evictionRecencyOlder(recency, oldest)) {
+            oldest = recency;
+            index = i;
+        }
+    }
+    return index;
+}
+
+int NodeDB::oldestResidentIndex() const
+{
+    // Newest-possible sentinel: a zeroed init ranks older than every candidate, so nothing
+    // would ever be selected. Keep it maximal even though the index guards below also cover it.
+    EvictionRecency oldest = {UINT32_MAX, true};
+    EvictionRecency oldestBoring = {UINT32_MAX, true};
+    int oldestIndex = -1;
+    int oldestBoringIndex = -1;
+    for (int i = 1; i < numMeshNodes; i++) {
+        const meshtastic_NodeInfoLite *cand = &meshNodes->at(i);
+        if (nodeInfoLiteIsOnProbation(cand))
+            continue;
+        const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
+        const bool isIgnored = nodeInfoLiteIsIgnored(cand);
+        const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
+        // last_heard, except that nodes heard this boot before the clock became trusted
+        // rank by their RAM arrival stamp instead of the 0 in the stored field.
+        const EvictionRecency candRecency = evictionRecency(cand);
+        // Simply the oldest non-favorite, non-ignored, non-verified node
+        if (!isFavoriteNode && !isIgnored && !isVerified && (oldestIndex == -1 || evictionRecencyOlder(candRecency, oldest))) {
+            oldest = candRecency;
+            oldestIndex = i;
+        }
+        // The oldest "boring" node
+        if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 &&
+            (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
+            oldestBoring = candRecency;
+            oldestBoringIndex = i;
+        }
+    }
+    // if we found a "boring" node, evict it
+    return oldestBoringIndex != -1 ? oldestBoringIndex : oldestIndex;
+}
+
+void NodeDB::evictAt(int index, bool keepKeylessInWarm)
+{
+    const meshtastic_NodeInfoLite &evicted = meshNodes->at(index);
+#if WARM_NODE_COUNT > 0
+    // Demote to the warm tier so the identity (and crucially the PKI key) outlives the hot-store
+    // slot. A one-packet probation entry has no key worth keeping and would only LRU real ones out.
+    if (evicted.public_key.size == 32 || keepKeylessInWarm)
+        warmStore.absorb(evicted.num, evicted.last_heard, evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL,
+                         evicted.role, warmProtectedCategory(evicted), nodeInfoLiteHasXeddsaSigned(&evicted));
+#else
+    (void)keepKeylessInWarm;
+#endif
+    eraseNodeSatellites(evicted.num);
+    // Shove the remaining nodes down the chain
+    for (int i = index; i < numMeshNodes - 1; i++) {
+        meshNodes->at(i) = meshNodes->at(i + 1);
+    }
+    (numMeshNodes)--;
+}
+
+uint32_t NodeDB::ageSecs(const meshtastic_NodeInfoLite *n) const
+{
+    const EvictionRecency recency = evictionRecency(n);
+    const uint32_t now = recency.heardThisBoot ? Time::getUptimeSecs() : getValidTime(RTCQualityFromNet);
+    return (recency.value && now > recency.value) ? now - recency.value : 0;
+}
+
+void NodeDB::promoteFromProbation(meshtastic_NodeInfoLite *info)
+{
+    const NodeNum num = info->num;
+    nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_ON_PROBATION_MASK, false);
+    // Residents are capped at the store minus the band, full or not: a promotion adds no entry, so
+    // the store sits one short until the next admission refills the band.
+    const int residents = numMeshNodes - probationCount();
+    if (residents > MAX_NUM_NODES - NODEDB_PROBATION_SLOTS) {
+        const int victim = oldestResidentIndex();
+        if (victim != -1 && meshNodes->at(victim).num != num)
+            evictAt(victim, /*keepKeylessInWarm=*/true);
+    }
+    LOG_DEBUG("Promote 0x%08x from probation", num);
+}
+
 // Minimum spacing between evictions once the node database is full.
 #define NODEDB_FULL_EVICTION_INTERVAL_MS (2 * 1000UL)
 
@@ -3645,7 +3752,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
  */
 void NodeDB::addFromContact(meshtastic_SharedContact contact)
 {
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num, /*heardOnAir=*/false);
     if (!info || !contact.has_user) {
         return;
     }
@@ -3851,6 +3958,20 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
                 lastFullEvictionMs = millis();
             }
             info = getOrCreateMeshNode(getFrom(&mp));
+        } else if (nodeInfoLiteIsOnProbation(info)) {
+            // Heard again. A gap since the previous packet says recurring rather than a burst; a
+            // packet addressed to us says it already knows us. Measured before last_heard moves.
+            bool promote = isToUs(&mp);
+            if (!promote) {
+                const EvictionRecency prev = evictionRecency(info);
+                const uint32_t now = prev.heardThisBoot ? Time::getUptimeSecs() : (mp.has_rx_time ? mp.rx_time : 0);
+                // No usable previous stamp (clockless boot past the sidecar cap): the second packet decides.
+                promote = prev.value == 0 || now == 0 || (now > prev.value && now - prev.value >= probationGapSecs());
+            }
+            if (promote) {
+                promoteFromProbation(info);
+                info = getMeshNode(getFrom(&mp)); // the eviction may have shifted the array under the pointer
+            }
         }
         if (!info) {
             return;
@@ -3939,6 +4060,8 @@ bool NodeDB::setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool
     // slots so getOrCreateMeshNode can always make room.
     if (nodeInfoLiteIsProtected(node) || numProtectedNodes() < MAX_NUM_NODES - 2) {
         nodeInfoLiteSetBit(node, mask, true);
+        // The user vouched for it: no longer a probation entry, whatever the mesh says.
+        nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_ON_PROBATION_MASK, false);
         return true;
     }
     return false;
@@ -4362,60 +4485,28 @@ void NodeDB::backfillHeardAt()
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing
-meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
+meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n, bool heardOnAir)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
+    bool evictedForThis = false;
 
     if (!lite) {
         if (isFull()) {
             LOG_INFO("Node database full: %i nodes, %u bytes free. Erase oldest", numMeshNodes, memGet.getFreeHeap());
-            // look for oldest node and erase it
-            // Newest-possible sentinel: a zeroed init ranks older than every candidate, so nothing
-            // would ever be selected. Keep it maximal even though the index guards below also cover it.
-            EvictionRecency oldest = {UINT32_MAX, true};
-            EvictionRecency oldestBoring = {UINT32_MAX, true};
-            int oldestIndex = -1;
-            int oldestBoringIndex = -1;
-            for (int i = 1; i < numMeshNodes; i++) {
-                const meshtastic_NodeInfoLite *cand = &meshNodes->at(i);
-                const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
-                const bool isIgnored = nodeInfoLiteIsIgnored(cand);
-                const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
-                // last_heard, except that nodes heard this boot before the clock became trusted
-                // rank by their RAM arrival stamp instead of the 0 in the stored field.
-                const EvictionRecency candRecency = evictionRecency(cand);
-                // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavoriteNode && !isIgnored && !isVerified &&
-                    (oldestIndex == -1 || evictionRecencyOlder(candRecency, oldest))) {
-                    oldest = candRecency;
-                    oldestIndex = i;
+            // The probation band absorbs the churn: once it holds its quota the oldest probation
+            // entry goes; until then a resident makes room so the band can grow to quota.
+            int victim = probationCount() >= NODEDB_PROBATION_SLOTS ? oldestProbationIndex() : -1;
+            const bool fromProbation = victim != -1;
+            if (!fromProbation)
+                victim = oldestResidentIndex();
+            if (victim != -1) {
+                if (fromProbation) {
+                    const uint32_t age = ageSecs(&meshNodes->at(victim));
+                    probationResidencyEmaSecs +=
+                        (static_cast<int32_t>(age) - static_cast<int32_t>(probationResidencyEmaSecs)) / 8;
                 }
-                // The oldest "boring" node
-                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 &&
-                    (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
-                    oldestBoring = candRecency;
-                    oldestBoringIndex = i;
-                }
-            }
-            // if we found a "boring" node, evict it
-            if (oldestBoringIndex != -1) {
-                oldestIndex = oldestBoringIndex;
-            }
-
-            if (oldestIndex != -1) {
-                const meshtastic_NodeInfoLite &evicted = meshNodes->at(oldestIndex);
-#if WARM_NODE_COUNT > 0
-                // Demote to the warm tier so the identity (and crucially the
-                // PKI key) outlives the hot-store slot.
-                warmStore.absorb(evicted.num, evicted.last_heard, evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL,
-                                 evicted.role, warmProtectedCategory(evicted), nodeInfoLiteHasXeddsaSigned(&evicted));
-#endif
-                eraseNodeSatellites(evicted.num);
-                // Shove the remaining nodes down the chain
-                for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
-                    meshNodes->at(i) = meshNodes->at(i + 1);
-                }
-                (numMeshNodes)--;
+                evictAt(victim, /*keepKeylessInWarm=*/!fromProbation);
+                evictedForThis = true;
             }
         }
         // Don't append past the end of the vector. The protected-node cap
@@ -4433,6 +4524,9 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+        // Heard on a full store: on probation until heard again. Contacts and admin blocks are residents.
+        if (evictedForThis && heardOnAir)
+            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_ON_PROBATION_MASK, true);
 #if WARM_NODE_COUNT > 0
         // Re-admission: restore what the warm tier kept for this node
         WarmNodeEntry warm;

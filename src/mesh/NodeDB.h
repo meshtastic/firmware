@@ -183,6 +183,12 @@ inline bool isRadioProfileFile(const char *filename)
 /// display formatters fall into their existing unknown-age branches ("unknown age" / "?").
 inline constexpr uint32_t SINCE_UNKNOWN = UINT32_MAX;
 
+/// Probation band: nodes heard once on a full store, evicted first, never greeted, promoted when heard
+/// again after a gap of half the measured band residency (clamped) or when they address us.
+inline constexpr uint8_t NODEDB_PROBATION_SLOTS = 10;
+inline constexpr uint32_t NODEDB_PROBATION_GAP_MIN_SECS = 60;
+inline constexpr uint32_t NODEDB_PROBATION_GAP_MAX_SECS = 10 * 60;
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
@@ -449,6 +455,9 @@ class NodeDB
      */
     size_t getNumOnlineMeshNodes(bool localOnly = false);
 
+    /// Gap since a probation node's previous packet that promotes it; see NODEDB_PROBATION_*.
+    uint32_t probationGapSecs() const;
+
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
         removeNodeByNum(NodeNum nodeNum);
 
@@ -474,7 +483,9 @@ class NodeDB
     /// Find a node in our DB, create an empty NodeInfoLite if missing (evicting
     /// the oldest non-protected node when full). Public so admin handlers can
     /// register a node we have not heard from yet (e.g. to block it by ID).
-    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+    /// heardOnAir: admitted because we heard the node, so on a full store it starts on probation;
+    /// a contact import or an admin block passes false and is a resident at once.
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n, bool heardOnAir = true);
 
 #if WARM_NODE_COUNT > 0
     // Warm ("long-tail") tier: minimal {num, last_heard, public_key} records
@@ -741,6 +752,22 @@ class NodeDB
     bool loraSlotTransient = false;
     LoraSlotSnapshot currentLoraSlot() const;
 
+    /// EMA (1/8) of how long a probation entry lasted before eviction; seeds at twice the gap cap
+    /// so a fresh boot starts at NODEDB_PROBATION_GAP_MAX_SECS.
+    uint32_t probationResidencyEmaSecs = 2 * NODEDB_PROBATION_GAP_MAX_SECS;
+
+    int probationCount() const;
+    /// Index of the oldest probation entry, or -1.
+    int oldestProbationIndex() const;
+    /// Index of the oldest evictable resident: key-less first, else oldest; -1 if none.
+    int oldestResidentIndex() const;
+    /// Drop the entry at index; a key always reaches the warm tier, a key-less identity only if asked.
+    void evictAt(int index, bool keepKeylessInWarm);
+    /// Age of the entry in seconds against its own timebase, for the residency EMA.
+    uint32_t ageSecs(const meshtastic_NodeInfoLite *n) const;
+    /// Clear probation; evicts the oldest resident when the resident band is at its cap.
+    void promoteFromProbation(meshtastic_NodeInfoLite *info);
+
     /*
      * Internal boolean to track sorting paused
      */
@@ -871,12 +898,20 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_HEARD_SLOT_SHIFT 12
 #define NODEINFO_BITFIELD_HEARD_SLOT_BITS 12
 #define NODEINFO_BITFIELD_HEARD_SLOT_MASK (((1u << NODEINFO_BITFIELD_HEARD_SLOT_BITS) - 1) << NODEINFO_BITFIELD_HEARD_SLOT_SHIFT)
-// Bits 24..31 reserved for future single-bit flags.
+// Admitted to a full store by a heard packet and not yet heard again: first to be evicted, never
+// greeted. See NODEDB_PROBATION_SLOTS.
+#define NODEINFO_BITFIELD_ON_PROBATION_SHIFT 24
+#define NODEINFO_BITFIELD_ON_PROBATION_MASK (1u << NODEINFO_BITFIELD_ON_PROBATION_SHIFT)
+// Bits 25..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_USER_MASK);
+}
+inline bool nodeInfoLiteIsOnProbation(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_ON_PROBATION_MASK);
 }
 inline bool nodeInfoLiteViaMqtt(const meshtastic_NodeInfoLite *n)
 {
