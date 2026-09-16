@@ -1361,9 +1361,10 @@ void test_customMqttRoot(void)
 }
 
 // A LoRa region change rewrites moduleConfig.mqtt.root without telling MQTT (AdminModule, MenuHandler,
-// InkHUD). runOnce() must pick it up, rebuild the topics and resubscribe; otherwise the node keeps
-// publishing and subscribing under the old region's root until reboot.
-void test_reinitTopicsUpdatesOnRegionChange(void)
+// InkHUD). MQTT must pick it up, rebuild the topics and resubscribe; otherwise the node keeps
+// publishing and subscribing under the old region's root until reboot. An uplink sent before
+// runOnce() runs must already use the new root.
+void test_rootChange_rebuildsTopics(void)
 {
     // Start MQTT with a US region root.
     strcpy(moduleConfig.mqtt.root, "msh/US");
@@ -1376,14 +1377,13 @@ void test_reinitTopicsUpdatesOnRegionChange(void)
     strcpy(moduleConfig.mqtt.root, "msh/EU_868");
     pubsub->subscriptions_.clear();
     pubsub->published_.clear();
-
-    // Verify that subscriptions are refreshed with the new region prefix.
-    TEST_ASSERT_TRUE(loopUntil([] {
-        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") && pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+");
-    }));
-
-    // Verify that publish also uses the new topic prefix.
     mqtt->onSend(encrypted, decoded, 0);
+
+    // Subscriptions are refreshed, and the uplink is published under the new root after the reconnect.
+    TEST_ASSERT_TRUE(loopUntil([] {
+        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") && pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+") &&
+               !pubsub->published_.empty();
+    }));
     TEST_ASSERT_EQUAL(1, pubsub->published_.size());
     const auto &[topic, payload] = pubsub->published_.front();
     TEST_ASSERT_EQUAL_STRING("msh/EU_868/2/e/test/!12345678", topic.c_str());
@@ -1584,7 +1584,7 @@ void setup()
     RUN_TEST(test_disabled);
     RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
-    RUN_TEST(test_reinitTopicsUpdatesOnRegionChange);
+    RUN_TEST(test_rootChange_rebuildsTopics);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);

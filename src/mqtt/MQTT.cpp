@@ -774,6 +774,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
                                             .channel_id = const_cast<char *>(channelId),
                                             .gateway_id = const_cast<char *>(nodeId.c_str())};
     size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    if (topicRoot != moduleConfig.mqtt.root)
+        reinitTopics(); // root changed before runOnce() noticed
     std::string topic = cryptTopic + channelId + "/" + nodeId;
 
     if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
