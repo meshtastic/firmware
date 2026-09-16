@@ -73,8 +73,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                       uint16_t title_color_override = 0);
 
 // Shared battery/time/mail header
-// wipe=false draws the connection icon without the black band behind it, for
-// callers whose own content sits under the footer row.
+// wipe=false omits the black band behind the icon.
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y, bool wipe = true);
 
 // Inline so non-compact boards fold this to a constant false at every call site, cost-free.

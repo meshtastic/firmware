@@ -91,12 +91,7 @@ static void formatDistM(char *buf, size_t len, float metres)
     }
 }
 
-/** Format a ring radius as a bare number - used for radar ring labels.
- *
- * The unit is chosen once from the outer-ring range so all three labels share
- * it; picking per value made 500 m and 1.5 km both render as "500"/"1.5" with
- * no way to tell them apart.  Matches the unit the header title already shows.
- */
+/** Format a ring radius as a bare number, unit taken from the outer-ring range. */
 static void formatRingNum(char *buf, size_t len, float metres, float scale)
 {
     const bool imperial = (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL);
@@ -260,13 +255,10 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     // Radar circle - right side, padded, centred in the area below the header.
     // -----------------------------------------------------------------------
-    // Clamped against width too: derived from height alone, a square or narrow
-    // panel let the circle eat the width and left the list column unusable.
+    // Capped at half the width so the node list keeps a usable column.
     const int radarDiam = std::min(contentH - 2 * pad, sw / 2);
     const int radarRadius = radarDiam / 2;
     const int radarCX = x + sw - pad - radarRadius;
-    // Centred rather than pinned below the header: once the width clamp bites,
-    // the circle is shorter than the content area and would sit high otherwise.
     const int radarCY = y + headerH + contentH / 2;
 
     // Node list panel fills the space to the left of the radar circle.
@@ -447,9 +439,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     display->setFont(FONT_SMALL);
 
     constexpr int kListTopPad = 5;
-    // Glyph ink fills about half the font bbox, so that is the tightest pitch
-    // still legible; flooring here makes a short panel list fewer nodes rather
-    // than stack all of them on top of each other.
+    // Half the font bbox is the glyph's visible ink, so the tightest legible pitch.
     const int kMinRowPitch = FONT_HEIGHT_SMALL / 2 + 1;
     const int rowPitch = std::max(kMinRowPitch, (listContentH - kListTopPad) / kMaxPlotted);
     const int listRows = std::min(plottedCount, std::max(1, (listContentH - kListTopPad) / rowPitch));
@@ -497,9 +487,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->setTextAlignment(TEXT_ALIGN_LEFT);
     }
 
-    // BT/API connection icon - drawn here (no surrounding wipe) so the radar
-    // circle and the last list row stay intact.  NodeListRenderer's radar
-    // branch deliberately skips drawCommonFooter for the same reason.
+    // No background wipe, so the radar arc and last list row stay intact.
     graphics::drawCommonFooter(display, x, y, false);
 }
 
