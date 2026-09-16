@@ -276,6 +276,12 @@ bool MeshBeaconModule::fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconC
     return size != 0 && size <= remoteAdminCeiling();
 }
 
+// One format for every validator rejection: the field, its index for a target, and the value.
+static void clearingInvalid(const char *what, unsigned index, const char *field, long value)
+{
+    LOG_WARN("Beacon: %s[%u] %s %ld invalid, clearing", what, index, field, value);
+}
+
 void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     // Hard cap at whatever the schema allows, so a max_size change cannot leave this behind.
@@ -288,20 +294,20 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
     if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         const RegionInfo *r = getRegion(bcfg.broadcast_offer_region);
         if (r->code != bcfg.broadcast_offer_region) {
-            LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", bcfg.broadcast_offer_region);
+            clearingInvalid("offer", 0, "region", bcfg.broadcast_offer_region);
             bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         }
     }
     // Only a value that is no preset at all: one this region cannot run may be right after a move.
     if (bcfg.has_broadcast_offer_preset && !isKnownModemPreset(bcfg.broadcast_offer_preset)) {
-        LOG_WARN("Beacon: broadcast_offer_preset %d is not a preset any region offers, clearing", bcfg.broadcast_offer_preset);
+        clearingInvalid("offer", 0, "preset", bcfg.broadcast_offer_preset);
         bcfg.has_broadcast_offer_preset = false;
     }
     // Bounds-checked only with an explicit region and preset: that pair fixes the bandwidth, so the
     // slot count cannot move later. Against the running region a pin would die on the next move.
     if (bcfg.has_broadcast_offer_frequency_slot) {
         if (bcfg.broadcast_offer_frequency_slot == 0) {
-            LOG_WARN("Beacon: broadcast_offer_frequency_slot 0 means unset, clearing");
+            clearingInvalid("offer", 0, "slot", 0);
             bcfg.has_broadcast_offer_frequency_slot = false;
         } else if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
                    bcfg.has_broadcast_offer_preset) {
@@ -311,8 +317,7 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
             probe.region = bcfg.broadcast_offer_region;
             const uint32_t slots = RadioInterface::frequencySlotCount(probe);
             if (bcfg.broadcast_offer_frequency_slot > slots) {
-                LOG_WARN("Beacon: broadcast_offer_frequency_slot %u outside 1..%u, clearing", bcfg.broadcast_offer_frequency_slot,
-                         slots);
+                clearingInvalid("offer", 0, "slot", bcfg.broadcast_offer_frequency_slot);
                 bcfg.has_broadcast_offer_frequency_slot = false;
             }
         }
@@ -325,26 +330,26 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
         if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             const RegionInfo *r = getRegion(t.region);
             if (r->code != t.region) {
-                LOG_WARN("Beacon: broadcast_targets[%u] region %d invalid, clearing", i, t.region);
+                clearingInvalid("target", i, "region", t.region);
                 t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
             }
         }
         // Before the preset check, so the name hashed below is this target's. Range only:
         // Role_DISABLED is the zero value, so an unprovisioned slot would read as disabled.
         if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
-            LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
+            clearingInvalid("target", i, "channel_index", t.channel_index);
             t.has_channel_index = false;
         }
         // As for the offer: only a value that is no preset at all, never one this region cannot run.
         if (t.has_preset && !isKnownModemPreset(t.preset)) {
-            LOG_WARN("Beacon: broadcast_targets[%u] preset %d is not a preset any region offers, clearing", i, t.preset);
+            clearingInvalid("target", i, "preset", t.preset);
             t.has_preset = false;
         }
         // Last, so it is checked against the preset and region the clamp above settled on - and
         // only when both are explicit, exactly as for the offer above.
         if (t.has_frequency_slot) {
             if (t.frequency_slot == 0) {
-                LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot 0 means unset, clearing", i);
+                clearingInvalid("target", i, "slot", 0);
                 t.has_frequency_slot = false;
             } else if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && t.has_preset) {
                 meshtastic_Config_LoRaConfig probe = config.lora;
@@ -353,8 +358,7 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
                 probe.region = t.region;
                 const uint32_t slots = RadioInterface::frequencySlotCount(probe);
                 if (t.frequency_slot > slots) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot %u outside 1..%u, clearing", i, t.frequency_slot,
-                             slots);
+                    clearingInvalid("target", i, "slot", t.frequency_slot);
                     t.has_frequency_slot = false;
                 }
             }
