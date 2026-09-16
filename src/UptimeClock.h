@@ -58,6 +58,13 @@ inline uint32_t timerEndsAtMillis(uint32_t delayMs)
     return skipZero(getMillis() + delayMs);
 }
 
+/// getMillis() for 0-means-unset stamps, with the 0 tick called 1. Use at the read when the value
+/// is both stored and compared against stamps: skipZero() only at the store makes `now - stamp` wrap.
+inline uint32_t stampMillis()
+{
+    return skipZero(getMillis());
+}
+
 // skipZero() is the whole 0-means-unset contract in one expression, and it is constexpr, so pin it
 // here rather than only in test_uptime_clock: a build that breaks it stops at this header instead of
 // shipping a deadline that reads as never-set. The two obvious "simplifications" are what these
