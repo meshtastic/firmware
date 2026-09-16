@@ -12,6 +12,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -58,15 +59,6 @@ static bool isPowered()
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
-static bool isBluetoothEnabledForPowerFSM()
-{
-#if HAS_BLUETOOTH && !MESHTASTIC_EXCLUDE_BLUETOOTH
-    return config.bluetooth.enabled;
-#else
-    return false;
-#endif
-}
-
 static bool isWifiActiveForPowerFSM()
 {
     // Configured WiFi blocks sleep even while disconnected, preventing a disconnect from triggering sleep.
@@ -76,14 +68,6 @@ static bool isWifiActiveForPowerFSM()
 #else
     return false;
 #endif
-}
-
-static uint32_t getBluetoothWaitMs()
-{
-    if (!isBluetoothEnabledForPowerFSM())
-        return 0;
-
-    return Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
 }
 
 static bool hasModuleManagedSleepRole()
@@ -139,7 +123,7 @@ extern Power *power;
 static void shutdownEnter()
 {
     LOG_POWERFSM("State: SHUTDOWN");
-    shutdownAtMsec = millis();
+    shutdownAtMsec = Time::skipZero(Time::getMillis());
 }
 
 #include "error.h"
@@ -206,6 +190,13 @@ static void lsIdle()
                 if (pressed) {
                     powerFSM.trigger(EVENT_PRESS);
                 }
+#ifdef MOTION_WAKE_INT_PIN
+                // Not the button: the accelerometer can have raised the line instead.
+                else if (config.display.wake_on_tap_or_motion &&
+                         digitalRead(MOTION_WAKE_INT_PIN) == (MOTION_WAKE_INT_ACTIVE_HIGH ? HIGH : LOW)) {
+                    powerFSM.trigger(EVENT_INPUT);
+                }
+#endif
                 break;
             }
             default:
@@ -234,6 +225,17 @@ static void lsExit()
     t5BacklightWakeFromSleep();
 }
 
+/// Skip the BLE re-enable while a reboot/shutdown is armed: AdminModule tears BLE down before
+/// scheduling the restart, and a state transition in that window would otherwise bring it back up.
+static void setBluetoothEnableUnlessRestarting()
+{
+    if (rebootAtMsec || shutdownAtMsec) {
+        LOG_POWERFSM("Skip BLE enable, restart pending");
+        return;
+    }
+    setBluetoothEnable(true);
+}
+
 static void nbEnter()
 {
     LOG_POWERFSM("State: nbEnter");
@@ -250,7 +252,7 @@ static void nbEnter()
 static void darkEnter()
 {
     LOG_POWERFSM("State: darkEnter");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
     if (screen)
         screen->setOn(false);
     // Screen timeout enters DARK; ensure backlight also turns off.
@@ -274,7 +276,7 @@ static void serialExit()
 {
     LOG_POWERFSM("State: serialExit");
     // Turn bluetooth back on when we leave serial stream API
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void powerEnter()
@@ -287,7 +289,7 @@ static void powerEnter()
     } else {
         if (screen)
             screen->setOn(true);
-        setBluetoothEnable(true);
+        setBluetoothEnableUnlessRestarting();
         // within enter() the function getState() returns the state we came from
     }
 }
@@ -305,7 +307,7 @@ static void powerIdle()
 static void powerExit()
 {
     LOG_POWERFSM("State: powerExit");
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onEnter()
@@ -313,7 +315,7 @@ static void onEnter()
     LOG_POWERFSM("State: onEnter");
     if (screen)
         screen->setOn(true);
-    setBluetoothEnable(true);
+    setBluetoothEnableUnlessRestarting();
 }
 
 static void onIdle()
@@ -466,7 +468,10 @@ void PowerFSM_setup()
 
         // If ESP32 and using power-saving, timer mover from DARK to light-sleep
         // Also serves purpose of the old DARK to DARK transition(?) See https://github.com/meshtastic/firmware/issues/3517
-        powerFSM.add_timed_transition(&stateDARK, &stateLS, getBluetoothWaitMs(), NULL, "Bluetooth timeout");
+        powerFSM.add_timed_transition(
+            &stateDARK, &stateLS,
+            Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
+            "Bluetooth timeout");
     } else {
         // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
         powerFSM.add_timed_transition(&stateDARK, &stateDARK,

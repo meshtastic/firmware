@@ -51,6 +51,7 @@ class ScanI2C
         BMA423,
         BQ24295,
         LSM6DS3,
+        AW35615,
         TCA9535,
         TCA9555,
         VEML7700,
@@ -108,7 +109,12 @@ class ScanI2C
         SPA06,
         STC8HKB, // STC8H companion-MCU keypad (ThinkNode-M9)
         DS248X,
-        HM330X
+        HM330X,
+        AS3935,
+        GT911,
+        LP5814,
+        ES8311,
+        ES7243E,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

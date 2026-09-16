@@ -51,7 +51,7 @@
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
-#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+#if !defined(HAS_CUSTOM_CRYPTO_ENGINE) && !defined(ARCH_NRF54L)
 #define HAS_CUSTOM_CRYPTO_ENGINE 1
 #endif
 
@@ -137,6 +137,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
 #elif defined(SEEED_WIO_TRACKER_L1_EINK)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
+#elif defined(SEEED_WIO_TRACKER_L1_PRO_1W)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W
 #elif defined(SEEED_WIO_TRACKER_L1)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #elif defined(HELTEC_MESH_SOLAR)
@@ -145,6 +147,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
 #elif defined(HELTEC_MESH_TOWER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2
+#elif defined(HELTEC_MESH_NODE_T096)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T096
+#elif defined(HELTEC_RC52)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RC52
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
@@ -192,7 +198,7 @@
 
 // If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
 // use SEGGER for debug output
-#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA)
+#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA) && !defined(ARCH_NRF54L)
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif

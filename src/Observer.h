@@ -81,6 +81,7 @@ template <class T> class Observable
     // Not called directly, instead call observer.observe
     void addObserver(Observer<T> *o) { observers.push_back(o); }
 
+    // cppcheck-suppress constParameterPointer ; std::list::remove() needs a non-const pointer
     void removeObserver(Observer<T> *o) { observers.remove(o); }
 };
 

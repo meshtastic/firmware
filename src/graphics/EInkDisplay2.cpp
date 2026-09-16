@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "graphics/Backlight.h"
 
@@ -59,7 +60,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
 
-    uint32_t now = millis();
+    uint32_t now = Time::stampMillis();
     uint32_t sinceLast = now - lastDrawMsec;
 
     if (adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0))
@@ -143,19 +144,14 @@ bool EInkDisplay::connect()
 {
     LOG_INFO("Do EInk init");
 
-#ifdef PIN_EINK_EN
-    // backlight power, HIGH is backlight on, LOW is off
-    pinMode(PIN_EINK_EN, OUTPUT);
-#ifdef ELECROW_ThinkNode_M1
-    // ThinkNode M1 has a hardware dimmable backlight. Start enabled
-    digitalWrite(PIN_EINK_EN, HIGH);
-#elif defined(MINI_EPAPER_S3)
+#if HAS_GPIO_BACKLIGHT
+    // Frontlight rail, level comes from uiconfig and is defaulted per variant
+    graphics::backlightInit();
+#elif defined(PIN_EINK_EN)
     // T-Mini Epaper S3 requires panel power rail enabled before SPI transfer.
+    pinMode(PIN_EINK_EN, OUTPUT);
     digitalWrite(PIN_EINK_EN, HIGH);
     delay(10);
-#else
-    digitalWrite(PIN_EINK_EN, LOW);
-#endif
 #endif
 
 #if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS) ||                \
