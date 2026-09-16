@@ -91,7 +91,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 #else
   private:
 #endif
-    bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
+    bool handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool fromOthers = false,
+                               meshtastic_Routing_Error *err = nullptr);
     void handleSetChannel();
 
   public:
