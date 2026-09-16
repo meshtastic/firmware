@@ -325,6 +325,23 @@ void test_promotion_evictsResidentPastCap(void)
     TEST_ASSERT_EQUAL(NODEDB_PROBATION_SLOTS - 3, db->probationCount());
 }
 
+// add_contact sets the verified bit on a key-less entry whenever the client says so; the key-less
+// ("boring") victim rule must skip it like the oldest-node rule does, or it is the first to go.
+void test_eviction_skipsKeylessVerifiedResident(void)
+{
+    const NodeNum verified = 0x00010001; // the oldest resident fill() creates
+    db->fill(60);
+    meshtastic_NodeInfoLite *n = db->getMeshNode(verified);
+    TEST_ASSERT_NOT_NULL(n);
+    TEST_ASSERT_EQUAL(0, n->public_key.size);
+    TEST_ASSERT_TRUE(db->setProtectedFlag(n, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true));
+
+    db->admit(FRESH_BASE + 1);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(verified), "a key-less verified resident is never the eviction victim");
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(FRESH_BASE + 1));
+}
+
 // Below the cap a promotion evicts nobody.
 void test_promotion_evictsNobodyBelowCap(void)
 {
@@ -477,6 +494,7 @@ PROBATION_TEST_ENTRY void setup()
     printf("\n=== Resident cap ===\n");
     RUN_TEST(test_promotion_evictsResidentPastCap);
     RUN_TEST(test_promotion_evictsNobodyBelowCap);
+    RUN_TEST(test_eviction_skipsKeylessVerifiedResident);
     RUN_TEST(test_promotion_worksWithClockNeverTrusted);
 
     printf("\n=== NodeInfo reply policy ===\n");

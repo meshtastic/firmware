@@ -3557,7 +3557,7 @@ NodeDB::EvictionScan NodeDB::scanForEviction() const
             oldestIndex = i;
         }
         // The oldest "boring" node
-        if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 &&
+        if (!isFavoriteNode && !isIgnored && !isVerified && cand->public_key.size == 0 &&
             (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
             oldestBoring = candRecency;
             oldestBoringIndex = i;
