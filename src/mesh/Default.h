@@ -58,6 +58,17 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_hop_scaling_min_target_nodes_floor 5     // minimum allowed min_target_nodes
 #define default_hop_scaling_max_target_nodes_ceiling 512 // maximum allowed max_target_nodes
 
+// Congestion gate: hop scaling only applies while the channel is measurably busy. Engage sits below
+// AirTime::polite_channel_util_percent (25) so hops ease back before the polite gate withholds traffic.
+#define default_hop_scaling_congestion_engage_pct 20  // smoothed channel utilization that engages scaling
+#define default_hop_scaling_congestion_release_pct 12 // smoothed channel utilization that releases it
+#define default_hop_scaling_congestion_confirm_runs 3 // consecutive 5-min samples needed to flip either way
+// Above this the hop walk's one-hop extension is cut to its strictest setting: the radio is
+// already withholding metadata at the polite gate, so an extra relay is the wrong thing to spend.
+#define default_hop_scaling_congestion_strict_pct 25 // = AirTime::polite_channel_util_percent
+// Hop floor for the infrastructure roles Router.cpp already groups for zero-cost hops.
+#define default_hop_scaling_infrastructure_hop_floor 3
+
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
 #else
