@@ -43,10 +43,12 @@ class CryptoEngine
     virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 #endif
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
-    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
-                     uint8_t *signature);
-    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
-                       size_t payloadLen, const uint8_t *signature);
+    // requestId/replyId are the Data envelope's fields, bound into the signature so a signed reply
+    // cannot be re-pointed at another message. See buildSigningBuffer for the two layouts.
+    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, uint32_t requestId, uint32_t replyId,
+                     const uint8_t *payload, size_t payloadLen, uint8_t *signature);
+    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, uint32_t requestId,
+                       uint32_t replyId, const uint8_t *payload, size_t payloadLen, const uint8_t *signature);
 #endif
     void setDHPrivateKey(uint8_t *_private_key);
     // The remotePublic key parameter takes the public_key bytes container from

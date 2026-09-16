@@ -253,8 +253,8 @@ static meshtastic_MeshPacket makeDecoded(NodeNum from, NodeNum to, meshtastic_Po
 // because perhapsEncode only auto-signs packets that originate from us.
 static void signWithCurrentKey(meshtastic_MeshPacket *p)
 {
-    bool ok = crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
-                                  p->decoded.xeddsa_signature.bytes);
+    bool ok = crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.request_id, p->decoded.reply_id,
+                                  p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
     TEST_ASSERT_TRUE_MESSAGE(ok, "xeddsa_sign failed in test setup");
     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 }
@@ -2123,6 +2123,65 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
+// E14: the reason this change exists. A signed broadcast reply (a tapback: the client sets reply_id
+// on an outgoing text, firmware signs the broadcast) has its reply_id in the Data envelope, outside
+// the signed payload. Channel crypto is AES-CTR with no MAC, so before this binding a listener
+// holding the PSK could re-point a signed tapback at a different message and it would still verify.
+void test_E14_decoded_signed_reply_retargeted_reply_id_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.decoded.reply_id = 0x5555AAAA;
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+
+    p.decoded.reply_id ^= 1; // re-point the tapback at a different message
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted reply must fail verification");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E15: the same for request_id. Nothing broadcast carries one today, so this is forward cover for
+// any future signed packet that does - and for licensed mode, where unicasts are signed.
+void test_E15_decoded_signed_response_retargeted_request_id_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.decoded.request_id = 0xAAAA5555;
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    p.decoded.request_id ^= 1;
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted response must fail verification");
+}
+
+// E16: a packet with neither field keeps the base layout, so an unchanged signed broadcast - the
+// overwhelming majority of signed traffic - still verifies exactly as it does on an alpha today.
+void test_E16_decoded_signed_broadcast_without_linkage_still_verifies(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(0, p.decoded.request_id);
+    TEST_ASSERT_EQUAL(0, p.decoded.reply_id);
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -2239,6 +2298,9 @@ void setup()
     RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
     RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
     RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
+    RUN_TEST(test_E14_decoded_signed_reply_retargeted_reply_id_dropped);
+    RUN_TEST(test_E15_decoded_signed_response_retargeted_request_id_dropped);
+    RUN_TEST(test_E16_decoded_signed_broadcast_without_linkage_still_verifies);
 
     const int result = UNITY_END();
     airTime = savedAirTime;
