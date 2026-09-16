@@ -6,7 +6,6 @@
 #include <Wire.h>
 
 // The nRF54L core compiles the nrfx 3 drivers itself: errno-style returns, 0 is success
-#include <nRF54Crypto.h>
 #include <nrfx_wdt.h>
 
 #include <assert.h>
@@ -297,15 +296,6 @@ void checkSDEvents()
             case NRF_EVT_FLASH_OPERATION_ERROR:
                 flash_nrf5x_event_cb(evt);
                 break;
-            // s145 asks the application for entropy
-            case NRF_EVT_RAND_SEED_REQUEST: {
-                uint8_t seed[SD_RAND_SEED_SIZE];
-                nRF54Crypto.begin();
-                if (nRF54Crypto.random(seed, sizeof(seed)))
-                    sd_rand_seed_set(seed);
-                nRF54Crypto.end();
-                break;
-            }
 
             default:
                 LOG_DEBUG("Unexpected SDevt %d", evt);
