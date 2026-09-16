@@ -28,7 +28,7 @@ Meshtastic is an open-source LoRa mesh networking project for long-range, low-po
 
 - **ESP32** (ESP32, ESP32-S3, ESP32-C3, ESP32-C6) - Most common platform
 - **nRF52** (nRF52840) - Low power Nordic chips
-- **nRF54** (nRF54L15) - `ARCH_NRF54L`, its own platform layer in `src/platform/nrf54` (`architecture.h`, `main-nrf54.cpp`; env base `nrf54_base` in `variants/nrf54l15/nrf54.ini`) that shares only `NRF52Bluetooth.cpp`, `Nrf52SaadcLock.cpp`, `alloc.cpp` and `hardfault.cpp` with `src/platform/nrf52`, built through the out-of-tree `meshtastic/platform-nordicnrf54` platform and its s145 SoftDevice Arduino core. Boards under `variants/nrf54l15/`: `xiao_nrf54l15_lr2021` is the per-PR canary, `xiao_nrf54l15` and `nrf54l15dk` are `board_level = extra`. Memory class SMALL: 120 hot nodes, 100 warm in `/prefs/warm.dat` (not the nRF52840 raw-flash ring)
+- **nRF54** - `ARCH_NRF54L`, its own platform layer in `src/platform/nrf54` (`architecture.h`, `main-nrf54.cpp`; env base `nrf54_base` in `variants/nrf54l15/nrf54.ini`) that shares only `NRF52Bluetooth.cpp`, `Nrf52SaadcLock.cpp`, `alloc.cpp` and `hardfault.cpp` with `src/platform/nrf52`, built through the out-of-tree `meshtastic/platform-nordicnrf54` platform and its s145 SoftDevice Arduino core. Boards under `variants/nrf54l15/`: `xiao_nrf54l15_lr2021` is the per-PR canary, `xiao_nrf54l15` and `nrf54l15dk` are `board_level = extra`. Memory class SMALL: 120 hot nodes, 100 warm in `/prefs/warm.dat` (not the nRF52840 raw-flash ring)
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
 - **Linux/Portduino** - Native Linux builds (Raspberry Pi, etc.)
