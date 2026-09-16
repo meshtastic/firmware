@@ -3935,16 +3935,12 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             }
             info = getOrCreateMeshNode(getFrom(&mp));
         } else if (nodeInfoLiteIsOnProbation(info)) {
-            // Heard again. A gap since the previous packet says recurring rather than a burst; a
-            // packet addressed to us says it already knows us. Measured before last_heard moves.
-            bool promote = isToUs(&mp);
-            if (!promote) {
-                const EvictionRecency prev = evictionRecency(info);
-                const uint32_t now = prev.heardThisBoot ? Time::getUptimeSecs() : (mp.has_rx_time ? mp.rx_time : 0);
-                // No usable previous stamp (clockless boot past the sidecar cap): the second packet decides.
-                promote = prev.value == 0 || now == 0 || (now > prev.value && now - prev.value >= probationGapSecs());
-            }
-            if (promote) {
+            // Heard again. Only a gap since the previous packet says recurring rather than a burst;
+            // the header is unauthenticated, so a packet addressed to us proves nothing. Measured before last_heard moves.
+            const EvictionRecency prev = evictionRecency(info);
+            const uint32_t now = prev.heardThisBoot ? Time::getUptimeSecs() : (mp.has_rx_time ? mp.rx_time : 0);
+            // No usable previous stamp (clockless boot past the sidecar cap): the second packet decides.
+            if (prev.value == 0 || now == 0 || (now > prev.value && now - prev.value >= probationGapSecs())) {
                 promoteFromProbation(info);
                 info = getMeshNode(getFrom(&mp)); // the eviction may have shifted the array under the pointer
             }

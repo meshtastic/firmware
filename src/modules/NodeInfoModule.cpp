@@ -148,8 +148,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
     if (isReplyingToExternalRequest) {
         // A broadcast want_response asks every listener to answer one packet: amplification. Our
         // scheduled broadcast carries the same information; unicast requests are still answered.
-        // Probation: heard once on a full store, so defer to our scheduled broadcast. This request is
-        // addressed to us, so updateFrom() promotes the requester right after this; the next one is answered.
+        // Probation: heard once on a full store, so defer to our scheduled broadcast; it is answered
+        // once it has been heard again after the band's gap and promoted.
         const char *refuse = isBroadcast(currentRequest->to)                                           ? "broadcast"
                              : suppressReplyForCurrentRequest                                          ? "heard <12h ago"
                              : nodeInfoLiteIsOnProbation(nodeDB->getMeshNode(getFrom(currentRequest))) ? "on probation"

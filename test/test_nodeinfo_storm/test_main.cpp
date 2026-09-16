@@ -3,7 +3,7 @@
 //
 // Contract: on a full store a node heard once is admitted on probation, evicted ahead of every
 // resident, not greeted and not answered; it becomes a resident (greeted, answered) only when
-// heard again after probationGapSecs() or when it addresses us; residents stay capped at
+// heard again after probationGapSecs() (never because it addressed us); residents stay capped at
 // MAX_NUM_NODES - NODEDB_PROBATION_SLOTS. Before this (develop @ 3468af94a) every admission to a full
 // store evicted a real resident - NYC MediumSlow replay: 28.5 resident evictions/h at ~2 % channel
 // utilisation - and each evicted-then-reheard node was greeted again and answered again, so a
@@ -266,8 +266,9 @@ void test_probation_promotesOnGapNotOnBurst(void)
     TEST_ASSERT_FALSE_MESSAGE(db->onProbation(node), "a second packet after the gap promotes");
 }
 
-// A packet addressed to us promotes regardless of timing: the sender already knows us.
-void test_probation_promotesWhenPacketAddressedToUs(void)
+// The destination is a plaintext header field: a stranger addressing us is not evidence of anything,
+// and letting it promote would turn a rotating-from unicast flood into one resident lost per packet.
+void test_probation_packetAddressedToUsDoesNotPromote(void)
 {
     const NodeNum node = 0x66000002;
     const uint32_t t0 = 1700000000;
@@ -275,8 +276,10 @@ void test_probation_promotesWhenPacketAddressedToUs(void)
 
     db->hear(node, t0);
     db->hear(node, t0 + 1, /*toUs=*/true);
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(node), "addressing us inside the gap must not promote");
 
-    TEST_ASSERT_FALSE(db->onProbation(node));
+    db->hear(node, t0 + 1 + db->probationGapSecs(), /*toUs=*/true);
+    TEST_ASSERT_FALSE_MESSAGE(db->onProbation(node), "the gap rule still applies to packets addressed to us");
 }
 
 // Favourite / ignore / verify are the user vouching for the node.
@@ -404,7 +407,7 @@ void test_reply_allowedForUnicastRequest(void)
 }
 
 // A requester heard once on a full store is on probation: defer the reply to our scheduled
-// broadcast. The request itself promotes it (it is addressed to us), so the next one is answered.
+// broadcast. Asking again inside the gap changes nothing; asking again after it is answered.
 void test_reply_deferredWhileRequesterOnProbation(void)
 {
     const uint32_t t0 = 1700000000;
@@ -419,8 +422,13 @@ void test_reply_deferredWhileRequesterOnProbation(void)
     TEST_ASSERT_NULL_MESSAGE(shim.receiveAndReply(req), "a probation requester must be deferred");
     TEST_ASSERT_TRUE(shim.ignoreRequest);
 
-    // The request reaches updateFrom() after the modules: addressed to us, it promotes.
+    // The request reaches updateFrom() after the modules: addressed to us, still inside the gap.
     db->hear(REQUESTER, t0 + 1, /*toUs=*/true);
+    TEST_ASSERT_TRUE(db->onProbation(REQUESTER));
+    TEST_ASSERT_NULL_MESSAGE(shim.receiveAndReply(req), "asking again inside the gap is still deferred");
+
+    // Heard again after the gap: promoted, and the request that follows is answered.
+    db->hear(REQUESTER, t0 + 1 + db->probationGapSecs(), /*toUs=*/true);
     TEST_ASSERT_FALSE(db->onProbation(REQUESTER));
     meshtastic_MeshPacket *reply = shim.receiveAndReply(req);
     TEST_ASSERT_NOT_NULL_MESSAGE(reply, "once promoted, the requester's next request is answered");
@@ -487,7 +495,7 @@ PROBATION_TEST_ENTRY void setup()
     RUN_TEST(test_probation_storeWithRoomAdmitsResidents);
     RUN_TEST(test_probation_notHeardOnAirAdmitsResident);
     RUN_TEST(test_probation_promotesOnGapNotOnBurst);
-    RUN_TEST(test_probation_promotesWhenPacketAddressedToUs);
+    RUN_TEST(test_probation_packetAddressedToUsDoesNotPromote);
     RUN_TEST(test_probation_protectedFlagPromotes);
     RUN_TEST(test_probation_gapTracksResidency);
 
