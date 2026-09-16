@@ -13,7 +13,9 @@ permissions:
 
 jobs:
   build-MacOS:
-    runs-on: macos-${{ inputs.macos_ver }}
+    # Runner naming changed to `xcode-` with MacOS 27.
+    # Ex: 'xcode-27', 'macos-26', 'macos-26-intel'
+    runs-on: ${{ inputs.macos_ver >= 27 && format('xcode-{0}', inputs.macos_ver) || format('macos-{0}', inputs.macos_ver) }}
     # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
     # restore it but never save, so they stop filling up the repo's Actions cache storage.
     env:
