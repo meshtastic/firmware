@@ -6,7 +6,6 @@
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
-#include <cstdlib>
 #include <cstring>
 
 #if HAS_SCREEN
@@ -20,9 +19,6 @@
 GeofenceModule *geofenceModule;
 
 static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
-
-// The cap above is a ceiling, not an expectation; ensureCrossingCapacity() doubles from here to it.
-static constexpr size_t GEOFENCE_INITIAL_CROSSING = 8;
 
 GeofenceModule::GeofenceModule()
 {
@@ -76,24 +72,13 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
     return notifyOnExit ? Crossing::Exit : Crossing::None;
 }
 
-/// Grows with realloc(), which refuses where a vector's operator new would abort on a live heap,
+/// One block for the whole cap on first use. malloc() refuses where a vector's operator new would abort,
 /// so a refusal falls into the caller's bounded-drop path.
 bool GeofenceModule::ensureCrossingCapacity()
 {
-    if (crossingCount < crossingCapacity)
-        return true;
-
-    size_t target = crossingCapacity ? crossingCapacity * 2 : GEOFENCE_INITIAL_CROSSING;
-    if (target > GEOFENCE_MAX_CROSSING)
-        target = GEOFENCE_MAX_CROSSING;
-
-    auto *grown = static_cast<CrossingState *>(realloc(crossingInside.get(), target * sizeof(CrossingState)));
-    if (!grown)
-        return false;               // the old block is untouched
-    (void)crossingInside.release(); // realloc() already freed or kept the old block
-    crossingInside.reset(grown);
-    crossingCapacity = target;
-    return true;
+    if (!crossingInside)
+        crossingInside.reset(static_cast<CrossingState *>(malloc(GEOFENCE_MAX_CROSSING * sizeof(CrossingState))));
+    return crossingInside != nullptr;
 }
 
 GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
@@ -122,14 +107,10 @@ bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint8_t notifica
     return true;
 }
 
-int GeofenceModule::onWaypointStoreChanged(const WaypointStore *store)
+int GeofenceModule::onWaypointStoreChanged(const WaypointStore *)
 {
     crossingCount = 0;
-    // Give the block back once nothing can need it again.
-    if (store && store->getWaypoints().empty()) {
-        crossingInside.reset();
-        crossingCapacity = 0;
-    }
+    crossingInside.reset();
     return 0;
 }
 

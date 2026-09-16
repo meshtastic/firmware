@@ -52,7 +52,7 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
         bool inside;
     };
 
-    // Grown with realloc(), so it must be released with free(), not delete[].
+    // malloc()ed, so it must be released with free(), not delete[].
     struct CFreeDeleter {
         void operator()(CrossingState *p) const noexcept { free(p); }
     };
@@ -68,7 +68,6 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     // Unallocated until the first crossing, so a node with no geofenced waypoints never pays for it.
     std::unique_ptr<CrossingState[], CFreeDeleter> crossingInside;
     size_t crossingCount = 0;
-    size_t crossingCapacity = 0;
     CallbackObserver<GeofenceModule, const WaypointStore *> waypointStoreObserver =
         CallbackObserver<GeofenceModule, const WaypointStore *>(this, &GeofenceModule::onWaypointStoreChanged);
 };
