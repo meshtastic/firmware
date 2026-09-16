@@ -1072,9 +1072,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
 #if !MESHTASTIC_EXCLUDE_MQTT
-                    if (mqtt) {
+                    if (mqtt)
                         mqtt->reinitTopics();
-                    }
 #endif
                 }
                 changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
@@ -1117,9 +1116,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
 #if !MESHTASTIC_EXCLUDE_MQTT
-                    if (mqtt) {
+                    if (mqtt)
                         mqtt->reinitTopics();
-                    }
 #endif
                 }
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;

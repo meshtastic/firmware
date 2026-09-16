@@ -376,18 +376,10 @@ void mqttInit()
 
 void MQTT::reinitTopics()
 {
-    cryptTopic = "/2/e/";
-    mapTopic = "/2/map/";
-
-    if (*moduleConfig.mqtt.root) {
-        cryptTopic = moduleConfig.mqtt.root + cryptTopic;
-        mapTopic = moduleConfig.mqtt.root + mapTopic;
-        isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
-    } else {
-        cryptTopic = "msh" + cryptTopic;
-        mapTopic = "msh" + mapTopic;
-        isConfiguredForDefaultRootTopic = true;
-    }
+    const std::string root = *moduleConfig.mqtt.root ? moduleConfig.mqtt.root : default_mqtt_root;
+    cryptTopic = root + "/2/e/";
+    mapTopic = root + "/2/map/";
+    isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
 
 #if HAS_NETWORKING
     // Force a broker reconnect so subscriptions are refreshed with the new topic prefix

@@ -58,10 +58,7 @@ class MQTT : private concurrency::OSThread
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
     bool isUsingDefaultRootTopic() { return isConfiguredForDefaultRootTopic; }
 
-    /** Re-read moduleConfig.mqtt.root and rebuild the topic strings.
-     *  Call this after changing the MQTT root (e.g. on LoRa region change).
-     *  Also forces a broker reconnect so subscriptions are refreshed.
-     */
+    /// Rebuild topics from moduleConfig.mqtt.root and force a resubscribe.
     void reinitTopics();
 
     /// Validate the meshtastic_ModuleConfig_MQTTConfig.
