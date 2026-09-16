@@ -770,7 +770,7 @@ class NodeDB
     EvictionScan scanForEviction() const;
     /// Drop the entry at index; a key always reaches the warm tier, a key-less identity only if asked.
     void evictAt(int index, bool keepKeylessInWarm);
-    /// Clear probation; evicts the oldest resident when the resident band is at its cap.
+    /// Clear probation. Frees nothing: the next admission on the full store evicts a resident instead.
     void promoteFromProbation(meshtastic_NodeInfoLite *info);
 
     /*

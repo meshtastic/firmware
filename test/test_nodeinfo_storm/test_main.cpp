@@ -3,9 +3,9 @@
 //
 // Contract: on a full store a node heard once is admitted on probation, evicted ahead of every
 // resident, not greeted and not answered; it becomes a resident (greeted, answered) only when
-// heard again after probationGapSecs() (never because it addressed us); residents stay capped at
-// MAX_NUM_NODES - NODEDB_PROBATION_SLOTS. Before this (develop @ 3468af94a) every admission to a full
-// store evicted a real resident - NYC MediumSlow replay: 28.5 resident evictions/h at ~2 % channel
+// heard again after probationGapSecs() (never because it addressed us); a promotion frees no slot,
+// so the resident tier is capped at MAX_NUM_NODES - NODEDB_PROBATION_SLOTS by admission. Before this (develop @ 3468af94a) every
+// admission to a full store evicted a real resident - NYC MediumSlow replay: 28.5 resident evictions/h at ~2 % channel
 // utilisation - and each evicted-then-reheard node was greeted again and answered again, so a
 // full store generated more NodeInfo traffic than one with room. A want_response broadcast was
 // answered by every listener (one packet -> N replies), and its 12 h dedup entry then refused the
@@ -27,6 +27,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 #include "modules/NodeInfoModule.h"
+#include "support/MockMeshService.h"
 #include <cstdio>
 #include <cstring>
 
@@ -50,9 +51,20 @@ class NodeDBTestShim : public NodeDB
         residentsEvicted += before - numMeshNodes;
     }
 
+    bool inWarm(NodeNum num) const { return warmStore.contains(num); }
+    void armThrottle(bool armed) { lastFullEvictionMs = armed ? Time::getMillis() : Time::getMillis() - 3000; }
+    void giveKey(NodeNum num)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        n->public_key.size = 32;
+        memset(n->public_key.bytes, 0x5A, 32);
+    }
+
     // Deliver a decoded packet the way the radio path does, so updateFrom() runs its probation
     // logic. rxTime is an epoch; toUs addresses the packet to our own node number.
-    void hear(NodeNum from, uint32_t rxTime, bool toUs = false)
+    // throttled=true leaves the 2 s full-store admission throttle armed instead of stepping past it.
+    void hear(NodeNum from, uint32_t rxTime, bool toUs = false, bool throttled = false)
     {
         meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
         mp.from = from;
@@ -65,8 +77,16 @@ class NodeDBTestShim : public NodeDB
         mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         // Step past the full-store admission throttle (NODEDB_FULL_EVICTION_INTERVAL_MS, 2 s); the
         // unsigned subtraction is wrap-safe when the test clock is young.
-        lastFullEvictionMs = Time::getMillis() - 3000;
+        armThrottle(throttled);
         updateFrom(mp);
+    }
+
+    // Fill to capacity with favourites only - the pre-cap legacy shape getOrCreateMeshNode must refuse.
+    void fillAllProtected()
+    {
+        fill(60);
+        for (int i = 1; i < numMeshNodes; i++)
+            nodeInfoLiteSetBit(&meshNodes->at(i), NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
     }
 
     // Fill the hot store to capacity with nodes carrying the given last_heard; index 0 is us.
@@ -135,10 +155,24 @@ class StormRouter : public Router
     }
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
+        sent.push_back(*p);
         packetPool.release(p);
         return ERRNO_OK;
     }
     void enqueueReceivedMessage(meshtastic_MeshPacket *p) override { packetPool.release(p); }
+    std::vector<meshtastic_MeshPacket> sent;
+};
+StormRouter *stormRouter = nullptr;
+
+class StormRadio : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t, bool = false) override { return 0; }
 };
 
 class NodeInfoStormShim : public NodeInfoModule
@@ -159,6 +193,52 @@ class NodeInfoStormShim : public NodeInfoModule
         return allocReply();
     }
 };
+
+} // namespace
+
+// handleFromRadio() is private; MeshService befriends this exact name under PIO_UNIT_TESTING.
+class MeshServicePhoneDeliveryTest
+{
+  public:
+    static void deliver(const meshtastic_MeshPacket &p) { service->handleFromRadio(&p); }
+};
+
+namespace
+{
+
+// Run a decoded text broadcast from `from` through the radio path (updateFrom, then the greeting
+// gate) and report whether we sent it our NodeInfo. Drains the phone queue so nothing leaks.
+bool heardAndGreeted(NodeNum from, uint32_t rxTime, bool throttled = false)
+{
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = from;
+    mp.to = NODENUM_BROADCAST;
+    mp.id = 0x2000 + from;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    mp.has_rx_time = true;
+    mp.rx_time = rxTime;
+    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    db->armThrottle(throttled);
+
+    stormRouter->sent.clear();
+    MeshServicePhoneDeliveryTest::deliver(mp);
+    while (meshtastic_MeshPacket *q = service->getForPhone())
+        service->releaseToPool(q);
+
+    for (const auto &s : stormRouter->sent)
+        if (s.to == from && s.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            s.decoded.portnum == meshtastic_PortNum_NODEINFO_APP)
+            return true;
+    return false;
+}
+
+void giveUser(NodeNum num)
+{
+    meshtastic_NodeInfoLite *n = db->getMeshNode(num);
+    TEST_ASSERT_NOT_NULL(n);
+    nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
+}
 
 meshtastic_MeshPacket makeNodeInfoRequest(NodeNum to)
 {
@@ -314,18 +394,24 @@ void test_probation_gapTracksResidency(void)
 // Resident cap
 // ---------------------------------------------------------------------------
 
-// Promotions past the resident cap evict residents, one each, and never a probation entry.
-void test_promotion_evictsResidentPastCap(void)
+// A promotion frees nothing; the store stays full and the resident count sits over the cap until
+// admissions refill the band, one resident eviction per newcomer. Never two, never a stranger let in.
+void test_promotion_evictsNothingUntilTheBandRefills(void)
 {
     uint32_t seq = 2000;
     fillAndAdmit(NODEDB_PROBATION_SLOTS, seq);
     const int residentsAtQuota = db->residents();
 
     promoteMany(3, 2000);
+    TEST_ASSERT_EQUAL_MESSAGE(0, db->residentsEvicted, "a promotion evicts nobody");
+    TEST_ASSERT_EQUAL(residentsAtQuota + 3, db->residents());
+    TEST_ASSERT_TRUE_MESSAGE(db->isFull(), "a promotion leaves no free slot for a stranger");
 
-    TEST_ASSERT_EQUAL_MESSAGE(3, db->residentsEvicted, "each promotion past the cap evicts one resident");
-    TEST_ASSERT_EQUAL_MESSAGE(residentsAtQuota, db->residents(), "the resident count holds at the cap");
-    TEST_ASSERT_EQUAL(NODEDB_PROBATION_SLOTS - 3, db->probationCount());
+    churn(3, seq);
+    TEST_ASSERT_EQUAL_MESSAGE(residentsAtQuota, db->residents(), "each refill admission evicts one resident");
+    TEST_ASSERT_EQUAL(NODEDB_PROBATION_SLOTS, db->probationCount());
+    for (int i = 0; i < 3; i++)
+        TEST_ASSERT_TRUE_MESSAGE(db->onProbation(FRESH_BASE + seq - 1 - i), "every refill newcomer is on probation");
 }
 
 // add_contact sets the verified bit on a key-less entry whenever the client says so; the key-less
@@ -345,7 +431,7 @@ void test_eviction_skipsKeylessVerifiedResident(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(FRESH_BASE + 1));
 }
 
-// Below the cap a promotion evicts nobody.
+// With room in the store a promotion evicts nobody and the next admission evicts nobody either.
 void test_promotion_evictsNobodyBelowCap(void)
 {
     uint32_t seq = 1100;
@@ -357,8 +443,12 @@ void test_promotion_evictsNobodyBelowCap(void)
     TEST_ASSERT_FALSE(db->isFull());
 
     promoteMany(3, 1100);
-
     TEST_ASSERT_EQUAL_MESSAGE(0, db->residentsEvicted, "a promotion into a band with room must not evict");
+
+    const int before = db->getNumMeshNodes();
+    db->admit(FRESH_BASE + 1150);
+    TEST_ASSERT_EQUAL_MESSAGE(before + 1, db->getNumMeshNodes(), "a store with room admits without evicting");
+    TEST_ASSERT_FALSE_MESSAGE(db->onProbation(FRESH_BASE + 1150), "a store with room admits residents");
 }
 
 // The cap reads uptime through evictionRecency(): on a boot whose clock is never trusted every
@@ -371,9 +461,154 @@ void test_promotion_worksWithClockNeverTrusted(void)
     TEST_ASSERT_EQUAL(NODEDB_PROBATION_SLOTS, db->probationCount());
 
     promoteMany(2, 6000);
-
-    TEST_ASSERT_EQUAL(2, db->residentsEvicted);
     TEST_ASSERT_FALSE(db->onProbation(FRESH_BASE + 6000));
+
+    // The refill admissions must still find a resident victim with every last_heard at 0.
+    churn(2, seq);
+    TEST_ASSERT_EQUAL(NODEDB_PROBATION_SLOTS, db->probationCount());
+    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 6000), "the promoted node is not the refill victim");
+}
+
+// ---------------------------------------------------------------------------
+// Admission edges
+// ---------------------------------------------------------------------------
+
+// Inside 2 s of the last full-store eviction a newcomer gets no entry at all (mp.from is
+// unauthenticated; without this an invented number per packet churns the store at packet rate).
+void test_admission_deferredInsideTheFullStoreThrottle(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fill(60);
+    db->hear(0x61000001, t0);
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x61000001));
+
+    db->hear(0x61000002, t0 + 1, /*toUs=*/false, /*throttled=*/true);
+    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(0x61000002), "admission inside the 2 s throttle must be deferred");
+}
+
+// The legacy shape - a full store of protected nodes and no band - is refused rather than overrun.
+void test_admission_refusedWhenEveryResidentIsProtected(void)
+{
+    db->fillAllProtected();
+    TEST_ASSERT_NULL(db->getOrCreateMeshNode(0x61000003));
+    TEST_ASSERT_EQUAL(MAX_NUM_NODES, db->getNumMeshNodes());
+}
+
+// A NodeInfo broadcast is just another packet: on a full store the sender joins the band, name and all.
+void test_admission_nodeInfoOnFullStoreIsProbation(void)
+{
+    db->fill(60);
+    meshtastic_User u = meshtastic_User_init_zero;
+    snprintf(u.short_name, sizeof(u.short_name), "NEW");
+    db->updateUser(0x61000004, u);
+
+    TEST_ASSERT_TRUE(db->onProbation(0x61000004));
+    TEST_ASSERT_TRUE(nodeInfoLiteHasUser(db->getMeshNode(0x61000004)));
+}
+
+// After a promotion the store is still full: the next newcomer joins the band and evicts one
+// resident. (Promotion used to evict, leaving a slot the next stranger walked into as a resident.)
+void test_admission_afterPromotionJoinsTheBand(void)
+{
+    uint32_t seq = 6000;
+    fillAndAdmit(NODEDB_PROBATION_SLOTS, seq);
+    const int residentsAtCap = db->residents();
+    db->promote(FRESH_BASE + 6000);
+    TEST_ASSERT_EQUAL(residentsAtCap + 1, db->residents());
+    TEST_ASSERT_TRUE(db->isFull());
+
+    db->admit(0x61000005);
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(0x61000005), "the newcomer after a promotion is on probation");
+    TEST_ASSERT_EQUAL_MESSAGE(residentsAtCap, db->residents(), "and its admission evicts one resident, not two");
+}
+
+// ---------------------------------------------------------------------------
+// Eviction destination
+// ---------------------------------------------------------------------------
+
+// A resident evicted for admission keeps its identity in the warm tier; a key-less probation
+// entry is dropped outright; a keyed one is kept.
+void test_eviction_warmTierKeepsResidentsAndKeyedProbationOnly(void)
+{
+    uint32_t seq = 6100;
+    const NodeNum oldestResident = 0x00010001;
+    db->fill(60);
+    db->admit(FRESH_BASE + (seq++)); // evicts the oldest resident
+    TEST_ASSERT_NULL(db->getMeshNode(oldestResident));
+    TEST_ASSERT_TRUE_MESSAGE(db->inWarm(oldestResident), "an evicted resident goes to the warm tier");
+
+    churn(NODEDB_PROBATION_SLOTS - 1, seq); // band at quota; the first probation entry is the oldest
+    const NodeNum keyless = FRESH_BASE + 6100, keyed = FRESH_BASE + 6101;
+    db->giveKey(keyed);
+    churn(2, seq); // evicts keyless, then keyed
+    TEST_ASSERT_NULL(db->getMeshNode(keyless));
+    TEST_ASSERT_FALSE_MESSAGE(db->inWarm(keyless), "a key-less probation entry is not worth a warm slot");
+    TEST_ASSERT_NULL(db->getMeshNode(keyed));
+    TEST_ASSERT_TRUE_MESSAGE(db->inWarm(keyed), "a keyed probation entry keeps its key in the warm tier");
+}
+
+// Re-admission from the warm tier restores the key but not residency: on a full store it is on probation.
+void test_eviction_rehydratedNodeIsStillOnProbation(void)
+{
+    uint32_t seq = 6200;
+    const uint32_t t0 = 1700000000;
+    const NodeNum keyed = FRESH_BASE + 6200; // the first probation entry, hence the band's next victim
+    fillAndAdmit(NODEDB_PROBATION_SLOTS, seq);
+    db->giveKey(keyed);
+    churn(1, seq);
+    TEST_ASSERT_NULL(db->getMeshNode(keyed));
+    TEST_ASSERT_TRUE(db->inWarm(keyed));
+
+    db->hear(keyed, t0);
+    const meshtastic_NodeInfoLite *n = db->getMeshNode(keyed);
+    TEST_ASSERT_NOT_NULL(n);
+    TEST_ASSERT_EQUAL_MESSAGE(32, n->public_key.size, "the warm tier hands the key back");
+    TEST_ASSERT_FALSE(db->inWarm(keyed));
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(keyed), "warm data does not promote");
+}
+
+// ---------------------------------------------------------------------------
+// Greeting gate (MeshService::handleFromRadio)
+// ---------------------------------------------------------------------------
+
+// A resident without a user record is greeted - with room, and on a full store (the old !isFull()
+// gate is gone).
+void test_greeting_residentWithoutUserIsGreeted(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fillWithRoom();
+    TEST_ASSERT_TRUE_MESSAGE(heardAndGreeted(0x62000001, t0), "new node on a store with room is greeted");
+
+    db->fill(60);
+    db->admit(0x62000002, /*heardOnAir=*/false); // a contact import: resident, no user record yet
+    meshtastic_NodeInfoLite *n = db->getMeshNode(0x62000002);
+    nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, false);
+    TEST_ASSERT_TRUE_MESSAGE(heardAndGreeted(0x62000002, t0), "a resident on a full store is greeted");
+}
+
+// A node whose user record we hold is never greeted.
+void test_greeting_knownUserIsNotGreeted(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fillWithRoom();
+    db->hear(0x62000003, t0);
+    giveUser(0x62000003);
+    TEST_ASSERT_FALSE(heardAndGreeted(0x62000003, t0 + 1));
+}
+
+// Neither a probation entry nor a deferred newcomer is greeted; the packet that promotes one is.
+void test_greeting_probationAndDeferredAreNotGreeted(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fill(60);
+    TEST_ASSERT_FALSE_MESSAGE(heardAndGreeted(0x62000004, t0), "first hearing on a full store: probation, no greeting");
+    TEST_ASSERT_TRUE(db->onProbation(0x62000004));
+    TEST_ASSERT_FALSE_MESSAGE(heardAndGreeted(0x62000005, t0 + 1, /*throttled=*/true), "deferred: no entry, no greeting");
+    TEST_ASSERT_NULL(db->getMeshNode(0x62000005));
+
+    TEST_ASSERT_TRUE_MESSAGE(heardAndGreeted(0x62000004, t0 + 1 + db->probationGapSecs()),
+                             "heard again after the gap: promoted, and greeted on that packet");
+    TEST_ASSERT_FALSE(db->onProbation(0x62000004));
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +686,37 @@ void test_reply_allowedForResidentOnAFullStore(void)
     packetPool.release(reply);
 }
 
+// A resident asking twice inside the 12 h window is answered once.
+void test_reply_refusedWithinTwelveHoursOfTheLast(void)
+{
+    db->fill(60);
+    db->admit(REQUESTER, /*heardOnAir=*/false);
+
+    NodeInfoStormShim shim;
+    meshtastic_MeshPacket req = makeNodeInfoRequest(db->getNodeNum());
+    meshtastic_MeshPacket *reply = shim.receiveAndReply(req);
+    TEST_ASSERT_NOT_NULL(reply);
+    packetPool.release(reply);
+
+    TEST_ASSERT_NULL_MESSAGE(shim.receiveAndReply(req), "a second unicast request inside 12 h is refused");
+}
+
+// A refused broadcast request is not recorded, so the same node's unicast request is still answered.
+void test_reply_broadcastRequestDoesNotArmTheDedup(void)
+{
+    db->fill(60);
+    db->admit(REQUESTER, /*heardOnAir=*/false);
+
+    NodeInfoStormShim shim;
+    meshtastic_MeshPacket bcast = makeNodeInfoRequest(NODENUM_BROADCAST);
+    TEST_ASSERT_NULL(shim.receiveAndReply(bcast));
+
+    meshtastic_MeshPacket req = makeNodeInfoRequest(db->getNodeNum());
+    meshtastic_MeshPacket *reply = shim.receiveAndReply(req);
+    TEST_ASSERT_NOT_NULL_MESSAGE(reply, "the broadcast refusal must not suppress the unicast request");
+    packetPool.release(reply);
+}
+
 // Our own scheduled broadcast is not a reply and must never be caught by the reply policy.
 void test_periodicBroadcast_notSuppressed(void)
 {
@@ -484,8 +750,12 @@ PROBATION_TEST_ENTRY void setup()
 
     db = new NodeDBTestShim();
     nodeDB = db;
-    router = new StormRouter();
+    stormRouter = new StormRouter();
+    stormRouter->addInterface(std::unique_ptr<RadioInterface>(new StormRadio()));
+    router = stormRouter;
     airTime = new AirTime();
+    service = new MockMeshService();
+    nodeInfoModule = new NodeInfoStormShim(); // the greeting gate needs the module the service calls
 
     UNITY_BEGIN();
 
@@ -499,17 +769,34 @@ PROBATION_TEST_ENTRY void setup()
     RUN_TEST(test_probation_protectedFlagPromotes);
     RUN_TEST(test_probation_gapTracksResidency);
 
+    printf("\n=== Admission edges ===\n");
+    RUN_TEST(test_admission_deferredInsideTheFullStoreThrottle);
+    RUN_TEST(test_admission_refusedWhenEveryResidentIsProtected);
+    RUN_TEST(test_admission_nodeInfoOnFullStoreIsProbation);
+    RUN_TEST(test_admission_afterPromotionJoinsTheBand);
+
     printf("\n=== Resident cap ===\n");
-    RUN_TEST(test_promotion_evictsResidentPastCap);
+    RUN_TEST(test_promotion_evictsNothingUntilTheBandRefills);
     RUN_TEST(test_promotion_evictsNobodyBelowCap);
     RUN_TEST(test_eviction_skipsKeylessVerifiedResident);
     RUN_TEST(test_promotion_worksWithClockNeverTrusted);
+
+    printf("\n=== Eviction destination ===\n");
+    RUN_TEST(test_eviction_warmTierKeepsResidentsAndKeyedProbationOnly);
+    RUN_TEST(test_eviction_rehydratedNodeIsStillOnProbation);
+
+    printf("\n=== Greeting gate ===\n");
+    RUN_TEST(test_greeting_residentWithoutUserIsGreeted);
+    RUN_TEST(test_greeting_knownUserIsNotGreeted);
+    RUN_TEST(test_greeting_probationAndDeferredAreNotGreeted);
 
     printf("\n=== NodeInfo reply policy ===\n");
     RUN_TEST(test_reply_refusedForBroadcastRequest);
     RUN_TEST(test_reply_allowedForUnicastRequest);
     RUN_TEST(test_reply_deferredWhileRequesterOnProbation);
     RUN_TEST(test_reply_allowedForResidentOnAFullStore);
+    RUN_TEST(test_reply_refusedWithinTwelveHoursOfTheLast);
+    RUN_TEST(test_reply_broadcastRequestDoesNotArmTheDedup);
     RUN_TEST(test_periodicBroadcast_notSuppressed);
 
     exit(UNITY_END());

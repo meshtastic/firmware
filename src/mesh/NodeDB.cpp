@@ -3590,14 +3590,9 @@ void NodeDB::evictAt(int index, bool keepKeylessInWarm)
 
 void NodeDB::promoteFromProbation(meshtastic_NodeInfoLite *info)
 {
-    const NodeNum num = info->num;
+    // Frees nothing: the store stays full, so the next newcomer joins the band and the admission
+    // evicts a resident to make room for it. Evicting here left a slot a stranger walked into.
     nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_ON_PROBATION_MASK, false);
-    // Residents are capped at the store minus the band, full or not: a promotion adds no entry, so
-    // the store sits one short until the next admission refills the band.
-    const EvictionScan scan = scanForEviction();
-    if (numMeshNodes - scan.probationCount > MAX_NUM_NODES - NODEDB_PROBATION_SLOTS && scan.oldestResident != -1 &&
-        meshNodes->at(scan.oldestResident).num != num)
-        evictAt(scan.oldestResident, /*keepKeylessInWarm=*/true);
 }
 
 // Minimum spacing between evictions once the node database is full.
@@ -3940,10 +3935,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             const EvictionRecency prev = evictionRecency(info);
             const uint32_t now = prev.heardThisBoot ? Time::getUptimeSecs() : (mp.has_rx_time ? mp.rx_time : 0);
             // No usable previous stamp (clockless boot past the sidecar cap): the second packet decides.
-            if (prev.value == 0 || now == 0 || (now > prev.value && now - prev.value >= probationGapSecs())) {
+            if (prev.value == 0 || now == 0 || (now > prev.value && now - prev.value >= probationGapSecs()))
                 promoteFromProbation(info);
-                info = getMeshNode(getFrom(&mp)); // the eviction may have shifted the array under the pointer
-            }
         }
         if (!info) {
             return;
