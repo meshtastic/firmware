@@ -1,4 +1,5 @@
 #include "UpDownInterruptBase.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 
 UpDownInterruptBase::UpDownInterruptBase(const char *name) : concurrency::OSThread(name)
@@ -50,7 +51,7 @@ int32_t UpDownInterruptBase::runOnce()
 {
     InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
-    unsigned long now = millis();
+    unsigned long now = Time::stampMillis();
 
     // Read all button states once at the beginning
     bool pressButtonPressed = !digitalRead(_pinPress);
