@@ -2,8 +2,8 @@
 
 #ifdef HAS_CST226SE
 
-#include "TouchDrvCSTXXX.hpp"
 #include "input/TouchScreenImpl1.h"
+#include "touch/TouchDrvCST226.h"
 #include <Wire.h>
 
 #ifndef TOUCH_RST
