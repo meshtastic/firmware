@@ -9,12 +9,17 @@ This directory contains C++ unit tests that run on the host machine via Platform
 ```bash
 ./bin/run-tests.sh                          # all suites
 ./bin/run-tests.sh -f test_traffic_management  # single suite
-./bin/run-tests.sh -f test_traffic_management > /tmp/test_out.txt 2>&1; tail -5 /tmp/test_out.txt
+./bin/run-tests.sh -f test_traffic_management --quiet   # prints only the RESULT: line - the mode for tool calls
+./bin/run-tests.sh --status                 # a run in progress? else the last verdict, marked STALE if the tree changed since
+./bin/run-tests.sh --wait                   # attach to the run in progress; exits with its verdict
+./bin/run-tests.sh --abort                  # stop it (the whole build tree); its log is kept
 ```
 
-Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
+Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED, 4 = BUSY (a run is already in progress; nothing started), 5 = ABORTED, 6 = UNSUPPORTED host.
 
-**The harness is Linux-only, by choice.** `bin/run-tests.sh` and the per-suite isolation it drives need bash 4+ and GNU coreutils/find (`find -printf`, `md5sum`), and the script refuses to start anywhere else rather than degrade quietly - a shared-state check that silently mis-hashes a sandbox still prints a verdict, and that verdict would be worthless. The `native-macos` PlatformIO env is a **build** target for `meshtasticd`, not a test host; the isolation wrapper is registered for `env:native` and `env:coverage` only. On macOS or Windows, run the suite in a container: `./bin/test-native-docker.sh`.
+**The `RESULT:` line is the only verdict.** pio prints `[PASSED]` per suite and `N succeeded` per invocation long before the wrapper has decided anything, so a captured output file looks green within the first minute; grade on the final `RESULT:` line and nothing else. One run at a time per checkout: a second invocation is refused with `BUSY` rather than started, because two `pio` jobs share `.pio/build/` and wipe each other's objects. Never look for a run with `pgrep` - ask `--status`. The last verdict and its log live in `.pio/runtests/`; an interrupted run records `ABORTED`, not nothing.
+
+**The harness is Linux-only, by choice.** `bin/run-tests.sh` and the per-suite isolation it drives need bash 4+ and GNU coreutils/find (`find -printf`, `md5sum`), and the script refuses to start anywhere else rather than degrade quietly - a shared-state check that silently mis-hashes a sandbox still prints a verdict, and that verdict would be worthless. The `native-macos` PlatformIO env is a **build** target for `meshtasticd`, not a test host; the isolation wrapper is registered for `env:native` and `env:coverage` only. On Windows, `bin\run-tests.cmd <same args>` forwards into WSL with the exit code passed through; on macOS, or without WSL, run the suite in a container: `./bin/test-native-docker.sh`.
 
 **`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
 

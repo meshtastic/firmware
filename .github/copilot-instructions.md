@@ -2,12 +2,12 @@
 
 > **TL;DR**
 >
-> |                |                                                                                                                        |
-> | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                                                     |
-> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout) |
-> | Format         | `trunk fmt`                                                                                                            |
-> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code)                           |
+> |                |                                                                                                                           |
+> | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED · 4 BUSY · 5 ABORTED · 6 UNSUPPORTED); `--status` first |
+> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout)    |
+> | Format         | `trunk fmt`                                                                                                               |
+> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code)                              |
 >
 > **Need this? It's here.**
 >
@@ -769,12 +769,15 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-| Exit | Verdict    | Meaning                                                                                                                                                                                                              |
-| ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                          |
-| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                |
-| 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or a suite left behind shared state it does not declare |
-| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                   |
+| Exit | Verdict       | Meaning                                                                                                                                                                                                              |
+| ---- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `GREEN`       | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                          |
+| 1    | `RED`         | At least one failure, build error, or sanitizer fault                                                                                                                                                                |
+| 2    | `AMBER`       | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or a suite left behind shared state it does not declare |
+| 3    | `FILTERED`    | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                   |
+| 4    | `BUSY`        | A run is already in progress (this or another session); nothing was started. `--status` to see it, `--wait` to attach, `--abort` to stop it                                                                          |
+| 5    | `ABORTED`     | The run was stopped by a signal or `--abort`; its log is kept. `--status` shows it                                                                                                                                   |
+| 6    | `UNSUPPORTED` | Not a Linux host; nothing ran. Use WSL (`bin\run-tests.cmd` forwards) or `./bin/test-native-docker.sh`                                                                                                               |
 
 Examples - exact counts will vary by suite count and env:
 
@@ -789,11 +792,13 @@ RESULT: RED 1 failed
 RESULT: RED exit-time abort (tests passed; likely sanitizer - see hint above)
 
 # AMBER: a suite silently went missing on a full run
-RESULT: AMBER 23/24 suites ran (missing: test_radio) - all that ran passed
+RESULT: AMBER N-1/N suites ran (missing: test_radio) - all that ran passed
 
 # FILTERED: single suite run completed cleanly
-RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) - filtered: test_serial
+RESULT: FILTERED 1/N suites ran (N-1 not run) - filtered: test_serial
 ```
+
+The script is written to be driven by a caller that cannot see the terminal: the final `RESULT:` line is the only verdict (pio's own `[PASSED]` and `N succeeded` lines precede it and mean nothing on their own); a second invocation while a run is in progress is refused with `BUSY` rather than started; the last verdict is kept in `.pio/runtests/last-result.tsv` with its log, and `./bin/run-tests.sh --status` prints it, marking it **STALE** when the tree has changed since. Never `pgrep` for a run - ask `--status`.
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
