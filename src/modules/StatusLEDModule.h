@@ -3,6 +3,7 @@
 #include "BluetoothStatus.h"
 #include "MeshModule.h"
 #include "PowerStatus.h"
+#include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
@@ -103,6 +104,9 @@ class StatusLEDModule : private concurrency::OSThread
     bool txAckWaiting = false;                       // a reliable send of ours is still unresolved
     uint8_t txAckFailPhases = 0;                     // on/off phases of the failure flash left to play
     uint32_t txAckFailPhaseStart = 0;
+    /// Guards the three fields above. nRF52 publishes TX state from the BLE task as well as the
+    /// loop task (see Router::deferredLock), and runOnce() read-modify-writes the phase counter.
+    concurrency::Lock txAckLock;
 #endif
 
     enum PowerState { discharging, charging, charged, critical };

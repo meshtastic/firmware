@@ -115,12 +115,16 @@ int StatusLEDModule::handleLoRaRx(uint32_t)
 #ifdef LED_TX_ACK
 int StatusLEDModule::handleTxAckStatus(const TxAckEvent *event)
 {
-    // Record the verdict only; runOnce() owns every write to the pin. We are called from the
-    // router, which may share this thread with the radio's receive handler.
-    txAckWaiting = event->outstanding > 0;
-    if (event->state == TxAckState::FAILED) {
-        txAckFailPhases = TX_ACK_FAIL_PHASES;
-        txAckFailPhaseStart = millis();
+    {
+        // Record the verdict only; runOnce() owns every write to the pin. Under the lock because on
+        // nRF52 a phone-originated send publishes from the BLE task, so an unguarded assignment here
+        // can be lost against runOnce()'s phase decrement - dropping a whole failure flash.
+        concurrency::LockGuard g(&txAckLock);
+        txAckWaiting = event->outstanding > 0;
+        if (event->state == TxAckState::FAILED) {
+            txAckFailPhases = TX_ACK_FAIL_PHASES;
+            txAckFailPhaseStart = millis();
+        }
     }
     setIntervalFromNow(0); // show the transition on the next loop pass, not up to a second later
     return 0;
@@ -305,24 +309,34 @@ int32_t StatusLEDModule::runOnce()
     // Reliable-delivery indication: solid while one of our reliable sends is unresolved, three
     // flashes when one fails. It writes LED_TX_ACK last so a variant may point it at an LED that
     // other status already drives, and only while the indication is active - the regular writes
-    // above resume on the next pass, which every transition wakes immediately.
-    if (config.device.led_heartbeat_disabled) {
-        txAckFailPhases = 0;
-    } else {
-        if (txAckFailPhases && Throttle::hasElapsed(txAckFailPhaseStart, TX_ACK_FAIL_FLASH_MS)) {
-            txAckFailPhases--;
-            txAckFailPhaseStart = millis();
-        }
-        if (txAckFailPhases) {
-            digitalWrite(LED_TX_ACK, (txAckFailPhases % 2) ? LED_STATE_OFF : LED_STATE_ON);
-            uint32_t elapsed = millis() - txAckFailPhaseStart;
-            uint32_t remaining = elapsed >= TX_ACK_FAIL_FLASH_MS ? 1 : TX_ACK_FAIL_FLASH_MS - elapsed;
-            if ((uint32_t)my_interval > remaining)
-                my_interval = remaining;
-        } else if (txAckWaiting) {
-            digitalWrite(LED_TX_ACK, LED_STATE_ON);
+    // above resume on the next pass, which every transition wakes immediately. The state is
+    // snapshotted under the lock and rendered outside it, so no pin write happens while held.
+    bool txAckOwnsPin = false, txAckLedOn = false;
+    uint32_t txAckWakeIn = 0;
+    {
+        concurrency::LockGuard g(&txAckLock);
+        if (config.device.led_heartbeat_disabled) {
+            txAckFailPhases = 0;
+        } else {
+            if (txAckFailPhases && Throttle::hasElapsed(txAckFailPhaseStart, TX_ACK_FAIL_FLASH_MS)) {
+                txAckFailPhases--;
+                txAckFailPhaseStart = millis();
+            }
+            if (txAckFailPhases) {
+                txAckOwnsPin = true;
+                txAckLedOn = (txAckFailPhases % 2) == 0;
+                uint32_t elapsed = millis() - txAckFailPhaseStart;
+                txAckWakeIn = elapsed >= TX_ACK_FAIL_FLASH_MS ? 1 : TX_ACK_FAIL_FLASH_MS - elapsed;
+            } else if (txAckWaiting) {
+                txAckOwnsPin = true;
+                txAckLedOn = true;
+            }
         }
     }
+    if (txAckOwnsPin)
+        digitalWrite(LED_TX_ACK, txAckLedOn ? LED_STATE_ON : LED_STATE_OFF);
+    if (txAckWakeIn && (uint32_t)my_interval > txAckWakeIn)
+        my_interval = txAckWakeIn;
 #endif
 
     return (my_interval);
