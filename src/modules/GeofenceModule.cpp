@@ -2,10 +2,12 @@
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 
+#include "UptimeClock.h"
 #include "WaypointStore.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
+#include "mesh/Throttle.h"
 #include <cstring>
 
 #if HAS_SCREEN
@@ -146,16 +148,26 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
 
         // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {
-            if (crossingCount < GEOFENCE_MAX_CROSSING && ensureCrossingCapacity()) {
-                crossingInside[crossingCount++] = CrossingState{key, isInside};
-            } else {
+            if (crossingCount >= GEOFENCE_MAX_CROSSING) {
+                // Stays full until a waypoint goes away, so say it once.
                 static bool warnedCrossingFull = false;
                 if (!warnedCrossingFull) {
-                    LOG_WARN("Geofence crossing-state cannot grow (%u tracked, %u max); new (waypoint,node) pairs will "
-                             "not alert until space frees",
-                             (unsigned)crossingCount, (unsigned)GEOFENCE_MAX_CROSSING);
+                    LOG_WARN("Geofence crossing-state full (%u max); new (waypoint,node) pairs will not alert until "
+                             "space frees",
+                             (unsigned)GEOFENCE_MAX_CROSSING);
                     warnedCrossingFull = true;
                 }
+            } else if (!ensureCrossingCapacity()) {
+                // A refused malloc is a heap blip, not a full table: throttle it rather than spend the
+                // one-shot above, because the next position may well find the memory.
+                static uint32_t lastAllocWarning = 0;
+                if (lastAllocWarning == 0 || !Throttle::isWithinTimespanMs(lastAllocWarning, 60000)) {
+                    LOG_WARN("No heap for the geofence crossing-state (%u bytes); no (waypoint,node) pair will alert",
+                             (unsigned)(GEOFENCE_MAX_CROSSING * sizeof(CrossingState)));
+                    lastAllocWarning = Time::stampMillis();
+                }
+            } else {
+                crossingInside[crossingCount++] = CrossingState{key, isInside};
             }
         } else {
             state->inside = isInside;
