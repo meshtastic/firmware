@@ -91,6 +91,13 @@ class UdpMulticastHandler final
             // Authentication metadata is local-only; Router re-establishes it after successful PKI decryption.
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
+            // Wire-carried flags only the local stack may set. A sender must not suppress our MQTT
+            // uplink or schedule our transmit, and priority is not in the LoRa header, so fixPriority
+            // derives it locally for a radio arrival: left as sent, MAX outranks the ACK ceiling and
+            // replaceLowerPriorityPacket evicts one of ours once perhapsRebroadcast queues it.
+            mp.via_mqtt = false;
+            mp.tx_after = 0;
+            mp.priority = meshtastic_MeshPacket_Priority_UNSET;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             if (!p)
                 return;
