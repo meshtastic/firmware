@@ -75,4 +75,5 @@ test_traceroute_nexthop	writes=config.proto,module.proto,device.proto,channels.p
 test_traffic_management	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat errors=3000..12000	constructs a NodeDB for the per-node rate-limit and dedup state; test_tm_fuzz_nodenum_blitz feeds malformed payloads, and each rejection logs (measured 7985)
 test_transmit_history	writes=transmit_history.dat	persistence round-trip: what it asserts is that retransmission state survives a save/load
 test_warm_store	writes=warm.dat	persistence round-trip of the warm-tier snapshot, which is the tier's whole contract
+test_waypoint_expiry	writes=Waypoints_default.wpts	clearAllWaypoints() in setUp/tearDown rewrites the waypoint store file (ENABLE_WAYPOINT_PERSISTENCE defaults on)
 test_nodeinfo_storm	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	saturates a real NodeDB and drives admissions and promotions through its probation band, which demotes evicted residents into the warm tier
