@@ -255,10 +255,14 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
 } meshtastic_ModuleConfig_PaxcounterConfig;
 
 /* Config for the Traffic Management module.
- Provides packet inspection and traffic shaping to help reduce channel utilization */
+ Provides packet inspection and traffic shaping to help reduce channel utilization.
+ Every field uses the proto3 zero value to mean "disabled"; there is no
+ "use the firmware default" sentinel. Firmware installs its own defaults when it
+ first creates this config, and a client that writes 0 turns that feature off. */
 typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
     /* Minimum interval in seconds between position updates from the same node.
- A non-zero value implicitly enables the suppression window; 0 disables it. */
+ A non-zero value implicitly enables the suppression window; 0 disables it.
+ Firmware default: 21600 (6 hours), installed when this config is first created. */
     uint32_t position_min_interval_secs;
     /* Maximum hop distance from the requestor at which direct NodeInfo responses
  are served from the local cache. A non-zero value implicitly enables direct
@@ -1138,7 +1142,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_size 10
-#define meshtastic_ModuleConfig_MeshBeaconConfig_size 240
+#define meshtastic_ModuleConfig_MeshBeaconConfig_size 242
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
@@ -1149,7 +1153,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 30
-#define meshtastic_ModuleConfig_size             244
+#define meshtastic_ModuleConfig_size             246
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus
