@@ -282,6 +282,17 @@ extern "C" void lfs_assert(const char *reason)
 // Defined by the core's InternalFileSystem, completes a pending sd_flash_write()
 extern "C" void flash_nrf5x_event_cb(uint32_t event);
 
+// s145 asks the application for entropy. Bluefruit's SoC task answers the same request, but whichever
+// consumer pops the event must seed, so the request is never dropped. HardwareRNG::fill() always fills.
+static void seedSoftDevice()
+{
+    uint8_t seed[SD_RAND_SEED_SIZE];
+    HardwareRNG::fill(seed, sizeof(seed));
+    uint32_t err = sd_rand_seed_set(seed);
+    if (err != NRF_SUCCESS)
+        LOG_WARN("sd_rand_seed_set failed: %u", err);
+}
+
 void checkSDEvents()
 {
     if (useSoftDevice) {
@@ -295,6 +306,9 @@ void checkSDEvents()
             case NRF_EVT_FLASH_OPERATION_SUCCESS:
             case NRF_EVT_FLASH_OPERATION_ERROR:
                 flash_nrf5x_event_cb(evt);
+                break;
+            case NRF_EVT_RAND_SEED_REQUEST:
+                seedSoftDevice();
                 break;
 
             default:
