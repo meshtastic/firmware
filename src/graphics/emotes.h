@@ -425,6 +425,10 @@ extern const unsigned char wood[] PROGMEM;
 #define beer_width 16
 #define beer_height 16
 extern const unsigned char beer[] PROGMEM;
+
+#define pushpin_width 16
+#define pushpin_height 16
+extern const unsigned char pushpin[] PROGMEM;
 #endif // EXCLUDE_EMOJI
 
 } // namespace graphics

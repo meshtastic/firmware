@@ -45,6 +45,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 // Extras renderers
 void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth,
                       float myHeadingRadian, double userLat, double userLon);
+void drawRelativeCompassArrow(OLEDDisplay *display, int16_t centerX, int16_t centerY, float relativeBearingDeg);
 
 // Screen frame functions
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

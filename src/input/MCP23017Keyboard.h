@@ -4,8 +4,6 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#define MCP23017_KB_ADDR 0x20 // Default address (A0, A1 y A2 to GND)
-
 class MCP23017Keyboard
 {
   public:

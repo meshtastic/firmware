@@ -95,7 +95,7 @@ void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
         pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
 }
 
-void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
+bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
@@ -125,7 +125,9 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 
         service->sendToMesh(p);
         shorterTimeout = false;
+        return true;
     }
+    return false;
 }
 
 void NodeInfoModule::triggerImmediateNodeInfoCheck()
@@ -225,13 +227,12 @@ NodeInfoModule::NodeInfoModule()
 
 int32_t NodeInfoModule::runOnce()
 {
-    // If we changed channels, ask everyone else for their latest info
-    bool requestReplies = currentGeneration != radioGeneration;
-    currentGeneration = radioGeneration;
-
     if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        // If we changed channels, ask everyone else for their latest info
+        bool requestReplies = currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
-        sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
+        if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies))
+            currentGeneration = radioGeneration; // only a send that went out consumes the channel change
     }
     return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }

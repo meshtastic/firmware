@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "buzz.h"
 #include "graphics/Backlight.h"
 #include "graphics/Screen.h"
@@ -28,11 +29,16 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
+#include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #include "modules/TraceRouteModule.h"
+#include "modules/WaypointModule.h"
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -44,6 +50,10 @@ namespace graphics
 
 namespace
 {
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+uint32_t selectedGeofenceWaypointId = 0;
+#endif
 
 // Caller must ensure the provided options array outlives the banner callback.
 template <typename T, size_t N, typename Callback>
@@ -218,8 +228,33 @@ void menuHandler::OnboardMessage()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// Out-of-box US setup starts on LongTurbo rather than the region table's LongFast. Menu-only: the
+// US entry in `regions[]` keeps LongFast, so no other route onto US changes. Anything that already
+// states a preset - a pinned userpref, or a preset moved off the install default - outranks it.
+meshtastic_Config_LoRaConfig_ModemPreset menuHandler::presetForRegionSelection(const meshtastic_Config_LoRaConfig &lora,
+                                                                               meshtastic_Config_LoRaConfig_RegionCode selected)
+{
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    (void)selected; // the pinned preset wins outright; nothing to decide
+#else
+    if (lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET && selected == meshtastic_Config_LoRaConfig_RegionCode_US &&
+        lora.use_preset && lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST) {
+        return meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
+    }
+#endif
+    return lora.modem_preset;
+}
+
 static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
 {
+    // Decided first: it keys off the *outgoing* region being UNSET.
+    const meshtastic_Config_LoRaConfig_ModemPreset selectionPreset = menuHandler::presetForRegionSelection(config.lora, region);
+    if (selectionPreset != config.lora.modem_preset) {
+        LOG_INFO("First region is %s, default preset to %s", getRegion(region)->name,
+                 DisplayFormatters::getModemPresetDisplayName(selectionPreset, false, true));
+        config.lora.modem_preset = selectionPreset;
+    }
+
     config.lora.region = region;
     config.lora.channel_num = 0; // Reset to default channel
 
@@ -263,6 +298,10 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
         gps->enable();
 #endif
+    if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && !config.lora.tx_enabled && !owner.is_licensed) {
+        LOG_WARN("Setting config.lora.tx_enabled to true");
+        config.lora.tx_enabled = true;
+    }
     service->reloadConfig(changes);
 }
 
@@ -440,7 +479,7 @@ void menuHandler::deviceRolePicker()
             config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
         }
         service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -1834,12 +1873,12 @@ void menuHandler::resetNodeDBMenu()
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
             disableBluetooth();
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 2) {
             LOG_INFO("Initiate node-db reset, keep favorites");
             nodeDB->resetNodes(1);
             disableBluetooth();
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 0) {
             menuQueue = NodeBaseMenu;
             screen->runNow();
@@ -2034,12 +2073,12 @@ void menuHandler::GPSSmartPositionMenu()
             config.position.position_broadcast_smart_enabled = true;
             saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 2) {
             config.position.position_broadcast_smart_enabled = false;
             saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
     bannerOptions.InitialSelected = config.position.position_broadcast_smart_enabled ? 1 : 2;
@@ -2094,7 +2133,7 @@ void menuHandler::GPSUpdateIntervalMenu()
         if (selected != 0) {
             saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
 
@@ -2184,7 +2223,7 @@ void menuHandler::GPSPositionBroadcastMenu()
         if (selected != 0) {
             saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
 
@@ -2325,7 +2364,7 @@ void menuHandler::switchToMUIMenu()
             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
             config.bluetooth.enabled = false;
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -2346,7 +2385,7 @@ void menuHandler::rebootMenu()
             IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
             messageStore.saveToFlash();
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         } else {
             menuQueue = PowerMenu;
             screen->runNow();
@@ -2398,6 +2437,158 @@ void menuHandler::removeFavoriteMenu()
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::waypointBaseMenu()
+{
+    enum optionsNumbers { Back, GeofenceAlerts, RemoveWaypoint };
+    static const char *optionsArray[] = {"Back", "Geofence Alerts", "Remove Waypoint"};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Waypoint Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == GeofenceAlerts) {
+            menuQueue = GeofenceWaypointMenu;
+            screen->runNow();
+        } else if (selected == RemoveWaypoint) {
+            menuQueue = RemoveWaypointMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::geofenceWaypointMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    static const char *optionsArray[WAYPOINT_HISTORY_LIMIT + 1];
+    static uint32_t waypointIds[WAYPOINT_HISTORY_LIMIT + 1];
+    static std::string labelStorage[WAYPOINT_HISTORY_LIMIT + 1];
+
+    optionsArray[0] = "Back";
+    int options = 1;
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (options > WAYPOINT_HISTORY_LIMIT || !GeofenceModule::hasGeofence(entry.waypoint))
+            continue;
+        std::string name = sanitizeString(entry.waypoint.name);
+        if (name.empty())
+            name = "Unnamed Geofence";
+        labelStorage[options] = name.substr(0, 20);
+        optionsArray[options] = labelStorage[options].c_str();
+        waypointIds[options] = entry.waypoint.id;
+        options++;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = options > 1 ? "Geofence Alerts" : "No Geofences";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = WaypointBaseMenu;
+        } else {
+            selectedGeofenceWaypointId = waypointIds[selected];
+            menuQueue = GeofenceOptionsMenu;
+        }
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
+void menuHandler::geofenceOptionsMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    const StoredWaypoint *entry = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+    if (!entry) {
+        menuQueue = GeofenceWaypointMenu;
+        screen->runNow();
+        return;
+    }
+
+    static std::string labels[4];
+    static const char *optionsArray[4];
+    labels[0] = "Back";
+    labels[1] = std::string("Enter Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_ENTER) ? "On" : "Off");
+    labels[2] = std::string("Exit Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_EXIT) ? "On" : "Off");
+    labels[3] = std::string("Favorites Only: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY) ? "On" : "Off");
+    for (size_t i = 0; i < 4; ++i)
+        optionsArray[i] = labels[i].c_str();
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Geofence Alerts";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = GeofenceWaypointMenu;
+        } else {
+            const StoredWaypoint *current = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+            if (current) {
+                const WaypointNotificationPreference preference =
+                    selected == 1 ? WAYPOINT_NOTIFY_ENTER
+                                  : (selected == 2 ? WAYPOINT_NOTIFY_EXIT : WAYPOINT_NOTIFY_FAVORITES_ONLY);
+                waypointStore.setNotificationPreference(selectedGeofenceWaypointId, preference,
+                                                        !current->notificationEnabled(preference));
+            }
+            menuQueue = GeofenceOptionsMenu;
+        }
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
+void menuHandler::removeWaypointMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    static const char *optionsArray[WAYPOINT_HISTORY_LIMIT + 1];
+    static uint32_t waypointIds[WAYPOINT_HISTORY_LIMIT + 1];
+    static std::string labelStorage[WAYPOINT_HISTORY_LIMIT + 1];
+
+    optionsArray[0] = "Back";
+    int options = 1;
+
+    for (const auto &entry : waypointStore.getWaypoints()) {
+        if (options > WAYPOINT_HISTORY_LIMIT)
+            break;
+        std::string name = sanitizeString(entry.waypoint.name);
+        if (name.empty())
+            name = "Unnamed Waypoint";
+        labelStorage[options] = name.substr(0, 20);
+        optionsArray[options] = labelStorage[options].c_str();
+        waypointIds[options] = entry.waypoint.id;
+        options++;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Remove Waypoint";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = WaypointBaseMenu;
+            screen->runNow();
+            return;
+        }
+        const uint32_t waypointId = waypointIds[selected];
+        LOG_INFO("Removing waypoint 0x%08x", waypointId);
+        if (waypointModule)
+            waypointModule->broadcastDelete(waypointId);
+        else
+            waypointStore.removeWaypoint(waypointId);
+        screen->setFrames(graphics::Screen::FOCUS_DEFAULT);
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
 }
 
 void menuHandler::traceRouteMenu()
@@ -2497,12 +2688,12 @@ void menuHandler::wifiToggleMenu()
             config.network.wifi_enabled = false;
             config.bluetooth.enabled = true;
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == Wifi_enable) {
             config.network.wifi_enabled = true;
             config.bluetooth.enabled = false;
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -3036,6 +3227,18 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case RemoveFavorite:
         removeFavoriteMenu();
+        break;
+    case WaypointBaseMenu:
+        waypointBaseMenu();
+        break;
+    case GeofenceWaypointMenu:
+        geofenceWaypointMenu();
+        break;
+    case GeofenceOptionsMenu:
+        geofenceOptionsMenu();
+        break;
+    case RemoveWaypointMenu:
+        removeWaypointMenu();
         break;
     case TraceRouteMenu:
         traceRouteMenu();

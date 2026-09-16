@@ -3,6 +3,7 @@
 // would assert conditions it cannot reach, and initializeTestEnvironment()'s RTC and OSThread setup
 // would add portduino globals it otherwise never touches. Suite-level state cleanliness is still
 // checked from outside by bin/pio-test-isolate.sh, which wraps every suite regardless.
+#include "WaypointUtils.h"
 #include "meshUtils.h"
 #include <cstring>
 #include <unity.h>
@@ -168,6 +169,19 @@ void test_above_max_codepoint()
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
 }
 
+void test_waypoint_codepoint_encoding()
+{
+    TEST_ASSERT_EQUAL_STRING("A", WaypointUtils::utf8FromCodepoint('A').c_str());
+    TEST_ASSERT_EQUAL_STRING("\xF0\x9F\x93\x8D", WaypointUtils::utf8FromCodepoint(0x1F4CD).c_str());
+}
+
+void test_waypoint_codepoint_rejects_invalid_scalars()
+{
+    TEST_ASSERT_TRUE(WaypointUtils::utf8FromCodepoint(0).empty());
+    TEST_ASSERT_TRUE(WaypointUtils::utf8FromCodepoint(0xD800).empty());
+    TEST_ASSERT_TRUE(WaypointUtils::utf8FromCodepoint(0x110000).empty());
+}
+
 // --- clampLongName: local 24-byte cap over wider wire buffers ---
 
 void test_clamp_long_name_short_unchanged()
@@ -236,6 +250,8 @@ void setup()
     RUN_TEST(test_zero_size);
     RUN_TEST(test_valid_max_codepoint);
     RUN_TEST(test_above_max_codepoint);
+    RUN_TEST(test_waypoint_codepoint_encoding);
+    RUN_TEST(test_waypoint_codepoint_rejects_invalid_scalars);
 
     // clampLongName
     RUN_TEST(test_clamp_long_name_short_unchanged);

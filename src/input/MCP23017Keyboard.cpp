@@ -1,4 +1,5 @@
 #include "MCP23017Keyboard.h"
+#include "mesh/Throttle.h"
 
 // Registers
 #define _MCP23017_IODIRA 0x00
@@ -53,18 +54,17 @@
 #define MCP23017_KEYMAP_12 12
 #define MCP23017_KEYMAP_13 13
 #define MCP23017_KEYMAP_14 14
-#define MCP23017_KEYMAP_15 15
+
+#endif
 
 #define LONG_PRESS_THRESHOLD 1000
 #define MULTI_TAP_THRESHOLD 2000
 
-#endif
-
 // Num chars per key
-uint8_t MCP23017_TapMod[15] = {1, 6, 6, 6, 6, 6, 8, 6, 8, 1, 1, 1, 1, 1, 1};
+static const uint8_t MCP23017_TapMod[_NUM_KEYS] = {1, 6, 6, 6, 6, 6, 8, 6, 8, 1, 1, 1, 1, 1, 1};
 
 // Tap Map
-static const unsigned char MCP23017_TapMap[15][13] = {
+static const unsigned char MCP23017_TapMap[_NUM_KEYS][8] = {
     {' '},                                    // 0: K_1
     {'a', 'b', 'c', 'A', 'B', 'C'},           // 1: K_2
     {'d', 'e', 'f', 'D', 'E', 'F'},           // 2: K_3
@@ -83,7 +83,7 @@ static const unsigned char MCP23017_TapMap[15][13] = {
 };
 
 // Long Press map
-static const unsigned char MCP23017_LongPressMap[15] = {
+static const unsigned char MCP23017_LongPressMap[_NUM_KEYS] = {
     '1',    // 0:  K_1
     '2',    // 1:  K_2
     '3',    // 2:  K_3
@@ -102,10 +102,10 @@ static const unsigned char MCP23017_LongPressMap[15] = {
 };
 
 // Bit position to logical index translation (0-14)
-uint8_t MCP23017_KeyMap[16] = {MCP23017_KEYMAP_0,  MCP23017_KEYMAP_1,  MCP23017_KEYMAP_2,  MCP23017_KEYMAP_3,
-                               MCP23017_KEYMAP_4,  MCP23017_KEYMAP_5,  MCP23017_KEYMAP_6,  MCP23017_KEYMAP_7,
-                               MCP23017_KEYMAP_8,  MCP23017_KEYMAP_9,  MCP23017_KEYMAP_10, MCP23017_KEYMAP_11,
-                               MCP23017_KEYMAP_12, MCP23017_KEYMAP_13, MCP23017_KEYMAP_14, MCP23017_KEYMAP_15};
+static const uint8_t MCP23017_KeyMap[_NUM_KEYS] = {MCP23017_KEYMAP_0,  MCP23017_KEYMAP_1,  MCP23017_KEYMAP_2,  MCP23017_KEYMAP_3,
+                                                   MCP23017_KEYMAP_4,  MCP23017_KEYMAP_5,  MCP23017_KEYMAP_6,  MCP23017_KEYMAP_7,
+                                                   MCP23017_KEYMAP_8,  MCP23017_KEYMAP_9,  MCP23017_KEYMAP_10, MCP23017_KEYMAP_11,
+                                                   MCP23017_KEYMAP_12, MCP23017_KEYMAP_13, MCP23017_KEYMAP_14};
 
 MCP23017Keyboard::MCP23017Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
@@ -135,7 +135,7 @@ void MCP23017Keyboard::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
 
 void MCP23017Keyboard::reset()
 {
-    LOG_DEBUG("MCP23017 Reset\n");
+    LOG_DEBUG("MCP23017 Reset");
     // Configure I/O
     writeRegister(_MCP23017_IODIRA, 0xFF); // All set as inputs
     writeRegister(_MCP23017_IODIRB, 0xFF);
@@ -191,7 +191,7 @@ uint8_t MCP23017Keyboard::keyCount(uint16_t value) const
 {
     uint16_t buttonState = value & _KEY_MASK;
     uint8_t numButtonsPressed = 0;
-    for (uint8_t i = 0; i < 15; ++i) {
+    for (uint8_t i = 0; i < _NUM_KEYS; ++i) {
         if (buttonState & (1 << i)) {
             numButtonsPressed++;
         }
@@ -263,7 +263,7 @@ void MCP23017Keyboard::pressed(uint16_t keyRegister)
 
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_pin = 0;
-    for (uint8_t i = 0; i < 15; ++i) {
+    for (uint8_t i = 0; i < _NUM_KEYS; ++i) {
         if (buttonState & (1 << i)) {
             next_pin = i;
             break;
@@ -271,24 +271,17 @@ void MCP23017Keyboard::pressed(uint16_t keyRegister)
     }
 
     uint8_t next_key = MCP23017_KeyMap[next_pin];
-    uint32_t now = millis();
-    int32_t tap_interval = now - last_tap;
 
-    if (tap_interval < 0) {
-        // long running, millis has overflowed.
-        last_tap = 0;
-        state = Busy;
-        return;
-    }
-
-    if (next_key != last_key || tap_interval > MULTI_TAP_THRESHOLD) {
+    // A different key, or the same one after the multi-tap window closed, starts a fresh
+    // character rather than advancing through the tap map.
+    if (next_key != last_key || Throttle::hasElapsed(last_tap, MULTI_TAP_THRESHOLD)) {
         char_idx = 0;
     } else {
         char_idx += 1;
     }
 
     last_key = next_key;
-    last_tap = now;
+    last_tap = millis();
     state = Held;
     return;
 }
@@ -300,10 +293,9 @@ void MCP23017Keyboard::held(uint16_t keyRegister)
     if (keyCount(keyRegister) != 1)
         return;
 
-    LOG_DEBUG("Held");
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_pin = 0;
-    for (uint8_t i = 0; i < 15; ++i) {
+    for (uint8_t i = 0; i < _NUM_KEYS; ++i) {
         if (buttonState & (1 << i)) {
             next_pin = i;
             break;
@@ -311,19 +303,19 @@ void MCP23017Keyboard::held(uint16_t keyRegister)
     }
 
     uint8_t next_key = MCP23017_KeyMap[next_pin];
-    uint32_t now = millis();
-    int32_t held_interval = now - last_tap;
 
-    if (held_interval < 0 || next_key != last_key) {
+    // last_key indexes the long-press map below; a CUSTOM_MCP23017_MAP entry outside the
+    // key range would run off the end of it.
+    if (last_key >= _NUM_KEYS || next_key != last_key) {
         last_tap = 0;
         state = Busy;
         return;
     }
 
-    if (held_interval > LONG_PRESS_THRESHOLD) {
+    if (Throttle::hasElapsed(last_tap, LONG_PRESS_THRESHOLD)) {
         state = HeldLong;
         queueEvent(MCP23017_LongPressMap[last_key]);
-        last_tap = now;
+        last_tap = millis();
     }
 }
 

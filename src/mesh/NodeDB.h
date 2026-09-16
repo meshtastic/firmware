@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
+#include <cstring>
 #include <map>
 #include <pb_encode.h>
 #include <string>
@@ -80,6 +81,11 @@ static const uint8_t LOW_ENTROPY_HASHES[][32] = {
     {0xcc, 0x11, 0xfb, 0x1a, 0xab, 0xa1, 0x31, 0x87, 0x6a, 0xc6, 0xde, 0x88, 0x87, 0xa9, 0xb9, 0x59,
      0x37, 0x82, 0x8d, 0xb2, 0xcc, 0xd8, 0x97, 0x40, 0x9a, 0x5c, 0x8f, 0x40, 0x55, 0xcb, 0x4c, 0x3e}};
 static const char LOW_ENTROPY_WARNING[] = "Compromised keys were detected and regenerated.";
+// Shown when a user tries to restore/set a known pre-2.8 low-entropy key: explains why the saved
+// key did not persist and that the node's identity (NodeNum == crc32(public_key)) changed with it.
+static const char LOW_ENTROPY_RESTORE_WARNING[] =
+    "That key is a known pre-2.8 low-entropy key and can't be restored. A new secure key was "
+    "generated; your node number has changed.";
 #endif
 static const char LICENSED_IDENTITY_MIGRATION_WARNING[] =
     "Licensed signing generated a new identity key; this node identity changed.";
@@ -268,6 +274,29 @@ struct NodeHeardAt {
     uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard
 };
 
+/// What decides which LoRa slot this radio listens on. Only ever consumed as a fingerprint(), which
+/// is what each node stores and what the committed slot is compared against.
+struct LoraSlotSnapshot {
+    meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    bool use_preset = false;
+    /// Only the modem fields actually in force are populated - see loraSlotSnapshotFrom().
+    meshtastic_Config_LoRaConfig_ModemPreset modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    uint16_t bandwidth = 0;
+    uint32_t spread_factor = 0;
+    uint8_t coding_rate = 0;
+    float override_frequency = 0;
+    uint16_t channel_num = 0;
+    /// Channels::getName(); 16 covers name[12] and the preset name it substitutes for an empty one.
+    char primary_channel_name[16] = {0};
+
+    /// Fold into the NODEINFO_BITFIELD_HEARD_SLOT_BITS-wide value stored per node. A collision only
+    /// costs a node heard on one slot reading as heard on another, which 12 bits makes remote.
+    uint16_t fingerprint() const;
+};
+
+/// Normalises to the modem fields actually in force, so editing a dormant one is not a slot change.
+LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName);
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
@@ -325,6 +354,18 @@ class NodeDB
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const meshtastic_MeshPacket &p);
+
+    /// Re-read which slot this radio is committed to. Cheap, touches no node and writes nothing, so
+    /// it is safe on every config write - a client hopping presets just moves it and moves it back.
+    void refreshCommittedLoraSlot();
+
+    /// Fingerprint of the slot the radio is committed to, which a node's stored slot is compared
+    /// against to derive NodeInfo.heard_on_current_lora.
+    uint16_t committedLoraSlot() const { return committedSlot; }
+
+    /// Declare that config.lora holds a temporary radio switch - a beacon keying up on another preset.
+    /// While set the committed slot is pinned, so neither the switch nor its restore reads as a move.
+    void setLoraSlotTransient(bool transient) { loraSlotTransient = transient; }
 
     void addFromContact(const meshtastic_SharedContact);
 
@@ -587,6 +628,10 @@ class NodeDB
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    bool generateBlacklistCheckedKeyPair();
+    bool derivePublicKeyFromPrivate();
+#endif
 
     /// Consolidate crypto key generation logic used across multiple modules
     /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
@@ -690,6 +735,11 @@ class NodeDB
     /// Eviction ranking with current-boot stamps newer than every persisted epoch.
     EvictionRecency evictionRecency(const meshtastic_NodeInfoLite *n) const;
     static bool evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent);
+
+    /// The slot this radio is committed to; see refreshCommittedLoraSlot().
+    uint16_t committedSlot = 0;
+    bool loraSlotTransient = false;
+    LoraSlotSnapshot currentLoraSlot() const;
 
     /*
      * Internal boolean to track sorting paused
@@ -812,7 +862,16 @@ extern uint32_t error_address;
 // Use this instead of `if (snr_q4)`. Legacy records (bit clear) are unambiguously "unknown".
 #define NODEINFO_BITFIELD_HAS_SNR_SHIFT 10
 #define NODEINFO_BITFIELD_HAS_SNR_MASK (1u << NODEINFO_BITFIELD_HAS_SNR_SHIFT)
-// Bits 11..31 reserved for future single-bit flags.
+// Set on a genuine RF hear, and with it the slot fingerprint below. Clear means never heard over our
+// own radio, so the fingerprint is meaningless - legacy records read that way and are correct.
+#define NODEINFO_BITFIELD_HAS_RF_HEAR_SHIFT 11
+#define NODEINFO_BITFIELD_HAS_RF_HEAR_MASK (1u << NODEINFO_BITFIELD_HAS_RF_HEAR_SHIFT)
+// Bits 12..23: fingerprint of the LoRa slot this node was last heard on. NodeInfo.heard_on_current_lora
+// is derived from it matching the slot the radio is committed to, which is what makes scanning harmless.
+#define NODEINFO_BITFIELD_HEARD_SLOT_SHIFT 12
+#define NODEINFO_BITFIELD_HEARD_SLOT_BITS 12
+#define NODEINFO_BITFIELD_HEARD_SLOT_MASK (((1u << NODEINFO_BITFIELD_HEARD_SLOT_BITS) - 1) << NODEINFO_BITFIELD_HEARD_SLOT_SHIFT)
+// Bits 24..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
@@ -860,6 +919,32 @@ inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteHasSnr(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK);
+}
+
+inline bool nodeInfoLiteHasRfHear(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_RF_HEAR_MASK);
+}
+
+inline uint16_t nodeInfoLiteHeardSlot(const meshtastic_NodeInfoLite *n)
+{
+    return n ? (n->bitfield & NODEINFO_BITFIELD_HEARD_SLOT_MASK) >> NODEINFO_BITFIELD_HEARD_SLOT_SHIFT : 0;
+}
+
+/// Record that this node was just heard over RF on `slot`.
+inline void nodeInfoLiteSetHeardSlot(meshtastic_NodeInfoLite *n, uint16_t slot)
+{
+    if (!n)
+        return;
+    n->bitfield = (n->bitfield & ~NODEINFO_BITFIELD_HEARD_SLOT_MASK) |
+                  (((uint32_t)slot << NODEINFO_BITFIELD_HEARD_SLOT_SHIFT) & NODEINFO_BITFIELD_HEARD_SLOT_MASK) |
+                  NODEINFO_BITFIELD_HAS_RF_HEAR_MASK;
+}
+
+/// True iff this node was last heard over RF on the slot the radio is committed to right now.
+inline bool nodeInfoLiteHeardOnSlot(const meshtastic_NodeInfoLite *n, uint16_t committedSlot)
+{
+    return nodeInfoLiteHasRfHear(n) && nodeInfoLiteHeardSlot(n) == committedSlot;
 }
 /// A node that the eviction/migration paths must not drop: a favourite, an
 /// ignored (blocked) node, or a manually-verified key.

@@ -341,6 +341,12 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_RCC6 = 143,
     /* Seeed Wio Tracker L1 Pro 1W, nRF52840 + SX1262 with 1 W external PA */
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W = 144,
+    /* Meshnology W12 */
+    meshtastic_HardwareModel_MESHNOLOGY_W12 = 145,
+    /* Seeed Studio MeshPager X2 */
+    meshtastic_HardwareModel_MESHPAGER_X2 = 146,
+    /* Lilygo T-CONNECT PRO */
+    meshtastic_HardwareModel_T_CONNECT_PRO = 147,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -738,7 +744,7 @@ typedef struct _meshtastic_Position {
    multiplied with DOP to calculate positional accuracy
  Default: "'bout three meters-ish" :) */
     uint32_t gps_accuracy;
-    /* Ground speed in m/s and True North TRACK in 1/100 degrees
+    /* Ground speed in km/h and True North TRACK in 1/100 degrees
  Clarification of terms:
  - "track" is the direction of motion (measured in horizontal plane)
  - "heading" is where the fuselage points (measured in horizontal plane)
@@ -1211,6 +1217,15 @@ typedef struct _meshtastic_NodeInfo {
  Persists between NodeDB internal clean ups
  LSB 1 of the bitfield */
     bool has_xeddsa_signed;
+    /* True if we have heard this node over RF since our current LoRa
+ configuration took effect. Cleared for every node whenever the region,
+ modem preset (or the custom bandwidth/spread factor/coding rate when
+ use_preset is false), override_frequency, channel_num or the primary
+ channel name changes - the frequency slot is derived from that name.
+ Not set for nodes heard over MQTT, which reach us over the internet
+ rather than over our own radio - see via_mqtt.
+ LSB 11 of the bitfield */
+    bool heard_on_current_lora;
 } meshtastic_NodeInfo;
 
 typedef PB_BYTES_ARRAY_T(16) meshtastic_MyNodeInfo_device_id_t;
@@ -1273,15 +1288,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        — storage already unlocked, client must auth
-   "token_missing"     — no boot token on flash
-   "token_expired"     — boot token wall-clock TTL elapsed
-   "token_boots_zero"  — boot token boot-count TTL exhausted
-   "token_hmac_fail"   — token tampered or wrong device
-   "token_dek_fail"    — token DEK decrypt failed
-   "token_wrong_size"  — token file corrupted
-   "token_bad_magic"   — token file corrupted
-   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
+   "needs_auth"        - storage already unlocked, client must auth
+   "token_missing"     - no boot token on flash
+   "token_expired"     - boot token wall-clock TTL elapsed
+   "token_boots_zero"  - boot token boot-count TTL exhausted
+   "token_hmac_fail"   - token tampered or wrong device
+   "token_dek_fail"    - token DEK decrypt failed
+   "token_wrong_size"  - token file corrupted
+   "token_bad_magic"   - token file corrupted
+   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];
@@ -1752,7 +1767,7 @@ extern "C" {
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
+#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
@@ -1791,7 +1806,7 @@ extern "C" {
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
+#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
@@ -1949,6 +1964,7 @@ extern "C" {
 #define meshtastic_NodeInfo_is_key_manually_verified_tag 12
 #define meshtastic_NodeInfo_is_muted_tag         13
 #define meshtastic_NodeInfo_has_xeddsa_signed_tag 14
+#define meshtastic_NodeInfo_heard_on_current_lora_tag 15
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
@@ -2244,7 +2260,8 @@ X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10) \
 X(a, STATIC,   SINGULAR, BOOL,     is_ignored,       11) \
 X(a, STATIC,   SINGULAR, BOOL,     is_key_manually_verified,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     is_muted,         13) \
-X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa_signed,  14)
+X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa_signed,  14) \
+X(a, STATIC,   SINGULAR, BOOL,     heard_on_current_lora,  15)
 #define meshtastic_NodeInfo_CALLBACK NULL
 #define meshtastic_NodeInfo_DEFAULT NULL
 #define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
@@ -2600,7 +2617,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 327
+#define meshtastic_NodeInfo_size                 329
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23

@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
@@ -327,7 +328,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::parseBannerMessageWithFonts(NotificationRenderer::alertBannerMessage);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
     NotificationRenderer::alertBannerUntil =
-        (banner_overlay_options.durationMs == 0) ? 0 : millis() + banner_overlay_options.durationMs;
+        (banner_overlay_options.durationMs == 0) ? 0 : Time::timerEndsAtMillis(banner_overlay_options.durationMs);
     NotificationRenderer::optionsArrayPtr = banner_overlay_options.optionsArrayPtr;
     NotificationRenderer::optionsEnumPtr = banner_overlay_options.optionsEnumPtr;
     NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
@@ -351,7 +352,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -373,7 +374,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -402,7 +403,7 @@ void Screen::showAlphanumericPicker(const char *message, const char *initialText
 
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::textInputCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -439,7 +440,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
     // Store the message and set the expiration timestamp (use same pattern as other notifications)
     strncpy(NotificationRenderer::alertBannerMessage, header ? header : "Text Input", 255);
     NotificationRenderer::alertBannerMessage[255] = '\0';
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::current_notification_type = notificationTypeEnum::text_input;
 
@@ -492,7 +493,7 @@ float Screen::estimatedHeading(double lat, double lon)
     static double oldLat, oldLon;
     static float b = -1.0f;
     static uint32_t lastHeadingAtMs = 0;
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     const uint32_t gpsUpdateIntervalSecs =
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
     uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
@@ -1083,6 +1084,7 @@ int32_t Screen::runOnce()
 {
     // If we don't have a screen, don't ever spend any CPU for us.
     if (!useDisplay) {
+        textMessageFrameShown = false;
         enabled = false;
         return RUN_SAME;
     }
@@ -1202,7 +1204,11 @@ int32_t Screen::runOnce()
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
+            // Cleared even while a module holds the screen: START_ALERT_FRAME set it and nothing
+            // else would, so swallowing it here would leave banners suppressed for good.
             NotificationRenderer::pauseBanner = false;
+            if (hasModalModule())
+                break; // only the owning module may take the screen back off its own frame
             // Return from one-off alert mode back to regular frames.
             if (!showingNormalScreen && NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
                 setFrames();
@@ -1223,6 +1229,7 @@ int32_t Screen::runOnce()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
+        textMessageFrameShown = false;
         enabled = false;
         return 0;
     }
@@ -1260,7 +1267,7 @@ int32_t Screen::runOnce()
     // standard screen switching is stopped.
     if (showingNormalScreen) {
         // standard screen loop handling here
-        if (config.display.auto_screen_carousel_secs > 0 &&
+        if (config.display.auto_screen_carousel_secs > 0 && !hasModalModule() &&
             NotificationRenderer::current_notification_type != notificationTypeEnum::text_input &&
             !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
@@ -1275,6 +1282,9 @@ int32_t Screen::runOnce()
             handleOnPress();
         }
     }
+
+    textMessageFrameShown = showingNormalScreen && framesetInfo.positions.textMessage != 255 && ui &&
+                            ui->getUiState()->currentFrame == framesetInfo.positions.textMessage;
 
     // LOG_DEBUG("want fps %d, fixed=%d", targetFramerate,
     // ui->getUiState()->frameState); If we are scrolling we need to be called
@@ -1315,6 +1325,10 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     if (einkScreensaver != NULL) {
         screensaverFrame = einkScreensaver;
         ui->setFrames(&screensaverFrame, 1);
+
+        // Hide the nav bar before the sleep / shutdown screen is rendered
+        static OverlayCallback screensaverOverlays[] = {NotificationRenderer::drawBannercallback};
+        ui->setOverlays(screensaverOverlays, 1);
     }
 
     // Else, display the usual "overlay" screensaver
@@ -1372,6 +1386,7 @@ void Screen::setFrames(FrameFocus focus)
         return;
     }
 
+    const FramesetInfo previousFramesetInfo = framesetInfo;
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
@@ -1624,8 +1639,15 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        //  No more adjustment - force stay on same index
-        if (previousFrameCount > fsi.frameCount) {
+        if (previousFramesetInfo.positions.waypoint == 255 && fsi.positions.waypoint != 255) {
+            const uint8_t target = originalPosition >= fsi.positions.waypoint ? originalPosition + 1 : originalPosition;
+            ui->switchToFrame(target);
+        } else if (previousFramesetInfo.positions.waypoint != 255 && fsi.positions.waypoint == 255) {
+            const uint8_t target = originalPosition > previousFramesetInfo.positions.waypoint
+                                       ? originalPosition - 1
+                                       : std::min<uint8_t>(originalPosition, fsi.frameCount - 1);
+            ui->switchToFrame(target);
+        } else if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
             ui->switchToFrame(originalPosition + 1);
@@ -1846,6 +1868,19 @@ void Screen::applyHiddenFramesMask(uint32_t mask)
     hiddenFrames.lora = getBit(mask, FVBIT_LORA);
     hiddenFrames.show_favorites = getBit(mask, FVBIT_SHOW_FAVORITES);
     hiddenFrames.chirpy = getBit(mask, FVBIT_CHIRPY);
+}
+
+bool Screen::isShowingModuleFrame(const MeshModule *m) const
+{
+    if (!m || !showingNormalScreen)
+        return false;
+    // Same effective frame drawModuleFrame() picks: mid-transition the incoming frame is the one
+    // being rendered, so comparing currentFrame would report false while the module is on screen.
+    const OLEDDisplayUiState *state = ui->getUiState();
+    uint8_t frame = state->currentFrame;
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == TransitionRelationship_INCOMING)
+        frame = state->transitionFrameTarget;
+    return frame < moduleFrames.size() && moduleFrames.at(frame) == m;
 }
 
 void Screen::loadFrameVisibility()
@@ -2109,6 +2144,21 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
     return 0;
 }
 
+// Only the environmental telemetry frame answers SELECT with a menu. A module frame that has none
+// must not claim the press, or every frame matched after it in the dispatch chain is unreachable.
+static bool moduleFrameHasMenu(size_t frame)
+{
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // moduleFrames bounds the module-frame region, before favorites are appended; its leading slots
+    // are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
+    const MeshModule *module = frame < moduleFrames.size() ? moduleFrames.at(frame) : nullptr;
+    return module != nullptr && environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(module);
+#else
+    (void)frame;
+    return false;
+#endif
+}
+
 int Screen::handleInputEvent(const InputEvent *event)
 {
     LOG_INPUT("Screen Input event %u! kb %u", event->inputEvent, event->kbchar);
@@ -2262,7 +2312,8 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
             if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
                 showFrame(FrameDirection::PREVIOUS);
-            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
+            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS ||
+                       (event->inputEvent == INPUT_BROKER_ANYKEY && event->kbchar == ' ')) {
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
                 this->ui->switchToFrame(0);
@@ -2336,16 +2387,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
-                    // moduleFrames.size() bounds the module-frame region, before favorites are appended; its leading
-                    // slots are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
-                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
-                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
-#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-                    const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
-                    if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
-                        menuHandler::environmentTelemetryMenu();
-                    }
-#endif
+                } else if (moduleFrameHasMenu(this->ui->getUiState()->currentFrame)) {
+                    menuHandler::environmentTelemetryMenu();
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
@@ -2360,6 +2403,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::nodeListMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
+                } else if (framesetInfo.positions.waypoint != 255 &&
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.waypoint) {
+                    menuHandler::waypointBaseMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showFrame(FrameDirection::PREVIOUS);
@@ -2391,6 +2437,11 @@ int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
 bool Screen::isOverlayBannerShowing()
 {
     return NotificationRenderer::isOverlayBannerShowing();
+}
+
+bool Screen::isTextMessageFrameShown() const
+{
+    return textMessageFrameShown.load();
 }
 
 bool Screen::isGamesFrameShown()

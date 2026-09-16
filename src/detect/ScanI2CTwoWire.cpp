@@ -319,11 +319,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     }
 #endif
 
-    // We only need to scan 112 addresses, the rest is reserved for special
-    // purposes 0x00 General Call 0x01 CBUS addresses 0x02 Reserved for different
-    // bus formats 0x03 Reserved for future purposes 0x04-0x07 High Speed Master
-    // Code 0x78-0x7B 10-bit slave addressing 0x7C-0x7F Reserved for future
-    // purposes
+    // We only need to scan 112 addresses, the rest is reserved for special purposes
+    // 0x00 General Call
+    // 0x01 CBUS addresses
+    // 0x02 Reserved for different bus formats
+    // 0x03 Reserved for future purposes
+    // 0x04-0x07 High Speed Master Code
+    // 0x78-0x7B 10-bit slave addressing
+    // 0x7C-0x7F Reserved for future purposes
 
     for (addr.address = 8; addr.address < 120; addr.address++) {
 #if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
@@ -334,8 +337,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 continue;
             LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         }
-        // For QMA6100P candidates on nRF52, use bounded I2C probing; otherwise use
-        // normal Wire
+        // For QMA6100P candidates on nRF52, use bounded I2C probing; otherwise use normal Wire
 #if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
         if (addr.address == QMA6100P_ADDRESS_LOW || addr.address == QMA6100P_ADDRESS_HIGH) {
             nrf52QmaFound = probeQMA6100P(addr.address);
@@ -447,7 +449,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
 #endif
+#if defined(HAS_LP5562) && (LP5562_ADDR != MMC5983MA_ADDR)
+                SCAN_SIMPLE_CASE(LP5562_ADDR, LP5562, "LP5562", (uint8_t)addr.address);
+#endif
+#ifdef HAS_LP5814
+                SCAN_SIMPLE_CASE(LP5814_ADDR, LP5814, "LP5814", (uint8_t)addr.address);
+#endif
+#ifdef HAS_ES7243E
+                SCAN_SIMPLE_CASE(ES7243E_ADDR, ES7243E, "ES7243E", (uint8_t)addr.address);
+#endif
             case XPOWERS_AXP192_AXP2101_ADDRESS:
+#ifndef SEEED_WIO_TRACKER_L2 // false positive on Wio Tracker L2
                 // Do we have the axp2101/192 or the TCA8418
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x90), 1);
                 if (registerValue == 0x0) {
@@ -457,6 +469,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("AXP192/AXP2101", (uint8_t)addr.address);
                     type = PMU_AXP192_AXP2101;
                 }
+#endif
                 break;
             case BME_ADDR:
             case BME_ADDR_ALTERNATE:
@@ -525,8 +538,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 LOG_DEBUG("Register MFG_UID: 0x%x", mfg);
 
                 // Only read DIE_UID for vendors we recognize as INA-compatible to avoid
-                // an extra I2C transaction + delay on other devices sharing this
-                // address.
+                // an extra I2C transaction + delay on other devices sharing this address.
                 if (mfg == 0x5449 || mfg == 0x190F) {
                     uint16_t die = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
                     LOG_DEBUG("Register DIE_UID: 0x%x", die);
@@ -608,10 +620,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
             case MCP9808_ADDR:
-                // We need to check for STK8BAXX first, since register 0x07 is new data
-                // flag for the z-axis and can produce some weird result. and register
-                // 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
+                // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
+                // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
                 {
+                    // Check register 0xFD for 0x83 to ID ES8311 audio codec.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFD), 1);
+                    if (registerValue == 0x83) {
+                        type = ES8311;
+                        logFoundDevice("ES8311", (uint8_t)addr.address);
+                        break;
+                    }
 #ifdef HAS_STK8XXX
                     // Check register 0x00 for 0x8700 response to ID STK8BA53 chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
@@ -672,6 +690,22 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case LPS22HB_ADDR_ALT:
+                // GT911 touchscreen: product ID register 0x8140 returns "911"
+                {
+                    uint8_t gt911_reg[] = {0x81, 0x40};
+                    uint8_t gt911_buf[4] = {0};
+                    i2cBus->beginTransmission(addr.address);
+                    i2cBus->write(gt911_reg, 2);
+                    if (i2cBus->endTransmission() == 0) {
+                        i2cBus->requestFrom((int)addr.address, 4);
+                        i2cBus->readBytes(gt911_buf, 4);
+                        if (gt911_buf[0] == '9' && gt911_buf[1] == '1' && gt911_buf[2] == '1') {
+                            type = GT911;
+                            logFoundDevice("GT911", (uint8_t)addr.address);
+                            break;
+                        }
+                    }
+                }
                 // SFA30 detection: send 2-byte command 0xD060 (Get Device Marking) and check for 48-byte response
                 if (i2cCommandResponseLength(addr, 0xD060, 48)) {
                     type = SFA30;
@@ -803,24 +837,42 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 logFoundDevice("BMA423", (uint8_t)addr.address);
 
                 break;
-            case TCA9535_ADDR: // this can also be MCP23017_ADDR (both 0x20)
+            case RAK120353_ADDR: { // AW35615 USB-C CC controller - must be checked before
+                                   // RAK120353_ADDR which shares 0x22 but is a TCA9535 variant
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);
+                if ((registerValue & 0xF0) == 0x90) { // DEVICE_ID upper nibble = 0x9 for AW35615
+                    type = AW35615;
+                    logFoundDevice("AW35615", (uint8_t)addr.address);
+                    break;
+                }
+                // Fall through to TCA9535/RAK check
+            }
+            case TCA9535_ADDR:
             case RAK120352_ADDR:
-            case RAK120353_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1);
                 if (registerValue == addr.address) { // RAK12035 returns its I2C address at 0x02 (eg 0x20)
                     type = RAK12035;
                     logFoundDevice("RAK12035", (uint8_t)addr.address);
-                } else {
-                    // TCA9535 only has registers 0x00-0x07; MCP23017 has IOCON at 0x0A
+                    break;
+                }
+#if defined(HAS_MCP23017_KEYBOARD) && !defined(USE_MCP23017)
+                // The MCP23017 shares 0x20 with the TCA9535 and there is no read-only probe that
+                // separates them reliably, so only boards that declare an MCP23017 keypad look for
+                // one here. USE_MCP23017 means the part is wired as the radio's GPIO expander and
+                // must never be handed to the keyboard driver, which reprograms IODIR/GPPU.
+                if (addr.address == MCP23017_KB_ADDR) {
+                    // IOCON is a single register mirrored at 0x0A and 0x0B; the TCA9535 has no
+                    // register there at all. Matching reads are a cheap confirmation.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1);
-                    if (registerValue != 0xFF) {
-                        type = MCP23017;
+                    if (registerValue == getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0B), 1)) {
+                        type = MCP23017KB;
                         logFoundDevice("MCP23017", (uint8_t)addr.address);
-                    } else {
-                        type = TCA9535;
-                        logFoundDevice("TCA9535", (uint8_t)addr.address);
+                        break;
                     }
                 }
+#endif
+                type = TCA9535;
+                logFoundDevice("TCA9535", (uint8_t)addr.address);
 
                 break;
 
@@ -915,9 +967,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(CHSC6X_ADDR, CHSC6X, "CHSC6X", (uint8_t)addr.address);
             case LTR553ALS_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x86),
-                                                 1); // Part ID register
-                if (registerValue == 0x92) {         // LTR553ALS Part ID
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x86), 1); // Part ID register
+                if (registerValue == 0x92) {                                                       // LTR553ALS Part ID
                     type = LTR553ALS;
                     logFoundDevice("LTR553ALS", (uint8_t)addr.address);
                 } else {
@@ -971,8 +1022,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = MLX90614;
                     logFoundDevice("MLX90614", (uint8_t)addr.address);
                 } else {
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00),
-                                                     1); // DRV2605_REG_STATUS
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // DRV2605_REG_STATUS
                     if (registerValue == 0xe0) {
                         type = DRV2605;
                         logFoundDevice("DRV2605", (uint8_t)addr.address);
@@ -983,10 +1033,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case ICM20948_ADDR:     // same as BMX160_ADDR, BMI270_ADDR_ALT,
-                                    // ICM42607P_ADDR_ALT, and SEN5X_ADDR
-            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR, BMI270_ADDR, and
-                                    // ICM42607P_ADDR
+            case ICM20948_ADDR:     // same as BMX160_ADDR, BMI270_ADDR_ALT, ICM42607P_ADDR_ALT, and SEN5X_ADDR
+            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR, BMI270_ADDR, and ICM42607P_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
 #ifdef HAS_ICM20948
                 type = ICM20948;
@@ -1027,9 +1075,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case CGRADSENS_ADDR:
-                // Register 0x00 of the RadSens sensor contains is product identifier
-                // 0x7D Undocumented, but some devices return a product identifier of
-                // 0x7A
+                // Register 0x00 of the RadSens sensor contains is product identifier 0x7D
+                // Undocumented, but some devices return a product identifier of 0x7A
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
                 if (registerValue == 0x7D || registerValue == 0x7A) {
                     type = CGRADSENS;
@@ -1041,6 +1088,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
+                // Check ADS1X15 FIRST - the SE050 probe writes 5 bytes which corrupts the ADS1X15 Lo_thresh register.
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700 || registerValue == 0xc580) {
+                    type = ADS1X15;
+                    logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
+                    break;
+                }
+
                 // T=1oI2C soft reset; an SE050 answers A5 E0 00 3F 19. requestFrom() is
                 // required: readBytes() only drains the RX buffer requestFrom() fills.
                 const uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
@@ -1059,24 +1114,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                             info[i] = i2cBus->read();
                         isSE050 = (memcmp(expectedInfo, info, sizeof(info)) == 0);
                     }
-                }
 
-                if (isSE050) {
-                    LOG_INFO("NXP SE050 crypto chip found");
-                    type = NXP_SE050;
-                    break;
+                    if (isSE050) {
+                        LOG_INFO("NXP SE050 crypto chip found");
+                        type = NXP_SE050;
+                    } else {
+                        LOG_INFO("FT6336U touchscreen found");
+                        type = FT6336U;
+                    }
                 }
-
-                // ADS1X15 default config register is 8583h
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
-                    type = ADS1X15;
-                    logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
-                    break;
-                }
-
-                LOG_INFO("FT6336U touchscreen found");
-                type = FT6336U;
                 break;
             }
 
@@ -1105,55 +1151,55 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             deviceAddresses[type] = addr;
             foundDevices[addr] = type;
         }
+    }
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        // AS3935 addresses (0x01-0x03) fall in the reserved range the loop above skips; probe
-        // them separately rather than widening that loop for every board.
-        static const uint8_t as3935Candidates[] = {AS3935_ADDR_ALT, AS3935_ADDR_ALT2, AS3935_ADDR};
-        for (uint8_t i = 0; i < sizeof(as3935Candidates); i++) {
-            // Respect the caller's address filter, same as the main loop above (line ~269).
-            if (asize != 0 && !in_array(address, asize, as3935Candidates[i]))
-                continue;
+    // AS3935 addresses (0x01-0x03) fall in the reserved range the loop above skips; probe
+    // them separately rather than widening that loop for every board.
+    static const uint8_t as3935Candidates[] = {AS3935_ADDR_ALT, AS3935_ADDR_ALT2, AS3935_ADDR};
+    for (uint8_t i = 0; i < sizeof(as3935Candidates); i++) {
+        // Respect the caller's address filter, same as the main loop above (line ~269).
+        if (asize != 0 && !in_array(address, asize, as3935Candidates[i]))
+            continue;
 
-            DeviceAddress as3935Addr(port, as3935Candidates[i]);
+        DeviceAddress as3935Addr(port, as3935Candidates[i]);
+        i2cBus->beginTransmission(as3935Candidates[i]);
+        uint8_t as3935Err = i2cBus->endTransmission();
+        if (as3935Err == 0) {
+            // No WHOAMI, and a POR-only check can't survive a warm reboot (initDevice rewrites
+            // REG0x00). Write a test pattern to bits[5:1] instead and confirm it reads back.
+            constexpr uint8_t AS3935_PROBE_PATTERN = 0b01010; // arbitrary, bits[5:1]
             i2cBus->beginTransmission(as3935Candidates[i]);
-            uint8_t as3935Err = i2cBus->endTransmission();
-            if (as3935Err == 0) {
-                // No WHOAMI, and a POR-only check can't survive a warm reboot (initDevice rewrites
-                // REG0x00). Write a test pattern to bits[5:1] instead and confirm it reads back.
-                constexpr uint8_t AS3935_PROBE_PATTERN = 0b01010; // arbitrary, bits[5:1]
-                i2cBus->beginTransmission(as3935Candidates[i]);
-                i2cBus->write((uint8_t)0x00);                        // REG0x00 (AFE_GAIN)
-                i2cBus->write((uint8_t)(AS3935_PROBE_PATTERN << 1)); // PWD=0, gain bits = pattern
-                if (i2cBus->endTransmission() == 0) {
-                    uint16_t reg0 = getRegisterValue(ScanI2CTwoWire::RegisterLocation(as3935Addr, 0x00), 1);
-                    if (((reg0 >> 1) & 0x1F) == AS3935_PROBE_PATTERN) {
-                        logFoundDevice("AS3935", as3935Candidates[i]);
-                        deviceAddresses[AS3935] = as3935Addr;
-                        foundDevices[as3935Addr] = AS3935;
-                        break; // only one AS3935 expected per bus
-                    } else {
-                        LOG_DEBUG("Unexpected REG0x00 readback for AS3935: addr=0x%x val=0x%x", as3935Candidates[i], reg0);
-                    }
+            i2cBus->write((uint8_t)0x00);                        // REG0x00 (AFE_GAIN)
+            i2cBus->write((uint8_t)(AS3935_PROBE_PATTERN << 1)); // PWD=0, gain bits = pattern
+            if (i2cBus->endTransmission() == 0) {
+                uint16_t reg0 = getRegisterValue(ScanI2CTwoWire::RegisterLocation(as3935Addr, 0x00), 1);
+                if (((reg0 >> 1) & 0x1F) == AS3935_PROBE_PATTERN) {
+                    logFoundDevice("AS3935", as3935Candidates[i]);
+                    deviceAddresses[AS3935] = as3935Addr;
+                    foundDevices[as3935Addr] = AS3935;
+                    break; // only one AS3935 expected per bus
+                } else {
+                    LOG_DEBUG("Unexpected REG0x00 readback for AS3935: addr=0x%x val=0x%x", as3935Candidates[i], reg0);
                 }
             }
         }
+    }
 #endif
 
-        // The QMC6309 magnetometer sits at 0x7C, above the general scan ceiling (the loop above stops at 0x77 to
-        // avoid the reserved 0x78-0x7F block). Probe it explicitly. Gated on the SensorLib driver being present so
-        // only boards that can actually drive the chip poke this reserved address.
+    // The QMC6309 magnetometer sits at 0x7C, above the general scan ceiling (the loop above stops at 0x77 to
+    // avoid the reserved 0x78-0x7F block). Probe it explicitly. Gated on the SensorLib driver being present so
+    // only boards that can actually drive the chip poke this reserved address.
 #if __has_include(<SensorQMC6309.hpp>)
-        addr.address = QMC6309_ADDR;
-        i2cBus->beginTransmission(addr.address);
-        if (i2cBus->endTransmission() == 0 &&
-            getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1) == 0x90 /* QMC6309 chip id */) {
-            deviceAddresses[QMC6309] = addr;
-            foundDevices[addr] = QMC6309;
-            logFoundDevice("QMC6309", (uint8_t)addr.address);
-        }
-#endif
+    addr.address = QMC6309_ADDR;
+    i2cBus->beginTransmission(addr.address);
+    if (i2cBus->endTransmission() == 0 &&
+        getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1) == 0x90 /* QMC6309 chip id */) {
+        deviceAddresses[QMC6309] = addr;
+        foundDevices[addr] = QMC6309;
+        logFoundDevice("QMC6309", (uint8_t)addr.address);
     }
+#endif
 }
 
 void ScanI2CTwoWire::scanPort(I2CPort port)

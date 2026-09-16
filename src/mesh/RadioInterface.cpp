@@ -14,6 +14,7 @@
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
@@ -643,7 +644,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
             }
-            rebootAtMsec = millis() + 5000;
+            rebootAtMsec = Time::timerEndsAtMillis(5000);
         }
     }
     return rIf;
@@ -1432,11 +1433,13 @@ uint32_t RadioInterface::computeSlotTimeMsec()
 
 /**
  * Some regulatory regions limit xmit power.
- * This function should be called by subclasses after setting their desired power.  It might lower it
+ * This function should be called by subclasses after setting their desired power.  It might lower it.
+ * Re-derives `power` from config each call so a re-init that runs it twice cannot subtract PA gain twice.
  */
 void RadioInterface::limitPower(int8_t loraMaxPower)
 {
-    uint8_t maxPower = 255; // No limit
+    power = config.lora.tx_power; // applyModemConfig() writes the resolved value back here
+    uint8_t maxPower = 255;       // No limit
 
     if (myRegion->powerLimit)
         maxPower = myRegion->powerLimit;
@@ -1518,15 +1521,17 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-    // Runtime packet payload size bounds check against radioBuffer to prevent overflow in memcpy()
-    if (static_cast<size_t>(p->encrypted.size) > sizeof(radioBuffer.payload)) {
-        LOG_ERROR("Packet payload size %u exceeds radioBuffer capacity %u", static_cast<unsigned>(p->encrypted.size),
-                  static_cast<unsigned>(sizeof(radioBuffer.payload)));
-        packetPool.release(p);
-        return 0;
+
+    // Oversize is rejected at the radio queue in Router::send(); clamp rather than fail here so this
+    // stays a call that always succeeds, with no failure return for startSend() to unwind.
+    size_t payloadLen = p->encrypted.size;
+    if (payloadLen > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_ERROR("Payload %u exceeds radioBuffer capacity %u, truncate", (unsigned)payloadLen, (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        payloadLen = MAX_RADIO_PAYLOAD_LEN;
     }
-    memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
+
+    memcpy(radioBuffer.payload, p->encrypted.bytes, payloadLen);
 
     sendingPacket = p;
-    return p->encrypted.size + sizeof(PacketHeader);
+    return payloadLen + sizeof(PacketHeader);
 }
