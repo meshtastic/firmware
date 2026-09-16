@@ -588,20 +588,21 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
             byte buf[512];
             size_t readLength = parser->read(buf, 512);
 
-            // Abort the transfer if there is less than 50k space left on the filesystem.
-            if (fileLength + readLength + 51200 > freeBytes) {
+            // Abort the transfer if there is less than 50k space left on the filesystem, or a write comes up short.
+            const bool full = fileLength + readLength + 51200 > freeBytes;
+            size_t written = 0;
+            if (!full) {
+                concurrency::LockGuard g(spiLock);
+                written = file.write(buf, readLength);
+            }
+            if (full || written != readLength) {
                 {
                     concurrency::LockGuard g(spiLock);
                     file.flush();
                     file.close();
                 }
-                res->println("<p>Write aborted! Reserving 50k on filesystem.</p>");
+                res->println(full ? "<p>Write aborted! Reserving 50k on filesystem.</p>" : "<p>Write failed.</p>");
                 return;
-            }
-
-            {
-                concurrency::LockGuard g(spiLock);
-                file.write(buf, readLength);
             }
             fileLength += readLength;
             LOG_DEBUG("File Length %i", fileLength);
