@@ -761,9 +761,12 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
+    // A couple of kB at a time: the whole body at once asked for a 64 kB block, one write per node
+    // asks mbedTLS for a record per node.
+    static const size_t NODES_FLUSH_BYTES = 2048;
     std::string out;
-    if (!writeAll(res, "{\"data\":{\"nodes\":["))
-        return;
+    out.reserve(NODES_FLUSH_BYTES + 1024); // a node's worth of headroom past the mark, so no regrowth
+    out += "{\"data\":{\"nodes\":[";
 
     bool firstNode = true;
     uint32_t readIndex = 0;
@@ -791,7 +794,6 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
                 position = "null";
             }
 
-            out.clear(); // keeps the capacity, so this never grows past one record
             if (!firstNode)
                 out += ",";
             firstNode = false;
@@ -816,13 +818,17 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
             out += ",\"via_mqtt\":";
             out += jsonEscape(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
             out += "}";
-            if (!writeAll(res, out))
-                return;
+            if (out.size() >= NODES_FLUSH_BYTES) {
+                if (!writeAll(res, out))
+                    return;
+                out.clear(); // keeps the capacity, so the buffer never grows past the mark
+            }
         }
         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     }
 
-    writeAll(res, "]},\"status\":\"ok\"}");
+    out += "]},\"status\":\"ok\"}";
+    writeAll(res, out);
 }
 
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
