@@ -547,6 +547,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ledOff(pin) pinMode(pin, INPUT)
 #endif
 
+// Boards with no hardwired user button still take one from device.button_gpio, resolved at runtime.
+#if !defined(BUTTON_PIN) && HAS_BUTTON && !defined(ARCH_PORTDUINO)
+#define BUTTON_PIN_RUNTIME_ONLY
+#endif
+
 // default mapping of pins
 #if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
 #define ALT_BUTTON_PIN PIN_BUTTON2

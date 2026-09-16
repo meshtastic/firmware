@@ -345,8 +345,10 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
         34, 35, 37};
 
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN)
     const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+    const int wakeButton = config.device.button_gpio ? (int)config.device.button_gpio : -1;
 #else
     const int wakeButton = -1;
 #endif
@@ -359,16 +361,20 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
     // to detect wake and in normal operation the external part drives them hard.
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN) || defined(BUTTON_PIN_RUNTIME_ONLY)
     // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
-    uint64_t gpioMask = (1ULL << wakeButton);
+    uint64_t gpioMask = wakeButton >= 0 ? (1ULL << wakeButton) : 0;
 #endif
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
 #endif
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+    // Resolved here rather than from wakeButton, which only exists where RTC IO hold does.
+    if (config.device.button_gpio)
+        gpio_pullup_en((gpio_num_t)config.device.button_gpio); // a user-added switch pulls to ground, so it needs our pullup
 #endif
 
     // Not needed because both of the current boards have external pullups
@@ -376,14 +382,17 @@ void cpuDeepSleep(uint32_t msecToWake)
     // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
 #ifdef ESP32S3_WAKE_TYPE
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
+    if (gpioMask)
+        esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
 #else
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 #ifdef CONFIG_IDF_TARGET_ESP32
     // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+    if (gpioMask)
+        esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
 #else
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
+    if (gpioMask)
+        esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
 #endif
 

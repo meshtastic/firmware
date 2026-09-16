@@ -164,6 +164,9 @@ static void lsIdle()
 #elif defined(KB_INT)
                 // keyboard press (probably) triggered GPIO interrupt
                 pressed = true;
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+                if (config.device.button_gpio)
+                    pressed = !digitalRead(config.device.button_gpio);
 #endif
                 if (pressed) {
                     powerFSM.trigger(EVENT_PRESS);
