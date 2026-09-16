@@ -4472,7 +4472,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n, bool heardOnAir)
             // The probation band absorbs the churn: once it holds its quota the oldest probation
             // entry goes; until then a resident makes room so the band can grow to quota.
             const EvictionScan scan = scanForEviction();
-            const bool fromProbation = scan.probationCount >= NODEDB_PROBATION_SLOTS && scan.oldestProbation != -1;
+            const bool fromProbation =
+                NODEDB_PROBATION_SLOTS > 0 && scan.probationCount >= NODEDB_PROBATION_SLOTS && scan.oldestProbation != -1;
             const int victim = fromProbation ? scan.oldestProbation : scan.oldestResident;
             if (victim != -1) {
                 if (fromProbation) {
@@ -4503,7 +4504,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n, bool heardOnAir)
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
         // Heard on a full store: on probation until heard again. Contacts and admin blocks are residents.
-        if (evictedForThis && heardOnAir)
+        if (NODEDB_PROBATION_SLOTS > 0 && evictedForThis && heardOnAir)
             nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_ON_PROBATION_MASK, true);
 #if WARM_NODE_COUNT > 0
         // Re-admission: restore what the warm tier kept for this node

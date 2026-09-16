@@ -185,7 +185,12 @@ inline constexpr uint32_t SINCE_UNKNOWN = UINT32_MAX;
 
 /// Probation band: nodes heard once on a full store, evicted first, never greeted, promoted when heard
 /// again after a gap of half the measured band residency (clamped) or when they address us.
+// STM32WL holds 10 nodes: too small for a band, so it keeps the plain LRU and every entry is a resident.
+#if defined(ARCH_STM32WL)
+inline constexpr uint8_t NODEDB_PROBATION_SLOTS = 0;
+#else
 inline constexpr uint8_t NODEDB_PROBATION_SLOTS = 10;
+#endif
 inline constexpr uint32_t NODEDB_PROBATION_GAP_MIN_SECS = 60;
 inline constexpr uint32_t NODEDB_PROBATION_GAP_MAX_SECS = 10 * 60;
 

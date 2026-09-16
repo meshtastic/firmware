@@ -1,5 +1,15 @@
 // NodeInfo storm suppression: the NodeDB probation band (src/mesh/NodeDB.cpp), the greeting gate
 // in src/mesh/MeshService.cpp and the reply policy in src/modules/NodeInfoModule.cpp that read it.
+//
+// Contract: on a full store a node heard once is admitted on probation, evicted ahead of every
+// resident, not greeted and not answered; it becomes a resident (greeted, answered) only when
+// heard again after probationGapSecs() or when it addresses us; residents stay capped at
+// MAX_NUM_NODES - NODEDB_PROBATION_SLOTS. Before this (develop @ 3468af94a) every admission to a full
+// store evicted a real resident - NYC MediumSlow replay: 28.5 resident evictions/h at ~2 % channel
+// utilisation - and each evicted-then-reheard node was greeted again and answered again, so a
+// full store generated more NodeInfo traffic than one with room. A want_response broadcast was
+// answered by every listener (one packet -> N replies), and its 12 h dedup entry then refused the
+// same node's unicast request. None of that may return.
 #include "MeshTypes.h" // BEFORE TestUtil.h - provides MAX_NUM_NODES via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -137,6 +147,17 @@ class NodeInfoStormShim : public NodeInfoModule
     using MeshModule::currentRequest;
     using MeshModule::ignoreRequest;
     using NodeInfoModule::allocReply;
+    using NodeInfoModule::handleReceivedProtobuf;
+    // The module pass as the router runs it: record the requester, then decide the reply.
+    meshtastic_MeshPacket *receiveAndReply(meshtastic_MeshPacket &req)
+    {
+        meshtastic_User u = meshtastic_User_init_zero;
+        snprintf(u.short_name, sizeof(u.short_name), "REQ");
+        handleReceivedProtobuf(req, &u);
+        currentRequest = &req;
+        ignoreRequest = false;
+        return allocReply();
+    }
 };
 
 meshtastic_MeshPacket makeNodeInfoRequest(NodeNum to)
@@ -376,17 +397,16 @@ void test_reply_deferredWhileRequesterOnProbation(void)
 
     NodeInfoStormShim shim;
     meshtastic_MeshPacket req = makeNodeInfoRequest(db->getNodeNum());
-    shim.currentRequest = &req;
 
-    TEST_ASSERT_NULL_MESSAGE(shim.allocReply(), "a probation requester must be deferred");
+    // Through handleReceivedProtobuf(), so the 12 h dedup record is made and must be undone.
+    TEST_ASSERT_NULL_MESSAGE(shim.receiveAndReply(req), "a probation requester must be deferred");
     TEST_ASSERT_TRUE(shim.ignoreRequest);
 
     // The request reaches updateFrom() after the modules: addressed to us, it promotes.
     db->hear(REQUESTER, t0 + 1, /*toUs=*/true);
     TEST_ASSERT_FALSE(db->onProbation(REQUESTER));
-    shim.ignoreRequest = false;
-    meshtastic_MeshPacket *reply = shim.allocReply();
-    TEST_ASSERT_NOT_NULL_MESSAGE(reply, "once promoted, the requester is answered");
+    meshtastic_MeshPacket *reply = shim.receiveAndReply(req);
+    TEST_ASSERT_NOT_NULL_MESSAGE(reply, "once promoted, the requester's next request is answered");
     packetPool.release(reply);
 }
 

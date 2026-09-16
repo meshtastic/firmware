@@ -156,6 +156,9 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
                                                                                                        : nullptr;
         if (refuse) {
             LOG_DEBUG("Skip send NodeInfo reply to 0x%08x: %s", getFrom(currentRequest), refuse);
+            // Forget a probation refusal, or handleReceivedProtobuf()'s record would refuse the next one for 12 h.
+            if (!suppressReplyForCurrentRequest && !isBroadcast(currentRequest->to))
+                lastNodeInfoSeen.erase(getFrom(currentRequest));
             ignoreRequest = true;
             suppressReplyForCurrentRequest = false;
             return NULL;
