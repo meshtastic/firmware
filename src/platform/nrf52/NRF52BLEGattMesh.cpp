@@ -117,9 +117,10 @@ void onCccd(uint16_t conn, BLECharacteristic *, uint16_t value)
     const bool subscribed = (value & 0x0001) != 0;
     {
         concurrency::LockGuard guard(&lock);
-        if (Link *l = addLink(conn))
+        if (Link *l = addLink(conn)) {
             l->subscribed = subscribed;
-        l->everSubscribed |= subscribed;
+            l->everSubscribed |= subscribed;
+        }
     }
     LOG_INFO("BLE GATT mesh: conn %u %s (chunk %u)", conn, subscribed ? "subscribed" : "unsubscribed", chunkFor(conn));
     if (bleGattMeshHandler)
