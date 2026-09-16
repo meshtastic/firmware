@@ -254,8 +254,7 @@ static std::string jsonNum(double v)
     return ss.str();
 }
 
-// mbedtls_ssl_write() takes one TLS record per call and short-counts the rest; neither the server
-// library nor Print::print() loops on that, so a longer body was silently cut at the record edge.
+// One TLS record per write(); loop until the whole body is sent.
 static bool writeAll(HTTPResponse *res, const std::string &body)
 {
     size_t sent = 0;
@@ -762,10 +761,7 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
-    // A node at a time: buffering 200 of them asked for a 64 kB block while holding 32 kB, through
-    // an operator new that aborts rather than throws.
     std::string out;
-    out.reserve(320);
     if (!writeAll(res, "{\"data\":{\"nodes\":["))
         return;
 
