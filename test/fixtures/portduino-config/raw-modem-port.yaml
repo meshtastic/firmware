@@ -1,0 +1,8 @@
+# FAULT: General.RawModemPort collides with the API port. initRawModem() exits rather than
+# fall back to running a mesh node on the radio the operator asked to serve raw, so the
+# checker reports it as an error, not a warning.
+Lora:
+  Module: sx1262
+General:
+  APIPort: 4403
+  RawModemPort: 4403

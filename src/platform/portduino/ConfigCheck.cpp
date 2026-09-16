@@ -20,6 +20,8 @@
 #include <system_error>
 #include <vector>
 
+extern int TCPPort; // PortduinoGlue.cpp, already resolved from General.APIPort / --port
+
 namespace
 {
 
@@ -67,7 +69,8 @@ const std::map<std::string, std::set<std::string>> &schema()
           "SX126X_ANT_SW",
           "GPIO_DETECT_PA"}},
         {"General",
-         {"MACAddress", "MACAddressSource", "MaxNodes", "MaxMessageQueue", "APIPort", "ConfigDirectory", "AvailableDirectory"}},
+         {"MACAddress", "MACAddressSource", "MaxNodes", "MaxMessageQueue", "APIPort", "RawModemPort", "ConfigDirectory",
+          "AvailableDirectory"}},
         {"Config", {"DisplayMode", "EnableUDP", "StatusMessage"}},
         {"Display",
          {"Panel", "spidev", "BusFrequency", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY", "OffsetRotate",
@@ -388,6 +391,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"General.MaxNodes", {kInt, false}},
         {"General.MaxMessageQueue", {kInt, false}},
         {"General.APIPort", {kInt, false}},
+        {"General.RawModemPort", {kInt, false}},
         {"General.ConfigDirectory", {kString, false}},
         {"General.AvailableDirectory", {kString, false}},
         {"Config.DisplayMode", {kString, false}},
@@ -960,6 +964,15 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         findings.push_back({kWarn, merged, 0,
                             "General.APIPort " + std::to_string(portduino_config.api_port) +
                                 " is outside 1024-65535, so it is ignored and the default port is used instead"});
+
+    // initRawModem() refuses to start rather than fall back to meshing on the radio.
+    if (portduino_config.raw_modem_port != -1 &&
+        (portduino_config.raw_modem_port <= 1023 || portduino_config.raw_modem_port >= 65536 ||
+         portduino_config.raw_modem_port == TCPPort || portduino_config.raw_modem_port == portduino_config.webserverport))
+        findings.push_back({kError, merged, 0,
+                            "General.RawModemPort " + std::to_string(portduino_config.raw_modem_port) +
+                                " must be inside 1024-65535 and differ from the API port " + std::to_string(TCPPort) +
+                                " and Webserver.Port"});
 
     if (portduino_config.webserverport != -1 && (portduino_config.webserverport <= 0 || portduino_config.webserverport >= 65536))
         findings.push_back({kError, merged, 0,

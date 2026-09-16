@@ -15,6 +15,7 @@
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
+#include "RawModem.h"
 #include "meshUtils.h"
 #endif
 
@@ -151,6 +152,12 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 {
+#if ARCH_PORTDUINO
+    if (rawModem) { // the radio belongs to the raw modem client, the mesh stack stays off the air
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+#endif
 
 #ifndef DISABLE_WELCOME_UNSET
 
@@ -572,11 +579,11 @@ void RadioLibInterface::handleTransmitInterrupt()
     // This can be null if we forced the device to enter standby mode.  In that case
     // ignore the transmit interrupt
     if (sendingPacket)
-        completeSending();
+        completeSending(true);
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
 }
 
-void RadioLibInterface::completeSending()
+void RadioLibInterface::completeSending(bool transmitted)
 {
     // We are careful to clear sending packet before calling printPacket because
     // that can take a long time
@@ -584,6 +591,19 @@ void RadioLibInterface::completeSending()
     sendingPacket = NULL;
 #ifdef LED_LORA
     digitalWrite(LED_LORA, LED_STATE_OFF);
+#endif
+
+#if ARCH_PORTDUINO
+    if (p && rawSendingLen) {
+        airTime->logAirtime(TX_LOG, getPacketTime(rawSendingLen));
+        if (transmitted)
+            txGood++;
+        rawSendingLen = 0;
+        packetPool.release(p); // only the placeholder, see startSendRaw()
+        if (rawModem)
+            rawModem->onTxDone(transmitted);
+        return;
+    }
 #endif
 
     if (p) {
@@ -626,6 +646,22 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 
     uint32_t rxMsec = getPacketTime(length, true);
+
+#if ARCH_PORTDUINO
+    if (rawModem) { // raw modem mode: the whole frame goes to the TCP client, nothing to the Router
+        int rawState = iface->readData((uint8_t *)&radioBuffer, length);
+        airTime->logAirtime(RX_LOG, rxMsec);
+        if (rawState == RADIOLIB_ERR_NONE && length > 0) {
+            rxGood++;
+            rawModem->onReceive((uint8_t *)&radioBuffer, length, iface->getSNR(), iface->getRSSI());
+        } else {
+            LOG_DEBUG("Raw modem: ignore rx packet, error=%d", rawState);
+            rxBad++;
+            rawModem->onReceiveError();
+        }
+        return;
+    }
+#endif
 
 #ifndef DISABLE_WELCOME_UNSET
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
@@ -808,6 +844,37 @@ void RadioLibInterface::setStandby()
     powerMon->clearState(meshtastic_PowerMon_State_Lora_RXOn);
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
 }
+
+#if ARCH_PORTDUINO
+bool RadioLibInterface::startSendRaw(const uint8_t *frame, size_t len)
+{
+    if (disabled || !config.lora.tx_enabled || sendingPacket || len == 0 || len > sizeof(radioBuffer))
+        return false;
+
+    // Every busy/sleep/missed-IRQ check keys on sendingPacket, so hold a placeholder there until completeSending()
+    meshtastic_MeshPacket *placeholder = packetPool.allocZeroed();
+    if (!placeholder)
+        return false;
+
+    configHardwareForSend();
+    memcpy(&radioBuffer, frame, len);
+    sendingPacket = placeholder;
+    rawSendingLen = len;
+
+    int res = iface->startTransmit((uint8_t *)&radioBuffer, len);
+    if (res != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("Raw modem: startTransmit failed, error=%d", res);
+        completeSending();
+        powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
+        startReceive();
+        return false;
+    }
+    enableInterrupt(isrTxLevel0);
+    // unset-sentinel-ok: busyTx/sendingPacket is the armed flag, so 0 is a legal stamp
+    lastTxStart = Time::getMillis();
+    return true;
+}
+#endif
 
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)

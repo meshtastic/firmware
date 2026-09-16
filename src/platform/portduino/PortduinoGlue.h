@@ -235,6 +235,7 @@ extern struct portduino_config_struct {
     bool mac_address_explicit = false;
     std::string mac_address_source = "";
     int api_port = -1;
+    int raw_modem_port = -1; // raw LoRa modem over TCP instead of a mesh node, see RawModem.h
     std::string config_directory = "";
     std::string available_directory = "/etc/meshtasticd/available.d/";
     int maxtophone = 100;
@@ -650,6 +651,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "ConfigDirectory" << YAML::Value << config_directory;
         if (api_port != -1)
             out << YAML::Key << "TCPPort" << YAML::Value << api_port;
+        if (raw_modem_port != -1)
+            out << YAML::Key << "RawModemPort" << YAML::Value << raw_modem_port;
         if (mac_address_explicit)
             out << YAML::Key << "MACAddress" << YAML::Value << mac_address;
         if (mac_address_source != "")

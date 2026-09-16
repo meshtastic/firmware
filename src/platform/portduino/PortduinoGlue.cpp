@@ -90,10 +90,12 @@ void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
 int TCPPort = SERVER_API_DEFAULT_PORT;
 bool checkConfigPort = true;
+static bool checkConfigRawModemPort = true;
 
 // Long-only option: argp treats any key above the printable ASCII range as having no
 // single-character equivalent.
 #define OPT_CONFIG_CHECK 1001
+#define OPT_RAW_MODEM 1003
 #ifdef _WIN32
 #define OPT_SERVICE 1002
 #endif
@@ -103,6 +105,11 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     switch (key) {
     case OPT_CONFIG_CHECK:
         configCheck = true;
+        break;
+    case OPT_RAW_MODEM:
+        if (sscanf(arg, "%d", &portduino_config.raw_modem_port) < 1)
+            return ARGP_ERR_UNKNOWN;
+        checkConfigRawModemPort = false;
         break;
     case 'p':
         if (sscanf(arg, "%d", &TCPPort) < 1) {
@@ -188,6 +195,7 @@ void portduinoCustomInit()
         {"verbose", 'v', 0, 0, "Set log level to full debug"},
         {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
         {"check", OPT_CONFIG_CHECK, 0, 0, "Check the configuration for problems, print a report, and exit"},
+        {"raw-modem", OPT_RAW_MODEM, "PORT", 0, "Serve the LoRa radio as a raw KISS modem on this TCP port instead of meshing"},
 #ifdef _WIN32
         {"service", OPT_SERVICE, 0, 0, "Run as a Windows service"},
 #endif
@@ -1297,6 +1305,10 @@ bool loadConfig(const char *configPath)
                 if (portduino_config.api_port > 1023 && portduino_config.api_port < 65536) {
                     TCPPort = (portduino_config.api_port);
                 }
+            }
+            // Only where given, so a config.d file with its own General section doesn't switch raw modem mode off
+            if (checkConfigRawModemPort && yamlConfig["General"]["RawModemPort"]) {
+                portduino_config.raw_modem_port = (yamlConfig["General"]["RawModemPort"]).as<int>(-1);
             }
             portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
             if (portduino_config.mac_address != "") {

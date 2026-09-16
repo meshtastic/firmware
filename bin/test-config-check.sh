@@ -245,6 +245,12 @@ assert "ports outside their usable range" 1 port-out-of-range.yaml check \
 	"General.APIPort 80 is outside 1024-65535" \
 	"Webserver.Port 99999 is not a usable TCP port" \
 	"Result: 1 error, 1 warning"
+assert "RawModemPort equal to the API port" 1 raw-modem-port.yaml check \
+	"General.RawModemPort 4403 must be inside 1024-65535 and differ from the API port 4403 and Webserver.Port" \
+	"Result: 1 error, 0 warnings"
+assert "RawModemPort equal to the webserver port" 1 raw-modem-port-webserver.yaml check \
+	"General.RawModemPort 9443 must be inside 1024-65535 and differ from the API port 4403 and Webserver.Port" \
+	"Result: 1 error, 0 warnings"
 assert "StatusMessage longer than its buffer" 0 statusmessage-long.yaml check \
 	"is truncated to 79 when it is stored" \
 	"Result: 0 errors, 1 warning"
