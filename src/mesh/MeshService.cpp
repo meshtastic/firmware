@@ -91,6 +91,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp->from);
     bool isPreferredRebroadcaster =
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                   meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
@@ -98,11 +99,10 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG("Got telemetry response. Skip our NodeInfo");
         //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-               !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
-               !nodeInfoLiteIsOnProbation(nodeDB->getMeshNode(mp->from))) {
-        // A probation entry (heard once on a full store) is never greeted; the packet that promotes
-        // it arrives here with the flag already clear, so a recurring node is greeted then.
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && sender && !nodeInfoLiteHasUser(sender) &&
+               !nodeInfoLiteIsOnProbation(sender) && nodeInfoModule && !isPreferredRebroadcaster) {
+        // Greet only a node the store holds as a resident: a deferred admission (no entry yet) or a
+        // probation entry is not greeted; the packet that promotes it arrives here with the flag clear.
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
