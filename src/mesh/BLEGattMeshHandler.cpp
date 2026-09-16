@@ -83,8 +83,9 @@ bool BLEGattMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     }
     slot.len = (uint16_t)n;
     slot.fragId = nextFragId++;
-    // A relay must never go back to the peer that delivered it; an origination matches nothing.
-    slot.exclude = arrivalPeer(mp->from, mp->id);
+    // A relay must not go back to the peer that handed it over - unless that peer originated it, in
+    // which case the echo is its implicit ack, the one a shared medium gives for free.
+    slot.exclude = relayExclusion(mp->from, mp->id);
 
     txTail = (txTail + 1) % BLE_GATT_MESH_TX_QUEUE_SIZE;
     txCount++;
@@ -319,9 +320,9 @@ size_t BLEGattMeshHandler::pendingAssemblies() const
     return n;
 }
 
-void BLEGattMeshHandler::rememberArrival(NodeNum from, PacketId id, BLEGattPeerId peer)
+void BLEGattMeshHandler::rememberArrival(NodeNum from, PacketId id, BLEGattPeerId peer, bool fromOrigin)
 {
-    arrivals[arrivalNext] = {from, id, peer};
+    arrivals[arrivalNext] = {from, id, peer, fromOrigin};
     arrivalNext = (arrivalNext + 1) % arrivals.size();
 }
 
@@ -330,6 +331,29 @@ BLEGattPeerId BLEGattMeshHandler::arrivalPeer(NodeNum from, PacketId id) const
     for (const auto &a : arrivals) {
         if (a.peer != BLE_GATT_MESH_NO_PEER && a.from == from && a.id == id)
             return a.peer;
+    }
+    return BLE_GATT_MESH_NO_PEER;
+}
+
+/*
+ * On LoRa an originator hears its own packet relayed and takes that as the implicit ack. A
+ * point-to-point bearer has no such echo: excluding the delivering peer from the relay leaves a
+ * neighbour that reached us over GATT alone with no delivery evidence at all. So the exclusion
+ * applies only when we are carrying someone else's packet onward.
+ *
+ * This is the only bearer with an exclusion at all - BLEMeshHandler and the UDP transport are
+ * broadcast media and have none - which is why GATT was the only one where an implicit ack could
+ * not arrive. node-kmp's MeshNode.scheduleRelay holds the same rule as `header.hopsAway == 0`;
+ * change one and change the other.
+ *
+ * Echoing to the originator cannot loop - it drops a packet bearing its own node number, and so do
+ * we - and it costs one write per relayed broadcast per adjacent originator.
+ */
+BLEGattPeerId BLEGattMeshHandler::relayExclusion(NodeNum from, PacketId id) const
+{
+    for (const auto &a : arrivals) {
+        if (a.peer != BLE_GATT_MESH_NO_PEER && a.from == from && a.id == id)
+            return a.fromOrigin ? BLE_GATT_MESH_NO_PEER : a.peer;
     }
     return BLE_GATT_MESH_NO_PEER;
 }
@@ -383,7 +407,9 @@ void BLEGattMeshHandler::deliverToRouter(BLEGattPeerId peer, const uint8_t *data
     if (!p)
         return;
 
-    rememberArrival(mp.from, mp.id, peer);
+    // Read here, before the Router decrements: equal counts mean no relay has touched it, so this
+    // peer is the node that sent it.
+    rememberArrival(mp.from, mp.id, peer, mp.hop_start == mp.hop_limit);
     LOG_DEBUG("BLE GATT mesh RX from=0x%08x to=0x%08x id=0x%08x peer=%u len=%u", mp.from, mp.to, mp.id, peer, (unsigned)len);
     enqueueReceived(p.release());
 }

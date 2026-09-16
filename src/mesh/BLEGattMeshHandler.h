@@ -161,11 +161,17 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
         NodeNum from;
         PacketId id;
         BLEGattPeerId peer;
+        // Whether this peer originated the packet rather than relaying it: hop_start == hop_limit on
+        // arrival, read before the Router decrements. Decides whether the relay may go back to it.
+        bool fromOrigin;
     };
     std::array<Arrival, BLE_GATT_MESH_RECENT_ARRIVALS> arrivals{};
     size_t arrivalNext = 0;
-    void rememberArrival(NodeNum from, PacketId id, BLEGattPeerId peer);
+    void rememberArrival(NodeNum from, PacketId id, BLEGattPeerId peer, bool fromOrigin);
     BLEGattPeerId arrivalPeer(NodeNum from, PacketId id) const;
+    // The peer a relay of this packet must skip, which is none when the arrival came straight from
+    // its originator - that echo is the originator's only implicit ack on a point-to-point bearer.
+    BLEGattPeerId relayExclusion(NodeNum from, PacketId id) const;
 
     struct TxSlot {
         std::array<uint8_t, meshtastic_MeshPacket_size> data;
