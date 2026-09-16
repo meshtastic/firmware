@@ -20,6 +20,7 @@
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
+#include <esp_heap_caps.h>
 #include <mbedtls/platform.h>
 #include <mbedtls/ssl.h>
 #endif
@@ -70,11 +71,25 @@ static const size_t TLS_OUT_BUFFER_BYTES = MBEDTLS_SSL_OUT_CONTENT_LEN + TLS_REC
 // The rest of a handshake is many small blocks, so a sum is the right instrument for that part.
 static const uint32_t TLS_HANDSHAKE_SLACK = 8192;
 
+// Only for the sum below: mbedtls_calloc() draws from this heap, while ESP.getFreeHeap() reports the
+// internal one even where EXTERNAL_MEM_ALLOC sends mbedTLS to PSRAM. The allocator has no free-size
+// query of its own, and the handshake's remaining small blocks are a sum, not a block to probe for.
+#if defined(CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC)
+#define TLS_HEAP_CAPS (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+#elif defined(CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC)
+#define TLS_HEAP_CAPS (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#else
+#define TLS_HEAP_CAPS (MALLOC_CAP_8BIT)
+#endif
+
+/// Which check refused the session, so the log can name the one that actually failed.
+enum class TlsHeapVerdict { Ok, TooLittleFree, NoContiguousBlock };
+
 /// Advisory. Not largest_free_block(): it trips the WDT (#11666).
-static bool canAllocateTlsSession()
+static TlsHeapVerdict judgeTlsSessionHeap()
 {
-    if (ESP.getFreeHeap() < TLS_IN_BUFFER_BYTES + TLS_OUT_BUFFER_BYTES + TLS_HANDSHAKE_SLACK)
-        return false;
+    if (heap_caps_get_free_size(TLS_HEAP_CAPS) < TLS_IN_BUFFER_BYTES + TLS_OUT_BUFFER_BYTES + TLS_HANDSHAKE_SLACK)
+        return TlsHeapVerdict::TooLittleFree;
 
     // Held together, through mbedTLS's own allocator, as setup() does: one can fit where two do not.
     void *in = mbedtls_calloc(1, TLS_IN_BUFFER_BYTES);
@@ -82,7 +97,7 @@ static bool canAllocateTlsSession()
     const bool fits = in && out;
     mbedtls_free(out);
     mbedtls_free(in);
-    return fits;
+    return fits ? TlsHeapVerdict::Ok : TlsHeapVerdict::NoContiguousBlock;
 }
 
 // HTTPSServer that can service and reap the connections it already holds without accepting new ones,
@@ -136,7 +151,8 @@ static void handleWebResponse()
             if (secureServer) {
                 // Reap first so the probe sees the heap a finished session just returned. With every slot
                 // busy loop() cannot accept, so the probe would buy nothing.
-                if (!secureServer->reapClosedConnections() || canAllocateTlsSession()) {
+                const TlsHeapVerdict verdict = secureServer->reapClosedConnections() ? judgeTlsSessionHeap() : TlsHeapVerdict::Ok;
+                if (verdict == TlsHeapVerdict::Ok) {
                     secureServer->loop();
                 } else {
                     // Low heap: accept nothing new, but keep servicing open connections so they can time out
@@ -144,9 +160,10 @@ static void handleWebResponse()
                     secureServer->serviceExistingConnections();
                     static uint32_t lastHeapWarning = 0;
                     if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
-                        LOG_WARN("No contiguous heap for a TLS session (%u free), not accepting HTTPS connections",
-                                 ESP.getFreeHeap());
-                        lastHeapWarning = Time::skipZero(Time::getMillis());
+                        LOG_WARN("%s for a TLS session (%u free), not accepting HTTPS connections",
+                                 verdict == TlsHeapVerdict::TooLittleFree ? "Too little heap" : "No contiguous block",
+                                 (unsigned)heap_caps_get_free_size(TLS_HEAP_CAPS));
+                        lastHeapWarning = Time::stampMillis();
                     }
                 }
             }
