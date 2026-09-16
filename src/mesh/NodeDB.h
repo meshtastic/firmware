@@ -756,15 +756,15 @@ class NodeDB
     /// so a fresh boot starts at NODEDB_PROBATION_GAP_MAX_SECS.
     uint32_t probationResidencyEmaSecs = 2 * NODEDB_PROBATION_GAP_MAX_SECS;
 
-    int probationCount() const;
-    /// Index of the oldest probation entry, or -1.
-    int oldestProbationIndex() const;
-    /// Index of the oldest evictable resident: key-less first, else oldest; -1 if none.
-    int oldestResidentIndex() const;
+    /// One pass over the store: band size plus the eviction candidates, indexes -1 when absent.
+    struct EvictionScan {
+        int probationCount = 0;
+        int oldestProbation = -1;
+        int oldestResident = -1; // key-less first, else oldest; never protected
+    };
+    EvictionScan scanForEviction() const;
     /// Drop the entry at index; a key always reaches the warm tier, a key-less identity only if asked.
     void evictAt(int index, bool keepKeylessInWarm);
-    /// Age of the entry in seconds against its own timebase, for the residency EMA.
-    uint32_t ageSecs(const meshtastic_NodeInfoLite *n) const;
     /// Clear probation; evicts the oldest resident when the resident band is at its cap.
     void promoteFromProbation(meshtastic_NodeInfoLite *info);
 

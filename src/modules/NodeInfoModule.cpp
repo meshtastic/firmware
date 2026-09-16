@@ -148,25 +148,16 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
     if (isReplyingToExternalRequest) {
         // A broadcast want_response asks every listener to answer one packet: amplification. Our
         // scheduled broadcast carries the same information; unicast requests are still answered.
-        if (isBroadcast(currentRequest->to)) {
-            LOG_DEBUG("Skip send NodeInfo: broadcast request from 0x%08x would amplify", getFrom(currentRequest));
+        // Probation: heard once on a full store, so defer to our scheduled broadcast. This request is
+        // addressed to us, so updateFrom() promotes the requester right after this; the next one is answered.
+        const char *refuse = isBroadcast(currentRequest->to)                                           ? "broadcast"
+                             : suppressReplyForCurrentRequest                                          ? "heard <12h ago"
+                             : nodeInfoLiteIsOnProbation(nodeDB->getMeshNode(getFrom(currentRequest))) ? "on probation"
+                                                                                                       : nullptr;
+        if (refuse) {
+            LOG_DEBUG("Skip send NodeInfo reply to 0x%08x: %s", getFrom(currentRequest), refuse);
             ignoreRequest = true;
             suppressReplyForCurrentRequest = false;
-            return NULL;
-        }
-
-        if (suppressReplyForCurrentRequest) {
-            LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
-            ignoreRequest = true;
-            suppressReplyForCurrentRequest = false;
-            return NULL;
-        }
-
-        // Heard once on a full store: defer to our scheduled broadcast. This request is addressed to
-        // us, so updateFrom() promotes the requester right after this and its next one is answered.
-        if (nodeInfoLiteIsOnProbation(nodeDB->getMeshNode(getFrom(currentRequest)))) {
-            LOG_DEBUG("Skip send NodeInfo reply to 0x%08x: requester on probation", getFrom(currentRequest));
-            ignoreRequest = true;
             return NULL;
         }
     }

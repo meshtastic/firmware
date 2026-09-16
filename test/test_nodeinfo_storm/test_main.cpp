@@ -28,7 +28,7 @@ class NodeDBTestShim : public NodeDB
     void resetProbation() { probationResidencyEmaSecs = 2 * NODEDB_PROBATION_GAP_MAX_SECS; }
     int residentsEvicted = 0; // counted by the shim's promote(), see below
 
-    using NodeDB::probationCount;
+    int probationCount() const { return scanForEviction().probationCount; }
     int residents() const { return numMeshNodes - probationCount(); }
     bool onProbation(NodeNum num) { return nodeInfoLiteIsOnProbation(getMeshNode(num)); }
     void promote(NodeNum num)

@@ -3519,53 +3519,38 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
 uint32_t NodeDB::probationGapSecs() const
 {
-    return clamp<uint32_t>(probationResidencyEmaSecs / 2, NODEDB_PROBATION_GAP_MIN_SECS, NODEDB_PROBATION_GAP_MAX_SECS);
+    const uint32_t gap = probationResidencyEmaSecs / 2;
+    if (gap < NODEDB_PROBATION_GAP_MIN_SECS)
+        return NODEDB_PROBATION_GAP_MIN_SECS;
+    return gap > NODEDB_PROBATION_GAP_MAX_SECS ? NODEDB_PROBATION_GAP_MAX_SECS : gap;
 }
 
-int NodeDB::probationCount() const
+NodeDB::EvictionScan NodeDB::scanForEviction() const
 {
-    int count = 0;
-    for (int i = 1; i < numMeshNodes; i++)
-        if (nodeInfoLiteIsOnProbation(&meshNodes->at(i)))
-            count++;
-    return count;
-}
-
-int NodeDB::oldestProbationIndex() const
-{
-    EvictionRecency oldest = {UINT32_MAX, true};
-    int index = -1;
-    for (int i = 1; i < numMeshNodes; i++) {
-        const meshtastic_NodeInfoLite *cand = &meshNodes->at(i);
-        if (!nodeInfoLiteIsOnProbation(cand))
-            continue;
-        const EvictionRecency recency = evictionRecency(cand);
-        if (index == -1 || evictionRecencyOlder(recency, oldest)) {
-            oldest = recency;
-            index = i;
-        }
-    }
-    return index;
-}
-
-int NodeDB::oldestResidentIndex() const
-{
+    EvictionScan out;
     // Newest-possible sentinel: a zeroed init ranks older than every candidate, so nothing
     // would ever be selected. Keep it maximal even though the index guards below also cover it.
+    EvictionRecency oldestProbation = {UINT32_MAX, true};
     EvictionRecency oldest = {UINT32_MAX, true};
     EvictionRecency oldestBoring = {UINT32_MAX, true};
     int oldestIndex = -1;
     int oldestBoringIndex = -1;
     for (int i = 1; i < numMeshNodes; i++) {
         const meshtastic_NodeInfoLite *cand = &meshNodes->at(i);
-        if (nodeInfoLiteIsOnProbation(cand))
-            continue;
-        const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
-        const bool isIgnored = nodeInfoLiteIsIgnored(cand);
-        const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
         // last_heard, except that nodes heard this boot before the clock became trusted
         // rank by their RAM arrival stamp instead of the 0 in the stored field.
         const EvictionRecency candRecency = evictionRecency(cand);
+        if (nodeInfoLiteIsOnProbation(cand)) {
+            out.probationCount++;
+            if (out.oldestProbation == -1 || evictionRecencyOlder(candRecency, oldestProbation)) {
+                oldestProbation = candRecency;
+                out.oldestProbation = i;
+            }
+            continue;
+        }
+        const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
+        const bool isIgnored = nodeInfoLiteIsIgnored(cand);
+        const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
         // Simply the oldest non-favorite, non-ignored, non-verified node
         if (!isFavoriteNode && !isIgnored && !isVerified && (oldestIndex == -1 || evictionRecencyOlder(candRecency, oldest))) {
             oldest = candRecency;
@@ -3579,7 +3564,8 @@ int NodeDB::oldestResidentIndex() const
         }
     }
     // if we found a "boring" node, evict it
-    return oldestBoringIndex != -1 ? oldestBoringIndex : oldestIndex;
+    out.oldestResident = oldestBoringIndex != -1 ? oldestBoringIndex : oldestIndex;
+    return out;
 }
 
 void NodeDB::evictAt(int index, bool keepKeylessInWarm)
@@ -3602,26 +3588,16 @@ void NodeDB::evictAt(int index, bool keepKeylessInWarm)
     (numMeshNodes)--;
 }
 
-uint32_t NodeDB::ageSecs(const meshtastic_NodeInfoLite *n) const
-{
-    const EvictionRecency recency = evictionRecency(n);
-    const uint32_t now = recency.heardThisBoot ? Time::getUptimeSecs() : getValidTime(RTCQualityFromNet);
-    return (recency.value && now > recency.value) ? now - recency.value : 0;
-}
-
 void NodeDB::promoteFromProbation(meshtastic_NodeInfoLite *info)
 {
     const NodeNum num = info->num;
     nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_ON_PROBATION_MASK, false);
     // Residents are capped at the store minus the band, full or not: a promotion adds no entry, so
     // the store sits one short until the next admission refills the band.
-    const int residents = numMeshNodes - probationCount();
-    if (residents > MAX_NUM_NODES - NODEDB_PROBATION_SLOTS) {
-        const int victim = oldestResidentIndex();
-        if (victim != -1 && meshNodes->at(victim).num != num)
-            evictAt(victim, /*keepKeylessInWarm=*/true);
-    }
-    LOG_DEBUG("Promote 0x%08x from probation", num);
+    const EvictionScan scan = scanForEviction();
+    if (numMeshNodes - scan.probationCount > MAX_NUM_NODES - NODEDB_PROBATION_SLOTS && scan.oldestResident != -1 &&
+        meshNodes->at(scan.oldestResident).num != num)
+        evictAt(scan.oldestResident, /*keepKeylessInWarm=*/true);
 }
 
 // Minimum spacing between evictions once the node database is full.
@@ -4495,13 +4471,15 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n, bool heardOnAir)
             LOG_INFO("Node database full: %i nodes, %u bytes free. Erase oldest", numMeshNodes, memGet.getFreeHeap());
             // The probation band absorbs the churn: once it holds its quota the oldest probation
             // entry goes; until then a resident makes room so the band can grow to quota.
-            int victim = probationCount() >= NODEDB_PROBATION_SLOTS ? oldestProbationIndex() : -1;
-            const bool fromProbation = victim != -1;
-            if (!fromProbation)
-                victim = oldestResidentIndex();
+            const EvictionScan scan = scanForEviction();
+            const bool fromProbation = scan.probationCount >= NODEDB_PROBATION_SLOTS && scan.oldestProbation != -1;
+            const int victim = fromProbation ? scan.oldestProbation : scan.oldestResident;
             if (victim != -1) {
                 if (fromProbation) {
-                    const uint32_t age = ageSecs(&meshNodes->at(victim));
+                    // The victim's age is the band's residency; a one-packet entry was heard only at admission.
+                    const EvictionRecency r = evictionRecency(&meshNodes->at(victim));
+                    const uint32_t now = r.heardThisBoot ? Time::getUptimeSecs() : getValidTime(RTCQualityFromNet);
+                    const uint32_t age = (r.value && now > r.value) ? now - r.value : 0;
                     probationResidencyEmaSecs +=
                         (static_cast<int32_t>(age) - static_cast<int32_t>(probationResidencyEmaSecs)) / 8;
                 }
