@@ -64,11 +64,11 @@ void RouterRetirementModule::loadFromDisk()
     const bool readOk = file.read(reinterpret_cast<uint8_t *>(&rec), sizeof(rec)) == sizeof(rec);
     file.close();
     if (!readOk || rec.magic != CREDIT_FILE_MAGIC || rec.version != CREDIT_FILE_VERSION) {
-        LOG_WARN("Router retirement: invalid credit file (magic=%08x ver=%u), starting from 0", rec.magic, rec.version);
+        LOG_WARN("Router retirement: bad credit file, credit 0");
         return;
     }
     creditSecs = rec.creditSecs;
-    LOG_INFO("Router retirement: loaded %u s unmanaged uptime credit", creditSecs);
+    LOG_INFO("Router retirement: credit %u s", creditSecs);
 #endif
 }
 
@@ -84,7 +84,7 @@ bool RouterRetirementModule::saveToDisk() const
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&rec), sizeof(rec));
     if (file.close() && written == sizeof(rec))
         return true;
-    LOG_WARN("Router retirement: failed to write %s", CREDIT_FILE);
+    LOG_WARN("Router retirement: credit write failed");
     return false;
 #else
     return true;
@@ -118,7 +118,7 @@ bool RouterRetirementModule::commitRetirement()
 {
     // Role defaults touch config, module config (telemetry interval) and the owner (devicestate).
     if (!nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE)) {
-        LOG_WARN("Router retirement: role save failed, will retry next tick");
+        LOG_WARN("Router retirement: role save failed, retry");
         retirementSavePending = true;
         return false;
     }
@@ -134,7 +134,7 @@ void RouterRetirementModule::retireOneRung()
     if (next == current)
         return; // defensive: ladder bottom
 
-    LOG_WARN("Router retirement: demoting role %d -> %d after %u s unmanaged uptime", (int)current, (int)next, creditSecs);
+    LOG_WARN("Router retirement: role %d -> %d after %u s", (int)current, (int)next, creditSecs);
     config.device.role = next;
     creditSecs = 0; // fresh credit at the new rung
     saveToDisk();
