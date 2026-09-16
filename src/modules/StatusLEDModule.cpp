@@ -126,7 +126,12 @@ int StatusLEDModule::handleTxAckStatus(const TxAckEvent *event)
             txAckFailPhaseStart = millis();
         }
     }
-    setIntervalFromNow(0); // show the transition on the next loop pass, not up to a second later
+    // Wake the scheduler the way NotifiedWorkerThread::notify() does. Setting our own next-run
+    // time is not enough: we may be on the BLE task while the loop task is already parked in
+    // mainDelay, and it would not look at us again until that delay expired.
+    setIntervalFromNow(0);
+    runASAP = true;
+    concurrency::mainDelay.interrupt();
     return 0;
 }
 #endif
