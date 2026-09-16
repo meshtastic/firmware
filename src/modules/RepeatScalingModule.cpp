@@ -14,8 +14,7 @@ void RepeatScalingTxHook::transmitStarted(RadioInterface *, const meshtastic_Mes
         return;
     const uint8_t dupesTolerated = repeatScalingModule->getToleratedDupeCount(p->from, p->id);
     if (dupesTolerated > 0)
-        LOG_DEBUG("[REPEATSCALE] Transmitting 0x%08x from=0x%08x after tolerating %u duplicate(s)", p->id, p->from,
-                  dupesTolerated);
+        LOG_DEBUG("[REPEATSCALE] tx 0x%08x after %u dupes", p->id, dupesTolerated);
 }
 
 // Design notes for getDupeCancelThreshold()'s policy (kept here rather than inline):
@@ -37,23 +36,26 @@ void RepeatScalingTxHook::transmitStarted(RadioInterface *, const meshtastic_Mes
 //
 // Either way, meshTooBusyForExtraRepeats() forces the threshold back to 1 on a busy/dense mesh.
 
+static bool busy(const char *which)
+{
+    LOG_DEBUG("[REPEATSCALE] mesh busy: %s", which);
+    return true;
+}
+
 // True if channel/air utilization or direct-neighbor density says the mesh is too busy for extra
 // repeats. Logs which condition tripped.
 bool RepeatScalingModule::meshTooBusy(float channelUtilPercent, float airUtilTxPercent, uint16_t directActiveNodes)
 {
     if (channelUtilPercent > BUSY_CHANNEL_UTIL_PERCENT) {
-        LOG_DEBUG("[REPEATSCALE] Mesh busy: chUtil=%.1f%% > %.1f%%", channelUtilPercent, BUSY_CHANNEL_UTIL_PERCENT);
-        return true;
+        return busy("chUtil");
     }
     if (airUtilTxPercent > BUSY_AIR_UTIL_TX_PERCENT) {
-        LOG_DEBUG("[REPEATSCALE] Mesh busy: airUtilTX=%.1f%% > %.1f%%", airUtilTxPercent, BUSY_AIR_UTIL_TX_PERCENT);
-        return true;
+        return busy("airUtilTX");
     }
 #if HAS_VARIABLE_HOPS
     // perHop[0] is HopScalingModule's estimate of active direct (hop_away == 0) neighbors.
     if (directActiveNodes > BUSY_DIRECT_ACTIVE_NODES) {
-        LOG_DEBUG("[REPEATSCALE] Mesh busy: directActiveNodes=%u > %u", directActiveNodes, BUSY_DIRECT_ACTIVE_NODES);
-        return true;
+        return busy("directActiveNodes");
     }
 #else
     (void)directActiveNodes;
@@ -94,13 +96,10 @@ uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket 
     } else {
         // Portnum unknowable (undecodable packet): fall back to the plaintext next_hop header.
         threshold = (p->next_hop == NO_NEXT_HOP_PREFERENCE) ? 2 : 1;
-        LOG_DEBUG("[REPEATSCALE] portnum unknown for 0x%08x from=0x%08x; next_hop=0x%x -> threshold=%u", p->id, p->from,
-                  p->next_hop, threshold);
     }
 
     // A busy/dense mesh overrides any extra tolerance decided above.
     if (threshold > 1 && meshTooBusyForExtraRepeats()) {
-        LOG_DEBUG("[REPEATSCALE] portnum=%d wanted threshold=%u but mesh is busy; falling back to 1", portnum, threshold);
         return 1;
     }
 
@@ -188,14 +187,10 @@ bool RepeatScalingModule::shouldCancelDupe(const meshtastic_MeshPacket *p)
     const int32_t portnum = resolvePortnum(p); // for logging only
 
     if (dupesHeard >= threshold) {
-        LOG_INFO("[REPEATSCALE] Giving up own rebroadcast of 0x%08x from=0x%08x portnum=%d: heard %u/%u duplicate(s)", p->id,
-                 p->from, portnum, dupesHeard, threshold);
+        LOG_INFO("[REPEATSCALE] drop own rebroadcast of 0x%08x port=%d: %u/%u dupes", p->id, portnum, dupesHeard, threshold);
         clearDupeCount(p->from, p->id);
         return true;
     }
 
-    LOG_DEBUG("[REPEATSCALE] Tolerated duplicate %u/%u of 0x%08x from=0x%08x portnum=%d: will still transmit our own "
-              "rebroadcast",
-              dupesHeard, threshold, p->id, p->from, portnum);
     return false;
 }
