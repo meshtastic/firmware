@@ -181,6 +181,33 @@ static void test_saveToDisk_railStillUnsafeAtRetry_bailsWithoutFormat(void)
     TEST_ASSERT_TRUE(FSCom.exists(deviceStateFileName));
 }
 
+// The whole point of the retry gate: a write that keeps failing while the filesystem still reads is a
+// busy or lock-protected flash, not corruption, and formatting would take every other file with it.
+static void test_saveToDisk_writeFailsButFsReadable_doesNotFormat(void)
+{
+    TEST_MESSAGE("=== saveToDisk: unwritable but readable filesystem must not be formatted ===");
+    std::vector<uint8_t> live;
+    TEST_ASSERT_TRUE(readFileBytes(configFileName, live));
+    const uint64_t deviceStateBefore = fileFingerprint(deviceStateFileName);
+
+    // A directory on the live path fails every rename, so all retries fail - while /prefs and the
+    // other protos stay perfectly readable.
+    TEST_ASSERT_TRUE(FSCom.remove(configFileName));
+    TEST_ASSERT_TRUE(FSCom.mkdir(configFileName));
+
+    const bool saved = nodeDB->saveToDisk(SEGMENT_CONFIG);
+
+    std::string tmp = std::string(configFileName) + ".tmp";
+    FSCom.remove(tmp.c_str());
+    TEST_ASSERT_TRUE(removeHostDirectory(configFileName));
+    writeFileBytes(configFileName, live);
+
+    TEST_ASSERT_FALSE(saved);
+    // The decisive assertion: an fsFormat() would have taken devicestate with it.
+    TEST_ASSERT_TRUE(FSCom.exists(deviceStateFileName));
+    TEST_ASSERT_EQUAL_UINT64(deviceStateBefore, fileFingerprint(deviceStateFileName));
+}
+
 static void test_saveToDisk_railUnsafeAtEntry_returnsFalseImmediately(void)
 {
     TEST_MESSAGE("=== saveToDisk: rail unsafe at entry writes nothing ===");
@@ -217,6 +244,7 @@ NSR_TEST_ENTRY void setup()
     printf("\n=== saveToDisk retry gate ===\n");
     RUN_TEST(test_saveToDisk_railDipDuringWrite_retriesAndLands);
     RUN_TEST(test_saveToDisk_railStillUnsafeAtRetry_bailsWithoutFormat);
+    RUN_TEST(test_saveToDisk_writeFailsButFsReadable_doesNotFormat);
     RUN_TEST(test_saveToDisk_railUnsafeAtEntry_returnsFalseImmediately);
 #endif
 
