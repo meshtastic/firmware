@@ -106,13 +106,21 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
 // both for a failed encode and for a message whose every field is at its default - and the latter
 // is a legitimate comparison here (a zeroed SecurityConfig encodes to zero bytes). Reading the
 // stream result tells the two apart.
-template <size_t MaxSize> static NOINLINE bool protobufsEqual(const pb_msgdesc_t *fields, const void *left, const void *right)
+// One body for every message: the largest compared is MQTTConfig, and each caller static_asserts
+// its _size against this so a grown proto cannot silently turn into "changed".
+static constexpr size_t PROTOBUFS_EQUAL_MAX = meshtastic_ModuleConfig_MQTTConfig_size;
+static_assert(meshtastic_Config_LoRaConfig_size <= PROTOBUFS_EQUAL_MAX, "protobufsEqual buffer too small");
+static_assert(meshtastic_Config_SecurityConfig_size <= PROTOBUFS_EQUAL_MAX, "protobufsEqual buffer too small");
+static_assert(meshtastic_ModuleConfig_MQTTConfig_size <= PROTOBUFS_EQUAL_MAX, "protobufsEqual buffer too small");
+static_assert(meshtastic_ModuleConfig_SerialConfig_size <= PROTOBUFS_EQUAL_MAX, "protobufsEqual buffer too small");
+static_assert(meshtastic_ModuleConfig_TelemetryConfig_size <= PROTOBUFS_EQUAL_MAX, "protobufsEqual buffer too small");
+
+static NOINLINE bool protobufsEqual(const pb_msgdesc_t *fields, const void *left, const void *right)
 {
-    // NOINLINE limits peak stack use to this frame: two MaxSize encode buffers.
-    uint8_t leftBytes[MaxSize], rightBytes[MaxSize];
+    // NOINLINE limits peak stack use to this frame: two encode buffers.
+    uint8_t leftBytes[PROTOBUFS_EQUAL_MAX], rightBytes[PROTOBUFS_EQUAL_MAX];
     pb_ostream_t leftStream = pb_ostream_from_buffer(leftBytes, sizeof(leftBytes));
     pb_ostream_t rightStream = pb_ostream_from_buffer(rightBytes, sizeof(rightBytes));
-    // MaxSize is the nanopb-generated _size for the message, so this cannot fail for want of room.
     if (!pb_encode(&leftStream, fields, left) || !pb_encode(&rightStream, fields, right)) {
         LOG_ERROR("Can't encode config for comparison; assuming it changed");
         return false;
@@ -139,7 +147,7 @@ static NOINLINE bool loraRadioConfigChanged(const meshtastic_Config_LoRaConfig &
     memcpy(newEffective.ignore_incoming, oldEffective.ignore_incoming, sizeof(newEffective.ignore_incoming));
     newEffective.ignore_mqtt = oldEffective.ignore_mqtt;
     newEffective.config_ok_to_mqtt = oldEffective.config_ok_to_mqtt;
-    return !protobufsEqual<meshtastic_Config_LoRaConfig_size>(&meshtastic_Config_LoRaConfig_msg, &oldEffective, &newEffective);
+    return !protobufsEqual(&meshtastic_Config_LoRaConfig_msg, &oldEffective, &newEffective);
 }
 
 /**
@@ -1336,8 +1344,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             LOG_WARN(warning);
             sendWarning(warning);
         }
-        requiresReboot = !protobufsEqual<meshtastic_Config_SecurityConfig_size>(&meshtastic_Config_SecurityConfig_msg,
-                                                                                &oldSecurity, &config.security);
+        requiresReboot = !protobufsEqual(&meshtastic_Config_SecurityConfig_msg, &oldSecurity, &config.security);
 
         changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
 
@@ -1377,8 +1384,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         {
             auto incoming = c.payload_variant.mqtt;
             writeSecret(incoming.password, sizeof(incoming.password), moduleConfig.mqtt.password);
-            shouldReboot = !protobufsEqual<meshtastic_ModuleConfig_MQTTConfig_size>(&meshtastic_ModuleConfig_MQTTConfig_msg,
-                                                                                    &moduleConfig.mqtt, &incoming);
+            shouldReboot = !protobufsEqual(&meshtastic_ModuleConfig_MQTTConfig_msg, &moduleConfig.mqtt, &incoming);
             moduleConfig.mqtt = incoming;
         }
 #endif
@@ -1394,8 +1400,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // a real serial change still disables the radio while a no-op write leaves it alone -
         // calling it eagerly here would disable Bluetooth even when nothing changed.
         moduleConfig.has_serial = true;
-        shouldReboot = !protobufsEqual<meshtastic_ModuleConfig_SerialConfig_size>(
-            &meshtastic_ModuleConfig_SerialConfig_msg, &moduleConfig.serial, &c.payload_variant.serial);
+        shouldReboot =
+            !protobufsEqual(&meshtastic_ModuleConfig_SerialConfig_msg, &moduleConfig.serial, &c.payload_variant.serial);
         moduleConfig.serial = c.payload_variant.serial;
         break;
     case meshtastic_ModuleConfig_external_notification_tag:
@@ -1415,9 +1421,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_telemetry_tag:
         LOG_INFO("Set module config: Telemetry");
-        shouldReboot = !moduleConfig.has_telemetry ||
-                       !protobufsEqual<meshtastic_ModuleConfig_TelemetryConfig_size>(
-                           &meshtastic_ModuleConfig_TelemetryConfig_msg, &moduleConfig.telemetry, &c.payload_variant.telemetry);
+        shouldReboot = !moduleConfig.has_telemetry || !protobufsEqual(&meshtastic_ModuleConfig_TelemetryConfig_msg,
+                                                                      &moduleConfig.telemetry, &c.payload_variant.telemetry);
         moduleConfig.has_telemetry = true;
         moduleConfig.telemetry = c.payload_variant.telemetry;
         break;
