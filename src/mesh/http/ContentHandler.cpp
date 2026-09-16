@@ -406,38 +406,43 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             filenameGzip = "/static/index.html.gz";
         }
 
-        concurrency::LockGuard g(spiLock);
+        // spiLock covers filesystem calls only: a socket write or a syslog line can need the lock itself on a
+        // shared-bus Ethernet board, and the lock is not recursive.
+        bool exists;
+        bool gzipExists = false;
+        bool available;
+        size_t size;
+        {
+            concurrency::LockGuard g(spiLock);
+            exists = FSCom.exists(filename.c_str());
+            if (!exists) {
+                gzipExists = FSCom.exists(filenameGzip.c_str());
+                if (!gzipExists)
+                    filenameGzip = "/static/index.html.gz";
+            }
+            file = FSCom.open(exists ? filename.c_str() : filenameGzip.c_str());
+            available = file.available();
+            size = file.size();
+            if (!available && !exists && !gzipExists)
+                file.close();
+        }
 
-        if (FSCom.exists(filename.c_str())) {
-            file = FSCom.open(filename.c_str());
-            if (!file.available()) {
-                LOG_WARN("File not available - %s", filename.c_str());
-            }
-        } else if (FSCom.exists(filenameGzip.c_str())) {
-            file = FSCom.open(filenameGzip.c_str());
-            res->setHeader("Content-Encoding", "gzip");
-            if (!file.available()) {
-                LOG_WARN("File not available - %s", filenameGzip.c_str());
-            }
-        } else {
+        if (!available)
+            LOG_WARN("File not available - %s", exists ? filename.c_str() : filenameGzip.c_str());
+        if (!exists && !gzipExists) {
             has_set_content_type = true;
-            filenameGzip = "/static/index.html.gz";
-            file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Type", "text/html");
-            if (!file.available()) {
-
-                LOG_WARN("File not available - %s", filenameGzip.c_str());
+            if (!available) {
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
                              "href=https://meshtastic.org/docs/software/web-client/>FAQ</a>.<br><br><a "
                              "href=/admin>admin</a>");
-
                 return;
-            } else {
-                res->setHeader("Content-Encoding", "gzip");
             }
         }
+        if (!exists)
+            res->setHeader("Content-Encoding", "gzip");
 
-        res->setHeader("Content-Length", httpsserver::intToString(file.size()));
+        res->setHeader("Content-Length", httpsserver::intToString(size));
 
         // Content-Type is guessed using the definition of the contentTypes-table defined above
         int cTypeIdx = 0;
@@ -458,13 +463,18 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         // Read the file and write it to the HTTP response body
         size_t length = 0;
         do {
-            char buffer[256];
-            length = file.read((uint8_t *)buffer, 256);
-            std::string bufferString(buffer, length);
-            res->write((uint8_t *)bufferString.c_str(), bufferString.size());
+            uint8_t buffer[256];
+            {
+                concurrency::LockGuard g(spiLock);
+                length = file.read(buffer, sizeof(buffer));
+            }
+            res->write(buffer, length);
         } while (length > 0);
 
-        file.close();
+        {
+            concurrency::LockGuard g(spiLock);
+            file.close();
+        }
 
         return;
     } else {
@@ -551,9 +561,16 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         // concepts of the body parser functionality easier to understand.
         std::string pathname = "/static/" + filename;
 
-        concurrency::LockGuard g(spiLock);
-        // Create a new file to stream the data into
-        File file = FSCom.open(pathname.c_str(), FILE_O_WRITE);
+        // spiLock covers filesystem calls only: the body is read from a socket, and on a shared-bus Ethernet board
+        // the receive path needs the lock. Free space is taken once, as nothing else writes while this runs.
+        File file;
+        size_t freeBytes;
+        {
+            concurrency::LockGuard g(spiLock);
+            // Create a new file to stream the data into
+            file = FSCom.open(pathname.c_str(), FILE_O_WRITE);
+            freeBytes = FSCom.totalBytes() - FSCom.usedBytes();
+        }
         size_t fileLength = 0;
         didwrite = true;
 
@@ -564,29 +581,31 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
             byte buf[512];
             size_t readLength = parser->read(buf, 512);
-            // LOG_DEBUG("readLength - %i", readLength);
 
             // Abort the transfer if there is less than 50k space left on the filesystem.
-            if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
-                file.flush();
-                file.close();
+            if (fileLength + readLength + 51200 > freeBytes) {
+                {
+                    concurrency::LockGuard g(spiLock);
+                    file.flush();
+                    file.close();
+                }
                 res->println("<p>Write aborted! Reserving 50k on filesystem.</p>");
-
-                // enableLoopWDT();
-
                 return;
             }
 
-            // if (readLength) {
-            file.write(buf, readLength);
+            {
+                concurrency::LockGuard g(spiLock);
+                file.write(buf, readLength);
+            }
             fileLength += readLength;
             LOG_DEBUG("File Length %i", fileLength);
-            //}
         }
-        // enableLoopWDT();
 
-        file.flush();
-        file.close();
+        {
+            concurrency::LockGuard g(spiLock);
+            file.flush();
+            file.close();
+        }
 
         res->printf("<p>Saved %d bytes to %s</p>", (int)fileLength, pathname.c_str());
     }
