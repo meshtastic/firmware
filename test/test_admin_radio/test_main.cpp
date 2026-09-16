@@ -2356,7 +2356,7 @@ static void test_setFavoriteNode_skipsRadioReload_butPersists()
 // The clear-side twin of each set: removal is a node-DB write too, so it must not reconfigure
 // the radio either. Set and clear travel different admin tags, so one holding says nothing
 // about the other.
-static void test_removeFavoriteNode_skipsRadioReload()
+static void test_removeFavoriteNode_skipsTheRadioReload()
 {
     meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
     nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
@@ -2525,7 +2525,7 @@ static void test_setConfigDisplay_skipsRadioReload()
     TEST_ASSERT_EQUAL_INT(0, counter.count);
 }
 
-static void test_setConfigBluetooth_skipsRadioReload()
+static void test_setConfigBluetooth_skipsTheRadioReload()
 {
     ConfigChangedCounter counter;
     counter.observe(&service->configChanged);
@@ -4167,7 +4167,7 @@ void setup()
 
     // Node-DB metadata saves must not reconfigure the radio
     RUN_TEST(test_setFavoriteNode_skipsRadioReload_butPersists);
-    RUN_TEST(test_removeFavoriteNode_skipsRadioReload);
+    RUN_TEST(test_removeFavoriteNode_skipsTheRadioReload);
     RUN_TEST(test_setIgnoredNode_skipsRadioReload_butPersists);
     RUN_TEST(test_removeIgnoredNode_skipsRadioReload);
     RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
@@ -4179,7 +4179,7 @@ void setup()
     RUN_TEST(test_setConfigPower_skipsRadioReload);
     RUN_TEST(test_setConfigNetwork_skipsRadioReload);
     RUN_TEST(test_setConfigDisplay_skipsRadioReload);
-    RUN_TEST(test_setConfigBluetooth_skipsRadioReload);
+    RUN_TEST(test_setConfigBluetooth_skipsTheRadioReload);
     RUN_TEST(test_setConfigSecurity_skipsRadioReload);
     RUN_TEST(test_removeFixedPosition_skipsRadioReload);
     RUN_TEST(test_reloadConfig_defaultRadioAffected_stillReloads);

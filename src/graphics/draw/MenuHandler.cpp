@@ -302,7 +302,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
         LOG_WARN("Setting config.lora.tx_enabled to true");
         config.lora.tx_enabled = true;
     }
-        // Region/preset/HAM-mode change - the only LoRa radio parameters this menu can touch.
+    // Region/preset/HAM-mode change - the only LoRa radio parameters this menu can touch.
     service->applyConfigChange(changes, CONFIG_APPLY_RADIO);
 }
 

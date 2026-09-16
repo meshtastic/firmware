@@ -1291,7 +1291,7 @@ void requestReboot(int32_t seconds)
         return;
     }
     LOG_INFO("Reboot in %d seconds", seconds);
-    rebootAtMsec = millis() + seconds * 1000;
+    rebootAtMsec = Time::timerEndsAtMillis(seconds * 1000);
 }
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
