@@ -125,8 +125,9 @@ void test_proof_rejects_weak_peer_key(void)
     TEST_ASSERT_FALSE(crypto->ackProofCompute(zeroPub, BOB, ALICE, REQUEST_ID, ROUTING, ROUTING_LEN, proof));
 }
 
-// The proof rides as a protobuf field appended to the encoded Routing payload, and a decoder that
-// does not know the field must still read the ack correctly.
+// The proof rides as a protobuf field appended to the encoded Routing payload. A decoder still
+// reads the ack correctly with it present - which held when ack_proof was an unknown field to this
+// build and must keep holding now that it is generated, since older firmware sees it as unknown.
 void test_wire_roundtrip_and_unknown_field_tolerance(void)
 {
     const Identity alice = makeIdentity();
@@ -147,11 +148,12 @@ void test_wire_roundtrip_and_unknown_field_tolerance(void)
     TEST_ASSERT_TRUE(crypto->ackProofCompute(alice.pub, BOB, ALICE, REQUEST_ID, bareRouting, bare, expected));
     TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, extracted, ACK_PROOF_SIZE);
 
-    // A build without the field still parses the ack; the proof is skipped as an unknown field.
+    // Parsing the ack is unaffected by the proof - the case older firmware, which does not know the
+    // field, will be in.
     meshtastic_Routing decoded = meshtastic_Routing_init_default;
     TEST_ASSERT_TRUE_MESSAGE(
         pb_decode_from_bytes(ack.decoded.payload.bytes, ack.decoded.payload.size, &meshtastic_Routing_msg, &decoded),
-        "an unaware decoder must still parse the Routing message");
+        "a decoder must still parse the Routing message with a proof present");
     TEST_ASSERT_EQUAL(meshtastic_Routing_error_reason_tag, decoded.which_variant);
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, decoded.error_reason);
 }
