@@ -133,6 +133,19 @@ class MeshHTTPSServer : public HTTPSServer
                 _connections[i]->loop();
         }
     }
+
+    /// loop()'s own accept test, asked microseconds earlier: without it the probe holds 21 kB on
+    /// every tick of a server nobody is talking to.
+    bool hasPendingConnection() const
+    {
+        if (_socket < 0)
+            return false;
+        fd_set sockfds;
+        FD_ZERO(&sockfds);
+        FD_SET(_socket, &sockfds);
+        timeval immediate = {};
+        return select(_socket + 1, &sockfds, nullptr, nullptr, &immediate) > 0;
+    }
 };
 
 static SSLCert *cert;
@@ -149,21 +162,25 @@ static void handleWebResponse()
         if (isWebServerReady) {
             // Check heap before HTTPS processing - SSL requires significant memory
             if (secureServer) {
-                // Reap first so the probe sees the heap a finished session just returned. With every slot
-                // busy loop() cannot accept, so the probe would buy nothing.
-                const TlsHeapVerdict verdict = secureServer->reapClosedConnections() ? judgeTlsSessionHeap() : TlsHeapVerdict::Ok;
-                if (verdict == TlsHeapVerdict::Ok) {
-                    secureServer->loop();
-                } else {
-                    // Low heap: accept nothing new, but keep servicing open connections so they can time out
-                    // and free their contexts - skipping them pins the heap below the threshold for good.
+                // Reap first so the probe sees the heap a finished session just returned. Nowhere to put
+                // a connection, or nobody knocking: either way the probe would buy nothing.
+                if (!secureServer->reapClosedConnections() || !secureServer->hasPendingConnection()) {
                     secureServer->serviceExistingConnections();
-                    static uint32_t lastHeapWarning = 0;
-                    if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
-                        LOG_WARN("%s for a TLS session (%u free), not accepting HTTPS connections",
-                                 verdict == TlsHeapVerdict::TooLittleFree ? "Too little heap" : "No contiguous block",
-                                 (unsigned)heap_caps_get_free_size(TLS_HEAP_CAPS));
-                        lastHeapWarning = Time::stampMillis();
+                } else {
+                    const TlsHeapVerdict verdict = judgeTlsSessionHeap();
+                    if (verdict == TlsHeapVerdict::Ok) {
+                        secureServer->loop();
+                    } else {
+                        // Low heap: accept nothing new, but keep servicing open connections so they can time out
+                        // and free their contexts - skipping them pins the heap below the threshold for good.
+                        secureServer->serviceExistingConnections();
+                        static uint32_t lastHeapWarning = 0;
+                        if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
+                            LOG_WARN("%s for a TLS session (%u free), not accepting HTTPS connections",
+                                     verdict == TlsHeapVerdict::TooLittleFree ? "Too little heap" : "No contiguous block",
+                                     (unsigned)heap_caps_get_free_size(TLS_HEAP_CAPS));
+                            lastHeapWarning = Time::stampMillis();
+                        }
                     }
                 }
             }
