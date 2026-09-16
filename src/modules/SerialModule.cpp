@@ -663,6 +663,7 @@ void SerialModule::processWXSerial()
         if (dirAvg < 0) {
             dirAvg += 360.0;
         }
+        // unset-sentinel-ok: gotwind carries the armed state; no read tests this for 0
         lastAveraged = millis();
 
         // make a telemetry packet with the data

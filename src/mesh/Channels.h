@@ -127,6 +127,15 @@ class Channels
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
+    /** Return true if the channel has AEAD (authenticated encryption) enabled */
+    bool isAEADEnabled(ChannelIndex chIndex);
+
+    /**
+     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
+     * PSK)
+     */
+    CryptoKey getKey(ChannelIndex chIndex);
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
@@ -153,12 +162,6 @@ class Channels
      * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
-
-    /**
-     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
-     * PSK)
-     */
-    CryptoKey getKey(ChannelIndex chIndex);
 
     // getNameForPreset() against settings the caller already holds.
     static const char *nameForSettings(const meshtastic_ChannelSettings &settings,
