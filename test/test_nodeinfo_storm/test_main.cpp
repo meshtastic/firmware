@@ -124,7 +124,7 @@ void churn(int count, uint32_t &seq)
 // ---------------------------------------------------------------------------
 
 // Evicting nodes we have not heard from in hours is ordinary pruning, not churn.
-void test_rolling_falseWhenEvictingStaleNodes(void)
+void test_rolling_falseWhenEvictingStaleEntries(void)
 {
     uint32_t seq = 1000;
     db->fill(NODEDB_ROLL_FRESH_SECS + 600); // every victim is well past the freshness cutoff
@@ -190,7 +190,7 @@ void test_reply_allowedForUnicastRequest(void)
 }
 
 // On a rolling database even the unicast reply is deferred to our scheduled broadcast.
-void test_reply_refusedForUnicastWhileRolling(void)
+void test_reply_refusedForUnicastWhileDbRolling(void)
 {
     uint32_t seq = 4000;
     db->fill(60);
@@ -245,14 +245,14 @@ STORM_TEST_ENTRY void setup()
     UNITY_BEGIN();
 
     printf("\n=== NodeDB churn detection ===\n");
-    RUN_TEST(test_rolling_falseWhenEvictingStaleNodes);
+    RUN_TEST(test_rolling_falseWhenEvictingStaleEntries);
     RUN_TEST(test_rolling_trueAfterFreshEvictions);
     RUN_TEST(test_rolling_needsAFullRingOfSamples);
 
     printf("\n=== NodeInfo reply policy ===\n");
     RUN_TEST(test_reply_refusedForBroadcastRequest);
     RUN_TEST(test_reply_allowedForUnicastRequest);
-    RUN_TEST(test_reply_refusedForUnicastWhileRolling);
+    RUN_TEST(test_reply_refusedForUnicastWhileDbRolling);
     RUN_TEST(test_periodicBroadcast_survivesRolling);
 
     exit(UNITY_END());
