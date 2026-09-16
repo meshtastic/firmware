@@ -1,8 +1,10 @@
-#include "mesh/SerialHalDevice.h"
+#include "configuration.h"
+#if HAS_SERIAL_HAL_DEVICE
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
+#include "mesh/SerialHalDevice.h"
 #include "mesh/StreamAPI.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <Arduino.h>
@@ -383,3 +385,4 @@ void SerialHalDevice::emitResponse(const meshtastic_SerialHalResponse &response,
         interruptStreamApi = streamApi;
     }
 }
+#endif // HAS_SERIAL_HAL_DEVICE
