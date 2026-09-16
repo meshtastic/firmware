@@ -149,6 +149,11 @@ lint:
     - linters: [gitleaks]
       paths:
         - test/fixtures/nodedb/seed_v25_*.jsonl
+    # trufflehog's Lob detector matches "test_" followed by alphanumerics, which is every
+    # Unity test function name. There are no credentials in these suites.
+    - linters: [trufflehog]
+      paths:
+        - test/**/test_main.cpp
     # Deliberately broken YAML: these are the inputs to bin/test-config-check.sh,
     # which asserts that `meshtasticd --check` reports each planted fault. Prettier
     # rejects the duplicate keys and bad indentation that are the whole point of
