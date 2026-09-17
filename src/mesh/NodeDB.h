@@ -193,10 +193,6 @@ inline constexpr uint8_t NODEDB_PROBATION_SLOTS = 10;
 #endif
 inline constexpr uint32_t NODEDB_PROBATION_GAP_MIN_SECS = 60;
 inline constexpr uint32_t NODEDB_PROBATION_GAP_MAX_SECS = 10 * 60;
-/// A freshly promoted entry has no key yet, so the key-less-first victim rule would pick it at the
-/// next admission - before our greeting or its own NodeInfo can name it. It is passed over for this
-/// long, unless no other victim exists.
-inline constexpr uint32_t NODEDB_PROMOTION_GRACE_SECS = 30 * 60;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
@@ -287,14 +283,6 @@ enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
 struct NodeHeardAt {
     NodeNum num = 0;                ///< node this stamp describes; 0 == empty slot
     uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard
-};
-
-// RAM-only promotion stamp (monotonic uptime secs) behind NODEDB_PROMOTION_GRACE_SECS. Bounded,
-// linear-scan, reuse-oldest: past capacity the earliest promotion loses its grace first, having
-// had the longest chance to be named. Never persisted.
-struct NodePromotedAt {
-    NodeNum num = 0;                   ///< node this stamp describes; 0 == empty slot
-    uint32_t promotedAtUptimeSecs = 0; ///< Time::getUptimeSecs() when promoted off probation
 };
 
 /// What decides which LoRa slot this radio listens on. Only ever consumed as a fingerprint(), which
@@ -474,9 +462,6 @@ class NodeDB
 
     /// Gap since a probation node's previous packet that promotes it; see NODEDB_PROBATION_*.
     uint32_t probationGapSecs() const;
-
-    /// True while a node promoted off probation is still inside NODEDB_PROMOTION_GRACE_SECS.
-    bool inPromotionGrace(NodeNum num) const;
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
         removeNodeByNum(NodeNum nodeNum);
@@ -750,14 +735,6 @@ class NodeDB
     /// Stamp (or re-stamp) a node's RAM arrival record; used instead of writing a non-epoch into
     /// last_heard whenever the wall clock is untrusted.
     void recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptimeSecs);
-
-    /// See NodePromotedAt. Sized so a burst of promotions cannot cost a genuine one its grace at
-    /// the promotion rates measured on a city mesh (NYC MediumSlow replay: 1.3/h).
-    static constexpr size_t kMaxPromotedAt = 16;
-    NodePromotedAt promotedAt[kMaxPromotedAt] = {};
-
-    /// Stamp a node as just promoted off probation, starting its eviction grace.
-    void notePromoted(NodeNum num);
 
     /// addFromContact's anti-eviction stamp: a real epoch when the clock is trusted, otherwise a
     /// RAM arrival stamp that evictionRecency() honours - never a boot-relative last_heard.

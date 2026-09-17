@@ -37,16 +37,22 @@
 class NodeDBTestShim : public NodeDB
 {
   public:
-    void resetProbation()
-    {
-        probationResidencyEmaSecs = 2 * NODEDB_PROBATION_GAP_MAX_SECS;
-        for (auto &p : promotedAt)
-            p = {};
-    }
-    bool inGrace(NodeNum num) const { return inPromotionGrace(num); }
+    void resetProbation() { probationResidencyEmaSecs = 2 * NODEDB_PROBATION_GAP_MAX_SECS; }
     int residentsEvicted = 0; // counted by the shim's promote(), see below
 
     int probationCount() const { return scanForEviction().probationCount; }
+    // Unprotected, key-less residents: the population the shortlist rule counts.
+    int boringResidents() const
+    {
+        int n = 0;
+        for (int i = 1; i < numMeshNodes; i++) {
+            const meshtastic_NodeInfoLite *c = &meshNodes->at(i);
+            if (!nodeInfoLiteIsOnProbation(c) && !nodeInfoLiteIsFavorite(c) && !nodeInfoLiteIsIgnored(c) &&
+                !nodeInfoLiteIsKeyManuallyVerified(c) && c->public_key.size == 0)
+                n++;
+        }
+        return n;
+    }
     int residents() const { return numMeshNodes - probationCount(); }
     bool onProbation(NodeNum num) { return nodeInfoLiteIsOnProbation(getMeshNode(num)); }
     void promote(NodeNum num)
@@ -76,6 +82,28 @@ class NodeDBTestShim : public NodeDB
         for (int i = 1; i < numMeshNodes; i++)
             if (!nodeInfoLiteIsOnProbation(&meshNodes->at(i)))
                 giveKey(meshNodes->at(i).num);
+    }
+    // Shape the residents into `boring` key-less newcomers and an older keyed remainder, so the
+    // shortlist rule has something to choose between. Returns the oldest keyed resident.
+    NodeNum shapeResidents(int boring)
+    {
+        const uint32_t now = getTime();
+        NodeNum oldestKeyed = 0;
+        int seen = 0;
+        for (int i = numMeshNodes - 1; i >= 1; i--) {
+            meshtastic_NodeInfoLite *n = &meshNodes->at(i);
+            if (nodeInfoLiteIsOnProbation(n))
+                continue;
+            if (seen++ < boring) {
+                n->last_heard = now; // newest, and left key-less
+                n->public_key.size = 0;
+            } else {
+                n->last_heard = now - 3600; // older, and keyed
+                giveKey(n->num);
+                oldestKeyed = n->num;
+            }
+        }
+        return oldestKeyed;
     }
     void armThrottle(bool armed) { lastFullEvictionMs = armed ? Time::getMillis() : Time::getMillis() - 3000; }
     void giveKey(NodeNum num)
@@ -465,67 +493,56 @@ void test_eviction_skipsKeylessVerifiedResident(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(FRESH_BASE + 1));
 }
 
-// A promotion has no key yet, so the key-less-first rule would evict it at the next admission,
-// before a greeting or its own NodeInfo could name it. Inside the grace a keyed resident goes instead.
-void test_eviction_promotedResidentIsSparedTheKeylessPick(void)
+// Under NODEDB_PROBATION_SLOTS boring candidates the shortlist is topped up with keyed ones, so
+// the pick is the oldest node overall and a fresh key-less promotion - the newest - is spared.
+void test_eviction_shortlistSparesAFreshPromotion(void)
 {
     uint32_t seq = 1200;
-    Time::setTestMillis(10 * 60 * 1000);
     fillAndAdmit(1, seq);
     db->keyAllResidents();
     db->promote(FRESH_BASE + 1200);
-    TEST_ASSERT_EQUAL(0, db->getMeshNode(FRESH_BASE + 1200)->public_key.size);
-    TEST_ASSERT_TRUE(db->inGrace(FRESH_BASE + 1200));
+    TEST_ASSERT_EQUAL_MESSAGE(0, db->getMeshNode(FRESH_BASE + 1200)->public_key.size, "a promotion cannot have a key yet");
     const NodeNum oldestKeyed = db->oldestKeyedResident();
     TEST_ASSERT_NOT_EQUAL(0, oldestKeyed);
 
     db->admit(FRESH_BASE + 1201);
 
-    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 1200), "a promotion inside its grace is not the key-less victim");
-    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(oldestKeyed), "the oldest keyed resident goes instead");
-    Time::useRealClock();
+    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 1200), "the only boring candidate is not the victim on its own");
+    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(oldestKeyed), "the oldest node overall goes instead");
 }
 
-// The grace is a window, not a permanent exemption: past it the promotion is an ordinary key-less
-// resident. Nothing named it, so there is nothing left to protect.
-void test_eviction_promotionGraceExpires(void)
+// Once the shortlist is full of boring candidates the rule is the one it has always been: the
+// oldest boring node goes and older keyed nodes are left alone.
+void test_eviction_shortlistFullOfBoringPicksTheOldestBoring(void)
 {
     uint32_t seq = 1300;
-    Time::setTestMillis(10 * 60 * 1000);
-    fillAndAdmit(1, seq);
-    db->keyAllResidents();
-    db->promote(FRESH_BASE + 1300);
-    const NodeNum oldestKeyed = db->oldestKeyedResident();
+    db->fill(60);
+    const NodeNum oldestKeyed = db->shapeResidents(NODEDB_PROBATION_SLOTS);
     TEST_ASSERT_NOT_EQUAL(0, oldestKeyed);
+    const int boringBefore = db->boringResidents();
+    TEST_ASSERT_EQUAL_MESSAGE(NODEDB_PROBATION_SLOTS, boringBefore, "the shortlist is exactly full");
 
-    Time::advanceTestMillis((NODEDB_PROMOTION_GRACE_SECS + 60) * 1000UL);
-    TEST_ASSERT_FALSE(db->inGrace(FRESH_BASE + 1300));
-    db->admit(FRESH_BASE + 1301);
+    db->admit(FRESH_BASE + (seq++));
 
-    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 1300), "past the grace the key-less promotion is the victim again");
-    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(oldestKeyed), "and the keyed resident it was shielding stays");
-    Time::useRealClock();
+    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(oldestKeyed), "a full shortlist of boring nodes shields the oldest keyed node");
+    TEST_ASSERT_EQUAL_MESSAGE(boringBefore - 1, db->boringResidents(), "and a boring node is what was evicted");
 }
 
-// Grace is a preference, not immunity: when it is the only entry the victim rule may take, it goes
-// and the admission still succeeds. A full store must never wedge.
-void test_eviction_promotionGraceYieldsWhenItIsTheOnlyVictim(void)
+// Keyed nodes keep leaving until there are NODEDB_PROBATION_SLOTS boring ones to choose from: with
+// one short of a full shortlist the oldest keyed node is still the victim.
+void test_eviction_shortlistOneShortStillTakesAKeyedNode(void)
 {
     uint32_t seq = 1400;
-    Time::setTestMillis(10 * 60 * 1000);
-    fillAndAdmit(1, seq);
-    db->promote(FRESH_BASE + 1400);
-    for (int i = 1; i < db->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *n = db->getMeshNodeByIndex(i);
-        if (n->num != FRESH_BASE + 1400)
-            TEST_ASSERT_TRUE(db->setProtectedFlag(n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true));
-    }
+    db->fill(60);
+    const NodeNum oldestKeyed = db->shapeResidents(NODEDB_PROBATION_SLOTS - 1);
+    TEST_ASSERT_NOT_EQUAL(0, oldestKeyed);
+    const int boringBefore = db->boringResidents();
+    TEST_ASSERT_EQUAL(NODEDB_PROBATION_SLOTS - 1, boringBefore);
 
-    db->admit(FRESH_BASE + 1401);
+    db->admit(FRESH_BASE + (seq++));
 
-    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 1400), "the graced promotion yields rather than refuse the admission");
-    TEST_ASSERT_NOT_NULL(db->getMeshNode(FRESH_BASE + 1401));
-    Time::useRealClock();
+    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(oldestKeyed), "one short of a full shortlist, the oldest keyed node goes");
+    TEST_ASSERT_EQUAL_MESSAGE(boringBefore, db->boringResidents(), "and every boring candidate is still there");
 }
 
 // With room in the store a promotion evicts nobody and the next admission evicts nobody either.
@@ -952,9 +969,9 @@ PROBATION_TEST_ENTRY void setup()
     RUN_TEST(test_promotion_evictsNothingUntilTheBandRefills);
     RUN_TEST(test_promotion_evictsNobodyBelowCap);
     RUN_TEST(test_eviction_skipsKeylessVerifiedResident);
-    RUN_TEST(test_eviction_promotedResidentIsSparedTheKeylessPick);
-    RUN_TEST(test_eviction_promotionGraceExpires);
-    RUN_TEST(test_eviction_promotionGraceYieldsWhenItIsTheOnlyVictim);
+    RUN_TEST(test_eviction_shortlistSparesAFreshPromotion);
+    RUN_TEST(test_eviction_shortlistFullOfBoringPicksTheOldestBoring);
+    RUN_TEST(test_eviction_shortlistOneShortStillTakesAKeyedNode);
     RUN_TEST(test_promotion_worksWithClockNeverTrusted);
 
     printf("\n=== Eviction destination ===\n");
