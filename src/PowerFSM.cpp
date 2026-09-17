@@ -165,7 +165,8 @@ static void lsIdle()
                 // keyboard press (probably) triggered GPIO interrupt
                 pressed = true;
 #elif defined(BUTTON_PIN_RUNTIME_ONLY)
-                if (config.device.button_gpio)
+                // Unreachable where KB_INT also exists: that branch wins the chain above.
+                if (IS_RUNTIME_BUTTON_PIN(config.device.button_gpio))
                     pressed = !digitalRead(config.device.button_gpio);
 #endif
                 if (pressed) {

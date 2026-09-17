@@ -548,8 +548,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // Boards with no hardwired user button still take one from device.button_gpio, resolved at runtime.
-#if !defined(BUTTON_PIN) && HAS_BUTTON && !defined(ARCH_PORTDUINO)
+// Portduino and MUZI_BASE are out: they build their own UserButtonThread from their own config.
+#if !defined(BUTTON_PIN) && HAS_BUTTON && !defined(ARCH_PORTDUINO) && !defined(MUZI_BASE)
 #define BUTTON_PIN_RUNTIME_ONLY
+// device.button_gpio is unvalidated user input, and 63 is the widest pin a uint64 wake mask can hold.
+#define IS_RUNTIME_BUTTON_PIN(pin) ((pin) > 0 && (pin) <= 63)
 #endif
 
 // default mapping of pins

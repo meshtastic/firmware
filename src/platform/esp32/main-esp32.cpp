@@ -348,7 +348,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #if defined(BUTTON_PIN)
     const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
 #elif defined(BUTTON_PIN_RUNTIME_ONLY)
-    const int wakeButton = config.device.button_gpio ? (int)config.device.button_gpio : -1;
+    const int wakeButton = IS_RUNTIME_BUTTON_PIN(config.device.button_gpio) ? (int)config.device.button_gpio : -1;
 #else
     const int wakeButton = -1;
 #endif
@@ -373,7 +373,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #elif defined(BUTTON_PIN_RUNTIME_ONLY)
     // Resolved here rather than from wakeButton, which only exists where RTC IO hold does.
-    if (config.device.button_gpio)
+    if (IS_RUNTIME_BUTTON_PIN(config.device.button_gpio))
         gpio_pullup_en((gpio_num_t)config.device.button_gpio); // a user-added switch pulls to ground, so it needs our pullup
 #endif
 

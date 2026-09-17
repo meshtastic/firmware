@@ -470,7 +470,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
 #elif defined(BUTTON_PIN_RUNTIME_ONLY)
     gpio_num_t pin = (gpio_num_t)config.device.button_gpio;
-    if (config.device.button_gpio) {
+    if (IS_RUNTIME_BUTTON_PIN(config.device.button_gpio)) {
         gpio_pullup_en(pin); // a user-added switch pulls to ground, so it needs our pullup
         gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     }
@@ -531,7 +531,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
 #elif defined(BUTTON_PIN_RUNTIME_ONLY)
-    if (config.device.button_gpio)
+    if (IS_RUNTIME_BUTTON_PIN(config.device.button_gpio))
         gpio_wakeup_disable(pin);
 #endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN

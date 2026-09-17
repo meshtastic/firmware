@@ -177,8 +177,8 @@ static void setupUserButton(int pullup_sense)
 #elif defined(BUTTON_PIN)
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
 #else
-    // Nothing is hardwired here, so an unset device.button_gpio means there is no button to wire up.
-    int _pinNum = config.device.button_gpio ? (int)config.device.button_gpio : -1;
+    // Nothing is hardwired here, so an unset or out-of-range device.button_gpio means no button at all.
+    int _pinNum = IS_RUNTIME_BUTTON_PIN(config.device.button_gpio) ? (int)config.device.button_gpio : -1;
 #endif
 #ifndef BUTTON_ACTIVE_LOW
 #define BUTTON_ACTIVE_LOW true
