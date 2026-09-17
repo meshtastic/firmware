@@ -196,48 +196,6 @@ void test_ws_xeddsaSigned_roundTrip()
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
 }
 
-// The greeting mark is the reason a re-admitted node is not asked for its NodeInfo twice, so it
-// must round trip through the warm tier without disturbing the word's other tenants.
-void test_ws_greeted_roundTrip()
-{
-    WarmNodeStore ws;
-    uint8_t key[32];
-    makeKey(key, 0x9a);
-    TEST_ASSERT_TRUE(ws.absorb(0x720, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role,
-                               /*xeddsaSigned=*/true, /*greeted=*/true));
-    TEST_ASSERT_TRUE(ws.absorb(0x721, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role,
-                               /*xeddsaSigned=*/true, /*greeted=*/false));
-
-    WarmNodeEntry e;
-    TEST_ASSERT_TRUE(ws.take(0x720, e));
-    TEST_ASSERT_TRUE_MESSAGE(warmGreetedOf(e), "greeted flag must round trip");
-    TEST_ASSERT_TRUE_MESSAGE(warmXeddsaSignedOf(e), "greeted must not disturb the signer bit below it");
-    TEST_ASSERT_EQUAL(5, warmRoleOf(e));
-    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
-    TEST_ASSERT_EQUAL(1234u & WARM_TIME_MASK, warmTimeOf(e));
-
-    // Control: the accessor reports the stored bit rather than always-true.
-    TEST_ASSERT_TRUE(ws.take(0x721, e));
-    TEST_ASSERT_FALSE(warmGreetedOf(e));
-    TEST_ASSERT_TRUE(warmXeddsaSignedOf(e));
-}
-
-// Re-absorbing a node already in the warm tier must not discard an ask we already sent - the
-// same rule place() applies to a key it already learned.
-void test_ws_greeted_survivesReabsorb()
-{
-    WarmNodeStore ws;
-    uint8_t key[32];
-    makeKey(key, 0x9b);
-    TEST_ASSERT_TRUE(ws.absorb(0x730, 1234, key, 0, 0, false, /*greeted=*/true));
-    TEST_ASSERT_TRUE(ws.absorb(0x730, 5678, key, 0, 0, false, /*greeted=*/false));
-
-    WarmNodeEntry e;
-    TEST_ASSERT_TRUE(ws.take(0x730, e));
-    TEST_ASSERT_TRUE_MESSAGE(warmGreetedOf(e), "a refresh must keep the ask already sent");
-    TEST_ASSERT_EQUAL(5678u & WARM_TIME_MASK, warmTimeOf(e));
-}
-
 void test_ws_remove_and_clear()
 {
     WarmNodeStore ws;
@@ -386,63 +344,6 @@ void test_ws_v2_migration_clearsXeddsaSignedBit()
 // rejected cleanly at the header check - load() starts empty instead of reading
 // past entries[]. (The nRF52840 raw-flash ring backend has no such cliff: it
 // replays records through place(), whose LRU admission keeps the newest.)
-// A v3 (WRM3) warm.dat used bit 7 as a timestamp bit, so loading one must not read it as an ask
-// we already sent - that would silently cost the node its one greeting. File backend only.
-void test_ws_v3_migration_clearsGreetedBit()
-{
-    WarmNodeStore a;
-    uint8_t key[32], got[32];
-    makeKey(key, 0x68);
-    // greeted=true sets bit 7, standing in for a v3 record whose timestamp had it set.
-    a.absorb(0x920, 123456, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*xeddsaSigned=*/true,
-             /*greeted=*/true);
-    if (!a.saveIfDirty()) {
-        TEST_IGNORE_MESSAGE("Filesystem not available in this test environment");
-        return;
-    }
-
-    std::vector<uint8_t> buf;
-    {
-        auto f = FSCom.open("/prefs/warm.dat", FILE_O_READ);
-        if (!f) {
-            TEST_IGNORE_MESSAGE("warm.dat not readable in this environment");
-            return;
-        }
-        buf.resize(f.size());
-        const size_t got2 = f.read(buf.data(), buf.size());
-        f.close();
-        TEST_ASSERT_EQUAL_MESSAGE(buf.size(), got2, "short read patching warm.dat");
-    }
-    TEST_ASSERT_TRUE(buf.size() >= 4);
-    const uint32_t v3magic = 0x334D5257u; // "WRM3"
-    memcpy(buf.data(), &v3magic, sizeof(v3magic));
-    {
-        auto f = FSCom.open("/prefs/warm.dat", FILE_O_WRITE);
-        TEST_ASSERT_TRUE((bool)f);
-        const size_t wrote = f.write(buf.data(), buf.size());
-        f.close();
-        TEST_ASSERT_EQUAL_MESSAGE(buf.size(), wrote, "short write patching warm.dat");
-    }
-
-    WarmNodeStore b;
-    b.load();
-    TEST_ASSERT_TRUE(b.contains(0x920));
-    TEST_ASSERT_TRUE(b.copyKey(0x920, got));
-    TEST_ASSERT_EQUAL_MEMORY(key, got, 32);
-
-    WarmNodeEntry e;
-    TEST_ASSERT_TRUE(b.take(0x920, e));
-    TEST_ASSERT_FALSE_MESSAGE(warmGreetedOf(e), "a v3 timestamp bit must not read as greeted");
-    // v3 kept role/protected/signer/time in place, so they survive the migration.
-    TEST_ASSERT_TRUE(warmXeddsaSignedOf(e));
-    TEST_ASSERT_EQUAL(123456u & WARM_TIME_MASK, warmTimeOf(e));
-    TEST_ASSERT_EQUAL(5, warmRoleOf(e));
-    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
-
-    b.clear();
-    b.saveIfDirty();
-}
-
 void test_ws_load_rejectsOversizedSnapshot()
 {
     WarmNodeStore a;
@@ -496,13 +397,10 @@ WS_TEST_ENTRY void setup()
     RUN_TEST(test_ws_keyedCandidate_evictsOldestKeyedWhenNoKeyless);
     RUN_TEST(test_ws_meta_roundTrip);
     RUN_TEST(test_ws_xeddsaSigned_roundTrip);
-    RUN_TEST(test_ws_greeted_roundTrip);
-    RUN_TEST(test_ws_greeted_survivesReabsorb);
     RUN_TEST(test_ws_remove_and_clear);
     RUN_TEST(test_ws_persistence_roundTrip);
     RUN_TEST(test_ws_v1_migration_discardsLastHeard);
     RUN_TEST(test_ws_v2_migration_clearsXeddsaSignedBit);
-    RUN_TEST(test_ws_v3_migration_clearsGreetedBit);
     RUN_TEST(test_ws_load_rejectsOversizedSnapshot);
     exit(UNITY_END());
 }

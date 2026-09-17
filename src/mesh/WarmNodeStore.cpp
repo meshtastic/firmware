@@ -13,12 +13,11 @@
 
 #if defined(NRF52840_XXAA)
 #include "flash/flash_nrf5x.h"
-#define WARM_RING_MAGIC 0x344E5257u    // "WRN4" - v4: adds the greeted bit (7) to the v3 metadata
-#define WARM_RING_MAGIC_V3 0x334E5257u // "WRN3" - v3: role + protected + xeddsa-signed; bit 7 was still timestamp.
+#define WARM_RING_MAGIC 0x334E5257u    // "WRN3" - v3: last_heard low bits carry role + protected + xeddsa-signed
 #define WARM_RING_MAGIC_V2 0x324E5257u // "WRN2" - v2: role + protected only; bit 6 was still timestamp.
 #define WARM_RING_MAGIC_V1 0x474E5257u // "WRNG" - v1: last_heard was a plain timestamp.
 // Older pages are still read on upgrade: v1 keeps identity + key but discards last_heard,
-// v2 and v3 keep the word but clear the bit that was still part of the timestamp then.
+// v2 keeps the word but clears bit 6, which was still part of the timestamp then.
 // A tombstone is an entry record whose last_heard is all-ones - getTime()
 // (unix seconds) cannot reach 0xFFFFFFFF until 2106, and erased flash is
 // detected via num == 0xFFFFFFFF before last_heard is ever inspected.
@@ -34,16 +33,13 @@ struct WarmStoreHeader {
 };
 static_assert(sizeof(WarmStoreHeader) == 16, "header layout is part of the persistence format");
 
-#define WARM_STORE_MAGIC 0x344D5257u // "WRM4" - v4: adds the greeted bit (7) to the v3 metadata
-#define WARM_STORE_MAGIC_V3                                                                                                      \
-    0x334D5257u // "WRM3" - v3: role + protected + xeddsa-signed; bit 7 was still timestamp. On
-                // upgrade we clear the greeted bit, then rewrite as v4.
+#define WARM_STORE_MAGIC 0x334D5257u // "WRM3" - v3: last_heard low bits carry role + protected + xeddsa-signed
 #define WARM_STORE_MAGIC_V2                                                                                                      \
     0x324D5257u // "WRM2" - v2: role + protected only; bit 6 was still timestamp. On upgrade
-                // we clear the xeddsa-signed and greeted bits, then rewrite as v4.
+                // we clear the xeddsa-signed bit, then rewrite as v3.
 #define WARM_STORE_MAGIC_V1                                                                                                      \
     0x314D5257u // "WRM1" - v1: last_heard was a plain timestamp. On upgrade we keep
-                // identity + key but discard last_heard, then rewrite as v4.
+                // identity + key but discard last_heard, then rewrite as v3.
 
 #ifdef FSCom
 static const char *warmFileName = "/prefs/warm.dat";
@@ -141,22 +137,18 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
 }
 
 bool WarmNodeStore::absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32, uint8_t role, uint8_t protectedCat,
-                           bool xeddsaSigned, bool greeted)
+                           bool xeddsaSigned)
 {
-    // A refresh of a node already here keeps an ask we already sent, just as place() keeps a key
-    // we already learned: a re-absorb must not hand the node a second greeting.
-    if (const WarmNodeEntry *prev = find(num))
-        greeted = greeted || warmGreetedOf(*prev);
-    // Pack role + protected category + xeddsa-signed + greeted into the low bits of last_heard.
-    // place() and ring replay store the raw word verbatim, so the metadata round-trips through flash.
-    const uint32_t packed = warmPackLastHeard(lastHeard, role, protectedCat, xeddsaSigned, greeted);
+    // Pack role + protected category + xeddsa-signed into the low bits of last_heard. place() and
+    // ring replay store the raw word verbatim, so the metadata round-trips through flash.
+    const uint32_t packed = warmPackLastHeard(lastHeard, role, protectedCat, xeddsaSigned);
     const WarmNodeEntry *slot = place(num, packed, key32);
     if (!slot)
         return false;
     persistEntry(*slot);
-    LOG_MIGRATION("WarmStore absorb 0x%08x key=%d last_heard=%u role=%u prot=%u xeddsa=%u greeted=%u (now %u/%u)", (unsigned)num,
+    LOG_MIGRATION("WarmStore absorb 0x%08x key=%d last_heard=%u role=%u prot=%u xeddsa=%u (now %u/%u)", (unsigned)num,
                   keyIsSet(slot->public_key) ? 1 : 0, (unsigned)warmTimeOf(*slot), (unsigned)role, (unsigned)protectedCat,
-                  xeddsaSigned ? 1u : 0u, greeted ? 1u : 0u, (unsigned)count(), (unsigned)capacity());
+                  xeddsaSigned ? 1u : 0u, (unsigned)count(), (unsigned)capacity());
     return true;
 }
 
@@ -283,11 +275,6 @@ bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h, WarmFormat *
     if (h.magic == WARM_RING_MAGIC) {
         if (fmt)
             *fmt = WarmFormat::Current;
-        return true;
-    }
-    if (h.magic == WARM_RING_MAGIC_V3) {
-        if (fmt)
-            *fmt = WarmFormat::V3; // replay it, but clear the greeted bit (see WARM_RING_MAGIC_V3)
         return true;
     }
     if (h.magic == WARM_RING_MAGIC_V2) {
@@ -472,16 +459,13 @@ void WarmNodeStore::load()
                 }
             } else {
                 // Normalise older records: v1's timestamp would be misread as role/protected,
-                // v2's bit 6 as a signer we never verified, v3's bit 7 as an ask we never sent.
+                // and v2's bit 6 as a signer we never verified.
                 uint32_t lh = rec.last_heard;
                 if (fmt == WarmFormat::V1) {
                     lh = 0;
                     migrated++;
                 } else if (fmt == WarmFormat::V2) {
-                    lh &= ~((WARM_XEDDSA_SIGNED_MASK << WARM_XEDDSA_SIGNED_SHIFT) | (WARM_GREETED_MASK << WARM_GREETED_SHIFT));
-                    migrated++;
-                } else if (fmt == WarmFormat::V3) {
-                    lh &= ~(WARM_GREETED_MASK << WARM_GREETED_SHIFT);
+                    lh &= ~(WARM_XEDDSA_SIGNED_MASK << WARM_XEDDSA_SIGNED_SHIFT);
                     migrated++;
                 }
                 const WarmNodeEntry *e = place(rec.num, lh, rec.public_key);
@@ -571,11 +555,9 @@ void WarmNodeStore::load()
     }
     // Older snapshots are still accepted: same record size, fewer metadata bits in
     // last_heard. Both are normalised to the current format below.
-    const bool known = h.magic == WARM_STORE_MAGIC || h.magic == WARM_STORE_MAGIC_V3 || h.magic == WARM_STORE_MAGIC_V2 ||
-                       h.magic == WARM_STORE_MAGIC_V1;
+    const bool known = h.magic == WARM_STORE_MAGIC || h.magic == WARM_STORE_MAGIC_V2 || h.magic == WARM_STORE_MAGIC_V1;
     const WarmFormat fmt = h.magic == WARM_STORE_MAGIC_V1   ? WarmFormat::V1
                            : h.magic == WARM_STORE_MAGIC_V2 ? WarmFormat::V2
-                           : h.magic == WARM_STORE_MAGIC_V3 ? WarmFormat::V3
                                                             : WarmFormat::Current;
     const bool legacy = fmt != WarmFormat::Current;
     if (!known || h.entrySize != sizeof(WarmNodeEntry) || h.count > WARM_NODE_COUNT) {
@@ -599,21 +581,16 @@ void WarmNodeStore::load()
             return;
         }
         // Normalise older records, then mark dirty so save() rewrites in the current format:
-        // v1's timestamp would be misread as role/protected, v2's bit 6 as an unverified signer,
-        // v3's bit 7 as an ask we never sent.
+        // v1's timestamp would be misread as role/protected, v2's bit 6 as an unverified signer.
         if (fmt == WarmFormat::V1) {
             for (size_t i = 0; i < WARM_NODE_COUNT; i++)
                 if (entries[i].num)
                     entries[i].last_heard = 0;
             dirty = true;
-        } else if (fmt == WarmFormat::V2 || fmt == WarmFormat::V3) {
-            const uint32_t stale =
-                fmt == WarmFormat::V2
-                    ? ((WARM_XEDDSA_SIGNED_MASK << WARM_XEDDSA_SIGNED_SHIFT) | (WARM_GREETED_MASK << WARM_GREETED_SHIFT))
-                    : (WARM_GREETED_MASK << WARM_GREETED_SHIFT);
+        } else if (fmt == WarmFormat::V2) {
             for (size_t i = 0; i < WARM_NODE_COUNT; i++)
                 if (entries[i].num)
-                    entries[i].last_heard &= ~stale;
+                    entries[i].last_heard &= ~(WARM_XEDDSA_SIGNED_MASK << WARM_XEDDSA_SIGNED_SHIFT);
             dirty = true;
         }
     } else {

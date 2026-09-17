@@ -176,8 +176,8 @@ static void test_migration_dropsShortKeyOnDemotion(void)
     const NodeNum shortKeyNum = 2000 + 3;
     const NodeNum fullKeyNum = 2000 + 4;
     const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected are demoted
-    // Warm entries steal the low WARM_META_BITS of last_heard for role, protected category and
-    // flags, so seeds are masked with WARM_TIME_MASK once demoted - assert against the mask.
+    // Warm entries steal the low 7 bits of last_heard for role and protected-category metadata
+    // (WARM_TIME_MASK), so seed multiples of 128 to keep the values representable once demoted.
     for (int i = 1; i <= extra; i++)
         db->push(2000 + i, /*last_heard=*/(uint32_t)i * 128, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true,
                  /*withKey=*/true, meshtastic_Config_DeviceConfig_Role_CLIENT,
@@ -196,8 +196,7 @@ static void test_migration_dropsShortKeyOnDemotion(void)
     TEST_ASSERT_TRUE_MESSAGE(db->warmMeta(shortKeyNum, role, prot), "keyless placeholder row must still be present");
     WarmNodeEntry placeholder = {};
     TEST_ASSERT_TRUE_MESSAGE(db->warmTake(shortKeyNum, placeholder), "placeholder must be readable from the warm tier");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(3u * 128 & WARM_TIME_MASK, warmTimeOf(placeholder),
-                                     "the keyless placeholder must carry last_heard");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(3u * 128, warmTimeOf(placeholder), "the keyless placeholder must carry last_heard");
 }
 
 // Favourite handling: a favourite is never the eviction victim, even when it is

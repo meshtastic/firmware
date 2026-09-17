@@ -681,29 +681,25 @@ void test_eviction_rehydratedNodeIsStillOnProbation(void)
     TEST_ASSERT_TRUE_MESSAGE(db->onProbation(keyed), "warm data does not promote");
 }
 
-// The warm tier carries the greeting mark in a spare metadata bit, so a re-admitted node - keyed
-// but nameless, since the warm tier keeps no name - is not asked for its NodeInfo a second time.
-void test_eviction_warmTierCarriesTheGreetingMark(void)
+// Presence in the warm tier is the greeting mark: anything re-admitted from it has had a
+// residency already, so it comes back marked whether or not we got round to asking it.
+void test_eviction_rehydrationMarksTheNodeAsGreeted(void)
 {
     uint32_t seq = 6300;
     const uint32_t t0 = 1700000000;
-    const NodeNum marked = FRESH_BASE + 6300; // the band's next victim, then the one after it
-    const NodeNum unmarked = FRESH_BASE + 6301;
+    const NodeNum neverAsked = FRESH_BASE + 6300; // the band's next victim, and never greeted
     fillAndAdmit(NODEDB_PROBATION_SLOTS, seq);
-    db->giveKey(marked);
-    db->giveKey(unmarked);
-    nodeInfoLiteSetBit(db->getMeshNode(marked), NODEINFO_BITFIELD_HAS_BEEN_GREETED_MASK, true);
+    db->giveKey(neverAsked);
+    TEST_ASSERT_FALSE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(neverAsked)));
 
-    churn(2, seq); // evicts the two oldest probation entries, both keyed so both are kept warm
-    TEST_ASSERT_TRUE(db->inWarm(marked));
-    TEST_ASSERT_TRUE(db->inWarm(unmarked));
+    churn(1, seq); // keyed, so the warm tier keeps it
+    TEST_ASSERT_TRUE(db->inWarm(neverAsked));
 
-    db->hear(marked, t0);
-    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(marked)),
-                             "re-admission restores the ask we already sent");
-    db->hear(unmarked, t0);
-    TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(unmarked)),
-                              "and a node we never asked comes back askable");
+    db->hear(neverAsked, t0);
+    const meshtastic_NodeInfoLite *n = db->getMeshNode(neverAsked);
+    TEST_ASSERT_NOT_NULL(n);
+    TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasUser(n), "the warm tier keeps no name, so it is back nameless");
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasBeenGreeted(n), "a re-admission from the warm tier is not asked again");
 }
 
 // ---------------------------------------------------------------------------
@@ -979,7 +975,7 @@ PROBATION_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_rehydratedNodeIsStillOnProbation);
 
     printf("\n=== Greeting gate ===\n");
-    RUN_TEST(test_eviction_warmTierCarriesTheGreetingMark);
+    RUN_TEST(test_eviction_rehydrationMarksTheNodeAsGreeted);
     RUN_TEST(test_greeting_residentWithoutUserIsGreeted);
     RUN_TEST(test_greeting_onlyOnceWhileStillNameless);
     RUN_TEST(test_greeting_markClearedByTheNodeInfoItAskedFor);
