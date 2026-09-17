@@ -321,11 +321,12 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
+    // Full key schedule: faster per block than AESSmall*, and encryptAESCtr already links these classes.
     if (key_len == 16) {
-        aes = std::unique_ptr<BlockCipher>(new AESSmall128());
+        aes = std::unique_ptr<BlockCipher>(new AES128());
         aes->setKey(key_bytes, 16);
     } else if (key_len != 0) {
-        aes = std::unique_ptr<BlockCipher>(new AESSmall256());
+        aes = std::unique_ptr<BlockCipher>(new AES256());
         aes->setKey(key_bytes, key_len);
     }
 }

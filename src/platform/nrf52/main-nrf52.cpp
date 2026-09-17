@@ -189,6 +189,14 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
     NVIC_SystemReset();
 }
 
+// Bluefruit LESC pairing only uses secp256r1. Replacing the cc310 lookup keeps the parameter
+// tables of its ten other curves (~7.4 KB) from being linked through ecDomainsFuncP.
+extern "C" const CRYS_ECPKI_Domain_t *SaSi_ECPKI_GetSecp256r1DomainP(void);
+extern "C" const CRYS_ECPKI_Domain_t *CRYS_ECPKI_GetEcDomain(CRYS_ECPKI_DomainID_t domainId)
+{
+    return domainId == CRYS_ECPKI_DomainID_secp256r1 ? SaSi_ECPKI_GetSecp256r1DomainP() : nullptr;
+}
+
 void getMacAddr(uint8_t *dmac)
 {
     const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
