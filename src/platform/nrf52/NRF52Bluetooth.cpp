@@ -36,9 +36,14 @@ class QuiescingBLEDfu : public BLEDfu
 
     static void onControlWrite(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_write_t *request)
     {
+        // Only START_DFU resets, and the library reads this byte without checking len, so match it exactly.
+        if (request->data[0] != 1) {
+            libraryCb(conn_hdl, chr, request);
+            return;
+        }
         nrf52FlashQuiesce();
-        // The handler reloads the bond keys through LittleFS, so it cannot run under the FS mutex. spiLock still
-        // fences the BLE task's writers, and this task outranks the loop, so nothing lands before the jump.
+        // The handler reloads the bond keys through LittleFS, so it cannot run under the FS mutex; spiLock still
+        // fences every other writer until the jump.
         InternalFS._unlockFS();
         libraryCb(conn_hdl, chr, request);
         spiLock->unlock();
