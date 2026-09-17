@@ -417,9 +417,9 @@ std::unique_ptr<RadioInterface> initLoRa()
               portduino_config.lora_spi_dev.c_str());
     if (portduino_config.lora_spi_dev == "ch341") {
         RadioLibHAL = ch341Hal.get();
-#ifndef __EMSCRIPTEN__
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
     } else if (portduino_config.lora_spi_dev == "serial") {
-        // A radio behind a serial link: host builds only, the browser has no tty and SerialHal.cpp is not built for wasm.
+        // A radio behind a serial link: POSIX hosts only - the browser has no tty and Windows has no termios.
         RadioLibHAL = new SerialHal(portduino_config.lora_serial_device, portduino_config.lora_serial_baud,
                                     (uint32_t)portduino_config.lora_serial_timeout_ms);
 #endif

@@ -1,5 +1,8 @@
 #include "platform/portduino/SerialHal.h"
 
+// termios + poll: POSIX hosts only. The Windows build has neither, and RadioInterface never constructs it there.
+#ifndef _WIN32
+
 #include "mesh/mesh-pb-constants.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <cerrno>
@@ -35,10 +38,14 @@ speed_t toTermiosBaud(uint32_t baud)
         return B115200;
     case 230400:
         return B230400;
+#ifdef B460800 // macOS termios stops at B230400
     case 460800:
         return B460800;
+#endif
+#ifdef B921600
     case 921600:
         return B921600;
+#endif
     default:
         return B115200;
     }
@@ -593,3 +600,4 @@ void SerialHal::stopReaderThread()
     std::lock_guard<std::mutex> lock(stateMutex);
     pendingInterruptPins.clear();
 }
+#endif // !_WIN32
