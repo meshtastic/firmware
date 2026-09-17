@@ -1377,7 +1377,8 @@ void GPS::airohaEnterSoftRtcSleep()
         _serial_gps->write("$PAIR650,0*25\r\n");
         if (getACK("$PAIR001,650,0", AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK)
             return;
-    } while (Throttle::isWithinTimespanMs(start, AIROHA_SLEEP_BUDGET_MS));
+        // Only start another attempt while a whole ack window still fits inside the budget.
+    } while (Throttle::isWithinTimespanMs(start, AIROHA_SLEEP_BUDGET_MS - AIROHA_SLEEP_ACK_MS));
     LOG_WARN("GPS: no ack for $PAIR650; may not wake from hardware RTC mode");
 #endif
 }
