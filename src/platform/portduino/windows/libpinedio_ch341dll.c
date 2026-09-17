@@ -373,7 +373,10 @@ int32_t pinedio_deattach_interrupt(struct pinedio_inst *inst, enum pinedio_int_p
     pthread_mutex_unlock(&usb_mutex);
 
     // Joining under the lock would deadlock against the poll thread taking it.
-    if (stop && !pthread_equal(thread_to_join, pthread_self()))
+    // Called from the poll thread's own callback there is no one left to join it, so detach.
+    if (stop && pthread_equal(thread_to_join, pthread_self()))
+        pthread_detach(thread_to_join);
+    else if (stop)
         pthread_join(thread_to_join, NULL);
     return 0;
 }
