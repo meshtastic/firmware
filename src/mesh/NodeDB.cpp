@@ -3454,6 +3454,10 @@ bool NodeDB::saveToDisk(int saveWhat)
             LOG_ERROR("saveToDisk() on unsafe device power level");
             return false;
         }
+#ifdef ARCH_RP2040
+        // Probe, format and resave run back-to-back from here with no retry loop left to feed it.
+        watchdog_update();
+#endif
         // The format below takes every file with it, so spend one read proving it is warranted.
         if (filesystemStillReadable()) {
             LOG_ERROR("Save to disk failed but the filesystem still reads, not formatting");
@@ -3469,6 +3473,10 @@ bool NodeDB::saveToDisk(int saveWhat)
         spiLock->lock();
         const bool formatted = fsFormat();
         spiLock->unlock();
+#ifdef ARCH_RP2040
+        // The five-segment resave below needs a budget of its own.
+        watchdog_update();
+#endif
 
         // The format took every segment, not just the ones asked for, so all of them must land again.
         if (!formatted)
