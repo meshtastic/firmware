@@ -36,7 +36,13 @@
 class NodeDBTestShim : public NodeDB
 {
   public:
-    void resetProbation() { probationResidencyEmaSecs = 2 * NODEDB_PROBATION_GAP_MAX_SECS; }
+    void resetProbation()
+    {
+        probationResidencyEmaSecs = 2 * NODEDB_PROBATION_GAP_MAX_SECS;
+        for (auto &p : promotedAt)
+            p = {};
+    }
+    bool inGrace(NodeNum num) const { return inPromotionGrace(num); }
     int residentsEvicted = 0; // counted by the shim's promote(), see below
 
     int probationCount() const { return scanForEviction().probationCount; }
@@ -52,6 +58,24 @@ class NodeDBTestShim : public NodeDB
     }
 
     bool inWarm(NodeNum num) const { return warmStore.contains(num); }
+    // The keyed resident the plain-oldest rule would take: fill() gives them one last_heard, and a
+    // recency tie keeps the earliest index. Read after keyAllResidents(), never assumed by number -
+    // filling the band has already evicted the lowest-numbered residents.
+    NodeNum oldestKeyedResident() const
+    {
+        for (int i = 1; i < numMeshNodes; i++)
+            if (meshNodes->at(i).public_key.size == 32 && !nodeInfoLiteIsOnProbation(&meshNodes->at(i)))
+                return meshNodes->at(i).num;
+        return 0;
+    }
+    // Give every resident a key, so a key-less promotion is the only "boring" candidate the victim
+    // rule can pick - the shape a real mesh has, where most residents have sent a NodeInfo.
+    void keyAllResidents()
+    {
+        for (int i = 1; i < numMeshNodes; i++)
+            if (!nodeInfoLiteIsOnProbation(&meshNodes->at(i)))
+                giveKey(meshNodes->at(i).num);
+    }
     void armThrottle(bool armed) { lastFullEvictionMs = armed ? Time::getMillis() : Time::getMillis() - 3000; }
     void giveKey(NodeNum num)
     {
@@ -431,6 +455,69 @@ void test_eviction_skipsKeylessVerifiedResident(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(FRESH_BASE + 1));
 }
 
+// A promotion has no key yet, so the key-less-first rule would evict it at the next admission,
+// before a greeting or its own NodeInfo could name it. Inside the grace a keyed resident goes instead.
+void test_eviction_promotedResidentIsSparedTheKeylessPick(void)
+{
+    uint32_t seq = 1200;
+    Time::setTestMillis(10 * 60 * 1000);
+    fillAndAdmit(1, seq);
+    db->keyAllResidents();
+    db->promote(FRESH_BASE + 1200);
+    TEST_ASSERT_EQUAL(0, db->getMeshNode(FRESH_BASE + 1200)->public_key.size);
+    TEST_ASSERT_TRUE(db->inGrace(FRESH_BASE + 1200));
+    const NodeNum oldestKeyed = db->oldestKeyedResident();
+    TEST_ASSERT_NOT_EQUAL(0, oldestKeyed);
+
+    db->admit(FRESH_BASE + 1201);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 1200), "a promotion inside its grace is not the key-less victim");
+    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(oldestKeyed), "the oldest keyed resident goes instead");
+    Time::useRealClock();
+}
+
+// The grace is a window, not a permanent exemption: past it the promotion is an ordinary key-less
+// resident. Nothing named it, so there is nothing left to protect.
+void test_eviction_promotionGraceExpires(void)
+{
+    uint32_t seq = 1300;
+    Time::setTestMillis(10 * 60 * 1000);
+    fillAndAdmit(1, seq);
+    db->keyAllResidents();
+    db->promote(FRESH_BASE + 1300);
+    const NodeNum oldestKeyed = db->oldestKeyedResident();
+    TEST_ASSERT_NOT_EQUAL(0, oldestKeyed);
+
+    Time::advanceTestMillis((NODEDB_PROMOTION_GRACE_SECS + 60) * 1000UL);
+    TEST_ASSERT_FALSE(db->inGrace(FRESH_BASE + 1300));
+    db->admit(FRESH_BASE + 1301);
+
+    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 1300), "past the grace the key-less promotion is the victim again");
+    TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(oldestKeyed), "and the keyed resident it was shielding stays");
+    Time::useRealClock();
+}
+
+// Grace is a preference, not immunity: when it is the only entry the victim rule may take, it goes
+// and the admission still succeeds. A full store must never wedge.
+void test_eviction_promotionGraceYieldsWhenItIsTheOnlyVictim(void)
+{
+    uint32_t seq = 1400;
+    Time::setTestMillis(10 * 60 * 1000);
+    fillAndAdmit(1, seq);
+    db->promote(FRESH_BASE + 1400);
+    for (int i = 1; i < db->getNumMeshNodes(); i++) {
+        meshtastic_NodeInfoLite *n = db->getMeshNodeByIndex(i);
+        if (n->num != FRESH_BASE + 1400)
+            TEST_ASSERT_TRUE(db->setProtectedFlag(n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true));
+    }
+
+    db->admit(FRESH_BASE + 1401);
+
+    TEST_ASSERT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 1400), "the graced promotion yields rather than refuse the admission");
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(FRESH_BASE + 1401));
+    Time::useRealClock();
+}
+
 // With room in the store a promotion evicts nobody and the next admission evicts nobody either.
 void test_promotion_evictsNobodyBelowCap(void)
 {
@@ -779,6 +866,9 @@ PROBATION_TEST_ENTRY void setup()
     RUN_TEST(test_promotion_evictsNothingUntilTheBandRefills);
     RUN_TEST(test_promotion_evictsNobodyBelowCap);
     RUN_TEST(test_eviction_skipsKeylessVerifiedResident);
+    RUN_TEST(test_eviction_promotedResidentIsSparedTheKeylessPick);
+    RUN_TEST(test_eviction_promotionGraceExpires);
+    RUN_TEST(test_eviction_promotionGraceYieldsWhenItIsTheOnlyVictim);
     RUN_TEST(test_promotion_worksWithClockNeverTrusted);
 
     printf("\n=== Eviction destination ===\n");

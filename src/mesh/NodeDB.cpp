@@ -3556,8 +3556,9 @@ NodeDB::EvictionScan NodeDB::scanForEviction() const
             oldest = candRecency;
             oldestIndex = i;
         }
-        // The oldest "boring" node
-        if (!isFavoriteNode && !isIgnored && !isVerified && cand->public_key.size == 0 &&
+        // The oldest "boring" node. A promotion inside its grace is not one: the band has just
+        // vetted it and it cannot have a key yet. oldestIndex still covers it, so nothing wedges.
+        if (!isFavoriteNode && !isIgnored && !isVerified && cand->public_key.size == 0 && !inPromotionGrace(cand->num) &&
             (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
             oldestBoring = candRecency;
             oldestBoringIndex = i;
@@ -3581,6 +3582,10 @@ void NodeDB::evictAt(int index, bool keepKeylessInWarm)
     (void)keepKeylessInWarm;
 #endif
     eraseNodeSatellites(evicted.num);
+    // Drop any promotion grace with the slot, so a later re-admission starts without one.
+    for (auto &p : promotedAt)
+        if (p.num == evicted.num)
+            p = {};
     // Shove the remaining nodes down the chain
     for (int i = index; i < numMeshNodes - 1; i++) {
         meshNodes->at(i) = meshNodes->at(i + 1);
@@ -3593,6 +3598,38 @@ void NodeDB::promoteFromProbation(meshtastic_NodeInfoLite *info)
     // Frees nothing: the store stays full, so the next newcomer joins the band and the admission
     // evicts a resident to make room for it. Evicting here left a slot a stranger walked into.
     nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_ON_PROBATION_MASK, false);
+    notePromoted(info->num);
+}
+
+void NodeDB::notePromoted(NodeNum num)
+{
+    // Update in place if the node already has a stamp.
+    for (auto &p : promotedAt) {
+        if (p.num == num) {
+            p.promotedAtUptimeSecs = Time::getUptimeSecs();
+            return;
+        }
+    }
+    // Otherwise take an empty slot, or reuse the oldest stamp.
+    NodePromotedAt *victim = &promotedAt[0];
+    for (auto &p : promotedAt) {
+        if (p.num == 0) {
+            victim = &p;
+            break;
+        }
+        if (p.promotedAtUptimeSecs < victim->promotedAtUptimeSecs)
+            victim = &p;
+    }
+    victim->num = num;
+    victim->promotedAtUptimeSecs = Time::getUptimeSecs();
+}
+
+bool NodeDB::inPromotionGrace(NodeNum num) const
+{
+    for (const auto &p : promotedAt)
+        if (p.num == num)
+            return (uint32_t)(Time::getUptimeSecs() - p.promotedAtUptimeSecs) < NODEDB_PROMOTION_GRACE_SECS;
+    return false;
 }
 
 // Minimum spacing between evictions once the node database is full.
