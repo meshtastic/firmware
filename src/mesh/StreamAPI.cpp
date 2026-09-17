@@ -127,8 +127,10 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
             }
 #else
         } else if (ptr == 1) { // looking for START2
+            // A byte that fails START2 can itself be the START1 of the real frame (0x94 0x94 0xc3
+            // ...), so re-test it here: discarding it drops the frame behind a single stray marker.
             if (c != START2)
-                rxPtr = 0; // failed to find framing
+                rxPtr = (c == START1) ? 1 : 0;
 #endif
         } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
             uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
@@ -221,8 +223,10 @@ int32_t StreamAPI::readStream()
                 }
 #else
             } else if (ptr == 1) { // looking for START2
+                // A byte that fails START2 can itself be the START1 of the real frame (0x94 0x94 0xc3
+                // ...), so re-test it here: discarding it drops the frame behind a single stray marker.
                 if (c != START2)
-                    rxPtr = 0; // failed to find framing
+                    rxPtr = (c == START1) ? 1 : 0;
 #endif
             } else if (ptr >= HEADER_LEN - 1) {            // we have at least read our 4 byte framing
                 uint32_t len = (rxBuf[2] << 8) + rxBuf[3]; // big endian 16 bit length follows framing
