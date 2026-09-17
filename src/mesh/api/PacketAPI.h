@@ -31,6 +31,8 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
 
     bool isConnected;
     bool programmingMode;
+    bool hasSentGPSStatus = false;
+    uint32_t lastGPSStatusMs = 0;
     PacketServer *server;
     uint8_t txBuf[MAX_TO_FROM_RADIO_SIZE] = {0}; // dummy buf to obey PhoneAPI
 };

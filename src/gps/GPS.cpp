@@ -2234,8 +2234,40 @@ bool GPS::lookForLocation()
         p.ground_speed = reader.speed.kmph();
     }
 
+#ifdef USE_PACKET_API
+    lastPositionUpdateMs = Time::getMillis();
+#endif
     return true;
 }
+
+#ifdef USE_PACKET_API
+LocalGPSStatus GPS::getLocalGPSStatus()
+{
+    LocalGPSStatus status;
+    status.connected = isConnected();
+    status.awake = powerState == GPS_ACTIVE;
+    status.hasTime = gotTime;
+
+    // value() consumes TinyGPS's updated flag. Read a copy so the normal position
+    // producer still sees every update, including counts received before a fix.
+    auto satellites = reader.satellites;
+    status.satellitesValid = satellites.isValid();
+    if (status.satellitesValid) {
+        status.satellitesAgeMs = satellites.age();
+        status.satellites = satellites.value();
+    }
+
+    status.hasPosition = hasValidLocation;
+    if (status.hasPosition) {
+        status.latitude_i = p.latitude_i;
+        status.longitude_i = p.longitude_i;
+        status.altitude = p.altitude;
+    }
+    const uint32_t positionAgeMs = Time::getMillis() - lastPositionUpdateMs;
+    status.hasFix = status.awake && status.hasPosition && hasLock() && positionAgeMs < GPS_SOL_EXPIRY_MS;
+    return status;
+}
+#endif
 
 bool GPS::hasLock()
 {
