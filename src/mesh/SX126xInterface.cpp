@@ -70,16 +70,31 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    // An explicit Vref wins; probing with none given tries the radio default first.
+    bool tcxoVoltageExplicit = portduino_config.dio3_tcxo_voltage > 0;
+    if (tcxoVoltageExplicit)
+        tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    else if (TCXO_OPTIONAL_ENABLED)
+        tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    else
+        tcxoVoltage = 0;
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
         pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
     }
-#endif
+    // The knob here is the YAML key, not the variant define the other branch reports.
+    if (tcxoVoltage == 0.0)
+        LOG_DEBUG("Lora.DIO3_TCXO_VOLTAGE not set, DIO3 not used as TCXO Vref");
+    else if (!tcxoVoltageExplicit)
+        LOG_DEBUG("TCXO_OPTIONAL: no Vref configured, probing default TCXO Vref %f V on DIO3", tcxoVoltage);
+    else
+        LOG_DEBUG("Lora.DIO3_TCXO_VOLTAGE set, DIO3 as TCXO Vref %f V", tcxoVoltage);
+#else
     if (tcxoVoltage == 0.0)
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
     else
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", tcxoVoltage);
+#endif
     setTransmitEnable(false);
 
     RadioLibInterface::init();
@@ -108,6 +123,24 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+
+    // Chip answered but would not start on the TCXO: retry on the XTAL. CHIP_NOT_FOUND is a
+    // wiring or SPI fault, where a second attempt only hides it. Portduino only - an embedded
+    // board gets this from the second interface instance in initLoRa()'s ladder.
+    // TODO: consider deferring to RadioLib, which has autocorrected this itself since 7.5.0:
+    // SX126x::modSetup() retries config() on the XTAL when begin() fails with SPI_CMD_FAILED and
+    // XOSC_START_ERR, so the ordinary "TCXO configured, XTAL fitted" case never reaches here and
+    // what does is mostly invalid settings. Narrowing this to SPI_CMD_TIMEOUT - the oscillator
+    // symptom RadioLib's condition misses - would keep the cover and drop the misdiagnosis.
+#if ARCH_PORTDUINO
+    if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        LOG_WARN("SX126x init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);
+        tcxoVoltage = 0;
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+        if (res == RADIOLIB_ERR_NONE)
+            LOG_INFO("SX126x init success without TCXO (XTAL mode)");
+    }
+#endif
 
 #ifdef SX126X_PA_RAMP_US
     // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
