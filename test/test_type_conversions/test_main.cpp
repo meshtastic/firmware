@@ -18,6 +18,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unity.h>
 
@@ -441,6 +442,35 @@ static void test_displaySafeFloat_bounds_and_finiteness()
     }
 }
 
+// parseDecimalFloat replaced strtof/String::toFloat in the WS85 serial parser and the DFRobot Lark sensor to keep
+// newlib's strtod out of nRF52 images. Pins that it reads those plain decimal fields exactly as strtof did.
+static void test_parseDecimalFloat_matches_strtof_for_plain_decimals()
+{
+    const char *inputs[] = {"0",  "79", "0.5", "-3.25",  "+7",     "  24.4",  "\t-0.75", "1.2V", "1013.25",
+                            ".5", "5.", "-.5", "007.10", "12.3.4", "65535.9", "3.30 V",  "-40",  "0.001"};
+    for (const char *in : inputs)
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(strtof(in, nullptr), parseDecimalFloat(in), in);
+
+    // No digits: strtof converts nothing and returns +0, not -0.
+    const char *empty[] = {"", "abc", "-", "+", ".", " V"};
+    for (const char *in : empty) {
+        const float v = parseDecimalFloat(in);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, v, in);
+        TEST_ASSERT_FALSE_MESSAGE(std::signbit(v), in);
+    }
+
+    // Sweep sensor-sized values; each must land within one float step of strtof.
+    char buf[24];
+    for (int i = -200000; i <= 200000; i += 7) {
+        snprintf(buf, sizeof(buf), "%d.%03d", i / 1000, abs(i % 1000));
+        if (i < 0 && i > -1000)
+            snprintf(buf, sizeof(buf), "-0.%03d", -i);
+        const float expected = strtof(buf, nullptr);
+        const float got = parseDecimalFloat(buf);
+        TEST_ASSERT_TRUE_MESSAGE(got == expected || got == nextafterf(expected, got), buf);
+    }
+}
+
 // ---------- entry point -------------------------------------------------------
 
 void setup()
@@ -477,6 +507,7 @@ void setup()
     RUN_TEST(test_convert_to_node_info_extracts_bitfield_bools_none_set);
     RUN_TEST(test_convert_to_node_info_user_only_when_has_user_bit_set);
     RUN_TEST(test_displaySafeFloat_bounds_and_finiteness);
+    RUN_TEST(test_parseDecimalFloat_matches_strtof_for_plain_decimals);
     exit(UNITY_END());
 }
 

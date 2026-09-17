@@ -2,6 +2,8 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "graphics/draw/CompassRenderer.h"
 
@@ -149,8 +151,7 @@ void MotionSensor::beginCalibrationDisplay(bool &showingScreen)
 void MotionSensor::finishCalibrationIfExpired(bool &showingScreen, const char *filePath, float highestX, float lowestX,
                                               float highestY, float lowestY, float highestZ, float lowestZ)
 {
-    const uint32_t now = millis();
-    if ((int32_t)(now - endCalibrationAt) < 0)
+    if (!Throttle::deadlinePassed(endCalibrationAt))
         return;
 
     doCalibration = false;
@@ -170,7 +171,7 @@ void MotionSensor::startCalibrationWindow(uint16_t forSeconds)
 {
     doCalibration = true;
     const uint32_t calibrateFor = static_cast<uint32_t>(forSeconds) * 1000U;
-    endCalibrationAt = millis() + calibrateFor;
+    endCalibrationAt = Time::timerEndsAtMillis(calibrateFor);
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     if (screen)
         screen->setEndCalibration(endCalibrationAt);
@@ -288,7 +289,7 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     const bool compactLayout = (height <= 80);
     const int16_t margin = 4;
 
-    const uint32_t now = millis();
+    const uint32_t now = Time::getMillis();
     const uint32_t endCalibrationAt = screen->getEndCalibration();
     uint32_t timeRemaining = 0;
     // Signed delta, as in finishCalibrationIfExpired(): this needs the remaining magnitude, not

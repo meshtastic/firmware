@@ -87,6 +87,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */
     bool fullBegin(float freq);
 
+    /** Board LF PA table after begin(); HF keeps RadioLib default. Warn-only on setOutputPower miss. */
+    void applyCustomLfPaTable(float freq);
+
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 

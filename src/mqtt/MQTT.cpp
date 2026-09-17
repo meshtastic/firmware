@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "ServiceEnvelope.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
@@ -373,6 +374,23 @@ void mqttInit()
     new MQTT();
 }
 
+void MQTT::reinitTopics()
+{
+    topicRoot = moduleConfig.mqtt.root;
+    const std::string root = *moduleConfig.mqtt.root ? moduleConfig.mqtt.root : default_mqtt_root;
+    cryptTopic = root + "/2/e/";
+    mapTopic = root + "/2/map/";
+    isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
+
+#if HAS_NETWORKING
+    // Force a broker reconnect so subscriptions are refreshed with the new topic prefix
+    if (pubSub.connected()) {
+        pubSub.disconnect();
+    }
+    isConnected = false;
+#endif
+}
+
 #if HAS_NETWORKING
 MQTT::MQTT() : MQTT(std::unique_ptr<MQTTClient>(new MQTTClient())) {}
 MQTT::MQTT(std::unique_ptr<MQTTClient> _mqttClient)
@@ -387,15 +405,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         assert(!mqtt);
         mqtt = this;
 
-        if (*moduleConfig.mqtt.root) {
-            cryptTopic = moduleConfig.mqtt.root + cryptTopic;
-            mapTopic = moduleConfig.mqtt.root + mapTopic;
-            isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
-        } else {
-            cryptTopic = "msh" + cryptTopic;
-            mapTopic = "msh" + mapTopic;
-            isConfiguredForDefaultRootTopic = true;
-        }
+        reinitTopics();
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
             map_position_precision = Default::getConfiguredOrDefault(moduleConfig.mqtt.map_report_settings.position_precision,
@@ -571,6 +581,9 @@ int32_t MQTT::runOnce()
 {
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
+    // A region change rewrites the root at runtime, from several call sites
+    if (topicRoot != moduleConfig.mqtt.root)
+        reinitTopics();
     bool wantConnection = wantsLink();
 
     perhapsReportToMap();
@@ -761,6 +774,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
                                             .channel_id = const_cast<char *>(channelId),
                                             .gateway_id = const_cast<char *>(nodeId.c_str())};
     size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    if (topicRoot != moduleConfig.mqtt.root)
+        reinitTopics(); // root changed before runOnce() noticed
     std::string topic = cryptTopic + channelId + "/" + nodeId;
 
     if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
@@ -870,5 +885,5 @@ void MQTT::perhapsReportToMap()
     packetPool.release(mp);
 
     // Update the last report time
-    last_report_to_map = millis();
+    last_report_to_map = Time::skipZero(Time::getMillis());
 }
