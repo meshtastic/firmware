@@ -121,12 +121,7 @@ static void bledfu_control_wr_authorize_cb(uint16_t conn_hdl, BLECharacteristic 
             Bluefruit.Advertising.restartOnDisconnect(false);
             conn->disconnect();
 
-#ifdef ARCH_NRF54L
-            sd_power_gpregret_clr(0, 0xFF);
-            sd_power_gpregret_set(0, 0xB1);
-#else
             NRF_POWER->GPREGRET = 0xB1;
-#endif
             NVIC_SystemReset();
         }
     }

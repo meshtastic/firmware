@@ -116,7 +116,8 @@ int32_t QMC6309Sensor::runOnce()
             heading = 360.0f - heading;
 
     } else {
-        heading = atan2f(-magY, magX) * RAD_TO_DEG;
+        // Double atan2 on purpose: already linked, atan2f would add a float copy.
+        heading = atan2(-double(magY), double(magX)) * RAD_TO_DEG;
     }
 
     if (heading >= 360.0f)

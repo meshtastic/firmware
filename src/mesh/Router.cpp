@@ -536,7 +536,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
             // Never exceed user-configured hop_limit
             if (variableHopLimit < p->hop_limit) {
-                LOG_DEBUG("[HOPSCALE] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);
                 p->hop_limit = variableHopLimit;
             }
             break;
