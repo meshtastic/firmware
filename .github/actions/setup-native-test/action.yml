@@ -8,7 +8,7 @@ runs:
   steps:
     # No checkout: the caller must already have one to reference this action at all.
     - name: Setup Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.x
         cache: pip

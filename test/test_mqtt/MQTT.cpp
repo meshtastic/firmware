@@ -1360,6 +1360,35 @@ void test_customMqttRoot(void)
         [] { return pubsub->subscriptions_.count("custom/2/e/test/+") && pubsub->subscriptions_.count("custom/2/e/PKI/+"); }));
 }
 
+// A LoRa region change rewrites moduleConfig.mqtt.root without telling MQTT (AdminModule, MenuHandler,
+// InkHUD). MQTT must pick it up, rebuild the topics and resubscribe; otherwise the node keeps
+// publishing and subscribing under the old region's root until reboot. An uplink sent before
+// runOnce() runs must already use the new root.
+void test_rootChange_rebuildsTopics(void)
+{
+    // Start MQTT with a US region root.
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    MQTTUnitTest::restart();
+
+    TEST_ASSERT_TRUE(loopUntil(
+        [] { return pubsub->subscriptions_.count("msh/US/2/e/test/+") && pubsub->subscriptions_.count("msh/US/2/e/PKI/+"); }));
+
+    // Simulate region change: only the root changes, nobody notifies MQTT.
+    strcpy(moduleConfig.mqtt.root, "msh/EU_868");
+    pubsub->subscriptions_.clear();
+    pubsub->published_.clear();
+    mqtt->onSend(encrypted, decoded, 0);
+
+    // Subscriptions are refreshed, and the uplink is published under the new root after the reconnect.
+    TEST_ASSERT_TRUE(loopUntil([] {
+        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") && pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+") &&
+               !pubsub->published_.empty();
+    }));
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    const auto &[topic, payload] = pubsub->published_.front();
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868/2/e/test/!12345678", topic.c_str());
+}
+
 // Empty configuration is valid.
 void test_configEmptyIsValid(void)
 {
@@ -1555,6 +1584,7 @@ void setup()
     RUN_TEST(test_disabled);
     RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
+    RUN_TEST(test_rootChange_rebuildsTopics);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);
