@@ -3397,7 +3397,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 }
 
 /// Reads never touch the write path a busy or lock-protected flash fails on, so metadata that still
-/// resolves means the write failure was transient. Real corruption asserts in lfs and formats on reboot.
+/// resolves means the write failure was transient, not a filesystem that needs formatting.
 static bool filesystemStillReadable()
 {
     concurrency::LockGuard g(spiLock);
@@ -3460,7 +3460,7 @@ bool NodeDB::saveToDisk(int saveWhat)
 #endif
         // The format below takes every file with it, so spend one read proving it is warranted.
         if (filesystemStillReadable()) {
-            LOG_ERROR("Save to disk failed but the filesystem still reads, not formatting");
+            LOG_ERROR("Save to disk failed but the filesystem still reads, not formatting (full or busy?)");
             return false;
         }
         LOG_ERROR("Save to disk failed and the filesystem is unreadable, formatting");
