@@ -5,6 +5,7 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "error.h"
+#include "main-nrf52.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/Throttle.h"
@@ -291,6 +292,12 @@ void NRF52Bluetooth::setup()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
+
+    // Re-assert DC/DC mode now that the SoftDevice owns the POWER peripheral.
+    // powerHAL_platformInit() already enabled it pre-SoftDevice; this is a no-op
+    // unless the board opts in, and logs only on failure.
+    nrf52ReassertDCDC();
+
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
