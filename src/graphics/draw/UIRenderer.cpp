@@ -91,8 +91,9 @@ static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int
     // between north/south halves to prevent seam bleed while rotating.
     const float scaledDiam = compassDiam * 0.76f;
     const float gapNormHalf = (centerGapPx * 0.5f) / scaledDiam;
-    const float sinHeading = sinf(headingRadian);
-    const float cosHeading = cosf(headingRadian);
+    // Double sin/cos on purpose: GeoCoord already links them, sinf/cosf would add ~3 KB of float libm.
+    const float sinHeading = sin(double(headingRadian));
+    const float cosHeading = cos(double(headingRadian));
 
     StandardCompassNeedlePoints points{};
     transformNeedlePoint(0.0f, -0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.northTipX, points.northTipY);
@@ -279,8 +280,8 @@ static inline void drawCompassCardinalLabels(OLEDDisplay *display, int16_t compa
 {
     const float northAngle = getCompassRingAngleOffset(heading);
     const float radius = compassRadius - 1.0f;
-    const float sinNorth = sinf(northAngle);
-    const float cosNorth = cosf(northAngle);
+    const float sinNorth = sin(double(northAngle));
+    const float cosNorth = cos(double(northAngle));
 
     const int16_t nX = compassX + static_cast<int16_t>(radius * sinNorth);
     const int16_t nY = compassY - static_cast<int16_t>(radius * cosNorth);
@@ -310,10 +311,10 @@ static inline void drawCompassDegreeMarkers(OLEDDisplay *display, int16_t compas
 
     display->setColor(WHITE);
     constexpr float kStepAngle = 15.0f * DEG_TO_RAD;
-    const float sinStep = sinf(kStepAngle);
-    const float cosStep = cosf(kStepAngle);
-    float sinAngle = sinf(baseAngle);
-    float cosAngle = cosf(baseAngle);
+    const float sinStep = sin(double(kStepAngle));
+    const float cosStep = cos(double(kStepAngle));
+    float sinAngle = sin(double(baseAngle));
+    float cosAngle = cos(double(baseAngle));
     bool isMajor = true;
     for (int tick = 0; tick < 24; tick++) {
         const int16_t tickLen = isMajor ? majorLen : minorLen;
