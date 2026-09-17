@@ -183,9 +183,18 @@ bool loopCanSleep()
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
-    // debugger_break(); FIXME doesn't work, possibly not for segger
+    Serial.flush(); // the reset below would cut the message short
+    // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu
     NVIC_SystemReset();
+}
+
+// Bluefruit LESC pairing only uses secp256r1. Replacing the cc310 lookup keeps the parameter
+// tables of its ten other curves (~7.4 KB) from being linked through ecDomainsFuncP.
+extern "C" const CRYS_ECPKI_Domain_t *SaSi_ECPKI_GetSecp256r1DomainP(void);
+extern "C" const CRYS_ECPKI_Domain_t *CRYS_ECPKI_GetEcDomain(CRYS_ECPKI_DomainID_t domainId)
+{
+    return domainId == CRYS_ECPKI_DomainID_secp256r1 ? SaSi_ECPKI_GetSecp256r1DomainP() : nullptr;
 }
 
 void getMacAddr(uint8_t *dmac)
@@ -344,6 +353,9 @@ extern "C" void lfs_assert(const char *reason)
     NVIC_SystemReset();
 }
 
+// Defined by the core's InternalFileSystem, completes a pending sd_flash_write()
+extern "C" void flash_nrf5x_event_cb(uint32_t event);
+
 void checkSDEvents()
 {
     if (useSoftDevice) {
@@ -352,6 +364,11 @@ void checkSDEvents()
             switch (evt) {
             case NRF_EVT_POWER_FAILURE_WARNING:
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
+                break;
+            // Bluefruit's SoC task polls the same queue; an event taken here must still reach the flash driver
+            case NRF_EVT_FLASH_OPERATION_SUCCESS:
+            case NRF_EVT_FLASH_OPERATION_ERROR:
+                flash_nrf5x_event_cb(evt);
                 break;
 
             default:

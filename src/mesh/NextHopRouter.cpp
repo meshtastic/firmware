@@ -33,7 +33,8 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     const auto mode = config.device.rebroadcast_mode;
     if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
         !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
-                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING) ||
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY) ||
         (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
         return false;
 

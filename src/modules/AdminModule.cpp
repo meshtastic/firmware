@@ -1112,7 +1112,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             }
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
@@ -1819,10 +1819,6 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (config.bluetooth.enabled && nrf52Bluetooth) {
         conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
     }
-#elif defined(ARCH_NRF54L15)
-    if (config.bluetooth.enabled && nrf54l15Bluetooth) {
-        conn.bluetooth.is_connected = nrf54l15Bluetooth->isConnected();
-    }
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
@@ -2512,9 +2508,6 @@ void disableBluetooth()
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
-#elif defined(ARCH_NRF54L15)
-    if (nrf54l15Bluetooth)
-        nrf54l15Bluetooth->shutdown();
 #endif
 #endif
 }
