@@ -70,7 +70,7 @@ static meshtastic_MeshPacket create_test_packet_no_rx_time(meshtastic_PortNum po
                                                            int payload_variant = meshtastic_MeshPacket_decoded_tag)
 {
     meshtastic_MeshPacket packet = create_test_packet(port, payload, payload_size, payload_variant);
-    packet.rx_time = 123456; // a plausible millis() placeholder, not a real epoch
+    packet.rx_time = 123456; // a plausible uptime-seconds placeholder, not a real epoch
     packet.has_rx_time = false;
     return packet;
 }

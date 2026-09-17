@@ -39,6 +39,8 @@ class PMSA003ISensor : public TelemetrySensor
 
     uint16_t computedChecksum = 0;
     uint16_t receivedChecksum = 0;
+    // millis()-based, not wall-clock: this only measures in-session warmup elapsed time,
+    // and getTime() can jump discontinuously when RTC quality improves mid-session.
     uint32_t pmMeasureStarted = 0;
 
     uint8_t buffer[PMSA003I_FRAME_LENGTH]{};

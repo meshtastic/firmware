@@ -1,17 +1,17 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
+#include "aes-ccm.h"
 #include "architecture.h"
+#include <SHA256.h>
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "HardwareRNG.h"
 #include "NodeDB.h"
-#include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <RNG.h>
-#include <SHA256.h>
 
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 #include "XEdDSA.h"
@@ -292,6 +292,8 @@ void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
     memcpy(private_key, _private_key, 32);
 }
 
+#endif // !(MESHTASTIC_EXCLUDE_PKI)
+
 /**
  * Hash arbitrary data using SHA256.
  *
@@ -314,11 +316,17 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
     hash.finalize(bytes, 32);
 }
 
+// aes-ccm.cpp drives the block cipher through these two, and it is compiled in every build,
+// so they must stay outside the PKI guard or MESHTASTIC_EXCLUDE_PKI=1 fails to link.
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
-    if (key_len != 0) {
-        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
+    // Full key schedule: faster per block than AESSmall*, and encryptAESCtr already links these classes.
+    if (key_len == 16) {
+        aes = std::unique_ptr<BlockCipher>(new AES128());
+        aes->setKey(key_bytes, 16);
+    } else if (key_len != 0) {
+        aes = std::unique_ptr<BlockCipher>(new AES256());
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -327,6 +335,8 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
 {
     aes->encryptBlock(out, in);
 }
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
 
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 {
@@ -369,6 +379,50 @@ bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_pu
 }
 
 #endif
+
+// AAD layout: [fromNode (4)] [toNode (4)], in the same native byte order initNonce uses.
+static void initAad(uint32_t fromNode, uint32_t toNode, uint8_t *aad)
+{
+    // memcpy to avoid breaking strict-aliasing, as initNonce does
+    memcpy(aad, &fromNode, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint32_t), &toNode, sizeof(uint32_t));
+}
+
+bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                                    const uint8_t *plaintext, uint8_t *ciphertextWithTag)
+{
+    // length is int8_t and the aes_ccm_* key length is size_t, so the -1 "invalid key"
+    // sentinel would widen into a huge unsigned length rather than being rejected.
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD encryption requires a valid, non-empty PSK");
+        return false;
+    }
+    initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
+    // Output layout: [ciphertext (numBytes)] [auth_tag (AEAD_TAG_SIZE bytes)]
+    return aes_ccm_ae(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, plaintext, numBytes, aad, sizeof(aad), ciphertextWithTag,
+                      ciphertextWithTag + numBytes) == 0;
+}
+
+bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId,
+                                    size_t totalBytes, const uint8_t *ciphertextWithTag, uint8_t *plaintext)
+{
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD decryption requires a valid, non-empty PSK");
+        return false;
+    }
+    if (totalBytes <= AEAD_TAG_SIZE)
+        return false;
+    initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
+    size_t crypt_len = totalBytes - AEAD_TAG_SIZE;
+    const uint8_t *auth = ciphertextWithTag + crypt_len;
+    return aes_ccm_ad(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, aad, sizeof(aad), auth,
+                      plaintext);
+}
+
 concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
@@ -403,11 +457,20 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    std::unique_ptr<CTRCommon> ctr;
-    if (_key.length == 16)
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES128>());
-    else
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES256>());
+    // Reused instead of reallocated per packet: safe because all callers hold cryptLock and setKey/setIV reset the
+    // full cipher state. Lazy so overriding platforms reserve nothing; key material now lives until the next call.
+    static CTR<AES128> *ctr128 = nullptr;
+    static CTR<AES256> *ctr256 = nullptr;
+    CTRCommon *ctr;
+    if (_key.length == 16) {
+        if (!ctr128)
+            ctr128 = new CTR<AES128>();
+        ctr = ctr128;
+    } else {
+        if (!ctr256)
+            ctr256 = new CTR<AES256>();
+        ctr = ctr256;
+    }
     ctr->setKey(_key.bytes, _key.length);
     static uint8_t scratch[MAX_BLOCKSIZE];
     memcpy(scratch, bytes, numBytes);

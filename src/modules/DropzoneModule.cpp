@@ -2,6 +2,7 @@
 
 #include "DropzoneModule.h"
 #include "Meshservice->h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
@@ -12,6 +13,7 @@
 #include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
 #include "modules/Telemetry/UnitConversions.h"
 
+#include "mesh/Throttle.h"
 #include <string>
 
 DropzoneModule *dropzoneModule;
@@ -19,7 +21,7 @@ DropzoneModule *dropzoneModule;
 int32_t DropzoneModule::runOnce()
 {
     // Send on a 5 second delay from receiving the matching request
-    if (startSendConditions != 0 && (startSendConditions + 5000U) < millis()) {
+    if (startSendConditions != 0 && Throttle::hasElapsed(startSendConditions, 5000U)) {
         service->sendToMesh(sendConditions(), RX_SRC_LOCAL);
         startSendConditions = 0;
     }
@@ -38,13 +40,13 @@ ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
     snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.short_name);
     if (received >= strlen(matchCompare) && strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
-        startSendConditions = millis();
+        startSendConditions = Time::skipZero(Time::getMillis());
     }
 
     snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.long_name);
     if (received >= strlen(matchCompare) && strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
-        startSendConditions = millis();
+        startSendConditions = Time::skipZero(Time::getMillis());
     }
     return ProcessMessage::CONTINUE;
 }

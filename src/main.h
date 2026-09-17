@@ -20,10 +20,6 @@ extern NimbleBluetooth *nimbleBluetooth;
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
-#ifdef ARCH_NRF54L15
-#include "NRF54L15Bluetooth.h"
-extern NRF54L15Bluetooth *nrf54l15Bluetooth;
-#endif
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/LinuxBluetooth.h" // self-guards; defines MESHTASTIC_LINUX_BLE when BLE is compiled in
 #ifdef MESHTASTIC_LINUX_BLE
@@ -98,6 +94,9 @@ extern uint32_t timeLastPowered;
 extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
+#ifdef ARCH_STM32
+extern uint32_t enterDfuAtMsec; // 0 = unset; else millis() deadline for the deferred DFU jump
+#endif
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 // Set by PhoneAPI::handleLockdownAuthInline after a successful unlock.

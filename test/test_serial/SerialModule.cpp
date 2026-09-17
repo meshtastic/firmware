@@ -2,6 +2,11 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+// Required by Unity: PlatformIO's weak defaults do not link on MinGW (PE-COFF weak externals).
+// Outside the guard below so both the portduino and the stub setup() get them.
+void setUp(void) {}
+void tearDown(void) {}
+
 #ifdef ARCH_PORTDUINO
 #include "configuration.h"
 

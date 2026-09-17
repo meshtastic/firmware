@@ -18,6 +18,8 @@ class HM330XSensor : public TelemetrySensor
   private:
     enum class State { IDLE, ACTIVE };
     State state = State::IDLE;
+    // millis()-based, not wall-clock: this only measures in-session warmup elapsed time,
+    // and getTime() can jump discontinuously when RTC quality improves mid-session.
     uint32_t measureStarted = 0;
     uint8_t buffer[HM330X_FRAME_LENGTH]{};
     TwoWire *_bus{};
