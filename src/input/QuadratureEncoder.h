@@ -165,6 +165,9 @@ class QuadratureEncoder : public Observable<const InputEvent *>, public concurre
     void attachInterrupts();
     void detachInterrupts();
     static uint8_t readAB();
+#ifdef INPUTDRIVER_ENCODER_BTN
+    static bool buttonAsserted();
+#endif
 
     const char *_originName;
 

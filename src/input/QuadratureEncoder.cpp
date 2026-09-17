@@ -24,6 +24,18 @@ uint8_t QuadratureEncoder::readAB()
     return (uint8_t)((a << 1) | b);
 }
 
+#ifdef INPUTDRIVER_ENCODER_BTN
+bool QuadratureEncoder::buttonAsserted()
+{
+    const bool raw = digitalRead(INPUTDRIVER_ENCODER_BTN) ? true : false;
+#if INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW
+    return !raw;
+#else
+    return raw;
+#endif
+}
+#endif
+
 // Decode in the ISR and bank whole detents only. A missed edge is unrecoverable state loss, so
 // the table has to run on every edge; keeping the sub-detent accumulator here as well means a
 // fast spin cannot lose counts to scheduling latency. It is a table index and an add.
@@ -137,10 +149,7 @@ int32_t QuadratureEncoder::runOnce()
 
 #ifdef INPUTDRIVER_ENCODER_BTN
     const uint32_t now = millis();
-    bool level = digitalRead(INPUTDRIVER_ENCODER_BTN) ? true : false;
-#if INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW
-    level = !level;
-#endif
+    const bool level = buttonAsserted();
 
     if (level != pressed && Throttle::hasElapsed(lastPressChangeMs, INPUTDRIVER_ENCODER_BTN_DEBOUNCE_MS)) {
         lastPressChangeMs = now;
@@ -183,10 +192,23 @@ int QuadratureEncoder::beforeLightSleep(void *unused)
 int QuadratureEncoder::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 {
     // Re-seed before re-arming: the shaft can be turned while we are not watching, and decoding
-    // against a stale sample would invent a detent that never happened.
+    // against a stale sample would invent a detent that never happened. Rotation is deliberately
+    // not a wake source, so a turn during sleep is discarded rather than replayed on wake.
     abState = readAB();
     accum = 0;
     attachInterrupts();
+
+#ifdef INPUTDRIVER_ENCODER_BTN
+    // The edge that woke us landed while the interrupts were detached, and a button that is still
+    // held produces no further edge until it is released - so without a nudge here the thread stays
+    // parked, the press is never sampled, and the node drops straight back into light sleep. The
+    // press itself only wakes the screen: InputBroker drops the event it eventually emits because
+    // the screen was off, which is how every other input device on every board behaves.
+    if (buttonAsserted()) {
+        setIntervalFromNow(0);
+        runASAP = true;
+    }
+#endif
     return 0;
 }
 #endif
