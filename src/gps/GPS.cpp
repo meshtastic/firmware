@@ -91,6 +91,16 @@ constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
 constexpr uint32_t T1000_E_AIROHA_WAKE_MS = 1000;
 constexpr uint32_t T1000_E_AIROHA_WAKE_INTERVAL_MS = 40;
 #endif
+#ifdef GNSS_AIROHA
+// The receiver may already have auto-slept and missed the first $PAIR650, so resend until it acks.
+constexpr uint32_t AIROHA_SLEEP_ACK_MS = 40;
+constexpr uint32_t AIROHA_SLEEP_BUDGET_MS = 400;
+#ifdef GPS_RTC_INT
+constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
+constexpr uint32_t AIROHA_RTC_INT_PULSE_MS = 3;
+constexpr uint32_t AIROHA_WAKE_SETTLE_MS = 50;
+#endif
+#endif
 
 struct GPSProbeCacheRecord {
     uint32_t magic;
@@ -113,14 +123,23 @@ bool isValidProbeBaud(uint32_t baud)
     return baud >= 1200 && baud <= 921600;
 }
 
+#if defined(GNSS_AIROHA) && defined(GPS_RTC_INT)
+// Airoha leaves software-RTC sleep on an RTC_INT rising edge; VCC must already be up.
+static void airohaPulseRtcInt()
+{
+    delay(AIROHA_POWER_SETTLE_MS);
+    digitalWrite(GPS_RTC_INT, HIGH);
+    delay(AIROHA_RTC_INT_PULSE_MS);
+    digitalWrite(GPS_RTC_INT, LOW);
+    delay(AIROHA_WAKE_SETTLE_MS);
+}
+#endif
+
 template <typename T> void wakeAirohaForActiveProbe(T *serialGps)
 {
 #ifdef TRACKER_T1000_E
     digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
-    digitalWrite(GPS_RTC_INT, HIGH);
-    delay(3);
-    digitalWrite(GPS_RTC_INT, LOW);
-    delay(50);
+    airohaPulseRtcInt();
 
     const uint32_t start = millis();
     do {
@@ -1172,10 +1191,13 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 #endif
         powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                         // Power (EN pin): on
-        setPowerPMU(true);                                        // Power (PMU): on
-        writePinRFEN(true);                                       // External RF front-end: on
-        writePinStandby(false);                                   // Standby (pin): awake (not standby)
-        setPowerUBLOX(true);                                      // Standby (UBLOX): awake
+#if defined(GNSS_AIROHA) && defined(GPS_RTC_INT)
+        airohaPulseRtcInt(); // Airoha: leave software-RTC sleep, now that VCC is back
+#endif
+        setPowerPMU(true);      // Power (PMU): on
+        writePinRFEN(true);     // External RF front-end: on
+        writePinStandby(false); // Standby (pin): awake (not standby)
+        setPowerUBLOX(true);    // Standby (UBLOX): awake
         break;
 
     case GPS_SOFTSLEEP:
@@ -1189,27 +1211,29 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 
     case GPS_HARDSLEEP:
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
-        writePinRFEN(false);                                        // External RF front-end: off
-        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
-        writePinEN(false);                                          // Power (EN pin): off
-        setPowerPMU(false);                                         // Power (PMU): off
-        setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
 #ifdef GNSS_AIROHA
-        digitalWrite(PIN_GPS_EN, LOW);
+        if (oldState != GPS_HARDSLEEP && oldState != GPS_OFF)
+            airohaEnterSoftRtcSleep(); // Airoha: must precede the power cut, while it can still hear us
 #endif
+        writePinRFEN(false);             // External RF front-end: off
+        writePinStandby(true);           // Standby (pin): asleep (not awake)
+        writePinEN(false);               // Power (EN pin): off
+        setPowerPMU(false);              // Power (PMU): off
+        setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_OFF:
         assert(sleepTime == 0);                                     // This is an indefinite sleep
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
-        writePinRFEN(false);                                        // External RF front-end: off
-        writePinStandby(true);                                      // Standby (pin): asleep
-        writePinEN(false);                                          // Power (EN pin): off
-        setPowerPMU(false);                                         // Power (PMU): off
-        setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
 #ifdef GNSS_AIROHA
-        digitalWrite(PIN_GPS_EN, LOW);
+        if (oldState != GPS_HARDSLEEP && oldState != GPS_OFF)
+            airohaEnterSoftRtcSleep(); // Airoha: must precede the power cut, while it can still hear us
 #endif
+        writePinRFEN(false);     // External RF front-end: off
+        writePinStandby(true);   // Standby (pin): asleep
+        writePinEN(false);       // Power (EN pin): off
+        setPowerPMU(false);      // Power (PMU): off
+        setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
         break;
     }
 }
@@ -1342,6 +1366,20 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
         gps->_serial_gps->write(gps->UBXscratch, msglen);
         LOG_DEBUG_GPS("UBLOX: sleep for %dmS", sleepMs);
     }
+}
+
+// Park an Airoha receiver in software RTC mode, so an RTC_INT pulse can wake it once VCC is cut.
+void GPS::airohaEnterSoftRtcSleep()
+{
+#ifdef GNSS_AIROHA
+    const uint32_t start = millis();
+    do {
+        _serial_gps->write("$PAIR650,0*25\r\n");
+        if (getACK("$PAIR001,650,0", AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK)
+            return;
+    } while (Throttle::isWithinTimespanMs(start, AIROHA_SLEEP_BUDGET_MS));
+    LOG_WARN("GPS: no ack for $PAIR650; may not wake from hardware RTC mode");
+#endif
 }
 
 /// Record that we have a GPS
@@ -2324,12 +2362,6 @@ void GPS::toggleGpsMode()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
         LOG_INFO("User toggled GpsMode. Now DISABLED");
         playGPSDisableBeep();
-#ifdef GNSS_AIROHA
-        if (powerState == GPS_ACTIVE) {
-            LOG_DEBUG("User power Off GPS");
-            digitalWrite(PIN_GPS_EN, LOW);
-        }
-#endif
         disable();
     } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;

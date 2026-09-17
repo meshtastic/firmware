@@ -277,6 +277,10 @@ class GPS : private concurrency::OSThread
      */
     void setPowerUBLOX(bool on, uint32_t sleepMs = 0);
 
+    /** Put an Airoha receiver into software RTC mode, if relevant
+     */
+    void airohaEnterSoftRtcSleep();
+
     /**
      * Tell users we have new GPS readings
      */
