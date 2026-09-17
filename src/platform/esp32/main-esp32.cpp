@@ -365,6 +365,13 @@ void cpuDeepSleep(uint32_t msecToWake)
     // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
     uint64_t gpioMask = wakeButton >= 0 ? (1ULL << wakeButton) : 0;
+#ifdef BUTTON_PIN_RUNTIME_ONLY
+    // ext1 only wakes on an RTC pad, which a runtime-chosen pin is not guaranteed to be.
+    if (wakeButton >= 0 && !rtc_gpio_is_valid_gpio((gpio_num_t)wakeButton)) {
+        LOG_WARN("GPIO%02d cannot wake from deep sleep: not an RTC pad", wakeButton);
+        gpioMask = 0;
+    }
+#endif
 #endif
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
@@ -381,22 +388,25 @@ void cpuDeepSleep(uint32_t msecToWake)
     // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
     // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
+    esp_err_t wakeRes = ESP_OK;
 #ifdef ESP32S3_WAKE_TYPE
     if (gpioMask)
-        esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
+        wakeRes = esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
 #else
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 #ifdef CONFIG_IDF_TARGET_ESP32
     // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
     if (gpioMask)
-        esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+        wakeRes = esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
 #else
     if (gpioMask)
-        esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
+        wakeRes = esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
 #endif
 
 #endif // #end ESP32S3_WAKE_TYPE
+    if (wakeRes != ESP_OK)
+        LOG_WARN("ext1 wake setup failed: %d", wakeRes);
 #endif
     variant_shutdown();
 

@@ -187,7 +187,10 @@ static void setupUserButton(int pullup_sense)
 #define BUTTON_ACTIVE_PULLUP true
 #endif
     if (_pinNum < 0) {
-        LOG_INFO("No user button wired on this board, set device.button_gpio to add one");
+        if (config.device.button_gpio)
+            LOG_WARN("Ignore device.button_gpio %u: not a usable pin", (unsigned)config.device.button_gpio);
+        else
+            LOG_INFO("No user button wired on this board, set device.button_gpio to add one");
         return;
     }
     LOG_DEBUG("Use GPIO%02d for user button", _pinNum);
