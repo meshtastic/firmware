@@ -1,6 +1,7 @@
 #pragma once
 
 #include "StreamAPI.h"
+#include "mesh/StreamFrameWriter.h"
 #include <cstdlib>
 #include <memory>
 
@@ -14,6 +15,7 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
 {
   private:
     T client;
+    StreamFrameWriter frameWriter;
 
   public:
     explicit ServerAPI(T &_client);
@@ -30,8 +32,12 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
     /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
     /// stay in the POWERED state to prevent disabling wifi)
     virtual void onConnectionChanged(bool connected) override {}
-    virtual bool canWriteFrame(size_t frameLen) override;
-    virtual void onFrameWriteFailed(size_t frameLen, size_t writtenLen) override;
+    /// Write or retain one framed TCP message.
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort) override;
+    /// Continue retained TCP output before PhoneAPI advances.
+    virtual bool finishPendingFrame() override;
+    /// Report a retained TCP frame awaiting transmit space.
+    virtual bool hasRetainedFrame() override;
 
     virtual int32_t runOnce() override; // Check for dropped client connections
 };
