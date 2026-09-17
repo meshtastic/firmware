@@ -72,6 +72,12 @@ template <typename T> bool ServerAPI<T>::hasRetainedFrame()
     return !frameWriter.isIdle();
 }
 
+/// Protect the retained log buffer from being re-encoded under it.
+template <typename T> bool ServerAPI<T>::canEncodeLogRecord()
+{
+    return !hasRetainedFrame();
+}
+
 template <class T> int32_t ServerAPI<T>::runOnce()
 {
     if (client.connected()) {

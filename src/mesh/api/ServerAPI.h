@@ -38,6 +38,8 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
     virtual bool finishPendingFrame() override;
     /// Report a retained TCP frame awaiting transmit space.
     virtual bool hasRetainedFrame() override;
+    /// Return whether the dedicated log buffer can be safely overwritten.
+    virtual bool canEncodeLogRecord() override;
 
     virtual int32_t runOnce() override; // Check for dropped client connections
 };
