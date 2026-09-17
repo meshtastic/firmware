@@ -2128,7 +2128,7 @@ void NodeDB::cleanupMeshDB()
                 // exchange completed) rather than losing it with the purge.
                 if (n.public_key.size == 32)
                     warmStore.absorb(gone, n.last_heard, n.public_key.bytes, n.role, warmProtectedCategory(n),
-                                     nodeInfoLiteHasXeddsaSigned(&n));
+                                     nodeInfoLiteHasXeddsaSigned(&n), nodeInfoLiteHasBeenGreeted(&n));
 #endif
 
                 eraseNodeSatellites(gone);
@@ -2319,7 +2319,7 @@ void NodeDB::demoteOldestHotNodesToWarm()
         // Warm entries carry no key length, so a partial key would be indistinguishable
         // from a full one. nullptr keeps the keyless placeholder that restores last_heard.
         warmStore.absorb(n.num, n.last_heard, n.public_key.size == 32 ? n.public_key.bytes : nullptr, n.role,
-                         warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n));
+                         warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n), nodeInfoLiteHasBeenGreeted(&n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) - they'd otherwise orphan until the next
         // enforceSatelliteCaps pass.
@@ -3577,7 +3577,8 @@ void NodeDB::evictAt(int index, bool keepKeylessInWarm)
     // slot. A one-packet probation entry has no key worth keeping and would only LRU real ones out.
     if (evicted.public_key.size == 32 || keepKeylessInWarm)
         warmStore.absorb(evicted.num, evicted.last_heard, evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL,
-                         evicted.role, warmProtectedCategory(evicted), nodeInfoLiteHasXeddsaSigned(&evicted));
+                         evicted.role, warmProtectedCategory(evicted), nodeInfoLiteHasXeddsaSigned(&evicted),
+                         nodeInfoLiteHasBeenGreeted(&evicted));
 #else
     (void)keepKeylessInWarm;
 #endif
@@ -4543,6 +4544,9 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n, bool heardOnAir)
             // Restore the XEdDSA-signed bit too: it is learned from verified traffic, not from
             // NodeInfo, so a round trip through the warm tier must not relearn it from zero.
             nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, warmXeddsaSignedOf(warm));
+            // Restore the greeting mark: without it a re-admitted node - keyed but nameless, since
+            // the warm tier keeps no name - is asked for its NodeInfo again on every residency.
+            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_BEEN_GREETED_MASK, warmGreetedOf(warm));
             if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);

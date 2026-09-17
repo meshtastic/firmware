@@ -664,6 +664,31 @@ void test_eviction_rehydratedNodeIsStillOnProbation(void)
     TEST_ASSERT_TRUE_MESSAGE(db->onProbation(keyed), "warm data does not promote");
 }
 
+// The warm tier carries the greeting mark in a spare metadata bit, so a re-admitted node - keyed
+// but nameless, since the warm tier keeps no name - is not asked for its NodeInfo a second time.
+void test_eviction_warmTierCarriesTheGreetingMark(void)
+{
+    uint32_t seq = 6300;
+    const uint32_t t0 = 1700000000;
+    const NodeNum marked = FRESH_BASE + 6300; // the band's next victim, then the one after it
+    const NodeNum unmarked = FRESH_BASE + 6301;
+    fillAndAdmit(NODEDB_PROBATION_SLOTS, seq);
+    db->giveKey(marked);
+    db->giveKey(unmarked);
+    nodeInfoLiteSetBit(db->getMeshNode(marked), NODEINFO_BITFIELD_HAS_BEEN_GREETED_MASK, true);
+
+    churn(2, seq); // evicts the two oldest probation entries, both keyed so both are kept warm
+    TEST_ASSERT_TRUE(db->inWarm(marked));
+    TEST_ASSERT_TRUE(db->inWarm(unmarked));
+
+    db->hear(marked, t0);
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(marked)),
+                             "re-admission restores the ask we already sent");
+    db->hear(unmarked, t0);
+    TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(unmarked)),
+                              "and a node we never asked comes back askable");
+}
+
 // ---------------------------------------------------------------------------
 // Greeting gate (MeshService::handleFromRadio)
 // ---------------------------------------------------------------------------
@@ -937,6 +962,7 @@ PROBATION_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_rehydratedNodeIsStillOnProbation);
 
     printf("\n=== Greeting gate ===\n");
+    RUN_TEST(test_eviction_warmTierCarriesTheGreetingMark);
     RUN_TEST(test_greeting_residentWithoutUserIsGreeted);
     RUN_TEST(test_greeting_onlyOnceWhileStillNameless);
     RUN_TEST(test_greeting_markClearedByTheNodeInfoItAskedFor);
