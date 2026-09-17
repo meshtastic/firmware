@@ -125,6 +125,9 @@ void TypeConversions::CopyUserToNodeInfoLite(meshtastic_NodeInfoLite *lite, cons
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK, user.has_is_unmessagable);
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK, user.has_is_unmessagable && user.is_unmessagable);
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_USER_MASK, true);
+    // The identity we asked for has arrived, so the greeting mark has served its purpose: clear it
+    // rather than leave it to suppress a later ask if this record is ever dropped.
+    nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_BEEN_GREETED_MASK, false);
 }
 
 meshtastic_User TypeConversions::ConvertToUser(const meshtastic_NodeInfoLite *lite)

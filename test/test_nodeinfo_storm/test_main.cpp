@@ -26,6 +26,7 @@
 #include "mesh/CryptoEngine.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
+#include "mesh/TransmitHistory.h"
 #include "modules/NodeInfoModule.h"
 #include "support/MockMeshService.h"
 #include <cstdio>
@@ -255,6 +256,15 @@ bool heardAndGreeted(NodeNum from, uint32_t rxTime, bool throttled = false)
             s.decoded.portnum == meshtastic_PortNum_NODEINFO_APP)
             return true;
     return false;
+}
+
+// Forget our last NodeInfo transmission, so the next greeting or reply is not refused by
+// allocReply()'s TX throttle. Guarded: TransmitHistory::getInstance() would *create* the global,
+// and a suite that never sends for real is meant to see the throttle only where a case arms it.
+void clearNodeInfoThrottle()
+{
+    if (transmitHistory)
+        transmitHistory->clear();
 }
 
 void giveUser(NodeNum num)
@@ -666,11 +676,59 @@ void test_greeting_residentWithoutUserIsGreeted(void)
     db->fillWithRoom();
     TEST_ASSERT_TRUE_MESSAGE(heardAndGreeted(0x62000001, t0), "new node on a store with room is greeted");
 
+    clearNodeInfoThrottle(); // the greeting above counts as a NodeInfo transmission once armed
     db->fill(60);
     db->admit(0x62000002, /*heardOnAir=*/false); // a contact import: resident, no user record yet
     meshtastic_NodeInfoLite *n = db->getMeshNode(0x62000002);
     nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, false);
     TEST_ASSERT_TRUE_MESSAGE(heardAndGreeted(0x62000002, t0), "a resident on a full store is greeted");
+}
+
+// One ask per residency. The mark lives in the bitfield and is only read while the node has no user
+// record, so the states are: nameless -> greeted, no answer -> named by its NodeInfo.
+void test_greeting_onlyOnceWhileStillNameless(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fillWithRoom();
+    TEST_ASSERT_TRUE(heardAndGreeted(0x62000010, t0));
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(0x62000010)), "the ask that went out is marked");
+
+    TEST_ASSERT_FALSE_MESSAGE(heardAndGreeted(0x62000010, t0 + 30), "a node that did not answer is not asked twice");
+}
+
+// The mark is not sticky state: the NodeInfo we asked for clears it, so a node whose record is
+// later dropped can be asked again.
+void test_greeting_markClearedByTheNodeInfoItAskedFor(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fillWithRoom();
+    TEST_ASSERT_TRUE(heardAndGreeted(0x62000011, t0));
+    TEST_ASSERT_TRUE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(0x62000011)));
+
+    meshtastic_User u = meshtastic_User_init_zero;
+    snprintf(u.short_name, sizeof(u.short_name), "ANS");
+    db->updateUser(0x62000011, u);
+
+    const meshtastic_NodeInfoLite *n = db->getMeshNode(0x62000011);
+    TEST_ASSERT_TRUE(nodeInfoLiteHasUser(n));
+    TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasBeenGreeted(n), "the answer clears the mark");
+}
+
+// A greeting refused by our own NodeInfo TX throttle never went out, so it must not spend the
+// node's one ask - the throttle is 10 min scaled by online count, the commonest refusal there is.
+void test_greeting_markNotSpentWhenTheSendIsRefused(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fillWithRoom();
+    // setLastSentToMesh(), not the persisted setters: allocReply() reads the runtime millis map, the
+    // only one both the filesystem and the stub build of TransmitHistory keep.
+    TransmitHistory::getInstance()->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+
+    TEST_ASSERT_FALSE_MESSAGE(heardAndGreeted(0x62000012, t0), "inside our NodeInfo throttle nothing is sent");
+    TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasBeenGreeted(db->getMeshNode(0x62000012)), "a refused ask leaves the node askable");
+
+    clearNodeInfoThrottle();
+    TEST_ASSERT_TRUE_MESSAGE(heardAndGreeted(0x62000012, t0 + 30), "and it is asked once the throttle clears");
 }
 
 // A node whose user record we hold is never greeted.
@@ -829,6 +887,9 @@ void setUp(void)
 void tearDown(void)
 {
     NodeInfoStormShim::currentRequest = nullptr;
+    // A case that armed our NodeInfo TX throttle must not leave it armed: an aborted assertion skips
+    // the case's own cleanup, and every later greeting or reply would then be refused.
+    clearNodeInfoThrottle();
 }
 
 PROBATION_TEST_ENTRY void setup()
@@ -877,6 +938,9 @@ PROBATION_TEST_ENTRY void setup()
 
     printf("\n=== Greeting gate ===\n");
     RUN_TEST(test_greeting_residentWithoutUserIsGreeted);
+    RUN_TEST(test_greeting_onlyOnceWhileStillNameless);
+    RUN_TEST(test_greeting_markClearedByTheNodeInfoItAskedFor);
+    RUN_TEST(test_greeting_markNotSpentWhenTheSendIsRefused);
     RUN_TEST(test_greeting_knownUserIsNotGreeted);
     RUN_TEST(test_greeting_probationAndDeferredAreNotGreeted);
 
