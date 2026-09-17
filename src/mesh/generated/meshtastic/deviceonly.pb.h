@@ -81,9 +81,7 @@ typedef struct _meshtastic_NodeInfoLite {
     uint8_t hops_away;
     /* Last byte of the node number of the node that should be used as the next hop to reach this node. */
     uint8_t next_hop;
-    /* Bitfield for storing booleans. See NODEINFO_BITFIELD_* in src/mesh/NodeDB.h.
- Bit 11 is NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA, mirrored on the wire as
- NodeInfo.heard_on_current_lora. */
+    /* Bitfield for storing booleans. See NODEINFO_BITFIELD_* in src/mesh/NodeDB.h. */
     uint32_t bitfield;
     /* A full name for this user, i.e. "Kevin Hester". */
     char long_name[25];
@@ -97,11 +95,8 @@ typedef struct _meshtastic_NodeInfoLite {
     /* The public key of the user's device, for PKI-based encrypted DMs. */
     meshtastic_NodeInfoLite_public_key_t public_key;
     /* Q4-encoded SNR: dB × 4, sint32 zigzag. Matches RouteDiscovery convention.
- Encode: snr_q4 = (int32_t)lroundf(snr * 4.0f). Decode: snr = snr_q4 / 4.0f.
- float snr is always zeroed on disk; this field carries all persisted SNR.
- A stored 0 does not by itself mean "unknown" here - see NODEINFO_BITFIELD_HAS_SNR in
- src/mesh/NodeDB.h for the presence bit that disambiguates a genuine 0 dB reading from
- "never measured". */
+ Encode: snr_q4 = (int32_t)(snr * 4.0f). Decode: snr = snr_q4 / 4.0f.
+ float snr is always zeroed on disk; this field carries all persisted SNR. */
     int32_t snr_q4;
 } meshtastic_NodeInfoLite;
 
@@ -457,10 +452,10 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_NodeDatabase_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
-#define meshtastic_BackupPreferences_size        2674
-#define meshtastic_ChannelFile_size              734
+#define meshtastic_BackupPreferences_size        2738
+#define meshtastic_ChannelFile_size              718
 #define meshtastic_DeviceState_size              1944
-#define meshtastic_NodeEnvironmentEntry_size     231
+#define meshtastic_NodeEnvironmentEntry_size     170
 #define meshtastic_NodeInfoLite_size             112
 #define meshtastic_NodePositionEntry_size        42
 #define meshtastic_NodeStatusEntry_size          89
