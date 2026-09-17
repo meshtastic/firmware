@@ -347,6 +347,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MESHPAGER_X2 = 146,
     /* Lilygo T-CONNECT PRO */
     meshtastic_HardwareModel_T_CONNECT_PRO = 147,
+    /* Axiometa Axiometa Genesis Mini */
+    meshtastic_HardwareModel_AXIOMETA_GENESIS_MINI = 148,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
