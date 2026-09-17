@@ -79,8 +79,8 @@ class CryptoEngine
      * Clobbers shared_key, so the caller must hold cryptLock (which is NOT recursive - do not call
      * this from a context that already holds it, such as perhapsEncode).
      */
-    bool ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, uint32_t ackTo, uint32_t requestId,
-                         const uint8_t *routing, size_t routingLen, uint8_t *proofOut);
+    bool ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, uint32_t ackTo, uint32_t requestId, const uint8_t *routing,
+                         size_t routingLen, uint8_t *proofOut);
 
     void setDHPrivateKey(uint8_t *_private_key);
     // The remotePublic key parameter takes the public_key bytes container from

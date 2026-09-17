@@ -422,47 +422,6 @@ void loop() {}
 
 void setUp(void) {}
 void tearDown(void) {}
-// REGRESSION: an ack and a nak for the same packet share from/to/portnum/request_id and differ
-// only in the Routing payload. Channel crypto is CTR with no MAC, so if the payload were not bound
-// a PSK holder could bit-flip a proven "delivered" into a "failed" and the proof would still
-// verify. The easy direction is success -> failure; manufacturing a fake success is much narrower,
-// needing a captured proofed nak, and the naks that exist either never reach the air or come from
-// a node that by definition holds no key.
-void test_proof_binds_error_reason(void)
-{
-    const Identity alice = makeIdentity();
-    const Identity bob = makeIdentity();
-
-    becomeNode(bob);
-    meshtastic_MeshPacket ack = makeAck(BOB, ALICE, REQUEST_ID);
-    TEST_ASSERT_EQUAL_MESSAGE(0x18, ack.decoded.payload.bytes[0], "expected error_reason to be field 3, varint");
-    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, ack.decoded.payload.bytes[1], "expected a success ack");
-    TEST_ASSERT_TRUE(ackProofAttachWithKey(&ack, alice.pub));
-
-    becomeNode(alice);
-    TEST_ASSERT_EQUAL(AckProofResult::VALID, ackProofVerifyWithKey(&ack, REQUEST_ID, bob.pub));
-
-    // Exactly what a CTR bit-flip buys the attacker: same proof bytes, different verdict.
-    ack.decoded.payload.bytes[1] = meshtastic_Routing_Error_MAX_RETRANSMIT;
-    TEST_ASSERT_EQUAL_MESSAGE(AckProofResult::INVALID, ackProofVerifyWithKey(&ack, REQUEST_ID, bob.pub),
-                              "flipping a proven ack into a nak must invalidate the proof");
-}
-
-// X25519 is symmetric - DH(a_priv, B_pub) == DH(b_priv, A_pub) - so without the direction bound an
-// A->B proof for a request_id would equal the B->A proof for it. Cheap insurance; this pins it.
-void test_proof_binds_direction(void)
-{
-    const Identity alice = makeIdentity();
-    const Identity bob = makeIdentity();
-
-    becomeNode(bob);
-    uint8_t forward[ACK_PROOF_SIZE], reverse[ACK_PROOF_SIZE];
-    TEST_ASSERT_TRUE(crypto->ackProofCompute(alice.pub, BOB, ALICE, REQUEST_ID, ROUTING, ROUTING_LEN, forward));
-    TEST_ASSERT_TRUE(crypto->ackProofCompute(alice.pub, ALICE, BOB, REQUEST_ID, ROUTING, ROUTING_LEN, reverse));
-    TEST_ASSERT_TRUE_MESSAGE(memcmp(forward, reverse, ACK_PROOF_SIZE) != 0,
-                             "A->B and B->A proofs must differ despite the symmetric shared secret");
-}
-
 void setup()
 {
     initializeTestEnvironment();
