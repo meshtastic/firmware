@@ -105,6 +105,43 @@ class NodeDBTestShim : public NodeDB
         }
         return oldestKeyed;
     }
+    // For test_eviction_victimInvariants: build an arbitrary store state, then read back what the
+    // shipping rule picks. Out-params rather than the nested EvictionScan type, because friendship
+    // covers the shim's own members and not the test functions calling it.
+    void clearStore()
+    {
+        meshNodes->clear();
+        numMeshNodes = 0;
+    }
+    void pushRaw(NodeNum num, uint32_t lastHeard, uint32_t flags)
+    {
+        meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
+        n.num = num;
+        n.last_heard = lastHeard;
+        nodeInfoLiteSetBit(&n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
+        if (flags & kProbation)
+            nodeInfoLiteSetBit(&n, NODEINFO_BITFIELD_ON_PROBATION_MASK, true);
+        if (flags & kFavorite)
+            nodeInfoLiteSetBit(&n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+        if (flags & kIgnored)
+            nodeInfoLiteSetBit(&n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+        if (flags & kVerified)
+            nodeInfoLiteSetBit(&n, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true);
+        if (flags & kKeyed) {
+            n.public_key.size = 32;
+            memset(n.public_key.bytes, 0x5A, 32);
+        }
+        meshNodes->push_back(n);
+        numMeshNodes = meshNodes->size();
+    }
+    static constexpr uint32_t kProbation = 1u, kFavorite = 2u, kIgnored = 4u, kVerified = 8u, kKeyed = 16u;
+    void rawScan(int &victim, int &oldestProb, int &probCount) const
+    {
+        const EvictionScan s = scanForEviction();
+        victim = s.oldestResident;
+        oldestProb = s.oldestProbation;
+        probCount = s.probationCount;
+    }
     void armThrottle(bool armed) { lastFullEvictionMs = armed ? Time::getMillis() : Time::getMillis() - 3000; }
     void giveKey(NodeNum num)
     {
@@ -702,6 +739,95 @@ void test_eviction_rehydrationMarksTheNodeAsGreeted(void)
     TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasBeenGreeted(n), "a re-admission from the warm tier is not asked again");
 }
 
+// The victim rule stated as invariants rather than as worked examples, checked over randomised
+// store states. The cases above pin the shapes that matter; this pins the rule itself, so a model
+// of it maintained outside the tree (or a future refactor) cannot drift silently.
+//
+// Two regimes: keyed-heavy is the shape a city mesh has and exercises the plain-oldest branch,
+// key-less-heavy drives the boring population across NODEDB_PROBATION_SLOTS. Without the second,
+// only ~1 % of states reach the threshold at all.
+void test_eviction_victimInvariants(void)
+{
+    uint32_t rng = 0x13579BDFu; // xorshift32, fixed seed: a failure is reproducible
+    auto next = [&rng]() {
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+        return rng;
+    };
+    int crossedThreshold = 0, discriminating = 0;
+    for (int c = 0; c < 6000; c++) {
+        const bool keylessHeavy = (c & 1) != 0;
+        const uint32_t keyedPct = keylessHeavy ? 60u : 200u;          // out of 256
+        const int n = 2 + (int)(next() % (keylessHeavy ? 59u : 39u)); // index 0 is our own node
+        db->clearStore();
+        db->pushRaw(db->getNodeNum(), 1700000000u, NodeDBTestShim::kKeyed);
+        for (int i = 1; i < n; i++) {
+            const uint32_t lh = 1700000000u + (next() % 4000u);
+            const uint32_t r = next();
+            uint32_t flags = 0;
+            if ((r & 0xFF) < 40)
+                flags |= NodeDBTestShim::kProbation;
+            if (((r >> 8) & 0xFF) < 12)
+                flags |= NodeDBTestShim::kFavorite;
+            if (((r >> 16) & 0xFF) < 8)
+                flags |= NodeDBTestShim::kIgnored;
+            if (((r >> 24) & 0xFF) < 8)
+                flags |= NodeDBTestShim::kVerified;
+            if ((next() & 0xFF) < keyedPct)
+                flags |= NodeDBTestShim::kKeyed;
+            db->pushRaw(0x00020000u + i, lh, flags);
+        }
+
+        // Recompute the expected answer from the store, independently of scanForEviction().
+        int wantOldest = -1, wantBoring = -1, wantOldestProb = -1, boring = 0, probs = 0;
+        for (int i = 1; i < db->getNumMeshNodes(); i++) {
+            const meshtastic_NodeInfoLite *e = db->getMeshNodeByIndex(i);
+            if (nodeInfoLiteIsOnProbation(e)) {
+                probs++;
+                if (wantOldestProb == -1 || e->last_heard < db->getMeshNodeByIndex(wantOldestProb)->last_heard)
+                    wantOldestProb = i;
+                continue;
+            }
+            if (nodeInfoLiteIsFavorite(e) || nodeInfoLiteIsIgnored(e) || nodeInfoLiteIsKeyManuallyVerified(e))
+                continue;
+            if (wantOldest == -1 || e->last_heard < db->getMeshNodeByIndex(wantOldest)->last_heard)
+                wantOldest = i;
+            if (e->public_key.size == 0) {
+                boring++;
+                if (wantBoring == -1 || e->last_heard < db->getMeshNodeByIndex(wantBoring)->last_heard)
+                    wantBoring = i;
+            }
+        }
+        const int want = (wantBoring != -1 && boring >= NODEDB_PROBATION_SLOTS) ? wantBoring : wantOldest;
+        if (boring >= NODEDB_PROBATION_SLOTS)
+            crossedThreshold++;
+        if (wantBoring != -1 && wantOldest != -1 && wantBoring != wantOldest)
+            discriminating++;
+
+        int victim = -1, oldestProb = -1, probCount = 0;
+        db->rawScan(victim, oldestProb, probCount);
+        TEST_ASSERT_EQUAL_MESSAGE(probs, probCount, "probationCount must be every entry carrying the bit");
+        TEST_ASSERT_EQUAL_MESSAGE(wantOldestProb, oldestProb, "oldestProbation must be the oldest of the band");
+        TEST_ASSERT_EQUAL_MESSAGE(want, victim,
+                                  "the victim is the oldest boring node once there are "
+                                  "NODEDB_PROBATION_SLOTS of them, else the oldest node overall");
+        if (victim != -1) {
+            const meshtastic_NodeInfoLite *v = db->getMeshNodeByIndex(victim);
+            TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteIsOnProbation(v), "a probation entry is never the resident victim");
+            TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteIsFavorite(v) || nodeInfoLiteIsIgnored(v) ||
+                                          nodeInfoLiteIsKeyManuallyVerified(v),
+                                      "a protected entry is never the victim");
+        } else {
+            TEST_ASSERT_EQUAL_MESSAGE(-1, wantOldest, "no victim only when every candidate is protected");
+        }
+    }
+    // Guard the generator itself: a regime change that stopped reaching the threshold, or stopped
+    // producing states where the two branches differ, would leave the rule untested.
+    TEST_ASSERT_GREATER_THAN_MESSAGE(1000, crossedThreshold, "too few states reach NODEDB_PROBATION_SLOTS boring nodes");
+    TEST_ASSERT_GREATER_THAN_MESSAGE(1000, discriminating, "too few states where the two branches disagree");
+}
+
 // ---------------------------------------------------------------------------
 // Greeting gate (MeshService::handleFromRadio)
 // ---------------------------------------------------------------------------
@@ -724,7 +850,7 @@ void test_greeting_residentWithoutUserIsGreeted(void)
 
 // One ask per residency. The mark lives in the bitfield and is only read while the node has no user
 // record, so the states are: nameless -> greeted, no answer -> named by its NodeInfo.
-void test_greeting_onlyOnceWhileStillNameless(void)
+void test_greeting_onlyOneAskWhileStillNameless(void)
 {
     const uint32_t t0 = 1700000000;
     db->fillWithRoom();
@@ -976,8 +1102,9 @@ PROBATION_TEST_ENTRY void setup()
 
     printf("\n=== Greeting gate ===\n");
     RUN_TEST(test_eviction_rehydrationMarksTheNodeAsGreeted);
+    RUN_TEST(test_eviction_victimInvariants);
     RUN_TEST(test_greeting_residentWithoutUserIsGreeted);
-    RUN_TEST(test_greeting_onlyOnceWhileStillNameless);
+    RUN_TEST(test_greeting_onlyOneAskWhileStillNameless);
     RUN_TEST(test_greeting_markClearedByTheNodeInfoItAskedFor);
     RUN_TEST(test_greeting_markNotSpentWhenTheSendIsRefused);
     RUN_TEST(test_greeting_knownUserIsNotGreeted);
