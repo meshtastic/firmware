@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FloodingRouter.h"
+#include "TxAckStatus.h"
 #include <optional>
 #include <unordered_map>
 
@@ -192,6 +193,21 @@ class NextHopRouter : public FloodingRouter
      */
     bool stopRetransmission(NodeNum from, PacketId id);
     bool stopRetransmission(GlobalPacketId p);
+
+    /**
+     * stopRetransmission() plus the TX-lifecycle notification, for a record that has reached a
+     * verdict. Publishes only for packets we originated, and only when this call is the one that
+     * removed the record, so every reliable send we make resolves exactly once.
+     *
+     * @return true if we found and removed a transmission with this ID
+     */
+    bool resolveOwnTx(GlobalPacketId key, TxAckState state, meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE);
+
+    /// Publish a TX-lifecycle transition for a packet we originated.
+    void notifyTxAck(PacketId id, NodeNum to, TxAckState state, meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE);
+
+    /// Reliable packets we originated that are still awaiting an acknowledgement.
+    uint8_t countOutstandingOwnTx();
 
     /**
      * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)

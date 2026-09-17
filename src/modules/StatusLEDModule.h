@@ -3,9 +3,11 @@
 #include "BluetoothStatus.h"
 #include "MeshModule.h"
 #include "PowerStatus.h"
+#include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/TxAckStatus.h"
 #include <Arduino.h>
 #include <functional>
 
@@ -46,6 +48,9 @@ class StatusLEDModule : private concurrency::OSThread
 #ifdef LED_LORA
     int handleLoRaRx(uint32_t sender);
 #endif
+#ifdef LED_TX_ACK
+    int handleTxAckStatus(const TxAckEvent *event);
+#endif
 
     void setPowerLED(bool);
 
@@ -72,6 +77,10 @@ class StatusLEDModule : private concurrency::OSThread
     CallbackObserver<StatusLEDModule, uint32_t> loraRxObserver =
         CallbackObserver<StatusLEDModule, uint32_t>(this, &StatusLEDModule::handleLoRaRx);
 #endif
+#ifdef LED_TX_ACK
+    CallbackObserver<StatusLEDModule, const TxAckEvent *> txAckObserver =
+        CallbackObserver<StatusLEDModule, const TxAckEvent *>(this, &StatusLEDModule::handleTxAckStatus);
+#endif
 
   private:
     bool CHARGE_LED_state = LED_STATE_OFF;
@@ -88,6 +97,16 @@ class StatusLEDModule : private concurrency::OSThread
     static constexpr uint32_t LORA_RX_LED_FLASH_MS = 100;
     bool LORA_LED_state = LED_STATE_OFF;
     uint32_t LORA_LED_starttime = 0;
+#endif
+#ifdef LED_TX_ACK
+    static constexpr uint32_t TX_ACK_FAIL_FLASH_MS = 120;
+    static constexpr uint8_t TX_ACK_FAIL_PHASES = 6; // three on/off pairs
+    bool txAckWaiting = false;                       // a reliable send of ours is still unresolved
+    uint8_t txAckFailPhases = 0;                     // on/off phases of the failure flash left to play
+    uint32_t txAckFailPhaseStart = 0;
+    /// Guards the three fields above. nRF52 publishes TX state from the BLE task as well as the
+    /// loop task (see Router::deferredLock), and runOnce() read-modify-writes the phase counter.
+    concurrency::Lock txAckLock;
 #endif
 
     enum PowerState { discharging, charging, charged, critical };

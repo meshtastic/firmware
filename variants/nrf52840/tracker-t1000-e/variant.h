@@ -48,6 +48,8 @@ extern "C" {
 
 #define PIN_LED1 (0 + 24) // P0.24
 #define LED_POWER PIN_LED1
+// The single green LED also carries reliable-delivery state (StatusLEDModule).
+#define LED_TX_ACK LED_POWER
 #define LED_BLUE -1    // Actually green
 #define LED_STATE_ON 1 // State when LED is lit
 

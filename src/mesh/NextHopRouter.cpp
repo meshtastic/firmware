@@ -12,6 +12,8 @@
 #endif
 #include "NodeDB.h"
 
+Observable<const TxAckEvent *> txAckStatusObservable;
+
 #if USERPREFS_EVENT_MODE
 static void capEventRelayHops(meshtastic_MeshPacket *packet)
 {
@@ -422,6 +424,41 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         return false;
 }
 
+uint8_t NextHopRouter::countOutstandingOwnTx()
+{
+    const NodeNum us = getNodeNum();
+    uint8_t n = 0;
+    for (const auto &e : pending)
+        if (e.first.node == us && n < UINT8_MAX)
+            n++;
+    return n;
+}
+
+void NextHopRouter::notifyTxAck(PacketId id, NodeNum to, TxAckState state, meshtastic_Routing_Error err)
+{
+    const TxAckEvent event = {id, to, state, err, countOutstandingOwnTx()};
+    txAckStatusObservable.notifyObservers(&event);
+}
+
+bool NextHopRouter::resolveOwnTx(GlobalPacketId key, TxAckState state, meshtastic_Routing_Error err)
+{
+    auto *rec = findPendingPacket(key);
+    if (!rec)
+        return false;
+
+    // Read the identity off the record before stopRetransmission() releases the packet.
+    const bool ours = isFromUs(rec->packet);
+    const PacketId id = rec->packet->id;
+    const NodeNum to = rec->packet->to;
+
+    if (!stopRetransmission(key))
+        return false;
+    if (ours)
+        notifyTxAck(id, to, state, err);
+
+    return true;
+}
+
 /**
  * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
  */
@@ -460,13 +497,17 @@ int32_t NextHopRouter::doRetransmissions()
         // can't stall retransmission.
         if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
             if (p.numRetransmissions == 0) {
+                // sendAckNak() below delivers the nak locally, and that loopback can reach
+                // sniffReceived() and erase this record - which invalidates both `it` and `p`. Take
+                // the key up front so the removal below still has something valid to work with.
+                const GlobalPacketId key = it->first;
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
                               p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
-                // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
-                stopRetransmission(it->first);
+                // Note: the nak's loopback may already have stopped this retransmission in sniffReceived
+                resolveOwnTx(key, TxAckState::FAILED, meshtastic_Routing_Error_MAX_RETRANSMIT);
                 stillValid = false; // just deleted it
             } else {
                 LOG_DEBUG("Send retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
