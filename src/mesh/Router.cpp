@@ -1223,7 +1223,8 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
  * request_id, to a destination whose key we hold, under the same ham/sim/private-key preconditions
  * PKC always has - and only when the channel index does not resolve. It tests channels.getHash()
  * rather than setActiveByIndex() so the predicate has no side effect; generateHash already returns
- * -1 for an invalid key, so the two agree on which indexes are unusable.
+ * -1 for an invalid key, so the two agree on which indexes are unusable. The range check has to come
+ * first and stay first: getHash() is a bare hashes[i] with no bounds test of its own.
  */
 static bool ackNeedsPkcFallback(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
 {
@@ -1334,7 +1335,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
-        if (wouldEncryptWithPKC(p, chIndex, haveDestKey) || ackFallback) {
+        //
+        // ackFallback is tested first so an out-of-range chIndex short-circuits: wouldEncryptWithPKC
+        // reaches channels.getName(chIndex) before its portnum exclusion, and getByIndex() logs
+        // "Invalid channel index" on the way past. Without the short-circuit this path would print
+        // an error and then go on to encode the packet successfully.
+        if (ackFallback || wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
             LOG_DEBUG("Use PKI");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
