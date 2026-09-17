@@ -849,6 +849,7 @@ typedef struct _meshtastic_RouteDiscovery {
     int8_t snr_back[8];
 } meshtastic_RouteDiscovery;
 
+typedef PB_BYTES_ARRAY_T(8) meshtastic_Routing_ack_proof_t;
 /* A Routing control Data packet handled by the routing module */
 typedef struct _meshtastic_Routing {
     pb_size_t which_variant;
@@ -861,6 +862,31 @@ typedef struct _meshtastic_Routing {
      in addition to ack.fail_id to provide details on the type of failure). */
         meshtastic_Routing_Error error_reason;
     };
+    /* Optional proof that this ack/nak was produced by the node that actually received the packet
+ identified by Data.request_id, rather than by anyone holding the channel key.
+
+ Explicit acks are usually sent on the channel, and channel traffic is encrypted but not
+ authenticated, so such an ack can be forged by any listener holding the PSK. When the
+ acknowledged packet WAS PKI encrypted, the two endpoints already share a Curve25519 secret, so
+ the receiver can prove receipt cheaply rather than signing the ack:
+
+   ack_proof = HMAC-SHA256(shared_key,
+                           "ack" | LE32(from) | LE32(to) | LE32(request_id) | routing)[0..8)
+
+ where shared_key is the same SHA256(X25519(sender_private, receiver_public)) used for PKI
+ packet encryption, and `routing` is this encoded Routing message without the ack_proof field.
+
+ Each input is load-bearing. request_id stops a captured proof being replayed against a
+ different outstanding packet. The Routing bytes stop a bit-flip turning a proven success into a
+ failure: an ack and a nak for one packet otherwise share every other input, and channel
+ encryption is CTR with no integrity check. Integers are little-endian so the value is a
+ property of the protocol rather than of the host that computed it.
+
+ Unset when no pairwise key is available, including the PKI_UNKNOWN_PUBKEY and NO_CHANNEL naks,
+ which are emitted precisely because the packet could not be decrypted. Receivers that do not
+ understand this field ignore it. It does not replace xeddsa_signature, which remains the only
+ option for traffic with no pairwise key and the only proof a third party can check. */
+    meshtastic_Routing_ack_proof_t ack_proof;
 } meshtastic_Routing;
 
 typedef PB_BYTES_ARRAY_T(233) meshtastic_Data_payload_t;
@@ -1757,7 +1783,7 @@ extern "C" {
 #define meshtastic_Position_init_default         {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
+#define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}, {0, {0}}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
@@ -1796,7 +1822,7 @@ extern "C" {
 #define meshtastic_Position_init_zero            {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
+#define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}, {0, {0}}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
@@ -1873,6 +1899,7 @@ extern "C" {
 #define meshtastic_Routing_route_request_tag     1
 #define meshtastic_Routing_route_reply_tag       2
 #define meshtastic_Routing_error_reason_tag      3
+#define meshtastic_Routing_ack_proof_tag         4
 #define meshtastic_Data_portnum_tag              1
 #define meshtastic_Data_payload_tag              2
 #define meshtastic_Data_want_response_tag        3
@@ -2125,7 +2152,8 @@ X(a, STATIC,   REPEATED, INT32,    snr_back,          4)
 #define meshtastic_Routing_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_request,route_request),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_reply,route_reply),   2) \
-X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3)
+X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3) \
+X(a, STATIC,   SINGULAR, BYTES,    ack_proof,         4)
 #define meshtastic_Routing_CALLBACK NULL
 #define meshtastic_Routing_DEFAULT NULL
 #define meshtastic_Routing_variant_route_request_MSGTYPE meshtastic_RouteDiscovery
@@ -2623,7 +2651,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RemoteShell_size              253
 #define meshtastic_RouteDiscovery_size           256
-#define meshtastic_Routing_size                  259
+#define meshtastic_Routing_size                  269
 #define meshtastic_StatusMessage_size            81
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
