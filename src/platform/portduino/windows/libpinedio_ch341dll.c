@@ -313,7 +313,9 @@ static void *pin_poll_thread_fn(void *arg)
             }
             inst_int->previous_state = state;
         }
-        should_exit = poll_thread_exit;
+        // A re-attach can start the next poll thread before this one saw the exit flag, which it
+        // then clears; the handle names that successor, so stand down rather than poll alongside it.
+        should_exit = poll_thread_exit || !pthread_equal(poll_thread, pthread_self());
         pthread_mutex_unlock(&usb_mutex);
         Sleep(PIN_POLL_INTERVAL_MS);
     }
