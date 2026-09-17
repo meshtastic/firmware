@@ -1163,11 +1163,15 @@ void setup()
 #endif
 
     std::unique_ptr<RadioInterface> rIf;
+#if HAS_SERIAL_HAL_DEVICE
     if (!config.lora.serial_hal_only) {
         rIf = initLoRa();
     } else {
         LOG_INFO("skipping LoRa radio init, for serialHal");
     }
+#else
+    rIf = initLoRa();
+#endif
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
@@ -1221,7 +1225,12 @@ void setup()
 
     // Start airtime logger thread.
     airTime = new AirTime();
-    if (!rIf && !config.lora.serial_hal_only)
+#if HAS_SERIAL_HAL_DEVICE
+    const bool radioExpected = !config.lora.serial_hal_only;
+#else
+    const bool radioExpected = true;
+#endif
+    if (!rIf && radioExpected)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
     else if (rIf) {
 #ifndef ARCH_PORTDUINO_WASM

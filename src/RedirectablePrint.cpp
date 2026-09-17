@@ -22,6 +22,7 @@
 extern meshtastic::Syslog syslog;
 #endif
 
+#if HAS_SERIAL_HAL_DEVICE
 namespace
 {
 std::atomic<bool> serialHalLogSuppressed{false};
@@ -36,6 +37,7 @@ bool RedirectablePrint::isSerialHalLogSuppressed()
 {
     return serialHalLogSuppressed.load();
 }
+#endif
 
 void RedirectablePrint::rpInit()
 {
@@ -303,10 +305,11 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
-
+#if HAS_SERIAL_HAL_DEVICE
     if (isSerialHalLogSuppressed()) {
         return;
     }
+#endif
 
     // append \n to format
     size_t len = strlen(format);
