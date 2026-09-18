@@ -49,6 +49,26 @@ class InkHUD
     void setDriver(Drivers::EInk *driver);
     void setDisplayResilience(uint8_t fastPerFull = 5, float stressMultiplier = 2.0);
     void addApplet(const char *name, Applet *a, bool defaultActive = false, bool defaultAutoshow = false, uint8_t onTile = -1);
+
+    /** Show the "applying changes" holding screen.
+     *
+     * Called at the moment a config change is *initiated*, and it serves two distinct jobs at its
+     * call sites in MenuApplet.cpp. Do not treat them alike when refactoring:
+     *
+     *  - a **live** change, applied without restarting (LoRa region and modem preset). The screen
+     *    covers the seconds the e-ink takes to redraw. These calls must stay: nothing else raises
+     *    them.
+     *  - an imminent **reboot**, where it warns before the display goes. These sit next to an
+     *    applyConfigChange(..., CONFIG_APPLY_REBOOT).
+     *
+     * Neither is redundant with anything, which is the point worth recording. MeshService's
+     * requestReboot() deliberately carries no UI: BaseUI renders its own notice at draw time from
+     * rebootAtMsec, whereas e-ink only draws when pushed, so InkHUD has to be told explicitly.
+     * And the existing `notifyReboot` Observable (sleep.h, fired from Power::reboot) is a
+     * *different moment* - reboot execution, not scheduling - which InkHUD already observes to save
+     * settings and shut applets down. Centralising these calls onto a new "reboot scheduled"
+     * observable would add a third reboot signal for no functional gain.
+     */
     void notifyApplyingChanges();
 
     void begin();

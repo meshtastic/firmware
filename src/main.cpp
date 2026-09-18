@@ -1278,6 +1278,22 @@ bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for
 uint32_t enterDfuAtMsec; // If not zero, enter DFU mode at this millis() deadline (see main.h)
 #endif
 
+void requestReboot(int32_t seconds)
+{
+    // rebootAtMsec == 0 means "no reboot pending" everywhere it is read (Power::powerCommandsCheck
+    // tests `if (rebootAtMsec && ...)`, and both the reboot banner and the portduino/lockdown
+    // checks treat 0 as idle). So a negative delay *cancels* a pending reboot rather than bringing
+    // it forward - which is what admin.proto documents for reboot_seconds ("<0 to cancel reboot").
+    // Menu callers always pass a positive; the branch exists for that remote-admin cancel.
+    if (seconds < 0) {
+        LOG_INFO("Reboot cancelled");
+        rebootAtMsec = 0;
+        return;
+    }
+    LOG_INFO("Reboot in %d seconds", seconds);
+    rebootAtMsec = Time::timerEndsAtMillis(seconds * 1000);
+}
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 volatile bool lockdownReloadPending;  // see main.h - deferred NodeDB reload after lockdown unlock
 volatile bool lockdownDisablePending; // see main.h - deferred decrypt-revert after lockdown disable

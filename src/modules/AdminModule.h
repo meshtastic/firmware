@@ -3,6 +3,7 @@
 #include <esp_ota_ops.h>
 #endif
 #include "ProtobufModule.h"
+#include "concurrency/OSThread.h"
 #include "meshUtils.h"
 #include <sys/types.h>
 #if HAS_WIFI
@@ -21,7 +22,9 @@ struct AdminModule_ObserverData {
 /**
  * Admin module for admin messages
  */
-class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
+class AdminModule : public ProtobufModule<meshtastic_AdminMessage>,
+                    public Observable<AdminModule_ObserverData *>,
+                    private concurrency::OSThread
 {
     friend class AdminModuleTestShim; // test/support/AdminModuleTestShim.h - native tests reach the private handlers/state
 
@@ -37,6 +40,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *p) override;
+    virtual int32_t runOnce() override;
 
   private:
     bool hasOpenEditTransaction = false;
@@ -49,13 +53,31 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void expireStaleEditTransaction();
 #ifdef PIO_UNIT_TESTING
     int lastSaveWhatForTest = 0;
+    unsigned long editTransactionTimerIntervalForTest() const { return interval; }
 #endif
+
+    // While a transaction is open, saveChanges() defers the write - so the per-field reboot and
+    // radio-reload decisions computed in handleSetConfig would otherwise be thrown away, and the
+    // commit would fall back to the defaults (both true) and always reboot + reconfigure. These
+    // accumulate the deferred decisions so the commit does the least work the batch actually needs.
+    bool deferredShouldReboot = false;
+    bool deferredRadioAffected = false;
 
     uint8_t session_passkey[8] = {0};
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
-    void saveChanges(int saveWhat, bool shouldReboot = true);
+    /** Persist `saveWhat`, deferring to the commit if an edit transaction is open.
+     *
+     * `radioAffected` has deliberately **no default**. It used to default to true, which was
+     * harmless while reloadConfig()'s `saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)` bitmask
+     * still gated the reconfigure - a node-DB-only save could not reach the radio whatever it
+     * asked for. That stopped being true once the deferred flags below started accumulating the
+     * value: inside a transaction the commit saves under a fixed full mask, so the bitmask no
+     * longer gates anything and an accidental `true` reaches the live SX126x reconfigure. Making
+     * it mandatory means a new call site has to think about it rather than inherit the answer.
+     */
+    void saveChanges(int saveWhat, bool shouldReboot, bool radioAffected);
 
     /**
      * Getters
