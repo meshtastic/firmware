@@ -552,7 +552,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if !defined(BUTTON_PIN) && HAS_BUTTON && !defined(ARCH_PORTDUINO) && !defined(MUZI_BASE)
 #define BUTTON_PIN_RUNTIME_ONLY
 // device.button_gpio is unvalidated user input, and 63 is the widest pin a uint64 wake mask can hold.
+#ifdef ARCH_ESP32
+// GPIO numbering has per-SoC gaps, so range alone would admit pads that do not exist. Ordinary-GPIO
+// validity only; whether the pad can also wake deep sleep is asked separately, by ext1.
+#define IS_RUNTIME_BUTTON_PIN(pin) ((pin) > 0 && (pin) <= 63 && GPIO_IS_VALID_GPIO(pin))
+#else
 #define IS_RUNTIME_BUTTON_PIN(pin) ((pin) > 0 && (pin) <= 63)
+#endif
 #endif
 
 // default mapping of pins
