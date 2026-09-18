@@ -1245,14 +1245,20 @@ typedef struct _meshtastic_NodeInfo {
  Persists between NodeDB internal clean ups
  LSB 1 of the bitfield */
     bool has_xeddsa_signed;
-    /* True if we have heard this node over RF since our current LoRa
- configuration took effect. Cleared for every node whenever the region,
- modem preset (or the custom bandwidth/spread factor/coding rate when
- use_preset is false), override_frequency, channel_num or the primary
- channel name changes - the frequency slot is derived from that name.
- Not set for nodes heard over MQTT, which reach us over the internet
- rather than over our own radio - see via_mqtt.
- LSB 11 of the bitfield */
+    /* True if we have heard this node over RF on the LoRa configuration the
+ radio is using right now. Derived on the device rather than stored: each
+ node records the frequency slot it was last heard on, and this reports
+ whether that slot matches the one the radio is currently committed to.
+ The slot covers the region, modem preset (or the custom bandwidth/spread
+ factor/coding rate when use_preset is false), override_frequency,
+ channel_num and the primary channel name.
+ Because it is derived, leaving a configuration and returning to it
+ restores the previous answers, so a client sweeping through presets to
+ listen for traffic does not disturb them.
+ Not set for nodes heard only over MQTT, which reach us over the internet
+ rather than over our own radio - see via_mqtt - nor for nodes added as a
+ shared contact, which have never been heard over RF at all.
+ Derived from LSB 11 and bits 12..23 of NodeInfoLite.bitfield. */
     bool heard_on_current_lora;
 } meshtastic_NodeInfo;
 
