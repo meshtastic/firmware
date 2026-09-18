@@ -1389,6 +1389,38 @@ void test_rootChange_rebuildsTopics(void)
     TEST_ASSERT_EQUAL_STRING("msh/EU_868/2/e/test/!12345678", topic.c_str());
 }
 
+// The "<root>/<region>" suffix (msh/US, msh/EU_868) is a convention of the default Meshtastic broker, so a
+// region change only rewrites the root there, and only when the root is still the default one. Guards against
+// clobbering a root the user chose (including one that merely starts with "msh"), and against moving a private
+// broker's topics, which are regional already if they need to be.
+void test_applyRegionRootTopic_rewritesDefaultBrokerRootsOnly(void)
+{
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    strcpy(moduleConfig.mqtt.root, default_mqtt_root);
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // An empty root is the default too: MQTT falls back to "msh" when building its topics.
+    moduleConfig.mqtt.root[0] = ' ';
+    strcpy(moduleConfig.mqtt.address, default_mqtt_address);
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // A root of the user's own is left alone, even when it starts with "msh".
+    strcpy(moduleConfig.mqtt.root, "msh/home");
+    TEST_ASSERT_FALSE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/home", moduleConfig.mqtt.root);
+
+    // A private broker keeps its topics across a region change.
+    strcpy(moduleConfig.mqtt.address, "mqtt.example.org");
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_FALSE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/US", moduleConfig.mqtt.root);
+}
+
 // Empty configuration is valid.
 void test_configEmptyIsValid(void)
 {
@@ -1585,6 +1617,7 @@ void setup()
     RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
     RUN_TEST(test_rootChange_rebuildsTopics);
+    RUN_TEST(test_applyRegionRootTopic_rewritesDefaultBrokerRootsOnly);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);

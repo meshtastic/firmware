@@ -252,6 +252,18 @@ bool isDefaultRootTopic(const String &root)
     return root.length() == 0 || root == default_mqtt_root;
 }
 
+// "msh/<region>" is what the default broker's convention produces; any other suffix is the user's own.
+bool isRegionRootTopic(const char *root)
+{
+    const size_t prefixLen = strlen(default_mqtt_root) + 1;
+    if (strncmp(root, default_mqtt_root "/", prefixLen) != 0)
+        return false;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++)
+        if (strcmp(r->name, root + prefixLen) == 0)
+            return true;
+    return false;
+}
+
 struct PubSubConfig {
     explicit PubSubConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
     {
@@ -364,6 +376,17 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
     }
 
     onReceiveProto(topic, payload, length);
+}
+
+bool MQTT::applyRegionRootTopic(const char *regionName)
+{
+    // The region suffix is a convention of the default broker; a regional broker is regional already.
+    if (!isDefaultServer(moduleConfig.mqtt.address))
+        return false;
+    if (!isDefaultRootTopic(moduleConfig.mqtt.root) && !isRegionRootTopic(moduleConfig.mqtt.root))
+        return false; // the user picked their own root
+    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, regionName);
+    return true;
 }
 
 void mqttInit()
