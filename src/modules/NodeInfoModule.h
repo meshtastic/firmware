@@ -35,6 +35,11 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     /// private base, so only this class can reach it - a test shim cannot.
     unsigned long broadcastCountdownMsForTests() const { return interval; }
     void armBroadcastCountdownForTests(unsigned long ms) { setIntervalFromNow(ms); }
+    /// The deadline the scheduler actually reads. interval alone cannot tell a deadline moved to
+    /// now from one recomputed off a stale last_run, which is the regression worth catching.
+    unsigned long broadcastDeadlineMsForTests() const { return _cached_next_run; }
+    /// Pretend the periodic thread last ran ageMs ago, so those two deadlines differ by ageMs.
+    void ageLastRunForTests(unsigned long ageMs) { runned(millis() - ageMs); }
 #endif
 
   protected:

@@ -241,6 +241,22 @@ static void test_broadcastTimer_aSendRearmsTheRoutineCountdown(void)
     TEST_ASSERT_EQUAL_UINT32(4 * 60 * 60 * 1000, (uint32_t)mod->broadcastCountdownMsForTests());
 }
 
+// interval is not what the scheduler reads: shouldRun() keys off _cached_next_run, and
+// Thread::setInterval() recomputes that from last_run while setIntervalFromNow() recomputes it from
+// now. Age last_run by an hour first and the two answers differ by an hour, so this case fails if
+// the send ever re-arms the period without moving the deadline - which would fire the routine copy
+// straight after an ad-hoc send, the exact thing the reset exists to prevent.
+static void test_broadcastTimer_aSendMovesTheDeadlineNotJustThePeriod(void)
+{
+    const unsigned long ageMs = 60 * 60 * 1000;
+    mod->ageLastRunForTests(ageMs);
+    TEST_ASSERT_TRUE(mod->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, false));
+
+    const unsigned long remaining = mod->broadcastDeadlineMsForTests() - millis();
+    TEST_ASSERT_UINT32_WITHIN_MESSAGE(5000, kThreeHoursMs, (uint32_t)remaining,
+                                      "the next routine broadcast is due a full interval from the send, not from the last tick");
+}
+
 // An ad-hoc unicast - the shape of a greeting, a PKI decrypt failure or a completed key
 // verification - re-arms the countdown just as a broadcast does. Without it the routine copy
 // follows the ad-hoc one within minutes, putting two NodeInfos on the air for no gain.
@@ -334,6 +350,7 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_sendWindow_floorIsThirtyMinutes);
     RUN_TEST(test_sendWindow_interactiveSendKeepsItsSixtySecondGate);
     RUN_TEST(test_broadcastTimer_aSendRearmsTheRoutineCountdown);
+    RUN_TEST(test_broadcastTimer_aSendMovesTheDeadlineNotJustThePeriod);
     RUN_TEST(test_broadcastTimer_anAdHocUnicastRearmsItToo);
     RUN_TEST(test_broadcastTimer_aRefusedSendLeavesTheCountdownAlone);
     RUN_TEST(test_broadcastTimer_aRejectedSendLeavesTheCountdownAlone);
