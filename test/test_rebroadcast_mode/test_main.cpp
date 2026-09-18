@@ -15,9 +15,15 @@
 //
 // Every case builds a real PKI frame, so the suite runs only where PKI is compiled in.
 
-#include "support/AuthPipelineHarness.h"
+#include "MeshTypes.h" // BEFORE TestUtil.h
+#include "TestUtil.h"
+#include <unity.h>
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+
+// Inside the guard: the harness builds real PKI frames through CryptoEngine entry points that a
+// PKI-excluded build does not declare.
+#include "support/AuthPipelineHarness.h"
 
 void setUp(void)
 {
@@ -250,10 +256,6 @@ void test_opaque_relay_carries_a_frame_once_unless_the_originator_repeats_it(voi
     // consult the TX queue, which it does not do. Not this change's to add.
 }
 
-// Phone delivery of a frame we cannot read follows the same mode table as relay: LOCAL_ONLY and
-// KNOWN_ONLY ignore a stranger's unknown-channel broadcast rather than hand it up. A DM to us is
-// always one known party, so it reaches the phone in every mode - NONE included, which declines to
-// relay but not to listen.
 // None of the above depends on packet_signature_policy: the remote-admin case ran STRICT, the
 // strangers case COMPATIBLE. Here the same admin packet goes under every policy in turn.
 void test_relay_decision_ignores_signature_policy(void)
