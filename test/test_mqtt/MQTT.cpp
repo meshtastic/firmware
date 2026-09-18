@@ -1404,8 +1404,14 @@ void test_applyRegionRootTopic_rewritesDefaultBrokerRootsOnly(void)
     TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
 
     // An empty root is the default too: MQTT falls back to "msh" when building its topics.
-    moduleConfig.mqtt.root[0] = ' ';
+    moduleConfig.mqtt.root[0] = '\0';
     strcpy(moduleConfig.mqtt.address, default_mqtt_address);
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // The default broker with an explicit port is still the default broker.
+    strcpy(moduleConfig.mqtt.address, default_mqtt_address ":1883");
+    strcpy(moduleConfig.mqtt.root, "msh/US");
     TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
     TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
 

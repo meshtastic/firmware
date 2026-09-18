@@ -381,7 +381,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 bool MQTT::applyRegionRootTopic(const char *regionName)
 {
     // The region suffix is a convention of the default broker; a regional broker is regional already.
-    if (!isDefaultServer(moduleConfig.mqtt.address))
+    auto [host, parsedPort] = parseHostAndPort(moduleConfig.mqtt.address);
+    (void)parsedPort;
+    if (!isDefaultServer(host))
         return false;
     if (!isDefaultRootTopic(moduleConfig.mqtt.root) && !isRegionRootTopic(moduleConfig.mqtt.root))
         return false; // the user picked their own root

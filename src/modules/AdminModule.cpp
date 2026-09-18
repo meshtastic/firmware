@@ -1069,9 +1069,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }
 #if !MESHTASTIC_EXCLUDE_MQTT
-                MQTT::applyRegionRootTopic(myRegion->name);
+                if (MQTT::applyRegionRootTopic(myRegion->name))
+                    changes |= SEGMENT_MODULECONFIG;
 #endif
-                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes |= SEGMENT_CONFIG;
             } else {
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
@@ -1108,9 +1109,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }
 #if !MESHTASTIC_EXCLUDE_MQTT
-                MQTT::applyRegionRootTopic(myRegion->name);
+                if (MQTT::applyRegionRootTopic(myRegion->name))
+                    changes |= SEGMENT_MODULECONFIG;
 #endif
-                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes |= SEGMENT_CONFIG;
             }
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
