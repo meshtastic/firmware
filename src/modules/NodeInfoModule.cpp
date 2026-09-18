@@ -157,8 +157,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         return NULL;
     }
 
-    // Use graduated scaling based on active mesh size (10 minute base, scales with congestion coefficient)
-    uint32_t timeoutMs = Default::getConfiguredOrDefaultMsScaled(0, 10 * 60, nodeStatus->getNumOnline());
+    // Use graduated scaling based on active mesh size (30 minute base, scales with congestion coefficient)
+    uint32_t timeoutMs = Default::getConfiguredOrDefaultMsScaled(0, 30 * 60, nodeStatus->getNumOnline());
     uint32_t lastNodeInfo = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP) : 0;
     if (!shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
         LOG_DEBUG("Skip send NodeInfo since we sent it <%us ago", timeoutMs / 1000);
