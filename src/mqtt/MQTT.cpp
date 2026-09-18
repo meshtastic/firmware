@@ -247,11 +247,6 @@ bool isDefaultServer(const String &host)
     return host.length() == 0 || host == default_mqtt_address;
 }
 
-bool isDefaultRootTopic(const String &root)
-{
-    return root.length() == 0 || root == default_mqtt_root;
-}
-
 // "msh/<region>" is what the default broker's convention produces; any other suffix is the user's own.
 bool isRegionRootTopic(const char *root)
 {
@@ -262,6 +257,12 @@ bool isRegionRootTopic(const char *root)
         if (strcmp(r->name, root + prefixLen) == 0)
             return true;
     return false;
+}
+
+// The regional roots count as default: they are what a region change writes on the default broker.
+bool isDefaultRootTopic(const String &root)
+{
+    return root.length() == 0 || root == default_mqtt_root || isRegionRootTopic(root.c_str());
 }
 
 struct PubSubConfig {
@@ -385,7 +386,7 @@ bool MQTT::applyRegionRootTopic(const char *regionName)
     (void)parsedPort;
     if (!isDefaultServer(host))
         return false;
-    if (!isDefaultRootTopic(moduleConfig.mqtt.root) && !isRegionRootTopic(moduleConfig.mqtt.root))
+    if (!isDefaultRootTopic(moduleConfig.mqtt.root))
         return false; // the user picked their own root
     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, regionName);
     return true;
