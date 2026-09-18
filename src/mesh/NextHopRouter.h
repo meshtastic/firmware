@@ -43,11 +43,6 @@ struct PendingPacket {
     /** Initial remaining retry count, used to detect whether a retry has fired. */
     uint8_t initialNumRetransmissions = 0;
 
-    /** Wire form of the last transmit (ciphertext length and FNV-1a hash), 0 until the first encode. An
-     *  overheard copy must match it before it counts as a relay of our packet; a relay never alters the payload. */
-    uint16_t wireSize = 0;
-    uint32_t wireHash = 0;
-
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };
@@ -175,10 +170,9 @@ class NextHopRouter : public FloodingRouter
     PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
     PendingPacket *findPendingPacket(GlobalPacketId p);
 
-    /** Router::send() hands us the encoded form of a packet we are retransmitting, for the implicit-ACK check. */
+    /** Router::send() hands us the encoded form of a packet we are retransmitting: it replaces the payload of
+     *  the retransmission copy, which is then the exact frame an overheard relay of ours must carry. */
     void noteWireForm(const meshtastic_MeshPacket *p) override;
-    /** FNV-1a over the ciphertext; the same for a genuine relay copy, different for a forged payload. */
-    static uint32_t wireHashOf(const meshtastic_MeshPacket *p);
 
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
