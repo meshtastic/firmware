@@ -3297,9 +3297,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case MessageBubblesMenu:
         messageBubblesMenu();
         break;
+#if GRAPHICS_TFT_COLORING_ENABLED // the Theme option only exists with TFT coloring
     case ThemeMenu:
         themeMenu();
         break;
+#endif
     case HamModeConfirm:
         hamModeConfirmMenu();
         break;

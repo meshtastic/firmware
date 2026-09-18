@@ -1112,7 +1112,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             }
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
