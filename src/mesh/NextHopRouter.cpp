@@ -379,7 +379,9 @@ void NextHopRouter::noteWireForm(const meshtastic_MeshPacket *p)
 {
     if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
         return;
-    PendingPacket *rec = findPendingPacket(getFrom(p), p->id);
+    // p->from for origin safety: by here Router::send() has replaced a phone-originated 0 with our own
+    // node number, so this is an address we set, not one a client chose. Before that line, use getFrom().
+    PendingPacket *rec = findPendingPacket(p->from, p->id);
     if (!rec || !rec->packet)
         return;
     if (p->encrypted.size > sizeof(rec->packet->encrypted.bytes)) {

@@ -70,7 +70,9 @@ void ReliableRouter::perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *p)
 
     // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
     // from the intended recipient.
-    auto key = GlobalPacketId(p->from, p->id); // p->from, per the note above - it is ours and non-zero by now
+    // p->from for origin safety: the guard above accepted only our own address, and a received frame
+    // never carries 0 (the radio drops sender==0), so this is the sender as heard, not a client's claim.
+    auto key = GlobalPacketId(p->from, p->id);
     auto old = findPendingPacket(key);
     if (old) {
         // The header is cleartext anyone can copy; the payload a relay carries is our exact ciphertext.
