@@ -54,6 +54,10 @@ static pthread_mutex_t usb_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t poll_thread;
 static volatile bool poll_thread_exit = false;
 static int int_running_cnt = 0;
+// Poll threads that have not returned yet, including ones that detached themselves and so cannot
+// be joined. pinedio_deinit() waits for the count to reach 0 before the device and inst go away.
+static int poll_threads_alive = 0;
+static pthread_cond_t poll_thread_gone = PTHREAD_COND_INITIALIZER;
 
 // CH341PAR installs the 64-bit library as CH341DLLA64.DLL and the 32-bit one as
 // CH341DLL.DLL, so try the name matching this process first.
@@ -317,8 +321,16 @@ static void *pin_poll_thread_fn(void *arg)
         // then clears; the handle names that successor, so stand down rather than poll alongside it.
         should_exit = poll_thread_exit || !pthread_equal(poll_thread, pthread_self());
         pthread_mutex_unlock(&usb_mutex);
+        if (should_exit)
+            break; // no point sleeping on the way out, and it keeps a deinit wait short
         Sleep(PIN_POLL_INTERVAL_MS);
     }
+
+    // Last touch of inst: after this a deinit may free it and close the device.
+    pthread_mutex_lock(&usb_mutex);
+    poll_threads_alive--;
+    pthread_cond_broadcast(&poll_thread_gone);
+    pthread_mutex_unlock(&usb_mutex);
     return NULL;
 }
 
@@ -347,6 +359,7 @@ int32_t pinedio_attach_interrupt(struct pinedio_inst *inst, enum pinedio_int_pin
                 pthread_mutex_unlock(&usb_mutex);
                 return res;
             }
+            poll_threads_alive++;
         }
         int_running_cnt++;
     }
@@ -392,9 +405,14 @@ void pinedio_deinit(struct pinedio_inst *inst)
     int_running_cnt = 0;
     if (stop)
         thread_to_join = poll_thread; // copy before dropping the lock, as above
+    // A poll thread that detached itself in a callback is not joinable, but still reads inst and
+    // the device until it returns, so wait out every live one. Nothing to wait for when we are it.
+    bool self_is_poll = stop && pthread_equal(thread_to_join, pthread_self());
+    while (poll_threads_alive > 0 && !self_is_poll)
+        pthread_cond_wait(&poll_thread_gone, &usb_mutex);
     pthread_mutex_unlock(&usb_mutex);
 
-    if (stop && !pthread_equal(thread_to_join, pthread_self()))
+    if (stop && !self_is_poll)
         pthread_join(thread_to_join, NULL);
 
     if (ch341.dll)
