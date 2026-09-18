@@ -957,6 +957,10 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         if (linuxBluetooth) {
             LOG_INFO("Clear bluetooth bonds");
             linuxBluetooth->clearBonds();
+        } else {
+            // BlueZ bonds live in the host adapter's store, not ours, and removing them
+            // needs a live connection to bluetoothd that a disabled backend never opened.
+            LOG_WARN("BLE off, host bluetooth bonds left in place");
         }
 #endif
     }
