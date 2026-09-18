@@ -144,6 +144,12 @@ static LGFX *tft = nullptr;
 #define TFT_INVERT true
 #endif
 
+// Panels sharing the bus with a RadioLib radio must set this to 0: once the IDF driver configures
+// SPI2 for DMA, the Arduino SPI object's CPU/FIFO transfers stop returning valid data.
+#ifndef TFT_DMA_CHANNEL
+#define TFT_DMA_CHANNEL SPI_DMA_CH_AUTO
+#endif
+
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7735S _panel_instance;
@@ -164,7 +170,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
             cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
             cfg.use_lock = true;                // Set to true to use transaction locking
-            cfg.dma_channel = SPI_DMA_CH_AUTO;  // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
+            cfg.dma_channel = TFT_DMA_CHANNEL;  // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
                                                 // SPI_DMA_CH_AUTO=auto setting)
             cfg.pin_sclk = ST7735_SCK;          // Set SPI SCLK pin number
             cfg.pin_mosi = ST7735_SDA;          // Set SPI MOSI pin number
@@ -1843,13 +1849,19 @@ void TFTDisplay::sdlLoop()
 #endif
 }
 
+#if defined(TFT_BLANK_ON_DISPLAY_OFF) || defined(TFT_SLEEP_WHEN_OFF)
+// Neither LovyanGFX nor TFT_eSPI exposes display on/off, so send the MIPI DCS opcodes directly.
+static constexpr uint8_t kCmdDispOff = 0x28;
+static constexpr uint8_t kCmdDispOn = 0x29;
+// Quiet time the controller needs after sleep out before it will accept the next command.
+static constexpr uint32_t kSleepOutSettleMs = 120;
+#endif
+
 #ifdef TFT_SLEEP_WHEN_OFF
-// TFT_eSPI has no sleep()/wakeup(), so drive the MIPI DCS commands directly. Frame memory is retained
-// through sleep-in, so the last frame reappears on sleep-out and the dirty-window diff carries on.
-static constexpr uint8_t kDcsSleepIn = 0x10;
-static constexpr uint8_t kDcsSleepOut = 0x11;
-static constexpr uint8_t kDcsDisplayOff = 0x28;
-static constexpr uint8_t kDcsDisplayOn = 0x29;
+// TFT_eSPI has no sleep()/wakeup() either. Frame memory survives sleep-in, so the last frame
+// reappears on sleep-out and the dirty-window diff carries on.
+static constexpr uint8_t kCmdSleepIn = 0x10;
+static constexpr uint8_t kCmdSleepOut = 0x11;
 static bool panelAsleep = false;
 #endif
 
@@ -1881,21 +1893,38 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->displayOn();
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
     !defined(HELTEC_MESH_NODE_T1)
+#ifdef TFT_BLANK_ON_DISPLAY_OFF
+        {
+            concurrency::LockGuard g(spiLock);
+            tft->wakeup(); // sleep out
+        }
+        // Settle outside the lock - a radio may be sharing this bus and 120 ms is a long time to
+        // hold it for a panel that is not being drawn to yet.
+        delay(kSleepOutSettleMs);
+        {
+            concurrency::LockGuard g(spiLock);
+            tft->startWrite();
+            tft->writeCommand(kCmdDispOn);
+            tft->endWrite();
+        }
+#else
         tft->wakeup();
         tft->powerSaveOff();
+#endif
 #elif defined(TFT_SLEEP_WHEN_OFF)
         // Screen::handleSetOn() calls displayOn() twice per wake; only the first one has work to do.
         if (panelAsleep) {
-            tft->writecommand(kDcsSleepOut);
-            delay(120); // datasheet minimum before the panel accepts DISPON
-            tft->writecommand(kDcsDisplayOn);
+            tft->writecommand(kCmdSleepOut);
+            delay(kSleepOutSettleMs); // datasheet minimum before the panel accepts DISPON
+            tft->writecommand(kCmdDispOn);
             panelAsleep = false;
         }
 #endif
 
-#if defined(TFT_NV3001B)
-        // Re-init left display RAM undefined, so repaint in full rather than diff against a
-        // buffer that no longer describes the panel.
+#if defined(TFT_NV3001B) || defined(TFT_BLANK_ON_DISPLAY_OFF)
+        // Display RAM no longer describes the panel - the NV3001B lost it with its rail, and
+        // TFT_BLANK_ON_DISPLAY_OFF cleared it deliberately - so repaint in full rather than diff
+        // against a buffer that would leave most of the screen black.
         display(true);
 #endif
 
@@ -1923,12 +1952,29 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->displayOff();
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
     !defined(HELTEC_MESH_NODE_T1)
+#ifdef TFT_BLANK_ON_DISPLAY_OFF
+        {
+            concurrency::LockGuard g(spiLock);
+            // With no switchable backlight the panel itself has to go dark, and sleep() alone will
+            // not do it: that sends only sleep in, which halts the scan without blanking, so the
+            // last frame stays lit until the panel bias decays. Clear frame memory, turn the
+            // display output off, and only then drop the controller into sleep.
+            tft->fillScreen(TFT_BLACK);
+            tft->startWrite();
+            tft->writeCommand(kCmdDispOff);
+            tft->endWrite();
+            tft->sleep();
+        }
+        // Deliberately no powerSaveOn() here: that is idle mode (reduced colour depth), which does
+        // not blank anything, and it would land inside the settling window sleep in just opened.
+#else
         tft->sleep();
         tft->powerSaveOn();
+#endif
 #elif defined(TFT_SLEEP_WHEN_OFF)
         // Without this the LCD keeps driving the last frame unlit, which is what builds image retention.
-        tft->writecommand(kDcsDisplayOff);
-        tft->writecommand(kDcsSleepIn);
+        tft->writecommand(kCmdDispOff);
+        tft->writecommand(kCmdSleepIn);
         panelAsleep = true;
 #endif
 
