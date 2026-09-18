@@ -313,6 +313,12 @@ static void *pin_poll_thread_fn(void *arg)
                     pthread_mutex_unlock(&usb_mutex);
                     cb();
                     pthread_mutex_lock(&usb_mutex);
+                    // The callback may have detached this interrupt and re-armed it, which hands
+                    // the pin to a successor thread with previous_state reset to 255. Our sample
+                    // predates that, so stop before writing it back: the successor would take it
+                    // as its baseline and could report an edge spanning both registrations.
+                    if (poll_thread_exit || !pthread_equal(poll_thread, pthread_self()))
+                        break;
                 }
             }
             inst_int->previous_state = state;
