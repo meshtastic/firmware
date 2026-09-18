@@ -34,9 +34,7 @@ bool SENXXSensor::getVersion()
     hardwareVer = versionBuffer[3] + (versionBuffer[4] / 10.0f);
     protocolVer = versionBuffer[5] + (versionBuffer[6] / 10.0f);
 
-    LOG_INFO("%s: Firmware Version: %0.2f", sensorName, firmwareVer);
-    LOG_INFO("%s: Hardware Version: %0.2f", sensorName, hardwareVer);
-    LOG_INFO("%s: Protocol Version: %0.2f", sensorName, protocolVer);
+    LOG_INFO("%s: FW %0.2f, HW %0.2f, protocol %0.2f", sensorName, firmwareVer, hardwareVer, protocolVer);
 
     return true;
 }
@@ -166,18 +164,16 @@ bool SENXXSensor::findModel()
 
 bool SENXXSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
 {
-    LOG_INFO("%s: probing sensor", sensorName);
-
     _bus = bus;
     _address = address;
 
 #ifdef SENXX_I2C_CLOCK_SPEED
     _port = port;
     reClockI2C.setup(_bus, _port);
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
 #endif /* SENXX_I2C_CLOCK_SPEED */
 
     if (!findModel()) {
-        LOG_DEBUG("%s: can't find sensor model", sensorName);
         return false;
     }
 
@@ -215,22 +211,11 @@ bool SENXXSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
         }
     }
 
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Attempting to reclock speed to %uHz", sensorName, SENXX_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SENXX_I2C_CLOCK_SPEED);
-#endif /* SENXX_I2C_CLOCK_SPEED */
-
-    // Transmit the data
     // Note: this delay is necessary to allow for long-buffers
     delay(20);
     _bus->beginTransmission(_address);
     size_t writtenBytes = _bus->write(toSend, bufferSize);
     uint8_t i2c_error = _bus->endTransmission();
-
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
 
     if (writtenBytes != bufferSize) {
         LOG_ERROR("%s: Error writing on I2C bus", sensorName);
@@ -246,18 +231,9 @@ bool SENXXSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 
 uint8_t SENXXSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Attempting to reclock speed to %uHz", sensorName, SENXX_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SENXX_I2C_CLOCK_SPEED);
-#endif /* SENXX_I2C_CLOCK_SPEED */
-
     size_t readBytes = _bus->requestFrom(_address, byteNumber);
     if (readBytes != byteNumber) {
         LOG_ERROR("%s: Error reading I2C bus", sensorName);
-#ifdef SENXX_I2C_CLOCK_SPEED
-        LOG_DEBUG("%s: restoring clock speed", sensorName);
-        reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
         return 0;
     }
 
@@ -270,20 +246,11 @@ uint8_t SENXXSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
         uint8_t calcCRC = senxxCRC(&buffer[i - 2]);
         if (recvCRC != calcCRC) {
             LOG_ERROR("%s: Checksum error while receiving msg", sensorName);
-#ifdef SENXX_I2C_CLOCK_SPEED
-            LOG_DEBUG("%s: restoring clock speed", sensorName);
-            reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
             return 0;
         }
         readBytes -= 3;
         receivedBytes += 2;
     }
-
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
 
     return receivedBytes;
 }
@@ -317,9 +284,11 @@ void SENXXSensor::sleep()
         // here while a cleaning cycle is still running (isActive() reports SENXX_CLEANING as
         // active). Don't let it interrupt the cycle - pendingForReadyMs()/finishCleaning()
         // owns the transition out of SENXX_CLEANING.
-        LOG_INFO("%s: Not going to sleep, fan cleaning is in progress", sensorName);
         return;
     }
+#ifdef SENXX_I2C_CLOCK_SPEED
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
     idle(true);
 }
 
@@ -351,7 +320,6 @@ bool SENXXSensor::idle(bool checkState)
             }
 
             if (!(vocStateStable() && vocValid)) {
-                LOG_INFO("%s: Not stopping measurement, vocState is not stable yet!", sensorName);
                 return true;
             }
         }
@@ -360,10 +328,7 @@ bool SENXXSensor::idle(bool checkState)
     }
 
     if (!oneShotMode) {
-        LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
         return true;
-    } else {
-        LOG_INFO("%s: One shot mode enabled", sensorName);
     }
 
     // SEN6X has no low-power "RHT/Gas only" mode - it must always fully stop.
@@ -379,14 +344,12 @@ bool SENXXSensor::idle(bool checkState)
             return false;
         }
         state = SENXX_IDLE;
-        LOG_INFO("%s: Stop measurement mode", sensorName);
     } else {
         if (!sendCommand(SEN5X_START_MEASUREMENT_RHT_GAS)) {
             LOG_ERROR("%s: Error switching to RHT/Gas measurement", sensorName);
             return false;
         }
         state = SENXX_RHTGAS_ONLY;
-        LOG_INFO("%s: Switch to RHT/Gas only measurement mode", sensorName);
     }
 
     delay(200); // From Sensirion Datasheet
@@ -411,10 +374,8 @@ bool SENXXSensor::vocStateValid()
 {
     if (!vocState[0] && !vocState[1] && !vocState[2] && !vocState[3] && !vocState[4] && !vocState[5] && !vocState[6] &&
         !vocState[7]) {
-        LOG_DEBUG("%s: VOC state is all 0, invalid", sensorName);
         return false;
     } else {
-        LOG_DEBUG("%s: VOC state is valid", sensorName);
         return true;
     }
 }
@@ -426,7 +387,6 @@ bool SENXXSensor::vocStateToSensor()
     }
 
     if (!vocStateValid()) {
-        LOG_INFO("%s: VOC state is invalid, not sending", sensorName);
         return true;
     }
 
@@ -435,10 +395,6 @@ bool SENXXSensor::vocStateToSensor()
         return false;
     }
     delay(200); // From Sensirion Datasheet
-
-    LOG_DEBUG("%s: Sending VOC state to sensor", sensorName);
-    LOG_DEBUG("[%u, %u, %u, %u, %u, %u, %u, %u]", vocState[0], vocState[1], vocState[2], vocState[3], vocState[4], vocState[5],
-              vocState[6], vocState[7]);
 
     // Note: send command already takes into account the CRC
     // buffer size increment needed
@@ -456,7 +412,6 @@ bool SENXXSensor::vocStateFromSensor()
         return true;
     }
 
-    LOG_INFO("%s: Getting VOC state from sensor", sensorName);
     //  Ask VOCs state from the sensor
     if (!sendCommand(SENXX_RW_VOCS_STATE)) {
         LOG_ERROR("%s: Error sending VOC's state command", sensorName);
@@ -478,10 +433,6 @@ bool SENXXSensor::vocStateFromSensor()
     }
     memcpy(vocState, stateBuffer, SENXX_VOC_STATE_BUFFER_SIZE);
 
-    // Print the state (if debug is on)
-    LOG_DEBUG("%s: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1],
-              vocState[2], vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
-
     return true;
 }
 
@@ -492,8 +443,6 @@ bool SENXXSensor::loadState()
     auto file = FSCom.open(senXXStateFileName, FILE_O_READ);
     bool okay = false;
     if (file) {
-        LOG_INFO("%s: state read from %s", sensorName, senXXStateFileName);
-
         bool decoded;
         uint32_t lastCleaningTime = 0;
         bool lastCleaningValidFlag = false;
@@ -552,8 +501,6 @@ bool SENXXSensor::loadState()
             okay = true;
         }
         file.close();
-    } else {
-        LOG_INFO("%s: No state found (File: %s)", sensorName, senXXStateFileName);
     }
     spiLock->unlock();
     return okay;
@@ -574,8 +521,6 @@ bool SENXXSensor::saveState()
                              ((uint64_t)vocState[1] << 8) | ((uint64_t)vocState[0]);
 
     bool encoded;
-    LOG_INFO("%s: state write to %s", sensorName, senXXStateFileName);
-
     if (isSen6xFamily()) {
         sen6xstate.last_cleaning_time = lastCleaning;
         sen6xstate.last_cleaning_valid = lastCleaningValid;
@@ -617,9 +562,6 @@ bool SENXXSensor::saveState()
     bool okay = encoded;
     okay &= file.close();
 
-    if (okay)
-        LOG_INFO("%s: state write to %s successful", sensorName, senXXStateFileName);
-
     return okay;
 #else
     LOG_ERROR("%s: Filesystem not implemented", sensorName);
@@ -640,7 +582,6 @@ bool SENXXSensor::checkRTCQualityImproved()
     if (currentQuality == lastRTCQuality) {
         return false;
     }
-    LOG_DEBUG("%s: RTC quality changed: %s -> %s", sensorName, RtcName(lastRTCQuality), RtcName(currentQuality));
     bool gainedUsableClock = lastRTCQuality < RTCQuality::RTCQualityDevice && currentQuality >= RTCQuality::RTCQualityDevice;
     lastRTCQuality = currentQuality;
     return gainedUsableClock;
@@ -653,12 +594,7 @@ void SENXXSensor::reconcileTimeDependentState(uint32_t now)
 
         if (passed > ONE_WEEK_IN_SECONDS && (now > SENXX_VOC_VALID_DATE)) {
             // If current date greater than 01/01/2018 (validity check)
-            LOG_INFO("%s: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", sensorName, passed,
-                     lastCleaning);
             startCleaning();
-        } else {
-            LOG_INFO("%s: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", sensorName, passed,
-                     lastCleaning);
         }
     } else {
         // We assume the device has just been updated or it is new,
@@ -667,32 +603,25 @@ void SENXXSensor::reconcileTimeDependentState(uint32_t now)
         // Otherwise, we will never trigger cleaning in some cases
         lastCleaning = now;
         lastCleaningValid = true;
-        LOG_INFO("%s: No valid last cleaning date found, saving it now: %us", sensorName, lastCleaning);
         saveState();
     }
 
-    if (hasVOC) {
-        if (!vocValid) {
-            LOG_INFO("%s: No valid VOC's state found", sensorName);
-        } else {
-            // Check if state is recent
-            if (vocStateRecent(now)) {
-                // If current date greater than 01/01/2018 (validity check)
-                // Send it to the sensor
-                LOG_INFO("%s: VOC state is valid and recent", sensorName);
-                vocStateToSensor();
-            } else {
-                LOG_INFO("%s: VOC state is too old or date is invalid", sensorName);
-                LOG_DEBUG("%s: vocTime %u, and now %u", sensorName, vocTime, now);
-            }
-        }
+    // Restore the saved VOC state only if it is valid and recent
+    if (hasVOC && vocValid && vocStateRecent(now)) {
+        vocStateToSensor();
     }
 }
 
 uint32_t SENXXSensor::wakeUp()
 {
+#ifdef SENXX_I2C_CLOCK_SPEED
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
+    return wakeUpInternal();
+}
 
-    LOG_DEBUG("%s: Waking up sensor", sensorName);
+uint32_t SENXXSensor::wakeUpInternal()
+{
 
     // The RTC may not have had a valid time when we last checked (e.g. right after boot,
     // before a WiFi/GPS/phone time source connected). Each wake is a natural, frequent point
@@ -701,7 +630,6 @@ uint32_t SENXXSensor::wakeUp()
     if (checkRTCQualityImproved()) {
         uint32_t now = getValidTime(RTCQuality::RTCQualityDevice);
         if (now) {
-            LOG_INFO("%s: RTC became available (%s), reconciling saved cleaning/VOC state", sensorName, RtcName(lastRTCQuality));
             reconcileTimeDependentState(now);
             if (state == SENXX_CLEANING) {
                 // A cleaning cycle was just started; let it run its course via
@@ -721,14 +649,12 @@ uint32_t SENXXSensor::wakeUp()
 
     pmMeasureStarted = millis();
     state = SENXX_MEASUREMENT;
-    LOG_INFO("%s: Started measurement mode", sensorName);
     return SENXX_PM_WARMUP_MS_1;
 }
 
 bool SENXXSensor::vocStateStable()
 {
     uint32_t sinceFirstMeasureStarted = (millis() - rhtGasMeasureStarted) / 1000;
-    LOG_DEBUG("%s: sinceFirstMeasureStarted: %us", sensorName, sinceFirstMeasureStarted);
     return sinceFirstMeasureStarted > SENXX_VOC_STATE_WARMUP_S;
 }
 
@@ -755,7 +681,7 @@ bool SENXXSensor::startCleaning()
     delay(20); // From Sensirion Datasheet
 
     // This message will be always printed so the user knows the device it's not hung
-    LOG_INFO("%s: Started fan cleaning it will take 10 seconds...", sensorName);
+    LOG_INFO("%s: Fan cleaning started (~10 s)", sensorName);
 
     // Don't block the caller for the ~10.5s the cycle takes - pendingForReadyMs()
     // polls SENXX_CLEANING and calls finishCleaning() once it's done.
@@ -765,8 +691,6 @@ bool SENXXSensor::startCleaning()
 
 void SENXXSensor::finishCleaning()
 {
-    LOG_INFO("%s: Cleaning done", sensorName);
-
     // Save timestamp in flash so we know when a week has passed
     uint32_t now;
     now = getValidTime(RTCQuality::RTCQualityDevice);
@@ -782,13 +706,13 @@ void SENXXSensor::finishCleaning()
 bool SENXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     state = SENXX_NOT_DETECTED;
-    LOG_INFO("%s: Init sensor", sensorName);
 
     _bus = bus;
     _address = dev->address.address;
 #ifdef SENXX_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
 #endif /* SENXX_I2C_CLOCK_SPEED */
 
     delay(50); // without this there is an error on the deviceReset function
@@ -808,7 +732,7 @@ bool SENXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (!getVersion())
         return false;
     if (firmwareVer < 2) {
-        LOG_ERROR("%s: firmware is too old and will not work with this implementation", sensorName);
+        LOG_ERROR("%s: Firmware too old", sensorName);
         return false;
     }
     delay(200); // From Sensirion Datasheet
@@ -829,8 +753,6 @@ bool SENXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     uint32_t now = getValidTime(RTCQuality::RTCQualityDevice);
     if (now) {
         reconcileTimeDependentState(now);
-    } else {
-        LOG_INFO("%s: Not enough RTCQuality yet, deferring saved cleaning/VOC state check until it improves", sensorName);
     }
 
     // If reconcileTimeDependentState() just started a cleaning cycle, leave state as
@@ -852,7 +774,6 @@ bool SENXXSensor::readValues()
             LOG_ERROR("%s: Error sending read command", sensorName);
             return false;
         }
-        LOG_DEBUG("%s: Reading measured values", sensorName);
         delay(20); // From Sensirion Datasheet
 
         // Fixed field order per the SEN6x datasheet: PM1.0, PM2.5, PM4.0, PM10.0,
@@ -892,36 +813,27 @@ bool SENXXSensor::readValues()
         senxxmeasurement.hcho = FLT_MAX;
         senxxmeasurement.co2 = FLT_MAX;
 
-        LOG_DEBUG("%s: Got readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, senxxmeasurement.pM1p0,
-                  senxxmeasurement.pM2p5, senxxmeasurement.pM4p0, senxxmeasurement.pM10p0);
-
         if (hasRHT) {
             int16_t int_humidity = nextWord();
             int16_t int_temperature = nextWord();
             senxxmeasurement.humidity = (int_humidity != SENXX_INT_INVALID) ? (int_humidity / 100.0f) : FLT_MAX;
             senxxmeasurement.temperature = (int_temperature != SENXX_INT_INVALID) ? (int_temperature / 200.0f) : FLT_MAX;
-            LOG_DEBUG("%s: Got readings: humidity=%.2f, temperature=%.2f", sensorName, senxxmeasurement.humidity,
-                      senxxmeasurement.temperature);
         }
         if (hasVOC) {
             int16_t int_vocIndex = nextWord();
             senxxmeasurement.vocIndex = (int_vocIndex != SENXX_INT_INVALID) ? (int_vocIndex / 10.0f) : FLT_MAX;
-            LOG_DEBUG("%s: Got readings: vocIndex=%.2f", sensorName, senxxmeasurement.vocIndex);
         }
         if (hasNOx) {
             int16_t int_noxIndex = nextWord();
             senxxmeasurement.noxIndex = (int_noxIndex != SENXX_INT_INVALID) ? (int_noxIndex / 10.0f) : FLT_MAX;
-            LOG_DEBUG("%s: Got readings: noxIndex=%.2f", sensorName, senxxmeasurement.noxIndex);
         }
         if (hasHCHO) {
             uint16_t uint_hcho = static_cast<uint16_t>(nextWord());
             senxxmeasurement.hcho = (uint_hcho != SENXX_UINT_INVALID) ? (uint_hcho / 10.0f) : FLT_MAX;
-            LOG_DEBUG("%s: Got readings: HCHO=%.2f", sensorName, senxxmeasurement.hcho);
         }
         if (hasCO2) {
             uint16_t uint_co2 = static_cast<uint16_t>(nextWord());
             senxxmeasurement.co2 = (uint_co2 != SENXX_UINT_INVALID) ? uint_co2 : FLT_MAX;
-            LOG_DEBUG("%s: Got readings: CO2=%.2f", sensorName, senxxmeasurement.co2);
         }
 
         return true;
@@ -934,7 +846,6 @@ bool SENXXSensor::readValues()
         LOG_ERROR("%s: Error sending read command", sensorName);
         return false;
     }
-    LOG_DEBUG("%s: Reading PM Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
     uint8_t dataBuffer[SEN5X_READ_VALUES_BUFFER_SIZE]{};
@@ -969,18 +880,6 @@ bool SENXXSensor::readValues()
     senxxmeasurement.co2 = FLT_MAX;
     senxxmeasurement.hcho = FLT_MAX;
 
-    LOG_DEBUG("%s: Got readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, senxxmeasurement.pM1p0,
-              senxxmeasurement.pM2p5, senxxmeasurement.pM4p0, senxxmeasurement.pM10p0);
-
-    if (hasRHT) {
-        LOG_DEBUG("%s: Got readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, senxxmeasurement.humidity,
-                  senxxmeasurement.temperature, senxxmeasurement.vocIndex);
-    }
-
-    if (hasNOx) {
-        LOG_DEBUG("%s: Got readings: noxIndex=%.2f", sensorName, senxxmeasurement.noxIndex);
-    }
-
     return true;
 }
 
@@ -991,8 +890,6 @@ bool SENXXSensor::readPNValues(bool cumulative)
             LOG_ERROR("%s: Error sending read command", sensorName);
             return false;
         }
-
-        LOG_DEBUG("%s: Reading PN Values", sensorName);
         delay(20); // From Sensirion Datasheet
 
         uint8_t dataBuffer[10]{};
@@ -1033,9 +930,6 @@ bool SENXXSensor::readPNValues(bool cumulative)
                 senxxmeasurement.pN1p0 -= senxxmeasurement.pN0p5;
         }
 
-        LOG_DEBUG("%s: Got readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u", sensorName, senxxmeasurement.pN0p5,
-                  senxxmeasurement.pN1p0, senxxmeasurement.pN2p5, senxxmeasurement.pN4p0, senxxmeasurement.pN10p0);
-
         return true;
     }
 
@@ -1043,8 +937,6 @@ bool SENXXSensor::readPNValues(bool cumulative)
         LOG_ERROR("%s: Error sending read command", sensorName);
         return false;
     }
-
-    LOG_DEBUG("%s: Reading PN Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
     uint8_t dataBuffer[SEN5X_READ_PM_BUFFER_SIZE]{};
@@ -1086,10 +978,6 @@ bool SENXXSensor::readPNValues(bool cumulative)
             senxxmeasurement.pN1p0 -= senxxmeasurement.pN0p5;
     }
 
-    LOG_DEBUG("%s: Got readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
-              senxxmeasurement.pN0p5, senxxmeasurement.pN1p0, senxxmeasurement.pN2p5, senxxmeasurement.pN4p0,
-              senxxmeasurement.pN10p0, senxxmeasurement.tSize);
-
     return true;
 }
 
@@ -1115,7 +1003,6 @@ uint8_t SENXXSensor::getMeasurements()
     uint32_t sinceLastDataPollMs = now - lastDataPoll;
     // Check if data is ready, and if since last time we requested is less than SENXX_POLL_INTERVAL
     if (!dataReady || (sinceLastDataPollMs < SENXX_POLL_INTERVAL)) {
-        LOG_INFO("%s: Data is not ready", sensorName);
         return 1;
     }
 
@@ -1141,9 +1028,14 @@ int32_t SENXXSensor::wakeUpTimeMs()
 
 int32_t SENXXSensor::pendingForReadyMs()
 {
+#ifdef SENXX_I2C_CLOCK_SPEED
+    // Only the SENXX_MEASUREMENT/SENXX_CLEANING branches below touch I2C, but this is only
+    // ever called while isActive() (i.e. one of those, or SENXX_MEASUREMENT_2, which doesn't),
+    // so bracketing unconditionally here is simpler than guarding each branch separately.
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
     uint32_t now = millis();
     uint32_t sincePmMeasureStarted = now - pmMeasureStarted;
-    LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
 
     switch (state) {
     case SENXX_MEASUREMENT: {
@@ -1153,7 +1045,6 @@ int32_t SENXXSensor::pendingForReadyMs()
         }
 
         if (sincePmMeasureStarted < SENXX_PM_WARMUP_MS_1) {
-            LOG_INFO("%s: not enough time passed since starting measurement", sensorName);
             return SENXX_PM_WARMUP_MS_1 - sincePmMeasureStarted;
         }
 
@@ -1163,7 +1054,6 @@ int32_t SENXXSensor::pendingForReadyMs()
 
         // If the reading is low (the threshold is in #/cm3) and second warmUp hasn't passed we return to come back later
         if ((senxxmeasurement.pN4p0 / 100) < SENXX_PN4P0_CONC_THD && sincePmMeasureStarted < SENXX_PM_WARMUP_MS_2) {
-            LOG_INFO("%s: Concentration is low, we will ask again in the second warm up period", sensorName);
             state = SENXX_MEASUREMENT_2;
             // Report how many seconds are pending to cover the first warm up period
             return SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted;
@@ -1197,11 +1087,13 @@ int32_t SENXXSensor::pendingForReadyMs()
 
 bool SENXXSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_INFO("%s: Attempting to get metrics", sensorName);
     if (!isActive()) {
-        LOG_INFO("%s: not in measurement mode", sensorName);
         return false;
     }
+
+#ifdef SENXX_I2C_CLOCK_SPEED
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
 
     uint8_t response;
     response = getMeasurements();
@@ -1361,8 +1253,7 @@ bool SENXXSensor::setTemperatureOffset(float tempReference)
     }
 
     float tempOffset = senxxmeasurement.temperature - tempReference;
-    LOG_INFO("%s: Setting temperature offset: %.2f (current=%.2f, reference=%.2f)", sensorName, tempOffset,
-             senxxmeasurement.temperature, tempReference);
+    LOG_INFO("%s: Temperature offset %.2f", sensorName, tempOffset);
 
     // Payload: offset (int16, *200), slope (int16, *10000, 0=no change over time),
     // time constant (uint16 seconds, 0=apply immediately), slot (uint16, 0=base self-heating).
@@ -1392,8 +1283,7 @@ bool SENXXSensor::co2PerformFRC(uint32_t targetCO2ppm)
         return false;
     }
 
-    LOG_INFO("%s: Issuing FRC. Ensure device has been working at least 3 minutes in stable target environment", sensorName);
-    LOG_INFO("%s: Target CO2: %u ppm", sensorName, targetCO2ppm);
+    LOG_INFO("%s: FRC to %u ppm", sensorName, targetCO2ppm);
 
     uint8_t buffer[2]{static_cast<uint8_t>((targetCO2ppm >> 8) & 0xFF), static_cast<uint8_t>(targetCO2ppm & 0xFF)};
     if (!sendCommand(SEN6X_PERFORM_FORCED_CO2_RECAL, buffer, 2)) {
@@ -1414,7 +1304,7 @@ bool SENXXSensor::co2PerformFRC(uint32_t targetCO2ppm)
         return false;
     }
 
-    LOG_INFO("%s: FRC correction successful. Correction output: %d ppm", sensorName, (int32_t)correction - 0x8000);
+    LOG_INFO("%s: FRC correction %d ppm", sensorName, (int32_t)correction - 0x8000);
     return true;
 }
 
@@ -1447,8 +1337,6 @@ bool SENXXSensor::co2SetASC(bool ascEnabled)
         return false;
     }
 
-    LOG_INFO("%s: %s ASC", sensorName, ascEnabled ? "Enabling" : "Disabling");
-
     uint8_t buffer[2]{0, static_cast<uint8_t>(ascEnabled ? 1 : 0)};
     if (!sendCommand(SEN6X_GET_SET_CO2_ASC, buffer, 2)) {
         LOG_ERROR("%s: Error setting ASC", sensorName);
@@ -1463,7 +1351,7 @@ bool SENXXSensor::co2SetAltitude(uint32_t altitude)
         return false;
     }
 
-    LOG_INFO("%s: Setting altitude at %um (volatile - reverts on device reset)", sensorName, altitude);
+    LOG_INFO("%s: Altitude %um (until reset)", sensorName, altitude);
 
     uint16_t altitudeWord = static_cast<uint16_t>(altitude);
     uint8_t buffer[2]{static_cast<uint8_t>((altitudeWord >> 8) & 0xFF), static_cast<uint8_t>(altitudeWord & 0xFF)};
@@ -1483,7 +1371,7 @@ bool SENXXSensor::co2SetAmbientPressure(uint32_t ambientPressurePa)
     // The SEN6X command expects hPa (700-1200), while the admin config field
     // matches SCD4X's Pa convention (70000-120000) for consistency across sensors.
     uint16_t pressureHpa = static_cast<uint16_t>(ambientPressurePa / 100);
-    LOG_INFO("%s: Setting ambient pressure at %u hPa (volatile - reverts on device reset)", sensorName, pressureHpa);
+    LOG_INFO("%s: Ambient pressure %u hPa (until reset)", sensorName, pressureHpa);
 
     uint8_t buffer[2]{static_cast<uint8_t>((pressureHpa >> 8) & 0xFF), static_cast<uint8_t>(pressureHpa & 0xFF)};
     if (!sendCommand(SEN6X_GET_SET_AMBIENT_PRESSURE, buffer, 2)) {
@@ -1499,7 +1387,6 @@ bool SENXXSensor::co2FactoryReset()
         return false;
     }
 
-    LOG_INFO("%s: Requesting CO2 sensor factory reset", sensorName);
     if (!sendCommand(SEN6X_CO2_FACTORY_RESET)) {
         LOG_ERROR("%s: Error requesting CO2 factory reset", sensorName);
         return false;
@@ -1510,11 +1397,7 @@ bool SENXXSensor::co2FactoryReset()
 void SENXXSensor::setMode(bool setOneShot)
 {
     oneShotMode = setOneShot;
-    if (oneShotMode) {
-        LOG_INFO("%s: setting mode to one shot mode", sensorName);
-    } else {
-        LOG_INFO("%s: setting mode to continuous mode", sensorName);
-    }
+    LOG_INFO("%s: %s mode", sensorName, oneShotMode ? "One shot" : "Continuous");
 }
 
 AdminMessageHandleResult SENXXSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
@@ -1525,6 +1408,9 @@ AdminMessageHandleResult SENXXSensor::handleAdminMessage(const meshtastic_MeshPa
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_sensor_config_tag: {
+#ifdef SENXX_I2C_CLOCK_SPEED
+        ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
         bool ok = true;
         bool wasActive = isActive();
 
@@ -1552,7 +1438,7 @@ AdminMessageHandleResult SENXXSensor::handleAdminMessage(const meshtastic_MeshPa
                 // A fan cleaning was just started above (non-blocking) - stopping measurement
                 // now would interrupt it. Calibration and cleaning can't be requested together;
                 // ask the caller to retry once the cleaning cycle completes.
-                LOG_WARN("%s: Skipping calibration request - fan cleaning in progress, retry once it completes", sensorName);
+                LOG_WARN("%s: Calibration skipped, fan cleaning in progress", sensorName);
                 ok = false;
             } else if (needsCalibration) {
                 if (wasActive) {
@@ -1582,7 +1468,9 @@ AdminMessageHandleResult SENXXSensor::handleAdminMessage(const meshtastic_MeshPa
                 }
 
                 if (wasActive) {
-                    this->wakeUp();
+                    // Not this->wakeUp() - we're already inside this function's own
+                    // ReClockI2CGuard, and that guard isn't reentrant (see its comment).
+                    this->wakeUpInternal();
                 }
             }
         } else {

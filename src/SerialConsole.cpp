@@ -125,6 +125,10 @@ int32_t SerialConsole::runOnce()
 
     int32_t delay = runOncePart();
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
+    // Nothing wakes the idle sleep for "TX space freed" or a bounded-drain remainder
+    // (#11164), so keep polling while the API holds undelivered output.
+    if (hasPendingOutput())
+        return delay < 25 ? delay : 25; // 0 continues a budget slice; else short-poll TX drain
     return Port.available() ? delay : INT32_MAX;
 #elif defined(IS_USB_SERIAL)
     return HWCDC::isPlugged() ? delay : (1000 * 20);
@@ -209,6 +213,17 @@ bool SerialConsole::finishPendingFrame()
     return frameWriter.finishPendingFrame(Port);
 #else
     return true;
+#endif
+}
+
+/// Report a retained USB CDC frame awaiting TX space.
+bool SerialConsole::hasRetainedFrame()
+{
+#ifdef IS_USB_SERIAL
+    concurrency::LockGuard guard(&streamLock);
+    return !frameWriter.isIdle();
+#else
+    return false;
 #endif
 }
 

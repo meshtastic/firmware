@@ -17,6 +17,14 @@ void testDelay(unsigned long ms);
 // place instead of being spread across 40-odd suites.
 void testStateCheckpoint(const char *testName, const char *sourceFile);
 
+// Checked before every test, because the environment a suite starts in is not the one it keeps.
+// initializeTestEnvironment() clears force_simradio once, and a test that sets it - directly, or by
+// restoring a struct it saved before the clear - silently disables PKC for every test after it.
+// wouldEncryptWithPKC() would then return false and the encode path would quietly fall back to
+// channel crypto, which is a passing test asserting the wrong thing. Named per test so the culprit
+// is the test that follows the one that broke it.
+void testAssertEnvironmentIntact(const char *testName);
+
 // Every RUN_TEST becomes a checkpoint. An unintended write has no matching assertion *by
 // definition* - nobody wrote a TEST_ASSERT for the nodes.proto write that broke test_admin_radio,
 // because nobody knew it happened - so attribution has to come from outside the test body.
@@ -27,6 +35,7 @@ void testStateCheckpoint(const char *testName, const char *sourceFile);
 #undef RUN_TEST
 #define RUN_TEST(func, ...)                                                                                                      \
     do {                                                                                                                         \
+        testAssertEnvironmentIntact(#func);                                                                                      \
         UnityDefaultTestRun(func, #func, __LINE__);                                                                              \
         testStateCheckpoint(#func, __FILE__);                                                                                    \
     } while (0)

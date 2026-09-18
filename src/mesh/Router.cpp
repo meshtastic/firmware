@@ -16,6 +16,9 @@
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
+#include "modules/PositionModule.h"
+#endif
 #if HAS_TRAFFIC_MANAGEMENT
 #endif
 #if HAS_VARIABLE_HOPS
@@ -30,6 +33,11 @@
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
+
+// The size checks below budget for the tag that encryptPacketCCM actually appends, so the
+// two constants must not drift apart.
+static_assert(MESHTASTIC_AEAD_OVERHEAD == CryptoEngine::AEAD_TAG_SIZE,
+              "MESHTASTIC_AEAD_OVERHEAD must match CryptoEngine::AEAD_TAG_SIZE");
 
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
@@ -86,10 +94,42 @@ bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p)
     if (p->pki_encrypted || willUsePki(p)) {
         return false;
     }
+    // From us, to us: never leaves the device (sendLocal delivers it locally). This is how the phone
+    // hands a GPS-less node its fix and time, so it shares nothing and must not be blocked.
+    if (isFromUs(p) && isToUs(p)) {
+        return false;
+    }
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         return isCoordinatePortnum(p->decoded.portnum) && channels.isEventChannel(getEffectiveChannelIndex(p));
     }
     return false;
+#else
+    (void)p;
+    return false;
+#endif
+}
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
+// A remote node's unicast position request to us. Only the reply is generated for these; the packet
+// itself is still dropped by the caller.
+static bool isEventChannelPositionRequestForUs(const meshtastic_MeshPacket *p)
+{
+    return p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+           p->decoded.portnum == meshtastic_PortNum_POSITION_APP && p->decoded.want_response && isToUs(p) && !isFromUs(p);
+}
+#endif
+
+bool coerceCoordinatePacketToPositionChannel(meshtastic_MeshPacket *p)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (!isBlockedEventCoordinatePacket(p))
+        return false;
+    uint8_t positionChannel;
+    if (!findPositionChannel(positionChannel))
+        return false;
+    LOG_DEBUG("Coerce coordinate packet 0x%08x from event channel to position channel %u", p->id, positionChannel);
+    p->channel = positionChannel;
+    return true;
 #else
     (void)p;
     return false;
@@ -349,9 +389,9 @@ meshtastic_MeshPacket *Router::allocForSending()
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
 void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
-                        bool ackWantsAck)
+                        bool ackWantsAck, const meshtastic_MeshPacket *relaySource)
 {
-    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck);
+    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck, relaySource);
 }
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
@@ -396,6 +436,11 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         return ERRNO_NO_INTERFACES;
     } else {
+        // Coordinates never go out on the event channel: any local originator (phone, module, UI) that aimed
+        // one there is moved onto the position channel instead. Before the loopback below so the local copy
+        // carries the channel it will actually be sent on.
+        coerceCoordinatePacketToPositionChannel(p);
+
         // If we are sending a broadcast, we also treat it as if we just received it ourself
         // this allows local apps (and PCs) to see broadcasts sourced locally. Only the loopback
         // handleReceived is deferred when nested; send(p) below still transmits immediately.
@@ -491,7 +536,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
             // Never exceed user-configured hop_limit
             if (variableHopLimit < p->hop_limit) {
-                LOG_DEBUG("[HOPSCALE] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);
                 p->hop_limit = variableHopLimit;
             }
             break;
@@ -561,6 +605,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
     }
 #endif
+
+    // Only already-encrypted frames (relayed, phone-sourced) reach here oversized; perhapsEncode()
+    // bounds everything it encodes. No NAK: p->channel is a wire hash by now, not an index.
+    if (p->encrypted.size > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_WARN("Drop 0x%08x: payload %u exceeds radio capacity %u", p->id, (unsigned)p->encrypted.size,
+                 (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        packetPool.release(p);
+        return meshtastic_Routing_Error_TOO_LARGE;
+    }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
@@ -789,6 +842,12 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
+        // One-byte hash collisions are indistinguishable from tampering, so relay opaquely
+        // instead of blackholing; isFromUs stays REJECT to keep forged senders off the ACK path.
+        if (!isToUs(p) && !isFromUs(p)) {
+            LOG_WARN("Decryptable packet failed decoding, relay opaquely");
+            return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
+        }
         LOG_WARN("Decryptable packet failed decoding, drop");
         return RoutingAuthVerdict::REJECT;
     }
@@ -809,6 +868,18 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 static uint32_t adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
 static uint32_t adminKeyFallbackRefillMs = 0;
 
+#ifdef PIO_UNIT_TESTING
+// The refill stamp is a timestamp, so it is only meaningful against the clock that produced it.
+// A suite that swaps between the real and the virtual clock leaves a stamp from the other
+// timebase, and the next unsigned subtraction reads as a near-infinite gap: the bucket silently
+// refills to full. Re-stamp when the clock changes.
+void resetAdminKeyFallbackBudget()
+{
+    adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+    adminKeyFallbackRefillMs = Time::getMillis();
+}
+#endif
+
 static bool adminKeyFallbackAllowed()
 {
     bool haveAdminKey = false;
@@ -821,7 +892,8 @@ static bool adminKeyFallbackAllowed()
     if (!haveAdminKey)
         return false; // nothing to try, so do not spend a token
 
-    uint32_t now = millis();
+    // Injectable clock so the budget can be tested without sleeping, and without racing a slow host.
+    uint32_t now = Time::getMillis();
     if (adminKeyFallbackRefillMs == 0)
         adminKeyFallbackRefillMs = now;
     uint32_t elapsed = now - adminKeyFallbackRefillMs;
@@ -973,15 +1045,32 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
                 // fresh copy for each decrypt attempt.
                 memcpy(bytes, p->encrypted.bytes, rawSize);
-                // Try to decrypt the packet if we can
-                crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+                size_t decryptedSize = rawSize;
+
+                if (channels.isAEADEnabled(chIndex)) {
+                    // AEAD decryption - no CTR fallback
+                    if (rawSize <= MESHTASTIC_AEAD_OVERHEAD) {
+                        LOG_ERROR("Packet too small for AEAD (size=%d)", rawSize);
+                        continue;
+                    }
+                    CryptoKey k = channels.getKey(chIndex);
+                    if (!crypto->decryptPacketCCM(k, p->from, p->to, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                        LOG_WARN("AEAD authentication failed for ch %d", chIndex);
+                        continue; // reject - no fallback to CTR
+                    }
+                    decryptedSize = rawSize - MESHTASTIC_AEAD_OVERHEAD;
+                } else {
+                    // Standard AES-CTR decryption
+                    crypto->decrypt(p->from, p->id, rawSize, bytes);
+                }
 
                 // printBytes("plaintext", bytes, p->encrypted.size);
 
                 // Take those raw bytes and convert them back into a well structured protobuf we can understand
                 meshtastic_Data decodedtmp;
                 memset(&decodedtmp, 0, sizeof(decodedtmp));
-                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
+                if (!pb_decode_from_bytes(bytes, decryptedSize, &meshtastic_Data_msg, &decodedtmp)) {
                     LOG_DEBUG("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_DEBUG("Invalid portnum (bad psk?)");
@@ -1010,13 +1099,15 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             return DecodeState::DECODE_POLICY_REJECT;
 #endif
 
+        if (p->decoded.has_bitfield)
+            p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
+
         if (isBlockedEventCoordinatePacket(p)) {
+            // want_response is already merged above: a position request on the event channel is still
+            // answered (on the position channel) even though its coordinates are dropped.
             LOG_DEBUG("Decoded coordinate packet on event channel; suppress payload logging");
             return DecodeState::DECODE_SUCCESS;
         }
-
-        if (p->decoded.has_bitfield)
-            p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
         /* Not actually ever used.
         // Decompress if needed. jm
@@ -1059,7 +1150,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                         JSONFile.close();
                     }
                     JSONFile.open(portduino_config.JSONFilename + "_" + datetime, std::ios::out | std::ios::app);
-                    fileage = millis();
+                    fileage = Time::skipZero(Time::getMillis());
                 }
             }
             if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
@@ -1233,38 +1324,38 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
-        } else {
+        } else
+#endif
+        {
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
+            const bool useAead = channels.isAEADEnabled(chIndex);
+            if (useAead && numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_AEAD_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
+                return meshtastic_Routing_Error_TOO_LARGE;
+
             hash = channels.setActiveByIndex(chIndex);
 
             // Now that we are encrypting the packet channel should be the hash (no longer the index)
             p->channel = hash;
-            if (hash < 0) {
-                // No suitable channel could be found for
+            if (hash < 0)
                 return meshtastic_Routing_Error_NO_CHANNEL;
-            }
-            crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
-            memcpy(p->encrypted.bytes, bytes, numbytes);
-        }
-#else
-        if (p->pki_encrypted == true) {
-            // Client specifically requested PKI encryption
-            return meshtastic_Routing_Error_PKI_FAILED;
-        }
-        hash = channels.setActiveByIndex(chIndex);
 
-        // Now that we are encrypting the packet channel should be the hash (no longer the index)
-        p->channel = hash;
-        if (hash < 0) {
-            // No suitable channel could be found for
-            return meshtastic_Routing_Error_NO_CHANNEL;
+            if (useAead) {
+                // AEAD (AES-CCM) authenticated encryption path
+                CryptoKey k = channels.getKey(chIndex);
+                if (!crypto->encryptPacketCCM(k, getFrom(p), p->to, p->id, numbytes, bytes, p->encrypted.bytes)) {
+                    LOG_ERROR("AEAD encryption failed for ch %d", chIndex);
+                    return meshtastic_Routing_Error_BAD_REQUEST;
+                }
+                numbytes += MESHTASTIC_AEAD_OVERHEAD;
+            } else {
+                // Standard AES-CTR encryption path
+                crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+                memcpy(p->encrypted.bytes, bytes, numbytes);
+            }
         }
-        crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
-        memcpy(p->encrypted.bytes, bytes, numbytes);
-#endif
 
         // Copy back into the packet and set the variant type
         p->encrypted.size = numbytes;
@@ -1443,11 +1534,10 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             printPacket("handleReceived(REMOTE)", p);
 
 #if MESHTASTIC_PREHOP_DROP
-        // Pre-hop firmware drop, post-decode half: the bitfield that proves the origin populated hop_start is
-        // encrypted under the channel key, so it can only be evaluated now that the packet is decoded. A packet
-        // whose hop_start is still missing/unknown comes from pre-hop firmware - keep it out of module
-        // processing, admin handling, phone delivery, MQTT and rebroadcast. Local-origin packets are exempt.
-        if (!isFromUs(p) && classifyHopStart(*p) != HopStartStatus::VALID) {
+        // Pre-hop firmware drop, post-decode half: a packet whose hop_start is still missing/unknown comes
+        // from pre-hop firmware - keep it out of module processing, admin handling, phone delivery, MQTT
+        // and rebroadcast.
+        if (shouldSkipHandleForPostDecodeHop(*p)) {
             logHopStartDrop(*p, "post-decode pre-hop drop");
             cancelSending(p->from, p->id);
             skipHandle = true;
@@ -1497,6 +1587,16 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         // Discard coordinate-bearing packets that arrive on the event ("everyone")
         // channel: don't process, store in NodeDB, or rebroadcast them.
         if (!skipHandle && isBlockedEventCoordinatePacket(p)) {
+            // A position request addressed to us is still answered, on our position channel at that
+            // channel's precision, so "request position" from a node that only shares the event channel
+            // with us resolves where positions actually live. The requester's own coordinates are
+            // still dropped: not stored, not forwarded to the phone, not relayed, not published.
+            // Builds without the position module (MESHTASTIC_EXCLUDE_GPS, e.g. repeaters) have nothing
+            // to answer with, and neither the symbol nor the global exists to link against.
+#if !MESHTASTIC_EXCLUDE_GPS
+            if (isEventChannelPositionRequestForUs(p) && positionModule)
+                positionModule->replyOnPositionChannel(*p);
+#endif
             LOG_DEBUG("Drop coordinate packet on event (everyone) channel");
             cancelSending(p->from, p->id);
             skipHandle = true;
@@ -1611,6 +1711,12 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
     if (authVerdict == RoutingAuthVerdict::OPAQUE_RELAY_ONLY) {
+        // A packet we originated but cannot decrypt (a PKI DM we sent, overheard being rebroadcast)
+        // is opaque to us and would otherwise skip shouldFilterReceived entirely, so the implicit
+        // ACK that marks a DM "Delivered to mesh" never fires. The ACK is header-only (from/id), so
+        // generate it here from the still-encrypted packet before opaque relay.
+        if (isFromUs(p))
+            perhapsGenerateImplicitAckForOwnOverheard(p);
         relayOpaquePacket(p);
         packetPool.release(p);
         return;

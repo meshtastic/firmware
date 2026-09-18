@@ -29,7 +29,9 @@
 #include <power/PowerHAL.h>
 
 #include "Nrf52SaadcLock.h"
+#include "SPILock.h"
 #include "concurrency/LockGuard.h"
+#include "flash/flash_nrf5x.h"
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -183,9 +185,18 @@ bool loopCanSleep()
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
-    // debugger_break(); FIXME doesn't work, possibly not for segger
+    Serial.flush(); // the reset below would cut the message short
+    // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu
     NVIC_SystemReset();
+}
+
+// Bluefruit LESC pairing only uses secp256r1. Replacing the cc310 lookup keeps the parameter
+// tables of its ten other curves (~7.4 KB) from being linked through ecDomainsFuncP.
+extern "C" const CRYS_ECPKI_Domain_t *SaSi_ECPKI_GetSecp256r1DomainP(void);
+extern "C" const CRYS_ECPKI_Domain_t *CRYS_ECPKI_GetEcDomain(CRYS_ECPKI_DomainID_t domainId)
+{
+    return domainId == CRYS_ECPKI_DomainID_secp256r1 ? SaSi_ECPKI_GetSecp256r1DomainP() : nullptr;
 }
 
 void getMacAddr(uint8_t *dmac)
@@ -297,6 +308,7 @@ void preFSBegin()
     if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
     NRF_POWER->GPREGRET = 0;
+    // unset-sentinel-ok: formatted_this_boot carries the armed state, so 0 is a legal stamp
     last_format_ms = Time::getMillis();
     formatted_this_boot = true;
     InternalFS.format();
@@ -343,6 +355,9 @@ extern "C" void lfs_assert(const char *reason)
     NVIC_SystemReset();
 }
 
+// Defined by the core's InternalFileSystem, completes a pending sd_flash_write()
+extern "C" void flash_nrf5x_event_cb(uint32_t event);
+
 void checkSDEvents()
 {
     if (useSoftDevice) {
@@ -351,6 +366,11 @@ void checkSDEvents()
             switch (evt) {
             case NRF_EVT_POWER_FAILURE_WARNING:
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
+                break;
+            // Bluefruit's SoC task polls the same queue; an event taken here must still reach the flash driver
+            case NRF_EVT_FLASH_OPERATION_SUCCESS:
+            case NRF_EVT_FLASH_OPERATION_ERROR:
+                flash_nrf5x_event_cb(evt);
                 break;
 
             default:
@@ -465,6 +485,15 @@ void nrf52Setup()
     assert(r == NRFX_SUCCESS);
 }
 
+// Waits out any flash write another task has in flight, drains the shared page cache, and keeps
+// both locks: the caller resets next, and a reset mid-program tears the page.
+void nrf52FlashQuiesce()
+{
+    spiLock->lock();
+    InternalFS._lockFS();
+    flash_nrf5x_flush();
+}
+
 void cpuDeepSleep(uint32_t msecToWake)
 {
     // FIXME, configure RTC or button press to wake us
@@ -499,6 +528,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     // Run shutdown code if specified in variant.cpp
     variant_shutdown();
+
+    nrf52FlashQuiesce();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
@@ -565,6 +596,7 @@ void clearBonds()
 
 void enterDfuMode()
 {
+    nrf52FlashQuiesce();
 // SDK kit does not have native USB like almost all other NRF52 boards
 #ifdef NRF_USE_SERIAL_DFU
     enterSerialDfu();

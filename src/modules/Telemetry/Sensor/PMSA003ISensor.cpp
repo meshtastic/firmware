@@ -24,22 +24,17 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef PMSA003I_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-    reClockI2C.setClock(PMSA003I_I2C_CLOCK_SPEED);
+
+    LOG_INFO("%s: reclock speed %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, PMSA003I_I2C_CLOCK_SPEED);
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     _bus->beginTransmission(_address);
     if (_bus->endTransmission() != 0) {
         LOG_WARN("%s not found on I2C at 0x12", sensorName);
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* PMSA003I_I2C_CLOCK_SPEED */
         sleep();
         return false;
     }
-
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     status = 1;
     LOG_INFO("%s: Enabled", sensorName);
@@ -57,25 +52,19 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
-    reClockI2C.setClock(PMSA003I_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, PMSA003I_I2C_CLOCK_SPEED);
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     _bus->requestFrom(_address, (uint8_t)PMSA003I_FRAME_LENGTH);
     if (_bus->available() < PMSA003I_FRAME_LENGTH) {
         LOG_WARN("%s: read failed: incomplete data (%d bytes)", sensorName, _bus->available());
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* PMSA003I_I2C_CLOCK_SPEED */
         return false;
     }
 
     for (uint8_t i = 0; i < PMSA003I_FRAME_LENGTH; i++) {
         buffer[i] = _bus->read();
     }
-
-#ifdef PMSA003I_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     if (buffer[0] != 0x42 || buffer[1] != 0x4D) {
         LOG_WARN("%s: frame header invalid: 0x%02X 0x%02X", sensorName, buffer[0], buffer[1]);

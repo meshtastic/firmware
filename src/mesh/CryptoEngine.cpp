@@ -1,17 +1,17 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
+#include "aes-ccm.h"
 #include "architecture.h"
+#include <SHA256.h>
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "HardwareRNG.h"
 #include "NodeDB.h"
-#include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <RNG.h>
-#include <SHA256.h>
 
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 #include "XEdDSA.h"
@@ -287,10 +287,60 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
+// The label is domain separation only - it never needs to be secret. It is fixed length and
+// precedes the fixed-width fields, and only the trailing Routing bytes are variable, so the input is
+// unambiguous without length prefixes.
+static const char ACK_PROOF_LABEL[] = "ack";
+#define ACK_PROOF_LABEL_LEN (sizeof(ACK_PROOF_LABEL) - 1) // no trailing NUL on the wire
+
+/** Write a little-endian uint32 - the encoding is pinned by the protocol, not by the host. */
+static void ackProofPutLE32(uint8_t *out, uint32_t v)
+{
+    out[0] = (uint8_t)(v & 0xff);
+    out[1] = (uint8_t)((v >> 8) & 0xff);
+    out[2] = (uint8_t)((v >> 16) & 0xff);
+    out[3] = (uint8_t)((v >> 24) & 0xff);
+}
+
+bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, uint32_t ackTo, uint32_t requestId,
+                                   const uint8_t *routing, size_t routingLen, uint8_t *proofOut)
+{
+    if (memfll(private_key, 0, sizeof(private_key)))
+        return false; // no identity yet - nothing to prove with
+
+    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
+    uint8_t peer[32];
+    memcpy(peer, peerPubKey, 32);
+    if (!setDHPublicKey(peer))
+        return false;     // includes the library's weak-point check
+    hash(shared_key, 32); // same derivation encryptCurve25519/decryptCurve25519 use
+
+    uint8_t header[ACK_PROOF_LABEL_LEN + 3 * sizeof(uint32_t)];
+    memcpy(header, ACK_PROOF_LABEL, ACK_PROOF_LABEL_LEN);
+    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN, ackFrom);
+    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN + 4, ackTo);
+    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN + 8, requestId);
+
+    uint8_t digest[32];
+    SHA256 mac;
+    mac.resetHMAC(shared_key, 32);
+    mac.update(header, sizeof(header));
+    if (routing && routingLen)
+        mac.update(routing, routingLen);
+    mac.finalizeHMAC(shared_key, 32, digest, sizeof(digest));
+    memcpy(proofOut, digest, ACK_PROOF_SIZE);
+
+    memset(digest, 0, sizeof(digest));
+    memset(shared_key, 0, sizeof(shared_key)); // do not leave the pairwise secret sitting in the engine
+    return true;
+}
+
 void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
 {
     memcpy(private_key, _private_key, 32);
 }
+
+#endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 /**
  * Hash arbitrary data using SHA256.
@@ -314,11 +364,17 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
     hash.finalize(bytes, 32);
 }
 
+// aes-ccm.cpp drives the block cipher through these two, and it is compiled in every build,
+// so they must stay outside the PKI guard or MESHTASTIC_EXCLUDE_PKI=1 fails to link.
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
-    if (key_len != 0) {
-        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
+    // Full key schedule: faster per block than AESSmall*, and encryptAESCtr already links these classes.
+    if (key_len == 16) {
+        aes = std::unique_ptr<BlockCipher>(new AES128());
+        aes->setKey(key_bytes, 16);
+    } else if (key_len != 0) {
+        aes = std::unique_ptr<BlockCipher>(new AES256());
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -327,6 +383,8 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
 {
     aes->encryptBlock(out, in);
 }
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
 
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 {
@@ -369,6 +427,50 @@ bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_pu
 }
 
 #endif
+
+// AAD layout: [fromNode (4)] [toNode (4)], in the same native byte order initNonce uses.
+static void initAad(uint32_t fromNode, uint32_t toNode, uint8_t *aad)
+{
+    // memcpy to avoid breaking strict-aliasing, as initNonce does
+    memcpy(aad, &fromNode, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint32_t), &toNode, sizeof(uint32_t));
+}
+
+bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                                    const uint8_t *plaintext, uint8_t *ciphertextWithTag)
+{
+    // length is int8_t and the aes_ccm_* key length is size_t, so the -1 "invalid key"
+    // sentinel would widen into a huge unsigned length rather than being rejected.
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD encryption requires a valid, non-empty PSK");
+        return false;
+    }
+    initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
+    // Output layout: [ciphertext (numBytes)] [auth_tag (AEAD_TAG_SIZE bytes)]
+    return aes_ccm_ae(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, plaintext, numBytes, aad, sizeof(aad), ciphertextWithTag,
+                      ciphertextWithTag + numBytes) == 0;
+}
+
+bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId,
+                                    size_t totalBytes, const uint8_t *ciphertextWithTag, uint8_t *plaintext)
+{
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD decryption requires a valid, non-empty PSK");
+        return false;
+    }
+    if (totalBytes <= AEAD_TAG_SIZE)
+        return false;
+    initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
+    size_t crypt_len = totalBytes - AEAD_TAG_SIZE;
+    const uint8_t *auth = ciphertextWithTag + crypt_len;
+    return aes_ccm_ad(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, aad, sizeof(aad), auth,
+                      plaintext);
+}
+
 concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
