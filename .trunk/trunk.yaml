@@ -178,10 +178,17 @@ lint:
     # numbers and request ids (0x0A0A0A0A, 0x0B0B0B0B, 0xABCD1234); its key
     # material is generated at runtime by crypto->generateKeyPair, so there is
     # no literal key in the file to leak.
+    #
+    # test_nodedb_blocked trips it on an identifier rather than on hex: one of
+    # its removeNodeByNum cases has a name exactly 35 characters long after the
+    # test_ prefix, which is the Lob key length, so the detector matches the
+    # bare word. Nothing in that file is a credential. Do not quote the name in
+    # full anywhere under lint - a comment containing it trips the same rule.
     - linters: [trufflehog]
       paths:
         - test/test_ack_proof/test_main.cpp
         - test/test_airtime/test_main.cpp
+        - test/test_nodedb_blocked/test_main.cpp
         - test/test_throttle/test_main.cpp
         - test/test_uptime_clock/test_main.cpp
     # The nightly index templates are halves of one page, not whole documents:
