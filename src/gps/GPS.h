@@ -32,6 +32,12 @@
 #define GPS_RF_EN_ACTIVE HIGH
 #endif
 
+// Only park an Airoha receiver in software RTC where we can also pulse it back out; the sleep and
+// the wake must never be guarded separately, or a board without RTC_INT would sleep with no way back.
+#if defined(GNSS_AIROHA) && defined(GPS_RTC_INT)
+#define HAS_AIROHA_SOFT_RTC 1
+#endif
+
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
 static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
 
@@ -222,6 +228,9 @@ class GPS : private concurrency::OSThread
     bool GPSInitStarted = false;  // Init thread finished?
 
     GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
+#ifdef HAS_AIROHA_SOFT_RTC
+    uint8_t airohaSleepMisses = 0; // consecutive $PAIR650 sleeps that went unacked
+#endif
 
     uint8_t numSatellites = 0;
 
