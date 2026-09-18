@@ -11,6 +11,10 @@
 #include "api/PacketAPI.h"
 #include "modules/NodeInfoModule.h"
 
+#if defined(T_LORA_PAGER) && HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
+#include "gps/GPS.h"
+#endif
+
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 // receivePacket() dispatches ToRadio straight to MeshService, bypassing handleToRadioPacket and so
 // the lockdown admin gate. Fail the build rather than silently ship an admin-auth bypass.
@@ -36,6 +40,17 @@ PacketAPI::PacketAPI(PacketServer *_server)
 int32_t PacketAPI::runOnce()
 {
     bool success = false;
+#if defined(T_LORA_PAGER) && HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
+    // GPS and PacketAPI share mainController. Only the copied snapshot crosses
+    // to the TFT task; local status never enters PhoneAPI or the radio packet
+    // queue.
+    const uint32_t now = Time::getMillis();
+    if (!hasSentGPSStatus || now - lastGPSStatusMs >= 1000) {
+        server->setLocalGPSStatus(gps ? gps->getLocalGPSStatus() : LocalGPSStatus{});
+        hasSentGPSStatus = true;
+        lastGPSStatusMs = now;
+    }
+#endif
 #ifndef ARCH_PORTDUINO
     if (config.bluetooth.enabled) {
         if (!programmingMode) {
