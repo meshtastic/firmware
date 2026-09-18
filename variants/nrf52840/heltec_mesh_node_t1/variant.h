@@ -42,7 +42,7 @@ extern "C" {
 #define ST7735_MISO -1
 #define ST7735_BUSY -1
 #define ST7735_BL (0 + 15)
-#define VTFT_CTRL (0 + 13) // Active HIGH, powers the ST7735 display
+#define VTFT_CTRL (0 + 13) // Active LOW: LOW powers the ST7735 display rail
 #define SPI_FREQUENCY 80000000
 #define SPI_READ_FREQUENCY 16000000
 #define SCREEN_ROTATE

@@ -1464,6 +1464,7 @@ static LGFX *tft = nullptr;
 #include "TFTColorRegions.h"
 #include "TFTDisplay.h"
 #include "TFTPalette.h"
+#include "mesh/Throttle.h"
 #include <SPI.h>
 
 #ifdef UNPHONE
@@ -1863,6 +1864,7 @@ static constexpr uint32_t kSleepOutSettleMs = 120;
 static constexpr uint8_t kCmdSleepIn = 0x10;
 static constexpr uint8_t kCmdSleepOut = 0x11;
 static bool panelAsleep = false;
+static uint32_t sleepInMs = 0;
 #endif
 
 // Send a command to the display (low level function)
@@ -1914,6 +1916,12 @@ void TFTDisplay::sendCommand(uint8_t com)
 #elif defined(TFT_SLEEP_WHEN_OFF)
         // Screen::handleSetOn() calls displayOn() twice per wake; only the first one has work to do.
         if (panelAsleep) {
+#ifdef VTFT_CTRL
+            digitalWrite(VTFT_CTRL, LOW); // rail up before the panel is addressed
+#endif
+            // SLPOUT within 120 ms of SLPIN is ignored, e.g. a button press as the timeout fires.
+            if (Throttle::isWithinTimespanMs(sleepInMs, kSleepOutSettleMs))
+                delay(kSleepOutSettleMs);
             tft->writecommand(kCmdSleepOut);
             delay(kSleepOutSettleMs); // datasheet minimum before the panel accepts DISPON
             tft->writecommand(kCmdDispOn);
@@ -1973,9 +1981,12 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #elif defined(TFT_SLEEP_WHEN_OFF)
         // Without this the LCD keeps driving the last frame unlit, which is what builds image retention.
-        tft->writecommand(kCmdDispOff);
-        tft->writecommand(kCmdSleepIn);
-        panelAsleep = true;
+        if (!panelAsleep) {
+            tft->writecommand(kCmdDispOff);
+            tft->writecommand(kCmdSleepIn);
+            sleepInMs = millis();
+            panelAsleep = true;
+        }
 #endif
 
 #ifdef VTFT_CTRL
