@@ -93,9 +93,11 @@ class MockRouter : public Router
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
-        packetPool.release(p);
-        return ERRNO_OK;
+        packetPool.release(p); // released here either way: the interface owns the packet it declined
+        return sendResult;
     }
+
+    ErrorCode sendResult = ERRNO_OK;
 
     // The broadcast loopback copy lands here; release rather than queue into fromRadioQueue, which
     // nothing drains in tests.
@@ -154,6 +156,7 @@ void setUp(void)
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     config.device.node_info_broadcast_secs = 0; // 0 selects the default, 3 hours
 
+    owner.is_licensed = false;
     strncpy(owner.long_name, "send window", sizeof(owner.long_name) - 1);
     strncpy(owner.short_name, "sw", sizeof(owner.short_name) - 1);
 
@@ -266,6 +269,34 @@ static void test_broadcastTimer_aRefusedSendLeavesTheCountdownAlone(void)
     TEST_ASSERT_EQUAL_UINT32(sentinel, (uint32_t)mod->broadcastCountdownMsForTests());
 }
 
+// A licensed station announces its call sign on a regulatory interval - ham mode sets
+// node_info_broadcast_secs to 600 s for the FCC minimum - and the floor must not stretch that to 30
+// minutes. The unlicensed control below is the same configuration without the licence, so the
+// assertion cannot pass by the floor quietly disappearing for everyone.
+static void test_sendWindow_aLicensedStationKeepsItsCallSignInterval(void)
+{
+    config.device.node_info_broadcast_secs = 600;
+
+    owner.is_licensed = true;
+    TEST_ASSERT_FALSE_MESSAGE(sendAllowedAfterMs(5 * 60 * 1000), "5 min is inside the station's own 10 min interval");
+    TEST_ASSERT_TRUE_MESSAGE(sendAllowedAfterMs(11 * 60 * 1000), "11 min is past it, and the floor must not override it");
+
+    owner.is_licensed = false;
+    TEST_ASSERT_FALSE_MESSAGE(sendAllowedAfterMs(11 * 60 * 1000), "without a licence the 30 minute floor still applies");
+}
+
+// A send the router declines never reached the air. It must not defer the routine broadcast, and it
+// must report failure so runOnce() does not treat a pending channel change as delivered.
+static void test_broadcastTimer_aRejectedSendLeavesTheCountdownAlone(void)
+{
+    const unsigned long sentinel = 8765;
+    mod->armBroadcastCountdownForTests(sentinel);
+    mockRouter->sendResult = ERRNO_NO_INTERFACES;
+
+    TEST_ASSERT_FALSE_MESSAGE(mod->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, false), "a declined send is not a send");
+    TEST_ASSERT_EQUAL_UINT32(sentinel, (uint32_t)mod->broadcastCountdownMsForTests());
+}
+
 // A preset or channel change bumps radioGeneration, and only a send that goes out consumes it: the
 // refused attempt leaves the ask pending, the next successful one carries want_response, and the
 // one after that does not ask again.
@@ -305,6 +336,8 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_broadcastTimer_aSendRearmsTheRoutineCountdown);
     RUN_TEST(test_broadcastTimer_anAdHocUnicastRearmsItToo);
     RUN_TEST(test_broadcastTimer_aRefusedSendLeavesTheCountdownAlone);
+    RUN_TEST(test_broadcastTimer_aRejectedSendLeavesTheCountdownAlone);
+    RUN_TEST(test_sendWindow_aLicensedStationKeepsItsCallSignInterval);
     RUN_TEST(test_presetChange_isConsumedOnlyByASendThatGoesOut);
     exit(UNITY_END());
 }
