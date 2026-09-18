@@ -55,7 +55,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     return result;
 }
 
-void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *p)
+void ReliableRouter::perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
     if (p->from != getNodeNum())
@@ -65,14 +65,21 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
 
     // We are seeing someone rebroadcast one of our transmissions. If this is the first time we saw
     // this, cancel any retransmissions we have queued up and generate an internal ack for the
-    // original sending process. Header-only (from/id), so it works even for a packet we cannot
-    // decrypt - notably a PKI DM we originated, which is opaque to us when overheard.
+    // original sending process. Works for a packet we cannot decrypt - notably a PKI DM we
+    // originated, which is opaque to us when overheard - because the check below is on ciphertext.
 
     // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
     // from the intended recipient.
     auto key = GlobalPacketId(getFrom(p), p->id);
     auto old = findPendingPacket(key);
     if (old) {
+        // The header is cleartext anyone can copy; the payload a relay carries is our exact ciphertext.
+        // An encrypted copy must match what send() recorded, or it is a forgery and gets nothing.
+        if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
+            (old->wireSize == 0 || p->encrypted.size != old->wireSize || wireHashOf(p) != old->wireHash)) {
+            LOG_WARN("Overheard 0x%08x with our header but not our bytes, ignore", p->id);
+            return;
+        }
         LOG_DEBUG("Generate implicit ack");
         // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
         // marked as wantAck
@@ -91,7 +98,7 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
-    perhapsGenerateImplicitAckForOwnOverheard(p);
+    perhapsAckOurRelayedPacket(p);
 
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,

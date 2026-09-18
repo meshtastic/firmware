@@ -375,6 +375,24 @@ PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
         return NULL;
 }
 
+uint32_t NextHopRouter::wireHashOf(const meshtastic_MeshPacket *p)
+{
+    uint32_t h = 2166136261u; // FNV-1a
+    for (size_t i = 0; i < p->encrypted.size; i++)
+        h = (h ^ p->encrypted.bytes[i]) * 16777619u;
+    return h;
+}
+
+void NextHopRouter::noteWireForm(const meshtastic_MeshPacket *p)
+{
+    if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
+        return;
+    if (PendingPacket *rec = findPendingPacket(getFrom(p), p->id)) {
+        rec->wireSize = p->encrypted.size;
+        rec->wireHash = wireHashOf(p);
+    }
+}
+
 /**
  * Stop any retransmissions we are doing of the specified node/packet ID pair
  */

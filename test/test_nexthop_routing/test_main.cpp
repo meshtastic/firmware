@@ -268,7 +268,7 @@ class ReliableRouterTestShim : public ReliableRouter
         ReliableRouter::sniffReceived(p, routing);
     }
 
-    void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsGenerateImplicitAckForOwnOverheard(p); }
+    void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsAckOurRelayedPacket(p); }
 
     void clearPendingForTest()
     {
