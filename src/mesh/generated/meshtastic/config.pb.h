@@ -606,9 +606,9 @@ typedef struct _meshtastic_Config_LoRaConfig {
  This value is replaced by bandwidth/spread_factor/coding_rate.
  If you'd like to experiment with other options add them to MeshRadio.cpp in the device code. */
     meshtastic_Config_LoRaConfig_ModemPreset modem_preset;
-    /* Bandwidth in MHz
+    /* Bandwidth in kHz
  Certain bandwidth numbers are 'special' and will be converted to the
- appropriate floating point value: 31 -> 31.25MHz */
+ appropriate floating point value: 31 -> 31.25kHz */
     uint16_t bandwidth;
     /* A number from 7 to 12.
  Indicates number of chirps per symbol as 1<<spread_factor. */

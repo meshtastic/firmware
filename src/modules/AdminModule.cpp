@@ -22,6 +22,9 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#if defined(USE_PACKET_API) && defined(T_LORA_PAGER)
+#include "api/PacketAPI.h"
+#endif
 #ifdef ARCH_NRF52
 #include "main.h"
 #endif
@@ -1919,7 +1922,13 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg)
 {
 #if HAS_SCREEN
-    nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
+    if (nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg)) {
+        uiconfig = uicfg;
+#if defined(USE_PACKET_API) && defined(T_LORA_PAGER)
+        if (packetAPI)
+            packetAPI->notifyUIConfigChanged();
+#endif
+    }
 #endif
 }
 
