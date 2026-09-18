@@ -30,6 +30,13 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
      */
     void triggerImmediateNodeInfoCheck();
 
+#ifdef PIO_UNIT_TESTING
+    /// Test-only reads of the routine-broadcast countdown a send re-arms. concurrency::OSThread is a
+    /// private base, so only this class can reach it - a test shim cannot.
+    unsigned long broadcastCountdownMsForTests() const { return interval; }
+    void armBroadcastCountdownForTests(unsigned long ms) { setIntervalFromNow(ms); }
+#endif
+
   protected:
     /** Called to handle a particular incoming message
 
