@@ -58,6 +58,11 @@ static int int_running_cnt = 0;
 // be joined. pinedio_deinit() waits for the count to reach 0 before the device and inst go away.
 static int poll_threads_alive = 0;
 static pthread_cond_t poll_thread_gone = PTHREAD_COND_INITIALIZER;
+// Set once pinedio_deinit() starts tearing down; no further attachment is accepted.
+static bool deinit_started = false;
+// True on a poll thread, including one that has been superseded and is on its way out. Comparing
+// against poll_thread cannot answer that, since a successor overwrites the handle.
+static __thread bool this_is_poll_thread = false;
 
 // CH341PAR installs the 64-bit library as CH341DLLA64.DLL and the 32-bit one as
 // CH341DLL.DLL, so try the name matching this process first.
@@ -121,6 +126,7 @@ int32_t pinedio_init(struct pinedio_inst *inst, void *driver)
 {
     (void)driver;
     inst->in_error = false;
+    deinit_started = false; // these statics outlive a destroyed instance; a re-init reopens the door
     for (int i = 0; i < PINEDIO_INT_PIN_MAX; i++)
         inst->interrupts[i].callback = NULL;
 
@@ -283,6 +289,7 @@ static void *pin_poll_thread_fn(void *arg)
 {
     struct pinedio_inst *inst = (struct pinedio_inst *)arg;
     bool should_exit = false;
+    this_is_poll_thread = true;
 
     while (!should_exit) {
         uint32_t input = 0;
@@ -352,6 +359,10 @@ int32_t pinedio_attach_interrupt(struct pinedio_inst *inst, enum pinedio_int_pin
 
     int32_t res = 0;
     pthread_mutex_lock(&usb_mutex);
+    if (deinit_started) {
+        pthread_mutex_unlock(&usb_mutex);
+        return -1;
+    }
     bool was_attached = inst->interrupts[int_pin].callback != NULL;
     inst->interrupts[int_pin].previous_state = 255;
     inst->interrupts[int_pin].mode = int_mode;
@@ -415,14 +426,21 @@ void pinedio_deinit(struct pinedio_inst *inst)
     int_running_cnt = 0;
     if (stop)
         thread_to_join = poll_thread; // copy before dropping the lock, as above
+    // Reject attachments from here on: pthread_cond_wait() below drops the mutex, and an attach
+    // getting in would start a poll thread that we then either wait on forever or pull the device
+    // out from under.
+    deinit_started = true;
     // A poll thread that detached itself in a callback is not joinable, but still reads inst and
-    // the device until it returns, so wait out every live one. Nothing to wait for when we are it.
-    bool self_is_poll = stop && pthread_equal(thread_to_join, pthread_self());
+    // the device until it returns, so wait out every live one. Nothing to wait for when we are it,
+    // and waiting would deadlock, since only this thread can decrement the count.
+    bool self_is_poll = this_is_poll_thread;
     while (poll_threads_alive > 0 && !self_is_poll)
         pthread_cond_wait(&poll_thread_gone, &usb_mutex);
     pthread_mutex_unlock(&usb_mutex);
 
-    if (stop && !self_is_poll)
+    // Keyed on the handle, not on self_is_poll: a superseded thread calling this is not the one
+    // named by poll_thread, and has already detached itself.
+    if (stop && !pthread_equal(thread_to_join, pthread_self()))
         pthread_join(thread_to_join, NULL);
 
     if (ch341.dll)
