@@ -104,6 +104,43 @@ void test_known_destination_satisfies_known_only_and_local_only(void)
                       "LOCAL_ONLY carries a PKI unicast to a node we know, whoever sent it");
 }
 
+// The mirror of the case above, and the only one that makes the `from` half of the identity test do
+// any work: a known SENDER, a destination we have never heard of. A qualifier rewritten to consult
+// only p->to passes every other case in this suite and fails this one.
+void test_known_source_satisfies_known_only_and_local_only(void)
+{
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->setPublicKey(ADMIN_NODE, admin.pub);
+    mockNodeDB->markHasUser(ADMIN_NODE); // the sender is known; the destination is not in the DB at all
+    const meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA30013);
+
+    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY, true,
+                      "KNOWN_ONLY carries a PKI unicast from a node we know, whoever it is addressed to");
+    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY, true,
+                      "LOCAL_ONLY carries a PKI unicast from a node we know, whoever it is addressed to");
+}
+
+// The only case that makes the channel-0 half do any work. A unicast on a channel hash we do not
+// hold is not PKI - it is someone else's channel traffic, addressed - so these modes decline it even
+// though a party is known. The broadcast case cannot pin this: !isBroadcast() already rejects that.
+void test_known_party_on_a_foreign_channel_is_declined(void)
+{
+    const RelayIdentity admin = makeIdentity(ADMIN_NODE);
+    const RelayIdentity target = makeIdentity(TARGET_NODE);
+    mockNodeDB->addNode(TARGET_NODE);
+    mockNodeDB->setPublicKey(TARGET_NODE, target.pub);
+    mockNodeDB->markHasUser(TARGET_NODE);
+    meshtastic_MeshPacket p = makePkiUnicastBetween(admin, target, meshtastic_PortNum_TEXT_MESSAGE_APP, 0xADA30023);
+    p.channel = 0x2B; // a channel hash we do not hold, so nothing about this frame says PKI
+
+    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY, false,
+                      "KNOWN_ONLY declines an addressed frame on a foreign channel, known party or not");
+    assertOpaqueRelay(p, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY, false,
+                      "LOCAL_ONLY declines an addressed frame on a foreign channel, known party or not");
+}
+
 // An opaque *broadcast* (a channel we do not hold) is not PKI-shaped. CORE relays it - the
 // port list cannot apply to a packet with no readable port - and only KNOWN/LOCAL/NONE decline.
 void test_unknown_channel_broadcast_relays_in_core_portnums_only(void)
@@ -285,6 +322,8 @@ void setup()
     RUN_TEST(test_remote_admin_between_other_nodes_relays_in_every_mode);
     RUN_TEST(test_pki_unicast_between_strangers_relays_unless_mode_needs_identity);
     RUN_TEST(test_known_destination_satisfies_known_only_and_local_only);
+    RUN_TEST(test_known_source_satisfies_known_only_and_local_only);
+    RUN_TEST(test_known_party_on_a_foreign_channel_is_declined);
     RUN_TEST(test_unknown_channel_broadcast_relays_in_core_portnums_only);
     RUN_TEST(test_licensed_node_never_relays_opaque_traffic);
     RUN_TEST(test_licensed_node_relays_decoded_unless_a_party_is_known_unlicensed);
