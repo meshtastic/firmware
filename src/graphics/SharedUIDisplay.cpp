@@ -578,14 +578,14 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 // * Common Footer Drawing *
 // *************************
-void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
+void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y, bool wipe)
 {
     if (isCompactPanel(display)) {
         display->setColor(WHITE); // Reset for other UI - normally done at the end of this function
         return;
     }
 
-    if (!isAPIConnected(service->api_state))
+    if (!isAPIConnected(service ? service->api_state : 0))
         return;
 
     const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
@@ -601,12 +601,14 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     setAndRegisterTFTColorRole(TFTColorRole::ConnectionIcon, TFTPalette::Blue, TFTPalette::Black, iconX, iconY, iconW, iconH);
 #endif
 
-    display->setColor(BLACK);
+    if (wipe) {
+        display->setColor(BLACK);
 #if GRAPHICS_TFT_COLORING_ENABLED
-    display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+        display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
 #else
-    display->fillRect(0, footerY, connection_icon_width + 1, footerH);
+        display->fillRect(0, footerY, connection_icon_width + 1, footerH);
 #endif
+    }
     display->setColor(WHITE);
     if (currentResolution == ScreenResolution::High) {
         const int bytesPerRow = (connection_icon_width + 7) / 8;

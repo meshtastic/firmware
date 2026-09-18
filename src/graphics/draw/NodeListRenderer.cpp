@@ -3,6 +3,7 @@
 #include "CompassRenderer.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#include "RadarRenderer.h"
 #if !MESHTASTIC_EXCLUDE_STATUS
 #include "modules/StatusMessageModule.h"
 #endif
@@ -868,6 +869,13 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
         lastSwitchTime = now;
     }
 #endif
+
+    // Radar replaces the distance/bearings render path.
+    if (uiconfig.bearings_view_radar) {
+        // RadarRenderer owns the BT/API icon to avoid wiping radar content.
+        graphics::RadarRenderer::drawRadarOverlay(display, x, y);
+        return;
+    }
     // On very first call (on boot or state enter)
     if (lastRenderedMode == MODE_COUNT_LOCATION) {
         currentMode_Location = MODE_DISTANCE;
