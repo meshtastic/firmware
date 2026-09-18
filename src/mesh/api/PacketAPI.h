@@ -31,6 +31,10 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
 
     bool isConnected;
     bool programmingMode;
+#if defined(T_LORA_PAGER) && HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
+    bool hasSentGPSStatus = false;
+    uint32_t lastGPSStatusMs = 0;
+#endif
     PacketServer *server;
     uint8_t txBuf[MAX_TO_FROM_RADIO_SIZE] = {0}; // dummy buf to obey PhoneAPI
 };
