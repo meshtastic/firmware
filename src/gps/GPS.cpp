@@ -2234,13 +2234,13 @@ bool GPS::lookForLocation()
         p.ground_speed = reader.speed.kmph();
     }
 
-#ifdef USE_PACKET_API
+#if defined(USE_PACKET_API) && defined(T_LORA_PAGER)
     lastPositionUpdateMs = Time::getMillis();
 #endif
     return true;
 }
 
-#ifdef USE_PACKET_API
+#if defined(USE_PACKET_API) && defined(T_LORA_PAGER)
 LocalGPSStatus GPS::getLocalGPSStatus()
 {
     LocalGPSStatus status;

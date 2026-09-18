@@ -13,7 +13,7 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "modules/PositionModule.h"
 
-#ifdef USE_PACKET_API
+#if defined(USE_PACKET_API) && defined(T_LORA_PAGER)
 #include "util/LocalGPSStatus.h"
 #endif
 
@@ -132,7 +132,7 @@ class GPS : private concurrency::OSThread
 
     bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
 
-#ifdef USE_PACKET_API
+#if defined(USE_PACKET_API) && defined(T_LORA_PAGER)
     // Read only on mainController, where the GPS parser is updated.
     LocalGPSStatus getLocalGPSStatus();
 #endif
@@ -222,7 +222,7 @@ class GPS : private concurrency::OSThread
      *   GPS location, valid and fresh (< gps_update_interval + position_broadcast_secs)
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
-#ifdef USE_PACKET_API
+#if defined(USE_PACKET_API) && defined(T_LORA_PAGER)
     uint32_t lastPositionUpdateMs = 0;
 #endif
 
