@@ -168,10 +168,9 @@ jobs:
       fail-fast: false
       matrix:
         macos_ver:
+          - "27" # ARM64
           - "26" # ARM64
           # - '26-intel' # x86_64
-          - "15" # ARM64
-          # - '15-intel' # x86_64
     uses: ./.github/workflows/build_macos_bin.yml
     with:
       macos_ver: ${{ matrix.macos_ver }}
