@@ -6,6 +6,7 @@
 #include "DFRobotLarkSensor.h"
 #include "TelemetrySensor.h"
 #include "gps/GeoCoord.h"
+#include "meshUtils.h"
 #include <DFRobot_LarkWeatherStation.h>
 #include <string>
 
@@ -36,11 +37,11 @@ bool DFRobotLarkSensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.has_wind_direction = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
 
-    measurement->variant.environment_metrics.temperature = lark.getValue("Temp").toFloat();
-    measurement->variant.environment_metrics.relative_humidity = lark.getValue("Humi").toFloat();
-    measurement->variant.environment_metrics.wind_speed = lark.getValue("Speed").toFloat();
+    measurement->variant.environment_metrics.temperature = parseDecimalFloat(lark.getValue("Temp").c_str());
+    measurement->variant.environment_metrics.relative_humidity = parseDecimalFloat(lark.getValue("Humi").c_str());
+    measurement->variant.environment_metrics.wind_speed = parseDecimalFloat(lark.getValue("Speed").c_str());
     measurement->variant.environment_metrics.wind_direction = GeoCoord::bearingToDegrees(lark.getValue("Dir").c_str());
-    measurement->variant.environment_metrics.barometric_pressure = lark.getValue("Pressure").toFloat();
+    measurement->variant.environment_metrics.barometric_pressure = parseDecimalFloat(lark.getValue("Pressure").c_str());
 
     LOG_INFO("Temperature: %f", measurement->variant.environment_metrics.temperature);
     LOG_INFO("Humidity: %f", measurement->variant.environment_metrics.relative_humidity);

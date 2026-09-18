@@ -139,7 +139,9 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
     return value;
 }
 
-bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint16_t command, uint8_t expectedLength) const
+// requestFrom() reports the full length for any device that ACKs, so only the per-word Sensirion
+// CRC-8 (poly 0x31, init 0xFF) proves a Sensirion device answered.
+bool ScanI2CTwoWire::sensirionResponseValid(ScanI2C::DeviceAddress addr, uint16_t command, uint8_t expectedLength) const
 {
     TwoWire *i2cBus = fetchI2CBus(addr);
     i2cBus->beginTransmission(addr.address);
@@ -151,11 +153,20 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
         return false;
     }
     delay(20);
-    uint8_t received = i2cBus->requestFrom(addr.address, expectedLength);
-    bool match = (received == expectedLength);
+    bool valid = (i2cBus->requestFrom(addr.address, expectedLength) == expectedLength);
+    for (uint8_t i = 0; valid && i + 2 < expectedLength; i += 3) {
+        uint8_t crc = 0xFF;
+        for (uint8_t j = 0; j < 2; j++) {
+            crc ^= (uint8_t)i2cBus->read();
+            for (uint8_t bit = 0; bit < 8; bit++) {
+                crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : crc << 1;
+            }
+        }
+        valid = (crc == i2cBus->read());
+    }
     while (i2cBus->available())
         i2cBus->read();
-    return match;
+    return valid;
 }
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
@@ -706,17 +717,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         }
                     }
                 }
-                // SFA30 detection: send 2-byte command 0xD060 (Get Device Marking) and check for 48-byte response
-                if (i2cCommandResponseLength(addr, 0xD060, 48)) {
-                    type = SFA30;
-                    logFoundDevice("SFA30", (uint8_t)addr.address);
-                    break;
-                }
-                // Fallback: LPS22HB detection at alternate address using WHO_AM_I register (0x0F == 0xB1)
+                // LPS22HB family (also LPS33HW/LPS35HW): WHO_AM_I (0x0F) == 0xB1. Checked before SFA30, whose
+                // command an ST sensor would take as a write to a reserved register.
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1);
                 if (registerValue == 0xB1) {
                     type = LPS22HB;
                     logFoundDevice("LPS22HB", (uint8_t)addr.address);
+                    break;
+                }
+                // SFA30 detection: 2-byte command 0xD060 (Get Device Marking) returns 48 bytes of CRC-checked words
+                if (sensirionResponseValid(addr, 0xD060, 48)) {
+                    type = SFA30;
+                    logFoundDevice("SFA30", (uint8_t)addr.address);
                 }
                 break;
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)

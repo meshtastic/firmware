@@ -3,19 +3,16 @@
 #include "BluetoothCommon.h"
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
+#include "SPILock.h"
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
+#include <InternalFileSystem.h>
 #include <bluefruit.h>
 #include <utility/bonding.h>
-
-#ifdef ARCH_NRF54L
-extern uint32_t sd_app_ram_start_required;             // Bluefruit54Lib
-extern "C" uint32_t verify_last_err, verify_last_line; // core verify.h
-#endif
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
@@ -26,9 +23,46 @@ static BLEDis bledis;             // DIS (Device Information Service) helper cla
 static BLEBas blebas;             // BAS (Battery Service) helper class instance
 static int lastBatteryLevel = -1; // last value written to BAS, to skip redundant writes/notifies
 #ifndef BLE_DFU_SECURE
-static BLEDfu bledfu; // DFU software update helper service
+namespace
+{
+// The library's DFU handler jumps to the bootloader from the callback task with no flash quiesce, so
+// wrap it: wait out any write in flight first, and unlock again if it comes back without jumping.
+class QuiescingBLEDfu : public BLEDfu
+{
+    struct Peek : BLECharacteristic {
+        using BLECharacteristic::_wr_authorize_cb;
+    };
+    static BLECharacteristic::write_authorize_cb_t libraryCb;
+
+    static void onControlWrite(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_write_t *request)
+    {
+        // Only START_DFU resets, and the library reads this byte without checking len, so match it exactly.
+        if (request->data[0] != 1) {
+            libraryCb(conn_hdl, chr, request);
+            return;
+        }
+        nrf52FlashQuiesce();
+        // The handler reloads the bond keys through LittleFS, so it cannot run under the FS mutex; spiLock still
+        // fences every other writer until the jump.
+        InternalFS._unlockFS();
+        libraryCb(conn_hdl, chr, request);
+        spiLock->unlock();
+    }
+
+  public:
+    err_t begin() override
+    {
+        err_t err = BLEDfu::begin();
+        libraryCb = _chr_control.*(&Peek::_wr_authorize_cb);
+        _chr_control.setWriteAuthorizeCallback(onControlWrite);
+        return err;
+    }
+};
+BLECharacteristic::write_authorize_cb_t QuiescingBLEDfu::libraryCb;
+} // namespace
+static QuiescingBLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure; // DFU software update helper service
+static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -292,12 +326,7 @@ void NRF52Bluetooth::setup()
         // current Bluefruit config. Without this check the node would silently run without BLE.
         // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
         // raise the ORIGIN accordingly.
-#ifdef ARCH_NRF54L
-        LOG_ERROR("Bluefruit.begin failed: status 0x%lx at line %lu, app RAM base wanted 0x%08lx", verify_last_err,
-                  verify_last_line, sd_app_ram_start_required);
-#else
         LOG_ERROR("Bluefruit.begin failed: SoftDevice RAM too small");
-#endif
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
