@@ -975,14 +975,24 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 #if GRAPHICS_TFT_COLORING_ENABLED
         const int usernameWidth = UIRenderer::measureStringWithEmotes(display, username);
+
+        // Check the row gap to make sure we don't turn the next line a color
+        const int usernameRowGap = getTextPositions(display)[line + 1] - getTextPositions(display)[line];
+        const int usernameMaxHighlightHeight =
+            (usernameRowGap > 0 && usernameRowGap < FONT_HEIGHT_SMALL) ? usernameRowGap : FONT_HEIGHT_SMALL;
+
+        // Once in awhile we need some extra padding, this can be tweaked as necessary. Initially for T096 sized LCDs
+        constexpr int kUsernameHighlightPad = 2;
+        const int usernameHighlightHeight = usernameMaxHighlightHeight + kUsernameHighlightPad;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
         if (nodeInfoLiteHasXeddsaSigned(node)) {
             setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black,
-                                       x + usernameWidth, getTextPositions(display)[line], username_buffer, FONT_HEIGHT_SMALL);
+                                       x + usernameWidth, getTextPositions(display)[line], username_buffer,
+                                       usernameHighlightHeight);
         }
 #endif
         setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black, x,
-                                   getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
+                                   getTextPositions(display)[line], usernameWidth, usernameHighlightHeight);
 #endif
         UIRenderer::drawStringWithEmotes(display, x + username_buffer, getTextPositions(display)[line++], username,
                                          FONT_HEIGHT_SMALL, 1, false);

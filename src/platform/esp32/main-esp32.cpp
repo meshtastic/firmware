@@ -317,6 +317,32 @@ void esp32Loop()
     // radio.radioIf.canSleep();
 }
 
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+/**
+ * Drop any pin from an ext1 wake mask that this SoC cannot wake on.
+ *
+ * esp_sleep_enable_ext1_wakeup() clears the existing ext1 configuration *before* it validates the
+ * mask, so one non-RTC pin does not merely fail to arm itself - it returns ESP_ERR_INVALID_ARG with
+ * nothing armed at all. Callers here ignore that return, and a timed sleep still comes back on the
+ * RTC timer, so the failure stays invisible until a shutdown (portMAX_DELAY, no timer) leaves the
+ * device with no way back short of a reset. Filter first and name whatever gets dropped.
+ */
+static uint64_t filterExt1WakeMask(uint64_t gpioMask)
+{
+    uint64_t valid = 0;
+    for (int gpio = 0; gpio < SOC_GPIO_PIN_COUNT; gpio++) {
+        const uint64_t bit = 1ULL << gpio;
+        if (!(gpioMask & bit))
+            continue;
+        if (esp_sleep_is_valid_wakeup_gpio((gpio_num_t)gpio))
+            valid |= bit;
+        else
+            LOG_WARN("GPIO%d has no RTC function; dropped from the deep sleep wake mask", gpio);
+    }
+    return valid;
+}
+#endif
+
 void cpuDeepSleep(uint32_t msecToWake)
 {
     /*
@@ -345,7 +371,12 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
         34, 35, 37};
 
-#if defined(BUTTON_PIN)
+    // A variant whose button is not an RTC IO can nominate a different pad here. This replaces the
+    // button rather than joining it: esp_sleep_enable_ext1_wakeup() validates the whole mask and
+    // arms nothing if any pin in it lacks RTC function, so one bad pin would veto the good one.
+#if defined(DEEP_SLEEP_WAKE_PIN)
+    const int wakeButton = DEEP_SLEEP_WAKE_PIN;
+#elif defined(BUTTON_PIN)
     const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
 #elif defined(BUTTON_PIN_RUNTIME_ONLY)
     const int wakeButton = IS_RUNTIME_BUTTON_PIN(config.device.button_gpio) ? (int)config.device.button_gpio : -1;
@@ -361,17 +392,17 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
     // to detect wake and in normal operation the external part drives them hard.
-#if defined(BUTTON_PIN) || defined(BUTTON_PIN_RUNTIME_ONLY)
-    // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
-#if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
+#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN) || defined(BUTTON_PIN_RUNTIME_ONLY)
+    // Only GPIOs with RTC functionality can go in this bit map, and which ones those are differs
+    // per SoC (ESP32 0,2,4,12-15,25-27,32-39 / S2 and S3 0-21 / C6 0-7 / H2 7-14 / P4 0-15).
+    // filterExt1WakeMask() below enforces that rather than each variant having to know it.
+    //
+    // Guard on SOC_PM_SUPPORT_EXT1_WAKEUP, not the SOC_PM_SUPPORT_EXT_WAKEUP alias: that alias
+    // exists only on ESP32/S2/S3 for IDF backwards compatibility, so keying off it silently
+    // drops the whole ext1 path on C6, H2 and P4, which all have the hardware.
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+    // A board with no button configured has no wake pin, and shifting by -1 is undefined.
     uint64_t gpioMask = wakeButton >= 0 ? (1ULL << wakeButton) : 0;
-#ifdef BUTTON_PIN_RUNTIME_ONLY
-    // ext1 only wakes on an RTC pad, which a runtime-chosen pin is not guaranteed to be.
-    if (wakeButton >= 0 && !rtc_gpio_is_valid_gpio((gpio_num_t)wakeButton)) {
-        LOG_WARN("GPIO%02d cannot wake from deep sleep: not an RTC pad", wakeButton);
-        gpioMask = 0;
-    }
-#endif
 #endif
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
@@ -388,25 +419,25 @@ void cpuDeepSleep(uint32_t msecToWake)
     // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
     // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+    gpioMask = filterExt1WakeMask(gpioMask);
+    if (!gpioMask)
+        LOG_ERROR("No RTC-capable wake pin: deep sleep will not wake on a button");
+
     esp_err_t wakeRes = ESP_OK;
+    if (gpioMask) {
 #ifdef ESP32S3_WAKE_TYPE
-    if (gpioMask)
         wakeRes = esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
-#else
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-#ifdef CONFIG_IDF_TARGET_ESP32
-    // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
-    if (gpioMask)
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+        // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
         wakeRes = esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
 #else
-    if (gpioMask)
         wakeRes = esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
-#endif
-
-#endif // #end ESP32S3_WAKE_TYPE
+    }
     if (wakeRes != ESP_OK)
-        LOG_WARN("ext1 wake setup failed: %d", wakeRes);
+        LOG_ERROR("esp_sleep_enable_ext1_wakeup failed (%d); deep sleep has no button wake", wakeRes);
+#endif // SOC_PM_SUPPORT_EXT1_WAKEUP
 #endif
     variant_shutdown();
 
