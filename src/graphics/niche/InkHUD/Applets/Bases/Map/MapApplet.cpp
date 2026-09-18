@@ -928,8 +928,9 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
                 xAvg /= count;
                 yAvg /= count;
                 zAvg /= count;
-                *lng = atan2f(yAvg, xAvg) * RAD_TO_DEG;
-                *lat = atan2f(zAvg, sqrtf(xAvg * xAvg + yAvg * yAvg)) * RAD_TO_DEG;
+                // Double atan2 on purpose: already linked, atan2f would add a float copy.
+                *lng = atan2(double(yAvg), double(xAvg)) * RAD_TO_DEG;
+                *lat = atan2(double(zAvg), double(sqrtf(xAvg * xAvg + yAvg * yAvg))) * RAD_TO_DEG;
                 latCenter = *lat;
                 lngCenter = *lng;
             }

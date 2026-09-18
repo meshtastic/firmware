@@ -149,6 +149,11 @@ lint:
     - linters: [gitleaks]
       paths:
         - test/fixtures/nodedb/seed_v25_*.jsonl
+    # trufflehog's Lob detector matches "test_" followed by alphanumerics, which is every
+    # Unity test function name. There are no credentials in these suites.
+    - linters: [trufflehog]
+      paths:
+        - test/**/test_main.cpp
     # Deliberately broken YAML: these are the inputs to bin/test-config-check.sh,
     # which asserts that `meshtasticd --check` reports each planted fault. Prettier
     # rejects the duplicate keys and bad indentation that are the whole point of
@@ -174,9 +179,13 @@ lint:
     # (0xFFFFFF00u and neighbors). trufflehog's Lob detector stitches nearby
     # hex literals into one candidate string and the result happens to match
     # a Lob API key shape. Not secrets - deterministic test fixtures for the
-    # 32-bit rollover.
+    # 32-bit rollover. test_ack_proof trips the same detector on its node
+    # numbers and request ids (0x0A0A0A0A, 0x0B0B0B0B, 0xABCD1234); its key
+    # material is generated at runtime by crypto->generateKeyPair, so there is
+    # no literal key in the file to leak.
     - linters: [trufflehog]
       paths:
+        - test/test_ack_proof/test_main.cpp
         - test/test_airtime/test_main.cpp
         - test/test_throttle/test_main.cpp
         - test/test_uptime_clock/test_main.cpp

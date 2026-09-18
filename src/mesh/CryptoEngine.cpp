@@ -287,6 +287,54 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
+// The label is domain separation only - it never needs to be secret. It is fixed length and
+// precedes the fixed-width fields, and only the trailing Routing bytes are variable, so the input is
+// unambiguous without length prefixes.
+static const char ACK_PROOF_LABEL[] = "ack";
+#define ACK_PROOF_LABEL_LEN (sizeof(ACK_PROOF_LABEL) - 1) // no trailing NUL on the wire
+
+/** Write a little-endian uint32 - the encoding is pinned by the protocol, not by the host. */
+static void ackProofPutLE32(uint8_t *out, uint32_t v)
+{
+    out[0] = (uint8_t)(v & 0xff);
+    out[1] = (uint8_t)((v >> 8) & 0xff);
+    out[2] = (uint8_t)((v >> 16) & 0xff);
+    out[3] = (uint8_t)((v >> 24) & 0xff);
+}
+
+bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, uint32_t ackTo, uint32_t requestId,
+                                   const uint8_t *routing, size_t routingLen, uint8_t *proofOut)
+{
+    if (memfll(private_key, 0, sizeof(private_key)))
+        return false; // no identity yet - nothing to prove with
+
+    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
+    uint8_t peer[32];
+    memcpy(peer, peerPubKey, 32);
+    if (!setDHPublicKey(peer))
+        return false;     // includes the library's weak-point check
+    hash(shared_key, 32); // same derivation encryptCurve25519/decryptCurve25519 use
+
+    uint8_t header[ACK_PROOF_LABEL_LEN + 3 * sizeof(uint32_t)];
+    memcpy(header, ACK_PROOF_LABEL, ACK_PROOF_LABEL_LEN);
+    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN, ackFrom);
+    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN + 4, ackTo);
+    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN + 8, requestId);
+
+    uint8_t digest[32];
+    SHA256 mac;
+    mac.resetHMAC(shared_key, 32);
+    mac.update(header, sizeof(header));
+    if (routing && routingLen)
+        mac.update(routing, routingLen);
+    mac.finalizeHMAC(shared_key, 32, digest, sizeof(digest));
+    memcpy(proofOut, digest, ACK_PROOF_SIZE);
+
+    memset(digest, 0, sizeof(digest));
+    memset(shared_key, 0, sizeof(shared_key)); // do not leave the pairwise secret sitting in the engine
+    return true;
+}
+
 void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
 {
     memcpy(private_key, _private_key, 32);
@@ -321,11 +369,12 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
+    // Full key schedule: faster per block than AESSmall*, and encryptAESCtr already links these classes.
     if (key_len == 16) {
-        aes = std::unique_ptr<BlockCipher>(new AESSmall128());
+        aes = std::unique_ptr<BlockCipher>(new AES128());
         aes->setKey(key_bytes, 16);
     } else if (key_len != 0) {
-        aes = std::unique_ptr<BlockCipher>(new AESSmall256());
+        aes = std::unique_ptr<BlockCipher>(new AES256());
         aes->setKey(key_bytes, key_len);
     }
 }
