@@ -197,10 +197,6 @@ typedef struct _meshtastic_DeviceUIConfig {
     bool is_clockface_analog;
     /* How the GPS coordinates are formatted on the OLED screen. */
     meshtastic_DeviceUIConfig_GpsCoordinateFormat gps_format;
-    /* When true, the bearings/distance frame is replaced by the radar overlay. */
-    bool bearings_view_radar;
-    /* When true, the radar overlay only plots favorite nodes. */
-    bool radar_favorites_only;
 } meshtastic_DeviceUIConfig;
 
 
@@ -285,8 +281,6 @@ extern "C" {
 #define meshtastic_DeviceUIConfig_screen_rgb_color_tag 17
 #define meshtastic_DeviceUIConfig_is_clockface_analog_tag 18
 #define meshtastic_DeviceUIConfig_gps_format_tag 19
-#define meshtastic_DeviceUIConfig_bearings_view_radar_tag 20
-#define meshtastic_DeviceUIConfig_radar_favorites_only_tag 21
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceUIConfig_FIELDLIST(X, a) \
@@ -308,9 +302,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15) \
 X(a, STATIC,   SINGULAR, UENUM,    compass_mode,     16) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_rgb_color,  17) \
 X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_format,       19) \
-X(a, STATIC,   SINGULAR, BOOL,     bearings_view_radar,  20) \
-X(a, STATIC,   SINGULAR, BOOL,     radar_favorites_only, 21)
+X(a, STATIC,   SINGULAR, UENUM,    gps_format,       19)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter

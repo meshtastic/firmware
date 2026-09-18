@@ -871,7 +871,7 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
 #endif
 
     // Radar replaces the distance/bearings render path.
-    if (uiconfig.bearings_view_radar) {
+    if (config.display.bearings_view_radar) {
         // RadarRenderer owns the BT/API icon to avoid wiping radar content.
         graphics::RadarRenderer::drawRadarOverlay(display, x, y);
         return;

@@ -227,7 +227,7 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
  *   - Left side: node list (up to 5 closest nodes, marker + name + distance)
  *
  * Called from NodeListRenderer::drawDynamicListScreen_Location when
- * uiconfig.bearings_view_radar is true.  The caller draws the footer; this
+ * config.display.bearings_view_radar is true.  The caller draws the footer; this
  * function owns the header and content area.
  */
 void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
@@ -315,7 +315,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     std::vector<Entry> entries;
 
-    const bool favoritesOnly = uiconfig.radar_favorites_only;
+    const bool favoritesOnly = config.display.radar_favorites_only;
 
     const int numNodes = nodeDB->getNumMeshNodes();
     for (int i = 0; i < numNodes; i++) {

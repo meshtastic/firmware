@@ -694,8 +694,8 @@ void menuHandler::setTrackingViewPickerReturn(screenMenus target)
 void menuHandler::trackingViewPicker()
 {
     // Mirrors clockFacePicker: pick which view the bearings/distance frame
-    // shows.  Stored in uiconfig.bearings_view_radar (false=Bearings list,
-    // true=Radar overlay).
+    // shows.  Stored in config.display.bearings_view_radar (false=Bearings
+    // list, true=Radar overlay).
     static const ClockFaceOption trackingOptions[] = {
         {"Back", OptionsAction::Back},
         {"Bearings", OptionsAction::Select, false},
@@ -718,17 +718,17 @@ void menuHandler::trackingViewPicker()
                                                            return;
                                                        }
 
-                                                       if (uiconfig.bearings_view_radar == option.value) {
+                                                       if (config.display.bearings_view_radar == option.value) {
                                                            return;
                                                        }
 
-                                                       uiconfig.bearings_view_radar = option.value;
-                                                       menuHandler::saveUIConfig();
+                                                       config.display.bearings_view_radar = option.value;
+                                                       service->reloadConfig(SEGMENT_CONFIG);
                                                        screen->setFrames(Screen::FOCUS_PRESERVE);
                                                        screen->runNow();
                                                    });
 
-    bannerOptions.InitialSelected = uiconfig.bearings_view_radar ? 2 : 1;
+    bannerOptions.InitialSelected = config.display.bearings_view_radar ? 2 : 1;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -1621,7 +1621,7 @@ void menuHandler::radarBearingsMenu()
     static int optionsEnumArray[] = {Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut};
 
     optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
-    optionsArray[ToggleFavorites] = uiconfig.radar_favorites_only ? "Show: All Nodes" : "Show: Favorites Only";
+    optionsArray[ToggleFavorites] = config.display.radar_favorites_only ? "Show: All Nodes" : "Show: Favorites Only";
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Radar Options";
@@ -1643,8 +1643,8 @@ void menuHandler::radarBearingsMenu()
             screen->setFrames(Screen::FOCUS_PRESERVE);
             screen->runNow();
         } else if (selected == ToggleFavorites) {
-            uiconfig.radar_favorites_only = !uiconfig.radar_favorites_only;
-            menuHandler::saveUIConfig();
+            config.display.radar_favorites_only = !config.display.radar_favorites_only;
+            service->reloadConfig(SEGMENT_CONFIG);
             screen->setFrames(Screen::FOCUS_PRESERVE);
             screen->runNow();
         } else if (selected == ZoomIn) {
