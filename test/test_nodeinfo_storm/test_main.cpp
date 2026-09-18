@@ -171,6 +171,31 @@ class NodeDBTestShim : public NodeDB
         updateFrom(mp);
     }
 
+    // Deliver the same packet from a radio whose clock is not trusted: computeRxTimeStamp() puts the
+    // uptime-seconds placeholder in rx_time and leaves has_rx_time false, so the gap has to be
+    // measured in the uptime domain through the sidecar. Drive Time::setTestMillis() around this.
+    void hearClockless(NodeNum from, bool toUs = false)
+    {
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        mp.from = from;
+        mp.to = toUs ? getNodeNum() : NODENUM_BROADCAST;
+        mp.id = 0x2000 + from;
+        mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        mp.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        mp.has_rx_time = false;
+        mp.rx_time = Time::getUptimeSecs();
+        mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+        armThrottle(false);
+        updateFrom(mp);
+    }
+
+    // A reboot keeps the store (bitfield is a persisted NodeInfoLite field) but not the RAM sidecar.
+    void forgetBootStamps()
+    {
+        for (auto &h : heardAt)
+            h = {};
+    }
+
     // Fill to capacity with favourites only - the pre-cap legacy shape getOrCreateMeshNode must refuse.
     void fillAllProtected()
     {
@@ -205,13 +230,15 @@ class NodeDBTestShim : public NodeDB
         TEST_ASSERT_FALSE(isFull());
     }
 
-    // Admit a node the way updateFrom() does: create it (evicting when full), then stamp when we
-    // heard it. Without the stamp the fresh arrival is itself the next eviction victim.
+    // Admit a node the way the radio path does. A heard admission is dated by getOrCreateMeshNode()
+    // itself, so nothing is stamped here - that is the invariant these tests exist to hold. A contact
+    // import is not heard, so it is dated the way addFromContact() dates one.
     void admit(NodeNum num, bool heardOnAir = true)
     {
         meshtastic_NodeInfoLite *n = getOrCreateMeshNode(num, heardOnAir);
         TEST_ASSERT_NOT_NULL(n);
-        n->last_heard = getTime();
+        if (!heardOnAir)
+            stampContactHeardNow(n);
         nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
     }
 
@@ -356,6 +383,11 @@ meshtastic_MeshPacket makeNodeInfoRequest(NodeNum to)
 
 // Drive `count` admissions through getOrCreateMeshNode, using a fresh block of node numbers each
 // time so nothing is re-admitted out of the warm tier. On a full store every one of them evicts.
+constexpr NodeNum SAME_DISPATCH = 0x63000001;   // admitted by updateUser(), then heard in the same dispatch
+constexpr NodeNum CLOCKLESS = 0x63000002;       // heard on a boot whose wall clock is never trusted
+constexpr NodeNum PERSISTED = 0x63000003;       // on probation in the stored DB, no stamp for this boot
+constexpr NodeNum CLOCKLESS_ADMIT = 0x63000004; // both at once: no wall clock and updateUser() admits it
+
 void churn(int count, uint32_t &seq, bool heardOnAir = true)
 {
     for (int i = 0; i < count; i++)
@@ -618,6 +650,99 @@ void test_promotion_worksWithClockNeverTrusted(void)
     churn(2, seq);
     TEST_ASSERT_EQUAL(NODEDB_PROBATION_SLOTS, db->probationCount());
     TEST_ASSERT_NOT_NULL_MESSAGE(db->getMeshNode(FRESH_BASE + 6000), "the promoted node is not the refill victim");
+}
+
+// ---------------------------------------------------------------------------
+// Recency domains: a gap is only a gap when both stamps are real and comparable
+// ---------------------------------------------------------------------------
+
+// Put the fixture on a GPS-less boot: no trusted wall clock, virtual uptime. tearDown() restores both.
+void beginClocklessBoot(uint32_t uptimeSecs)
+{
+    resetRTCStateForTests();
+    Time::setTestMillis(uptimeSecs * 1000);
+}
+
+// NodeInfoModule runs before RoutingModule, so updateUser() admits the sender and updateFrom() then
+// sees it already present - within one dispatch of one packet. The packet that created an entry can
+// never be the one that proves it recurring.
+void test_probation_theAdmittingPacketDoesNotPromote(void)
+{
+    const uint32_t t0 = 1700000000;
+    db->fill(60);
+
+    meshtastic_User u = meshtastic_User_init_zero;
+    snprintf(u.long_name, sizeof(u.long_name), "storm");
+    db->updateUser(SAME_DISPATCH, u); // module phase: admits on probation, no packet yet
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(SAME_DISPATCH), "a NodeInfo admission to a full store is probation");
+
+    db->hear(SAME_DISPATCH, t0); // service phase, same dispatch, same packet
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(SAME_DISPATCH), "the packet that admitted it must not also promote it");
+}
+
+// Both holes at once, which is the common case on a GPS-less node: no wall clock to date the entry
+// and updateUser() - not updateFrom() - as the admitting call, so nothing has stamped it in any
+// domain. An unmeasurable gap is not evidence of recurrence.
+void test_probation_clocklessAdmittingPacketDoesNotPromote(void)
+{
+    beginClocklessBoot(30);
+    db->fill(60);
+
+    meshtastic_User u = meshtastic_User_init_zero;
+    snprintf(u.long_name, sizeof(u.long_name), "storm");
+    db->updateUser(CLOCKLESS_ADMIT, u); // module phase: admits on probation, dates it, no packet yet
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(CLOCKLESS_ADMIT), "a NodeInfo admission to a full store is probation");
+
+    db->hearClockless(CLOCKLESS_ADMIT); // service phase, same dispatch, same packet
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(CLOCKLESS_ADMIT),
+                             "with no clock and no stamp the gap is unmeasurable, which is not proof of recurrence");
+}
+
+// With no clock the gap is measured in uptime seconds through the sidecar, so a burst is still a burst.
+void test_probation_clocklessBurstDoesNotPromote(void)
+{
+    beginClocklessBoot(30);
+    db->fill(60);
+
+    db->hearClockless(CLOCKLESS);
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(CLOCKLESS), "heard once on a full store is probation");
+
+    Time::advanceTestMillis(5 * 1000); // well inside NODEDB_PROBATION_GAP_MIN_SECS
+    db->hearClockless(CLOCKLESS);
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(CLOCKLESS), "a burst with no trusted clock must not promote");
+}
+
+// ...and a real gap still promotes, on the same clockless boot.
+void test_probation_clocklessGapPromotes(void)
+{
+    beginClocklessBoot(30);
+    db->fill(60);
+
+    db->hearClockless(CLOCKLESS);
+    TEST_ASSERT_TRUE(db->onProbation(CLOCKLESS));
+
+    Time::advanceTestMillis((db->probationGapSecs() + 1) * 1000);
+    db->hearClockless(CLOCKLESS);
+    TEST_ASSERT_FALSE_MESSAGE(db->onProbation(CLOCKLESS), "heard again after the gap promotes without any wall clock");
+}
+
+// The probation bit is a persisted NodeInfoLite field but the sidecar is RAM: after a reboot the
+// entry is back with no stamp for this boot. That is not evidence of recurrence, so it waits.
+void test_probation_persistedEntryWaitsForItsFirstStampThisBoot(void)
+{
+    beginClocklessBoot(30);
+    db->fill(60);
+
+    db->hearClockless(PERSISTED);
+    TEST_ASSERT_TRUE(db->onProbation(PERSISTED));
+
+    db->forgetBootStamps(); // reboot: the store survives, the sidecar does not
+    db->hearClockless(PERSISTED);
+    TEST_ASSERT_TRUE_MESSAGE(db->onProbation(PERSISTED), "the first packet after a reboot only re-stamps");
+
+    Time::advanceTestMillis((db->probationGapSecs() + 1) * 1000);
+    db->hearClockless(PERSISTED);
+    TEST_ASSERT_FALSE_MESSAGE(db->onProbation(PERSISTED), "the gap after that stamp promotes as usual");
 }
 
 // ---------------------------------------------------------------------------
@@ -1054,6 +1179,14 @@ void tearDown(void)
     // A case that armed our NodeInfo TX throttle must not leave it armed: an aborted assertion skips
     // the case's own cleanup, and every later greeting or reply would then be refused.
     clearNodeInfoThrottle();
+    // A clockless case leaves the RTC reset and the uptime virtual; every other case reads real time.
+    Time::useRealClock();
+    if (getRTCQuality() < RTCQualityNTP) {
+        struct timeval tv;
+        tv.tv_sec = time(NULL);
+        tv.tv_usec = 0;
+        perhapsSetRTC(RTCQualityNTP, &tv);
+    }
 }
 
 PROBATION_TEST_ENTRY void setup()
@@ -1095,6 +1228,13 @@ PROBATION_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_shortlistFullOfBoringPicksTheOldestBoring);
     RUN_TEST(test_eviction_shortlistOneShortStillTakesAKeyedNode);
     RUN_TEST(test_promotion_worksWithClockNeverTrusted);
+
+    printf("\n=== Recency domains ===\n");
+    RUN_TEST(test_probation_theAdmittingPacketDoesNotPromote);
+    RUN_TEST(test_probation_clocklessAdmittingPacketDoesNotPromote);
+    RUN_TEST(test_probation_clocklessBurstDoesNotPromote);
+    RUN_TEST(test_probation_clocklessGapPromotes);
+    RUN_TEST(test_probation_persistedEntryWaitsForItsFirstStampThisBoot);
 
     printf("\n=== Eviction destination ===\n");
     RUN_TEST(test_eviction_warmTierKeepsResidentsAndKeyedProbationOnly);

@@ -752,6 +752,10 @@ class NodeDB
     EvictionRecency evictionRecency(const meshtastic_NodeInfoLite *n) const;
     static bool evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent);
 
+    /// Seconds since we last heard `n`, compared against `mp` in the domain both stamps share, or
+    /// SINCE_UNKNOWN when they share none - the threshold counterpart of evictionRecency().
+    uint32_t heardAgeSecs(const meshtastic_NodeInfoLite *n, const meshtastic_MeshPacket &mp) const;
+
     /// The slot this radio is committed to; see refreshCommittedLoraSlot().
     uint16_t committedSlot = 0;
     bool loraSlotTransient = false;

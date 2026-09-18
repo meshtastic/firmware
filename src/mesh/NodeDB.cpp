@@ -3938,12 +3938,10 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             }
             info = getOrCreateMeshNode(getFrom(&mp));
         } else if (nodeInfoLiteIsOnProbation(info)) {
-            // Heard again. Only a gap since the previous packet says recurring rather than a burst;
-            // the header is unauthenticated, so a packet addressed to us proves nothing. Measured before last_heard moves.
-            const EvictionRecency prev = evictionRecency(info);
-            const uint32_t now = prev.heardThisBoot ? Time::getUptimeSecs() : (mp.has_rx_time ? mp.rx_time : 0);
-            // No usable previous stamp (clockless boot past the sidecar cap): the second packet decides.
-            if (prev.value == 0 || now == 0 || (now > prev.value && now - prev.value >= probationGapSecs()))
+            // Heard again: only a gap proves recurrence (the unauthenticated header cannot), and a
+            // disk-loaded entry has no stamp this boot - unmeasurable is "not proven", not "promote".
+            const uint32_t heardAgo = heardAgeSecs(info, mp);
+            if (heardAgo != SINCE_UNKNOWN && heardAgo >= probationGapSecs())
                 promoteFromProbation(info);
         }
         if (!info) {
@@ -4420,6 +4418,19 @@ NodeDB::EvictionRecency NodeDB::evictionRecency(const meshtastic_NodeInfoLite *n
     return {heardThisBoot ? stamp : n->last_heard, heardThisBoot};
 }
 
+uint32_t NodeDB::heardAgeSecs(const meshtastic_NodeInfoLite *n, const meshtastic_MeshPacket &mp) const
+{
+    const EvictionRecency prev = evictionRecency(n);
+    // A boot stamp is uptime seconds, a stored last_heard is an epoch, and rx_time is an epoch only
+    // when has_rx_time says so. Pick the "now" that matches whichever domain prev is in.
+    const uint32_t now = prev.heardThisBoot ? Time::getUptimeSecs() : (mp.has_rx_time ? mp.rx_time : 0);
+    if (!prev.value || !now)
+        return SINCE_UNKNOWN; // nothing dated this node in a domain this packet can be compared to
+    if (now < prev.value)
+        return 0; // clock nudged backwards, as sinceLastSeen() treats it - not evidence of a gap
+    return now - prev.value;
+}
+
 bool NodeDB::evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent)
 {
     if (candidate.heardThisBoot != incumbent.heardThisBoot)
@@ -4543,6 +4554,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n, bool heardOnAir)
             }
         }
 #endif
+        // Hearing a node is what dates it, not each caller: updateUser() admits without a packet and
+        // an unstamped entry reads as infinitely old. After rehydration, which restores a stale epoch.
+        if (heardOnAir)
+            stampContactHeardNow(lite);
         LOG_INFO("Add node to database: %i nodes, %u bytes free", numMeshNodes, memGet.getFreeHeap());
     }
 
