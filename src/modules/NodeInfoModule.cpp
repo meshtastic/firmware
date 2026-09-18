@@ -125,6 +125,10 @@ bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 
         service->sendToMesh(p);
         shorterTimeout = false;
+        // Our NodeInfo just went on the air, so the routine broadcast is due a full interval from now
+        // rather than from the last tick - an ad-hoc send otherwise leaves the periodic copy right behind it.
+        setIntervalFromNow(
+            Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs));
         return true;
     }
     return false;
