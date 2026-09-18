@@ -3145,6 +3145,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     if (!okay || !writeSucceeded) {
         LOG_ERROR("Can't write prefs");
     }
+    okay &= writeSucceeded;
 #else
     LOG_ERROR("Filesystem not implemented");
 #endif
@@ -3405,6 +3406,31 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     return success;
 }
 
+/// Reads never touch the write path a busy or lock-protected flash fails on, so metadata that still
+/// resolves means the write failure was transient, not a filesystem that needs formatting.
+static bool filesystemStillReadable()
+{
+    concurrency::LockGuard g(spiLock);
+
+    auto dir = FSCom.open("/prefs", FILE_O_READ);
+    if (!dir)
+        return false;
+    dir.close();
+
+    // An existing pref proves the metadata chain resolves; a fresh device has none to check.
+    for (const char *name : {deviceStateFileName, configFileName, channelFileName}) {
+        if (!FSCom.exists(name))
+            continue;
+        auto f = FSCom.open(name, FILE_O_READ);
+        if (!f)
+            return false;
+        const bool readable = f.read() >= 0;
+        f.close();
+        return readable;
+    }
+    return true;
+}
+
 bool NodeDB::saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
@@ -3418,13 +3444,58 @@ bool NodeDB::saveToDisk(int saveWhat)
 
     bool success = saveToDiskNoRetry(saveWhat);
 
-    if (!success) {
-        LOG_ERROR("Save to disk failed, retry");
-        spiLock->lock();
-        fsFormat();
-        spiLock->unlock();
-
+    // A failed write is far more often a busy SoftDevice or a sagging rail than a corrupt filesystem,
+    // and the format below takes every file with it, so retry first and never format on a low rail.
+    for (int attempt = 1; !success && attempt <= 2; attempt++) {
+        delay(150);
+#ifdef ARCH_RP2040
+        watchdog_update();
+#endif
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+        LOG_WARN("Save to disk failed, retry %d", attempt);
         success = saveToDiskNoRetry(saveWhat);
+    }
+
+    if (!success) {
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+#ifdef ARCH_RP2040
+        // Probe, format and resave run back-to-back from here with no retry loop left to feed it.
+        watchdog_update();
+#endif
+        // The format below takes every file with it, so spend one read proving it is warranted.
+        if (filesystemStillReadable()) {
+            LOG_ERROR("Save to disk failed but the filesystem still reads, not formatting (full or busy?)");
+            return false;
+        }
+        LOG_ERROR("Save to disk failed and the filesystem is unreadable, formatting");
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        // The format takes the DEK with it, and without it the resave below would land the keys in plaintext.
+        const bool lockdownWasActive = EncryptedStorage::isLockdownActive();
+#else
+        const bool lockdownWasActive = false;
+#endif
+        spiLock->lock();
+        const bool formatted = fsFormat();
+        spiLock->unlock();
+#ifdef ARCH_RP2040
+        // The five-segment resave below needs a budget of its own.
+        watchdog_update();
+#endif
+
+        // The format took every segment, not just the ones asked for, so all of them must land again.
+        if (!formatted)
+            LOG_ERROR("Filesystem format failed");
+        else if (lockdownWasActive)
+            LOG_ERROR("Lockdown DEK formatted away, not resaving in plaintext");
+        else
+            success = saveToDiskNoRetry(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                                        SEGMENT_NODEDATABASE);
 
         RECORD_CRITICALERROR(success ? meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE
                                      : meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
