@@ -70,7 +70,7 @@ void ReliableRouter::perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *p)
 
     // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
     // from the intended recipient.
-    auto key = GlobalPacketId(getFrom(p), p->id);
+    auto key = GlobalPacketId(p->from, p->id); // p->from, per the note above - it is ours and non-zero by now
     auto old = findPendingPacket(key);
     if (old) {
         // The header is cleartext anyone can copy; the payload a relay carries is our exact ciphertext.
@@ -81,7 +81,8 @@ void ReliableRouter::perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *p)
             (!old->packet || old->packet->which_payload_variant != meshtastic_MeshPacket_encrypted_tag ||
              p->encrypted.size != old->packet->encrypted.size ||
              memcmp(p->encrypted.bytes, old->packet->encrypted.bytes, p->encrypted.size) != 0)) {
-            LOG_WARN("Overheard 0x%08x with our header but not our bytes, ignore", p->id);
+            // Attacker-triggerable at will, so DEBUG: a flood of these is the check working, not a fault.
+            LOG_DEBUG("Overheard 0x%08x with our header but not our bytes, ignore", p->id);
             return;
         }
         LOG_DEBUG("Generate implicit ack");

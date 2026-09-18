@@ -238,9 +238,9 @@ static meshtastic_MeshPacket relayedCopyOf(const meshtastic_MeshPacket &wire, ui
 
 /// Forget the channel a frame was sent on, so our own frame is as unreadable to us as a PKI DM we
 /// originated: the wire hash matches nothing we hold and ingress classifies it opaque.
-static void forgetChannelOf(const meshtastic_MeshPacket &wire)
+static void forgetChannelOf(const meshtastic_MeshPacket &wire, ChannelIndex sentOn = 1)
 {
-    meshtastic_Channel &ch = channels.getByIndex(1);
+    meshtastic_Channel &ch = channels.getByIndex(sentOn);
     ch.settings.psk.bytes[0] ^= 0xFF;
     channels.onConfigChanged();
     bool stillHeld = false;
