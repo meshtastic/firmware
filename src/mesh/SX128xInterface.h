@@ -75,6 +75,12 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    // 2.4 GHz only. isChannelActive() passes CAD_ON_8_SYMB; keep the two in step.
+    uint8_t getCadSymbolCountWideLora() const override { return 8; }
+
+    /** Set the CAD peak-to-noise threshold for the current sf/bw. Call after either changes. */
+    void applyCadDetPeak();
+
   private:
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();
@@ -88,5 +94,11 @@ template <class T> class SX128xInterface : public RadioLibInterface
     int16_t trySetStandby();
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
-    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
+    bool recoverChipStateLoss() override
+    {
+        if (!reinitChip() || programModemParams() != RADIOLIB_ERR_NONE)
+            return false;
+        applyCadDetPeak(); // the reset took the CAD threshold with the rest of the chip state
+        return true;
+    }
 };
