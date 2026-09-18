@@ -21,7 +21,9 @@
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
 // Floor for our own position broadcasts when stationary (unchanged beyond the broadcast
 // precision) or fixed_position: identical positions get deduped by traffic management anyway.
-#define default_position_stationary_broadcast_secs (12 * 60 * 60)
+// Held one hour above default_traffic_mgmt_position_min_interval_secs so this refresh clears
+// the receivers' dedup window instead of being dropped as a duplicate.
+#define default_position_stationary_broadcast_secs (6 * 60 * 60)
 #define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
@@ -39,9 +41,11 @@
 enum class TrafficType { POSITION, TELEMETRY };
 
 // Traffic management defaults
-#define default_traffic_mgmt_position_precision_bits 19                // ~90m grid cells (±45m)
-#define default_traffic_mgmt_position_min_interval_secs (11 * 60 * 60) // 11 hours between identical positions
-// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 11h default).
+#define default_traffic_mgmt_position_precision_bits 19 // ~90m grid cells (±45m)
+// Kept below default_position_stationary_broadcast_secs so a stationary node's periodic refresh
+// is not deduped away by its neighbours.
+#define default_traffic_mgmt_position_min_interval_secs (5 * 60 * 60) // 5 hours between identical positions
+// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 5h default).
 #define default_traffic_mgmt_tracker_position_min_interval_secs (60 * 60) // 1 hour
 // Role cap: lost-and-found origins may refresh a duplicate position this often, so a lost
 // device updates frequently without flooding. (Quantised to the dedup tick: ~2 ticks.)
@@ -53,6 +57,17 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_hop_scaling_max_target_nodes 80          // generous extension ceiling (2 × min)
 #define default_hop_scaling_min_target_nodes_floor 5     // minimum allowed min_target_nodes
 #define default_hop_scaling_max_target_nodes_ceiling 512 // maximum allowed max_target_nodes
+
+// Congestion gate: hop scaling only applies while the channel is measurably busy. Engage sits below
+// AirTime::polite_channel_util_percent (25) so hops ease back before the polite gate withholds traffic.
+#define default_hop_scaling_congestion_engage_pct 20  // smoothed channel utilization that engages scaling
+#define default_hop_scaling_congestion_release_pct 12 // smoothed channel utilization that releases it
+#define default_hop_scaling_congestion_confirm_runs 3 // consecutive 5-min samples needed to flip either way
+// Above this the hop walk's one-hop extension is cut to its strictest setting: the radio is
+// already withholding metadata at the polite gate, so an extra relay is the wrong thing to spend.
+#define default_hop_scaling_congestion_strict_pct 25 // = AirTime::polite_channel_util_percent
+// Hop floor for the infrastructure roles Router.cpp already groups for zero-cost hops.
+#define default_hop_scaling_infrastructure_hop_floor 3
 
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS

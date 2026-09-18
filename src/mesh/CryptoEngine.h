@@ -27,6 +27,8 @@ struct CryptoKey {
 // Encoded size the signature adds to the Data protobuf: 1 tag byte (field 10 < 16) +
 // 1 length byte (64 < 128) + 64 signature bytes. test_packet_signing asserts this stays exact.
 #define XEDDSA_SIGNATURE_FIELD_BYTES (XEDDSA_SIGNATURE_SIZE + 2)
+// Length of Routing.ack_proof, taken from the generated field so the protocol owns the number.
+static constexpr size_t ACK_PROOF_SIZE = sizeof(meshtastic_Routing_ack_proof_t::bytes);
 
 class CryptoEngine
 {
@@ -48,6 +50,38 @@ class CryptoEngine
     bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
                        size_t payloadLen, const uint8_t *signature);
 #endif
+    /**
+     * Derive the pairwise ACK proof carried in Routing.ack_proof.
+     *
+     *   proof = HMAC-SHA256( sharedKey,
+     *                        "ack" | LE32(ackFrom) | LE32(ackTo) | LE32(requestId) | routing )
+     *           [0 .. ACK_PROOF_SIZE)
+     *
+     * sharedKey is the same SHA256(X25519(our private, peer public)) packet crypto uses, so only the
+     * two endpoints can produce or check it. What each input is for:
+     *
+     *  - ackFrom / ackTo: X25519 is symmetric, so DH(a_priv, B_pub) == DH(b_priv, A_pub). Without
+     *    the direction bound, an A->B proof for a requestId equals the B->A proof for it.
+     *  - requestId: stops a captured proof being retargeted at another outstanding packet.
+     *  - routing: the encoded Routing message WITHOUT ack_proof, as the bytes arrived. An ack and a
+     *    nak for one packet otherwise hash identically, and channel crypto is CTR with no integrity
+     *    check, so a PSK holder could flip a proven success into a failure and it would still verify.
+     *  - HMAC rather than SHA256(key | msg): the raw construction is not breakable here, but HMAC is
+     *    the one with a proof behind it and costs no flash - SHA256 already carries resetHMAC and
+     *    finalizeHMAC in its vtable.
+     *  - Integers are little-endian explicitly, so the value is a property of the protocol and not of
+     *    the compiler that built the node.
+     *
+     * Cost: setDHPublicKey runs Curve25519::dh2 on every call and nothing caches the result, so this
+     * is one X25519 per verify, which an attacker chooses when we pay by sending a forged ack.
+     * Callers MUST gate on cheap checks first - see ReliableRouter::ackProofPermitsAction.
+     *
+     * Clobbers shared_key, so the caller must hold cryptLock (which is NOT recursive - do not call
+     * this from a context that already holds it, such as perhapsEncode).
+     */
+    bool ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, uint32_t ackTo, uint32_t requestId, const uint8_t *routing,
+                         size_t routingLen, uint8_t *proofOut);
+
     void setDHPrivateKey(uint8_t *_private_key);
     // The remotePublic key parameter takes the public_key bytes container from
     // a stored node header. NodeInfoLite is the on-device storage type since
@@ -57,7 +91,6 @@ class CryptoEngine
     virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
-    virtual void hash(uint8_t *bytes, size_t numBytes);
 
     // Temporary holder for a peer's not-yet-verified public key, learned in-band during an
     // in-progress key-verification handshake before it is committed to NodeDB. Lets the Router
@@ -69,13 +102,26 @@ class CryptoEngine
     void clearPendingPublicKey();
     // Fills `out` (size set to 32) and returns true iff a pending key is held for `node`.
     bool getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out);
+#endif
+
+    // Plain SHA256; outside the guard because PortduinoGlue uses it on EXCLUDE_PKI builds.
+    virtual void hash(uint8_t *bytes, size_t numBytes);
 
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    std::unique_ptr<AESSmall256> aes = nullptr;
+    std::unique_ptr<BlockCipher> aes = nullptr;
 
-#endif
+    static constexpr size_t AEAD_TAG_SIZE = 12;
+    // Sender and destination IDs are authenticated as associated data: the nonce already binds
+    // `from` and the packet id, and the hop fields are left out because relays rewrite them.
+    static constexpr size_t AEAD_AAD_SIZE = 2 * sizeof(uint32_t);
+
+    virtual bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                                  const uint8_t *plaintext, uint8_t *ciphertextWithTag);
+
+    virtual bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t totalBytes,
+                                  const uint8_t *ciphertextWithTag, uint8_t *plaintext);
 
     /**
      * Set the key used for encrypt, decrypt.

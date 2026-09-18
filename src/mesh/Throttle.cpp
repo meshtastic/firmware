@@ -10,6 +10,8 @@
 /// @return true if the function was executed, false if it was deferred
 bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, void (*throttleFunc)(void), void (*onDefer)(void))
 {
+    // TODO(elapsed-stamp): 0 doubles as "never run" here, so neither store is safe on the wrap tick:
+    // skipZero()'s 1 underflows a same-instant `now - *lastExecutionMs`, and 0 re-takes this branch.
     if (*lastExecutionMs == 0) {
         *lastExecutionMs = Time::getMillis();
         throttleFunc();

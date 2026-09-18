@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
@@ -119,7 +120,7 @@ static bool authenticateClient(EthernetClient &client)
     uint8_t clientHash[OTA_HASH_SIZE];
     if (!readExact(client, clientHash, OTA_HASH_SIZE)) {
         LOG_WARN("ETH OTA: Timeout reading auth response");
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
@@ -136,7 +137,7 @@ static bool authenticateClient(EthernetClient &client)
     if (diff != 0) {
         LOG_WARN("ETH OTA: Authentication failed");
         client.write(OTA_ERR_AUTH);
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
