@@ -319,6 +319,10 @@ static void *pin_poll_thread_fn(void *arg)
                     // as its baseline and could report an edge spanning both registrations.
                     if (poll_thread_exit || !pthread_equal(poll_thread, pthread_self()))
                         break;
+                    // Same thread, but a re-arm of this very pin during the callback also resets
+                    // previous_state to 255, and it was not 255 when we entered this branch.
+                    if (inst_int->previous_state == 255)
+                        continue;
                 }
             }
             inst_int->previous_state = state;
