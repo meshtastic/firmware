@@ -1035,6 +1035,7 @@ void Power::reboot()
 #if defined(ARCH_ESP32)
     ESP.restart();
 #elif defined(ARCH_NRF52)
+    nrf52FlashQuiesce();
     NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
