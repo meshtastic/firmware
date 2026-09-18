@@ -101,9 +101,11 @@ bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
+    deferHistoryStamp = true;
     DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocReply();
     DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
+    deferHistoryStamp = false;
 
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
@@ -131,6 +133,8 @@ bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
             LOG_WARN("NodeInfo send rejected (err=%d)", res);
             return false;
         }
+        if (transmitHistory)
+            transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
         // Our NodeInfo just went on the air, so the routine broadcast is due a full interval from now
         // rather than from the last tick - an ad-hoc send otherwise leaves the periodic copy right behind it.
         setIntervalFromNow(
@@ -199,7 +203,10 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         strcpy(u.id, nodeDB->getNodeId().c_str());
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
-        if (transmitHistory)
+        // The framework sends its own reply, so stamp here for that path. sendOurNodeInfo() stamps
+        // after the router accepts the packet instead - a send that never went out must not throttle
+        // the next one, and the floor it would sit out is 30 minutes.
+        if (transmitHistory && !deferHistoryStamp)
             transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
         return allocDataProtobuf(u);
     }

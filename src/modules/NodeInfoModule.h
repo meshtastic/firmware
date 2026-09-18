@@ -61,6 +61,8 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
   private:
     bool shorterTimeout = false;
+    /// Set across sendOurNodeInfo()'s own allocReply(), so the transmit stamp waits for an accepted send.
+    bool deferHistoryStamp = false;
     bool suppressReplyForCurrentRequest = false;
     /// Sender -> uptime seconds (Time::getUptimeSecs()) at our last reply. Seconds, not millis:
     /// the suppression window is hours wide. See handleReceivedProtobuf().

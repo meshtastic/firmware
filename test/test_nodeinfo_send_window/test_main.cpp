@@ -313,6 +313,24 @@ static void test_broadcastTimer_aRejectedSendLeavesTheCountdownAlone(void)
     TEST_ASSERT_EQUAL_UINT32(sentinel, (uint32_t)mod->broadcastCountdownMsForTests());
 }
 
+// The countdown is only half of it: allocReply() used to stamp TransmitHistory when it built the
+// packet, so a send the router then declined still started the window. With a 30 minute floor that
+// silences the node for half an hour over a packet that never left. The retry immediately after must
+// go out.
+static void test_sendWindow_aRejectedSendDoesNotStartTheWindow(void)
+{
+    mockRouter->sendResult = ERRNO_NO_INTERFACES;
+    TEST_ASSERT_FALSE_MESSAGE(mod->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, false), "the router declined this one");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP),
+                                     "a declined send must leave no transmit stamp behind");
+
+    mockRouter->sendResult = ERRNO_OK;
+    mockRouter->sentPackets.clear();
+    TEST_ASSERT_TRUE_MESSAGE(mod->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, false),
+                             "the retry must not be throttled by the send that failed");
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+}
+
 // A preset or channel change bumps radioGeneration, and only a send that goes out consumes it: the
 // refused attempt leaves the ask pending, the next successful one carries want_response, and the
 // one after that does not ask again.
@@ -354,6 +372,7 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_broadcastTimer_anAdHocUnicastRearmsItToo);
     RUN_TEST(test_broadcastTimer_aRefusedSendLeavesTheCountdownAlone);
     RUN_TEST(test_broadcastTimer_aRejectedSendLeavesTheCountdownAlone);
+    RUN_TEST(test_sendWindow_aRejectedSendDoesNotStartTheWindow);
     RUN_TEST(test_sendWindow_aLicensedStationKeepsItsCallSignInterval);
     RUN_TEST(test_presetChange_isConsumedOnlyByASendThatGoesOut);
     exit(UNITY_END());
