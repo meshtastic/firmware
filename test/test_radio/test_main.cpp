@@ -61,6 +61,7 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getCr() const { return cr; }
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
+    uint16_t getPreambleLength() const { return preambleLength; }
 
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
@@ -282,6 +283,93 @@ static void test_clampConfigLora_mediumTurboValidForUS()
     RadioInterface::clampConfigLora(cfg);
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO, cfg.modem_preset);
+}
+
+// -----------------------------------------------------------------------
+// Preamble length, derived from the modem preset (MeshRadio.h)
+// -----------------------------------------------------------------------
+
+// Every preset must pick the standard or wide-LoRa preamble according to the band.
+static void test_modemPresetToPreambleLength_wideVsStandard()
+{
+    const meshtastic_Config_LoRaConfig_ModemPreset presets[] = {
+        PRESET(SHORT_TURBO),   PRESET(SHORT_FAST),   PRESET(SHORT_SLOW), PRESET(MEDIUM_FAST),
+        PRESET(MEDIUM_SLOW),   PRESET(MEDIUM_TURBO), PRESET(LONG_TURBO), PRESET(LONG_FAST),
+        PRESET(LONG_MODERATE), PRESET(LONG_SLOW),    PRESET(LITE_FAST),  PRESET(LITE_SLOW),
+        PRESET(NARROW_FAST),   PRESET(NARROW_SLOW),  PRESET(TINY_FAST),  PRESET(TINY_SLOW),
+    };
+
+    for (size_t i = 0; i < sizeof(presets) / sizeof(presets[0]); i++) {
+        TEST_ASSERT_EQUAL_UINT16(LORA_PREAMBLE_LENGTH_DEFAULT, modemPresetToPreambleLength(presets[i], false));
+        TEST_ASSERT_EQUAL_UINT16(LORA_PREAMBLE_LENGTH_WIDE_DEFAULT, modemPresetToPreambleLength(presets[i], true));
+    }
+}
+
+// modemPresetToParams() must fill the preamble out-param consistently with the standalone helper,
+// and must not disturb the bw/sf/cr it already returned.
+static void test_modemPresetToParams_preambleMatchesHelper()
+{
+    float bwKHz = 0;
+    uint8_t sf = 0, cr = 0;
+    uint16_t preamble = 0;
+
+    modemPresetToParams(PRESET(LONG_FAST), false, bwKHz, sf, cr, preamble);
+    TEST_ASSERT_EQUAL_UINT16(modemPresetToPreambleLength(PRESET(LONG_FAST), false), preamble);
+    TEST_ASSERT_EQUAL_UINT8(11, sf);
+    TEST_ASSERT_EQUAL_UINT8(5, cr);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 250.0f, bwKHz);
+
+    modemPresetToParams(PRESET(LONG_FAST), true, bwKHz, sf, cr, preamble);
+    TEST_ASSERT_EQUAL_UINT16(modemPresetToPreambleLength(PRESET(LONG_FAST), true), preamble);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, bwKHz);
+}
+
+// A preset config in a sub-GHz region gets the standard preamble.
+static void test_applyModemConfig_preambleFromPreset()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = PRESET(LONG_FAST);
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT16(LORA_PREAMBLE_LENGTH_DEFAULT, testRadio->getPreambleLength());
+}
+
+// LORA_24 is the wide-LoRa region, so it must get the shorter preamble.
+static void test_applyModemConfig_preambleWideLoraRegion()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = PRESET(LONG_FAST);
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT16(LORA_PREAMBLE_LENGTH_WIDE_DEFAULT, testRadio->getPreambleLength());
+}
+
+// Manual (use_preset=false) configs must not take the preamble from the stale modem_preset field:
+// it stays on the band default regardless of what modem_preset happens to hold.
+static void test_applyModemConfig_preambleManualConfigIgnoresPreset()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = false;
+    config.lora.modem_preset = PRESET(SHORT_TURBO); // stale, must not be consulted
+    config.lora.bandwidth = 125;
+    config.lora.spread_factor = 11;
+    config.lora.coding_rate = 5;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT16(LORA_PREAMBLE_LENGTH_DEFAULT, testRadio->getPreambleLength());
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT16(LORA_PREAMBLE_LENGTH_WIDE_DEFAULT, testRadio->getPreambleLength());
 }
 
 // -----------------------------------------------------------------------
@@ -520,6 +608,11 @@ void setup()
     RUN_TEST(test_applyModemConfig_mediumTurbo);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
+    RUN_TEST(test_modemPresetToPreambleLength_wideVsStandard);
+    RUN_TEST(test_modemPresetToParams_preambleMatchesHelper);
+    RUN_TEST(test_applyModemConfig_preambleFromPreset);
+    RUN_TEST(test_applyModemConfig_preambleWideLoraRegion);
+    RUN_TEST(test_applyModemConfig_preambleManualConfigIgnoresPreset);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
     RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
