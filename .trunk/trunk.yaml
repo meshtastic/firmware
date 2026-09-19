@@ -117,7 +117,7 @@ lint:
     - unity-exit@SYSTEM
     - unset-sentinel-millis@SYSTEM
     - checkov@3.3.19
-    - renovate@44.103.0
+    - renovate@44.103.2
     - prettier@3.9.8
     - trufflehog@3.97.5
     - yamllint@1.38.0
