@@ -9,6 +9,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/StreamAPI.h"
 #include "mesh/StreamFrameWriter.h"
+#include "mesh/api/ServerAPI.cpp"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdint>
@@ -138,6 +139,51 @@ class StreamAPITestShim : public StreamAPI
         capturedPayload.assign(buf + 4, buf + 4 + len);
         return false;
     }
+};
+
+/// TCP client stand-in for ServerAPI. ServerAPI copies the client it is handed, so the scripted
+/// stream and the link state sit behind pointers that every copy shares.
+class MockTcpClient : public Stream
+{
+  public:
+    /// Bind the mock to shared scripted output and link state.
+    MockTcpClient(ScriptedStream *backing, bool *linkUp) : backing(backing), linkUp(linkUp) {}
+
+    /// Forward input queries to the scripted stream.
+    int available() override { return backing->available(); }
+    /// Forward reads to the scripted stream.
+    int read() override { return backing->read(); }
+    /// Forward peeks to the scripted stream.
+    int peek() override { return backing->peek(); }
+    /// Forward the scripted output capacity.
+    int availableForWrite() override { return backing->availableForWrite(); }
+    /// Forward single-byte writes to the scripted stream.
+    size_t write(uint8_t value) override { return backing->write(value); }
+    /// Forward buffer writes so the scripted quota applies.
+    size_t write(const uint8_t *buffer, size_t size) override { return backing->write(buffer, size); }
+    /// Forward flushes to the scripted stream.
+    void flush() override { backing->flush(); }
+
+    /// Report the shared link state ServerAPI gates writes on.
+    bool connected() const { return *linkUp; }
+    /// Drop the shared link, as a real client.stop() would.
+    void stop() { *linkUp = false; }
+
+  private:
+    ScriptedStream *backing;
+    bool *linkUp;
+};
+
+/// Exposes ServerAPI's transport hooks so backpressure can be driven directly.
+class ServerAPIShim : public ServerAPI<MockTcpClient>
+{
+  public:
+    /// Construct the shim over a mock TCP client.
+    explicit ServerAPIShim(MockTcpClient &tcpClient) : ServerAPI<MockTcpClient>(tcpClient) {}
+
+    using ServerAPI<MockTcpClient>::finishPendingFrame;
+    using ServerAPI<MockTcpClient>::hasRetainedFrame;
+    using ServerAPI<MockTcpClient>::writeFrame;
 };
 
 /// Minimal PhoneAPI transport for config-stream tests.
@@ -785,6 +831,38 @@ static void test_node_heard_during_first_uptime_second_gets_last_heard_backfille
     TEST_ASSERT_UINT32_WITHIN(1, (uint32_t)networkTime.tv_sec, info->last_heard);
 }
 
+// A socket that momentarily cannot take a whole frame is ordinary TCP backpressure, not a dead
+// peer. ServerAPI used to treat the resulting short write as fatal and tear the session down
+// ("TCP client write short (0/107 bytes), closing API service"), which dropped every client a
+// few seconds into a 200-node NodeDB dump (#11822). This pins the replacement contract: the
+// unwritten tail is retained, the link stays up, and only that tail is re-offered next pass.
+void test_server_api_short_write_retains_tail_and_keeps_link()
+{
+    ScopedMeshService scopedService;
+    ScriptedStream stream;
+    bool linkUp = true;
+    MockTcpClient client(&stream, &linkUp);
+    ServerAPIShim api(client);
+
+    uint8_t frame[7] = {0, 0, 0, 0, 0x11, 0x22, 0x33};
+    stream.queueWrite(4); // header fits, payload does not
+    stream.queueWrite(3);
+
+    TEST_ASSERT_FALSE(api.writeFrame(frame, 3, false));
+    TEST_ASSERT_TRUE(api.hasRetainedFrame());
+    TEST_ASSERT_TRUE(linkUp);
+
+    TEST_ASSERT_TRUE(api.finishPendingFrame());
+    TEST_ASSERT_FALSE(api.hasRetainedFrame());
+    TEST_ASSERT_TRUE(linkUp);
+
+    std::vector<uint8_t> expected = {0x94, 0xc3, 0x00, 0x03, 0x11, 0x22, 0x33};
+    assertBytesEqual(expected, stream.output);
+    std::vector<size_t> expectedRequests = {7, 3};
+    TEST_ASSERT_EQUAL_UINT(expectedRequests.size(), stream.requestedLengths.size());
+    TEST_ASSERT_EQUAL_UINT64_ARRAY(expectedRequests.data(), stream.requestedLengths.data(), expectedRequests.size());
+}
+
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
 /// Unity per-test teardown; restores state that a failed assert's longjmp would leak.
@@ -811,6 +889,7 @@ void setup()
     RUN_TEST(test_stream_api_short_write_reports_failure_without_flush);
     RUN_TEST(test_stream_api_finishes_pending_before_advancing_phone_api);
     RUN_TEST(test_stream_api_gates_logs_and_marks_them_best_effort);
+    RUN_TEST(test_server_api_short_write_retains_tail_and_keeps_link);
     RUN_TEST(test_lockdown_admin_gate_ignores_wire_from);
     RUN_TEST(test_lockdown_admin_gate_rejects_undecodable_admin);
     RUN_TEST(test_want_config_includes_status_message_module_config);
