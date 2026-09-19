@@ -1350,9 +1350,22 @@ void test_C6_opaque_unknown_channel_is_relay_only(void)
     TEST_ASSERT_NULL(pipelineService->getForPhone());
     TEST_ASSERT_FALSE(pipelineRouter->historyContains(&addressed));
 
+    // CORE_PORTNUMS_ONLY carries an opaque frame: the portnum filter cannot apply to a payload the relay
+    // cannot read, and the ROUTER role defaults to this mode (#11843).
+    pipelineRadio->reset();
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
+    meshtastic_MeshPacket core = opaque;
+    core.id += 0x10;
+    runPipelineIngress(core);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls, "CORE_PORTNUMS_ONLY must relay an opaque frame");
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(0, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+    TEST_ASSERT_NULL(pipelineService->getForPhone());
+    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&core));
+
     const meshtastic_Config_DeviceConfig_RebroadcastMode blockedModes[] = {
         meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
-        meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY,
         meshtastic_Config_DeviceConfig_RebroadcastMode_NONE,
     };
     for (const auto mode : blockedModes) {
