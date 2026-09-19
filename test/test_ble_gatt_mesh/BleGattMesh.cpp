@@ -8,6 +8,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <vector>
@@ -29,6 +30,8 @@ class FakeGattMesh : public BLEGattMeshHandler
     std::map<BLEGattPeerId, std::vector<std::vector<uint8_t>>> notified;
     std::map<BLEGattPeerId, std::vector<std::vector<uint8_t>>> greeted;
     std::vector<BLEGattPeerId> shed;
+    std::map<BLEGattPeerId, int> probed;
+    std::vector<BLEGattPeerId> dead;
     std::deque<std::pair<BLEGattPeerId, std::vector<uint8_t>>> inbound;
     std::vector<meshtastic_MeshPacket> received;
     bool ready = true;
@@ -38,6 +41,11 @@ class FakeGattMesh : public BLEGattMeshHandler
     void start() override { isRunning = true; }
     void stop() override { isRunning = false; }
 
+    void liveness(uint32_t nowMs)
+    {
+        pumpGreet(nowMs);
+        pumpLiveness(nowMs);
+    }
     void feed(BLEGattPeerId peer, const std::vector<uint8_t> &chunk, uint32_t nowMs = 0)
     {
         handleChunk(peer, chunk.data(), chunk.size(), nowMs);
@@ -77,6 +85,11 @@ class FakeGattMesh : public BLEGattMeshHandler
         return true;
     }
     void platformShedOutbound(BLEGattPeerId peer) override { shed.push_back(peer); }
+    bool platformProbe(BLEGattPeerId peer) override
+    {
+        probed[peer]++;
+        return std::find(dead.begin(), dead.end(), peer) == dead.end();
+    }
     bool platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len) override
     {
         if (inbound.empty())
@@ -611,6 +624,95 @@ void test_the_loser_sheds_a_node_reached_both_ways(void)
     TEST_ASSERT_EQUAL_MESSAGE(2, h.shed.size(), "the name on the new link is remembered");
 }
 
+void test_a_quiet_dialled_link_is_probed_and_kept(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 244, true}};
+    h.liveness(500); // first listed here: the window runs from now, not from the epoch
+    h.feed(1, helloWith(0x11), 1000);
+    h.liveness(20000);
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.probed[1], "heard 19 s ago: not yet");
+    h.liveness(31001);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "quiet for the idle window: asked once");
+    h.liveness(45000);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "asked 14 s ago: not again yet");
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "it answered, so it stays");
+    h.feed(1, split(encode(encryptedPacket()), 1, 244)[0], 50000);
+    h.liveness(70000);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "traffic 20 s ago resets the window");
+}
+
+void test_a_dead_dialled_link_is_shed(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 244, true}};
+    h.dead = {1};
+    h.liveness(0);
+    h.feed(1, helloWith(0x11), 0);
+    h.liveness(30000);
+    TEST_ASSERT_EQUAL(1, h.probed[1]);
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "one miss may be a busy stack");
+    h.liveness(31000);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "the retry waits its two seconds");
+    h.liveness(32000);
+    TEST_ASSERT_EQUAL(2, h.probed[1]);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.shed.size(), "two misses: shed");
+    TEST_ASSERT_EQUAL(1, h.shed[0]);
+    // Still listed until the platform reports the disconnect, and not asked again meanwhile.
+    h.liveness(32010);
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.probed[1], "asked nothing more while it drains");
+    TEST_ASSERT_EQUAL(1, h.shed.size());
+    // The disconnect forgets the name it gave: a fresh HELLO on a new link is a new peer, not a match.
+    h.lost(1);
+    h.feed(2, helloWith(0x11), 32020);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.shed.size(), "nothing left to be one node with");
+}
+
+void test_a_fresh_dialled_link_gets_its_full_window(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 244, true}};
+    // Up at t=100 s of uptime, never heard: the MTU exchange is still running, and a probe now would
+    // be refused by the stack and read as death.
+    h.liveness(100000);
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.probed[1], "listed just now: not asked");
+    h.liveness(129000);
+    TEST_ASSERT_EQUAL(0, h.probed[1]);
+    h.liveness(130000);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "asked once the window has run from link-up");
+}
+
+void test_one_missed_probe_is_forgiven_when_the_retry_answers(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 244, true}};
+    h.liveness(0);
+    h.dead = {1};
+    h.liveness(30000);
+    TEST_ASSERT_EQUAL(1, h.probed[1]);
+    h.dead.clear();
+    h.liveness(32000);
+    TEST_ASSERT_EQUAL(2, h.probed[1]);
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "the retry answered: kept");
+    h.liveness(40000);
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.probed[1], "back to the long window");
+}
+
+void test_an_inbound_link_is_never_probed(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 244, false}};
+    h.dead = {1};
+    h.liveness(100000);
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.probed[1], "the peer dialled us; its stack tells us when it goes");
+    TEST_ASSERT_EQUAL(0, h.shed.size());
+}
+
 void test_inbound_chunks_are_drained_by_the_pump(void)
 {
     FakeGattMesh h;
@@ -664,6 +766,11 @@ void setup()
     RUN_TEST(test_a_refused_greeting_is_offered_again);
     RUN_TEST(test_a_hello_in_is_never_a_fragment);
     RUN_TEST(test_the_loser_sheds_a_node_reached_both_ways);
+    RUN_TEST(test_a_quiet_dialled_link_is_probed_and_kept);
+    RUN_TEST(test_a_dead_dialled_link_is_shed);
+    RUN_TEST(test_a_fresh_dialled_link_gets_its_full_window);
+    RUN_TEST(test_one_missed_probe_is_forgiven_when_the_retry_answers);
+    RUN_TEST(test_an_inbound_link_is_never_probed);
     exit(UNITY_END());
 }
 

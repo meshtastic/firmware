@@ -155,13 +155,32 @@ BLEClientCharacteristic meshClientCharacteristic = BLEClientCharacteristic(BLEUu
 bool dialing = false;
 ble_gap_addr_t dialAddr{};
 // A peer that dropped, refused or never answered is not redialled for a while: the scanner reports it
-// again within 100 ms.
+// again within 100 ms. One length for every outcome: a dial that fails is a race with a link the peer
+// is still tearing down (a reflash, a relaunch), and a minute outlives that. The failure that would
+// have earned a longer wait - a phone that already holds a link to this node redialled under the
+// address it rotated to - cannot happen now that only the overflow bit is dialled, because the one
+// central slot is that link.
 #ifndef BLE_GATT_MESH_DIAL_COOLDOWN_MS
 #define BLE_GATT_MESH_DIAL_COOLDOWN_MS 60000
+#endif
+// How long a dial may wait for the peer to accept the connection. Bluefruit's own default is forever.
+#ifndef BLE_GATT_MESH_DIAL_TIMEOUT_MS
+#define BLE_GATT_MESH_DIAL_TIMEOUT_MS 4000
 #endif
 bool cooldownArmed = false;
 ble_gap_addr_t cooldownAddr{};
 uint32_t cooldownSinceMs = 0;
+
+// The proof-of-life write request in flight on the dialled link, and how it ended. Bluefruit's own
+// write_resp() gives the peer 100 ms, which a backgrounded iPhone on a long connection interval
+// misses while still answering every time; this waits a few intervals and reads the response event
+// through the mesh's event tap instead.
+#ifndef BLE_GATT_MESH_PROBE_WAIT_MS
+#define BLE_GATT_MESH_PROBE_WAIT_MS 1500
+#endif
+enum ProbeState : uint8_t { PROBE_IDLE, PROBE_PENDING, PROBE_ANSWERED, PROBE_REFUSED };
+volatile uint16_t probeConn = BLE_CONN_HANDLE_INVALID;
+volatile uint8_t probeState = PROBE_IDLE;
 
 void armCooldown()
 {
@@ -261,6 +280,9 @@ void NRF52BLEGattMesh::setupService()
         meshClientCharacteristic.setNotifyCallback(onNotify);
         Bluefruit.Central.setConnectCallback(onCentralConnect);
         Bluefruit.Central.setDisconnectCallback(onCentralDisconnect);
+        // Bluefruit dials with its scanner's parameters, whose timeout is 0: a peer that never accepts
+        // leaves the dial pending forever and this node never dials again.
+        Bluefruit.Scanner.getParams()->timeout = BLE_GATT_MESH_DIAL_TIMEOUT_MS / 10;
     }
 #endif
     {
@@ -344,10 +366,19 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
     if (cooldownArmed && memcmp(&cooldownAddr, &report->peer_addr, sizeof(cooldownAddr)) == 0 &&
         Throttle::isWithinTimespanMs(cooldownSinceMs, BLE_GATT_MESH_DIAL_COOLDOWN_MS))
         return;
-    // Only the primary advertisement is seen: the mesh scan is passive, so a node that puts the UUID in
-    // its scan response (this firmware on nRF52) is never dialled. Phones put it in the advertisement.
+        // Only the primary advertisement is seen: the mesh scan is passive, so a node that puts the UUID in
+        // its scan response (this firmware on nRF52) is never dialled. Phones put it in the advertisement.
+        // The dial is for the peer that cannot dial: an iOS app in the background, which always carries the
+        // overflow bit (in the foreground too). An advertiser showing the UUID alone is Android or another
+        // radio, and both reach this node by themselves - dialling one of those spent the single central
+        // slot on the phone that was about to connect anyway, then redialled its rotated address for ever.
+#if BLE_GATT_MESH_DIAL_UUID
     if (!Bluefruit.Scanner.checkReportForUuid(report, BLEUuid(serviceUuid)) && !reportHasIosOverflowBit(report))
         return;
+#else
+    if (!reportHasIosOverflowBit(report))
+        return;
+#endif
     dialing = true;
     dialAddr = report->peer_addr;
     if (!Bluefruit.Central.connect(report)) {
@@ -434,6 +465,7 @@ size_t NRF52BLEGattMesh::platformPeers(BLEGattMeshPeer *out, size_t cap)
             break;
         out[n].id = l.conn;
         out[n].chunk = chunkFor(l.conn);
+        out[n].outbound = l.outbound;
         n++;
     }
     return n;
@@ -463,6 +495,80 @@ bool NRF52BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, s
     return meshPeerCharacteristic.notify(peer, data, (uint16_t)len);
 }
 
+bool NRF52BLEGattMesh::platformProbe(BLEGattPeerId peer)
+{
+#if BLE_GATT_MESH_DIAL
+    bool outbound = false;
+    {
+        concurrency::LockGuard guard(&lock);
+        Link *l = findLink(peer);
+        outbound = l && l->outbound;
+    }
+    if (!outbound)
+        return true;
+    if (!Bluefruit.Central.connected(peer))
+        return false;
+    // A write with response: the peer's ATT layer must answer, and a peer whose app died has no
+    // handle left to answer for. The greeting is idempotent on the client, so it is the probe.
+    uint8_t hello[BLE_GATT_MESH_HELLO_SIZE];
+    const size_t len = buildHello(hello, sizeof(hello));
+    ble_gattc_write_params_t params = {
+        .write_op = BLE_GATT_OP_WRITE_REQ,
+        .flags = 0,
+        .handle = meshClientCharacteristic.valueHandle(),
+        .offset = 0,
+        .len = (uint16_t)len,
+        .p_value = hello,
+    };
+    probeConn = peer;
+    probeState = PROBE_PENDING;
+    if (sd_ble_gattc_write(peer, &params) != NRF_SUCCESS) {
+        probeState = PROBE_IDLE; // the stack is busy with another procedure; the retry will ask again
+        return false;
+    }
+    // This runs on the main task; the response lands on the BLE task, and delay() yields to it.
+    const uint32_t started = millis();
+    while (probeState == PROBE_PENDING && Bluefruit.Central.connected(peer) &&
+           Throttle::isWithinTimespanMs(started, BLE_GATT_MESH_PROBE_WAIT_MS))
+        delay(10);
+    const bool answered = probeState == PROBE_ANSWERED;
+    probeState = PROBE_IDLE;
+    probeConn = BLE_CONN_HANDLE_INVALID;
+    return answered;
+#else
+    (void)peer;
+    return true;
+#endif
+}
+
+void NRF52BLEGattMesh::onWriteResponse(uint16_t conn, uint16_t status)
+{
+#if BLE_GATT_MESH_DIAL
+    if (conn == probeConn && probeState == PROBE_PENDING)
+        probeState = status == BLE_GATT_STATUS_SUCCESS ? PROBE_ANSWERED : PROBE_REFUSED;
+#else
+    (void)conn;
+    (void)status;
+#endif
+}
+
+void NRF52BLEGattMesh::onSecurityRequest(uint16_t conn)
+{
+#if BLE_GATT_MESH_DIAL
+    // A phone bonded to this node's phone API asks the link be encrypted the moment it is dialled.
+    // Bluefruit answers nothing on a central link, the phone's SMP timer runs out at 30 s and it drops
+    // the link (0x05). The mesh-peer link is open by design - the channel key is the security - so
+    // decline, which the SoftDevice does for a NULL parameter set.
+    BLEConnection *c = Bluefruit.Connection(conn);
+    if (!c || c->getRole() != BLE_GAP_ROLE_CENTRAL)
+        return;
+    const uint32_t err = sd_ble_gap_authenticate(conn, NULL);
+    LOG_INFO("BLE GATT mesh: declined the security request on dialled conn %u (0x%x)", conn, (unsigned)err);
+#else
+    (void)conn;
+#endif
+}
+
 void NRF52BLEGattMesh::platformShedOutbound(BLEGattPeerId peer)
 {
 #if BLE_GATT_MESH_DIAL
@@ -474,7 +580,7 @@ void NRF52BLEGattMesh::platformShedOutbound(BLEGattPeerId peer)
     }
     if (!outbound)
         return;
-    LOG_INFO("BLE GATT mesh: shedding dialled conn %u, the peer reaches us already", peer);
+    LOG_INFO("BLE GATT mesh: shedding dialled conn %u", peer);
     Bluefruit.disconnect(peer); // onCentralDisconnect arms the cooldown
 #else
     (void)peer;

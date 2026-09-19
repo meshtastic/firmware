@@ -104,8 +104,10 @@ int32_t BLEGattMeshHandler::runOnce()
     if (!isRunning || !platformReady())
         return 500;
 
-    pumpRx(Time::getMillis());
-    pumpGreet();
+    const uint32_t now = Time::getMillis();
+    pumpRx(now);
+    pumpGreet(now);
+    pumpLiveness(now);
     return pumpTx() ? 10 : 100;
 }
 
@@ -159,23 +161,64 @@ BLEGattMeshHandler::Greeting *BLEGattMeshHandler::greeting(BLEGattPeerId peer, b
         g.peer = peer;
         g.sent = false;
         g.heard = false;
+        g.heardMs = 0;
+        g.probedMs = 0;
+        g.probeMisses = 0;
         return &g;
     }
     return nullptr;
 }
 
-void BLEGattMeshHandler::pumpGreet()
+void BLEGattMeshHandler::pumpGreet(uint32_t nowMs)
 {
     std::array<BLEGattMeshPeer, BLE_GATT_MESH_MAX_PEERS> all{};
     const size_t n = platformPeers(all.data(), all.size());
     uint8_t hello[BLE_GATT_MESH_HELLO_SIZE];
     const size_t len = buildHello(hello, sizeof(hello));
     for (size_t i = 0; i < n; i++) {
-        Greeting *g = greeting(all[i].id, true);
-        if (!g || g->sent)
+        Greeting *g = greeting(all[i].id, false);
+        if (!g) {
+            // First sight of this link: the quiet window runs from here, not from the epoch.
+            g = greeting(all[i].id, true);
+            if (!g)
+                continue;
+            g->heardMs = nowMs;
+        }
+        if (g->sent)
             continue;
         if (platformNotify(all[i].id, hello, len))
             g->sent = true; // a refusal is the stack busy; the next pump offers it again
+    }
+}
+
+void BLEGattMeshHandler::pumpLiveness(uint32_t nowMs)
+{
+    std::array<BLEGattMeshPeer, BLE_GATT_MESH_MAX_PEERS> all{};
+    const size_t n = platformPeers(all.data(), all.size());
+    for (size_t i = 0; i < n; i++) {
+        if (!all[i].outbound)
+            continue;
+        Greeting *g = greeting(all[i].id, false); // pumpGreet listed it first, with the clock started
+        if (!g)
+            continue;
+        // Quiet for less than the idle window: nothing to ask. Asked already: wait the window, or the
+        // short retry after a miss.
+        if (nowMs - g->heardMs < BLE_GATT_MESH_PROBE_IDLE_MS)
+            continue;
+        const uint32_t wait = g->probeMisses ? BLE_GATT_MESH_PROBE_RETRY_MS : BLE_GATT_MESH_PROBE_IDLE_MS;
+        if (g->probedMs != 0 && nowMs - g->probedMs < wait)
+            continue;
+        g->probedMs = nowMs;
+        if (platformProbe(all[i].id)) {
+            g->probeMisses = 0;
+            continue;
+        }
+        if (++g->probeMisses < 2)
+            continue;
+        // The disconnect arrives later as a zero-length chunk and forgets the peer then; until it does
+        // the link is still listed, and probedMs keeps this from asking it again every pump.
+        LOG_WARN("BLE GATT mesh: dialled conn %u answers nothing; shedding it", all[i].id);
+        platformShedOutbound(all[i].id);
     }
 }
 
@@ -280,6 +323,8 @@ void BLEGattMeshHandler::handleChunk(BLEGattPeerId peer, const uint8_t *chunk, s
         forgetPeer(peer);
         return;
     }
+    if (Greeting *g = greeting(peer, true))
+        g->heardMs = nowMs;
 
     uint8_t id[BLE_GATT_MESH_LINK_ID_SIZE];
     if (parseHello(chunk, len, id)) {

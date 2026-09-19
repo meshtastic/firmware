@@ -39,6 +39,10 @@ class NRF52BLEGattMesh : public BLEGattMeshHandler
     static void onScanReport(const ble_gap_evt_adv_report_t *report);
     /// The dial never completed (BLE_GAP_EVT_TIMEOUT, source CONN).
     static void onDialTimeout();
+    /// A peer on a dialled link asked for encryption. Declined - see the definition.
+    static void onSecurityRequest(uint16_t conn);
+    /// A write request on some link was answered, or refused with an ATT error.
+    static void onWriteResponse(uint16_t conn, uint16_t status);
 
   protected:
     bool platformReady() override;
@@ -46,6 +50,7 @@ class NRF52BLEGattMesh : public BLEGattMeshHandler
     bool platformNotify(BLEGattPeerId peer, const uint8_t *data, size_t len) override;
     bool platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len) override;
     void platformShedOutbound(BLEGattPeerId peer) override;
+    bool platformProbe(BLEGattPeerId peer) override;
 };
 
 #endif // HAS_BLE_GATT_MESH && ARCH_NRF52

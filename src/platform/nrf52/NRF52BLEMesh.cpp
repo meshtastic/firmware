@@ -233,6 +233,16 @@ void NRF52BLEMesh::onBleEvent(ble_evt_t *event)
         // A dial stops the scan; scanning and a central link coexist once it is up, or gone.
         instance->startScanning();
         break;
+    case BLE_GATTC_EVT_WRITE_RSP:
+#if HAS_BLE_GATT_MESH
+        NRF52BLEGattMesh::onWriteResponse(event->evt.gattc_evt.conn_handle, event->evt.gattc_evt.gatt_status);
+#endif
+        break;
+    case BLE_GAP_EVT_SEC_REQUEST:
+#if HAS_BLE_GATT_MESH
+        NRF52BLEGattMesh::onSecurityRequest(event->evt.gap_evt.conn_handle);
+#endif
+        break;
     case BLE_GAP_EVT_TIMEOUT:
         if (event->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN) {
             instance->startScanning();

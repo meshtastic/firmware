@@ -48,6 +48,18 @@
 // pump's 10 ms tick, bounded so a departed peer fails the send instead of stalling the ring.
 #ifndef BLE_GATT_MESH_TX_ATTEMPTS
 #define BLE_GATT_MESH_TX_ATTEMPTS 50
+
+// A dialled link that has carried nothing for this long is probed with a write the peer must answer.
+// The central keeps the ACL alive by itself, so a peer whose app died looks exactly like a quiet one
+// until something is asked of it - and the one central slot is lost until reboot otherwise.
+#ifndef BLE_GATT_MESH_PROBE_IDLE_MS
+#define BLE_GATT_MESH_PROBE_IDLE_MS 30000
+#endif
+// One unanswered probe may be the stack refusing a second GATTC procedure (an MTU exchange in flight,
+// a write queue full); the retry after this long is what tells that apart from a peer that is gone.
+#ifndef BLE_GATT_MESH_PROBE_RETRY_MS
+#define BLE_GATT_MESH_PROBE_RETRY_MS 2000
+#endif
 #endif
 
 // (from, id) -> arrival peer, so a relay is never written back to the peer that delivered it.
@@ -67,7 +79,8 @@ typedef uint16_t BLEGattPeerId;
 
 struct BLEGattMeshPeer {
     BLEGattPeerId id;
-    uint16_t chunk; // negotiated ATT MTU - 3
+    uint16_t chunk;        // negotiated ATT MTU - 3
+    bool outbound = false; // this node dialled it, so nothing but this node will ever notice it die
 };
 
 /**
@@ -134,6 +147,21 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     /// One node named itself on two links and the election went against this node: drop `peer` if it is
     /// a link this node dialled. An inbound link is the peer's to shed, so the default keeps everything.
     virtual void platformShedOutbound(BLEGattPeerId peer) { (void)peer; }
+    /// This node's link id, drawn on first use, and the greeting that carries it - the platform's probe
+    /// sends the same frame, so both live here rather than below.
+    void ensureLinkId();
+    size_t buildHello(uint8_t *out, size_t cap);
+    /// Greet every listed link once, and start its quiet window; then probe the dialled ones that have
+    /// gone quiet. A test drives both with its own clock.
+    void pumpGreet(uint32_t nowMs);
+    void pumpLiveness(uint32_t nowMs);
+    /// Ask `peer` for proof of life - a write it must acknowledge. False means it is gone. A platform
+    /// that cannot ask says true, and never sheds a link for silence.
+    virtual bool platformProbe(BLEGattPeerId peer)
+    {
+        (void)peer;
+        return true;
+    }
 
     int32_t runOnce() override;
 
@@ -195,12 +223,12 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
         bool sent;
         bool heard;
         uint8_t id[BLE_GATT_MESH_LINK_ID_SIZE];
+        uint32_t heardMs;    // last chunk of any kind from this peer, or when the link was first listed
+        uint32_t probedMs;   // last proof-of-life asked of it
+        uint8_t probeMisses; // unanswered probes in a row; two is gone, one may be a busy stack
     };
     std::array<Greeting, BLE_GATT_MESH_MAX_PEERS * 2> greetings{};
     Greeting *greeting(BLEGattPeerId peer, bool create);
-    void ensureLinkId();
-    size_t buildHello(uint8_t *out, size_t cap);
-    void pumpGreet();
     void handleHello(BLEGattPeerId peer, const uint8_t *id);
     BLEGattPeerId arrivalPeer(NodeNum from, PacketId id) const;
     // The peer a relay of this packet must skip, which is none when the arrival came straight from
