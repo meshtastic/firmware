@@ -47,6 +47,10 @@
 #include "input/LinuxJoystick.h"
 #endif
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+#include "mesh/wifi/WiFiAPClient.h"
+#endif
+
 #ifdef HAS_ADS1115
 #include <Adafruit_ADS1X15.h>
 #endif
@@ -1324,11 +1328,57 @@ void Power::logHeapUsage()
 #endif
 }
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+// Used when config.network.wifi_power_loss_timeout_secs is left at 0.
+static constexpr uint32_t DEFAULT_WIFI_POWER_LOSS_TIMEOUT_SECS = 30;
+
+/// Hold WiFi down while the node runs on battery, per config.network.wifi_on_external_power_only.
+/// Suspension leaves config.network.wifi_enabled alone: the radio is the node's to restore, not the
+/// user's setting to overwrite.
+void Power::handleWifiPowerManagement()
+{
+    if (!config.network.wifi_on_external_power_only || !config.network.wifi_enabled)
+        return;
+
+    if (powerStatus && powerStatus->getHasUSB()) {
+        wifiPowerLostAt = 0;
+        if (isWifiSuspended()) {
+            LOG_INFO("External power back, WiFi on");
+            resumeWifi();
+        }
+        return;
+    }
+
+    if (isWifiSuspended())
+        return;
+
+    uint32_t timeoutSecs = config.network.wifi_power_loss_timeout_secs;
+    if (timeoutSecs == 0)
+        timeoutSecs = DEFAULT_WIFI_POWER_LOSS_TIMEOUT_SECS;
+
+    if (wifiPowerLostAt == 0) {
+        LOG_INFO("On battery, WiFi off in %u s", timeoutSecs);
+        wifiPowerLostAt = Time::stampMillis();
+        return;
+    }
+
+    if (Throttle::hasElapsed(wifiPowerLostAt, timeoutSecs * 1000)) {
+        LOG_INFO("On battery, WiFi off");
+        suspendWifi();
+        wifiPowerLostAt = 0;
+    }
+}
+#endif
+
 int32_t Power::runOnce()
 {
     readPowerStatus();
     logHeapUsage();
     lipoChargerRetry();
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    handleWifiPowerManagement();
+#endif
 
 #ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from
