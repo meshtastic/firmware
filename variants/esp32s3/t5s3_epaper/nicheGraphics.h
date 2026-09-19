@@ -24,6 +24,9 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 #include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
+#include "T5HomeApplet.h"
+#include "T5NodeDetailApplet.h"
+#include "T5NodesApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
@@ -38,6 +41,10 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 #include "graphics/niche/Drivers/EInk/ED047TC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
+#ifdef T5_INKHUD_SCREENSHOT
+#include "T5Screenshot.h"
+#endif
+
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
@@ -47,7 +54,11 @@ void setupNicheGraphics()
     // The ED047TC1 is a parallel display - no SPI bus setup needed.
     // begin() args are part of the EInk interface but are ignored for parallel displays.
 
+#ifdef T5_INKHUD_SCREENSHOT
+    Drivers::EInk *driver = new T5Screenshot::Driver; // ED047TC1 that exposes the framebuffer
+#else
     Drivers::EInk *driver = new Drivers::ED047TC1;
+#endif
     driver->begin(nullptr, 0, 0, 0);
 
     // InkHUD
@@ -68,10 +79,10 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
 
     // Customize default settings
-    inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
-    inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
-    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
-    inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
+    inkhud->persistence->settings.userTiles.maxCount = 2;                         // How many tiles can the display handle?
+    inkhud->persistence->settings.rotation = static_cast<uint8_t>(T5Mode::CARRY); // First-boot default: Carry (portrait)
+    inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = false; // T5 UI draws its own battery status
     inkhud->persistence->settings.optionalMenuItems.backlight = false;
 
     // Alignment must cancel rotation for visual-frame touch input: (rotation + alignment) % 4 == 0.
@@ -86,14 +97,22 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false);           // Activated, not autoshown
     inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet, false, false);       // Not Active, not autoshown
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false);      // Activated, not autoshown
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
-    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // Not Active, not autoshown
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false);                   // Activated, not autoshown
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // Not Active, not autoshown
+    // T5 applets go last: InkHUD saves applet choices by index, so appending keeps existing saved indices valid
+    inkhud->addApplet("Home", new InkHUD::T5HomeApplet, true, false, 0);           // Activated, not autoshown, default on tile 0
+    inkhud->addApplet("Nodes", new InkHUD::T5NodesApplet, true, false);            // Activated, not autoshown
+    inkhud->addApplet("Node Detail", new InkHUD::T5NodeDetailApplet, true, false); // Activated, not autoshown
 
     // Enable reusable InkHUD touch status indicator for this touch-capable board.
     inkhud->setTouchEnabledProvider(isTouchInputEnabled);
 
     // Start running InkHUD
     inkhud->begin();
+    InkHUD::T5HomeApplet::begin(); // Saved settings loaded by begin() override the defaults above
+#ifdef T5_INKHUD_SCREENSHOT
+    T5Screenshot::begin();
+#endif
     // Arm GT911 capacitive-home callback only after InkHUD startup is complete.
     t5SetHomeCapButtonEventsEnabled(true);
 
@@ -112,8 +131,20 @@ void setupNicheGraphics()
 #else
     buttons->setWiring(0, BUTTON_PIN);
 #endif
+#ifdef T5_INKHUD_SCREENSHOT
+    // The screenshot chord consumes its BOOT press
+    buttons->setHandlerShortPress(0, [inkhud]() {
+        if (!T5Screenshot::swallowBoot())
+            inkhud->shortpress();
+    });
+    buttons->setHandlerLongPress(0, [inkhud]() {
+        if (!T5Screenshot::swallowBoot())
+            inkhud->longpress();
+    });
+#else
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
+#endif
 
     buttons->start();
 }

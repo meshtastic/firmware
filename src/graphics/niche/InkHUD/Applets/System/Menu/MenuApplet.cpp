@@ -2371,6 +2371,8 @@ void InkHUD::MenuApplet::populateAppletPage()
     assert(items.size() == 0);
 
     for (uint8_t i = 0; i < inkhud->userApplets.size(); i++) {
+        if (inkhud->userApplets.at(i)->hideFromMenu)
+            continue;
         const char *name = inkhud->userApplets.at(i)->name;
         bool *isActive = &(settings->userApplets.active[i]);
         items.push_back(MenuItem(name, MenuAction::TOGGLE_APPLET, MenuPage::APPLETS, isActive));
@@ -2386,7 +2388,7 @@ void InkHUD::MenuApplet::populateAutoshowPage()
 
     for (uint8_t i = 0; i < inkhud->userApplets.size(); i++) {
         // Only add a menu item if applet is active
-        if (settings->userApplets.active[i]) {
+        if (settings->userApplets.active[i] && !inkhud->userApplets.at(i)->hideFromMenu) {
             const char *name = inkhud->userApplets.at(i)->name;
             bool *isActive = &(settings->userApplets.autoshow[i]);
             items.push_back(MenuItem(name, MenuAction::TOGGLE_AUTOSHOW_APPLET, MenuPage::AUTOSHOW, isActive));

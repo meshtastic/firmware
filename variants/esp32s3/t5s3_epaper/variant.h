@@ -46,15 +46,25 @@ bool t5BacklightIsUserEnabled();
 void t5BacklightToggleUser();
 void t5BacklightSetForcedByTimeout(bool forced);
 void t5BacklightSetForcedBySleep(bool forced);
-void t5BacklightHandleUserInput();
 
 // Touch timeout/wake helpers for this variant
 void t5TouchSetForcedByTimeout(bool forced);
 bool t5TouchIsForcedByTimeout();
-void t5TouchHandleUserInput();
 
 // Gate GT911 capacitive-home callback delivery until InkHUD startup is complete.
 void t5SetHomeCapButtonEventsEnabled(bool enabled);
+
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+// InkHUD Carry (portrait, 508x928) / Console (landscape, 928x508) mode. Value is the InkHUD rotation.
+// Console uses rotation 0 (not 2) so the side key sits on the right edge.
+enum class T5Mode : uint8_t {
+    CARRY = 3,
+    CONSOLE = 0,
+};
+T5Mode t5CurrentMode();
+void t5SetMode(T5Mode mode);
+void t5ToggleMode();
+#endif
 
 #define PCF8563_RTC 0x51
 #define HAS_RTC 1
