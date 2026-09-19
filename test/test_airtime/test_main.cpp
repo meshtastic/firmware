@@ -718,9 +718,9 @@ void test_period_clear_boundary_is_exactly_the_log_depth()
 // --- channelUtilization: the 6 x 10 s modular ring --------------------------
 
 // Airtime ages out oldest-first. The ring's index is absolute uptime phase, so
-// the oldest bucket is (current + 1) % N, never index N-1 - the assumption
-// getSilentMinutes() wrongly makes about the other ring. Stated as a property
-// so it holds at any geometry.
+// the oldest bucket is (current + 1) % N, never index N-1 - the same convention
+// getSilentMinutes() walks on the other ring. Stated as a property so it holds
+// at any geometry.
 void test_channel_utilization_ages_out_oldest_first()
 {
     Time::setTestMillis(0);
@@ -1141,64 +1141,280 @@ void test_effective_duty_cycle_special_case_is_eu_866_only()
 }
 
 // --- getSilentMinutes() ------------------------------------------------------
+//
+// The contract is a promise about the future: after the answer's worth of silence the node may
+// transmit, and a minute earlier it may not. Everything below is checked against that promise by
+// replaying a scenario and advancing the injected clock - never against a second copy of the walk,
+// which would only ever agree with itself.
 
-void test_getSilentMinutes_returns_zero_when_already_under_the_limit()
+// Whole-ms time-on-air from the standard LoRa formula at Meshtastic's 16-symbol preamble, 237-byte
+// frames except where noted. The first and last lie outside modemPresetToParams(); they bound what
+// a bucket can see, from a quantum below a millisecond of resolution to one packet that nearly
+// fills a minute. Each profile's load is sized to about 12% of the hour, so it is over both the
+// 2.5% and the 10% duty cycle, and never more than 60 s of TX in any one minute.
+struct TxProfile {
+    const char *name;
+    uint32_t packetMs;
+    uint16_t packetsPerMinute;
+    uint8_t minutes;
+};
+
+static const TxProfile kProfiles[] = {
+    {"SF5/BW500 16B (sub-preset)", 4, 2700, 40},  // 4.4 ms - 22k packets fill a 2.5% hour
+    {"SHORT_TURBO SF7/BW500", 96, 112, 40},       // 95.6 ms
+    {"MEDIUM_TURBO SF9/BW500", 300, 36, 40},      // 300.3 ms
+    {"LONG_FAST SF11/BW250", 2034, 5, 42},        // 2033.7 ms
+    {"TINY_SLOW SF8/BW15.6/CR6", 8341, 4, 13},    // 8340.5 ms
+    {"LONG_SLOW SF12/BW125/CR8", 13509, 4, 8},    // 13508.6 ms - 54 s of TX in a 60 s bucket
+    {"SF12/BW31.25/CR8 (mythical)", 54034, 1, 8}, // 54034.4 ms - one packet, 90% of a bucket
+};
+static const size_t kProfileCount = sizeof(kProfiles) / sizeof(kProfiles[0]);
+
+// A scenario is fully described by these numbers, so it rebuilds byte-identically and can be
+// measured twice: once for the answer, once for what the answer promised.
+struct Scenario {
+    uint32_t phaseSecs; // uptime of the first packet, i.e. where in the ring the load lands
+    uint32_t packetMs;
+    uint16_t packetsPerMinute;
+    uint8_t minutes;
+};
+
+static Scenario scenarioFor(const TxProfile &p, uint32_t phaseSecs)
 {
-    Time::setTestMillis(0);
-    AirTime a;
-    TEST_ASSERT_EQUAL_UINT8(0, a.getSilentMinutes(1.0f, 2.5f));
+    return Scenario{phaseSecs, p.packetMs, p.packetsPerMinute, p.minutes};
 }
 
-void test_getSilentMinutes_returns_a_full_hour_when_nothing_ages_out()
+// Leaves the clock in the last minute of the load, which is where a real caller would be.
+static void layDownTx(AirTime &a, const Scenario &s)
 {
-    Time::setTestMillis(0);
-    AirTime a; // empty ring, but told we are over the limit
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(60, a.getSilentMinutes(10.0f, 2.5f), "nothing to age out means the full hour");
-}
-
-void test_getSilentMinutes_counts_minutes_until_enough_ages_out()
-{
-    Time::setTestMillis(0);
-    AirTime a;
-    a.logAirtime(TX_LOG, 120000); // two minutes of TX, all of it in minute-bucket 0
-    const float pct = a.utilizationTXPercent();
-    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.3333f, pct);
-
-    // Fully determined: the walk subtracts nothing for i in 59..1, then the whole 3.3333% at i == 0,
-    // returning MINUTES_IN_HOUR - 1 - 0. That answer is one minute short of the truth - syncNow()
-    // clears bucket 0 at minute 60, not 59 - which test_getSilentMinutes_depends_on_ring_phase pins.
-    const uint8_t mins = a.getSilentMinutes(pct, 2.5f);
-    TEST_ASSERT_EQUAL_UINT8(59, mins);
-}
-
-// CHARACTERISATION. getSilentMinutes() walks utilizationTX from index 59 down
-// to 0 and returns 59 - i, treating the index as an age. That is the report
-// array's convention; utilizationTX is a modular ring indexed by minute phase,
-// so identical airtime gives different answers at different phases.
-void test_getSilentMinutes_depends_on_ring_phase()
-{
-    uint8_t answers[6] = {0};
-    float pcts[6] = {0};
-    for (uint8_t i = 0; i < 6; i++) {
-        Time::resetMonotonicForTests();
-        Time::setTestMillis((uint32_t)i * 10u * 60u * 1000u); // 0, 10, 20... minutes of uptime
-        AirTime a;
-        a.logAirtime(TX_LOG, 120000);
-        pcts[i] = a.utilizationTXPercent();
-        answers[i] = a.getSilentMinutes(pcts[i], 2.5f);
+    for (uint8_t m = 0; m < s.minutes; m++) {
+        for (uint16_t i = 0; i < s.packetsPerMinute; i++)
+            a.logAirtime(TX_LOG, s.packetMs);
+        if (m + 1 < s.minutes)
+            Time::advanceTestMillis(60u * 1000u);
     }
+}
 
-    for (uint8_t i = 1; i < 6; i++)
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0001f, pcts[0], pcts[i], "the inputs must be identical");
+static uint8_t silentMinutesFor(const Scenario &s, float dutyCycle)
+{
+    Time::resetMonotonicForTests();
+    Time::setTestMillis(s.phaseSecs * 1000u);
+    AirTime a;
+    layDownTx(a, s);
+    return a.getSilentMinutes(dutyCycle);
+}
 
-    bool varies = false;
-    for (uint8_t i = 1; i < 6; i++)
-        if (answers[i] != answers[0])
-            varies = true;
+// Replays the scenario, lets `minutes` of silence actually elapse, and reports what the gate in
+// Router::send() would read at that point.
+static float txPercentAfterSilence(const Scenario &s, uint8_t minutes)
+{
+    Time::resetMonotonicForTests();
+    Time::setTestMillis(s.phaseSecs * 1000u);
+    AirTime a;
+    layDownTx(a, s);
+    if (minutes)
+        Time::advanceTestMillis((uint32_t)minutes * 60u * 1000u);
+    return a.utilizationTXPercent();
+}
 
-    snprintf(g_msg, sizeof(g_msg), "same airtime, answers by phase: %u %u %u %u %u %u", answers[0], answers[1], answers[2],
-             answers[3], answers[4], answers[5]);
-    TEST_ASSERT_TRUE_MESSAGE(varies, g_msg);
+// Both halves of the promise: enough silence, and no more than enough.
+static void assertSilentMinutesIsExact(const Scenario &s, float dutyCycle, const char *what)
+{
+    const uint8_t m = silentMinutesFor(s, dutyCycle);
+
+    const float atM = txPercentAfterSilence(s, m);
+    snprintf(g_msg, sizeof(g_msg), "%s @%us/%.1f%%: after the %u min it asked for, %.5f%% remains", what, s.phaseSecs, dutyCycle,
+             m, atM);
+    TEST_ASSERT_TRUE_MESSAGE(atM <= dutyCycle, g_msg);
+
+    if (m > 0) {
+        const float atPrev = txPercentAfterSilence(s, (uint8_t)(m - 1));
+        snprintf(g_msg, sizeof(g_msg), "%s @%us/%.1f%%: %u min already sufficed (%.5f%%), it asked for %u", what, s.phaseSecs,
+                 dutyCycle, m - 1, atPrev, m);
+        TEST_ASSERT_TRUE_MESSAGE(atPrev > dutyCycle, g_msg);
+    }
+}
+
+void test_getSilentMinutes_returns_zero_when_under_the_limit()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+    a.logAirtime(TX_LOG, 1000); // 0.028% of the hour, far below any duty cycle
+    TEST_ASSERT_EQUAL_UINT8(0, a.getSilentMinutes(2.5f));
+}
+
+// It reads the ring itself, so there is no longer a figure a caller can pass that disagrees with
+// the buckets. An empty ring owes no silence, whatever the caller believes.
+void test_getSilentMinutes_reads_the_ring_rather_than_a_caller_figure()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+    TEST_ASSERT_EQUAL_UINT8(0, a.getSilentMinutes(2.5f));
+}
+
+// The defect this replaces: the old walk read utilizationTX from index 59 down, treating the index
+// as an age. It is a modular ring indexed by minute phase, so identical traffic used to give
+// different answers depending on where in the hour the node happened to be.
+void test_getSilentMinutes_is_independent_of_ring_phase()
+{
+    uint8_t first = 0;
+    for (uint32_t phase = 0; phase < 60; phase++) {
+        const Scenario s = {phase * 60u + 17u, 2034, 5, 42}; // LONG_FAST
+        const uint8_t m = silentMinutesFor(s, 2.5f);
+        if (phase == 0)
+            first = m;
+        snprintf(g_msg, sizeof(g_msg), "minute phase %u answered %u, phase 0 answered %u", phase, m, first);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(first, m, g_msg);
+    }
+}
+
+// The same within a minute: the answer is in whole minutes, so it must not move with the seconds.
+void test_getSilentMinutes_is_independent_of_sub_minute_offset()
+{
+    uint8_t first = 0;
+    for (uint32_t secs = 0; secs < 60; secs += 7) {
+        const Scenario s = {23u * 60u + secs, 13509, 4, 8}; // LONG_SLOW
+        const uint8_t m = silentMinutesFor(s, 2.5f);
+        if (secs == 0)
+            first = m;
+        snprintf(g_msg, sizeof(g_msg), "second-of-minute %u answered %u, :00 answered %u", secs, m, first);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(first, m, g_msg);
+    }
+}
+
+// The headline sweep: every profile, at phases that cross the ring wrap, against both duty cycles
+// a real region imposes. Every case is settled by letting the time actually pass.
+void test_getSilentMinutes_is_exact_across_the_preset_spectrum()
+{
+    static const uint32_t phases[] = {0, 59, 1801, 3600};
+    static const float dutyCycles[] = {2.5f, 10.0f};
+
+    for (size_t p = 0; p < kProfileCount; p++)
+        for (size_t ph = 0; ph < sizeof(phases) / sizeof(phases[0]); ph++)
+            for (size_t d = 0; d < sizeof(dutyCycles) / sizeof(dutyCycles[0]); d++)
+                assertSilentMinutesIsExact(scenarioFor(kProfiles[p], phases[ph]), dutyCycles[d], kProfiles[p].name);
+}
+
+// Being early is the failure that matters: it tells the user to transmit into a live lockout. The
+// sweep above proves exactness at four phases; this states the one-sided half over a finer net.
+void test_getSilentMinutes_is_never_early()
+{
+    for (size_t p = 0; p < kProfileCount; p++) {
+        for (uint32_t phase = 0; phase < 3600; phase += 400) {
+            const Scenario s = scenarioFor(kProfiles[p], phase);
+            const uint8_t m = silentMinutesFor(s, 2.5f);
+            const float after = txPercentAfterSilence(s, m);
+            snprintf(g_msg, sizeof(g_msg), "%s @%us: answered %u min, still %.5f%% after it", kProfiles[p].name, phase, m, after);
+            TEST_ASSERT_TRUE_MESSAGE(after <= 2.5f, g_msg);
+        }
+    }
+}
+
+void test_getSilentMinutes_never_returns_zero_when_over_the_limit()
+{
+    for (size_t p = 0; p < kProfileCount; p++) {
+        for (uint32_t phase = 0; phase < 3600; phase += 331) {
+            const Scenario s = scenarioFor(kProfiles[p], phase);
+
+            Time::resetMonotonicForTests();
+            Time::setTestMillis(s.phaseSecs * 1000u);
+            AirTime a;
+            layDownTx(a, s);
+            const float pct = a.utilizationTXPercent();
+            TEST_ASSERT_TRUE_MESSAGE(pct > 2.5f, "the profile must put the node over the limit");
+
+            const uint8_t m = a.getSilentMinutes(2.5f);
+            snprintf(g_msg, sizeof(g_msg), "%s @%us: %.5f%% is over 2.5%% but it asked for no silence", kProfiles[p].name, phase,
+                     pct);
+            TEST_ASSERT_TRUE_MESSAGE(m > 0, g_msg);
+        }
+    }
+}
+
+// Hand-computed, so a sign error cannot hide behind an oracle that shares it. One 2-minute burst at
+// uptime 600 s lands in bucket 10; buckets age out from 11 forward, so the burst survives until
+// bucket 10 itself is cleared - 60 minutes later, not the 59 the old walk returned.
+void test_getSilentMinutes_counts_from_the_oldest_bucket()
+{
+    Time::setTestMillis(600u * 1000u);
+    AirTime a;
+    a.logAirtime(TX_LOG, 120000);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.3333f, a.utilizationTXPercent());
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(60, a.getSilentMinutes(2.5f), "the current bucket ages out last");
+}
+
+// The extreme the slowest profile exists to reach: two 54 s packets in one minute are 3% of the
+// hour by themselves, and only that bucket ageing out can clear them.
+void test_getSilentMinutes_waits_a_full_hour_when_the_current_bucket_alone_exceeds_the_limit()
+{
+    Time::setTestMillis(1234u * 1000u);
+    AirTime a;
+    a.logAirtime(TX_LOG, 54034);
+    a.logAirtime(TX_LOG, 54034);
+    TEST_ASSERT_TRUE(a.utilizationTXPercent() > 2.5f);
+    TEST_ASSERT_EQUAL_UINT8(60, a.getSilentMinutes(2.5f));
+}
+
+// It used to read the ring without rotating it, and was right only because its one caller had just
+// called utilizationTXPercent(). Nothing here calls anything else first.
+void test_getSilentMinutes_syncs_its_own_window()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+    a.logAirtime(TX_LOG, 200000); // 5.6% of an hour, well over the limit
+
+    Time::advanceTestMillis(61u * 60u * 1000u); // the whole window has aged out
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, a.getSilentMinutes(2.5f), "must rotate the ring itself, not trust the caller");
+}
+
+// The same promise across the 49.7-day millis() wrap, stepped the way the main loop steps it.
+void test_getSilentMinutes_is_exact_across_the_millis_wrap()
+{
+    Time::resetMonotonicForTests();
+    Time::setTestMillis(0xFFFFFFFFu - (120u * 1000u));
+    Time::serviceMonotonic();
+    AirTime a;
+    for (uint8_t i = 0; i < 42; i++) {
+        for (uint8_t k = 0; k < 5; k++)
+            a.logAirtime(TX_LOG, 2034); // LONG_FAST, five a minute
+        Time::advanceTestMillis(60u * 1000u);
+        Time::serviceMonotonic();
+    }
+    TEST_ASSERT_TRUE_MESSAGE(a.utilizationTXPercent() > 2.5f, "the scenario must actually be over the limit");
+
+    const uint8_t m = a.getSilentMinutes(2.5f);
+    Time::advanceTestMillis((uint32_t)m * 60u * 1000u);
+    Time::serviceMonotonic();
+
+    const float after = a.utilizationTXPercent();
+    snprintf(g_msg, sizeof(g_msg), "across the wrap: asked for %u min, left %.5f%%", m, after);
+    TEST_ASSERT_TRUE_MESSAGE(after <= 2.5f, g_msg);
+}
+
+// 4 ms packets against a 90,000 ms budget: each is 0.00011% of the hour, and the answer still has
+// to be exact. The old float-percent subtraction accumulated rounding over its 60 steps at this
+// scale; a sum in whole ms does not.
+void test_getSilentMinutes_is_exact_at_sub_millisecond_packet_scale()
+{
+    const Scenario s = {97u * 60u, 4, 2700, 40};
+    assertSilentMinutesIsExact(s, 2.5f, "4 ms quanta");
+    assertSilentMinutesIsExact(s, 10.0f, "4 ms quanta");
+}
+
+// The answer is the complement of Router::send()'s gate, so a stricter duty cycle can never ask for
+// less silence than a looser one on the same ring.
+void test_getSilentMinutes_is_monotonic_in_the_duty_cycle()
+{
+    static const float dutyCycles[] = {0.5f, 1.0f, 2.5f, 5.0f, 10.0f, 20.0f};
+    uint8_t prev = 61;
+    for (size_t d = 0; d < sizeof(dutyCycles) / sizeof(dutyCycles[0]); d++) {
+        const Scenario s = {777, 2034, 5, 42};
+        const uint8_t m = silentMinutesFor(s, dutyCycles[d]);
+        snprintf(g_msg, sizeof(g_msg), "%.1f%% asked for %u min, the stricter limit asked for %u", dutyCycles[d], m, prev);
+        TEST_ASSERT_TRUE_MESSAGE(m <= prev, g_msg);
+        prev = m;
+    }
 }
 
 // --- clock robustness ---------------------------------------------------------
@@ -1299,7 +1515,7 @@ void test_no_public_method_takes_the_lock_twice()
     (void)a.getSecondsPerPeriod();
     (void)a.getSecondsSinceBoot();
     (void)a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG);
-    (void)a.getSilentMinutes(10.0f, 2.5f);
+    (void)a.getSilentMinutes(2.5f);
     (void)a.isTxAllowedChannelUtil(false);
     (void)a.isTxAllowedChannelUtil(true);
     (void)a.isTxAllowedAirUtil();
@@ -1381,10 +1597,19 @@ void setup()
     RUN_TEST(test_isTxAllowedAirUtil_blocks_at_half_the_duty_cycle);
     RUN_TEST(test_router_send_gate_uses_the_whole_duty_cycle);
     RUN_TEST(test_effective_duty_cycle_special_case_is_eu_866_only);
-    RUN_TEST(test_getSilentMinutes_returns_zero_when_already_under_the_limit);
-    RUN_TEST(test_getSilentMinutes_returns_a_full_hour_when_nothing_ages_out);
-    RUN_TEST(test_getSilentMinutes_counts_minutes_until_enough_ages_out);
-    RUN_TEST(test_getSilentMinutes_depends_on_ring_phase);
+    RUN_TEST(test_getSilentMinutes_returns_zero_when_under_the_limit);
+    RUN_TEST(test_getSilentMinutes_reads_the_ring_rather_than_a_caller_figure);
+    RUN_TEST(test_getSilentMinutes_is_independent_of_ring_phase);
+    RUN_TEST(test_getSilentMinutes_is_independent_of_sub_minute_offset);
+    RUN_TEST(test_getSilentMinutes_is_exact_across_the_preset_spectrum);
+    RUN_TEST(test_getSilentMinutes_is_never_early);
+    RUN_TEST(test_getSilentMinutes_never_returns_zero_when_over_the_limit);
+    RUN_TEST(test_getSilentMinutes_counts_from_the_oldest_bucket);
+    RUN_TEST(test_getSilentMinutes_waits_a_full_hour_when_the_current_bucket_alone_exceeds_the_limit);
+    RUN_TEST(test_getSilentMinutes_syncs_its_own_window);
+    RUN_TEST(test_getSilentMinutes_is_exact_across_the_millis_wrap);
+    RUN_TEST(test_getSilentMinutes_is_exact_at_sub_millisecond_packet_scale);
+    RUN_TEST(test_getSilentMinutes_is_monotonic_in_the_duty_cycle);
     RUN_TEST(test_survives_heavy_sleep_across_the_wrap);
     RUN_TEST(test_multi_day_sleep_clears_every_window);
     RUN_TEST(test_backwards_uptime_degrades_safely);

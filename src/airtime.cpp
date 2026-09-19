@@ -212,28 +212,39 @@ float AirTime::Windows::smoothedChannelUtilizationPercent(const Held &held)
     return hasChannelUtilSample ? channelUtilAvg : channelUtilizationPercentRaw(held);
 }
 
-float AirTime::Windows::utilizationTXPercent(const Held &held)
+uint32_t AirTime::Windows::utilizationTXMsec(const Held &)
 {
-    // Duty-cycle checks use this value, so keep it current even outside the periodic thread.
-    syncNow(held);
-
     uint32_t sum = 0;
     for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
         sum += this->utilizationTX[i];
     }
 
-    return (float(sum) / float(MS_IN_HOUR)) * 100;
+    return sum;
 }
 
-// Minutes we must be silent before sending again. Does not sync, and walks the ring as if the index
-// were an age; both are wrong and both are pinned by characterisation tests. See airtime.h's TODO.
-uint8_t AirTime::Windows::getSilentMinutes(float txPercent, float dutyCycle, const Held &)
+float AirTime::Windows::utilizationTXPercent(const Held &held)
 {
-    float newTxPercent = txPercent;
-    for (int8_t i = MINUTES_IN_HOUR - 1; i >= 0; --i) {
-        newTxPercent -= ((float)this->utilizationTX[i] / (MS_IN_MINUTE * MINUTES_IN_HOUR / 100));
-        if (newTxPercent < dutyCycle)
-            return MINUTES_IN_HOUR - 1 - i;
+    // Duty-cycle checks use this value, so keep it current even outside the periodic thread.
+    syncNow(held);
+
+    return (float(utilizationTXMsec(held)) / float(MS_IN_HOUR)) * 100;
+}
+
+// Minutes of silence until the hour's TX total falls back under the limit. Buckets age out oldest
+// first, and this ring is indexed by minute phase, so the oldest is the one after the current.
+uint8_t AirTime::Windows::getSilentMinutes(float dutyCycle, const Held &held)
+{
+    syncNow(held);
+
+    // Whole milliseconds, and `<=` is the exact complement of the caller's `> dutyCycle` abort.
+    const uint32_t limitMs = (uint32_t)(dutyCycle * (MS_IN_HOUR / 100.0f));
+    uint32_t sum = utilizationTXMsec(held);
+    const uint8_t cur = getPeriodUtilHour(held);
+
+    for (uint8_t m = 0; m < MINUTES_IN_HOUR; m++) {
+        if (sum <= limitMs)
+            return m;
+        sum -= this->utilizationTX[(cur + 1 + m) % MINUTES_IN_HOUR];
     }
 
     return MINUTES_IN_HOUR;
@@ -335,10 +346,10 @@ bool AirTime::isTxAllowedAirUtil()
     return true;
 }
 
-uint8_t AirTime::getSilentMinutes(float txPercent, float dutyCycle)
+uint8_t AirTime::getSilentMinutes(float dutyCycle)
 {
     Held held(this);
-    return w.getSilentMinutes(txPercent, dutyCycle, held);
+    return w.getSilentMinutes(dutyCycle, held);
 }
 
 AirTime::AirTime() : concurrency::OSThread("AirTime") {}

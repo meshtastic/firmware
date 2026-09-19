@@ -72,9 +72,8 @@
   scheduler-driven window stops advancing during light sleep. Enforced by
   test_channel_utilization_is_independent_of_scheduler_rate.
 
-  TODO: airtime accuracy. Four known defects remain - the quantised denominator,
-  its sawtooth, whole-packet attribution to the completing bucket, and
-  getSilentMinutes() reading a modular ring as if the index were an age. Each is
+  TODO: airtime accuracy. Three known defects remain - the quantised denominator,
+  its sawtooth, and whole-packet attribution to the completing bucket. Each is
   pinned by a test tagged CHARACTERISATION in test/test_airtime.
 */
 
@@ -86,7 +85,6 @@
 #define PERIODS_TO_LOG 8
 #define MINUTES_IN_HOUR 60
 #define SECONDS_IN_MINUTE 60
-#define MS_IN_MINUTE (SECONDS_IN_MINUTE * 1000)
 #define MS_IN_HOUR (MINUTES_IN_HOUR * SECONDS_IN_MINUTE * 1000)
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
@@ -151,7 +149,8 @@ class AirTime : private concurrency::OSThread
     /// caller cannot hold a handle to buckets that every other entry point rotates underneath it.
     /// False if `out` is null, `count` exceeds the log depth, or the report type is unknown.
     bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count);
-    uint8_t getSilentMinutes(float txPercent, float dutyCycle);
+    /// Minutes of silence until utilizationTXPercent() falls back to `dutyCycle` or below.
+    uint8_t getSilentMinutes(float dutyCycle);
     bool isTxAllowedChannelUtil(bool polite = false);
     bool isTxAllowedAirUtil();
 
@@ -218,9 +217,12 @@ class AirTime : private concurrency::OSThread
         /// Fold `steps` readings of `sample` into channelUtilAvg. Power by squaring, so a
         /// multi-day sleep decays by the time elapsed in at most 32 multiplications.
         void foldChannelUtil(float sample, uint32_t steps, const Held &);
+        /// The ring sum in whole ms. Exact where the percentage is not, and the basis for
+        /// getSilentMinutes()'s budget arithmetic.
+        uint32_t utilizationTXMsec(const Held &);
         float utilizationTXPercent(const Held &);
         bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count, const Held &);
-        uint8_t getSilentMinutes(float txPercent, float dutyCycle, const Held &);
+        uint8_t getSilentMinutes(float dutyCycle, const Held &);
         uint8_t getPeriodUtilMinute(const Held &);
         uint8_t getPeriodUtilHour(const Held &);
         // Advance rolling airtime windows from monotonic uptime, not from runOnce() calls.
