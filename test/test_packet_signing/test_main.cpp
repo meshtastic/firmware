@@ -1698,10 +1698,11 @@ void test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name(void)
 
 static constexpr uint32_t kSuppressSecs = 12 * 60 * 60;
 
-// Deliver a NodeInfo request from `sender` and report whether we would reply to it.
+// Deliver a unicast NodeInfo request from `sender` and report whether we would reply to it. Unicast,
+// because a broadcast want_response is refused outright by policy and would never reach the window.
 static bool wouldReplyToNodeInfoRequest(NodeInfoTestShim &shim, NodeNum sender)
 {
-    meshtastic_MeshPacket mp = makeDecoded(sender, NODENUM_BROADCAST, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    meshtastic_MeshPacket mp = makeDecoded(sender, nodeDB->getNodeNum(), meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
     mp.decoded.want_response = true;
     meshtastic_User user = meshtastic_User_init_zero;
     user.is_licensed = owner.is_licensed;

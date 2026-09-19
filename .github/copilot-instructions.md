@@ -211,6 +211,14 @@ Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which d
 
 Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `demoteOldestHotNodesToWarm` (the over-cap warm-tier migration), `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly. (Note: `enforceSatelliteCaps`/`evictSatelliteOverCap` call `.erase()` directly on purpose - that's a satellite-only cap trim where the node _stays_ in the header, a different operation from this chokepoint.)
 
+### Probation band
+
+A node admitted to a **full** store by a heard packet is flagged `NODEINFO_BITFIELD_ON_PROBATION` (a store with room admits residents as before, so a small mesh is unchanged). Probation entries are evicted first: once the band holds `NODEDB_PROBATION_SLOTS`, a new admission evicts the oldest probation entry; until then it evicts a resident so the band can grow to quota. `updateFrom()` promotes a probation entry to resident when it is heard again after `probationGapSecs()`; `setProtectedFlag()` promotes on favourite/ignore/verify. Receiving its NodeInfo does **not** promote it, and neither does a packet addressed to us - the destination is an unauthenticated header field, and a promotion evicts a resident. A promotion frees nothing - the store stays full, so the next newcomer joins the band and that admission evicts a resident (key-less first, else oldest) to refill it. Evicting at promotion time left a free slot that the next stranger was admitted into as a resident, so every promotion cost two residents and let one unvetted node past the band. The resident tier is therefore capped at `MAX_NUM_NODES - NODEDB_PROBATION_SLOTS` only on a full store, by admission; a mesh that fits between the two never evicts. A key-less probation eviction is not absorbed into the warm tier; a keyed one is. Contact imports and admin blocks pass `getOrCreateMeshNode(n, heardOnAir=false)` and become residents directly.
+
+`probationGapSecs()` is half the measured probation residency (EMA 1/8 of each evicted probation entry's age, via `evictionRecency()` so it works on uptime before the clock is set), clamped to `[NODEDB_PROBATION_GAP_MIN_SECS, NODEDB_PROBATION_GAP_MAX_SECS]`. `NODEDB_PROBATION_SLOTS` is a fixed 10, not scaled by `MAX_NUM_NODES` (the gap adapts to the arrival rate instead), and 0 on STM32WL, whose 10-node store is too small for a band: there every entry is a resident and admission is the plain LRU.
+
+Two consumers read the flag, and there is no separate churn counter. `MeshService::handleFromRadio` never greets a probation entry; the promoting packet arrives with the flag already clear, so a recurring node is greeted on promotion under the 10-minute cooldown, channel-utilisation and hop gates - the old `!isFull()` greeting gate is gone. `NodeInfoModule::allocReply()` defers a unicast request from a probation entry (see **NodeInfo storm suppression**). Modules run before `MeshService`, and `handleReceivedProtobuf` has already admitted the requester through `updateUser()`, so at reply time a first contact on a full store is on probation and stays so until heard again after the gap; then its next request is answered.
+
 ### Warm tier (long-tail identity)
 
 On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node - primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
@@ -642,6 +650,17 @@ The mesh network has limited bandwidth. When modifying broadcast intervals:
 - Use `Default::getConfiguredOrMinimumValue()` to enforce minimums
 - Consider `numOnlineNodes` scaling for congestion control
 
+### NodeInfo storm suppression
+
+A NodeInfo exchange is cheap for the sender and expensive for the mesh, so `NodeInfoModule::allocReply()` refuses two classes of request outright. Both set `ignoreRequest`, which also stops `MeshModule::callModules` from sending a `NO_RESPONSE` NAK - a refusal is silent, not an error.
+
+1. **Broadcast requests are never answered.** A `want_response` NodeInfo addressed to `NODENUM_BROADCAST` asks every node in earshot to answer one packet; that is amplification, and it is how NodeInfo storms start. Senders still set the bit (`runOnce` on a channel change, the phone/TCP heartbeat), and older firmware still answers it, so don't read the bit as dead - just don't answer it here.
+2. **A unicast request from a probation entry is deferred** to our scheduled broadcast (see **Probation band** under NodeDB). The requester was heard once on a full store; once it is heard again after the band's gap it is promoted and its next one is answered. Residents, and every requester on a store with room, are answered as before.
+
+What deliberately survives both: our scheduled `runOnce` broadcast, and the handshakes driven by traffic we could not otherwise handle - `ReliableRouter`'s `PKI_UNKNOWN_PUBKEY` response to an undecryptable DM, `KeyVerificationModule`, and the phone-triggered sends. Those call `sendOurNodeInfo()` directly while `currentRequest` points at a non-NodeInfo packet (or nothing), so `isReplyingToExternalRequest` is false and no suppression applies. Keep new urgent paths on `sendOurNodeInfo()` rather than routing them through the reply machinery.
+
+Discovery still converges without broadcast replies: a node that hears a peer unicasts it a NodeInfo with `want_response`, and that unicast is answered once the peer is a resident. Covered by `test/test_nodeinfo_storm/`.
+
 ### Power Management
 
 Many devices are battery-powered:
@@ -735,6 +754,7 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 - `test_mqtt/` - MQTT integration
 - `test_nexthop_routing/` - Next-hop routing logic
 - `test_nodedb_blocked/` - NodeDB blocked-node handling
+- `test_nodeinfo_storm/` - NodeDB probation band and the NodeInfo reply-refusal policy
 - `test_packet_history/` - Packet history tracking
 - `test_packet_signing/` - Packet signing
 - `test_position_module/` - Position module behaviour
@@ -983,7 +1003,7 @@ House rules for agents running these prompts:
 Two firmware changes exist specifically so the test harness works reliably. **Keep these in mind when touching related code.**
 
 - **`src/mesh/StreamAPI.cpp` + `StreamAPI.h`** - `emitLogRecord` uses a dedicated `fromRadioScratchLog` + `txBufLog` pair and a `concurrency::Lock streamLock`. Before this fix, `debug_log_api_enabled=true` would tear `FromRadio` protobufs on the serial transport because `emitTxBuffer` and `emitLogRecord` shared a single scratch buffer. The conftest enables the log stream session-wide; without this fix the device would corrupt its own FromRadio replies mid-session.
-- **`src/mesh/PhoneAPI.cpp`** - `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion.
+- **`src/mesh/PhoneAPI.cpp`** - `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion. The `wantReplies` argument no longer earns a reply from current firmware (see **NodeInfo storm suppression**); the peer learns us from the broadcast itself and then unicasts its own NodeInfo back through the unknown-node path, so discovery still completes.
 
 If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` flow, run `./run-tests.sh` (from a meshtastic-mcp checkout, with `MESHTASTIC_FIRMWARE_ROOT` pointed here) at minimum before asking for review.
 

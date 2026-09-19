@@ -31,8 +31,9 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     auto p = *pptr;
 
-    // Suppress replies to senders we've replied to recently (12H window)
-    if (mp.decoded.want_response && !isFromUs(&mp)) {
+    // 12 h reply dedup. Broadcast requests are refused in allocReply() and not recorded here, or
+    // they would suppress a later unicast request from the same node - the one we do answer.
+    if (mp.decoded.want_response && !isFromUs(&mp) && !isBroadcast(mp.to)) {
         const NodeNum sender = getFrom(&mp);
         // A local dedup window, not a wall-clock reading - uptime avoids RTC jumps and replayed
         // packets' stale rx_time perturbing it. Seconds, not millis - this is a wide window.
@@ -144,11 +145,24 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
                                              currentRequest->decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
                                              currentRequest->decoded.want_response && !isFromUs(currentRequest);
 
-    if (suppressReplyForCurrentRequest && isReplyingToExternalRequest) {
-        LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
-        ignoreRequest = true;
-        suppressReplyForCurrentRequest = false;
-        return NULL;
+    if (isReplyingToExternalRequest) {
+        // A broadcast want_response asks every listener to answer one packet: amplification. Our
+        // scheduled broadcast carries the same information; unicast requests are still answered.
+        // Probation: heard once on a full store, so defer to our scheduled broadcast; it is answered
+        // once it has been heard again after the band's gap and promoted.
+        const char *refuse = isBroadcast(currentRequest->to)                                           ? "broadcast"
+                             : suppressReplyForCurrentRequest                                          ? "heard <12h ago"
+                             : nodeInfoLiteIsOnProbation(nodeDB->getMeshNode(getFrom(currentRequest))) ? "on probation"
+                                                                                                       : nullptr;
+        if (refuse) {
+            LOG_DEBUG("Skip send NodeInfo reply to 0x%08x: %s", getFrom(currentRequest), refuse);
+            // Forget a probation refusal, or handleReceivedProtobuf()'s record would refuse the next one for 12 h.
+            if (!suppressReplyForCurrentRequest && !isBroadcast(currentRequest->to))
+                lastNodeInfoSeen.erase(getFrom(currentRequest));
+            ignoreRequest = true;
+            suppressReplyForCurrentRequest = false;
+            return NULL;
+        }
     }
 
     if (!airTime->isTxAllowedChannelUtil(false)) {

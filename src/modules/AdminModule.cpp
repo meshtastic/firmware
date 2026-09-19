@@ -547,7 +547,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // Unlike the sibling node-targeted admin commands, create the entry if
         // it's absent so the block sticks for a node we've not heard from yet
         // (e.g. one a remote admin asks us to block) with no NodeInfo or key.
-        meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(r->set_ignored_node);
+        meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(r->set_ignored_node, /*heardOnAir=*/false);
         if (node != NULL) {
             if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 nodeDB->eraseNodeSatellites(node->num);

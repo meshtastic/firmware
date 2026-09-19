@@ -91,6 +91,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp->from);
     bool isPreferredRebroadcaster =
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                   meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
@@ -98,16 +99,25 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG("Got telemetry response. Skip our NodeInfo");
         //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-               !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
-               !nodeDB->isFull()) {
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && sender && !nodeInfoLiteHasUser(sender) &&
+               !nodeInfoLiteIsOnProbation(sender) && !nodeInfoLiteHasBeenGreeted(sender) && nodeInfoModule &&
+               !isPreferredRebroadcaster) {
+        // Greet only a node the store holds as a resident, and only once: a deferred admission (no entry
+        // yet) or a probation entry is not greeted; the packet that promotes it arrives here with the
+        // flag clear. Re-asking a node that did not answer spends our NodeInfo throttle for nothing.
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
                 LOG_DEBUG("Skip send NodeInfo: %d hops too far", hopsUsed);
             } else {
                 LOG_INFO("Heard new node on ch. %d, send NodeInfo, ask response", mp->channel);
-                nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+                // Stamp only an ask that went out: allocReply() still refuses one inside our NodeInfo
+                // throttle, and a refusal must not spend the node's single greeting.
+                if (nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel)) {
+                    // Re-fetch rather than reuse `sender`: the send runs the router in between.
+                    if (meshtastic_NodeInfoLite *greeted = nodeDB->getMeshNode(mp->from))
+                        nodeInfoLiteSetBit(greeted, NODEINFO_BITFIELD_HAS_BEEN_GREETED_MASK, true);
+                }
             }
         } else {
             LOG_DEBUG("Skip NodeInfo > 25%% ch. util");
