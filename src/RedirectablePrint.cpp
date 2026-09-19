@@ -235,8 +235,6 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
-#elif defined(ARCH_NRF54L15)
-        isBleConnected = nrf54l15Bluetooth != nullptr && nrf54l15Bluetooth->isConnected();
 #endif
         if (isBleConnected) {
             auto thread = concurrency::OSThread::currentThread;
@@ -253,8 +251,6 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(buffer.get(), size);
-#elif defined(ARCH_NRF54L15)
-            nrf54l15Bluetooth->sendLog(buffer.get(), size);
 #endif
         }
     }
@@ -302,13 +298,18 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     // level trace is special, two possible ways to handle it.
     if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
         if (portduino_config.traceFilename != "") {
+            // Format the message rather than assuming the first vararg is a string: not every
+            // LOG_TRACE call passes one, and reading a char* that isn't there segfaults. Sized for
+            // the worst-case packet JSON (233-byte payload escaped 6x, plus metadata ~= 1.7 KB).
+            char traceBuf[2048];
             va_list arg;
             va_start(arg, format);
+            vsnprintf(traceBuf, sizeof(traceBuf), format, arg);
+            va_end(arg);
             try {
-                traceFile << va_arg(arg, char *) << std::endl;
+                traceFile << traceBuf << std::endl;
             } catch (const std::ios_base::failure &e) {
             }
-            va_end(arg);
         }
         if (portduino_config.logoutputlevel < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
             return;

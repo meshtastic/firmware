@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 #if HAS_WIFI
 #include "NodeDB.h"
@@ -12,7 +13,12 @@
 
 #if HAS_ETHERNET && defined(ARCH_ESP32)
 #include <ETH.h>
+#include <SPI.h>
 #endif // HAS_ETHERNET
+
+#if HAS_ETHERNET && defined(ETH_SHARED_SPI)
+#include "platform/esp32/SharedBusEthernet.h"
+#endif
 
 #if HAS_ETHERNET && defined(USE_CH390D)
 #include "ESP32_CH390.h"
@@ -123,8 +129,14 @@ bool initEthernet()
     // Register before begin(): static config can fire ETH_GOT_IP immediately
     WiFi.onEvent(WiFiEvent);
 
+#ifdef ETH_SHARED_SPI
+    // SharedBusEthernet takes spiLock around every W5500 transfer; Arduino's ETH cannot.
+    if (!ETH.begin())
+        return false;
+#else
     if (!ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST, ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))
         return false;
+#endif
 
     applyEthStaticIp();
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
@@ -294,7 +306,7 @@ static int32_t reconnectWiFi()
 #ifndef DISABLE_NTP
     if (WiFi.isConnected() && (!Throttle::isWithinTimespanMs(lastrun_ntp, 43200000) || (lastrun_ntp == 0))) { // every 12 hours
         LOG_DEBUG("Update NTP time from %s", config.network.ntp_server);
-        if (timeClient.update()) {
+        if (timeClient.forceUpdate()) {
             LOG_DEBUG("NTP success - set RTCQualityNTP if needed");
 
             struct timeval tv;
@@ -302,7 +314,7 @@ static int32_t reconnectWiFi()
             tv.tv_usec = 0;
 
             perhapsSetRTC(RTCQualityNTP, &tv);
-            lastrun_ntp = millis();
+            lastrun_ntp = Time::skipZero(Time::getMillis());
         } else {
             LOG_DEBUG("NTP Update failed");
         }
@@ -316,7 +328,11 @@ static int32_t reconnectWiFi()
         return 1000; // check once per second
     } else {
         onNetworkConnected(); // will only do anything once (guarded by APStartupComplete)
-        return 300000;        // every 5 minutes
+#ifndef DISABLE_NTP
+        if (lastrun_ntp == 0)
+            return 5000; // NTP not yet synced, retry sooner
+#endif
+        return 300000; // every 5 minutes
     }
 }
 

@@ -1,3 +1,8 @@
+// Deliberately does NOT include TestUtil.h. This suite is pure-function - no NodeDB, no router, no
+// sockets, no PKC - so the harness-wide guards there (no listening sockets, force_simradio clear)
+// would assert conditions it cannot reach, and initializeTestEnvironment()'s RTC and OSThread setup
+// would add portduino globals it otherwise never touches. Suite-level state cleanliness is still
+// checked from outside by bin/pio-test-isolate.sh, which wraps every suite regardless.
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <cmath>

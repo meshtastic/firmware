@@ -29,17 +29,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#if __has_include("SensorRtcHelper.hpp")
-#include "SensorRtcHelper.hpp"
-// SensorLib defines isBitSet as a macro; undefine it here to avoid conflicts
-// with the SparkFun MMC5983MA library, which has a class method of the same name.
-#ifdef isBitSet
-#undef isBitSet
-#endif
+#if __has_include(<PCF8xRTC.h>)
+#include <PCF8xRTC.h>
 #endif
 
 /* Offer chance for variant-specific defines */
 #include "variant.h"
+
+// Both PCF parts answer at the same address and differ only in register layout, so a variant
+// picks one by defining PCF8563_RTC or PCF85063_RTC to it.
+#if defined(PCF8563_RTC)
+#define PCF_RTC_ADDRESS PCF8563_RTC
+#define PCF_RTC_CHIP PCF8xRTC::PCF8563
+#elif defined(PCF85063_RTC)
+#define PCF_RTC_ADDRESS PCF85063_RTC
+#define PCF_RTC_CHIP PCF8xRTC::PCF85063
+#endif
 
 // -----------------------------------------------------------------------------
 // Display feature overrides
@@ -205,6 +210,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
+#ifdef SEEED_WIO_TRACKER_L1_PRO_1W
+// Indexed by SX1262 output power in dBm, matching RadioInterface::limitPower().
+// TODO: verify against measured output.
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10
+#endif
+
 // Default system gain to 0 if not defined
 #ifndef NUM_PA_POINTS
 #define NUM_PA_POINTS 1
@@ -234,7 +246,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SSD1306_ADDRESS_L 0x3C // Addr = 0
 #define SSD1306_ADDRESS_H 0x3D // Addr = 1
 
-#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
+#if (defined(SEEED_WIO_TRACKER_L1) || defined(SEEED_WIO_TRACKER_L1_PRO_1W)) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS SSD1306_ADDRESS_H
 #define USE_SH1106
 #endif
@@ -253,6 +265,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BBQ10_KB_ADDR 0x1F
 #define MPR121_KB_ADDR 0x5A
 #define TCA8418_KB_ADDR 0x34
+#define TSTC8_KB_ADDR 0x6C // STC8H companion-MCU keypad on the ThinkNode-M9
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -270,6 +283,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define QMC5883L_ADDR 0x0D
 #define HMC5883L_ADDR 0x1E
 #define MMC5983MA_ADDR 0x30
+#define QMC6309_ADDR 0x7C
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
@@ -300,7 +314,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
+#define SEN6X_ADDR 0x6B // same as QMI8658_ADDR and BQ25896_ADDR
 #define SCD30_ADDR 0x61
+#define ADS1X15_ADDR 0x48
+#define ADS1X15_ADDR_ALT1 0x49
+#define ADS1X15_ADDR_ALT2 0x4A
+#define ADS1X15_ADDR_ALT3 0x4B
 #define DS248X_ADDR 0x18      // same as MCP9808_ADDR, STK8BXX_ADDR and LIS3DH_ADDR
 #define DS248X_ADDR_ALT1 0x19 // same as LIS3DH_ADDR_ALT and BMA423_ADDR
 #define DS248X_ADDR_ALT2 0x1A // same as CST328_ADDR
@@ -310,7 +329,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
 #define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 #define HM330X_ADDR 0x40
-
+#define AS3935_ADDR 0x03 // both address pins tied high, the common breakout-board default
+#define AS3935_ADDR_ALT 0x01
+#define AS3935_ADDR_ALT2 0x02
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -337,6 +358,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #define NCP5623_ADDR 0x38
 #define LP5562_ADDR 0x30
+#define LP5814_ADDR 0x2C
+
+// -----------------------------------------------------------------------------
+// Audio Codec
+// -----------------------------------------------------------------------------
+#if not __has_include("Codecs/es8311/ES8311.h")
+#define ES8311_ADDR 0x18 // same address as MCP9808_ADDR / STK8BXX_ADDR / LIS3DH_ADDR
+#endif
+#define ES7243E_ADDR 0x14
 
 // -----------------------------------------------------------------------------
 // Security
@@ -351,10 +381,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
-#define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A // same address as CST226SE
+#define FT6336U_ADDR 0x48 // same address as ADS1115
+#define CST328_ADDR 0x1A  // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
 #define CST226SE_ADDR_ALT 0x5A
+#define GT911_ADDR 0x5D // same address as SFA30_ADDR / LPS22HB_ADDR_ALT
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
@@ -576,7 +607,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_ADMIN 1
 #endif
 
-// // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
+// Store & Forward is implemented only for ESP32 and Portduino
+#if !defined(ARCH_ESP32) && !defined(ARCH_PORTDUINO) && !defined(MESHTASTIC_EXCLUDE_STOREFORWARD)
+#define MESHTASTIC_EXCLUDE_STOREFORWARD 1
+#endif
+
+// Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
 #ifdef MESHTASTIC_EXCLUDE_WIFI
 #define MESHTASTIC_EXCLUDE_WEBSERVER 1
 #undef HAS_WIFI
@@ -604,6 +640,33 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef MESHTASTIC_EXCLUDE_SCREEN
 #undef HAS_SCREEN
 #define HAS_SCREEN 0
+#endif
+
+// -----------------------------------------------------------------------------
+// Motion sensor wake
+// -----------------------------------------------------------------------------
+
+/* The motion driver that owns this pin attaches the ISR. sleep.cpp reuses it as a
+   light-sleep wake source and PowerFSM attributes the resulting GPIO wake to motion.
+   Must stay below the exclusion cascade: MESHTASTIC_MINIMIZE_BUILD derives
+   MESHTASTIC_EXCLUDE_I2C above, and no motion driver is built when it is set. */
+#if !MESHTASTIC_EXCLUDE_I2C
+#if defined(BMA4XX_INT) && defined(HAS_BMA423)
+#define MOTION_WAKE_INT_PIN BMA4XX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(BHI260AP_INT) && defined(HAS_BHI260AP)
+#define MOTION_WAKE_INT_PIN BHI260AP_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(STK8XXX_INT) && defined(HAS_STK8XXX)
+#define MOTION_WAKE_INT_PIN STK8XXX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(ICM_20948_INT_PIN) && defined(HAS_ICM20948)
+#define MOTION_WAKE_INT_PIN ICM_20948_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#elif defined(QMA_6100P_INT_PIN) && defined(HAS_QMA6100P)
+#define MOTION_WAKE_INT_PIN QMA_6100P_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#endif
 #endif
 
 #ifndef USE_ETHERNET_DEFAULT

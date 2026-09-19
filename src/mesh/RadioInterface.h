@@ -20,6 +20,7 @@ typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
 #define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
 #define MESHTASTIC_HEADER_LENGTH 16
 #define MESHTASTIC_PKC_OVERHEAD 12
+#define MESHTASTIC_AEAD_OVERHEAD 12
 
 #define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
@@ -66,6 +67,11 @@ typedef struct {
     uint8_t payload[MAX_LORA_PAYLOAD_LEN + 1 - sizeof(PacketHeader)] __attribute__((__aligned__));
 
 } RadioBuffer;
+
+/// On-air ceiling for MeshPacket.encrypted. RadioBuffer holds one byte more, but the PHY caps a whole
+/// frame at MAX_LORA_PAYLOAD_LEN, so the header comes out of the same budget (matches perhapsEncode).
+constexpr size_t MAX_RADIO_PAYLOAD_LEN = MAX_LORA_PAYLOAD_LEN - sizeof(PacketHeader);
+static_assert(MAX_RADIO_PAYLOAD_LEN < sizeof(RadioBuffer::payload), "payload ceiling must fit the buffer");
 
 /**
  * Basic operations all radio chipsets must implement.

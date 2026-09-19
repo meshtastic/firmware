@@ -1,6 +1,8 @@
 #include "NextHopRouter.h"
 #include "Default.h"
 #include "MeshTypes.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "meshUtils.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -31,9 +33,22 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     const auto mode = config.device.rebroadcast_mode;
     if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
         !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
-                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING) ||
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY) ||
         (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
         return false;
+
+    // Dedup opaque relays. Opaque frames deliberately never enter PacketHistory (so unauthenticated
+    // traffic can't influence routing/ACK/next-hop) - but with NO dedup at all, a dense mesh re-relays
+    // every copy of every frame, multiplying at each hop into an unbounded broadcast storm ("let hop
+    // exhaustion bound it" caps depth, not count). Suppress duplicate opaque rebroadcasts with a small,
+    // routing-isolated seen-set. Genuine originator (re)transmissions (hop_start == hop_limit) are
+    // always relayed so reliable opaque unicast still propagates (mirrors FloodingRouter's isRepeated).
+    const bool isOriginatorTx = p->hop_start > 0 && p->hop_start == p->hop_limit;
+    if (opaqueWasSeenRecently(getFrom(p), p->id) && !isOriginatorTx) {
+        LOG_TRACE("Drop duplicate opaque relay from 0x%08x id 0x%08x", getFrom(p), p->id);
+        return false;
+    }
 
     meshtastic_MeshPacket *relay = packetPool.allocCopy(*p);
     if (!relay)
@@ -51,16 +66,40 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     return res == ERRNO_OK;
 }
 
+// Isolated dedup for opaque relays (see relayOpaquePacket). Returns true if (from,id) is already in the
+// ring; otherwise records it (round-robin eviction) and returns false. A separate table from
+// PacketHistory on purpose: opaque frames must never influence routing/ACK/next-hop. No timestamps -
+// a stale (from,id) can't false-match a later packet because ids are effectively random.
+bool NextHopRouter::opaqueWasSeenRecently(NodeNum from, PacketId id)
+{
+    for (uint8_t i = 0; i < OPAQUE_SEEN_MAX; i++) {
+        if (opaqueSeen[i].sender == from && opaqueSeen[i].id == id)
+            return true;
+    }
+    // Not seen: record it, overwriting the oldest-written slot (FIFO). Empty slots hold id 0, which a
+    // real entry never has (relayOpaquePacket drops id 0), so they simply never match above.
+    opaqueSeen[opaqueSeenNext].sender = from;
+    opaqueSeen[opaqueSeenNext].id = id;
+    opaqueSeenNext = (uint8_t)((opaqueSeenNext + 1) % OPAQUE_SEEN_MAX);
+    return false;
+}
+
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
 {
     packet = p;
     this->numRetransmissions = numRetransmissions - 1; // We subtract one, because we assume the user just did the first send
+    this->initialNumRetransmissions = this->numRetransmissions;
 }
 
 /**
  * Send a packet
  */
 ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
+{
+    return sendWithNextHop(p, true);
+}
+
+ErrorCode NextHopRouter::sendWithNextHop(meshtastic_MeshPacket *p, bool trackRetransmission)
 {
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
@@ -71,7 +110,8 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
-    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack)) {
+    if (trackRetransmission && (!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE &&
+        (p->hop_limit > 0 || p->want_ack)) {
         if (auto *copy = packetPool.allocCopy(*p))
             startRetransmission(copy); // start retransmission for relayed packet
     }
@@ -162,7 +202,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
                                  p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
-                    noteRouteLearned(p->from, p->relay_node, millis()); // M3: anchor freshness (hot or overflow route)
+                    noteRouteLearned(p->from, p->relay_node, Time::stampMillis()); // M3: anchor freshness (hot or overflow route)
 #if HAS_TRAFFIC_MANAGEMENT
                     // Mirror the confirmed (and now unique-resolved) hop into the TMM overflow cache so it
                     // survives even when the source isn't (or is no longer) in the hot NodeDB.
@@ -274,7 +314,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         // a health record that still matches the stored byte; a next_hop set by another path (e.g.
         // TraceRouteModule) with no matching record is left authoritative.
         const RouteHealth *h = findRouteHealth(to);
-        if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, millis())) {
+        if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, Time::stampMillis())) {
             LOG_INFO("Next hop 0x%x for 0x%08x stale (age/fails); flood and clear", node->next_hop, to);
             node->next_hop = NO_NEXT_HOP_PREFERENCE; // clear persisted route
             clearRouteHealth(to);                    // clear RAM health
@@ -306,7 +346,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         uint8_t hint = trafficManagementModule->getNextHopHint(to);
         if (hint && hint != relay_node) {
             const RouteHealth *h = findRouteHealth(to);
-            if (h && h->lastNextHop == hint && isRouteStale(*h, millis())) {
+            if (h && h->lastNextHop == hint && isRouteStale(*h, Time::stampMillis())) {
                 LOG_INFO("TMM next hop 0x%x for 0x%08x stale (age/fails); flood and clear", hint, to);
                 trafficManagementModule->clearNextHop(to); // clear overflow route (setNextHop won't store 0)
                 clearRouteHealth(to);                      // clear RAM health
@@ -360,7 +400,7 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         auto p = old->packet;
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
-        if (old->numRetransmissions < NUM_RELIABLE_RETX - 1) {
+        if (old->numRetransmissions < old->initialNumRetransmissions) {
             // We only cancel it if we are the original sender or if we're not a router(_late)
             if (isFromUs(p) || roleAllowsCancelingFromTxQueue(p)) {
                 // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
@@ -403,7 +443,9 @@ PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint
  */
 int32_t NextHopRouter::doRetransmissions()
 {
-    uint32_t now = millis();
+    // Same clock Throttle reads, so setNextTx() deadlines and this test can't diverge under an
+    // injected test clock.
+    uint32_t now = Time::stampMillis();
     int32_t d = INT32_MAX;
 
     // FIXME, we should use a better datastructure rather than walking through this map.
@@ -414,8 +456,9 @@ int32_t NextHopRouter::doRetransmissions()
 
         bool stillValid = true; // assume we'll keep this record around
 
-        // FIXME, handle 51 day rolloever here!!!
-        if (p.nextTxMsec <= now) {
+        // Judged against the snapshot above, so one pass sees one instant and the 49.7 day wrap
+        // can't stall retransmission.
+        if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
@@ -470,13 +513,13 @@ int32_t NextHopRouter::doRetransmissions()
                             }
                         } else {
                             if (auto *copy = packetPool.allocCopy(*p.packet)) {
-                                if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
                                     packetPool.release(copy);
                             }
                         }
 #else
                         if (auto *copy = packetPool.allocCopy(*p.packet)) {
-                            if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                            if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
                                 packetPool.release(copy);
                         }
 #endif
@@ -511,7 +554,7 @@ void NextHopRouter::setNextTx(PendingPacket *pending)
 {
     assert(iface);
     auto d = iface->getRetransmissionMsec(pending->packet);
-    pending->nextTxMsec = millis() + d;
+    pending->nextTxMsec = Time::getMillis() + d;
     LOG_TRACE("Next retransmission in %u msecs", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
@@ -575,7 +618,8 @@ void NextHopRouter::noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now
         h->lastNextHop = nextHop;
         h->consecutiveFailures = 0;
     }
-    h->learnedAtMsec = now ? now : 1;
+    // `now` is a parameter, so guard at the store too: 0 is the empty-slot marker.
+    h->learnedAtMsec = Time::skipZero(now);
 }
 
 void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
@@ -584,7 +628,7 @@ void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
     if (!h)
         return; // only routes we actually learned have health to refresh
     h->consecutiveFailures = 0;
-    h->learnedAtMsec = now ? now : 1;
+    h->learnedAtMsec = Time::skipZero(now); // a parameter, so guard at the store too
 }
 
 void NextHopRouter::noteRouteFailure(NodeNum dest)

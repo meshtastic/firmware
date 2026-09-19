@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/http/WebServer.h"
@@ -19,6 +20,9 @@
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
+#include <esp_heap_caps.h>
+#include <mbedtls/platform.h>
+#include <mbedtls/ssl.h>
 #endif
 
 // Persistent Data Storage
@@ -58,11 +62,102 @@ static const int32_t IDLE_INTERVAL_MS = 1000;
 // Maximum concurrent HTTPS connections (reduced from default 4 to save memory)
 static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
 
-// Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
-static const uint32_t MIN_HEAP_FOR_SSL = 40000;
+// mbedtls_ssl_setup() calloc()s the inbound and outbound record buffers separately, so each needs a
+// contiguous block of its own. Rounds up the header+padding terms, which are private to ssl_misc.h.
+static const size_t TLS_RECORD_OVERHEAD = 512;
+static const size_t TLS_IN_BUFFER_BYTES = MBEDTLS_SSL_IN_CONTENT_LEN + TLS_RECORD_OVERHEAD;
+static const size_t TLS_OUT_BUFFER_BYTES = MBEDTLS_SSL_OUT_CONTENT_LEN + TLS_RECORD_OVERHEAD;
+
+// The rest of a handshake is many small blocks, so a sum is the right instrument for that part.
+static const uint32_t TLS_HANDSHAKE_SLACK = 8192;
+
+// Only for the sum below: mbedtls_calloc() draws from this heap, while ESP.getFreeHeap() reports the
+// internal one even where EXTERNAL_MEM_ALLOC sends mbedTLS to PSRAM. The allocator has no free-size
+// query of its own, and the handshake's remaining small blocks are a sum, not a block to probe for.
+#if defined(CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC)
+#define TLS_HEAP_CAPS (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+#elif defined(CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC)
+#define TLS_HEAP_CAPS (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#else
+#define TLS_HEAP_CAPS (MALLOC_CAP_8BIT)
+#endif
+
+/// Which check refused the session, so the log can name the one that actually failed.
+enum class TlsHeapVerdict { Ok, TooLittleFree, NoContiguousBlock };
+
+/// Advisory. Not largest_free_block(): it trips the WDT (#11666).
+static TlsHeapVerdict judgeTlsSessionHeap()
+{
+    if (heap_caps_get_free_size(TLS_HEAP_CAPS) < TLS_IN_BUFFER_BYTES + TLS_OUT_BUFFER_BYTES + TLS_HANDSHAKE_SLACK)
+        return TlsHeapVerdict::TooLittleFree;
+
+    // Held together, through mbedTLS's own allocator, as setup() does: one can fit where two do not.
+    void *in = mbedtls_calloc(1, TLS_IN_BUFFER_BYTES);
+    void *out = in ? mbedtls_calloc(1, TLS_OUT_BUFFER_BYTES) : nullptr;
+    const bool fits = in && out;
+    mbedtls_free(out);
+    mbedtls_free(in);
+    return fits ? TlsHeapVerdict::Ok : TlsHeapVerdict::NoContiguousBlock;
+}
+
+// HTTPSServer that can service and reap the connections it already holds without accepting new ones,
+// so a low-heap pause doesn't freeze open TLS sessions (and their heap) in place. Needs the protected table.
+class MeshHTTPSServer : public HTTPSServer
+{
+  public:
+    using HTTPSServer::HTTPSServer;
+
+    /// Frees closed slots without touching a socket and reports whether one is free. Runs before the heap
+    /// is judged, because loop() reaps and accepts in one pass and would otherwise open a slot behind it.
+    bool reapClosedConnections()
+    {
+        if (!_running)
+            return false;
+        bool freeSlot = false;
+        for (uint8_t i = 0; i < _maxConnections; i++) {
+            if (_connections[i] && _connections[i]->isClosed()) {
+                delete _connections[i];
+                _connections[i] = nullptr;
+            }
+            if (!_connections[i])
+                freeSlot = true;
+        }
+        return freeSlot;
+    }
+
+    /// The first half of HTTPServer::loop(): drive existing connections, accept nothing. Reap first.
+    void serviceExistingConnections()
+    {
+        for (uint8_t i = 0; i < _maxConnections; i++) {
+            if (_connections[i])
+                _connections[i]->loop();
+        }
+    }
+
+    /// loop()'s own accept test, asked microseconds earlier: without it the probe holds 21 kB on
+    /// every tick of a server nobody is talking to.
+    bool hasPendingConnection() const
+    {
+        if (_socket < 0)
+            return false;
+        fd_set sockfds;
+        FD_ZERO(&sockfds);
+        FD_SET(_socket, &sockfds);
+        timeval immediate = {};
+        return select(_socket + 1, &sockfds, nullptr, nullptr, &immediate) > 0;
+    }
+
+    /// Turns the waiting client away with a close, so it fails at once instead of timing out in the backlog.
+    void rejectPendingConnection()
+    {
+        int client = accept(_socket, nullptr, nullptr);
+        if (client >= 0)
+            close(client);
+    }
+};
 
 static SSLCert *cert;
-static HTTPSServer *secureServer;
+static MeshHTTPSServer *secureServer;
 static HTTPServer *insecureServer;
 
 volatile bool isWebServerReady;
@@ -75,15 +170,26 @@ static void handleWebResponse()
         if (isWebServerReady) {
             // Check heap before HTTPS processing - SSL requires significant memory
             if (secureServer) {
-                uint32_t freeHeap = ESP.getFreeHeap();
-                if (freeHeap >= MIN_HEAP_FOR_SSL) {
-                    secureServer->loop();
+                // Reap first so the probe sees the heap a finished session just returned. Nowhere to put
+                // a connection, or nobody knocking: either way the probe would buy nothing.
+                if (!secureServer->reapClosedConnections() || !secureServer->hasPendingConnection()) {
+                    secureServer->serviceExistingConnections();
                 } else {
-                    // Skip HTTPS when memory is low to prevent SSL setup failures
-                    static uint32_t lastHeapWarning = 0;
-                    if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
-                        LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
-                        lastHeapWarning = millis();
+                    const TlsHeapVerdict verdict = judgeTlsSessionHeap();
+                    if (verdict == TlsHeapVerdict::Ok) {
+                        secureServer->loop();
+                    } else {
+                        // Low heap: turn the new client away, but keep servicing open connections so they can time
+                        // out and free their contexts - skipping them pins the heap below the threshold for good.
+                        secureServer->rejectPendingConnection();
+                        secureServer->serviceExistingConnections();
+                        static uint32_t lastHeapWarning = 0;
+                        if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
+                            LOG_WARN("%s for a TLS session (%u free), not accepting HTTPS connections",
+                                     verdict == TlsHeapVerdict::TooLittleFree ? "Too little heap" : "No contiguous block",
+                                     (unsigned)heap_caps_get_free_size(TLS_HEAP_CAPS));
+                            lastHeapWarning = Time::stampMillis();
+                        }
                     }
                 }
             }
@@ -191,28 +297,19 @@ WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
     if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
-    lastActivityTime = millis();
+    lastActivityTime = Time::getMillis();
 }
 
 void WebServerThread::markActivity()
 {
-    lastActivityTime = millis();
+    lastActivityTime = Time::getMillis();
 }
 
 int32_t WebServerThread::getAdaptiveInterval()
 {
-    uint32_t currentTime = millis();
-    uint32_t timeSinceActivity;
-
-    if (currentTime >= lastActivityTime) {
-        timeSinceActivity = currentTime - lastActivityTime;
-    } else {
-        timeSinceActivity = (UINT32_MAX - lastActivityTime) + currentTime + 1;
-    }
-
-    if (timeSinceActivity < ACTIVE_THRESHOLD_MS) {
+    if (Throttle::isWithinTimespanMs(lastActivityTime, ACTIVE_THRESHOLD_MS)) {
         return ACTIVE_INTERVAL_MS;
-    } else if (timeSinceActivity < MEDIUM_THRESHOLD_MS) {
+    } else if (Throttle::isWithinTimespanMs(lastActivityTime, MEDIUM_THRESHOLD_MS)) {
         return MEDIUM_INTERVAL_MS;
     } else {
         return IDLE_INTERVAL_MS;
@@ -239,7 +336,7 @@ void initWebServer()
     LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
-    secureServer = new HTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
+    secureServer = new MeshHTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
     insecureServer = new HTTPServer();
 
     registerHandlers(insecureServer, secureServer);

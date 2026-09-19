@@ -5,6 +5,7 @@
 #include <Arduino.h>
 
 #include "Throttle.h"
+#include "UptimeClock.h"
 
 SGM41562 *sgm41562 = nullptr;
 
@@ -165,10 +166,10 @@ bool SGM41562::hasExtendedRegisterMap() const
 
 bool SGM41562::refresh()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     if (lastRefreshMs_ != 0 && Throttle::isWithinTimespanMs(lastRefreshMs_, 250))
-        return true; // cached
-    lastRefreshMs_ = now == 0 ? 1 : now;
+        return true;                      // cached
+    lastRefreshMs_ = Time::skipZero(now); // dodge the 0-sentinel case
 
     uint8_t status, fault;
     if (!readReg(REG_SYSTEM_STATUS, status))

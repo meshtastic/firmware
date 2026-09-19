@@ -18,22 +18,12 @@ OnScreenKeyboardModule &OnScreenKeyboardModule::instance()
     return inst;
 }
 
-OnScreenKeyboardModule::~OnScreenKeyboardModule()
-{
-    if (keyboard) {
-        delete keyboard;
-        keyboard = nullptr;
-    }
-}
+OnScreenKeyboardModule::~OnScreenKeyboardModule() = default;
 
 void OnScreenKeyboardModule::start(const char *header, const char *initialText, uint32_t durationMs,
                                    std::function<void(const std::string &)> cb)
 {
-    if (keyboard) {
-        delete keyboard;
-        keyboard = nullptr;
-    }
-    keyboard = new VirtualKeyboard();
+    keyboard = std::make_unique<VirtualKeyboard>();
     callback = cb;
     if (header)
         keyboard->setHeader(header);
@@ -50,7 +40,7 @@ void OnScreenKeyboardModule::start(const char *header, const char *initialText, 
     });
 
     // Maintain legacy compatibility hooks
-    NotificationRenderer::virtualKeyboard = keyboard;
+    NotificationRenderer::virtualKeyboard = keyboard.get();
     NotificationRenderer::textInputCallback = callback;
 }
 
@@ -58,10 +48,7 @@ void OnScreenKeyboardModule::stop(bool callEmptyCallback)
 {
     auto cb = callback;
     callback = nullptr;
-    if (keyboard) {
-        delete keyboard;
-        keyboard = nullptr;
-    }
+    keyboard.reset();
     // Keep NotificationRenderer legacy pointers in sync
     NotificationRenderer::virtualKeyboard = nullptr;
     NotificationRenderer::textInputCallback = nullptr;
@@ -74,7 +61,7 @@ void OnScreenKeyboardModule::handleInput(const InputEvent &event)
     if (!keyboard)
         return;
 
-    if (processVirtualKeyboardInput(event, keyboard))
+    if (processVirtualKeyboardInput(event, keyboard.get()))
         return;
 
     if (event.inputEvent == INPUT_BROKER_CANCEL)

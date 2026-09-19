@@ -4,6 +4,8 @@
 
 #include "MessageStore.h"
 #include "PowerFSM.h"
+#include "UptimeClock.h"
+#include "WaypointStore.h"
 #include "buzz.h"
 #include "gps/RTC.h"
 #include "modules/ExternalNotificationModule.h"
@@ -364,7 +366,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
     // A long-press used to open the menu can be followed by a synthetic/queued tap at release.
     // Ignore that brief follow-up window so touch-opened menus do not auto-select an item.
     if (touchEnabledBuild && !longPress && suppressTouchTapUntilMs != 0) {
-        if ((int32_t)(millis() - suppressTouchTapUntilMs) < 0) {
+        if ((int32_t)(Time::getMillis() - suppressTouchTapUntilMs) < 0) {
             noteInkHUDUserInteraction();
             return;
         }
@@ -400,7 +402,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
         // Only arm suppression if the long-press actually opened menu foreground.
         SystemApplet *menu = inkhud->getSystemApplet("Menu");
         if (touchEnabledBuild && menu && menu->isForeground()) {
-            suppressTouchTapUntilMs = millis() + TOUCH_MENU_OPEN_TAP_SUPPRESS_MS;
+            suppressTouchTapUntilMs = Time::timerEndsAtMillis(TOUCH_MENU_OPEN_TAP_SUPPRESS_MS);
         }
     } else
         onButtonShort();
@@ -468,6 +470,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
 
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
+    waypointStore.saveToFlash();
 
     // LogoApplet::onShutdown attempted to heal the display by drawing a "shutting down" screen twice,
     // then prepared a final powered-off screen for us, which shows device shortname.
@@ -516,6 +519,7 @@ int InkHUD::Events::beforeReboot(void *unused)
     } else {
         NicheGraphics::clearFlashData();
         messageStore.clearAllMessages(); // also wipe the shared message store
+        waypointStore.clearAllWaypoints();
     }
 
     // Note: no forceUpdate call here

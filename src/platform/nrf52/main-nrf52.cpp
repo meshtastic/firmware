@@ -1,4 +1,6 @@
+#include "UptimeClock.h"
 #include "configuration.h"
+#include "mesh/Throttle.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <InternalFileSystem.h>
@@ -27,7 +29,9 @@
 #include <power/PowerHAL.h>
 
 #include "Nrf52SaadcLock.h"
+#include "SPILock.h"
 #include "concurrency/LockGuard.h"
+#include "flash/flash_nrf5x.h"
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -181,9 +185,18 @@ bool loopCanSleep()
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
-    // debugger_break(); FIXME doesn't work, possibly not for segger
+    Serial.flush(); // the reset below would cut the message short
+    // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu
     NVIC_SystemReset();
+}
+
+// Bluefruit LESC pairing only uses secp256r1. Replacing the cc310 lookup keeps the parameter
+// tables of its ten other curves (~7.4 KB) from being linked through ecDomainsFuncP.
+extern "C" const CRYS_ECPKI_Domain_t *SaSi_ECPKI_GetSecp256r1DomainP(void);
+extern "C" const CRYS_ECPKI_Domain_t *CRYS_ECPKI_GetEcDomain(CRYS_ECPKI_DomainID_t domainId)
+{
+    return domainId == CRYS_ECPKI_DomainID_secp256r1 ? SaSi_ECPKI_GetSecp256r1DomainP() : nullptr;
 }
 
 void getMacAddr(uint8_t *dmac)
@@ -270,12 +283,17 @@ namespace
 {
 constexpr uint8_t NRF52_MAGIC_LFS_IS_CORRUPT = 0xF5;
 constexpr uint32_t MULTIPLE_CORRUPTION_DELAY_MILLIS = 20 * 60 * 1000;
-static unsigned long millis_until_formatting_again = 0;
+// When the last format happened, not when the next one is due: measuring forward from the event
+// bounds the pause below by the constant, where a stored deadline could hand delay() any value.
+// Armed separately because preFSBegin() runs in the first millisecond of boot, so a zero timestamp
+// is a legitimate value here, not an "unset" marker.
+static uint32_t last_format_ms = 0;
+static bool formatted_this_boot = false;
 
 // Report the critical error from loop(), giving a chance for the screen to be initialized first.
 inline void reportLittleFSCorruptionOnce()
 {
-    static bool report_corruption = !!millis_until_formatting_again;
+    static bool report_corruption = formatted_this_boot;
     if (report_corruption) {
         report_corruption = false;
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
@@ -290,7 +308,9 @@ void preFSBegin()
     if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
     NRF_POWER->GPREGRET = 0;
-    millis_until_formatting_again = millis() + MULTIPLE_CORRUPTION_DELAY_MILLIS;
+    // unset-sentinel-ok: formatted_this_boot carries the armed state, so 0 is a legal stamp
+    last_format_ms = Time::getMillis();
+    formatted_this_boot = true;
     InternalFS.format();
     LOG_INFO("LittleFS format complete; restoring default settings");
 }
@@ -298,10 +318,16 @@ void preFSBegin()
 extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LittleFS corruption detected: %s", reason);
-    if (millis_until_formatting_again > millis()) {
+    // Test the armed flag first, since elapsed-since-0 is inside the backoff for the first 20
+    // minutes after each wrap.
+    if (formatted_this_boot && Throttle::isWithinTimespanMs(last_format_ms, MULTIPLE_CORRUPTION_DELAY_MILLIS)) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
-        const long millis_remain = millis_until_formatting_again - millis();
-        LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);
+        // Same clock Throttle just read, and clamped: the check above and a second, later read
+        // can straddle the backoff, which would wrap the remainder into a ~50-day delay().
+        const uint32_t elapsed = Time::getMillis() - last_format_ms;
+        const uint32_t millis_remain =
+            elapsed < MULTIPLE_CORRUPTION_DELAY_MILLIS ? MULTIPLE_CORRUPTION_DELAY_MILLIS - elapsed : 0;
+        LOG_WARN("Pausing %u seconds to avoid wear on flash storage", millis_remain / 1000);
         delay(millis_remain);
     }
     LOG_INFO("Rebooting to format LittleFS");
@@ -329,6 +355,9 @@ extern "C" void lfs_assert(const char *reason)
     NVIC_SystemReset();
 }
 
+// Defined by the core's InternalFileSystem, completes a pending sd_flash_write()
+extern "C" void flash_nrf5x_event_cb(uint32_t event);
+
 void checkSDEvents()
 {
     if (useSoftDevice) {
@@ -337,6 +366,11 @@ void checkSDEvents()
             switch (evt) {
             case NRF_EVT_POWER_FAILURE_WARNING:
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
+                break;
+            // Bluefruit's SoC task polls the same queue; an event taken here must still reach the flash driver
+            case NRF_EVT_FLASH_OPERATION_SUCCESS:
+            case NRF_EVT_FLASH_OPERATION_ERROR:
+                flash_nrf5x_event_cb(evt);
                 break;
 
             default:
@@ -451,6 +485,15 @@ void nrf52Setup()
     assert(r == NRFX_SUCCESS);
 }
 
+// Waits out any flash write another task has in flight, drains the shared page cache, and keeps
+// both locks: the caller resets next, and a reset mid-program tears the page.
+void nrf52FlashQuiesce()
+{
+    spiLock->lock();
+    InternalFS._lockFS();
+    flash_nrf5x_flush();
+}
+
 void cpuDeepSleep(uint32_t msecToWake)
 {
     // FIXME, configure RTC or button press to wake us
@@ -485,6 +528,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     // Run shutdown code if specified in variant.cpp
     variant_shutdown();
+
+    nrf52FlashQuiesce();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
@@ -551,6 +596,7 @@ void clearBonds()
 
 void enterDfuMode()
 {
+    nrf52FlashQuiesce();
 // SDK kit does not have native USB like almost all other NRF52 boards
 #ifdef NRF_USE_SERIAL_DFU
     enterSerialDfu();
