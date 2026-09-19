@@ -58,6 +58,9 @@ class MQTT : private concurrency::OSThread
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
     bool isUsingDefaultRootTopic() { return isConfiguredForDefaultRootTopic; }
 
+    /** Point the root topic at the current region on the default broker. Returns true if it rewrote it. */
+    static bool applyRegionRootTopic(const char *regionName);
+
     /// Validate the meshtastic_ModuleConfig_MQTTConfig.
     static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config) { return isValidConfig(config, nullptr); }
 
