@@ -228,7 +228,8 @@ NodeInfoModule::NodeInfoModule()
 int32_t NodeInfoModule::runOnce()
 {
     if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
-        // If we changed channels, ask everyone else for their latest info
+        // Fresh install only: radioGeneration is bumped solely by resetRadioConfig(is_fresh_install).
+        // A broadcast want_response asks every node in earshot to reply, so it must stay this rare.
         bool requestReplies = currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
         if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies))

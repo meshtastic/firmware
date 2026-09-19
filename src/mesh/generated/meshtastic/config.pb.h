@@ -12,6 +12,29 @@
 #endif
 
 /* Enum definitions */
+/* Policy for a packet type this node sends on request or on a timer, one field per port.
+ Every bit restricts, so 0 is today's behaviour: answer everyone, PKI when the destination's
+ key is held, else the channel PSK. Bits 0-3 say who may poll us; bits 4-7 say how a unicast on
+ the port is encrypted, routine sends and replies alike. Ignored nodes are refused regardless,
+ and a request carrying our own node number is the phone and is never refused. */
+typedef enum _meshtastic_PortPolicyFlags {
+    /* Required for compilation */
+    meshtastic_PortPolicyFlags_PORT_POLICY_UNSET = 0,
+    /* Do not answer requests from anyone on the mesh. */
+    meshtastic_PortPolicyFlags_NO_ADHOC_REPLY = 1,
+    /* Answer requests only from the configured routine destination. With no destination
+ configured (or none for this packet type) nobody satisfies this. */
+    meshtastic_PortPolicyFlags_REPLY_ONLY_TO_DEST = 2,
+    /* Answer requests only from nodes marked favourite. */
+    meshtastic_PortPolicyFlags_REPLY_TO_FAVOURITES_ONLY = 4,
+    /* PKI only. A destination whose public key is not held fails to send, and the admin API
+ refuses a routine destination whose key is not in the node DB. */
+    meshtastic_PortPolicyFlags_PKC_ALWAYS = 16,
+    /* Channel PSK only, never PKI. If both this and PKC_ALWAYS are set, PKC_ALWAYS wins - an
+ accidental downgrade to a channel-readable payload is the worse failure. */
+    meshtastic_PortPolicyFlags_PKC_NEVER = 32
+} meshtastic_PortPolicyFlags;
+
 /* Defines the device's role on the Mesh network */
 typedef enum _meshtastic_Config_DeviceConfig_Role {
     /* Description: App connected or stand alone messaging device.
@@ -483,6 +506,14 @@ typedef struct _meshtastic_Config_PositionConfig {
     uint32_t gps_en_gpio;
     /* Set where GPS is enabled, disabled, or not present */
     meshtastic_Config_PositionConfig_GpsMode gps_mode;
+    /* Destination for routine position broadcasts.
+ 0 (the default) broadcasts, preserving the historic behaviour. Any other value sends
+ routine position to that node only. Ad-hoc replies to position requests are unaffected;
+ they continue to answer the requester. */
+    uint32_t position_dest;
+    /* Position policy: who may poll us, how a directed position is encrypted (bitwise OR of
+ PortPolicyFlags). 0 is today's behaviour. */
+    uint32_t policy_flags;
 } meshtastic_Config_PositionConfig;
 
 /* Power Config\
@@ -734,6 +765,10 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
+#define _meshtastic_PortPolicyFlags_MIN meshtastic_PortPolicyFlags_PORT_POLICY_UNSET
+#define _meshtastic_PortPolicyFlags_MAX meshtastic_PortPolicyFlags_PKC_NEVER
+#define _meshtastic_PortPolicyFlags_ARRAYSIZE ((meshtastic_PortPolicyFlags)(meshtastic_PortPolicyFlags_PKC_NEVER+1))
+
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
 #define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_CLIENT_BASE
 #define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE+1))
@@ -832,7 +867,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
-#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
+#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN, 0, 0}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
@@ -843,7 +878,7 @@ extern "C" {
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
-#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
+#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN, 0, 0}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
@@ -879,6 +914,8 @@ extern "C" {
 #define meshtastic_Config_PositionConfig_broadcast_smart_minimum_interval_secs_tag 11
 #define meshtastic_Config_PositionConfig_gps_en_gpio_tag 12
 #define meshtastic_Config_PositionConfig_gps_mode_tag 13
+#define meshtastic_Config_PositionConfig_position_dest_tag 14
+#define meshtastic_Config_PositionConfig_policy_flags_tag 15
 #define meshtastic_Config_PowerConfig_is_power_saving_tag 1
 #define meshtastic_Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define meshtastic_Config_PowerConfig_adc_multiplier_override_tag 3
@@ -1012,7 +1049,9 @@ X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_distance,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_interval_secs,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_en_gpio,      12) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_mode,         13)
+X(a, STATIC,   SINGULAR, UENUM,    gps_mode,         13) \
+X(a, STATIC,   SINGULAR, UINT32,   position_dest,    14) \
+X(a, STATIC,   SINGULAR, UINT32,   policy_flags,     15)
 #define meshtastic_Config_PositionConfig_CALLBACK NULL
 #define meshtastic_Config_PositionConfig_DEFAULT NULL
 
@@ -1151,7 +1190,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define meshtastic_Config_LoRaConfig_size        91
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     204
-#define meshtastic_Config_PositionConfig_size    62
+#define meshtastic_Config_PositionConfig_size    74
 #define meshtastic_Config_PowerConfig_size       52
 #define meshtastic_Config_SecurityConfig_size    180
 #define meshtastic_Config_SessionkeyConfig_size  0
