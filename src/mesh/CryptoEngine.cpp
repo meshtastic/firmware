@@ -100,10 +100,13 @@ static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode
     size_t totalLen = headerLen + payloadLen;
     if (totalLen > bufSize)
         return 0;
-    // May need endian conversion for oddball platforms.
-    memcpy(buf, &fromNode, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
+    // Little-endian on the wire, so signer and verifier agree across host byte orders.
+    uint32_t leFromNode = meshHtoLe32(fromNode);
+    uint32_t lePacketId = meshHtoLe32(packetId);
+    uint32_t lePortnum = meshHtoLe32(portnum);
+    memcpy(buf, &leFromNode, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t), &lePacketId, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t) * 2, &lePortnum, sizeof(uint32_t));
     memcpy(buf + headerLen, payload, payloadLen);
     return totalLen;
 }
@@ -431,12 +434,14 @@ bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_pu
 
 #endif
 
-// AAD layout: [fromNode (4)] [toNode (4)], in the same native byte order initNonce uses.
+// AAD layout: [fromNode (4)] [toNode (4)], little-endian like the nonce.
 static void initAad(uint32_t fromNode, uint32_t toNode, uint8_t *aad)
 {
-    // memcpy to avoid breaking strict-aliasing, as initNonce does
-    memcpy(aad, &fromNode, sizeof(uint32_t));
-    memcpy(aad + sizeof(uint32_t), &toNode, sizeof(uint32_t));
+    // Little-endian on the wire, like the nonce. memcpy to avoid breaking strict-aliasing.
+    uint32_t leFromNode = meshHtoLe32(fromNode);
+    uint32_t leToNode = meshHtoLe32(toNode);
+    memcpy(aad, &leFromNode, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint32_t), &leToNode, sizeof(uint32_t));
 }
 
 bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
