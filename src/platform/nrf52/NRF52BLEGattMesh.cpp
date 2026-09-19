@@ -154,17 +154,15 @@ BLEClientService meshClientService = BLEClientService(BLEUuid(serviceUuid));
 BLEClientCharacteristic meshClientCharacteristic = BLEClientCharacteristic(BLEUuid(characteristicUuid));
 bool dialing = false;
 ble_gap_addr_t dialAddr{};
-// A peer that dropped is not redialled for a while: the scanner reports it again within 100 ms. One
-// whose connection never came up (0x3e) waits longer: an iPhone that reached this node by itself
-// keeps advertising under an address it rotates, the dial of that address is refused every time, and
-// each attempt stops the mesh scan for a second - seen on a dual-role iPad the evening this landed.
-// Five minutes is the trade against the other 0x3e, a race with a link the peer is still tearing down
-// after a reflash, which then also waits five minutes.
+// A peer that dropped, refused or never answered is not redialled for a minute: the scanner reports
+// it again within 100 ms. One length for every outcome, on purpose. An iPhone that reached this node
+// by itself keeps advertising the overflow bit under an address it rotates, and the dial of that
+// address is refused (0x3e) every time - so a dual-role iPhone in range costs one refused dial a
+// minute, about a second of scan each. A longer wait after 0x3e would spare that and instead make a
+// backgrounded iPhone that hit a transient refusal (a reflash race, an app relaunch) unreachable for
+// that long, which is the worse trade for a mesh. Telling the two apart needs identity, not address.
 #ifndef BLE_GATT_MESH_DIAL_COOLDOWN_MS
 #define BLE_GATT_MESH_DIAL_COOLDOWN_MS 60000
-#endif
-#ifndef BLE_GATT_MESH_DIAL_FAIL_COOLDOWN_MS
-#define BLE_GATT_MESH_DIAL_FAIL_COOLDOWN_MS 300000
 #endif
 // How long a dial may wait for the peer to accept the connection. Bluefruit's own default is forever.
 #ifndef BLE_GATT_MESH_DIAL_TIMEOUT_MS
@@ -173,7 +171,6 @@ ble_gap_addr_t dialAddr{};
 bool cooldownArmed = false;
 ble_gap_addr_t cooldownAddr{};
 uint32_t cooldownSinceMs = 0;
-uint32_t cooldownMs = BLE_GATT_MESH_DIAL_COOLDOWN_MS;
 
 // The proof-of-life write request in flight on the dialled link, and how it ended. Bluefruit's own
 // write_resp() gives the peer 100 ms, which a backgrounded iPhone on a long connection interval
@@ -186,11 +183,10 @@ enum ProbeState : uint8_t { PROBE_IDLE, PROBE_PENDING, PROBE_ANSWERED, PROBE_REF
 volatile uint16_t probeConn = BLE_CONN_HANDLE_INVALID;
 volatile uint8_t probeState = PROBE_IDLE;
 
-void armCooldown(uint32_t ms = BLE_GATT_MESH_DIAL_COOLDOWN_MS)
+void armCooldown()
 {
     cooldownAddr = dialAddr;
     cooldownSinceMs = millis();
-    cooldownMs = ms;
     cooldownArmed = true;
     dialing = false;
 }
@@ -255,8 +251,7 @@ void onCentralDisconnect(uint16_t conn, uint8_t reason)
             pushRx(conn, nullptr, 0);
         }
     }
-    armCooldown(reason == BLE_HCI_CONN_FAILED_TO_BE_ESTABLISHED ? BLE_GATT_MESH_DIAL_FAIL_COOLDOWN_MS
-                                                                : BLE_GATT_MESH_DIAL_COOLDOWN_MS);
+    armCooldown();
     LOG_INFO("BLE GATT mesh: dialled conn %u disconnected (reason 0x%02x)", conn, reason);
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
@@ -370,7 +365,7 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
             return;
     }
     if (cooldownArmed && memcmp(&cooldownAddr, &report->peer_addr, sizeof(cooldownAddr)) == 0 &&
-        Throttle::isWithinTimespanMs(cooldownSinceMs, cooldownMs))
+        Throttle::isWithinTimespanMs(cooldownSinceMs, BLE_GATT_MESH_DIAL_COOLDOWN_MS))
         return;
         // Only the primary advertisement is seen: the mesh scan is passive, so a node that puts the UUID in
         // its scan response (this firmware on nRF52) is never dialled. Phones put it in the advertisement.
