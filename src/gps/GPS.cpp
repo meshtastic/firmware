@@ -87,9 +87,8 @@ constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
 constexpr int MIN_PLAUSIBLE_GPS_YEAR = 2020;
 constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
-#ifdef TRACKER_T1000_E
-constexpr uint32_t T1000_E_AIROHA_WAKE_MS = 1000;
-constexpr uint32_t T1000_E_AIROHA_WAKE_INTERVAL_MS = 40;
+#ifdef GNSS_AIROHA
+constexpr uint32_t AIROHA_PROBE_SETTLE_MS = 20;
 #endif
 #ifdef HAS_AIROHA_SOFT_RTC
 // The receiver may already have auto-slept and missed the first $PAIR650, so resend until it acks.
@@ -137,18 +136,19 @@ static void airohaPulseRtcInt()
 
 template <typename T> void wakeAirohaForActiveProbe(T *serialGps)
 {
-#ifdef TRACKER_T1000_E
+#ifdef HAS_AIROHA_SOFT_RTC
+    // The probe's own hardware reset drops the receiver back to sleep, so force the physical wake
+    // rather than relying on the command alone.
+#ifdef PIN_GPS_EN
     digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
+#endif
     airohaPulseRtcInt();
-
-    const uint32_t start = millis();
-    do {
-        serialGps->write("$PAIR382,1*2E\r\n");
-        delay(T1000_E_AIROHA_WAKE_INTERVAL_MS);
-    } while (Throttle::isWithinTimespanMs(start, T1000_E_AIROHA_WAKE_MS));
-#elif defined(GNSS_AIROHA)
     serialGps->write("$PAIR382,1*2E\r\n");
-    delay(20);
+    delay(AIROHA_PROBE_SETTLE_MS);
+#elif defined(GNSS_AIROHA)
+    // No RTC_INT routed: the command alone is still worth sending, since probing only reads.
+    serialGps->write("$PAIR382,1*2E\r\n");
+    delay(AIROHA_PROBE_SETTLE_MS);
 #else
     (void)serialGps;
 #endif
