@@ -9,6 +9,15 @@ bool initWifi()
 
 void deinitWifi() {}
 
+void suspendWifi() {}
+
+void resumeWifi() {}
+
+bool isWifiSuspended()
+{
+    return false;
+}
+
 bool isWifiAvailable()
 {
     return false;
