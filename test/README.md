@@ -222,6 +222,14 @@ So: `exit(UNITY_END())` in **every** `setup()` branch, including the `#else` of 
 
 Wrap the entire test body in the same `#if` guard the module uses (e.g. `#if HAS_VARIABLE_HOPS`, `#if !MESHTASTIC_EXCLUDE_GPS`). When the feature is disabled, the `#else` branch produces an empty passing suite.
 
+### 5. Don't Name a Test Exactly 35 Characters Past `test_`
+
+Trunk runs `trufflehog`, whose Lob detector matches `test_` followed by exactly 35 further identifier characters and reports the function name as a verified secret. It only fires on files a PR touches, so an offending name can sit on `develop` for months and then fail CI in an unrelated change. Longer or shorter both pass - only 35 matches. Check with:
+
+```sh
+grep -oE '\b(test|live)_[a-zA-Z0-9_]{35}\b' test/<suite>/test_main.cpp
+```
+
 ## Common Patterns
 
 ### MockNodeDB
@@ -259,6 +267,39 @@ static MockNodeDB *mockNodeDB = nullptr;
 ```
 
 Set `nodeDB = mockNodeDB;` in `setUp()`.
+
+### Save/Load With a Mock NodeDB
+
+**A new `NodeDB` subclass is not a new node database.** The hot store is not a member of the
+object: it lives in `nodeDatabase`, a file-scope global in `src/mesh/NodeDB.cpp`, which
+`meshNodes` points into and `numMeshNodes` indexes. `new MockNodeDB()` runs the real
+constructor, so it runs `loadFromDisk()` and reads `/prefs/nodes.proto` out of the suite's
+scratch `$HOME`. What you get back is whatever the previous test left on disk - and, before
+the vector clear in `loadFromDisk()`, whatever the previous test left in RAM as well, with
+the file's rows appended to it. That defect is fixed, but the ownership it exposed is
+permanent: **the store outlives your fixture.** Rules that follow from it:
+
+- **Decide whether your mock owns the real store or a private one, and don't mix.** The
+  `testNodes` pattern above re-points `meshNodes` at a vector the mock owns, which is fine
+  for pure in-RAM tests. It is not fine if you also call the persistence paths:
+  `saveNodeDatabaseToDisk()` encodes `nodeDatabase.nodes`, not `testNodes`, so you would
+  assert on one store and persist another. A suite that exercises persistence should drive
+  the real store instead - `meshNodes->clear(); numMeshNodes = 0;` then push into it, as
+  `test/test_nodedb_blocked/test_main.cpp`'s shim does.
+- **Arm the keypair gate, every time.** `saveNodeDatabaseToDisk()` logs _"Skip NodeDB without
+  key"_ and returns `true` - success, no write - until `owner.public_key.size == 32` or
+  `owner.is_licensed`. A test that means to write `nodes.proto` must set one. Re-arm before
+  **each** save: `owner` is a reference into `devicestate`, which `loadFromDisk()` reloads,
+  so a load silently disarms the next save. A "passing" round-trip that never wrote the file
+  is the failure mode this produces.
+- **`loadFromDisk()` is not scoped to the node DB.** It also reloads `devicestate`, `config`,
+  `channelFile`, `moduleConfig` and the warm tier. Treat a call to it as resetting all of
+  them, and restore anything your suite depends on afterwards.
+- **Delete `/prefs/nodes.proto` in `setUp()`** if you want "fresh NodeDB" to mean it. Cheap,
+  local, and it makes the intent visible - see §1 of the shared-state rules above.
+- **Round-trip across at least two cycles.** One cycle of an append-instead-of-replace bug
+  yields a number that looks plausible (3 nodes became 6); it is the _doubling_ that
+  identifies it. Assert the count is unchanged after two or three save/load cycles, not one.
 
 ### Test Shim (Exposing Protected/Private Members)
 
@@ -372,13 +413,17 @@ If your suite touches globals the code under test writes - `nodeDB`, `config`, `
 ```cpp
 void setUp(void) {
     // ...
-    replaceAdminRadioGlobals();   // saves the globals, installs a fresh NodeDB
+    replaceAdminRadioGlobals();   // drops nodes.proto, saves the globals, installs a fresh NodeDB
 }
 void tearDown(void) {
     restoreAdminRadioGlobals();   // restores them, deletes the NodeDB, re-runs initRegion()
     // ...
 }
 ```
+
+The `nodes.proto` delete is part of the fixture, not decoration: the constructor loads that file, so a
+replacement `NodeDB` built while the previous test's store is still on disk starts from that store. See
+_Save/Load With a Mock NodeDB_ above.
 
 A fresh `NodeDB` per test costs real time (`loadFromDisk()` plus, when the region is set, key generation) - in that suite roughly 7% of a ~7½-minute run. Pay it. If a test genuinely needs to observe the previous test's state, that is what `state=per-suite` in `test/state-manifest.tsv` is for; say so there rather than achieving it by omission.
 

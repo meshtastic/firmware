@@ -13,6 +13,7 @@
 // The migration demotes overflow into the warm tier, so these tests need it.
 #if WARM_NODE_COUNT > 0
 
+#include "FSCommon.h" // FSCom, for the persistence round-trip tests
 #include "mesh/NodeDB.h"
 #include <cstring>
 
@@ -25,6 +26,10 @@ class NodeDBTestShim : public NodeDB
   public:
     void runDemote() { demoteOldestHotNodesToWarm(); }
     void runCleanup() { cleanupMeshDB(); }
+    // The persistence pair the NodeDB constructor runs. Private in NodeDB; reachable
+    // here through the `friend class NodeDBTestShim` declaration.
+    void runLoad() { loadFromDisk(); }
+    bool runSave() { return saveNodeDatabaseToDisk(); }
     void stampUntrusted(NodeNum num, uint32_t uptimeSecs) { recordHeardWhileClockUntrusted(num, uptimeSecs); }
 
     // Read back the role + protected category the warm tier cached for a node.
@@ -77,6 +82,16 @@ bool warmHasKey(NodeNum n)
 {
     meshtastic_NodeInfoLite_public_key_t k = {0, {0}};
     return db->copyPublicKey(n, k) && k.size == 32;
+}
+
+// saveNodeDatabaseToDisk() returns early - "Skip NodeDB without key" - until this node
+// has a PKI keypair, so a test that means to write nodes.proto has to supply one. It has
+// to be re-armed before *every* save, because `owner` is a reference into devicestate,
+// which loadFromDisk() reloads from disk underneath it.
+void armSaveGate()
+{
+    owner.public_key.size = 32;
+    memset(owner.public_key.bytes, 0x5A, sizeof(owner.public_key.bytes));
 }
 
 } // namespace
@@ -287,7 +302,7 @@ static void test_protectedCap_refusesBeyondLimit(void)
 
 // removeNodeByNum() compacts survivors down and clears the slots that leaves free. A full
 // store with no matching node frees none, so there is nothing past the last node to clear.
-static void test_removeNodeByNum_absentNodeOnFullDb(void)
+static void test_removeNodeByNum_absentNodeFullDb(void)
 {
     db->seedSelf();
     for (int i = 1; i < MAX_NUM_NODES; i++) // fill to MAX_NUM_NODES total (incl. self)
@@ -304,7 +319,7 @@ static void test_removeNodeByNum_absentNodeOnFullDb(void)
 
 // Control for the above: a matching node on a full store is still removed, the survivors
 // compact down, and the freed tail slot is cleared.
-static void test_removeNodeByNum_presentNodeOnFullDb(void)
+static void test_removeNodeByNum_presentNodeFullDb(void)
 {
     db->seedSelf();
     for (int i = 1; i < MAX_NUM_NODES; i++)
@@ -316,6 +331,120 @@ static void test_removeNodeByNum_presentNodeOnFullDb(void)
     TEST_ASSERT_NULL(db->getMeshNode(8000 + 5));
     TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + 4));
     TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // survivors kept
+}
+
+// A save/load cycle must *replace* the in-RAM store, not add to it.
+//
+// loadProto() memsets every proto's destination clear before decoding except the two
+// NodeDatabase descriptors, which hold std::vector members that memset would corrupt.
+// Nothing took over that job, the nodes decode callback only push_back()s, and
+// `nodeDatabase` is a file-scope global that outlives any one NodeDB - so every load
+// appended the file's rows to whatever was already in RAM, and each cycle doubled the
+// store: 1 -> 2 -> 4 -> ... -> MAX_NUM_NODES copies of one node number. Duplicates that
+// are ignored (blocked) survive cleanupMeshDB() by design, which is what let a fixture
+// reach a full DB of protected rows and take the NULL branch tested further down.
+//
+// Two nearby paths got this right and are the reason the gap was easy to miss:
+// armNodeDatabaseDecodeTargets(), called immediately before the load, clears the
+// satellite maps, and migrateLegacyNodeDatabase() clears the vector before it fills it.
+// Only the current-version path did not.
+//
+// It is not test-only. reloadFromDisk() calls loadFromDisk() a second time in one process
+// after an encrypted-storage unlock, and the locked boot returns early from it having run
+// installDefaultNodeDatabase() - so the reload decoded the real store on top of
+// MAX_NUM_NODES zeroed rows, went over cap, and nodeDBSelfCare() truncated and rewrote
+// nodes.proto with cleanupMeshDB() never running on that path.
+static void test_saveThenLoad_doesNotAccumulate(void)
+{
+    db->clearHot();
+    db->seedSelf();
+    db->push(0x0A000001, /*last_heard=*/100, false, false, /*withUser=*/true, /*withKey=*/false);
+    db->push(0x0A000002, /*last_heard=*/200, false, false, /*withUser=*/true, /*withKey=*/false);
+    const int expected = (int)db->getNumMeshNodes();
+    TEST_ASSERT_EQUAL_INT(3, expected); // self + two
+
+    // Three cycles, because one cycle of the old defect only produced a plausible-looking
+    // 6: the signature is that it keeps doubling.
+    for (int cycle = 0; cycle < 3; cycle++) {
+        armSaveGate();
+        TEST_ASSERT_TRUE(db->runSave());
+        db->runLoad();
+        TEST_ASSERT_EQUAL_INT_MESSAGE(expected, (int)db->getNumMeshNodes(),
+                                      "a save/load cycle must round-trip the store, not append to it");
+    }
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x0A000001));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x0A000002));
+}
+
+// The other half of the same defect: with nothing resetting the destination, an absent or
+// undecodable nodes.proto left the previous contents in RAM *and* kept the version that
+// was decoded last time, so the install-defaults path was skipped and a "fresh" NodeDB
+// silently inherited the old store.
+static void test_loadFromDisk_absentFileDoesNotInheritStaleNodes(void)
+{
+    db->clearHot();
+    db->seedSelf();
+    db->push(0x0B000001, /*last_heard=*/100, false, false, /*withUser=*/true, /*withKey=*/false);
+    armSaveGate();
+    TEST_ASSERT_TRUE(db->runSave());
+
+    FSCom.remove(nodeDatabaseFileName);
+    db->runLoad();
+
+    TEST_ASSERT_EQUAL_INT(0, (int)db->getNumMeshNodes());
+    TEST_ASSERT_NULL(db->getMeshNode(0x0B000001));
+    TEST_ASSERT_NULL(db->getMeshNode(0x0BADF00D)); // not even self survives an empty store
+
+    // Leave the file state-manifest.tsv declares on disk. clearHot() first: the defaults the absent
+    // file installed leave MAX_NUM_NODES zeroed rows in the vector the encode walks.
+    armSaveGate();
+    db->clearHot();
+    TEST_ASSERT_TRUE(db->runSave());
+}
+
+// The NULL return in getOrCreateMeshNode(): a store at MAX_NUM_NODES whose every
+// non-self row is protected has no eviction candidate, so admission must be refused
+// rather than appending past the cap. setProtectedFlag() holds numProtectedNodes() to
+// MAX_NUM_NODES-2 at runtime, so only a pre-cap or externally written nodes.proto can
+// reach this shape - which is why the guard is not dead code, and why it is asserted
+// here rather than assumed.
+static void test_getOrCreateMeshNode_refusesWhenFullAndEveryCandidateProtected(void)
+{
+    db->clearHot();
+    db->seedSelf();
+    for (int i = 1; i < MAX_NUM_NODES; i++)
+        db->push(0x0C000000 + i, /*last_heard=*/i, /*favorite=*/false, /*ignored=*/true, /*withUser=*/true, /*withKey=*/false);
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes());
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES - 1, db->numProtectedNodes()); // past the runtime cap, on purpose
+
+    TEST_ASSERT_NULL(db->getOrCreateMeshNode(0x0CFFFFFF));
+
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes());         // nothing appended
+    TEST_ASSERT_EQUAL_UINT32(MAX_NUM_NODES, (uint32_t)db->meshNodes->size()); // and no growth past the cap
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x0C000001));                        // refusal evicted nobody
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x0BADF00D));
+}
+
+// Complement, and the reason the cap is MAX_NUM_NODES-2: with the protected limit
+// honoured, a full store still admits a new node - the guard above can only fire on a
+// store that never went through setProtectedFlag().
+static void test_getOrCreateMeshNode_admitsAtCapWhenProtectedLimitHonoured(void)
+{
+    db->clearHot();
+    db->seedSelf();
+    for (int i = 1; i <= MAX_NUM_NODES - 2; i++)
+        db->push(0x0D000000 + i, /*last_heard=*/1000 + i, /*favorite=*/true, false, /*withUser=*/true, /*withKey=*/false);
+    db->push(0x0DFFFF01, /*last_heard=*/1, false, false, /*withUser=*/true, /*withKey=*/false); // the evictable row
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes());
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES - 2, db->numProtectedNodes());
+
+    meshtastic_NodeInfoLite *fresh = db->getOrCreateMeshNode(0x0DFFFF02);
+
+    TEST_ASSERT_NOT_NULL(fresh);
+    TEST_ASSERT_EQUAL_UINT32(0x0DFFFF02, fresh->num);
+    TEST_ASSERT_NULL(db->getMeshNode(0x0DFFFF01));                    // the one evictable row was the victim
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x0D000001));                // no favourite was touched
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes()); // still exactly at the cap
 }
 
 NDB_TEST_ENTRY void setup()
@@ -333,8 +462,12 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_prefersCurrentBootStampOverPost2038Epoch);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
-    RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
-    RUN_TEST(test_removeNodeByNum_presentNodeOnFullDb);
+    RUN_TEST(test_removeNodeByNum_absentNodeFullDb);
+    RUN_TEST(test_removeNodeByNum_presentNodeFullDb);
+    RUN_TEST(test_saveThenLoad_doesNotAccumulate);
+    RUN_TEST(test_loadFromDisk_absentFileDoesNotInheritStaleNodes);
+    RUN_TEST(test_getOrCreateMeshNode_refusesWhenFullAndEveryCandidateProtected);
+    RUN_TEST(test_getOrCreateMeshNode_admitsAtCapWhenProtectedLimitHonoured);
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
