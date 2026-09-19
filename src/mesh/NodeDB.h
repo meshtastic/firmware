@@ -183,6 +183,14 @@ inline bool isRadioProfileFile(const char *filename)
 /// display formatters fall into their existing unknown-age branches ("unknown age" / "?").
 inline constexpr uint32_t SINCE_UNKNOWN = UINT32_MAX;
 
+/// Node-database churn detection (NodeDB::isNodeDbRolling). An eviction only counts as churn when
+/// we still heard the victim inside NODEDB_ROLL_FRESH_SECS - dropping long-silent entries is
+/// healthy pruning. NODEDB_ROLL_SAMPLES such evictions inside NODEDB_ROLL_WINDOW_MS mean the mesh
+/// is larger than the database and nodes are rolling straight back in.
+inline constexpr uint32_t NODEDB_ROLL_FRESH_SECS = 60 * 60 * 2;
+inline constexpr uint8_t NODEDB_ROLL_SAMPLES = 8;
+inline constexpr uint32_t NODEDB_ROLL_WINDOW_MS = 30 * 60 * 1000UL;
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
@@ -448,6 +456,11 @@ class NodeDB
      * @param localOnly if true, ignore nodes heard via MQTT
      */
     size_t getNumOnlineMeshNodes(bool localOnly = false);
+
+    /// True while the hot store keeps evicting nodes we can still hear, i.e. the mesh is bigger
+    /// than the database and entries are rolling rather than being pruned once stale. Optional
+    /// NodeInfo traffic backs off on this so we don't feed a NodeInfo storm.
+    bool isNodeDbRolling() const;
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
         removeNodeByNum(NodeNum nodeNum);
@@ -740,6 +753,15 @@ class NodeDB
     uint16_t committedSlot = 0;
     bool loraSlotTransient = false;
     LoraSlotSnapshot currentLoraSlot() const;
+
+    /// millis() ring of the most recent evictions of nodes we could still hear. Only meaningful
+    /// once wrapped, at which point head indexes the oldest sample. See isNodeDbRolling().
+    uint32_t freshEvictions[NODEDB_ROLL_SAMPLES] = {0};
+    uint8_t freshEvictionHead = 0;
+    bool freshEvictionsWrapped = false;
+
+    /// Record an about-to-be-dropped hot-store entry against the churn ring.
+    void noteNodeEvicted(const meshtastic_NodeInfoLite &evicted);
 
     /*
      * Internal boolean to track sorting paused
