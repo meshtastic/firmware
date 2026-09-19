@@ -13,10 +13,11 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
 {
   public:
     static PacketAPI *create(PacketServer *_server);
-    virtual ~PacketAPI(){};
+    virtual ~PacketAPI() {};
     virtual int32_t runOnce();
     // Check the current underlying physical queue to see if the client is fetching packets
     bool checkIsConnected() override;
+    void notifyUIConfigChanged() { uiConfigChanged = true; }
 
   protected:
     explicit PacketAPI(PacketServer *_server);
@@ -31,6 +32,7 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
 
     bool isConnected;
     bool programmingMode;
+    bool uiConfigChanged = false;
     PacketServer *server;
     uint8_t txBuf[MAX_TO_FROM_RADIO_SIZE] = {0}; // dummy buf to obey PhoneAPI
 };
