@@ -214,8 +214,9 @@ void onCentralConnect(uint16_t conn)
         }
     }
     dialing = false;
+    // 247 is what configCentralBandwidth(BANDWIDTH_MAX) allows; asking for more is refused and leaves 23.
     if (BLEConnection *c = Bluefruit.Connection(conn))
-        c->requestMtuExchange(BLE_GATT_MESH_MAX_CHUNK + 3);
+        c->requestMtuExchange(247);
     LOG_INFO("BLE GATT mesh: dialled conn %u is a mesh peer (chunk %u)", conn, chunkFor(conn));
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
@@ -300,6 +301,17 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
         return;
     if (!report->type.connectable || dialing || Bluefruit.Central.connected() > 0)
         return;
+    // A controller holds one link per peer address, so a peer already connected the other way - a
+    // phone that dialled this node first - cannot be dialled: the CONNECT_IND is ignored and the
+    // attempt ends in 0x3e. The dial is for the peer that cannot dial, an iPhone in the background.
+    for (uint16_t c = 0; c < BLE_MAX_CONNECTION; c++) {
+        BLEConnection *bc = Bluefruit.Connection(c);
+        if (!bc || !bc->connected())
+            continue;
+        const ble_gap_addr_t peer = bc->getPeerAddr();
+        if (peer.addr_type == report->peer_addr.addr_type && memcmp(peer.addr, report->peer_addr.addr, sizeof(peer.addr)) == 0)
+            return;
+    }
     if (cooldownArmed && memcmp(&cooldownAddr, &report->peer_addr, sizeof(cooldownAddr)) == 0 &&
         Throttle::isWithinTimespanMs(cooldownSinceMs, BLE_GATT_MESH_DIAL_COOLDOWN_MS))
         return;
