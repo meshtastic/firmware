@@ -888,7 +888,8 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.request_id, p.decoded.reply_id,
+                                         p.decoded.payload.bytes, p.decoded.payload.size,
                                          p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 
@@ -910,7 +911,8 @@ void test_receiveDropsBadSignatureOnDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.request_id, p.decoded.reply_id,
+                                         p.decoded.payload.bytes, p.decoded.payload.size,
                                          p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;

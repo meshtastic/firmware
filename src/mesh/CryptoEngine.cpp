@@ -89,31 +89,55 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 /**
  * Build a signing buffer that covers packet metadata and payload:
- *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]
- * This prevents replay, reattribution, and portnum redirection attacks.
+ *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]                               (base)
+ *   [fromNode(4) | packetId(4) | portnum(4) | request_id(4) | reply_id(4) | payload(N)] (extended)
+ *
+ * The extended layout is used exactly when request_id or reply_id is nonzero. Those two fields live
+ * in the Data envelope rather than the payload, so the base layout leaves them unsigned - and
+ * channel crypto is AES-CTR with no MAC, so they are malleable in flight. A signed reply can
+ * therefore be re-pointed at a different message today.
+ *
+ * Packets with neither field keep the base layout, byte-identical to what v2.8.0 alphas already
+ * emit, so their signatures stay verifiable in both directions across the upgrade. Both sides
+ * derive the layout from the packet's own decoded fields, so nothing is transmitted to select it.
+ *
+ * The conditional layout is theoretically ambiguous - a base-layout payload could begin with bytes
+ * that parse as the extended header - but a forgery additionally requires identical
+ * fromNode/packetId/portnum plus an honest signer emitting a zero-request packet whose payload
+ * prefix is attacker-useful on the same portnum. See the PR discussion for why a format byte is
+ * the better long-term answer and what it would cost.
+ *
+ * Covering the metadata prevents replay, reattribution, and portnum redirection attacks.
  */
 static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 const uint8_t *payload, size_t payloadLen)
+                                 uint32_t requestId, uint32_t replyId, const uint8_t *payload, size_t payloadLen)
 {
-    const size_t headerLen = sizeof(uint32_t) * 3;
-    size_t totalLen = headerLen + payloadLen;
+    size_t headerLen = sizeof(uint32_t) * 3;
+    const bool extended = requestId != 0 || replyId != 0;
+    size_t totalLen = headerLen + payloadLen + (extended ? sizeof(uint32_t) * 2 : 0);
     if (totalLen > bufSize)
         return 0;
     // May need endian conversion for oddball platforms.
     memcpy(buf, &fromNode, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
+    if (extended) {
+        memcpy(buf + sizeof(uint32_t) * 3, &requestId, sizeof(uint32_t));
+        memcpy(buf + sizeof(uint32_t) * 4, &replyId, sizeof(uint32_t));
+        headerLen += sizeof(uint32_t) * 2;
+    }
     memcpy(buf + headerLen, payload, payloadLen);
     return totalLen;
 }
 
-bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
-                               uint8_t *signature)
+bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, uint32_t requestId, uint32_t replyId,
+                               const uint8_t *payload, size_t payloadLen, uint8_t *signature)
 {
     if (memfll(xeddsa_private_key, 0, sizeof(xeddsa_private_key)))
         return false;
     uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    size_t sigLen =
+        buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
     if (sigLen == 0)
         return false;
     // XEdDSA::sign mixes signature[0..31] into the nonce as the spec's random Z (meshtastic/Crypto#3)
@@ -126,7 +150,8 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
 }
 
 bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 const uint8_t *payload, size_t payloadLen, const uint8_t *signature)
+                                 uint32_t requestId, uint32_t replyId, const uint8_t *payload, size_t payloadLen,
+                                 const uint8_t *signature)
 {
     // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
     if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
@@ -134,7 +159,8 @@ bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint3
         memcpy(cached_curve_pubkey, pubKey, 32);
     }
     uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    size_t sigLen =
+        buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
     if (sigLen == 0)
         return false;
     return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
