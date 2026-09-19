@@ -594,12 +594,12 @@ typedef struct _meshtastic_Nau7802Config {
     float calibrationFactor;
 } meshtastic_Nau7802Config;
 
-/* AS3935 lightning sensor configuration, for saving to flash */
-typedef struct _meshtastic_AS3935Config {
+/* AS3935 lightning sensor state, for saving to flash */
+typedef struct _meshtastic_AS3935State {
     /* Antenna tuning capacitance in pF, 0 to 120 in steps of 8. The chip does not retain
  this across power loss, so it is stored here and re-applied on every boot. */
     uint32_t tuning_cap_pf;
-} meshtastic_AS3935Config;
+} meshtastic_AS3935State;
 
 /* SEN5X State, for saving to flash (to be merged with SEN6XState) */
 typedef struct _meshtastic_SEN5XState {
@@ -676,7 +676,7 @@ extern "C" {
 #define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
-#define meshtastic_AS3935Config_init_default     {0}
+#define meshtastic_AS3935State_init_default      {0}
 #define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SEN6XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
@@ -690,7 +690,7 @@ extern "C" {
 #define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
-#define meshtastic_AS3935Config_init_zero        {0}
+#define meshtastic_AS3935State_init_zero         {0}
 #define meshtastic_SEN5XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SEN6XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 
@@ -843,7 +843,7 @@ extern "C" {
 #define meshtastic_Telemetry_soil_water_metrics_tag 11
 #define meshtastic_Nau7802Config_zeroOffset_tag  1
 #define meshtastic_Nau7802Config_calibrationFactor_tag 2
-#define meshtastic_AS3935Config_tuning_cap_pf_tag 1
+#define meshtastic_AS3935State_tuning_cap_pf_tag 1
 #define meshtastic_SEN5XState_last_cleaning_time_tag 1
 #define meshtastic_SEN5XState_last_cleaning_valid_tag 2
 #define meshtastic_SEN5XState_one_shot_mode_tag  3
@@ -1059,10 +1059,10 @@ X(a, STATIC,   SINGULAR, FLOAT,    calibrationFactor,   2)
 #define meshtastic_Nau7802Config_CALLBACK NULL
 #define meshtastic_Nau7802Config_DEFAULT NULL
 
-#define meshtastic_AS3935Config_FIELDLIST(X, a) \
+#define meshtastic_AS3935State_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   tuning_cap_pf,     1)
-#define meshtastic_AS3935Config_CALLBACK NULL
-#define meshtastic_AS3935Config_DEFAULT NULL
+#define meshtastic_AS3935State_CALLBACK NULL
+#define meshtastic_AS3935State_DEFAULT NULL
 
 #define meshtastic_SEN5XState_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   last_cleaning_time,   1) \
@@ -1095,7 +1095,7 @@ extern const pb_msgdesc_t meshtastic_HealthMetrics_msg;
 extern const pb_msgdesc_t meshtastic_HostMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
-extern const pb_msgdesc_t meshtastic_AS3935Config_msg;
+extern const pb_msgdesc_t meshtastic_AS3935State_msg;
 extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 
@@ -1111,13 +1111,13 @@ extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 #define meshtastic_HostMetrics_fields &meshtastic_HostMetrics_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
-#define meshtastic_AS3935Config_fields &meshtastic_AS3935Config_msg
+#define meshtastic_AS3935State_fields &meshtastic_AS3935State_msg
 #define meshtastic_SEN5XState_fields &meshtastic_SEN5XState_msg
 #define meshtastic_SEN6XState_fields &meshtastic_SEN6XState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
-#define meshtastic_AS3935Config_size             6
+#define meshtastic_AS3935State_size              6
 #define meshtastic_AirQualityMetrics_size        157
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       222
