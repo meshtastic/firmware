@@ -10,6 +10,7 @@
 #include "mesh/Throttle.h"
 #include <array>
 #include <bluefruit.h>
+#include <utility/bonding.h>
 
 namespace
 {
@@ -558,11 +559,24 @@ void NRF52BLEGattMesh::onSecurityRequest(uint16_t conn)
 #if BLE_GATT_MESH_DIAL
     // A phone bonded to this node's phone API asks the link be encrypted the moment it is dialled.
     // Bluefruit answers nothing on a central link, the phone's SMP timer runs out at 30 s and it drops
-    // the link (0x05). The mesh-peer link is open by design - the channel key is the security - so
-    // decline, which the SoftDevice does for a NULL parameter set.
+    // the link (0x05) - and declining is no better: Android drops a link whose security request is
+    // refused within a second (measured 2026-09-19, 0x05 every dial). So encrypt it, with the key the
+    // phone handed this node when it paired with the phone API. That pairing had this node as the
+    // peripheral, so the bond lives in the peripheral store whatever role this link has, and the
+    // key to start encryption with as the central is the one the phone distributed (peer_enc).
+    // The mesh characteristic needs no encryption; this only keeps a bonded phone on the link.
     BLEConnection *c = Bluefruit.Connection(conn);
     if (!c || c->getRole() != BLE_GAP_ROLE_CENTRAL)
         return;
+    ble_gap_addr_t addr = c->getPeerAddr(); // bond_load_keys resolves a private address by IRK itself
+    bond_keys_t bkeys = {};
+    if (bond_load_keys(BLE_GAP_ROLE_PERIPH, &addr, &bkeys) && bkeys.peer_enc.enc_info.ltk_len > 0) {
+        const uint32_t err = sd_ble_gap_encrypt(conn, &bkeys.peer_enc.master_id, &bkeys.peer_enc.enc_info);
+        LOG_INFO("BLE GATT mesh: encrypting dialled conn %u with its phone-API bond (0x%x)", conn, (unsigned)err);
+        if (err == NRF_SUCCESS)
+            return;
+    }
+    // No bond to honour: decline, which the SoftDevice does for a NULL parameter set.
     const uint32_t err = sd_ble_gap_authenticate(conn, NULL);
     LOG_INFO("BLE GATT mesh: declined the security request on dialled conn %u (0x%x)", conn, (unsigned)err);
 #else
