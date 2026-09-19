@@ -4,6 +4,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "RadioInterface.h"
 #include "Router.h"
 #include "gps/RTC.h"
 
@@ -100,7 +101,7 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
     // moduleConfig.audio.i2s_sck = 14;
     // moduleConfig.audio.ptt_pin = 39;
 
-    if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
+    if ((moduleConfig.audio.codec2_enabled) && (RadioInterface::configuredRegion()->profile->audioPermitted)) {
         LOG_INFO("Set up codec2 in mode %u", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
         codec2 = codec2_create((moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
         memcpy(tx_header.magic, c2_magic, sizeof(c2_magic));
@@ -143,7 +144,7 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
 int32_t AudioModule::runOnce()
 {
-    if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
+    if ((moduleConfig.audio.codec2_enabled) && (RadioInterface::configuredRegion()->profile->audioPermitted)) {
         esp_err_t res;
         if (firstTime) {
             // Set up I2S Processor configuration. This will produce 16bit samples at 8 kHz instead of 12 from the ADC
@@ -274,7 +275,7 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
+    if ((moduleConfig.audio.codec2_enabled) && (RadioInterface::configuredRegion()->profile->audioPermitted)) {
         auto &p = mp.decoded;
         if (!isFromUs(&mp)) {
             size_t n = p.payload.size;
