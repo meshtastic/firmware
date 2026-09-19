@@ -248,14 +248,18 @@ void Breakout::handleInput(input_broker_event ev, unsigned char kbchar)
     case INPUT_BROKER_LEFT:
     case INPUT_BROKER_RIGHT:
 #if ARCH_PORTDUINO && defined(__linux__)
-        // When a joystick is present the paddle is polled continuously in tick(); ignore the
-        // discrete (and slow) repeat events so we don't double-move. Only the paddle keys are
-        // skipped -- the serve button below must still get through.
+        // While the stick is held, tick() polls heldXZone() and moves the paddle itself, so the
+        // matching discrete (and slow) repeat events would double-move. Suppress just those.
         //
-        // That applies to the D-pad, which is an axis and arrives with no button in kbchar. A
-        // shoulder button configured as left/right is a real discrete press that the axis poll
-        // knows nothing about, so it still nudges the paddle.
-        if (aLinuxJoystick && kbchar == 0)
+        // Both halves of the test matter. kbchar == 0 means no button produced this, so it came
+        // from an axis; a shoulder button mapped to left/right is a real discrete press the axis
+        // poll knows nothing about and must still nudge the paddle. heldXZone() != 0 means the
+        // stick is driving right now: LinuxJoystick assigns heldX before it emits, and only
+        // auto-repeats while heldX is set, so every axis LEFT/RIGHT arrives with a zone held and
+        // nothing else does. Without it this also swallowed LEFT/RIGHT from the keyboard,
+        // trackball and ExpressLRS -- aLinuxJoystick is constructed on every Linux host, gamepad
+        // configured or not, so the old check was true even with no joystick attached at all.
+        if (aLinuxJoystick && kbchar == 0 && aLinuxJoystick->heldXZone() != 0)
             break;
 #endif
         if (ev == INPUT_BROKER_LEFT)

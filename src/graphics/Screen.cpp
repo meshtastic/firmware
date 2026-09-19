@@ -2441,8 +2441,15 @@ bool Screen::isGamesFrameShown()
 
 void Screen::showHomeFrame()
 {
-    if (ui && framesetInfo.positions.home != 255)
-        ui->switchToFrame(framesetInfo.positions.home);
+    if (!ui)
+        return;
+    // Home is optional -- setFrames() only adds it when !hiddenFrames.home, leaving the position
+    // 255. Bouncing to nothing would strand the caller on the frame it wanted to leave, so fall
+    // back to the messages frame, which setFrames() always adds.
+    const uint8_t target =
+        (framesetInfo.positions.home != 255) ? framesetInfo.positions.home : framesetInfo.positions.textMessage;
+    if (target != 255)
+        ui->switchToFrame(target);
 }
 
 bool Screen::anyModuleInterceptingInput()

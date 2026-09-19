@@ -294,8 +294,9 @@ class Screen : public concurrency::OSThread
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
 
-    // Jump straight to the home (device-focused) frame, if present. Used to bounce back to a clearly
-    // "this is a Meshtastic node" screen after a game is left idle.
+    // Jump straight to the home (device-focused) frame. Used to bounce back to a clearly "this is a
+    // Meshtastic node" screen after a game is left idle. Home is optional, so when it is hidden this
+    // falls back to the messages frame rather than staying put.
     void showHomeFrame();
 
     // True when the user is in the middle of something that must not be interrupted: a module (or

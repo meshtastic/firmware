@@ -35,7 +35,7 @@ void test_reset_initialState()
     TEST_ASSERT_TRUE(game.isBallDocked());
 }
 
-void test_ballWaitsOnPaddleUntilLaunched()
+void test_ball_waitsOnPaddleUntilLaunched()
 {
     BreakoutGame game;
     game.reset(kSeed);
@@ -139,7 +139,7 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
     RUN_TEST(test_reset_initialState);
-    RUN_TEST(test_ballWaitsOnPaddleUntilLaunched);
+    RUN_TEST(test_ball_waitsOnPaddleUntilLaunched);
     RUN_TEST(test_paddle_clampsToEdges);
     RUN_TEST(test_serve_clearsABrickAndScores);
     RUN_TEST(test_ball_staysInBounds);
