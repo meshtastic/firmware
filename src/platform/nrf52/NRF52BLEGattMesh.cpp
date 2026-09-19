@@ -294,12 +294,41 @@ void NRF52BLEGattMesh::rearmAdvertising()
         Bluefruit.Advertising.start(0);
 }
 
+// An iOS app in the background advertises none of its service UUIDs. iOS moves them into Apple's
+// "overflow area": manufacturer data for company 0x004c, type 0x01, then a 128-bit bitmap with one bit
+// set per service, the bit chosen by an undocumented hash of the UUID. The bit for the mesh-peer
+// service was measured on 2026-09-19 (iPadOS 26.6, BlueZ witness on james-pc): byte 1, mask 0x40 -
+// the same frame foreground and background, with the UUID beside it only in the foreground. Any
+// service that hashes to the same bit is a false positive, which the dial pays for with one connect:
+// the service discovery that follows finds no mesh-peer service and drops the link.
+//
+// The overflow area rides in the SCAN RESPONSE, never the ADV_IND - this node's own passive scan
+// received 1,500 Apple entries in a minute and not one of type 0x01, then saw it on the first scan
+// response once the scan went active (NRF52BLEMesh.cpp). Proven the same day: a RAK4631 dialled a
+// backgrounded, peripheral-only iPad off one such response, both HELLOs crossed, and a 127-byte
+// text landed on the iPad in one write.
+#define BLE_GATT_MESH_IOS_OVERFLOW_BYTE 1
+#define BLE_GATT_MESH_IOS_OVERFLOW_MASK 0x40
+
+static bool reportHasIosOverflowBit(const ble_gap_evt_adv_report_t *report)
+{
+    uint8_t mfr[31];
+    const uint8_t len = Bluefruit.Scanner.parseReportByType(report, BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA, mfr, sizeof(mfr));
+    // company id (2, little endian), overflow type (1), bitmap (16)
+    if (len != 19 || mfr[0] != 0x4c || mfr[1] != 0x00 || mfr[2] != 0x01)
+        return false;
+    return (mfr[3 + BLE_GATT_MESH_IOS_OVERFLOW_BYTE] & BLE_GATT_MESH_IOS_OVERFLOW_MASK) != 0;
+}
+
 void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
 {
 #if BLE_GATT_MESH_DIAL
     if (!report || !(config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER))
         return;
-    if (!report->type.connectable || dialing || Bluefruit.Central.connected() > 0)
+    // A scan response is only ever sent by a scannable advertiser, and the one this gate is for - an
+    // iOS app in the background - answers from a connectable ADV_IND; the connectable bit is not
+    // carried on the response report itself.
+    if (!(report->type.connectable || report->type.scan_response) || dialing || Bluefruit.Central.connected() > 0)
         return;
     // A controller holds one link per peer address, so a peer already connected the other way - a
     // phone that dialled this node first - cannot be dialled: the CONNECT_IND is ignored and the
@@ -317,7 +346,7 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
         return;
     // Only the primary advertisement is seen: the mesh scan is passive, so a node that puts the UUID in
     // its scan response (this firmware on nRF52) is never dialled. Phones put it in the advertisement.
-    if (!Bluefruit.Scanner.checkReportForUuid(report, BLEUuid(serviceUuid)))
+    if (!Bluefruit.Scanner.checkReportForUuid(report, BLEUuid(serviceUuid)) && !reportHasIosOverflowBit(report))
         return;
     dialing = true;
     dialAddr = report->peer_addr;

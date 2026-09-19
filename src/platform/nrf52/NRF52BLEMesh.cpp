@@ -21,7 +21,15 @@ static ble_data_t bleMeshScanReportData = {.p_data = bleMeshScanBuffer, .len = s
 static ble_gap_scan_params_t bleMeshScanParams = {
     .extended = 1,
     .report_incomplete_evts = 0,
+#if BLE_GATT_MESH_DIAL
+    // Active: an iOS app in the background names its services only in the scan response (Apple's
+    // overflow area - measured 2026-09-19, never in the ADV_IND), so a passive scan can never dial it.
+    // The cost is a SCAN_REQ per scannable advertiser heard and the radio time to hear the answer;
+    // the dial is the only reason to pay it, so the passive scan stays for every other build.
+    .active = 1,
+#else
     .active = 0,
+#endif
     .filter_policy = BLE_GAP_SCAN_FP_ACCEPT_ALL,
     .scan_phys = BLE_GAP_PHY_1MBPS,
     .interval = BLE_MESH_SCAN_INTERVAL,
