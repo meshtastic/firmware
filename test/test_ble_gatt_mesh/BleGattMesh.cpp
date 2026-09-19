@@ -27,6 +27,8 @@ class FakeGattMesh : public BLEGattMeshHandler
   public:
     std::vector<BLEGattMeshPeer> peers;
     std::map<BLEGattPeerId, std::vector<std::vector<uint8_t>>> notified;
+    std::map<BLEGattPeerId, std::vector<std::vector<uint8_t>>> greeted;
+    std::vector<BLEGattPeerId> shed;
     std::deque<std::pair<BLEGattPeerId, std::vector<uint8_t>>> inbound;
     std::vector<meshtastic_MeshPacket> received;
     bool ready = true;
@@ -61,12 +63,20 @@ class FakeGattMesh : public BLEGattMeshHandler
     }
     bool platformNotify(BLEGattPeerId peer, const uint8_t *data, size_t len) override
     {
+        // Control chunks are kept apart so every fragment count below stays what the link carries.
+        if (BLEGattMeshHandler::isControl(data, len)) {
+            if (busy)
+                return false;
+            greeted[peer].emplace_back(data, data + len);
+            return true;
+        }
         notifyCalls++;
         if (busy)
             return false;
         notified[peer].emplace_back(data, data + len);
         return true;
     }
+    void platformShedOutbound(BLEGattPeerId peer) override { shed.push_back(peer); }
     bool platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len) override
     {
         if (inbound.empty())
@@ -413,7 +423,10 @@ void test_a_relay_is_not_written_back_to_the_peer_it_came_from(void)
     FakeGattMesh h;
     h.start();
     h.peers = {{1, 512}, {2, 512}};
-    h.feed(1, split(encode(encryptedPacket(0x3061b02e, 0x1234)), 1, 512)[0]);
+    // A hop already spent: peer 1 is carrying someone else's packet, not originating it.
+    auto carried = encryptedPacket(0x3061b02e, 0x1234);
+    carried.hop_limit = 2;
+    h.feed(1, split(encode(carried), 1, 512)[0]);
     TEST_ASSERT_EQUAL(1, h.received.size());
 
     // What perhapsRebroadcast hands back: a copy of the received packet, still marked as it arrived.
@@ -423,6 +436,23 @@ void test_a_relay_is_not_written_back_to_the_peer_it_came_from(void)
     }
     TEST_ASSERT_EQUAL_MESSAGE(0, h.notified[1].size(), "peer 1 already has this packet");
     TEST_ASSERT_EQUAL_MESSAGE(1, h.notified[2].size(), "peer 2 does not");
+}
+
+void test_a_relay_echoes_to_the_peer_that_originated_it(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 512}, {2, 512}};
+    // hop_start == hop_limit: nothing has relayed it, so peer 1 is the originator and the echo is
+    // the implicit ack a shared medium would have given it for free.
+    h.feed(1, split(encode(encryptedPacket(0x3061b02e, 0x1235)), 1, 512)[0]);
+    TEST_ASSERT_EQUAL(1, h.received.size());
+    meshtastic_MeshPacket relay = h.received[0];
+    TEST_ASSERT_TRUE(h.onSend(&relay));
+    while (h.pump() == 10) {
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.notified[1].size(), "the originator hears its packet relayed");
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.notified[2].size(), "and so does everyone else");
 }
 
 void test_an_origination_reaches_every_peer(void)
@@ -507,6 +537,80 @@ void test_pump_waits_for_the_platform(void)
     TEST_ASSERT_EQUAL(1, h.notified[1].size());
 }
 
+// --- link control ------------------------------------------------------------------------------
+
+std::vector<uint8_t> helloWith(uint8_t fill)
+{
+    std::vector<uint8_t> h(BLE_GATT_MESH_HELLO_SIZE, fill);
+    h[0] = BLE_GATT_MESH_CTRL_MARKER;
+    h[1] = BLE_GATT_MESH_CTRL_HELLO;
+    return h;
+}
+
+void test_greets_each_peer_once(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 512}, {2, 20}};
+    h.pump();
+    h.pump();
+    TEST_ASSERT_EQUAL(1, h.greeted[1].size());
+    TEST_ASSERT_EQUAL(1, h.greeted[2].size());
+    TEST_ASSERT_EQUAL(BLE_GATT_MESH_HELLO_SIZE, h.greeted[1][0].size());
+    TEST_ASSERT_EQUAL_HEX8(BLE_GATT_MESH_CTRL_MARKER, h.greeted[1][0][0]);
+    TEST_ASSERT_EQUAL_HEX8(BLE_GATT_MESH_CTRL_HELLO, h.greeted[1][0][1]);
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(h.greeted[1][0].data(), h.greeted[2][0].data(), BLE_GATT_MESH_HELLO_SIZE,
+                                     "one id on every link");
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.notifyCalls, "a greeting is not a fragment");
+}
+
+void test_a_refused_greeting_is_offered_again(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 512}};
+    h.busy = true;
+    h.pump();
+    TEST_ASSERT_EQUAL(0, h.greeted[1].size());
+    h.busy = false;
+    h.pump();
+    TEST_ASSERT_EQUAL(1, h.greeted[1].size());
+}
+
+void test_a_hello_in_is_never_a_fragment(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.feed(1, helloWith(0x42));
+    std::vector<uint8_t> unknown = {BLE_GATT_MESH_CTRL_MARKER, 0x7f, 1, 2, 3};
+    h.feed(1, unknown);
+    TEST_ASSERT_EQUAL(0, h.pending());
+    TEST_ASSERT_EQUAL(0, h.received.size());
+}
+
+void test_the_loser_sheds_a_node_reached_both_ways(void)
+{
+    FakeGattMesh h;
+    h.start();
+    // An id of all 0xff is above any random one, all 0x00 below it: the peer wins, then loses.
+    h.feed(1, helloWith(0x00));
+    h.feed(2, helloWith(0x00));
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.shed.size(), "below us on both links: this node loses and sheds");
+    h.shed.clear();
+    h.feed(3, helloWith(0xff));
+    h.feed(4, helloWith(0xff));
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "above us: the winner keeps its links");
+    // The shed is asynchronous on hardware - the disconnect arrives later as a zero-length chunk - so
+    // the names stay until then. Once both links are gone the name is forgotten, and a fresh pair of
+    // links carrying it is a new election.
+    h.lost(1);
+    h.lost(2);
+    h.feed(5, helloWith(0x00));
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "a lost link's name is forgotten");
+    h.feed(6, helloWith(0x00));
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.shed.size(), "the name on the new link is remembered");
+}
+
 void test_inbound_chunks_are_drained_by_the_pump(void)
 {
     FakeGattMesh h;
@@ -549,12 +653,17 @@ void setup()
     RUN_TEST(test_send_queues_rather_than_notifying);
     RUN_TEST(test_send_fragments_per_peer_chunk_size);
     RUN_TEST(test_a_relay_is_not_written_back_to_the_peer_it_came_from);
+    RUN_TEST(test_a_relay_echoes_to_the_peer_that_originated_it);
     RUN_TEST(test_an_origination_reaches_every_peer);
     RUN_TEST(test_send_refuses_unencrypted_or_senderless_packets);
     RUN_TEST(test_tx_queue_is_bounded);
     RUN_TEST(test_a_busy_stack_is_retried_then_skipped);
     RUN_TEST(test_pump_waits_for_the_platform);
     RUN_TEST(test_inbound_chunks_are_drained_by_the_pump);
+    RUN_TEST(test_greets_each_peer_once);
+    RUN_TEST(test_a_refused_greeting_is_offered_again);
+    RUN_TEST(test_a_hello_in_is_never_a_fragment);
+    RUN_TEST(test_the_loser_sheds_a_node_reached_both_ways);
     exit(UNITY_END());
 }
 

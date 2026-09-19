@@ -53,6 +53,14 @@
 // (from, id) -> arrival peer, so a relay is never written back to the peer that delivered it.
 #define BLE_GATT_MESH_RECENT_ARRIVALS 8
 
+// Link-level control, shared with the client library (GattControl.kt): a chunk that starts with the
+// marker is the link's own business, never a fragment. HELLO carries an id that stands for this node
+// on GATT links and nowhere else - random per boot, deliberately not the node number.
+#define BLE_GATT_MESH_CTRL_MARKER 0xC0
+#define BLE_GATT_MESH_CTRL_HELLO 0x01
+#define BLE_GATT_MESH_LINK_ID_SIZE 8
+#define BLE_GATT_MESH_HELLO_SIZE (2 + BLE_GATT_MESH_LINK_ID_SIZE)
+
 /// A connection handle. Stable for the life of a connection; not an identity.
 typedef uint16_t BLEGattPeerId;
 #define BLE_GATT_MESH_NO_PEER 0xFFFF
@@ -108,6 +116,10 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     /// Write fragment `index` of `packet` into out. Returns the fragment length, 0 on refusal.
     static size_t buildFragment(const uint8_t *packet, size_t packetLen, uint16_t fragId, uint8_t index, uint8_t total,
                                 uint16_t chunk, uint8_t *out, size_t outCap);
+    /// The id a HELLO names, into idOut (BLE_GATT_MESH_LINK_ID_SIZE bytes); false when chunk is not one.
+    static bool parseHello(const uint8_t *chunk, size_t len, uint8_t *idOut);
+    /// True for any control chunk, a HELLO or an opcode this build does not know.
+    static bool isControl(const uint8_t *chunk, size_t len);
 
   protected:
     // --- platform hooks ---------------------------------------------------------------------
@@ -119,6 +131,9 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     virtual bool platformNotify(BLEGattPeerId peer, const uint8_t *data, size_t len) = 0;
     /// Take one received chunk. A zero-length chunk means the peer disconnected. False when none waits.
     virtual bool platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len) = 0;
+    /// One node named itself on two links and the election went against this node: drop `peer` if it is
+    /// a link this node dialled. An inbound link is the peer's to shed, so the default keeps everything.
+    virtual void platformShedOutbound(BLEGattPeerId peer) { (void)peer; }
 
     int32_t runOnce() override;
 
@@ -168,6 +183,25 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     std::array<Arrival, BLE_GATT_MESH_RECENT_ARRIVALS> arrivals{};
     size_t arrivalNext = 0;
     void rememberArrival(NodeNum from, PacketId id, BLEGattPeerId peer, bool fromOrigin);
+
+    // This node's link id, and what each peer has said. A greeting goes out once per link, retried
+    // while the stack refuses it; a HELLO in names the peer, and the same name on two links is one
+    // node reached both ways - the lower id is the central, the loser sheds the link it dialled.
+    uint8_t linkId[BLE_GATT_MESH_LINK_ID_SIZE] = {};
+    bool linkIdReady = false;
+    struct Greeting {
+        bool used;
+        BLEGattPeerId peer;
+        bool sent;
+        bool heard;
+        uint8_t id[BLE_GATT_MESH_LINK_ID_SIZE];
+    };
+    std::array<Greeting, BLE_GATT_MESH_MAX_PEERS * 2> greetings{};
+    Greeting *greeting(BLEGattPeerId peer, bool create);
+    void ensureLinkId();
+    size_t buildHello(uint8_t *out, size_t cap);
+    void pumpGreet();
+    void handleHello(BLEGattPeerId peer, const uint8_t *id);
     BLEGattPeerId arrivalPeer(NodeNum from, PacketId id) const;
     // The peer a relay of this packet must skip, which is none when the arrival came straight from
     // its originator - that echo is the originator's only implicit ack on a point-to-point bearer.

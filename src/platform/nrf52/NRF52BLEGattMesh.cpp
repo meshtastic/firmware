@@ -434,6 +434,24 @@ bool NRF52BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, s
     return meshPeerCharacteristic.notify(peer, data, (uint16_t)len);
 }
 
+void NRF52BLEGattMesh::platformShedOutbound(BLEGattPeerId peer)
+{
+#if BLE_GATT_MESH_DIAL
+    bool outbound = false;
+    {
+        concurrency::LockGuard guard(&lock);
+        Link *l = findLink(peer);
+        outbound = l && l->outbound;
+    }
+    if (!outbound)
+        return;
+    LOG_INFO("BLE GATT mesh: shedding dialled conn %u, the peer reaches us already", peer);
+    Bluefruit.disconnect(peer); // onCentralDisconnect arms the cooldown
+#else
+    (void)peer;
+#endif
+}
+
 bool NRF52BLEGattMesh::platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len)
 {
     concurrency::LockGuard guard(&lock);

@@ -105,7 +105,103 @@ int32_t BLEGattMeshHandler::runOnce()
         return 500;
 
     pumpRx(Time::getMillis());
+    pumpGreet();
     return pumpTx() ? 10 : 100;
+}
+
+bool BLEGattMeshHandler::isControl(const uint8_t *chunk, size_t len)
+{
+    return len >= 2 && chunk[0] == BLE_GATT_MESH_CTRL_MARKER;
+}
+
+bool BLEGattMeshHandler::parseHello(const uint8_t *chunk, size_t len, uint8_t *idOut)
+{
+    if (!isControl(chunk, len) || chunk[1] != BLE_GATT_MESH_CTRL_HELLO || len != BLE_GATT_MESH_HELLO_SIZE)
+        return false;
+    memcpy(idOut, chunk + 2, BLE_GATT_MESH_LINK_ID_SIZE);
+    return true;
+}
+
+// Drawn on first use, not in the constructor: a peer's HELLO can land before this node's first greet,
+// and the election it starts must compare against the id the greet will carry, not zeros.
+void BLEGattMeshHandler::ensureLinkId()
+{
+    if (linkIdReady)
+        return;
+    for (auto &b : linkId)
+        b = (uint8_t)random(256);
+    linkIdReady = true;
+}
+
+size_t BLEGattMeshHandler::buildHello(uint8_t *out, size_t cap)
+{
+    if (cap < BLE_GATT_MESH_HELLO_SIZE)
+        return 0;
+    ensureLinkId();
+    out[0] = BLE_GATT_MESH_CTRL_MARKER;
+    out[1] = BLE_GATT_MESH_CTRL_HELLO;
+    memcpy(out + 2, linkId, BLE_GATT_MESH_LINK_ID_SIZE);
+    return BLE_GATT_MESH_HELLO_SIZE;
+}
+
+BLEGattMeshHandler::Greeting *BLEGattMeshHandler::greeting(BLEGattPeerId peer, bool create)
+{
+    for (auto &g : greetings) {
+        if (g.used && g.peer == peer)
+            return &g;
+    }
+    if (!create)
+        return nullptr;
+    for (auto &g : greetings) {
+        if (g.used)
+            continue;
+        g.used = true;
+        g.peer = peer;
+        g.sent = false;
+        g.heard = false;
+        return &g;
+    }
+    return nullptr;
+}
+
+void BLEGattMeshHandler::pumpGreet()
+{
+    std::array<BLEGattMeshPeer, BLE_GATT_MESH_MAX_PEERS> all{};
+    const size_t n = platformPeers(all.data(), all.size());
+    uint8_t hello[BLE_GATT_MESH_HELLO_SIZE];
+    const size_t len = buildHello(hello, sizeof(hello));
+    for (size_t i = 0; i < n; i++) {
+        Greeting *g = greeting(all[i].id, true);
+        if (!g || g->sent)
+            continue;
+        if (platformNotify(all[i].id, hello, len))
+            g->sent = true; // a refusal is the stack busy; the next pump offers it again
+    }
+}
+
+void BLEGattMeshHandler::handleHello(BLEGattPeerId peer, const uint8_t *id)
+{
+    Greeting *g = greeting(peer, true);
+    if (!g)
+        return;
+    ensureLinkId();
+    memcpy(g->id, id, BLE_GATT_MESH_LINK_ID_SIZE);
+    g->heard = true;
+    LOG_INFO("BLE GATT mesh: conn %u is link %02x%02x%02x%02x%02x%02x%02x%02x", peer, id[0], id[1], id[2], id[3], id[4], id[5],
+             id[6], id[7]);
+    // The same name on another link: one node reached both ways. Same rule as the client library -
+    // the lower id is the central. As the winner nothing is done; the peer sheds the link it dialled.
+    for (const auto &o : greetings) {
+        if (!o.used || !o.heard || o.peer == peer || memcmp(o.id, id, BLE_GATT_MESH_LINK_ID_SIZE) != 0)
+            continue;
+        const bool lose = memcmp(linkId, id, BLE_GATT_MESH_LINK_ID_SIZE) > 0;
+        LOG_INFO("BLE GATT mesh: conns %u and %u are one node; this node %s the election", o.peer, peer, lose ? "loses" : "wins");
+        if (lose) {
+            platformShedOutbound(peer);
+            platformShedOutbound(o.peer);
+        }
+        return;
+    }
 }
 
 void BLEGattMeshHandler::pumpRx(uint32_t nowMs)
@@ -184,6 +280,14 @@ void BLEGattMeshHandler::handleChunk(BLEGattPeerId peer, const uint8_t *chunk, s
         forgetPeer(peer);
         return;
     }
+
+    uint8_t id[BLE_GATT_MESH_LINK_ID_SIZE];
+    if (parseHello(chunk, len, id)) {
+        handleHello(peer, id);
+        return;
+    }
+    if (isControl(chunk, len))
+        return; // an opcode this build does not know is not a fragment either
 
     uint8_t packet[meshtastic_MeshPacket_size];
     const size_t n = reassemble(peer, chunk, len, nowMs, packet, sizeof(packet));
@@ -298,6 +402,8 @@ BLEGattMeshHandler::Assembly *BLEGattMeshHandler::newAssembly(BLEGattPeerId peer
 
 void BLEGattMeshHandler::forgetPeer(BLEGattPeerId peer)
 {
+    if (Greeting *g = greeting(peer, false))
+        g->used = false;
     for (auto &a : assemblies) {
         if (a.used && a.peer == peer)
             a.used = false;
