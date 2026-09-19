@@ -165,21 +165,21 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // on self-addressed admin (the python CLI does), so don't use it to reroute
         // local packets into the remote-PKC key check.
         //
-        // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
-        // gate lives in PhoneAPI::handleToRadioPacket - any local admin
-        // payload other than lockdown_auth is dropped there if the
-        // originating connection is unauthorized. By the time we reach
-        // this branch the connection has already proven the passphrase,
-        // so is_managed needs no additional gate here.
-        //
-        // Without that build flag the legacy is_managed semantics still
-        // apply: refuse all plain local admin and require PKC instead.
-#ifndef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        if (config.security.is_managed) {
+        // is_managed refuses plain local admin and requires PKC instead. Lockdown's
+        // per-connection passphrase gate supersedes it, but only once lockdown is
+        // ACTIVE: PhoneAPI::handleToRadioPacket drops unauthorized local admin only
+        // while isLockdownActive(), and getAdminAuthorized() returns true for every
+        // connection when it is not. A lockdown-capable build that has never been
+        // provisioned therefore has no gate of its own, and must keep enforcing
+        // is_managed exactly like stock firmware.
+        bool lockdownGovernsLocalAdmin = false;
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        lockdownGovernsLocalAdmin = EncryptedStorage::isLockdownActive();
+#endif
+        if (!lockdownGovernsLocalAdmin && config.security.is_managed) {
             LOG_INFO("Ignore local admin payload: is_managed");
             return handled;
         }
-#endif
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin disabled");
