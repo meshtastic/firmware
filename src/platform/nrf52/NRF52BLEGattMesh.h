@@ -4,6 +4,8 @@
 
 #include "mesh/BLEGattMeshHandler.h"
 
+#include <bluefruit.h>
+
 // Received writes waiting for the main task; each holds one ATT value, so up to 512 bytes.
 #ifndef BLE_GATT_MESH_RX_QUEUE_SIZE
 #define BLE_GATT_MESH_RX_QUEUE_SIZE 6
@@ -31,6 +33,12 @@ class NRF52BLEGattMesh : public BLEGattMeshHandler
     static bool onDisconnect(uint16_t conn);
     /// Restart the connectable advertisement if a peripheral slot is free and it is not running.
     static void rearmAdvertising();
+    /// A report from the mesh scanner. With BLE_GATT_MESH_DIAL, a connectable advertisement carrying the
+    /// mesh-peer service is dialled when this node holds no outbound link: firmware as the central, so a
+    /// phone that can only be a peripheral - an iPhone in the background - still joins. SoftDevice event path.
+    static void onScanReport(const ble_gap_evt_adv_report_t *report);
+    /// The dial never completed (BLE_GAP_EVT_TIMEOUT, source CONN).
+    static void onDialTimeout();
 
   protected:
     bool platformReady() override;

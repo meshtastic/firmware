@@ -3,6 +3,9 @@
 #if HAS_BLE_MESH && defined(ARCH_NRF52)
 
 #include "NRF52BLEMesh.h"
+#if HAS_BLE_GATT_MESH
+#include "NRF52BLEGattMesh.h"
+#endif
 #include "NRF52Bluetooth.h"
 #include "main.h"
 #include "mesh/Router.h"
@@ -217,8 +220,18 @@ void NRF52BLEMesh::onBleEvent(ble_evt_t *event)
             instance->advActive = false;
         break;
     }
+    case BLE_GAP_EVT_CONNECTED:
+    case BLE_GAP_EVT_DISCONNECTED:
+        // A dial stops the scan; scanning and a central link coexist once it is up, or gone.
+        instance->startScanning();
+        break;
     case BLE_GAP_EVT_TIMEOUT:
         if (event->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN) {
+            instance->startScanning();
+        } else if (event->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_CONN) {
+#if HAS_BLE_GATT_MESH
+            NRF52BLEGattMesh::onDialTimeout();
+#endif
             instance->startScanning();
         }
         break;
@@ -231,6 +244,10 @@ void NRF52BLEMesh::handleScanResult(ble_gap_evt_adv_report_t *report)
 {
     if (!isRunning || !report->data.p_data)
         return;
+
+#if HAS_BLE_GATT_MESH
+    NRF52BLEGattMesh::onScanReport(report);
+#endif
 
     const uint8_t *data = report->data.p_data;
     uint16_t len = report->data.len;

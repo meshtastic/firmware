@@ -7,6 +7,7 @@
 #include "concurrency/Lock.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include <array>
 #include <bluefruit.h>
 
@@ -20,6 +21,7 @@ struct Link {
     uint16_t conn;
     bool subscribed;     // wrote the CCCD: a notify target, and the mark of a mesh peer
     bool everSubscribed; // subscribed at any point, which outlives an unsubscribe
+    bool outbound;       // this node dialled it: frames go out as GATT client writes, not notifies
 };
 std::array<Link, 4> links{};
 
@@ -70,6 +72,7 @@ Link *addLink(uint16_t conn)
         l.conn = conn;
         l.subscribed = false;
         l.everSubscribed = false;
+        l.outbound = false;
         return &l;
     }
     return nullptr;
@@ -144,6 +147,95 @@ void onCccd(uint16_t conn, BLECharacteristic *, uint16_t value)
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
 }
+
+#if BLE_GATT_MESH_DIAL
+// The outbound half: this node as the central, on the one central link Bluefruit.begin(2, 1) configures.
+BLEClientService meshClientService = BLEClientService(BLEUuid(serviceUuid));
+BLEClientCharacteristic meshClientCharacteristic = BLEClientCharacteristic(BLEUuid(characteristicUuid));
+bool dialing = false;
+ble_gap_addr_t dialAddr{};
+// A peer that dropped, refused or never answered is not redialled for a while: the scanner reports it
+// again within 100 ms.
+#ifndef BLE_GATT_MESH_DIAL_COOLDOWN_MS
+#define BLE_GATT_MESH_DIAL_COOLDOWN_MS 60000
+#endif
+bool cooldownArmed = false;
+ble_gap_addr_t cooldownAddr{};
+uint32_t cooldownSinceMs = 0;
+
+void armCooldown()
+{
+    cooldownAddr = dialAddr;
+    cooldownSinceMs = millis();
+    cooldownArmed = true;
+    dialing = false;
+}
+
+void onNotify(BLEClientCharacteristic *chr, uint8_t *data, uint16_t len)
+{
+    const uint16_t conn = chr->connHandle();
+    if (len == 0 || len > BLE_GATT_MESH_MAX_CHUNK)
+        return;
+    {
+        concurrency::LockGuard guard(&lock);
+        pushRx(conn, data, len);
+    }
+    rxArrived++;
+    if (bleGattMeshHandler)
+        bleGattMeshHandler->wake();
+}
+
+void onCentralConnect(uint16_t conn)
+{
+    // `dialing` stays set until this settles: the scanner is back on and would dial again in the gap.
+    // Discovery blocks; this runs on Bluefruit's callback task, never the SoftDevice's event path.
+    // The SoftDevice runs one GATTC procedure per link at a time, so the MTU exchange comes last.
+    const char *failed = nullptr;
+    if (!Bluefruit.connected(conn))
+        failed = "link gone before discovery";
+    else if (!meshClientService.discover(conn))
+        failed = "service not found";
+    else if (!meshClientCharacteristic.discover())
+        failed = "characteristic not found";
+    else if (!meshClientCharacteristic.enableNotify())
+        failed = "CCCD write refused";
+    if (failed) {
+        LOG_WARN("BLE GATT mesh: dialled conn %u dropped: %s", conn, failed);
+        armCooldown();
+        Bluefruit.disconnect(conn);
+        return;
+    }
+    {
+        concurrency::LockGuard guard(&lock);
+        if (Link *l = addLink(conn)) {
+            l->outbound = true;
+            l->subscribed = true;
+            l->everSubscribed = true;
+        }
+    }
+    dialing = false;
+    if (BLEConnection *c = Bluefruit.Connection(conn))
+        c->requestMtuExchange(BLE_GATT_MESH_MAX_CHUNK + 3);
+    LOG_INFO("BLE GATT mesh: dialled conn %u is a mesh peer (chunk %u)", conn, chunkFor(conn));
+    if (bleGattMeshHandler)
+        bleGattMeshHandler->wake();
+}
+
+void onCentralDisconnect(uint16_t conn, uint8_t reason)
+{
+    {
+        concurrency::LockGuard guard(&lock);
+        if (Link *l = findLink(conn)) {
+            l->used = false;
+            pushRx(conn, nullptr, 0);
+        }
+    }
+    armCooldown();
+    LOG_INFO("BLE GATT mesh: dialled conn %u disconnected (reason 0x%02x)", conn, reason);
+    if (bleGattMeshHandler)
+        bleGattMeshHandler->wake();
+}
+#endif // BLE_GATT_MESH_DIAL
 } // namespace
 
 void NRF52BLEGattMesh::setupService()
@@ -159,6 +251,17 @@ void NRF52BLEGattMesh::setupService()
     meshPeerCharacteristic.setWriteCallback(onWrite, true);
     meshPeerCharacteristic.setCccdWriteCallback(onCccd, true);
     meshPeerCharacteristic.begin();
+#if BLE_GATT_MESH_DIAL
+    static bool clientReady = false;
+    if (!clientReady) {
+        clientReady = true;
+        meshClientService.begin();
+        meshClientCharacteristic.begin();
+        meshClientCharacteristic.setNotifyCallback(onNotify);
+        Bluefruit.Central.setConnectCallback(onCentralConnect);
+        Bluefruit.Central.setDisconnectCallback(onCentralDisconnect);
+    }
+#endif
     {
         concurrency::LockGuard guard(&lock);
         for (auto &l : links)
@@ -188,6 +291,44 @@ void NRF52BLEGattMesh::rearmAdvertising()
     if ((config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER) &&
         Bluefruit.Periph.connected() < 2 && !Bluefruit.Advertising.isRunning())
         Bluefruit.Advertising.start(0);
+}
+
+void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
+{
+#if BLE_GATT_MESH_DIAL
+    if (!report || !(config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER))
+        return;
+    if (!report->type.connectable || dialing || Bluefruit.Central.connected() > 0)
+        return;
+    if (cooldownArmed && memcmp(&cooldownAddr, &report->peer_addr, sizeof(cooldownAddr)) == 0 &&
+        Throttle::isWithinTimespanMs(cooldownSinceMs, BLE_GATT_MESH_DIAL_COOLDOWN_MS))
+        return;
+    // Only the primary advertisement is seen: the mesh scan is passive, so a node that puts the UUID in
+    // its scan response (this firmware on nRF52) is never dialled. Phones put it in the advertisement.
+    if (!Bluefruit.Scanner.checkReportForUuid(report, BLEUuid(serviceUuid)))
+        return;
+    dialing = true;
+    dialAddr = report->peer_addr;
+    if (!Bluefruit.Central.connect(report)) {
+        LOG_WARN("BLE GATT mesh: dial refused by the SoftDevice");
+        armCooldown();
+        return;
+    }
+    const uint8_t *a = report->peer_addr.addr;
+    LOG_INFO("BLE GATT mesh: dialling %02x:%02x:%02x:%02x:%02x:%02x (rssi %d)", a[5], a[4], a[3], a[2], a[1], a[0], report->rssi);
+#else
+    (void)report;
+#endif
+}
+
+void NRF52BLEGattMesh::onDialTimeout()
+{
+#if BLE_GATT_MESH_DIAL
+    if (!dialing)
+        return;
+    LOG_INFO("BLE GATT mesh: dial timed out");
+    armCooldown();
+#endif
 }
 
 void NRF52BLEGattMesh::onConnect(uint16_t conn)
@@ -259,6 +400,21 @@ size_t NRF52BLEGattMesh::platformPeers(BLEGattMeshPeer *out, size_t cap)
 
 bool NRF52BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, size_t len)
 {
+#if BLE_GATT_MESH_DIAL
+    bool outbound = false;
+    {
+        concurrency::LockGuard guard(&lock);
+        Link *l = findLink(peer);
+        outbound = l && l->outbound;
+    }
+    if (outbound) {
+        if (!Bluefruit.Central.connected(peer))
+            return false;
+        // Write-without-response: a full command queue refuses now and the pump retries, where
+        // write_resp would block the main task on every fragment.
+        return meshClientCharacteristic.write(data, (uint16_t)len) == len;
+    }
+#endif
     // Bluefruit's notify blocks up to 100 ms waiting for a buffer, so a peer whose link is gone must be
     // refused here, not discovered by timing out fifty times on the main task.
     if (!Bluefruit.connected(peer))
