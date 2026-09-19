@@ -60,6 +60,12 @@ ScanI2C::FoundDevice ScanI2C::firstRGBLED() const
     return firstOfOrNONE(2, types);
 }
 
+ScanI2C::FoundDevice ScanI2C::firstBuzzer() const
+{
+    ScanI2C::DeviceType types[] = {MODULINO_BUZZER, QWIIC_BUZZER};
+    return firstOfOrNONE(2, types);
+}
+
 ScanI2C::FoundDevice ScanI2C::find(ScanI2C::DeviceType) const
 {
     return DEVICE_NONE;
