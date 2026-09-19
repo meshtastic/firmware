@@ -204,14 +204,13 @@ struct Figures {
 static Figures F;
 static char g_msg[192];
 
-// The one line that moves between stages. At stage 0 this mirrors Router::send() exactly - read the
-// percentage, then hand it back - because that coupling is itself one of the defects under measure.
-// When getSilentMinutes() starts reading the ring itself, this becomes a plain one-argument call and
-// every figure below stays untouched.
+// The one line that moves between stages, and the only edit this commit makes to the demo suite.
+// It used to mirror Router::send() - read the percentage, hand it back - because that coupling was
+// itself one of the defects under measure. getSilentMinutes() now reads the ring itself, so there
+// is nothing to hand it. Every figure below is untouched.
 static uint8_t silentMinutes(AirTime &a, float dutyCycle)
 {
-    const float hourlyTxPercent = a.utilizationTXPercent();
-    return a.getSilentMinutes(hourlyTxPercent, dutyCycle);
+    return a.getSilentMinutes(dutyCycle);
 }
 
 // Identical traffic laid down at every minute phase of the ring.

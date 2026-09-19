@@ -485,7 +485,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
         if (hourlyTxPercent > effectiveDutyCycle) {
-            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
+            uint8_t silentMinutes = airTime->getSilentMinutes(effectiveDutyCycle);
 
             LOG_WARN("Duty cycle limit exceeded, abort send, retry in %d mins", silentMinutes);
 
