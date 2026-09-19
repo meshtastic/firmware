@@ -76,6 +76,10 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
+#ifdef MESHTASTIC_LINUX_BLE
+LinuxBluetooth *linuxBluetooth = nullptr;
+#endif
+
 #ifdef MESHTASTIC_ENABLE_APPROTECT
 #include "security/APProtect.h"
 #endif
@@ -279,7 +283,7 @@ const char *firmware_version = optstr(APP_VERSION_SHORT);
 
 const char *getDeviceName()
 {
-    uint8_t dmac[6];
+    uint8_t dmac[6] = {0};
 
     getMacAddr(dmac);
 
@@ -1351,8 +1355,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
-// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
-#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
+// ESP32-C6 is excluded because we don't have a working bluetooth stack integrated yet.
+// Portduino only has BLE when built against BlueZ/sdbus-c++, so it falls out via !HAS_BLUETOOTH.
+#if defined(ARCH_RP2040) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
