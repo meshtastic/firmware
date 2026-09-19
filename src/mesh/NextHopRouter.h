@@ -170,6 +170,10 @@ class NextHopRouter : public FloodingRouter
     PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
     PendingPacket *findPendingPacket(GlobalPacketId p);
 
+    /** Router::send() hands us the encoded form of a packet we are retransmitting: it replaces the payload of
+     *  the retransmission copy, which is then the exact frame an overheard relay of ours must carry. */
+    void noteWireForm(const meshtastic_MeshPacket *p) override;
+
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
      */
