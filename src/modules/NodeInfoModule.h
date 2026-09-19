@@ -22,7 +22,10 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
      * Send our NodeInfo into the mesh. True only when a packet was handed to the router.
      */
     bool sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
-                         bool _shorterTimeout = false);
+                         bool _shorterTimeout = false, bool bypassCadenceThrottle = false);
+
+    /** Queue one owner announcement after a license transition. */
+    void requestOwnerSync();
 
     /**
      * Schedule an immediate NodeInfo periodic check.
@@ -49,12 +52,14 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
   private:
     bool shorterTimeout = false;
+    bool ownerSyncPending = false;
     bool suppressReplyForCurrentRequest = false;
     /// Sender -> uptime seconds (Time::getUptimeSecs()) at our last reply. Seconds, not millis:
     /// the suppression window is hours wide. See handleReceivedProtobuf().
     std::map<NodeNum, uint32_t> lastNodeInfoSeen;
 
     void pruneLastNodeInfoCache();
+    meshtastic_MeshPacket *allocNodeInfo(bool bypassCadenceThrottle);
 };
 
 extern NodeInfoModule *nodeInfoModule;
