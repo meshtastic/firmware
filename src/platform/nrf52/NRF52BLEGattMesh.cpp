@@ -325,10 +325,10 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
 #if BLE_GATT_MESH_DIAL
     if (!report || !(config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER))
         return;
-    // A scan response is only ever sent by a scannable advertiser, and the one this gate is for - an
-    // iOS app in the background - answers from a connectable ADV_IND; the connectable bit is not
-    // carried on the response report itself.
-    if (!(report->type.connectable || report->type.scan_response) || dialing || Bluefruit.Central.connected() > 0)
+    // A scan-response report carries the advertiser's connectable bit too (every overflow response
+    // logged on 2026-09-19 read conn=1 rsp=1), so this one gate covers both the ADV_IND and the
+    // response, and a scannable-but-not-connectable advertiser is never dialled.
+    if (!report->type.connectable || dialing || Bluefruit.Central.connected() > 0)
         return;
     // A controller holds one link per peer address, so a peer already connected the other way - a
     // phone that dialled this node first - cannot be dialled: the CONNECT_IND is ignored and the
