@@ -12,6 +12,7 @@
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "mesh/Throttle.h"
 #if HAS_BUTTON
 #include "input/ButtonThread.h"
 #endif
@@ -253,7 +254,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     // Handle text_input notifications first - they have their own timeout/banner logic
     if (current_notification_type == notificationTypeEnum::text_input) {
         // Check for timeout and reset if needed for text input
-        if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+        if (alertBannerUntil > 0 && Throttle::deadlinePassed(alertBannerUntil)) {
             resetBanner();
             return;
         }
@@ -261,7 +262,8 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
-    if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+    // 0 means "no deadline set", and reads as long expired - test it first.
+    if (alertBannerUntil > 0 && Throttle::deadlinePassed(alertBannerUntil)) {
         resetBanner();
     }
 
@@ -800,7 +802,10 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     uint16_t screenHeight = display->height();
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
-    uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
+    // Pairing PIN: pass every line, drawNotificationBox fits them (tiny panels spread them over the full screen).
+    uint8_t visibleTotalLines = (current_notification_type == notificationTypeEnum::pairing_pin)
+                                    ? totalLines
+                                    : std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
     uint8_t linesShown = lineCount;
     const char *linePointers[visibleTotalLines + 1] = {0}; // this is sort of a dynamic allocation
 
@@ -938,10 +943,16 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
     uint8_t visibleTotalLines = 0;
     uint16_t contentHeight = 0;
+#if defined(OLED_TINY)
+    // Tiny panels: the pairing PIN takes the whole screen, all lines shown and spread evenly over it.
+    const bool fullScreenPin = (current_notification_type == notificationTypeEnum::pairing_pin);
+#else
+    const bool fullScreenPin = false;
+#endif
     const uint16_t availableHeight = (screenHeight > (vPadding * 2)) ? (screenHeight - vPadding * 2) : 0;
     for (uint8_t i = 0; i < lineCount; i++) {
         uint8_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
-        if (contentHeight + thisLineHeight > availableHeight) {
+        if (!fullScreenPin && contentHeight + thisLineHeight > availableHeight) {
             break;
         }
         contentHeight += thisLineHeight;
@@ -962,7 +973,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     }
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
     boxHeight += (currentResolution == ScreenResolution::High) ? 2 : 1;
-    if (graphics::isCompactPanel(display)) {
+    if (fullScreenPin || graphics::isCompactPanel(display)) {
         boxLeft = 0;
         boxTop = 0;
         boxWidth = display->width();
@@ -1006,6 +1017,11 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     for (int i = 0; i < visibleTotalLines; i++) {
         display->setFont(fontForBannerLine(lineFonts[i]));
         int16_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
+        if (fullScreenPin) {
+            // Equal slots over the full height (10 rows each on a 32px panel, glyphs sit in rows 3..9).
+            thisLineHeight = boxHeight / visibleTotalLines;
+            lineY = i * thisLineHeight;
+        }
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
         if (needs_bell && i == 0) {
             int fontHeight = thisLineHeight + 3;
@@ -1226,7 +1242,8 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 
 bool NotificationRenderer::isOverlayBannerShowing()
 {
-    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+    // Here 0 means "show indefinitely", so it must short-circuit the comparison.
+    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || !Throttle::deadlinePassed(alertBannerUntil));
 }
 
 bool NotificationRenderer::isMenuShowing()

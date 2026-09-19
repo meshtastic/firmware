@@ -92,11 +92,30 @@ lint:
           run: ${workspace}/bin/lint-unity-exit.sh ${target}
           success_codes: [0]
           read_output_from: stdout
+    # Flags a 0-means-unset deadline in src/ armed from a raw millis()/getMillis() read. The sum
+    # lands on 0 once per ~49.7-day wrap and every reader then decides the timer was never set, so
+    # a pending reboot, shutdown, DFU jump or banner expiry is silently dropped. The fix is
+    # Time::timerEndsAtMillis() / Time::skipZero() from src/UptimeClock.h. Unlike its neighbours
+    # this one is blocking: nothing catches it at run time, because the window is one tick in seven
+    # weeks. A site where 0 really is legal opts out with an `unset-sentinel-ok: <reason>` comment on
+    # the write or the line above it; the reason is mandatory, so nothing can be muted silently. The
+    # field list lives in bin/lint-unset-sentinel-millis.sh; read the header there before adding to
+    # it, and re-run bin/test-lint-unset-sentinel-millis.sh after any change to the rule.
+    - name: unset-sentinel-millis
+      files: [cpp-sources]
+      commands:
+        - name: lint
+          output: regex
+          parse_regex: (?P<path>.+):(?P<line>\d+):(?P<col>\d+):(?P<severity>\w+):(?P<message>.+):(?P<code>[a-z-]+)
+          run: ${workspace}/bin/lint-unset-sentinel-millis.sh ${target}
+          success_codes: [0]
+          read_output_from: stdout
   enabled:
     - ascii-dash@SYSTEM
     - too-many-defined@SYSTEM
     - node-id-format@SYSTEM
     - unity-exit@SYSTEM
+    - unset-sentinel-millis@SYSTEM
     - checkov@3.3.8
     - renovate@44.2.3
     - prettier@3.9.6
@@ -130,6 +149,11 @@ lint:
     - linters: [gitleaks]
       paths:
         - test/fixtures/nodedb/seed_v25_*.jsonl
+    # trufflehog's Lob detector matches "test_" followed by alphanumerics, which is every
+    # Unity test function name. There are no credentials in these suites.
+    - linters: [trufflehog]
+      paths:
+        - test/**/test_main.cpp
     # Deliberately broken YAML: these are the inputs to bin/test-config-check.sh,
     # which asserts that `meshtasticd --check` reports each planted fault. Prettier
     # rejects the duplicate keys and bad indentation that are the whole point of
@@ -151,6 +175,26 @@ lint:
     - linters: [ascii-dash]
       paths:
         - src/graphics/fonts/**
+    # millis()-wraparound tests pin dense clusters of hex boundary constants
+    # (0xFFFFFF00u and neighbors). trufflehog's Lob detector stitches nearby
+    # hex literals into one candidate string and the result happens to match
+    # a Lob API key shape. Not secrets - deterministic test fixtures for the
+    # 32-bit rollover. test_ack_proof trips the same detector on its node
+    # numbers and request ids (0x0A0A0A0A, 0x0B0B0B0B, 0xABCD1234); its key
+    # material is generated at runtime by crypto->generateKeyPair, so there is
+    # no literal key in the file to leak.
+    - linters: [trufflehog]
+      paths:
+        - test/test_ack_proof/test_main.cpp
+        - test/test_airtime/test_main.cpp
+        - test/test_throttle/test_main.cpp
+        - test/test_uptime_clock/test_main.cpp
+    # The nightly index templates are halves of one page, not whole documents:
+    # hintro.html stops mid-<div> and houtro.html starts with closing tags, so
+    # that `tree --hintro/--houtro` can splice the file listing between them.
+    - linters: [ALL]
+      paths:
+        - .github/nightly/*.html
 runtimes:
   enabled:
     - python@3.14.4

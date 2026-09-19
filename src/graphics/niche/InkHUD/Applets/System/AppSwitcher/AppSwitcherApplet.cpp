@@ -205,6 +205,8 @@ IconKind iconKindForAppletName(const char *name)
         return IconKind::CHANNEL;
     if (lower.find("position") != std::string::npos)
         return IconKind::POSITIONS;
+    if (lower.find("waypoint") != std::string::npos)
+        return IconKind::POSITIONS;
     if (lower.find("recent") != std::string::npos)
         return IconKind::RECENTS;
     if (lower.find("heard") != std::string::npos)

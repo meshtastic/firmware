@@ -200,7 +200,9 @@ void GeoCoord::latLongToUTM(const double lat, const double lon, UTM &utm)
     double lonOriginRad = toRadians(lonOrigin);
     double eccPrimeSquared = (eccSquared) / (1 - eccSquared);
     double N = a / sqrt(1 - eccSquared * sin(latRad) * sin(latRad));
-    double T = tan(latRad) * tan(latRad);
+    // sin/cos instead of tan: these two conversions are its only callers, and it links its own libm kernel.
+    const double tanLat = sin(latRad) / cos(latRad);
+    double T = tanLat * tanLat;
     double C = eccPrimeSquared * cos(latRad) * cos(latRad);
     double A = cos(latRad) * (lonRad - lonOriginRad);
     double M =
@@ -214,7 +216,7 @@ void GeoCoord::latLongToUTM(const double lat, const double lon, UTM &utm)
             (A + (1 - T + C) * pow(A, 3) / 6 + (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A / 120) +
         500000.0;
     double northingMeters =
-        k0 * (M + N * tan(latRad) *
+        k0 * (M + N * tanLat *
                       (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 +
                        (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A / 720));
 
@@ -283,7 +285,8 @@ void GeoCoord::latLongToOSGR(const double lat, const double lon, OSGR &osgr)
 
     double cos3Phi = cos(phi) * cos(phi) * cos(phi);
     double cos5Phi = cos3Phi * cos(phi) * cos(phi);
-    double tan2Phi = tan(phi) * tan(phi);
+    const double tanPhi = sin(phi) / cos(phi); // see latLongToUTM: avoids linking tan
+    double tan2Phi = tanPhi * tanPhi;
     double tan4Phi = tan2Phi * tan2Phi;
     double I = m + n0;
     double II = (v / 2) * sin(phi) * cos(phi);
@@ -519,41 +522,6 @@ float GeoCoord::bearing(double lat1, double lon1, double lat2, double lon2)
     double y = sin(deltaLonRad) * cos(lat2Rad);
     double x = cos(lat1Rad) * sin(lat2Rad) - (sin(lat1Rad) * cos(lat2Rad) * cos(deltaLonRad));
     return atan2(y, x);
-}
-
-/**
- * Ported from http://www.edwilliams.org/avform147.htm#Intro
- * @brief Convert from meters to range in radians on a great circle
- * @param range_meters
- * The range in meters
- * @return range in radians on a great circle
- */
-float GeoCoord::rangeMetersToRadians(double range_meters)
-{
-    // 1 nm is 1852 meters
-    double distance_nm = range_meters * 1852;
-    return (PI / (180 * 60)) * distance_nm;
-}
-
-/**
- * Create a new point based on the passed-in point
- * Ported from http://www.edwilliams.org/avform147.htm#LL
- * @param bearing
- * The bearing in radians
- * @param range_meters
- * range in meters
- * @return GeoCoord object of point at bearing and range from initial point
- */
-std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range_meters)
-{
-    double range_radians = rangeMetersToRadians(range_meters);
-    double lat1 = this->getLatitude() * 1e-7;
-    double lon1 = this->getLongitude() * 1e-7;
-    double lat = asin(sin(lat1) * cos(range_radians) + cos(lat1) * sin(range_radians) * cos(bearing));
-    double dlon = atan2(sin(bearing) * sin(range_radians) * cos(lat1), cos(range_radians) - sin(lat1) * sin(lat));
-    double lon = fmod(lon1 - dlon + PI, 2 * PI) - PI;
-
-    return std::make_shared<GeoCoord>(double(lat), double(lon), this->getAltitude());
 }
 
 /**

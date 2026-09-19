@@ -81,10 +81,11 @@ class MockRoutingModule : public RoutingModule
 {
   public:
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
-                    bool ackWantsAck = false) override
+                    bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr) override
     {
         (void)hopLimit;
         (void)ackWantsAck;
+        (void)relaySource;
         ackNaks.push_back({err, to, idFrom, chIndex});
     }
 
@@ -265,12 +266,21 @@ static MockMeshService *mockService;
 static MockRouter *mockRouter;
 static MockRoutingModule *mockRoutingModule;
 static NeighborInfoModule *realNeighborInfoModule;
+static RoutingModule *realRoutingModule;
 static std::vector<MeshModule *> dispatchModules;
 
 template <typename T> static T *registerDispatchModule(T *module)
 {
     dispatchModules.push_back(module);
     return module;
+}
+
+// Swap the mocked RoutingModule for a real one. tearDown() owns the cleanup because a failed
+// assertion longjmps out of the test, which would otherwise leave it registered in MeshModule::modules.
+static void installRealRoutingModule()
+{
+    realRoutingModule = new RoutingModule();
+    routingModule = realRoutingModule;
 }
 
 static meshtastic_MeshPacket makeRequest(meshtastic_PortNum port)
@@ -335,6 +345,7 @@ void setUp(void)
 
     mockRoutingModule = new MockRoutingModule();
     routingModule = mockRoutingModule;
+    realRoutingModule = nullptr;
 
     testModule = new TestModule();
     memset(&testPacket, 0, sizeof(testPacket));
@@ -354,6 +365,9 @@ void tearDown(void)
 
     delete testModule;
     testModule = nullptr;
+
+    delete realRoutingModule;
+    realRoutingModule = nullptr;
 
     delete mockRoutingModule;
     mockRoutingModule = nullptr;
@@ -606,6 +620,153 @@ static void test_localReplyToSelf_isDeliveredToPhone()
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size()); // nothing went toward the radio
 }
 
+// handleFromRadio() is private to MeshService, which befriends RoutingModule and, under
+// PIO_UNIT_TESTING, this seam.
+class MeshServicePhoneDeliveryTest
+{
+  public:
+    static void deliver(const meshtastic_MeshPacket &p) { service->handleFromRadio(&p); }
+};
+
+static void test_handleFromRadio_remotePacketReachesPhone()
+{
+    meshtastic_MeshPacket rx = meshtastic_MeshPacket_init_zero;
+    rx.from = REMOTE_NODE;
+    rx.to = NODENUM_BROADCAST;
+    rx.id = 0x0BADF00D;
+    rx.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    rx.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    MeshServicePhoneDeliveryTest::deliver(rx);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0x0BADF00D, toPhone->id);
+    mockService->releaseToPool(toPhone);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
+// A packet we originated, coming back around, must not be echoed to the client that sent it.
+static void test_handleFromRadio_ownPacketIsNotEchoedToPhone()
+{
+    meshtastic_MeshPacket ours = meshtastic_MeshPacket_init_zero;
+    ours.from = LOCAL_NODE;
+    ours.to = NODENUM_BROADCAST;
+    ours.id = 0x5E1F0001;
+    ours.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    ours.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    MeshServicePhoneDeliveryTest::deliver(ours);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+
+    // Same for the from==0 spelling handleToRadio stamps on phone-originated packets.
+    ours.from = 0;
+    ours.id = 0x5E1F0002;
+    MeshServicePhoneDeliveryTest::deliver(ours);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
+// A packet from us *addressed to us* is locally-generated feedback, not an echo, and must still be
+// delivered - suppressing it would silently drop every ACK/NAK the client relies on.
+static void test_handleFromRadio_ownPacketAddressedToUsReachesPhone()
+{
+    meshtastic_MeshPacket ack = meshtastic_MeshPacket_init_zero;
+    ack.from = LOCAL_NODE;
+    ack.to = LOCAL_NODE;
+    ack.id = 0x5E1F0003;
+    ack.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    ack.decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+    ack.decoded.request_id = 0x0C0FFEE0;
+
+    MeshServicePhoneDeliveryTest::deliver(ack);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0x0C0FFEE0, toPhone->decoded.request_id);
+    mockService->releaseToPool(toPhone);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
+// sendAckNak stamps from == our nodenum and to == us, and sendLocal defaults to RX_SRC_RADIO, so the
+// loopback gate never applies and only handleFromRadio's filter gates the implicit ACK / NAK path.
+static void test_localAckNak_reachesPhoneViaRealRoutingModule()
+{
+    installRealRoutingModule();
+
+    realRoutingModule->sendAckNak(meshtastic_Routing_Error_NONE, LOCAL_NODE, 0xFEEDBEEF, 0);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, toPhone->decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0xFEEDBEEF, toPhone->decoded.request_id);
+    TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->to);
+    TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->from);
+    mockService->releaseToPool(toPhone);
+}
+
+// #10767: the implicit ACK for an overheard rebroadcast of our own packet carries that copy's
+// relaying node and the link metrics we heard it at, so the phone can attribute them to the relayer.
+// rx_rssi has explicit presence, so has_rx_rssi has to travel with it or the reading never encodes.
+static void test_localAck_carriesRelaySourceToPhone()
+{
+    installRealRoutingModule();
+
+    meshtastic_MeshPacket overheard = meshtastic_MeshPacket_init_zero;
+    overheard.from = LOCAL_NODE;
+    overheard.to = REMOTE_NODE;
+    overheard.id = 0xFEEDBEEF;
+    overheard.relay_node = 0xAB;
+    overheard.has_rx_rssi = true;
+    overheard.rx_rssi = -93;
+    overheard.rx_snr = 4.75f;
+
+    realRoutingModule->sendAckNak(meshtastic_Routing_Error_NONE, LOCAL_NODE, overheard.id, 0, /*hopLimit=*/0,
+                                  /*ackWantsAck=*/false, &overheard);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0xFEEDBEEF, toPhone->decoded.request_id);
+    TEST_ASSERT_EQUAL_HEX8(0xAB, toPhone->relay_node);
+    TEST_ASSERT_TRUE(toPhone->has_rx_rssi);
+    TEST_ASSERT_EQUAL_INT32(-93, toPhone->rx_rssi);
+    TEST_ASSERT_EQUAL_FLOAT(4.75f, toPhone->rx_snr);
+    mockService->releaseToPool(toPhone);
+}
+
+// Every other ACK/NAK passes no relay source and must reach the phone with the relay fields clear,
+// so the client is never told a relayer we did not hear.
+static void test_localAck_withoutRelaySource_leavesRelayFieldsUnset()
+{
+    installRealRoutingModule();
+
+    realRoutingModule->sendAckNak(meshtastic_Routing_Error_NONE, LOCAL_NODE, 0x0BADF00D, 0);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0x0BADF00D, toPhone->decoded.request_id);
+    TEST_ASSERT_EQUAL_HEX8(NO_RELAY_NODE, toPhone->relay_node);
+    TEST_ASSERT_FALSE(toPhone->has_rx_rssi);
+    mockService->releaseToPool(toPhone);
+}
+
+// The mirror of the above: a broadcast we originated, heard back off the mesh, must not reach the
+// phone even though it travels the same RoutingModule path.
+static void test_ownBroadcastEcho_isDroppedByRealRoutingModule()
+{
+    installRealRoutingModule();
+
+    meshtastic_MeshPacket echo = meshtastic_MeshPacket_init_zero;
+    echo.from = LOCAL_NODE;
+    echo.to = NODENUM_BROADCAST;
+    echo.id = 0x5E1F0004;
+    echo.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    echo.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    MeshModule::callModules(echo, RX_SRC_RADIO);
+
+    TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
 // Full loop: a phone-originated want_response request (from == 0, RX_SRC_USER) dispatched
 // through the real router must produce a module reply that reaches the phone queue.
 static void test_phoneRequest_replyReachesPhone()
@@ -736,6 +897,13 @@ void setup()
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
+    RUN_TEST(test_handleFromRadio_remotePacketReachesPhone);
+    RUN_TEST(test_handleFromRadio_ownPacketIsNotEchoedToPhone);
+    RUN_TEST(test_handleFromRadio_ownPacketAddressedToUsReachesPhone);
+    RUN_TEST(test_localAckNak_reachesPhoneViaRealRoutingModule);
+    RUN_TEST(test_localAck_carriesRelaySourceToPhone);
+    RUN_TEST(test_localAck_withoutRelaySource_leavesRelayFieldsUnset);
+    RUN_TEST(test_ownBroadcastEcho_isDroppedByRealRoutingModule);
     RUN_TEST(test_phoneRequest_replyReachesPhone);
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
