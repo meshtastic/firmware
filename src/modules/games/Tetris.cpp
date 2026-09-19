@@ -285,7 +285,7 @@ int32_t Tetris::tickIntervalMs() const
     return iv < 50 ? 50 : iv;
 }
 
-void Tetris::handleInput(input_broker_event ev)
+void Tetris::handleInput(input_broker_event ev, unsigned char kbchar)
 {
     switch (ev) {
     case INPUT_BROKER_UP:

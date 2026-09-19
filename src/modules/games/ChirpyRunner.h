@@ -154,7 +154,7 @@ class ChirpyRunner : public Game
     uint32_t score() const override { return game.score(); }
     int32_t tickIntervalMs() const override { return 33; } // ~30 fps; difficulty ramps via scroll speed
 
-    void handleInput(input_broker_event ev) override;
+    void handleInput(input_broker_event ev, unsigned char kbchar) override;
 
     void drawAttract(OLEDDisplay *display, int16_t x, int16_t y) override;
     void drawPlaying(OLEDDisplay *display, int16_t x, int16_t y) override;

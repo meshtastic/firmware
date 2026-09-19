@@ -2275,18 +2275,8 @@ int Screen::handleInputEvent(const InputEvent *event)
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {
 
-        // Ask any MeshModules if they're handling keyboard input right now
-        bool inputIntercepted = false;
-        for (MeshModule *module : moduleFrames) {
-            if (module && module->interceptingKeyboardInput())
-                inputIntercepted = true;
-        }
-#if BASEUI_HAS_GAMES
-        // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
-        // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
-        if (gamesModule && gamesModule->interceptingKeyboardInput())
-            inputIntercepted = true;
-#endif
+        // Ask any MeshModules (and the games frame) if they're handling keyboard input right now
+        const bool inputIntercepted = anyModuleInterceptingInput();
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
@@ -2447,6 +2437,40 @@ bool Screen::isTextMessageFrameShown() const
 bool Screen::isGamesFrameShown()
 {
     return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
+}
+
+void Screen::showHomeFrame()
+{
+    if (ui && framesetInfo.positions.home != 255)
+        ui->switchToFrame(framesetInfo.positions.home);
+}
+
+bool Screen::anyModuleInterceptingInput()
+{
+    for (MeshModule *module : moduleFrames) {
+        if (module && module->interceptingKeyboardInput())
+            return true;
+    }
+#if BASEUI_HAS_GAMES
+    // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it owns
+    // the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
+    if (gamesModule && gamesModule->interceptingKeyboardInput())
+        return true;
+#endif
+    return false;
+}
+
+bool Screen::isInteractionBusy()
+{
+    // Something is holding the D-pad -- the user is mid-interaction. A modal module owns the whole
+    // screen; an intercepting one owns the keys on its own frame.
+    if (hasModalModule() || anyModuleInterceptingInput())
+        return true;
+    // An interactive overlay (picker / text entry) is open. Showing a transient banner REPLACES the
+    // active overlay, so this would silently discard whatever the user was entering. A plain
+    // text_banner is itself transient, so superseding one of those is fine.
+    const notificationTypeEnum nt = NotificationRenderer::current_notification_type;
+    return nt != notificationTypeEnum::none && nt != notificationTypeEnum::text_banner;
 }
 
 } // namespace graphics
