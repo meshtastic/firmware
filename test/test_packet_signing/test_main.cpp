@@ -196,8 +196,8 @@ class AuthPipelineRoutingModule : public RoutingModule
   public:
     AuthPipelineRouter *target = nullptr;
 
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t = 0,
-                    bool = false, const meshtastic_MeshPacket * = nullptr) override
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t = 0, bool = false,
+                    const meshtastic_MeshPacket * = nullptr) override
     {
         ackCalls++;
         if (target == nullptr || err == meshtastic_Routing_Error_NONE)
