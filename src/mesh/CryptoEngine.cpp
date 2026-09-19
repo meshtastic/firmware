@@ -2,6 +2,7 @@
 // #include "NodeDB.h"
 #include "aes-ccm.h"
 #include "architecture.h"
+#include "endian.h"
 #include <SHA256.h>
 #include <memory>
 
@@ -99,10 +100,13 @@ static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode
     size_t totalLen = headerLen + payloadLen;
     if (totalLen > bufSize)
         return 0;
-    // May need endian conversion for oddball platforms.
-    memcpy(buf, &fromNode, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
+    // Little-endian on the wire, so signer and verifier agree across host byte orders.
+    uint32_t leFromNode = meshHtoLe32(fromNode);
+    uint32_t lePacketId = meshHtoLe32(packetId);
+    uint32_t lePortnum = meshHtoLe32(portnum);
+    memcpy(buf, &leFromNode, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t), &lePacketId, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t) * 2, &lePortnum, sizeof(uint32_t));
     memcpy(buf + headerLen, payload, payloadLen);
     return totalLen;
 }
@@ -230,6 +234,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     if (!HardwareRNG::fill((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp)))
         CryptRNG.rand((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
     auth = bytesOut + numBytes;
+    uint32_t leExtraNonce = meshHtoLe32(extraNonceTmp); // wire format is little-endian
     LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
@@ -245,7 +250,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     printBytes("Attempt encrypt with nonce: ", nonce, 13);
     printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
-    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
+    memcpy((uint8_t *)(auth + 8), &leExtraNonce,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     return true;
 }
@@ -268,6 +273,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     uint32_t extraNonce;                         // pointer was not really used
     memcpy(&extraNonce, auth + 8,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
+    extraNonce = meshLe32toH(extraNonce); // Wire format is LE; convert to host endian for initNonce
     LOG_INFO("Random nonce value: %d", extraNonce);
 
     if (remotePublic.size == 0) {
@@ -428,12 +434,14 @@ bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_pu
 
 #endif
 
-// AAD layout: [fromNode (4)] [toNode (4)], in the same native byte order initNonce uses.
+// AAD layout: [fromNode (4)] [toNode (4)], little-endian like the nonce.
 static void initAad(uint32_t fromNode, uint32_t toNode, uint8_t *aad)
 {
-    // memcpy to avoid breaking strict-aliasing, as initNonce does
-    memcpy(aad, &fromNode, sizeof(uint32_t));
-    memcpy(aad + sizeof(uint32_t), &toNode, sizeof(uint32_t));
+    // Little-endian on the wire, like the nonce. memcpy to avoid breaking strict-aliasing.
+    uint32_t leFromNode = meshHtoLe32(fromNode);
+    uint32_t leToNode = meshHtoLe32(toNode);
+    memcpy(aad, &leFromNode, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint32_t), &leToNode, sizeof(uint32_t));
 }
 
 bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
@@ -537,11 +545,16 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extr
 {
     memset(nonce, 0, sizeof(nonce));
 
-    // use memcpy to avoid breaking strict-aliasing
-    memcpy(nonce, &packetId, sizeof(uint64_t));
-    memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
-    if (extraNonce)
-        memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+    // Protocol uses little-endian byte order for nonce fields.
+    // On big-endian hosts, swap before memcpy to match wire format.
+    uint64_t lePacketId = meshHtoLe64(packetId);
+    uint32_t leFromNode = meshHtoLe32(fromNode);
+    memcpy(nonce, &lePacketId, sizeof(uint64_t));
+    memcpy(nonce + sizeof(uint64_t), &leFromNode, sizeof(uint32_t));
+    if (extraNonce) {
+        uint32_t leExtra = meshHtoLe32(extraNonce);
+        memcpy(nonce + sizeof(uint32_t), &leExtra, sizeof(uint32_t));
+    }
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
