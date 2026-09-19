@@ -91,7 +91,7 @@ RF95Interface::RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIO
 /** Some boards require GPIO control of tx vs rx paths */
 void RF95Interface::setTransmitEnable(bool txon)
 {
-#ifdef RF95_TXEN
+#if defined(RF95_TXEN) && (RF95_TXEN != RADIOLIB_NC)
     digitalWrite(RF95_TXEN, txon ? 1 : 0);
 #elif ARCH_PORTDUINO
     if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
@@ -99,7 +99,7 @@ void RF95Interface::setTransmitEnable(bool txon)
     }
 #endif
 
-#ifdef RF95_RXEN
+#if defined(RF95_RXEN) && (RF95_RXEN != RADIOLIB_NC)
     digitalWrite(RF95_RXEN, txon ? 0 : 1);
 #elif ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
@@ -113,7 +113,7 @@ void RF95Interface::setTransmitEnable(bool txon)
 /// \return true if initialisation succeeded.
 bool RF95Interface::init()
 {
-#ifdef RF95_POWER_EN
+#if defined(RF95_POWER_EN) && (RF95_POWER_EN != RADIOLIB_NC)
     pinMode(RF95_POWER_EN, OUTPUT);
     digitalWrite(RF95_POWER_EN, HIGH);
 #endif
@@ -153,17 +153,17 @@ bool RF95Interface::init()
     #define RF95_RXEN (23) // If defined, this pin should be set high prior to receive (controls an external analog switch)
     */
 
-#ifdef RF95_TXEN
+#if defined(RF95_TXEN) && (RF95_TXEN != RADIOLIB_NC)
     pinMode(RF95_TXEN, OUTPUT);
     digitalWrite(RF95_TXEN, 0);
 #endif
 
-#ifdef RF95_FAN_EN
+#if defined(RF95_FAN_EN) && (RF95_FAN_EN != RADIOLIB_NC)
     pinMode(RF95_FAN_EN, OUTPUT);
     digitalWrite(RF95_FAN_EN, 1);
 #endif
 
-#ifdef RF95_RXEN
+#if defined(RF95_RXEN) && (RF95_RXEN != RADIOLIB_NC)
     pinMode(RF95_RXEN, OUTPUT);
     digitalWrite(RF95_RXEN, 1);
 #endif
@@ -411,11 +411,11 @@ bool RF95Interface::sleep()
     (void)trySetStandby(); // First cancel any active receiving/sending - going to sleep, a failure must not crash
     lora->sleep();
 
-#ifdef RF95_POWER_EN
+#if defined(RF95_POWER_EN) && (RF95_POWER_EN != RADIOLIB_NC)
     digitalWrite(RF95_POWER_EN, LOW);
 #endif
 
-#ifdef RF95_FAN_EN
+#if defined(RF95_FAN_EN) && (RF95_FAN_EN != RADIOLIB_NC)
     digitalWrite(RF95_FAN_EN, 0);
 #endif
 
