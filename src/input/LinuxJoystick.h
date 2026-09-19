@@ -41,7 +41,7 @@ class LinuxJoystick : public Observable<const InputEvent *>, public concurrency:
     virtual int32_t runOnce() override;
 
   private:
-    void emitEvent(input_broker_event event);
+    void emitEvent(input_broker_event event, unsigned char kbchar = 0);
 
     const char *_originName;
     bool firstTime = true;
