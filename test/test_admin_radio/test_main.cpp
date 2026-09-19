@@ -844,6 +844,30 @@ static void test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, cfg.modem_preset);
 }
 
+static void test_clampConfigLora_longSlowOnJPClampedToLongFast()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_longModerateOnJPClampedToLongFast()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
 static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
 {
     // Validation (no clamp) must keep failing so callers route into clampConfigLora,
@@ -2595,6 +2619,8 @@ void setup()
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
     RUN_TEST(test_clampConfigLora_unsetRegionKeepsRealPreset);
     RUN_TEST(test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault);
+    RUN_TEST(test_clampConfigLora_longSlowOnJPClampedToLongFast);
+    RUN_TEST(test_clampConfigLora_longModerateOnJPClampedToLongFast);
 
     // Region-locked preset swap
     RUN_TEST(test_clampConfigLora_narrowPresetOnEU866SwapsToEUN868);
