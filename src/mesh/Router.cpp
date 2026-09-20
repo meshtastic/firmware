@@ -480,12 +480,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
 
-    // Abort sending if we are violating the duty cycle
+    // Abort sending if this packet would take us over the duty cycle. Admission counts the packet's
+    // own airtime, so the one that would cross the line is refused rather than the one after it.
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
-        float hourlyTxPercent = airTime->utilizationTXPercent();
-        if (hourlyTxPercent > effectiveDutyCycle) {
-            uint8_t silentMinutes = airTime->getSilentMinutes(effectiveDutyCycle);
+        const uint32_t proposedMs = iface ? iface->getPacketTime(p) : 0;
+        if (airTime->wouldExceedDutyCycle(proposedMs, effectiveDutyCycle)) {
+            uint8_t silentMinutes = airTime->getSilentMinutes(effectiveDutyCycle, proposedMs);
 
             LOG_WARN("Duty cycle limit exceeded, abort send, retry in %d mins", silentMinutes);
 
