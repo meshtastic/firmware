@@ -242,10 +242,26 @@ void loadBondedIdentities()
         LOG_INFO("BLE GATT mesh: %u bonded phone identit%s loaded, so a rotated address resolves", n, n == 1 ? "y" : "ies");
 }
 
-// Per link, the last advertiser passed over because it is that link's peer, so the skip is logged once
-// per address per link rather than on every report - two held peers advertising would otherwise
-// alternate and flood the log (they did, 2026-09-19).
-ble_gap_addr_t lastSkipped[BLE_MAX_CONNECTION]{};
+// Per link, the last few advertiser addresses passed over because they are that link's peer, so the
+// skip is logged once per address per link rather than on every report. A single slot was not enough:
+// an Android phone advertises under two private addresses at once (one per advertising set, another
+// on its connection), and alternating reports flooded the log at one line every ten seconds
+// overnight (2026-09-20, 4385 lines). Four covers that with room for a rotation.
+constexpr uint8_t SKIPPED_RING = 4;
+ble_gap_addr_t skipped[BLE_MAX_CONNECTION][SKIPPED_RING]{};
+uint8_t skippedNext[BLE_MAX_CONNECTION]{};
+
+// Whether this address was already passed over for link `c`; records it when not.
+bool skippedBefore(uint16_t c, const ble_gap_addr_t &addr)
+{
+    for (const ble_gap_addr_t &seen : skipped[c]) {
+        if (memcmp(&seen, &addr, sizeof(addr)) == 0)
+            return true;
+    }
+    skipped[c][skippedNext[c]] = addr;
+    skippedNext[c] = (skippedNext[c] + 1) % SKIPPED_RING;
+    return false;
+}
 
 void armCooldown()
 {
@@ -445,8 +461,7 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
             continue;
         bool byIdentity = false;
         if (sameDevice(bc->getPeerAddr(), report->peer_addr, byIdentity)) {
-            if (memcmp(&lastSkipped[c], &report->peer_addr, sizeof(lastSkipped[c])) != 0) {
-                lastSkipped[c] = report->peer_addr;
+            if (!skippedBefore(c, report->peer_addr)) {
                 const uint8_t *a = report->peer_addr.addr;
                 LOG_INFO("BLE GATT mesh: not dialling %02x:%02x:%02x:%02x:%02x:%02x (%s), already linked on conn %u", a[5], a[4],
                          a[3], a[2], a[1], a[0], byIdentity ? "identity" : "address", c);
