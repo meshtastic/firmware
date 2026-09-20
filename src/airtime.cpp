@@ -425,20 +425,23 @@ bool AirTime::isTxAllowedChannelUtil(bool polite)
     return false;
 }
 
-bool AirTime::isTxAllowedAirUtil()
+bool AirTime::isRoutineBroadcastAllowed()
 {
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
-        float limit = effectiveDutyCycle * polite_duty_cycle_percent / 100;
-        float utilization;
+        const float share = effectiveDutyCycle * routine_broadcast_share_percent / 100;
+        // No packet exists yet, so admit the widest frame the preset can carry. Rounding up is the
+        // safe direction, and on the fast presets it is a fraction of a percent of the share.
+        const uint32_t widestMs = getMaxPacketAirtimeMsec();
+        bool exceeds;
         {
             Held held(this);
-            utilization = w.utilizationTXPercent(held);
+            exceeds = w.wouldExceedDutyCycle(widestMs, share, held);
         }
 
-        if (utilization < limit)
+        if (!exceeds)
             return true;
-        LOG_WARN("TX air util. >%f%%. Skip send", limit);
+        LOG_WARN("Routine share of duty cycle (%.2f%%) spent, skip broadcast", share);
         return false;
     }
     return true;

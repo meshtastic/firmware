@@ -38,7 +38,13 @@
                                  the same, behind a ~21 min EMA folded per bucket
     utilizationTXPercent()       % of the last hour we transmitted
     isTxAllowedChannelUtil()     gate on the former, 40% or 25% "polite"
-    isTxAllowedAirUtil()         gate on the latter, at HALF the duty cycle
+    isRoutineBroadcastAllowed()  may a periodic broadcast (NodeInfo, telemetry,
+                                 NeighborInfo...) go out. Routine traffic may
+                                 spend only the FIRST HALF of the hour's duty
+                                 cycle; the second half is kept for the user's
+                                 own packets and for relaying. Gated on the
+                                 preset's widest frame, since the caller has no
+                                 packet yet.
     wouldExceedDutyCycle()       admission: would the hour's TX plus a proposed
                                  packet's airtime cross a limit. Router::send()
                                  gates every packet on it, so the packet that
@@ -135,9 +141,9 @@ enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 //     core method's `const Held &`, so the lock cannot be forgotten.
 //
 // Every public method takes the lock exactly once and delegates, with two exceptions: the two
-// constexpr accessors below touch no state and take none, and isTxAllowedAirUtil() takes it zero or
-// one times, depending on whether the duty-cycle branch is entered at all. Nothing inside locks -
-// that includes isTxAllowed*(), which call the core rather than the public accessors.
+// constexpr accessors below touch no state and take none, and isRoutineBroadcastAllowed() takes it
+// zero or one times, depending on whether the duty-cycle branch is entered at all. Nothing inside
+// locks - the gates call the core rather than the public accessors.
 //
 // A new write-path helper belongs to Windows or is a free function, never a method on AirTime: an
 // AirTime method locks, and logAirtime() would call it while already holding the lock.
@@ -172,7 +178,9 @@ class AirTime : private concurrency::OSThread
     /// of it, would sit at `dutyCycle` or below.
     uint8_t getSilentMinutes(float dutyCycle, uint32_t proposedMs = 0);
     bool isTxAllowedChannelUtil(bool polite = false);
-    bool isTxAllowedAirUtil();
+    /// Whether a periodic broadcast may go out: the preset's widest frame must fit inside the
+    /// routine share of the hour's duty cycle. User packets and relays are gated in Router::send().
+    bool isRoutineBroadcastAllowed();
 
   private:
     concurrency::Lock lock;
@@ -260,7 +268,8 @@ class AirTime : private concurrency::OSThread
 
     uint8_t max_channel_util_percent = 40;
     uint8_t polite_channel_util_percent = 25;
-    uint8_t polite_duty_cycle_percent = 50; // half of Duty Cycle allowance is ok for metadata
+    // Routine broadcasts may spend this much of the hour's duty cycle; the rest is the user's.
+    uint8_t routine_broadcast_share_percent = 50;
 
   protected:
     virtual int32_t runOnce() override;

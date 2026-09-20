@@ -227,7 +227,7 @@ NodeInfoModule::NodeInfoModule()
 
 int32_t NodeInfoModule::runOnce()
 {
-    if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+    if (airTime->isRoutineBroadcastAllowed() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         // If we changed channels, ask everyone else for their latest info
         bool requestReplies = currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
