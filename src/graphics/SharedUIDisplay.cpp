@@ -657,7 +657,17 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 
     display->setColor(BLACK);
 #if GRAPHICS_TFT_COLORING_ENABLED
-    display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+    // The full-width bar reads as a clean footer where there is room below the body, but the band is
+    // the bottom (connection_icon_height + 2) rows and the body grid does not shrink with the panel:
+    // textSixthLine is 58 whatever the height, so on a 64-row display the bar lands exactly on it and
+    // erases the last thing the frame drew (the sixth body line, the LoRa ChUtil bar, the clock).
+    // Only the icon's own rect is colour-tinted, so the wide fill buys the tint nothing - fall back to
+    // the icon-width fill, as the monochrome path already does, whenever it would overlap the body.
+    const int bodyBottom = getTextPositions(display)[6] + FONT_HEIGHT_SMALL;
+    if (footerY >= bodyBottom)
+        display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+    else
+        display->fillRect(0, footerY, connection_icon_width + 1, footerH);
 #else
     display->fillRect(0, footerY, connection_icon_width + 1, footerH);
 #endif

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Meshtastic Nightly v%%VERSION%%</title>
+<meta name="description" content="Nightly firmware builds from the tip of the Meshtastic develop branch.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -22.5 100 100'%3E%3Cg fill='rgb(103,234,148)' transform='matrix(0.802386,0,0,0.460028,-421.748,-122.127)'%3E%3Cpath transform='matrix(0.579082,0,0,1.01004,460.975,-39.6867)' d='M250.908,330.267L193.126,415.005L180.938,406.694L244.802,313.037C246.174,311.024 248.453,309.819 250.889,309.816C253.326,309.814 255.606,311.015 256.982,313.026L320.994,406.536L308.821,414.869L250.908,330.267Z'/%3E%3Cpath transform='matrix(0.582378,0,0,1.01579,485.019,-211.182)' d='M87.642,581.398L154.757,482.977L142.638,474.713L75.523,573.134L87.642,581.398Z'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #ffffff;
+    --panel: #fbfbfc;
+    --fg: #2c2d3c;
+    --muted: #6b6d80;
+    --rule: #e3e4ea;
+    --accent: #0f9d58;
+    --logo: #2c2d3c;
+    --notice-bg: #fff9e8;
+    --notice-rule: #e8b931;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1c26;
+      --panel: #23242f;
+      --fg: #e7e8ee;
+      --muted: #9a9cb0;
+      --rule: #32343f;
+      --accent: #67ea94;
+      --logo: #ffffff;
+      --notice-bg: #2b2618;
+      --notice-rule: #b9902a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2.5rem 1.25rem 4rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 62rem; margin: 0 auto; }
+  a { color: var(--accent); }
+  header { display: flex; align-items: center; gap: 0.85rem; }
+  header svg { width: 46px; height: auto; fill: var(--logo); flex: none; }
+  h1 {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+  }
+  h1 .sub {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .lede { margin: 1.5rem 0 0; max-width: 46rem; color: var(--muted); }
+  code {
+    padding: 0.1em 0.35em;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    font: 0.88em ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--fg);
+  }
+  dl.meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.3rem 1.25rem;
+    margin: 1.5rem 0 0;
+    font-size: 0.86rem;
+  }
+  dl.meta dt { color: var(--muted); }
+  dl.meta dd {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .notice {
+    margin: 1.75rem 0 0;
+    padding: 0.8rem 1rem;
+    background: var(--notice-bg);
+    border-left: 3px solid var(--notice-rule);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.9rem;
+  }
+  h2 {
+    margin: 2.5rem 0 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .tree {
+    padding: 1rem 1.15rem;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow-x: auto;
+    white-space: nowrap;
+    font: 12.5px/1.75 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--muted);
+  }
+  .tree a { color: var(--fg); text-decoration: none; }
+  .tree a:hover { color: var(--accent); text-decoration: underline; }
+  footer {
+    margin: 2.5rem 0 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  footer a { margin-right: 1.25rem; white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg viewBox="0 0 100 55" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Meshtastic">
+      <g transform="matrix(0.802386,0,0,0.460028,-421.748,-122.127)">
+        <path transform="matrix(0.579082,0,0,1.01004,460.975,-39.6867)" d="M250.908,330.267L193.126,415.005L180.938,406.694L244.802,313.037C246.174,311.024 248.453,309.819 250.889,309.816C253.326,309.814 255.606,311.015 256.982,313.026L320.994,406.536L308.821,414.869L250.908,330.267Z"/>
+        <path transform="matrix(0.582378,0,0,1.01579,485.019,-211.182)" d="M87.642,581.398L154.757,482.977L142.638,474.713L75.523,573.134L87.642,581.398Z"/>
+      </g>
+    </svg>
+    <h1>Meshtastic<span class="sub">Nightly Firmware</span></h1>
+  </header>
+
+  <p class="lede">
+    Firmware built straight from the tip of <code>develop</code>, published every night.
+    Grab a <code>.bin</code>, <code>.uf2</code> or <code>.hex</code> for your board below, or point the
+    <a href="https://flasher.meshtastic.org">Web Flasher</a> at the nightly channel and let it pick for you.
+  </p>
+
+  <dl class="meta">
+    <dt>Version</dt><dd>%%VERSION%%</dd>
+    <dt>Commit</dt><dd><a href="https://github.com/meshtastic/firmware/commit/%%COMMIT%%">%%COMMIT_SHORT%%</a></dd>
+    <dt>Built</dt><dd>%%BUILD_DATE%%</dd>
+    <dt>Build log</dt><dd><a href="%%RUN_URL%%">run %%RUN_ID%%</a></dd>
+  </dl>
+
+  <p class="notice">
+    Nightlies are untested pre-release builds and can be unstable. Only flash hardware you can afford to
+    fully erase, and back up your config first. Start with the
+    <a href="./release_notes.md">release notes</a> &mdash; they cover what changed and how to report what you find.
+  </p>
+
+  <h2>Files</h2>
+  <div class="tree">

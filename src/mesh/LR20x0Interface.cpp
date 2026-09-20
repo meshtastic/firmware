@@ -6,6 +6,12 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
+#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
+// The DCDC sensitivity workaround pokes RadioLib-internal DCDC registers that are NOT exposed via the
+// public LR2021.h, so pull in the internal register map explicitly. Opt-in only (see LR2021_DCDC_WORKAROUND).
+#include <modules/LR2021/LR2021_registers.h>
+#endif
+
 // Keep LR20x0 naming while RadioLib exposes LR2021 symbols.
 #ifndef LR20x0
 #define LR20x0 LR2021
@@ -15,14 +21,34 @@
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
-#define lr20x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
-#define lr20x0_rfswitch_table portduino_config.rfswitch_table
+
+// Switch-capable DIOs in slot order with this part's constants.
+static const int8_t lr20x0_switch_dio_nums[] = {5, 6, 7, 8, 9, 10, 11};
+static const uint32_t lr20x0_switch_dio_consts[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
+                                                    RADIOLIB_LR2021_DIO8, RADIOLIB_LR2021_DIO9, RADIOLIB_LR2021_DIO10,
+                                                    RADIOLIB_LR2021_DIO11};
+static_assert(sizeof(lr20x0_switch_dio_nums) / sizeof(lr20x0_switch_dio_nums[0]) ==
+                  sizeof(lr20x0_switch_dio_consts) / sizeof(lr20x0_switch_dio_consts[0]),
+              "LR20x0 switch DIO numbers and constants must describe the same slots");
+
+// This part has MODE_RX_HF and no MODE_TX_HP/MODE_GNSS/MODE_WIFI.
+static const int32_t lr20x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
+    LR20x0::MODE_STBY,  LR20x0::MODE_RX,    LR20x0::MODE_TX,       RFSW_MODE_UNSUPPORTED,
+    LR20x0::MODE_TX_HF, LR20x0::MODE_RX_HF, RFSW_MODE_UNSUPPORTED, RFSW_MODE_UNSUPPORTED,
+};
+
+static uint32_t lr20x0_rfswitch_dio_pins[Module::RFSWITCH_MAX_PINS];
+static Module::RfSwitchMode_t lr20x0_rfswitch_table[RFSW_MODE_COUNT + 1];
 #else
 static const uint32_t lr20x0_rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
     {LR20x0::MODE_STBY, {}},  {LR20x0::MODE_RX, {}},    {LR20x0::MODE_TX, {}},
     {LR20x0::MODE_RX_HF, {}}, {LR20x0::MODE_TX_HF, {}}, END_OF_MODE_TABLE,
 };
+#endif
+
+#ifdef LR2021_CUSTOM_PA_TABLE
+#include "pa_table.h"
 #endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
@@ -46,6 +72,12 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 // Last programmed carrier; LF/HF hops use full begin() (live setOutputPower returns -706).
 static float lr20x0LastFreqMHz = 0;
 
+// Unlike SX126x/LR11x0 (on/off bool), the LR2021 RX gain boost is a 0-7 level (0 = disabled, 7 = max boost).
+// Map the historical on/off sx126x_rx_boosted_gain flag to max boost when enabled.
+#ifndef LR2021_RX_GAIN_BOOST_LEVEL
+#define LR2021_RX_GAIN_BOOST_LEVEL 7
+#endif
+
 template <typename T>
 LR20x0Interface<T>::LR20x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                     RADIOLIB_PIN_TYPE busy)
@@ -65,8 +97,16 @@ template <typename T> bool LR20x0Interface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
-// FIXME: correct logic to default to not using TCXO if no voltage is specified for LR20x0_DIO3_TCXO_VOLTAGE
+    // An explicit Vref wins; probing with none given tries the radio default first.
+    float tcxoVoltage;
+    if (portduino_config.dio3_tcxo_voltage > 0)
+        tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    else if (TCXO_OPTIONAL_ENABLED)
+        tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    else
+        tcxoVoltage = 0;
+    if (portduino_config.dio3_tcxo_voltage <= 0 && TCXO_OPTIONAL_ENABLED)
+        LOG_DEBUG("TCXO_OPTIONAL: no Lora.DIO3_TCXO_VOLTAGE set, trying default TCXO Vref %f V first", tcxoVoltage);
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
     LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", LR2021_DIO3_TCXO_VOLTAGE);
@@ -90,6 +130,18 @@ template <typename T> bool LR20x0Interface<T>::init()
 #elif defined(IRQ_DIO_NUM)
     lora.irqDioNum = IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+#elif defined(ARCH_PORTDUINO)
+    // Unset keeps RadioLib's default of DIO5, which many carriers also drive as a switch line. The
+    // range is checked again here because a DIO the radio cannot drive is a silently dead receiver.
+    if (portduino_config.irq_dio_num < 0) {
+        LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+    } else if (portduino_config.irq_dio_num >= kLr20x0IrqDioMin && portduino_config.irq_dio_num <= kLr20x0IrqDioMax) {
+        lora.irqDioNum = portduino_config.irq_dio_num;
+        LOG_DEBUG("Set irqDioNum %d from config", lora.irqDioNum);
+    } else {
+        LOG_WARN("Config irqDioNum %d outside DIO%d-DIO%d, using default irqDioNum %d", portduino_config.irq_dio_num,
+                 kLr20x0IrqDioMin, kLr20x0IrqDioMax, lora.irqDioNum);
+    }
 #else
     LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
 #endif
@@ -124,21 +176,39 @@ template <typename T> bool LR20x0Interface<T>::init()
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     }
 
-#if defined(TCXO_OPTIONAL)
     // If init failed for any reason other than chip not found, retry without TCXO (XTAL mode)
-    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+    if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("LR20x0 init failed with TCXO Vref %f V (err %d), retry without TCXO", tcxoVoltage, res);
         tcxoVoltage = 0;
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("LR20x0 init success without TCXO (XTAL mode)");
     }
-#endif
 
     // \todo Display actual typename of the adapter, not just `LR20x0`
     LOG_INFO("LR20x0 init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
+
+        // Some basic info about the module's explicit firmware version - no other info available
+        // Currently requires radiolib godmode
+
+#if RADIOLIB_GODMODE
+    if (res == RADIOLIB_ERR_NONE) {
+        uint8_t fwMajor = 0;
+        uint8_t fwMinor = 0;
+        int versionRes = lora.getVersion(&fwMajor, &fwMinor);
+        if (versionRes == RADIOLIB_ERR_NONE)
+            LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
+    }
+#endif
+
+    // Semtech DCDC sensitivity workaround for sub-GHz operation - applied here after lora.begin() has set the
+    // packet type and modulation params. reconfigure() reapplies it after its own modulation changes.
+    if (res == RADIOLIB_ERR_NONE)
+        applyDcdcWorkaround();
+
+    applyCustomLfPaTable(getFreq());
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
@@ -147,10 +217,26 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
+        // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
+        // Currently requires radiolib godmode
+#if RADIOLIB_GODMODE
+    if (res == RADIOLIB_ERR_NONE) {
+        uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
+        // godmode-only DCDC ramp tuning: log failures but don't fail init (radio is already up)
+        int16_t rmRes = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
+        if (rmRes != RADIOLIB_ERR_NONE)
+            LOG_WARN("LR2021 setRegMode failed: %d", rmRes);
+    }
+#endif
+
 #ifdef LR2021_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
     bool dioAsRfSwitch = portduino_config.has_rfswitch_table;
+    if (dioAsRfSwitch)
+        buildRfSwitchTable(lr20x0_rfswitch_dio_pins, lr20x0_rfswitch_table, RFSW_MODE_COUNT + 1, lr20x0_switch_dio_nums,
+                           lr20x0_switch_dio_consts, sizeof(lr20x0_switch_dio_nums) / sizeof(lr20x0_switch_dio_nums[0]),
+                           lr20x0_rfswitch_mode_map);
 #else
     bool dioAsRfSwitch = false;
 #endif
@@ -162,11 +248,11 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
-            res = lora.setRxBoostedGainMode(true);
-            LOG_INFO("Set RX gain to boosted mode; result: %d", res);
+            res = lora.setRxBoostedGainMode(LR2021_RX_GAIN_BOOST_LEVEL);
+            LOG_INFO("Set RX gain to boosted mode (level %d); result: %d", LR2021_RX_GAIN_BOOST_LEVEL, res);
         } else {
-            res = lora.setRxBoostedGainMode(false);
-            LOG_INFO("Set RX gain to power saving mode; result: %d", res);
+            res = lora.setRxBoostedGainMode(0);
+            LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", res);
         }
     }
 
@@ -262,7 +348,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
         // Warn-only, as in LR11x0: a rejected gain mode is cosmetic and not a lost-state signature, so
         // it must not drag reconfigure() into a full chip reset.
-        err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+        err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
         if (err != RADIOLIB_ERR_NONE)
             LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
     }
@@ -279,6 +365,11 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         }
         LOG_INFO("LR20x0 recovered after re-init");
     }
+
+    // setSpreadingFactor/setBandwidth/setCodingRate each re-run setLoRaModulationParams(), which resets
+    // the DCDC configure state, so reapply the workaround before we resume receiving.
+    if (standbySuccess)
+        applyDcdcWorkaround();
 
     startReceive();
     lr20x0LastFreqMHz = freq;
@@ -303,11 +394,17 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
 #endif
 
 #if ARCH_PORTDUINO
-        float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+        float tcxoVoltage;
+        if (portduino_config.dio3_tcxo_voltage > 0)
+            tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+        else if (TCXO_OPTIONAL_ENABLED)
+            tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+        else
+            tcxoVoltage = 0;
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
         float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
 #elif defined(TCXO_OPTIONAL)
-        float tcxoVoltage = 1.6f;
+        float tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
 #else
         float tcxoVoltage = 0;
 #endif
@@ -320,18 +417,19 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             delay(100);
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
-#if defined(TCXO_OPTIONAL)
-        if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
             LOG_WARN("LR20x0 band-hop begin TCXO failed (%s%d), retry without TCXO", radioLibErr, res);
             tcxoVoltage = 0;
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
-#endif
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 band-hop begin %s%d", radioLibErr, res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
+
+        applyCustomLfPaTable(freq);
+
         lr20x0LastFreqMHz = freq;
 
         res = lora.setCRC(2);
@@ -348,15 +446,99 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             lora.setRfSwitchTable(lr20x0_rfswitch_dio_pins, lr20x0_rfswitch_table);
 #endif
 
-        res = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+        res = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 band-hop setRxBoostedGainMode %s%d", radioLibErr, res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
 
+        // begin() above reprogrammed the modulation params, so the DCDC configure state is reset here too.
+        applyDcdcWorkaround();
+
         return true;
     }
+}
+
+// Board LF PA table after begin(); pointer is retained. HF keeps the RadioLib default.
+// Warn-only: a calibration miss must not fail init/fullBegin, keep the begin() PA config.
+template <typename T> void LR20x0Interface<T>::applyCustomLfPaTable(float freq)
+{
+#ifdef LR2021_CUSTOM_PA_TABLE
+    if (isLr20x0HighBand(freq))
+        return;
+    lora.setPaTable(lr2021_pa_table_lf, false);
+    int16_t paRes = lora.setOutputPower(power);
+    if (paRes != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
+    else
+        LOG_DEBUG("LR2021 custom LF PA table installed");
+#else
+    (void)freq;
+#endif
+}
+
+// Semtech DCDC sensitivity workaround for sub-GHz operation on engineering sample date code 2513.
+// Worthy of note is that we tested this on non-engineering samples and it didn't make any difference, but
+// we went to the trouble of writing this, so it can stay in, albeit gated behind a compile-time option.
+// lr20xx_workarounds_dcdc_reset must follow setPacketType; lr20xx_workarounds_dcdc_configure must follow
+// setModulationParams. In init() both hold once lora.begin() returns; in reconfigure() the caller invokes this
+// after setSpreadingFactor/setBandwidth/setCodingRate, whose RadioLib implementations re-run
+// setLoRaModulationParams() and reset the DCDC configure state. Only applies to sub-GHz; 2.4 GHz (LORA_24) is
+// excluded. Opt-in only: requires -DLR2021_DCDC_WORKAROUND (and RADIOLIB_GODMODE for the internal register access).
+template <typename T> void LR20x0Interface<T>::applyDcdcWorkaround()
+{
+#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)
+        return;
+
+    // Helper: set DCDC LF frequency register and re-apply the current RF frequency.
+    auto dcdcSetFreq = [&](uint32_t freqHz) -> int16_t {
+        const uint32_t freqLf = (uint32_t)((float)freqHz * 1.048576f);
+        int16_t s = lora.writeRegMem32(RADIOLIB_LR2021_REG_DCDC_FREQ_LF, &freqLf, 1);
+        if (s != RADIOLIB_ERR_NONE)
+            return s;
+        uint32_t rawRfFreq = 0;
+        s = lora.readRegMem32(RADIOLIB_LR2021_REG_RTTOF_RF_FREQ, &rawRfFreq, 1);
+        if (s != RADIOLIB_ERR_NONE)
+            return s;
+        // Convert PLL steps to Hz: (steps * 15625 + 16383) / 16384
+        uint32_t rfHz = (uint32_t)(((uint64_t)rawRfFreq * 15625ULL + 16383ULL) / 16384ULL);
+        return lora.setRfFrequency(rfHz);
+    };
+
+    // dcdc_reset: reset RISE/FALL ramp fields to conservative 15/15 at 2.8 MHz
+    int16_t dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 20, 15u << 20);
+    if (dcdcRes == RADIOLIB_ERR_NONE)
+        dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 16, 15u << 16);
+    if (dcdcRes == RADIOLIB_ERR_NONE)
+        dcdcRes = dcdcSetFreq(2800000);
+
+    // dcdc_configure: tune RISE/FALL and DC freq based on ADC decimation and RX path.
+    // Matches lr20xx_workarounds_dcdc_configure() exactly.
+    if (dcdcRes == RADIOLIB_ERR_NONE) {
+        uint32_t adcCtrl = 0, rxPath = 0;
+        dcdcRes = lora.readRegMem32(RADIOLIB_LR2021_REG_DCDC_ADC_CTRL, &adcCtrl, 1);
+        if (dcdcRes == RADIOLIB_ERR_NONE)
+            dcdcRes = lora.readRegMem32(RADIOLIB_LR2021_REG_DCDC_RX_PATH, &rxPath, 1);
+        if (dcdcRes == RADIOLIB_ERR_NONE) {
+            const uint32_t anaDec = (adcCtrl >> 8) & 0x7;
+            const bool isRxHf = (rxPath & 0x3) == 1;
+            // Narrowband sub-GHz path (ana_dec 1 or 2): use tighter RISE=11/FALL=13 timing
+            const uint32_t rise = (!isRxHf && (anaDec == 1 || anaDec == 2)) ? 11u : 15u;
+            const uint32_t fall = (!isRxHf && (anaDec == 1 || anaDec == 2)) ? 13u : 15u;
+            dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 20, rise << 20);
+            if (dcdcRes == RADIOLIB_ERR_NONE)
+                dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 16, fall << 16);
+            if (dcdcRes == RADIOLIB_ERR_NONE)
+                dcdcRes = dcdcSetFreq(anaDec == 1 ? 4300000 : 2800000);
+        }
+    }
+    if (dcdcRes != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR20x0 DCDC workaround failed: %d", dcdcRes);
+    else
+        LOG_DEBUG("LR20x0 DCDC workaround applied");
+#endif
 }
 
 template <typename T> void LR20x0Interface<T>::clearRadioIsr()
@@ -509,7 +691,7 @@ template <typename T> void LR20x0Interface<T>::resetAGC()
     lora.calibrateImageRejection(getFreq() - 4.0f, getFreq() + 4.0f);
 
     // 5. Re-apply RX boosted gain mode
-    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
 
     // 6. Resume receiving
     startReceive();
@@ -542,8 +724,6 @@ template <typename T> int16_t LR20x0Interface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
-#undef lr20x0_rfswitch_dio_pins
-#undef lr20x0_rfswitch_table
+// Don't leak the alias into the files InterfacesTemplates.cpp includes after this one.
 #undef LR20x0
 #endif

@@ -30,6 +30,12 @@
 #define NUM_CELLS 1
 #endif
 
+/// Consecutive below-cutoff readings needed before the low-battery deep sleep fires.
+static constexpr uint8_t LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN = 10;
+
+/// Advance the low-battery shutdown counter by one reading; true once the device should deep sleep.
+bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv);
+
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/Sensor/nullSensor.h"
 #if __has_include(<Adafruit_INA219.h>)
@@ -98,7 +104,7 @@ class Power : public concurrency::OSThread
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
-    bool isLowBattery() { return low_voltage_counter >= 10; };
+    bool isLowBattery() { return low_voltage_counter >= LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN; };
 
 #ifdef ARCH_ESP32
     int beforeLightSleep(void *unused);

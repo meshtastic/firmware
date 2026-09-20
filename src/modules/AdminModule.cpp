@@ -8,6 +8,7 @@
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
@@ -427,13 +428,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
-        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        rebootAtMsec = (s < 0) ? 0 : Time::timerEndsAtMillis(s * 1000);
         break;
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
         LOG_INFO("Shutdown in %d seconds", s);
-        shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        shutdownAtMsec = (s < 0) ? 0 : Time::timerEndsAtMillis(s * 1000);
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
@@ -628,10 +629,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // Delay the jump so this ACK reaches the client and it releases the port before the
         // STM32WL ROM bootloader takes the UART and autobauds off the next byte it sees.
         LOG_INFO("Entering DFU in %us - disconnect now", (STM32_DFU_DETACH_DELAY_MS + 999) / 1000);
-        enterDfuAtMsec = millis() + STM32_DFU_DETACH_DELAY_MS;
-        // Guard against enterDfuAtMsec rolling over to 0, the sentinel powerCommandsCheck() reads as unarmed.
-        if (enterDfuAtMsec == 0)
-            enterDfuAtMsec = 1;
+        // timerEndsAtMillis() dodges 0, the sentinel powerCommandsCheck() reads as unarmed.
+        enterDfuAtMsec = Time::timerEndsAtMillis(STM32_DFU_DETACH_DELAY_MS);
 #elif defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
@@ -1069,11 +1068,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }
-                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-                }
-                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+#if !MESHTASTIC_EXCLUDE_MQTT
+                if (MQTT::applyRegionRootTopic(myRegion->name))
+                    changes |= SEGMENT_MODULECONFIG;
+#endif
+                changes |= SEGMENT_CONFIG;
             } else {
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
@@ -1109,11 +1108,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }
-                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-                }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+#if !MESHTASTIC_EXCLUDE_MQTT
+                if (MQTT::applyRegionRootTopic(myRegion->name))
+                    changes |= SEGMENT_MODULECONFIG;
+#endif
+                changes |= SEGMENT_CONFIG;
             }
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
@@ -1820,10 +1819,6 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (config.bluetooth.enabled && nrf52Bluetooth) {
         conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
     }
-#elif defined(ARCH_NRF54L15)
-    if (config.bluetooth.enabled && nrf54l15Bluetooth) {
-        conn.bluetooth.is_connected = nrf54l15Bluetooth->isConnected();
-    }
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
@@ -1883,7 +1878,7 @@ void AdminModule::reboot(int32_t seconds)
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
         screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    rebootAtMsec = (seconds < 0) ? 0 : Time::timerEndsAtMillis(seconds * 1000);
 }
 
 // Without this, a commit that never arrives leaves the transaction open forever and every later
@@ -2513,9 +2508,6 @@ void disableBluetooth()
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
-#elif defined(ARCH_NRF54L15)
-    if (nrf54l15Bluetooth)
-        nrf54l15Bluetooth->shutdown();
 #endif
 #endif
 }

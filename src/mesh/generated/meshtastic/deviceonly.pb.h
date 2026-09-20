@@ -82,8 +82,12 @@ typedef struct _meshtastic_NodeInfoLite {
     /* Last byte of the node number of the node that should be used as the next hop to reach this node. */
     uint8_t next_hop;
     /* Bitfield for storing booleans. See NODEINFO_BITFIELD_* in src/mesh/NodeDB.h.
- Bit 11 is NODEINFO_BITFIELD_HEARD_ON_CURRENT_LORA, mirrored on the wire as
- NodeInfo.heard_on_current_lora. */
+ Bit 11 is NODEINFO_BITFIELD_HAS_RF_HEAR, set once this node has been heard
+ over our own radio and never cleared afterwards. Bits 12..23 hold a
+ fingerprint of the LoRa slot it was last heard on. NodeInfo.heard_on_current_lora
+ is derived from those two together, not stored: it is true when the node has
+ been heard over RF and its recorded slot matches the slot the radio is
+ currently committed to. Bits 24..31 are reserved. */
     uint32_t bitfield;
     /* A full name for this user, i.e. "Kevin Hester". */
     char long_name[25];
@@ -457,10 +461,10 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_NodeDatabase_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
-#define meshtastic_BackupPreferences_size        2656
-#define meshtastic_ChannelFile_size              718
+#define meshtastic_BackupPreferences_size        2674
+#define meshtastic_ChannelFile_size              734
 #define meshtastic_DeviceState_size              1944
-#define meshtastic_NodeEnvironmentEntry_size     321
+#define meshtastic_NodeEnvironmentEntry_size     231
 #define meshtastic_NodeInfoLite_size             112
 #define meshtastic_NodePositionEntry_size        42
 #define meshtastic_NodeStatusEntry_size          89

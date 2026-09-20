@@ -53,6 +53,48 @@ enum input_broker_event {
 #define INPUT_BROKER_MSG_OPEN_FREETEXT 0x8E
 #define INPUT_BROKER_MSG_EMOTE_LIST 0x8F
 
+// Which physical joystick/gamepad button produced an event, carried in InputEvent::kbchar
+// beside the action it is mapped to. Several buttons may share one action, so this is what
+// lets a game tell SELECT-pressed-on-Y from SELECT-pressed-on-B and use more inputs than the
+// handful of actions the broker defines.
+//
+// The value is the button's evdev code offset into a reserved kbchar range. 0x120..0x13f spans
+// both the classic joystick codes (BTN_TRIGGER..BTN_DEAD) and the modern gamepad ones
+// (BTN_SOUTH..BTN_THUMBR). The range deliberately misses printable ASCII (0x20-0x7e, which
+// CannedMessages appends to a message) and every INPUT_BROKER_MSG_ value above: SystemCommands
+// switches on kbchar without looking at inputEvent, so a collision there would toggle Bluetooth
+// or reboot the node rather than move a paddle.
+#define INPUT_BROKER_MSG_JOY_BUTTON_FIRST 0xC0
+#define INPUT_BROKER_MSG_JOY_BUTTON_LAST 0xDF
+#define INPUT_BROKER_JOY_CODE_FIRST 0x120
+#define INPUT_BROKER_JOY_CODE_LAST 0x13F
+
+// evdev button code -> the kbchar that reports it, or 0 for a code outside the encodable range
+// (0 is also "no button", which is what every non-joystick source leaves in kbchar).
+constexpr unsigned char joyButtonToKbchar(int code)
+{
+    return (code >= INPUT_BROKER_JOY_CODE_FIRST && code <= INPUT_BROKER_JOY_CODE_LAST)
+               ? (unsigned char)(INPUT_BROKER_MSG_JOY_BUTTON_FIRST + (code - INPUT_BROKER_JOY_CODE_FIRST))
+               : 0;
+}
+
+// True if this kbchar names a gamepad button, i.e. the event came from a real button press
+// rather than from a D-pad axis (which has no button and leaves kbchar 0) or a keyboard key.
+// Lets a consumer treat "LEFT from a shoulder button" differently from "LEFT from the D-pad"
+// without hardcoding one pad's button codes.
+constexpr bool isJoyButton(unsigned char kbchar)
+{
+    return kbchar >= INPUT_BROKER_MSG_JOY_BUTTON_FIRST && kbchar <= INPUT_BROKER_MSG_JOY_BUTTON_LAST;
+}
+
+// The Start button. Map it to "select" like any other button: it selects normally, and a consumer
+// that wants Start specifically (GamesModule pauses on it) picks it out of kbchar. 0x129
+// (BTN_BASE4) is Start on the classic 10-button pads, 0x13b (BTN_START) on modern gamepads.
+constexpr bool isJoyStartButton(unsigned char kbchar)
+{
+    return kbchar == joyButtonToKbchar(0x129) || kbchar == joyButtonToKbchar(0x13b);
+}
+
 typedef struct _InputEvent {
     const char *source;
     input_broker_event inputEvent;

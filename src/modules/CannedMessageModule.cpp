@@ -140,6 +140,61 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     LOG_TRACE("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
+// Compose through the on-screen keyboard used by devices without a physical one
+// (rotary encoder, trackball, joystick). Returns false when no such keyboard exists,
+// so callers can fall back to the plain freetext screen.
+bool CannedMessageModule::showOnScreenKeyboard()
+{
+    if (!osk_found || !screen)
+        return false;
+
+    char headerBuffer[64];
+    if (this->dest == NODENUM_BROADCAST) {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
+    } else {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
+    }
+    screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
+        if (!text.empty()) {
+            this->freetext = text.c_str();
+            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
+            currentMessageIndex = -1;
+
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            screen->forceDisplay();
+
+            setIntervalFromNow(500);
+            return;
+        } else {
+            // Don't delete virtual keyboard immediately - it might still be executing
+            // Instead, just clear the callback and reset banner to stop input processing
+            graphics::NotificationRenderer::textInputCallback = nullptr;
+            graphics::NotificationRenderer::resetBanner();
+
+            // Return to inactive state
+            this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+            this->currentMessageIndex = -1;
+            this->freetext = "";
+            this->cursor = 0;
+
+            // Force display update to show normal screen
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            screen->forceDisplay();
+
+            // Schedule cleanup for next loop iteration to ensure safe deletion
+            setIntervalFromNow(50);
+            return;
+        }
+    });
+
+    return true;
+}
+
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
@@ -154,6 +209,19 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
+
+#if !defined(USE_VIRTUAL_KEYBOARD)
+    // The freetext screen needs real key input, so devices without a physical keyboard
+    // compose on the on-screen keyboard instead. Open it from runOnce() rather than here:
+    // menus call us from a banner callback, and the banner is torn down as soon as that
+    // callback returns, which would take the keyboard down with it.
+    if (!kb_found && osk_found && screen) {
+        pendingOskLaunch = true;
+        setIntervalFromNow(0);
+        LOG_TRACE("[CannedMessage] LaunchFreetextWithDestination (OSK) dest=0x%08x ch=%d", dest, channel);
+        return;
+    }
+#endif
 
     updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
     UIFrameEvent e;
@@ -469,6 +537,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             LaunchWithDestination(NODENUM_BROADCAST);
             return 1;
         }
+        // Space is reserved for advancing frames (handled by Screen), so it must not open the composer
+        if (event->kbchar == ' ')
+            return 0;
         // Allow opening free text compose without printing a char
         if (event->kbchar == INPUT_BROKER_MSG_OPEN_FREETEXT) {
             applyComposeContextFromCurrentThread(dest, channel);
@@ -755,65 +826,18 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         }
 
         // [Free Text] triggers the free text input (virtual keyboard)
-#if defined(USE_VIRTUAL_KEYBOARD)
         if (strcmp(current, "[-- Free Text --]") == 0) {
+#if defined(USE_VIRTUAL_KEYBOARD)
             updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
             return true;
-        }
 #else
-        if (strcmp(current, "[-- Free Text --]") == 0) {
-            if (osk_found && screen) {
-                char headerBuffer[64];
-                if (this->dest == NODENUM_BROADCAST) {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
-                } else {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
-                }
-                screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
-                    if (!text.empty()) {
-                        this->freetext = text.c_str();
-                        this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-                        updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
-                        currentMessageIndex = -1;
-
-                        UIFrameEvent e;
-                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                        this->notifyObservers(&e);
-                        screen->forceDisplay();
-
-                        setIntervalFromNow(500);
-                        return;
-                    } else {
-                        // Don't delete virtual keyboard immediately - it might still be executing
-                        // Instead, just clear the callback and reset banner to stop input processing
-                        graphics::NotificationRenderer::textInputCallback = nullptr;
-                        graphics::NotificationRenderer::resetBanner();
-
-                        // Return to inactive state
-                        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
-                        this->currentMessageIndex = -1;
-                        this->freetext = "";
-                        this->cursor = 0;
-
-                        // Force display update to show normal screen
-                        UIFrameEvent e;
-                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                        this->notifyObservers(&e);
-                        screen->forceDisplay();
-
-                        // Schedule cleanup for next loop iteration to ensure safe deletion
-                        setIntervalFromNow(50);
-                        return;
-                    }
-                });
-
+            if (showOnScreenKeyboard())
                 return true;
-            }
-        }
 #endif
+        }
 
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
@@ -1182,6 +1206,14 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
 int32_t CannedMessageModule::runOnce()
 {
+    // A menu asked to compose freetext on the on-screen keyboard; the menu banner is gone
+    // by now, so it is safe to bring the keyboard up.
+    if (this->pendingOskLaunch) {
+        this->pendingOskLaunch = false;
+        if (showOnScreenKeyboard())
+            return INT32_MAX; // the text input callback drives everything from here
+    }
+
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && needsUpdate) {
         updateDestinationSelectionList();
         needsUpdate = false;
