@@ -39,9 +39,13 @@
     utilizationTXPercent()       % of the last hour we transmitted
     isTxAllowedChannelUtil()     gate on the former, 40% or 25% "polite"
     isTxAllowedAirUtil()         gate on the latter, at HALF the duty cycle
-    getSilentMinutes()           minutes until the TX figure clears a limit.
-                                 Feeds a log line and a client notification; it
-                                 gates nothing.
+    wouldExceedDutyCycle()       admission: would the hour's TX plus a proposed
+                                 packet's airtime cross a limit. Router::send()
+                                 gates every packet on it, so the packet that
+                                 would cross the line is the one refused.
+    getSilentMinutes()           minutes until the TX figure, plus an optional
+                                 proposed packet, clears a limit. Feeds a log
+                                 line and a client notification; it gates nothing.
     airtimeReport()              8 x 1h of raw ms per type, for the HTTP report
     getSecondsSinceBoot()        the clock the buckets are keyed to
 
@@ -161,8 +165,12 @@ class AirTime : private concurrency::OSThread
     /// caller cannot hold a handle to buckets that every other entry point rotates underneath it.
     /// False if `out` is null, `count` exceeds the log depth, or the report type is unknown.
     bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count);
-    /// Minutes of silence until utilizationTXPercent() falls back to `dutyCycle` or below.
-    uint8_t getSilentMinutes(float dutyCycle);
+    /// True if the hour's TX airtime plus `proposedMs` more would exceed `dutyCycle`. The complement
+    /// of getSilentMinutes() == 0 for the same arguments.
+    bool wouldExceedDutyCycle(uint32_t proposedMs, float dutyCycle);
+    /// Minutes of silence until the hour's TX airtime, plus a packet of `proposedMs` sent at the end
+    /// of it, would sit at `dutyCycle` or below.
+    uint8_t getSilentMinutes(float dutyCycle, uint32_t proposedMs = 0);
     bool isTxAllowedChannelUtil(bool polite = false);
     bool isTxAllowedAirUtil();
 
@@ -238,7 +246,8 @@ class AirTime : private concurrency::OSThread
         uint32_t utilizationTXMsec(const Held &);
         float utilizationTXPercent(const Held &);
         bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count, const Held &);
-        uint8_t getSilentMinutes(float dutyCycle, const Held &);
+        bool wouldExceedDutyCycle(uint32_t proposedMs, float dutyCycle, const Held &);
+        uint8_t getSilentMinutes(float dutyCycle, uint32_t proposedMs, const Held &);
         uint8_t getPeriodUtilMinute(const Held &);
         uint8_t getPeriodUtilHour(const Held &);
         /// Milliseconds into the current `periodSecs` bucket. Sub-second resolution matters: at

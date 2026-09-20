@@ -305,17 +305,30 @@ float AirTime::Windows::utilizationTXPercent(const Held &held)
     return (float(utilizationTXMsec(held)) / float(MS_IN_HOUR)) * 100;
 }
 
-// Minutes of silence until the hour's TX total falls back under the limit. Buckets age out oldest
-// first, and this ring is indexed by minute phase, so the oldest is the one after the current.
-uint8_t AirTime::Windows::getSilentMinutes(float dutyCycle, const Held &held)
+/// The hour's allowance in whole milliseconds. Both admission and the countdown compare against
+/// this, so they cannot disagree about where the line is.
+static inline uint32_t dutyCycleLimitMs(float dutyCycle)
+{
+    return (uint32_t)(dutyCycle * (MS_IN_HOUR / 100.0f));
+}
+
+bool AirTime::Windows::wouldExceedDutyCycle(uint32_t proposedMs, float dutyCycle, const Held &held)
+{
+    syncNow(held);
+    return utilizationTXMsec(held) + proposedMs > dutyCycleLimitMs(dutyCycle);
+}
+
+// Minutes of silence until the hour's TX plus the proposed packet is under the limit. The oldest bucket
+// is the one after the current; the proposal is not in the ring and never sheds, it counts in full.
+uint8_t AirTime::Windows::getSilentMinutes(float dutyCycle, uint32_t proposedMs, const Held &held)
 {
     syncNow(held);
 
-    // Whole milliseconds, and `<=` is the exact complement of the caller's `> dutyCycle` abort.
-    const uint32_t limitMs = (uint32_t)(dutyCycle * (MS_IN_HOUR / 100.0f));
+    // `<=` is the exact complement of wouldExceedDutyCycle()'s `>`.
+    const uint32_t limitMs = dutyCycleLimitMs(dutyCycle);
     const uint32_t cur = this->secSinceBoot / SECONDS_IN_MINUTE;
     const uint32_t phase = phaseMs(SECONDS_IN_MINUTE);
-    uint32_t sum = utilizationTXMsec(held);
+    uint32_t sum = utilizationTXMsec(held) + proposedMs;
 
     for (uint8_t m = 0; m < MINUTES_IN_HOUR; m++) {
         if (sum <= limitMs)
@@ -431,10 +444,16 @@ bool AirTime::isTxAllowedAirUtil()
     return true;
 }
 
-uint8_t AirTime::getSilentMinutes(float dutyCycle)
+bool AirTime::wouldExceedDutyCycle(uint32_t proposedMs, float dutyCycle)
 {
     Held held(this);
-    return w.getSilentMinutes(dutyCycle, held);
+    return w.wouldExceedDutyCycle(proposedMs, dutyCycle, held);
+}
+
+uint8_t AirTime::getSilentMinutes(float dutyCycle, uint32_t proposedMs)
+{
+    Held held(this);
+    return w.getSilentMinutes(dutyCycle, proposedMs, held);
 }
 
 AirTime::AirTime() : concurrency::OSThread("AirTime") {}

@@ -1445,6 +1445,94 @@ void test_getSilentMinutes_is_monotonic_in_the_duty_cycle()
     }
 }
 
+// --- admission: wouldExceedDutyCycle() and the proposed-packet form of getSilentMinutes() ----
+//
+// Router::send() used to compare the hour's figure to the limit and let the packet through if it
+// was under - so the packet that crossed the line always went out, and only the NEXT one was
+// refused. Admission counts the packet's own airtime, so the crossing packet is the refused one.
+
+// 2.5% is a 90 000 ms allowance. With 63 000 ms already spent, exactly 27 000 ms more sits on the
+// line and is admitted; one more millisecond is not.
+void test_wouldExceedDutyCycle_counts_the_proposed_packet_and_the_boundary_is_inclusive()
+{
+    Time::setTestMillis(600u * 1000u);
+    AirTime a;
+    a.logAirtime(TX_LOG, 63000);
+
+    TEST_ASSERT_FALSE_MESSAGE(a.wouldExceedDutyCycle(0, 2.5f), "70% spent, nothing proposed: under");
+    TEST_ASSERT_FALSE_MESSAGE(a.wouldExceedDutyCycle(27000, 2.5f), "exactly the remaining allowance is admitted");
+    TEST_ASSERT_TRUE_MESSAGE(a.wouldExceedDutyCycle(27001, 2.5f), "one ms past the allowance is refused");
+}
+
+// The band the old gate got wrong: the ring alone is under the limit, so the old compare admitted
+// the packet and the figure landed over. Now the packet is refused and owes silence.
+void test_wouldExceedDutyCycle_refuses_the_packet_that_would_cross_the_line()
+{
+    Time::setTestMillis(600u * 1000u);
+    AirTime a;
+    a.logAirtime(TX_LOG, 80000); // 2.22% of the hour: under 2.5%
+
+    TEST_ASSERT_TRUE_MESSAGE(a.utilizationTXPercent() < 2.5f, "the ring alone is under the limit");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, a.getSilentMinutes(2.5f), "...so with nothing proposed it owes no silence");
+    TEST_ASSERT_TRUE_MESSAGE(a.wouldExceedDutyCycle(20000, 2.5f), "but 20 s more would cross it");
+    TEST_ASSERT_TRUE_MESSAGE(a.getSilentMinutes(2.5f, 20000) > 0, "...so that packet owes silence");
+}
+
+// The two are one decision seen from two sides: silence is owed exactly when admission is refused.
+void test_getSilentMinutes_is_zero_exactly_when_wouldExceedDutyCycle_is_false()
+{
+    static const uint32_t proposals[] = {0, 1, 1000, 20000, 27000, 27001, 60000};
+    Time::setTestMillis(600u * 1000u);
+    AirTime a;
+    a.logAirtime(TX_LOG, 63000);
+
+    for (size_t i = 0; i < sizeof(proposals) / sizeof(proposals[0]); i++) {
+        const bool refused = a.wouldExceedDutyCycle(proposals[i], 2.5f);
+        const uint8_t owed = a.getSilentMinutes(2.5f, proposals[i]);
+        snprintf(g_msg, sizeof(g_msg), "proposing %u ms: refused=%d but owes %u min", proposals[i], refused, owed);
+        TEST_ASSERT_TRUE_MESSAGE(refused == (owed > 0), g_msg);
+    }
+}
+
+// Replays the scenario, lets `minutes` of silence elapse, and asks admission for the packet.
+static bool wouldExceedAfterSilence(const Scenario &s, uint8_t minutes, uint32_t proposedMs, float dutyCycle)
+{
+    Time::resetMonotonicForTests();
+    Time::setTestMillis(s.phaseSecs * 1000u);
+    AirTime a;
+    layDownTx(a, s);
+    if (minutes)
+        Time::advanceTestMillis((uint32_t)minutes * 60u * 1000u);
+    return a.wouldExceedDutyCycle(proposedMs, dutyCycle);
+}
+
+// The promise, with a packet attached: after the answer's worth of silence the packet is admitted,
+// and a minute earlier it is not. Checked by replay against the gate itself, across the presets,
+// each proposing one of its own frames.
+void test_getSilentMinutes_with_a_proposed_packet_keeps_its_promise()
+{
+    for (size_t i = 0; i < kProfileCount; i++) {
+        const Scenario s = scenarioFor(kProfiles[i], 777);
+        const uint32_t proposed = kProfiles[i].packetMs;
+
+        Time::resetMonotonicForTests();
+        Time::setTestMillis(s.phaseSecs * 1000u);
+        AirTime a;
+        layDownTx(a, s);
+        const uint8_t m = a.getSilentMinutes(10.0f, proposed);
+        const uint8_t bare = a.getSilentMinutes(10.0f);
+        snprintf(g_msg, sizeof(g_msg), "%s: with a frame attached asked %u, bare asked %u", kProfiles[i].name, m, bare);
+        TEST_ASSERT_TRUE_MESSAGE(m >= bare, g_msg);
+
+        snprintf(g_msg, sizeof(g_msg), "%s: after the %u min it asked for, its own frame is still refused", kProfiles[i].name, m);
+        TEST_ASSERT_FALSE_MESSAGE(wouldExceedAfterSilence(s, m, proposed, 10.0f), g_msg);
+        if (m > 0) {
+            snprintf(g_msg, sizeof(g_msg), "%s: %u min already sufficed, it asked for %u", kProfiles[i].name, m - 1, m);
+            TEST_ASSERT_TRUE_MESSAGE(wouldExceedAfterSilence(s, (uint8_t)(m - 1), proposed, 10.0f), g_msg);
+        }
+    }
+}
+
 // --- clock robustness ---------------------------------------------------------
 
 // A gap longer than the window that also crosses the 49.7-day millis() wrap.
@@ -1544,6 +1632,8 @@ void test_no_public_method_takes_the_lock_twice()
     (void)a.getSecondsSinceBoot();
     (void)a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG);
     (void)a.getSilentMinutes(2.5f);
+    (void)a.getSilentMinutes(2.5f, 2034);
+    (void)a.wouldExceedDutyCycle(2034, 2.5f);
     (void)a.isTxAllowedChannelUtil(false);
     (void)a.isTxAllowedChannelUtil(true);
     (void)a.isTxAllowedAirUtil();
@@ -1638,6 +1728,10 @@ void setup()
     RUN_TEST(test_getSilentMinutes_is_exact_across_the_millis_wrap);
     RUN_TEST(test_getSilentMinutes_is_exact_at_sub_millisecond_packet_scale);
     RUN_TEST(test_getSilentMinutes_is_monotonic_in_the_duty_cycle);
+    RUN_TEST(test_wouldExceedDutyCycle_counts_the_proposed_packet_and_the_boundary_is_inclusive);
+    RUN_TEST(test_wouldExceedDutyCycle_refuses_the_packet_that_would_cross_the_line);
+    RUN_TEST(test_getSilentMinutes_is_zero_exactly_when_wouldExceedDutyCycle_is_false);
+    RUN_TEST(test_getSilentMinutes_with_a_proposed_packet_keeps_its_promise);
     RUN_TEST(test_survives_heavy_sleep_across_the_wrap);
     RUN_TEST(test_multi_day_sleep_clears_every_window);
     RUN_TEST(test_backwards_uptime_degrades_safely);
