@@ -682,11 +682,19 @@ static std::string sanitizedMeshText(const char *src, size_t len)
 /// escaping is unconditional: a server without body-markup renders the entities literally, which is
 /// cosmetic, while failing to escape one that has it is not, and mesh text carries no markup worth
 /// preserving. Only the body needs this; the spec gives the summary no markup.
+///
+/// Runs on the caller's thread rather than the worker's. That does not weaken the rule that the
+/// worker owns every libnotify call: this is a pure GLib string function, touching no libnotify or
+/// DBus state, and GLib has been thread-safe since 2.32.
 static std::string escapedNotificationBody(const std::string &text)
 {
     gchar *escaped = g_markup_escape_text(text.data(), (gssize)text.size());
-    if (!escaped)
-        return text;
+    if (!escaped) {
+        // Fail closed. Returning the input here would hand libnotify the one string this function
+        // exists to neutralize, so drop the body instead - it cannot happen for the already
+        // sanitized input we pass, and if it ever does, losing a body beats injecting one.
+        return "[unprintable]";
+    }
     std::string out(escaped);
     g_free(escaped);
     return out;
