@@ -1082,6 +1082,13 @@ void setup()
     osk_found = true;
 #endif
 #endif
+#if ARCH_PORTDUINO && defined(__linux__)
+    // Same idea for a gamepad: it can drive the on-screen keyboard but cannot type, so without a
+    // configured keyboard device it is the only way to compose freetext on this host.
+    if (portduino_config.joystickDevice != "" && portduino_config.keyboardDevice == "") {
+        osk_found = true;
+    }
+#endif
 
     // Now that the mesh service is created, create any modules
     setupModules();
@@ -1187,7 +1194,7 @@ void setup()
 
 #ifndef ARCH_PORTDUINO
 
-        // Initialize Wifi
+    // Initialize Wifi
 #if HAS_WIFI
     initWifi();
 #endif

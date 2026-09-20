@@ -14,6 +14,10 @@
 #if WARM_NODE_COUNT > 0
 
 #include "mesh/NodeDB.h"
+#if defined(ARCH_PORTDUINO)
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+#include <cstdio>
 #include <cstring>
 
 // Subclass shim: exposes the private maintenance paths (via the friend
@@ -66,12 +70,17 @@ class NodeDBTestShim : public NodeDB
 
     // Index 0 is our own node; the eviction/migration scans treat it as self.
     void seedSelf() { push(0x0BADF00D, 0xFFFFFFFFu, false, false, /*withUser=*/true, /*withKey=*/false); }
+
+    // isHalfEmpty() and isFull() read numMeshNodes against MAX_NUM_NODES and nothing else, so the
+    // occupancy tests set the count directly rather than allocating rows at every cap under test.
+    void setOccupancy(int n) { numMeshNodes = (pb_size_t)n; }
 };
 
 namespace
 {
 
 NodeDBTestShim *db = nullptr;
+int savedMaxNodes = 0;
 
 bool warmHasKey(NodeNum n)
 {
@@ -84,8 +93,18 @@ bool warmHasKey(NodeNum n)
 void setUp(void)
 {
     db->clearHot();
+#if defined(ARCH_PORTDUINO)
+    savedMaxNodes = portduino_config.MaxNodes;
+#endif
 }
-void tearDown(void) {}
+void tearDown(void)
+{
+#if defined(ARCH_PORTDUINO)
+    // The occupancy sweeps below move the cap. Restore it here rather than at the end of each
+    // test, so an assertion that fires mid-sweep cannot leak a 2-node cap into the next test.
+    portduino_config.MaxNodes = savedMaxNodes;
+#endif
+}
 
 // Migration: a database from a larger-cap build trims to MAX_NUM_NODES; the
 // oldest non-protected nodes are demoted into the warm tier (keys preserved),
@@ -318,6 +337,101 @@ static void test_removeNodeByNum_presentNodeOnFullDb(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // survivors kept
 }
 
+#if defined(ARCH_PORTDUINO)
+// NodeDB::isHalfEmpty() and the band it opens against isFull(). The ad-hoc greeting in
+// MeshService::handleFromRadio() reads it before sending an unsolicited NodeInfo to a node it holds
+// no user record for: greeting now stops at the half-way mark while admission continues to the cap,
+// so there is a deliberate occupancy band in which the store still takes new nodes but no longer
+// introduces itself to them. Before this the gate was !isFull(), and a node kept greeting up to the
+// last free slot - the regime where the store is already churning and the entry a greeting buys is
+// least likely to survive.
+//
+// Sweeping the cap matters because it is not a constant: on portduino MAX_NUM_NODES resolves to
+// General.MaxNodes on every read, and a predicate that captured it once - a static, a value copied
+// in the constructor - would greet at the wrong occupancy on every deployment that sets one.
+//
+// Not covered: the MINIMUM_SAFE_FREE_HEAP term both predicates carry. memGet.getFreeHeap() returns
+// UINT32_MAX on portduino, so that branch is unreachable natively and is not faked.
+
+// The caps a real deployment has - STM32WL's 10, the nRF52840/ESP32 120, portduino/ESP32-S3 200 and
+// 250 - plus odd caps, and 2 where an off-by-one stops being one slot and becomes the upper half.
+static constexpr int kCaps[] = {2, 3, 10, 11, 120, 121, 200, 250};
+
+static const char *occ(int cap, int n)
+{
+    static char buf[64];
+    snprintf(buf, sizeof(buf), "cap=%d occupancy=%d", cap, n);
+    return buf;
+}
+
+// Strictly more than half the slots must be free: exactly half full is not half empty, and at an
+// odd cap the unsplittable slot counts as empty (2n < cap). Relaxing this to >= hands greeting one
+// more slot at every cap.
+static void test_halfEmpty_boundaryIsExclusiveAtEveryCap(void)
+{
+    for (int cap : kCaps) {
+        portduino_config.MaxNodes = cap;
+        TEST_ASSERT_EQUAL_INT_MESSAGE(cap, (int)MAX_NUM_NODES, "MAX_NUM_NODES must track General.MaxNodes at runtime");
+
+        const int halfWay = cap / 2;
+
+        db->setOccupancy(0);
+        TEST_ASSERT_TRUE_MESSAGE(db->isHalfEmpty(), occ(cap, 0)); // a fresh node must greet
+
+        db->setOccupancy(halfWay);
+        TEST_ASSERT_EQUAL_MESSAGE(2 * halfWay < cap, db->isHalfEmpty(), occ(cap, halfWay));
+
+        db->setOccupancy(halfWay + 1);
+        TEST_ASSERT_FALSE_MESSAGE(db->isHalfEmpty(), occ(cap, halfWay + 1));
+
+        db->setOccupancy(cap);
+        TEST_ASSERT_FALSE_MESSAGE(db->isHalfEmpty(), occ(cap, cap));
+        TEST_ASSERT_TRUE_MESSAGE(db->isFull(), occ(cap, cap));
+    }
+}
+
+// The band is the point of the change: above the half-way mark and below the cap, admission
+// continues (!isFull) while greeting has stopped (!isHalfEmpty). The two are never both true. If
+// either predicate drifts the band closes, and greeting either runs to the last slot again or stops
+// when admission does.
+static void test_halfEmpty_theBandWhereAdmissionOutlivesGreeting(void)
+{
+    for (int cap : kCaps) {
+        portduino_config.MaxNodes = cap;
+
+        int bandWidth = 0;
+        for (int n = 0; n <= cap; n++) {
+            db->setOccupancy(n);
+            TEST_ASSERT_FALSE_MESSAGE(db->isHalfEmpty() && db->isFull(), occ(cap, n));
+            if (n < cap && !db->isHalfEmpty()) {
+                TEST_ASSERT_FALSE_MESSAGE(db->isFull(), occ(cap, n));
+                bandWidth++;
+            }
+        }
+        TEST_ASSERT_EQUAL_INT_MESSAGE(cap - (cap / 2 + (cap % 2)), bandWidth, occ(cap, -1));
+    }
+}
+
+// The same occupancy changes answer when the cap moves underneath it, with no store change - what a
+// General.MaxNodes edit plus a restart does, and what a cached cap gets wrong.
+static void test_halfEmpty_followsACapChangedUnderneathIt(void)
+{
+    db->setOccupancy(70);
+
+    portduino_config.MaxNodes = 120;
+    TEST_ASSERT_FALSE_MESSAGE(db->isHalfEmpty(), "70 of 120 is past the half-way mark");
+
+    portduino_config.MaxNodes = 200;
+    TEST_ASSERT_TRUE_MESSAGE(db->isHalfEmpty(), "70 of 200 leaves more than half free");
+
+    portduino_config.MaxNodes = 140;
+    TEST_ASSERT_FALSE_MESSAGE(db->isHalfEmpty(), "70 of 140 is exactly half full, which is not half empty");
+
+    portduino_config.MaxNodes = 141;
+    TEST_ASSERT_TRUE_MESSAGE(db->isHalfEmpty(), "70 of 141 leaves the spare slot free, so more than half");
+}
+#endif // ARCH_PORTDUINO
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -335,6 +449,11 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
     RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
     RUN_TEST(test_removeNodeByNum_presentNodeOnFullDb);
+#if defined(ARCH_PORTDUINO)
+    RUN_TEST(test_halfEmpty_boundaryIsExclusiveAtEveryCap);
+    RUN_TEST(test_halfEmpty_theBandWhereAdmissionOutlivesGreeting);
+    RUN_TEST(test_halfEmpty_followsACapChangedUnderneathIt);
+#endif
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
