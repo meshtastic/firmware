@@ -28,6 +28,9 @@
 #include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
+#include "mqtt/MQTT.h"
+#endif
 #include "modules/ExternalNotificationModule.h"
 #include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
@@ -118,6 +121,18 @@ const StoredMessage *getNewestMessageForActiveThread()
     return nullptr;
 }
 
+// Freetext compose is offered whenever the device can enter text at all: a physical
+// keyboard, an on-screen keyboard driven by rotary/trackball/joystick, or a touchscreen
+// virtual keyboard.
+bool freetextAvailable()
+{
+#if defined(USE_VIRTUAL_KEYBOARD)
+    return true;
+#else
+    return kb_found || osk_found;
+#endif
+}
+
 void launchReplyForMessage(const StoredMessage &message, bool freetext)
 {
     if (message.type == MessageType::BROADCAST || message.dest == NODENUM_BROADCAST) {
@@ -153,12 +168,7 @@ uint8_t test_count = 0;
 void menuHandler::loraMenu()
 {
     static const char *optionsArray[] = {
-        "Back",
-        "Device Role",
-        "Radio Preset",
-        "Frequency Slot",
-        "LoRa Region",
-        "Transmit Enabled",
+        "Back",    "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region", "Transmit Enabled",
 #if HAS_LORA_FEM
         "FEM LNA",
 #endif
@@ -289,10 +299,10 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     if (getEffectiveDutyCycle() < 100) {
         config.lora.ignore_mqtt = true;
     }
-    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
+#if !MESHTASTIC_EXCLUDE_MQTT
+    if (MQTT::applyRegionRootTopic(myRegion->name))
         changes |= SEGMENT_MODULECONFIG;
-    }
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
     // Enable gps if it was previously disabled due to region not being set
     if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
@@ -915,8 +925,8 @@ void menuHandler::replyMenu()
     optionsArray[options] = "With Preset";
     optionsEnumArray[options++] = ReplyPreset;
 
-    // Freetext reply (only when keyboard exists)
-    if (kb_found) {
+    // Freetext reply (only when the device can enter text)
+    if (freetextAvailable()) {
         optionsArray[options] = "With Freetext";
         optionsEnumArray[options++] = ReplyFreetext;
     }
@@ -1282,7 +1292,7 @@ void menuHandler::textMessageBaseMenu()
     int options = 1;
     optionsArray[options] = "New Preset Msg";
     optionsEnumArray[options++] = Preset;
-    if (kb_found) {
+    if (freetextAvailable()) {
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
@@ -1405,7 +1415,7 @@ void menuHandler::favoriteBaseMenu()
     }
     optionsEnumArray[options++] = Preset;
 
-    if (kb_found) {
+    if (freetextAvailable()) {
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
@@ -3297,9 +3307,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case MessageBubblesMenu:
         messageBubblesMenu();
         break;
+#if GRAPHICS_TFT_COLORING_ENABLED // the Theme option only exists with TFT coloring
     case ThemeMenu:
         themeMenu();
         break;
+#endif
     case HamModeConfirm:
         hamModeConfirmMenu();
         break;
