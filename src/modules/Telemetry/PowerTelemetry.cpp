@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -105,7 +106,7 @@ int32_t PowerTelemetryModule::runOnce()
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::skipZero(Time::getMillis());
         }
     }
     if (sleepOnNextExecution) {
@@ -165,7 +166,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     const auto &m = lastMeasurement.variant.power_metrics;
-    int lineY = textSecondLine;
+    int lineY = graphics::getTextPositions(display)[line];
 
     auto drawLine = [&](const char *label, float voltage, float current) {
         char lineStr[64];
@@ -272,10 +273,15 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     bool validTelemetry = getPowerTelemetry(&m);
     if (validTelemetry) {
-        LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
-                 "ch3_voltage=%f, ch3_current=%f",
-                 m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
-                 m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current);
+        LOG_INFO("Send: ch1_voltage=%f, ch2_voltage=%f, ch3_voltage=%f", m.variant.power_metrics.ch1_voltage,
+                 m.variant.power_metrics.ch2_voltage, m.variant.power_metrics.ch3_voltage);
+
+        bool hasAnyCurrent = m.variant.power_metrics.has_ch1_current || m.variant.power_metrics.has_ch2_current ||
+                             m.variant.power_metrics.has_ch3_current;
+        if (hasAnyCurrent) {
+            LOG_INFO("Send: ch1_current=%f, ch2_current=%f, ch3_current=%f", m.variant.power_metrics.ch1_current,
+                     m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_current);
+        }
 
         sensor_read_error_count = 0;
 

@@ -4,23 +4,20 @@
 #if HAS_WIFI
 #include "WiFiServerAPI.h"
 
-static WiFiServerPort *apiPort;
+static std::unique_ptr<WiFiServerPort> apiPort;
 
 void initApiServer(int port)
 {
     // Start API server on port 4403
     if (!apiPort) {
-        apiPort = new WiFiServerPort(port);
+        apiPort = std::make_unique<WiFiServerPort>(port);
         LOG_INFO("API server listen on TCP port %d", port);
         apiPort->init();
     }
 }
 void deInitApiServer()
 {
-    if (apiPort) {
-        delete apiPort;
-        apiPort = nullptr;
-    }
+    apiPort.reset();
 }
 
 WiFiServerAPI::WiFiServerAPI(WiFiClient &_client) : ServerAPI(_client)

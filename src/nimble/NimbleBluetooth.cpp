@@ -1025,13 +1025,16 @@ void NimbleBluetooth::setupService()
 
     // Setup the battery service
     BLEService *batteryService = bleServer->createService(BLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
-    BLE2904 *batteryLevelDescriptor = new BLE2904();
-    batteryLevelDescriptor->setFormat(BLE2904::FORMAT_UINT8);
-    batteryLevelDescriptor->setNamespace(1);
-    batteryLevelDescriptor->setUnit(0x27ad);
+    // Static like the callback objects above: setupService() re-runs on every BLE re-enable, and
+    // the framework never frees descriptors (~BLECharacteristic is empty), so a heap allocation
+    // here leaks one BLE2904 per cycle.
+    static BLE2904 batteryLevelDescriptor;
+    batteryLevelDescriptor.setFormat(BLE2904::FORMAT_UINT8);
+    batteryLevelDescriptor.setNamespace(1);
+    batteryLevelDescriptor.setUnit(0x27ad);
     BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
         (uint16_t)0x2a19, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-    BatteryCharacteristic->addDescriptor(batteryLevelDescriptor);
+    BatteryCharacteristic->addDescriptor(&batteryLevelDescriptor);
     // Seed an initial 0-100 level so an early read of 0x2A19 returns a valid value.
     uint8_t initialLevel = (powerStatus && powerStatus->getHasBattery()) ? powerStatus->getBatteryChargePercent() : 0;
     if (initialLevel > 100)

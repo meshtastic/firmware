@@ -4,7 +4,7 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.10.2
+      ref: v1.11.0
       uri: https://github.com/trunk-io/plugins
 lint:
   # Custom file set + formatter that rewrites Unicode em-dash (U+2014, UTF-8
@@ -92,33 +92,52 @@ lint:
           run: ${workspace}/bin/lint-unity-exit.sh ${target}
           success_codes: [0]
           read_output_from: stdout
+    # Flags a 0-means-unset deadline in src/ armed from a raw millis()/getMillis() read. The sum
+    # lands on 0 once per ~49.7-day wrap and every reader then decides the timer was never set, so
+    # a pending reboot, shutdown, DFU jump or banner expiry is silently dropped. The fix is
+    # Time::timerEndsAtMillis() / Time::skipZero() from src/UptimeClock.h. Unlike its neighbours
+    # this one is blocking: nothing catches it at run time, because the window is one tick in seven
+    # weeks. A site where 0 really is legal opts out with an `unset-sentinel-ok: <reason>` comment on
+    # the write or the line above it; the reason is mandatory, so nothing can be muted silently. The
+    # field list lives in bin/lint-unset-sentinel-millis.sh; read the header there before adding to
+    # it, and re-run bin/test-lint-unset-sentinel-millis.sh after any change to the rule.
+    - name: unset-sentinel-millis
+      files: [cpp-sources]
+      commands:
+        - name: lint
+          output: regex
+          parse_regex: (?P<path>.+):(?P<line>\d+):(?P<col>\d+):(?P<severity>\w+):(?P<message>.+):(?P<code>[a-z-]+)
+          run: ${workspace}/bin/lint-unset-sentinel-millis.sh ${target}
+          success_codes: [0]
+          read_output_from: stdout
   enabled:
     - ascii-dash@SYSTEM
     - too-many-defined@SYSTEM
     - node-id-format@SYSTEM
     - unity-exit@SYSTEM
-    - checkov@3.3.8
-    - renovate@44.2.3
-    - prettier@3.9.6
-    - trufflehog@3.96.0
+    - unset-sentinel-millis@SYSTEM
+    - checkov@3.3.19
+    - renovate@44.103.2
+    - prettier@3.9.8
+    - trufflehog@3.97.5
     - yamllint@1.38.0
     - bandit@1.9.4
-    - trivy@0.72.0
+    - trivy@0.74.0
     - taplo@0.10.0
-    - ruff@0.16.0
-    - isort@8.0.1
+    - ruff@0.16.8
+    - isort@9.0.1
     - markdownlint@0.49.1
-    - oxipng@10.1.1
-    - svgo@4.0.2
+    - oxipng@10.2.1
+    - svgo@4.1.0
     - actionlint@1.7.12
     - flake8@7.3.0
-    - hadolint@2.14.0
-    - shfmt@3.6.0
+    - hadolint@2.15.1
+    - shfmt@3.14.1
     - shellcheck@0.11.0
     - black@26.5.1
     - git-diff-check
     - gitleaks@8.30.1
-    - clang-format@16.0.3
+    - clang-format@20.1.0
   ignore:
     - linters: [ALL]
       paths:
@@ -130,6 +149,11 @@ lint:
     - linters: [gitleaks]
       paths:
         - test/fixtures/nodedb/seed_v25_*.jsonl
+    # trufflehog's Lob detector matches "test_" followed by alphanumerics, which is every
+    # Unity test function name. There are no credentials in these suites.
+    - linters: [trufflehog]
+      paths:
+        - test/**/test_main.cpp
     # Deliberately broken YAML: these are the inputs to bin/test-config-check.sh,
     # which asserts that `meshtasticd --check` reports each planted fault. Prettier
     # rejects the duplicate keys and bad indentation that are the whole point of
@@ -151,6 +175,26 @@ lint:
     - linters: [ascii-dash]
       paths:
         - src/graphics/fonts/**
+    # millis()-wraparound tests pin dense clusters of hex boundary constants
+    # (0xFFFFFF00u and neighbors). trufflehog's Lob detector stitches nearby
+    # hex literals into one candidate string and the result happens to match
+    # a Lob API key shape. Not secrets - deterministic test fixtures for the
+    # 32-bit rollover. test_ack_proof trips the same detector on its node
+    # numbers and request ids (0x0A0A0A0A, 0x0B0B0B0B, 0xABCD1234); its key
+    # material is generated at runtime by crypto->generateKeyPair, so there is
+    # no literal key in the file to leak.
+    - linters: [trufflehog]
+      paths:
+        - test/test_ack_proof/test_main.cpp
+        - test/test_airtime/test_main.cpp
+        - test/test_throttle/test_main.cpp
+        - test/test_uptime_clock/test_main.cpp
+    # The nightly index templates are halves of one page, not whole documents:
+    # hintro.html stops mid-<div> and houtro.html starts with closing tags, so
+    # that `tree --hintro/--houtro` can splice the file listing between them.
+    - linters: [ALL]
+      paths:
+        - .github/nightly/*.html
 runtimes:
   enabled:
     - python@3.14.4
