@@ -264,8 +264,17 @@ bool WarmNodeStore::saveIfDirty()
 // 3 × 4 KB pages below LittleFS. Mutations append 40 B records (entry snapshot,
 // or tombstone with last_heard == 0xFFFFFFFF) via the shared flash_nrf5x page
 // cache; saveIfDirty() is the durability point. A full page reclaims the oldest
-// (stranded live entries re-appended, then erased). Flash access holds spiLock -
-// the page cache is shared with InternalFS/LittleFS.
+// (stranded live entries re-appended, then erased).
+
+// That page cache, and the SoftDevice's one flash-op semaphore, are shared with LittleFS, whose
+// writers (Bluefruit bond saves, on the callback task) hold only this mutex. spiLock first, always.
+namespace
+{
+struct WarmFsLock {
+    WarmFsLock() { FSCom._lockFS(); }
+    ~WarmFsLock() { FSCom._unlockFS(); }
+};
+} // namespace
 
 bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h, WarmFormat *fmt) const
 {
@@ -364,6 +373,7 @@ void WarmNodeStore::ringAppend(const WarmNodeEntry &rec, int storeSlot)
 void WarmNodeStore::persistEntry(const WarmNodeEntry &e)
 {
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     ringAppend(e, static_cast<int>(&e - entries));
 }
 
@@ -376,12 +386,14 @@ void WarmNodeStore::persistRemove(NodeNum num, int storeSlot)
     tomb.num = num;
     tomb.last_heard = WARM_RING_TOMBSTONE;
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     ringAppend(tomb, -1);
 }
 
 void WarmNodeStore::persistClear()
 {
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     flash_nrf5x_flush();
     for (uint8_t p = 0; p < WARM_FLASH_PAGES; p++)
         flash_nrf5x_erase(WARM_FLASH_PAGE_ADDR(p));
@@ -396,6 +408,7 @@ void WarmNodeStore::load()
     if (!entries)
         return;
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
 
     // Order valid pages by ascending seq so replay applies oldest first
     uint8_t order[WARM_FLASH_PAGES] = {};
@@ -498,6 +511,7 @@ bool WarmNodeStore::save()
         return false;
     }
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     flash_nrf5x_flush();
     return true;
 }
