@@ -286,8 +286,8 @@ int32_t KbI2cBase::runOnce()
     case 0x84: { // Adafruit TCA8418
         TCAKeyboard->trigger();
         InputEvent e = {};
-        while (TCAKeyboard.hasEvent()) {
-            char nextEvent = TCAKeyboard.dequeueEvent();
+        while (TCAKeyboard->hasEvent()) {
+            char nextEvent = TCAKeyboard->dequeueEvent();
 
             if (nextEvent == TCA8418KeyboardBase::KEYPAD_LOCK) {
                 isKeypadLockedState = !isKeypadLockedState;
