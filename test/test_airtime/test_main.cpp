@@ -8,12 +8,14 @@
 #include "Arduino.h"
 #include "MeshRadio.h"
 #include "NodeDB.h"
+#include "Router.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "airtime.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <unity.h>
 
 static meshtastic_Config_LoRaConfig_RegionCode savedRegion;
@@ -39,6 +41,7 @@ void tearDown(void)
     config.device.role = savedRole;
     config.lora.override_duty_cycle = savedOverrideDutyCycle;
     initRegion();
+    router = nullptr; // the widest-frame case installs one; an aborted body must not leak it
 }
 
 // --- first sync / immediate writes ---
@@ -1068,7 +1071,7 @@ void test_isTxAllowedChannelUtil_boundary_is_exclusive()
     TEST_ASSERT_FALSE_MESSAGE(a.isTxAllowedChannelUtil(false), "exactly 40.0% must block, not allow");
 }
 
-void test_isTxAllowedAirUtil_allows_when_override_is_set()
+void test_isRoutineBroadcastAllowed_allows_when_override_is_set()
 {
     Time::setTestMillis(0);
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
@@ -1077,11 +1080,11 @@ void test_isTxAllowedAirUtil_allows_when_override_is_set()
     AirTime a;
     a.logAirtime(TX_LOG, MS_IN_HOUR); // 100% TX utilisation
 
-    TEST_ASSERT_TRUE(a.isTxAllowedAirUtil());
+    TEST_ASSERT_TRUE(a.isRoutineBroadcastAllowed());
     config.lora.override_duty_cycle = false;
 }
 
-void test_isTxAllowedAirUtil_allows_when_the_region_is_unlimited()
+void test_isRoutineBroadcastAllowed_allows_when_the_region_is_unlimited()
 {
     Time::setTestMillis(0);
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
@@ -1091,11 +1094,11 @@ void test_isTxAllowedAirUtil_allows_when_the_region_is_unlimited()
     a.logAirtime(TX_LOG, MS_IN_HOUR);
 
     TEST_ASSERT_TRUE_MESSAGE(getEffectiveDutyCycle() >= 100.0f, "US has no duty cycle limit");
-    TEST_ASSERT_TRUE(a.isTxAllowedAirUtil());
+    TEST_ASSERT_TRUE(a.isRoutineBroadcastAllowed());
 }
 
-// The polite gate is half the allowance, not the whole of it.
-void test_isTxAllowedAirUtil_blocks_at_half_the_duty_cycle()
+// Routine broadcasts get the first half of the allowance, not the whole of it.
+void test_isRoutineBroadcastAllowed_blocks_at_half_the_duty_cycle()
 {
     Time::setTestMillis(0);
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
@@ -1108,17 +1111,17 @@ void test_isTxAllowedAirUtil_blocks_at_half_the_duty_cycle()
     AirTime a;
     // 40% of the allowance: under half, so still allowed.
     a.logAirtime(TX_LOG, (uint32_t)(MS_IN_HOUR * duty / 100.0f * 0.40f));
-    TEST_ASSERT_TRUE_MESSAGE(a.isTxAllowedAirUtil(), "40% of the allowance is under the polite half");
+    TEST_ASSERT_TRUE_MESSAGE(a.isRoutineBroadcastAllowed(), "40% of the allowance is under the routine half");
 
     // Push past half.
     a.logAirtime(TX_LOG, (uint32_t)(MS_IN_HOUR * duty / 100.0f * 0.30f));
-    TEST_ASSERT_FALSE_MESSAGE(a.isTxAllowedAirUtil(), "70% of the allowance is over the polite half");
+    TEST_ASSERT_FALSE_MESSAGE(a.isRoutineBroadcastAllowed(), "70% of the allowance is over the routine half");
 }
 
-// Two thresholds ride on one figure: isTxAllowedAirUtil() is polite at half the
-// duty cycle, while Router::send() aborts only at the whole of it. There is a
-// band where the polite gate blocks and the hard gate would not - pinning it
-// here means an accuracy change has to be evaluated against both.
+// Two thresholds ride on one figure: isRoutineBroadcastAllowed() stops at half the
+// duty cycle, while Router::send() admits up to the whole of it. There is a
+// band where routine traffic is held back and a user packet still goes - pinning
+// it here means an accuracy change has to be evaluated against both.
 void test_router_send_gate_uses_the_whole_duty_cycle()
 {
     Time::setTestMillis(0);
@@ -1131,9 +1134,74 @@ void test_router_send_gate_uses_the_whole_duty_cycle()
     AirTime a;
     a.logAirtime(TX_LOG, (uint32_t)(MS_IN_HOUR * duty / 100.0f * 0.70f)); // 70% of the allowance
 
-    TEST_ASSERT_FALSE_MESSAGE(a.isTxAllowedAirUtil(), "the polite gate blocks at 70% of the allowance");
+    TEST_ASSERT_FALSE_MESSAGE(a.isRoutineBroadcastAllowed(), "the routine gate blocks at 70% of the allowance");
     TEST_ASSERT_TRUE_MESSAGE(a.utilizationTXPercent() < duty,
                              "...while the figure is still under the whole duty cycle Router::send() uses");
+}
+
+// A routine broadcaster asks before it has a packet, so the gate admits the preset's widest frame
+// in its place. That figure comes from the radio through the global router; with neither, it is 0
+// and the gate degrades to the bare figure, which is what every case above exercises.
+class WidestFrameRadio : public RadioInterface
+{
+  public:
+    uint32_t widestMs = 0;
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t, bool = false) override { return widestMs; }
+};
+
+// Function-local statics: Router's constructor asserts a global lock is not yet allocated, so at
+// most one may ever be built in this process.
+static WidestFrameRadio *installWidestFrameRadio()
+{
+    static Router *r = nullptr;
+    static WidestFrameRadio *radio = nullptr;
+    if (!r) {
+        r = new Router();
+        radio = new WidestFrameRadio();
+        r->addInterface(std::unique_ptr<RadioInterface>(radio));
+    }
+    router = r;
+    return radio;
+}
+
+void test_getMaxPacketAirtimeMsec_is_zero_without_a_radio()
+{
+    router = nullptr;
+    TEST_ASSERT_EQUAL_UINT32(0, getMaxPacketAirtimeMsec());
+}
+
+void test_isRoutineBroadcastAllowed_admits_the_widest_frame_not_the_bare_figure()
+{
+    Time::setTestMillis(600u * 1000u);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    config.lora.override_duty_cycle = false;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    initRegion();
+    const uint32_t shareMs = (uint32_t)(MS_IN_HOUR * getEffectiveDutyCycle() / 100.0f * 0.5f); // 45 000 ms
+
+    WidestFrameRadio *radio = installWidestFrameRadio();
+    radio->widestMs = 2034; // LONG_FAST
+    TEST_ASSERT_EQUAL_UINT32(2034, getMaxPacketAirtimeMsec());
+
+    AirTime a;
+    a.logAirtime(TX_LOG, shareMs - 1000); // 1 s of the routine share left
+
+    TEST_ASSERT_TRUE_MESSAGE(a.utilizationTXPercent() < getEffectiveDutyCycle() * 0.5f, "the bare figure is under the share");
+    TEST_ASSERT_FALSE_MESSAGE(a.isRoutineBroadcastAllowed(), "...but a LONG_FAST frame would not fit in what is left");
+
+    radio->widestMs = 900;
+    TEST_ASSERT_TRUE_MESSAGE(a.isRoutineBroadcastAllowed(), "a frame that fits is admitted");
+    radio->widestMs = 1000;
+    TEST_ASSERT_TRUE_MESSAGE(a.isRoutineBroadcastAllowed(), "exactly what is left is admitted");
+    radio->widestMs = 1001;
+    TEST_ASSERT_FALSE_MESSAGE(a.isRoutineBroadcastAllowed(), "one ms more is not");
+
+    router = nullptr;
 }
 
 // getEffectiveDutyCycle() special-cases EU_866 by role. Every other region -
@@ -1611,7 +1679,7 @@ void test_backwards_uptime_degrades_safely()
 void test_no_public_method_takes_the_lock_twice()
 {
     Time::setTestMillis(0);
-    // EU_868 explicitly, not inherited: isTxAllowedAirUtil() constructs a Held only inside its
+    // EU_868 explicitly, not inherited: isRoutineBroadcastAllowed() constructs a Held only inside its
     // duty-cycle branch, so under the default US region (100%) it would return before locking and
     // this test would not cover it at all.
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
@@ -1636,7 +1704,7 @@ void test_no_public_method_takes_the_lock_twice()
     (void)a.wouldExceedDutyCycle(2034, 2.5f);
     (void)a.isTxAllowedChannelUtil(false);
     (void)a.isTxAllowedChannelUtil(true);
-    (void)a.isTxAllowedAirUtil();
+    (void)a.isRoutineBroadcastAllowed();
 
     // Reaching here without the assert firing IS the assertion; check the object still works.
     TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
@@ -1710,10 +1778,12 @@ void setup()
     RUN_TEST(test_tx_utilization_matches_the_truth);
     RUN_TEST(test_isTxAllowedChannelUtil_polite_threshold_is_lower);
     RUN_TEST(test_isTxAllowedChannelUtil_boundary_is_exclusive);
-    RUN_TEST(test_isTxAllowedAirUtil_allows_when_override_is_set);
-    RUN_TEST(test_isTxAllowedAirUtil_allows_when_the_region_is_unlimited);
-    RUN_TEST(test_isTxAllowedAirUtil_blocks_at_half_the_duty_cycle);
+    RUN_TEST(test_isRoutineBroadcastAllowed_allows_when_override_is_set);
+    RUN_TEST(test_isRoutineBroadcastAllowed_allows_when_the_region_is_unlimited);
+    RUN_TEST(test_isRoutineBroadcastAllowed_blocks_at_half_the_duty_cycle);
     RUN_TEST(test_router_send_gate_uses_the_whole_duty_cycle);
+    RUN_TEST(test_getMaxPacketAirtimeMsec_is_zero_without_a_radio);
+    RUN_TEST(test_isRoutineBroadcastAllowed_admits_the_widest_frame_not_the_bare_figure);
     RUN_TEST(test_effective_duty_cycle_special_case_is_eu_866_only);
     RUN_TEST(test_getSilentMinutes_returns_zero_when_under_the_limit);
     RUN_TEST(test_getSilentMinutes_reads_the_ring_rather_than_a_caller_figure);
