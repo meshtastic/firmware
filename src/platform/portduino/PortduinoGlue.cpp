@@ -1297,21 +1297,33 @@ bool loadConfig(const char *configPath)
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
             portduino_config.joystickDevice = (yamlConfig["Input"]["JoystickDevice"]).as<std::string>("");
             if (yamlConfig["Input"]["JoystickButtons"]) {
-                // action name -> evdev button code (hex like 0x122 or decimal); stored inverted
-                // as code -> lowercase action name for the driver to look up per keypress.
+                // action name -> evdev button code (hex like 0x122 or decimal), or a list of codes
+                // so several physical buttons drive the same action. Stored inverted as
+                // code -> lowercase action name for the driver to look up per keypress.
                 for (const auto &button : yamlConfig["Input"]["JoystickButtons"]) {
                     std::string action = button.first.as<std::string>("");
                     for (auto &c : action)
                         c = tolower(c);
-                    int code = 0;
-                    try {
-                        // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
-                        code = std::stoi(button.second.as<std::string>(""), nullptr, 0);
-                    } catch (const std::exception &) {
-                        code = 0;
+                    if (action == "")
+                        continue;
+                    // A bare scalar is just a one-entry list.
+                    std::vector<YAML::Node> codeNodes;
+                    if (button.second.IsSequence())
+                        for (const auto &codeNode : button.second)
+                            codeNodes.push_back(codeNode);
+                    else
+                        codeNodes.push_back(button.second);
+                    for (const auto &codeNode : codeNodes) {
+                        int code = 0;
+                        try {
+                            // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
+                            code = std::stoi(codeNode.as<std::string>(""), nullptr, 0);
+                        } catch (const std::exception &) {
+                            code = 0;
+                        }
+                        if (code != 0)
+                            portduino_config.joystickButtons[code] = action;
                     }
-                    if (code != 0 && action != "")
-                        portduino_config.joystickButtons[code] = action;
                 }
             }
 
