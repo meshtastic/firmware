@@ -27,6 +27,7 @@
 #include <Arduino.h>
 
 #if HAS_LIBNOTIFY
+#include "meshUtils.h"
 #include <libnotify/notify.h>
 #endif
 
@@ -658,6 +659,39 @@ static constexpr int maxNotifyFailures = 3;
 static constexpr uint32_t notifyBackoffInitialMs = 30 * 1000;
 static constexpr uint32_t notifyBackoffMaxMs = 15 * 60 * 1000;
 
+/// Copy an untrusted mesh string into something GLib will accept. Embedded NULs become spaces -
+/// they would otherwise truncate the text at the first one - and invalid UTF-8 is replaced, because
+/// g_variant_new_string() rejects it: a GLib CRITICAL by default, and a hard abort under
+/// G_DEBUG=fatal-criticals, which an unauthenticated mesh packet must never be able to trigger.
+static std::string sanitizedMeshText(const char *src, size_t len)
+{
+    std::string out(src, len);
+    for (char &c : out) {
+        if (c == '\0')
+            c = ' ';
+    }
+    out.push_back('\0'); // sanitizeUtf8() works on a NUL-terminated buffer
+    sanitizeUtf8(out.data(), out.size());
+    out.pop_back(); // bad bytes are replaced in place, so the length is unchanged
+    return out;
+}
+
+/// Escape Pango markup in a notification body. Servers advertising "body-markup" parse a markup
+/// subset there, so an unescaped message can inject formatting - and where the server also
+/// advertises body-images or body-hyperlinks, tags that make the daemon fetch a remote URL. The
+/// escaping is unconditional: a server without body-markup renders the entities literally, which is
+/// cosmetic, while failing to escape one that has it is not, and mesh text carries no markup worth
+/// preserving. Only the body needs this; the spec gives the summary no markup.
+static std::string escapedNotificationBody(const std::string &text)
+{
+    gchar *escaped = g_markup_escape_text(text.data(), (gssize)text.size());
+    if (!escaped)
+        return text;
+    std::string out(escaped);
+    g_free(escaped);
+    return out;
+}
+
 void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp)
 {
     std::string senderName;
@@ -674,8 +708,14 @@ void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp
 
     // nodeDB is only safe to touch on this thread, so the strings are resolved here and the worker
     // gets owned copies.
-    std::string notificationSummary = "From: " + senderName;
-    std::string notificationBody((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
+    //
+    // Both are attacker-controlled - the body is the raw payload and the name came off the mesh -
+    // so neither reaches libnotify unsanitized. TypeConversions already sanitizes names on the way
+    // into NodeDB, but the abort described above is too sharp an edge to leave resting on an
+    // invariant owned by another file.
+    std::string notificationSummary = "From: " + sanitizedMeshText(senderName.data(), senderName.size());
+    std::string notificationBody =
+        escapedNotificationBody(sanitizedMeshText((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size));
 
     reportNotifyStatus();
 
@@ -798,5 +838,9 @@ ExternalNotificationModule::~ExternalNotificationModule()
     notifyWake.notify_one();
     if (notifyThread.joinable())
         notifyThread.join();
+    // Only after the join: the worker owns every libnotify call, so tearing down while it is still
+    // running would be a use-after-uninit.
+    if (notify_is_initted())
+        notify_uninit();
 }
 #endif
