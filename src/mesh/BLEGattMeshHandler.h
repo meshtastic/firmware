@@ -91,7 +91,8 @@ struct BLEGattMeshPeer {
 /**
  * Carries mesh frames between this node and phones connected over a BLE GATT link, the SIG Mesh
  * "GATT proxy" role. The node is the GATT server; each phone is a central that writes fragments to
- * the mesh characteristic and subscribes to it. Firmware never dials out.
+ * the mesh characteristic and subscribes to it. ESP32 never dials out; the nRF52 build also dials a
+ * phone whose advertisement shows the mesh-peer service (NRF52BLEGattMesh).
  *
  * Point-to-point where LoRa and the advertisement transport are one-to-many: a broadcast here is N
  * notifies to N peers. Egress skips the peer a relayed packet arrived from. Framing, reassembly
