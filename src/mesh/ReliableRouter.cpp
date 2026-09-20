@@ -1,4 +1,5 @@
 #include "ReliableRouter.h"
+#include "AckProof.h"
 #include "Default.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
@@ -172,7 +173,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if ((ackId || nakId) &&
+        if ((ackId || nakId) && ackProofPermitsAction(p, ackId ? ackId : nakId) &&
             // Implicit ACKs from MQTT should not stop retransmissions
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
             LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
@@ -190,6 +191,44 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
     // handle the packet as normal
     isBroadcast(p->to) ? FloodingRouter::sniffReceived(p, c) : NextHopRouter::sniffReceived(p, c);
+}
+
+bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId)
+{
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // Cheap gate FIRST: verification costs one X25519 per call (setDHPublicKey runs Curve25519::dh2
+    // and nothing caches the result), and an attacker with the channel key picks when we pay it. A
+    // packet id is visible in the cleartext header, so without this gate a forged ack for any id at
+    // all forces a DH. With it, only ids we genuinely have outstanding can, and only while pending.
+    PendingPacket *orig = findPendingPacket(p->to, originalId);
+    if (!orig)
+        return true;
+    const bool expected = orig->packet && orig->packet->pki_encrypted;
+
+    switch (ackProofVerify(p, originalId)) {
+    case AckProofResult::VALID:
+        LOG_DEBUG("ACK proof OK for 0x%08x", originalId);
+        return true;
+    case AckProofResult::INVALID:
+        // Somebody produced an ack for our packet without holding the shared secret.
+        LOG_WARN("ACK proof MISMATCH for 0x%08x from 0x%08x%s", originalId, getFrom(p),
+                 ACK_PROOF_ENFORCE ? ", ignoring ack" : " (advisory)");
+        return !ACK_PROOF_ENFORCE;
+    case AckProofResult::NO_KEY:
+        LOG_DEBUG("ACK proof present for 0x%08x but no authoritative key for 0x%08x", originalId, getFrom(p));
+        return true;
+    case AckProofResult::ABSENT:
+        // What every current firmware sends, and what every non-PKI peer will always send, so this
+        // can only ever be reported - never enforced. See ACK_PROOF_ENFORCE in AckProof.h.
+        if (expected)
+            LOG_INFO("Unproven ack for PKI packet 0x%08x from 0x%08x", originalId, getFrom(p));
+        return true;
+    }
+#else
+    (void)p;
+    (void)originalId;
+#endif
+    return true;
 }
 
 /**

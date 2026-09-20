@@ -1362,6 +1362,87 @@ void test_customMqttRoot(void)
         [] { return pubsub->subscriptions_.count("custom/2/e/test/+") && pubsub->subscriptions_.count("custom/2/e/PKI/+"); }));
 }
 
+// A LoRa region change rewrites moduleConfig.mqtt.root without telling MQTT (AdminModule, MenuHandler,
+// InkHUD). MQTT must pick it up, rebuild the topics and resubscribe; otherwise the node keeps
+// publishing and subscribing under the old region's root until reboot. An uplink sent before
+// runOnce() runs must already use the new root.
+void test_rootChange_rebuildsTopics(void)
+{
+    // Start MQTT with a US region root.
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    MQTTUnitTest::restart();
+
+    TEST_ASSERT_TRUE(loopUntil(
+        [] { return pubsub->subscriptions_.count("msh/US/2/e/test/+") && pubsub->subscriptions_.count("msh/US/2/e/PKI/+"); }));
+
+    // Simulate region change: only the root changes, nobody notifies MQTT.
+    strcpy(moduleConfig.mqtt.root, "msh/EU_868");
+    pubsub->subscriptions_.clear();
+    pubsub->published_.clear();
+    mqtt->onSend(encrypted, decoded, 0);
+
+    // Subscriptions are refreshed, and the uplink is published under the new root after the reconnect.
+    TEST_ASSERT_TRUE(loopUntil([] {
+        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") && pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+") &&
+               !pubsub->published_.empty();
+    }));
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    const auto &[topic, payload] = pubsub->published_.front();
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868/2/e/test/!12345678", topic.c_str());
+}
+
+// The "<root>/<region>" suffix (msh/US, msh/EU_868) is a convention of the default Meshtastic broker, so a
+// region change only rewrites the root there, and only when the root is still the default one. Guards against
+// clobbering a root the user chose (including one that merely starts with "msh"), and against moving a private
+// broker's topics, which are regional already if they need to be.
+void test_applyRegionRootTopic_rewritesDefaultBrokerRootsOnly(void)
+{
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    strcpy(moduleConfig.mqtt.root, default_mqtt_root);
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // An empty root is the default too: MQTT falls back to "msh" when building its topics.
+    moduleConfig.mqtt.root[0] = '\0';
+    strcpy(moduleConfig.mqtt.address, default_mqtt_address);
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // The default broker with an explicit port is still the default broker.
+    strcpy(moduleConfig.mqtt.address, default_mqtt_address ":1883");
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // A root of the user's own is left alone, even when it starts with "msh".
+    strcpy(moduleConfig.mqtt.root, "msh/home");
+    TEST_ASSERT_FALSE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/home", moduleConfig.mqtt.root);
+
+    // A private broker keeps its topics across a region change.
+    strcpy(moduleConfig.mqtt.address, "mqtt.example.org");
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_FALSE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/US", moduleConfig.mqtt.root);
+}
+
+// USERPREFS_EVENT_MODE gates the public broker on isUsingDefaultRootTopic() (Channels::anyMqttEnabled()).
+// A "msh/<region>" root is what a region change writes on the default broker, so it has to keep counting as
+// the default root; otherwise an event build silently loses that guard the first time the region changes.
+void test_regionRootTopic_countsAsTheDefaultRoot(void)
+{
+    strcpy(moduleConfig.mqtt.root, "msh/EU_868");
+    MQTTUnitTest::restart();
+    TEST_ASSERT_TRUE(mqtt->isUsingDefaultRootTopic());
+
+    strcpy(moduleConfig.mqtt.root, "msh/home");
+    MQTTUnitTest::restart();
+    TEST_ASSERT_FALSE(mqtt->isUsingDefaultRootTopic());
+}
+
 // Empty configuration is valid.
 void test_configEmptyIsValid(void)
 {
@@ -1557,6 +1638,9 @@ void setup()
     RUN_TEST(test_disabled);
     RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
+    RUN_TEST(test_rootChange_rebuildsTopics);
+    RUN_TEST(test_applyRegionRootTopic_rewritesDefaultBrokerRootsOnly);
+    RUN_TEST(test_regionRootTopic_countsAsTheDefaultRoot);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);

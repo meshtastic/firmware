@@ -161,6 +161,16 @@ if those yield nothing meshtasticd exits with "Blank MAC Address not allowed!".
 | `mac-malformed.yaml`      | `AA:BB:CC` is under 12 hex digits, so it is silently dropped.                                                                               |
 | `mac-source-missing.yaml` | Names an interface with no `/sys/class/net/<n>/address`. Warning, not an error: it is machine-dependent and may be checked on another host. |
 
+## Joystick buttons
+
+`Input.JoystickButtons` is keyed by action, not by button, so an action can name a
+single evdev code or a list of them and every one of those buttons drives it.
+
+| File                        | Expected                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `joystick-buttons.yaml`     | **Clean, and a regression guard** - four actions, two of them with several codes.                              |
+| `joystick-buttons-bad.yaml` | Three silent no-ops: an action name nothing reads, an evdev name where a code belongs, one code claimed twice. |
+
 ## CH341 USB-SPI adapters
 
 `spidev: ch341` is a different hardware model, not a variant of the same one. The Lora

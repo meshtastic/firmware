@@ -1091,6 +1091,106 @@ void test_B13_licensed_port_and_destination_signing_matrix(void)
     }
 }
 
+// B14: PKI needs only the two keys, so a DM can arrive over a channel we do not carry. Its ack is a
+// ROUTING packet, which is PKC-excluded, so it would be channel-encoded and die with NO_CHANNEL -
+// and the sender would then retransmit to exhaustion for a message that WAS delivered. Fall back to
+// PKC for exactly that case.
+void test_B14_ack_with_no_usable_channel_falls_back_to_pkc(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+
+    // A secondary channel index that does not resolve - otherwise the test proves nothing.
+    const ChannelIndex deadChannel = 1;
+    TEST_ASSERT_LESS_THAN_MESSAGE(0, channels.getHash(deadChannel), "test needs an unusable channel index");
+
+    meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    ack.decoded.request_id = 0xFEED5150;
+    ack.channel = deadChannel;
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(&ack),
+                              "ack on an unusable channel must not fail to send");
+    TEST_ASSERT_TRUE_MESSAGE(ack.pki_encrypted, "it must have gone out over PKC");
+}
+
+// The fallback must not paper over a genuinely unsendable ack: with no key for the destination there
+// is nothing to encrypt to, and NO_CHANNEL is still the honest answer.
+void test_B15_ack_with_no_channel_and_no_key_still_fails(void)
+{
+    uint8_t localPub[32], localPriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+    // REMOTE_NODE deliberately absent from the DB, so we hold no key for it.
+
+    const ChannelIndex deadChannel = 1;
+    TEST_ASSERT_LESS_THAN(0, channels.getHash(deadChannel));
+
+    meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    ack.decoded.request_id = 0xFEED5150;
+    ack.channel = deadChannel;
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NO_CHANNEL, perhapsEncode(&ack),
+                              "without a destination key the ack is genuinely unsendable");
+}
+
+// The fallback is scoped to acks: a non-ROUTING unicast on an unusable channel still fails, so this
+// does not quietly turn every channel-less packet into a PKC packet.
+void test_B16_non_ack_on_unusable_channel_still_fails(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+
+    const ChannelIndex deadChannel = 1;
+    TEST_ASSERT_LESS_THAN(0, channels.getHash(deadChannel));
+
+    // TRACEROUTE is PKC-excluded like ROUTING, but carries no request_id and is not an ack.
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    p.channel = deadChannel;
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NO_CHANNEL, perhapsEncode(&p), "the PKC fallback must apply to acks only");
+}
+
+// A ROUTING packet on a channel that DOES resolve keeps taking the channel path, so relays retain
+// the readable acks they use for next-hop learning and retransmission cancel.
+void test_B17_ack_on_a_usable_channel_stays_on_the_channel(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+
+    meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    ack.decoded.request_id = 0xFEED5150;
+    ack.channel = 0; // the primary, which initDefaults() made usable
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, perhapsEncode(&ack));
+    TEST_ASSERT_FALSE_MESSAGE(ack.pki_encrypted, "a sendable ack must stay readable to relays");
+}
+
 // ===========================================================================
 // Group C - routing pipeline and NodeInfo authentication ordering
 // ===========================================================================
@@ -2244,6 +2344,10 @@ void setup()
     RUN_TEST(test_B11_normal_unicast_still_uses_pki);
     RUN_TEST(test_B12_licensed_receiver_does_not_decrypt_pki);
     RUN_TEST(test_B13_licensed_port_and_destination_signing_matrix);
+    RUN_TEST(test_B14_ack_with_no_usable_channel_falls_back_to_pkc);
+    RUN_TEST(test_B15_ack_with_no_channel_and_no_key_still_fails);
+    RUN_TEST(test_B16_non_ack_on_unusable_channel_still_fails);
+    RUN_TEST(test_B17_ack_on_a_usable_channel_stays_on_the_channel);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
