@@ -72,9 +72,11 @@
   scheduler-driven window stops advancing during light sleep. Enforced by
   test_channel_utilization_is_independent_of_scheduler_rate.
 
-  TODO: airtime accuracy. Three known defects remain - the quantised denominator,
-  its sawtooth, and whole-packet attribution to the completing bucket. Each is
-  pinned by a test tagged CHARACTERISATION in test/test_airtime.
+  Accuracy: the four defects this block used to list - the ring-phase walk in
+  getSilentMinutes(), whole-packet attribution to the completing bucket, the
+  quantised denominator and its sawtooth - are fixed, and test_airtime_accuracy
+  measures what is left against an exact oracle. What remains is burst aliasing
+  at 6 x 10 s, which narrower channel buckets would halve.
 */
 
 #define CHANNEL_UTILIZATION_PERIODS 6
@@ -90,6 +92,12 @@
 // because narrowing the channel window later is a change to one of these and nothing else.
 #define CHANUTIL_PERIOD_MS 10000
 #define TXUTIL_PERIOD_MS 60000
+// One slot more than the window is wide. The extra slot holds the bucket that is only PARTLY
+// expired, so the window can cover exactly the N periods its denominator claims instead of
+// (N-1) + however far we are into the current one. The denominator keeps the WINDOW count, never
+// the slot count - that asymmetry is the whole mechanism.
+#define CHANNEL_UTILIZATION_SLOTS (CHANNEL_UTILIZATION_PERIODS + 1)
+#define TXUTIL_SLOTS (MINUTES_IN_HOUR + 1)
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
@@ -192,18 +200,22 @@ class AirTime : private concurrency::OSThread
         uint32_t secSinceBoot = 0;
 
         // Modular rings: index is absolute phase, (uptime secs / period) % N, never age.
-        uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0}; // 6 x 10s
+        uint32_t channelUtilization[CHANNEL_UTILIZATION_SLOTS] = {0}; // 6 x 10s window, 7 slots
 
         // EMA over channelUtilization, folded in syncNow() once per crossed 10 s bucket so its
         // time constant follows elapsed time rather than how often a caller happens to ask.
         float channelUtilAvg = 0.0f;
         bool hasChannelUtilSample = false;
-        uint32_t utilizationTX[MINUTES_IN_HOUR] = {0}; // 60 x 60s, our TX only
+        uint32_t utilizationTX[TXUTIL_SLOTS] = {0}; // 60 x 60s window, 61 slots, our TX only
 
         // Hour crossings rotated but not yet traced. The core cannot log its own rotations: it
         // only ever runs under the lock, and DEBUG_PORT.log() blocks on a UART write. runOnce()
         // drains this and logs after releasing, so the trace costs the lock nothing.
         uint32_t rotationsPendingLog = 0;
+
+        // Sub-second remainder of the last sync, 0..999. Kept beside the seconds snapshot so
+        // nothing downstream needs 64-bit arithmetic on a path that runs per send attempt.
+        uint16_t msInSec = 0;
 
         // Shift-ordered, unlike the rings above: slot 0 is the newest hour and the index is age.
         struct airtimeStruct {
@@ -229,6 +241,10 @@ class AirTime : private concurrency::OSThread
         uint8_t getSilentMinutes(float dutyCycle, const Held &);
         uint8_t getPeriodUtilMinute(const Held &);
         uint8_t getPeriodUtilHour(const Held &);
+        /// Milliseconds into the current `periodSecs` bucket. Sub-second resolution matters: at
+        /// second granularity with 10 s buckets the interpolation weight moves in 0.1 steps, which
+        /// leaves a 0.67 pp step per second at a 40% reading.
+        uint32_t phaseMs(uint32_t periodSecs) const;
         // Advance rolling airtime windows from monotonic uptime, not from runOnce() calls.
         void syncNow(const Held &);
     } w;
