@@ -155,10 +155,11 @@ BLE support is compiled in only when sdbus-c++ is present, so a valid `Bluetooth
 section is clean on a BLE build and reports the build-time gap as a warning on a
 non-BLE build. The assertions only test what holds either way.
 
-| File                         | Expected                                                                                       |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| `bluetooth.yaml`             | The section parses, both keys are known, and no error is invented.                             |
-| `bluetooth-bad-enabled.yaml` | `Enabled: maybe` is read with a fallback: silently replaced by `false`, so BLE never turns on. |
+| File                         | Expected                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| `bluetooth.yaml`             | The section parses, both keys are known, and no error is invented.                               |
+| `bluetooth-bad-enabled.yaml` | `Enabled: maybe` is read with a fallback: silently replaced by `false`, so BLE never turns on.   |
+| `bluetooth-bad-adapter.yaml` | `hci1junk` passes the MAC fallback but is not a BlueZ object path, so BLE silently never starts. |
 
 ## MAC address
 

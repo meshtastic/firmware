@@ -154,6 +154,9 @@ assert "bluetooth section parses" 0 bluetooth.yaml check \
 assert "bluetooth bad Enabled is silently defaulted" 0 bluetooth-bad-enabled.yaml check \
 	"Bluetooth.Enabled is not a true/false value" \
 	"Result: 0 errors, 1 warning"
+assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.yaml check \
+	"is not a BlueZ adapter name" \
+	"Result: 0 errors, 1 warning"
 
 echo
 echo "module names are matched exactly:"

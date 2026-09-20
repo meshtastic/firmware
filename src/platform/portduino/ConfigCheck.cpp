@@ -839,6 +839,19 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             if (value.IsSequence())
                 for (const auto &pin : value)
                     checkPinNode(file, section + "." + key, pin, findings);
+        } else if (section == "Bluetooth" && key == "AdapterId") {
+            // LinuxBluetooth uses this verbatim as the BlueZ object path (/org/bluez/<id>), while the
+            // MAC fallback only reads the leading hciN. A value like "hci1junk" therefore looks
+            // plausible, yields a MAC, and then finds no adapter -- BLE just never comes up. Only
+            // hci<digits> is a real adapter name.
+            const std::string adapter = value.as<std::string>("");
+            const bool wellFormed = adapter.rfind("hci", 0) == 0 && adapter.size() > 3 &&
+                                    adapter.find_first_not_of("0123456789", 3) == std::string::npos;
+            if (!wellFormed)
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Bluetooth.AdapterId '" + adapter +
+                                        "' is not a BlueZ adapter name. It must be hci followed by digits (hci0, hci1); "
+                                        "anything else leaves no /org/bluez entry to attach to and Bluetooth stays off"});
         } else if (key == "JoystickButtons") {
             // Free-form: any action name mapped to an evdev code.
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||

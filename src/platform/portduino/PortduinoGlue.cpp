@@ -178,6 +178,12 @@ void setBluetoothEnable(bool enable)
         LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
         linuxBluetooth = new LinuxBluetooth();
         linuxBluetooth->setup();
+    } else if (!linuxBluetooth->isEnabled()) {
+        // The backend exists but never came up -- bluetoothd was not ready, the adapter was
+        // missing, or policy refused us. resumeAdvertising() returns immediately while disabled, so
+        // without this a transient failure at boot would keep BLE off until the process restarted.
+        LOG_INFO("Retry LinuxBluetooth setup (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        linuxBluetooth->setup();
     } else {
         linuxBluetooth->resumeAdvertising();
     }
@@ -1387,8 +1393,15 @@ bool loadConfig(const char *configPath)
         }
 
         if (yamlConfig["Bluetooth"]) {
-            portduino_config.bluetooth_enabled = (yamlConfig["Bluetooth"]["Enabled"]).as<bool>(false);
-            portduino_config.bluetooth_adapter = (yamlConfig["Bluetooth"]["AdapterId"]).as<std::string>("hci0");
+            // Assign per key, not per section. loadConfig() runs once for every file in config.d, so
+            // reading an absent key as its default would let a later file that names only one of
+            // these silently reset the other -- `AdapterId: hci1` alone would turn Bluetooth off,
+            // and `Enabled: true` alone would drag the adapter back to hci0. Only what a file
+            // actually says should override what an earlier one set.
+            if (yamlConfig["Bluetooth"]["Enabled"])
+                portduino_config.bluetooth_enabled = (yamlConfig["Bluetooth"]["Enabled"]).as<bool>(false);
+            if (yamlConfig["Bluetooth"]["AdapterId"])
+                portduino_config.bluetooth_adapter = (yamlConfig["Bluetooth"]["AdapterId"]).as<std::string>("hci0");
         }
 
         if (yamlConfig["HostMetrics"]) {
