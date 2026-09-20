@@ -157,7 +157,9 @@ void test_smoothed_channel_utilization_starts_from_the_raw_window()
 
 void test_smoothed_channel_utilization_lags_a_sudden_spike()
 {
-    Time::setTestMillis(0);
+    // Past a full window before the burst: a 30 s frame completing at uptime 10 s overlapped boot,
+    // and only the part after boot is inside any window this node can account for.
+    Time::setTestMillis(120u * 1000u);
     AirTime a;
     a.smoothedChannelUtilizationPercent(); // seed from an idle window
 
@@ -249,7 +251,9 @@ void test_smoothed_channel_utilization_decays_across_a_long_sleep()
 
 void test_isTxAllowedChannelUtil_blocks_once_over_threshold()
 {
-    Time::setTestMillis(0);
+    // Past a full window: airtime longer than one bucket needs somewhere to spread, and nothing can
+    // have been on air before uptime 0.
+    Time::setTestMillis(120u * 1000u);
     AirTime a;
 
     TEST_ASSERT_TRUE(a.isTxAllowedChannelUtil()); // nothing logged yet
@@ -756,12 +760,14 @@ void test_channel_utilization_clears_only_the_buckets_crossed()
         a.logAirtime(RX_LOG, (b + 1) * 1000);
         Time::advanceTestMillis(10u * 1000u);
     }
-    // t = 60 s: bucket 0 has just been cleared, taking 1000 + 2000 with it.
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, (3000 + 4000 + 5000 + 6000) / 600.0f, a.channelUtilizationPercent(),
-                                     "entering a bucket clears exactly that bucket");
+    // t = 60 s. The spare slot still holds the oldest bucket, and at phase 0 all of it is inside
+    // the window - so the reading is every millisecond the true trailing 60 s contains.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, (1000 + 2000 + 3000 + 4000 + 5000 + 6000) / 600.0f, a.channelUtilizationPercent(),
+                                     "the window covers exactly its own length");
 
     Time::advanceTestMillis(20u * 1000u); // crosses two more
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, (5000 + 6000) / 600.0f, a.channelUtilizationPercent(),
+    // t = 80 s: the true window is [20 s, 80 s], which excludes the airtime logged at 10 s and 20 s.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, (4000 + 5000 + 6000) / 600.0f, a.channelUtilizationPercent(),
                                      "20s must clear exactly two buckets, oldest first");
 }
 
@@ -774,8 +780,13 @@ void test_channel_utilization_clear_boundary_is_exactly_six_periods()
     Time::advanceTestMillis(59u * 1000u);
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 10.0f, a.channelUtilizationPercent(), "59s: still inside the window");
 
+    // 60 s is the last instant the airtime is wholly inside the window, and the spare slot is what
+    // lets the window say so. It then decays across the following bucket rather than vanishing.
     Time::advanceTestMillis(1000);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f, a.channelUtilizationPercent(), "60s: the bucket is reused");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 10.0f, a.channelUtilizationPercent(), "60s: still exactly covered");
+
+    Time::advanceTestMillis(10u * 1000u);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f, a.channelUtilizationPercent(), "70s: the slot is reused");
 }
 
 void test_channel_utilization_is_zero_when_nothing_logged()
@@ -807,13 +818,10 @@ void test_channel_utilization_decays_proportionally_across_light_sleep()
     const float truth = expectedUtilisation(ev, 6, 90000, 60000);
     snprintf(g_msg, sizeof(g_msg), "before %.4f%%, after a 30s gap %.4f%%, oracle %.4f%%", full, after, truth);
     TEST_ASSERT_TRUE_MESSAGE(after < full, g_msg);
-    // CHARACTERISATION. The reading is BELOW the oracle, and by design cannot reach it yet: six
-    // buckets cover (N-1)p + phase, not a full 60 s, so at a bucket boundary the window holds only
-    // 50 s of the hour the oracle integrates over. Airtime that is genuinely inside the true window
-    // falls out with the recycled bucket. Interpolating the expiring bucket is what closes this;
-    // until then, assert the direction and the bound rather than equality.
-    TEST_ASSERT_TRUE_MESSAGE(after <= truth + 0.01f, g_msg);
-    TEST_ASSERT_TRUE_MESSAGE(after >= truth / 2.0f - 0.01f, g_msg);
+    // Whole buckets shed, so the survivors are exactly what was still on air in the last 60 s. This
+    // was briefly unreachable: splitting a packet across the buckets it occupied exposed a coverage
+    // deficit that whole-packet attribution had been masking, and only the spare slot closes it.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, truth, after, g_msg);
 }
 
 // Hold wall time and airtime fixed, vary only how often the class is polled,
@@ -870,10 +878,10 @@ void test_channel_utilization_counts_each_packet_once()
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, a.channelUtilizationPercent());
 }
 
-// CHARACTERISATION. The current bucket is zeroed on entry and fills across its
-// period, so the window covers (N-1)p + phase against a denominator of Np -
-// right after a boundary, 50s of coverage divided by 60s.
-void test_channel_utilization_covers_less_than_its_denominator()
+// The window covers exactly the length its denominator claims. The spare slot holds the bucket that
+// is only partly expired, and the read counts the fraction of it still inside the window, so
+// coverage is (N-1)p + phase + (p - phase) = Np rather than falling short by the phase.
+void test_channel_utilization_covers_its_denominator()
 {
     Time::setTestMillis(0);
     AirTime a;
@@ -893,12 +901,13 @@ void test_channel_utilization_covers_less_than_its_denominator()
 
     snprintf(g_msg, sizeof(g_msg), "oracle %.4f%%, reported %.4f%% (deficit %.4f pp)", truth, reported, truth - reported);
     TEST_ASSERT_TRUE_MESSAGE(truth > 9.5f, g_msg); // a steady 10% load, less the event on the window edge
-    TEST_ASSERT_TRUE_MESSAGE(reported < truth - 1.0f, g_msg);
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(reported - truth) < 0.5f, g_msg);
 }
 
-// CHARACTERISATION. The same defect numerically: under a steady load the
-// reading sweeps with position inside the current bucket instead of holding.
-void test_channel_utilization_quantisation_error_by_phase()
+// The same, stated as jitter: under a steady load the reading now holds across the bucket phase
+// instead of sweeping with it, because what the current bucket has not yet collected is exactly what
+// the expiring one still contributes.
+void test_channel_utilization_holds_steady_across_bucket_phase()
 {
     Time::setTestMillis(0);
     AirTime a;
@@ -919,9 +928,9 @@ void test_channel_utilization_quantisation_error_by_phase()
     }
 
     snprintf(g_msg, sizeof(g_msg), "steady 10%% load reads %.4f%%..%.4f%% across bucket phase", lo, hi);
-    TEST_ASSERT_TRUE_MESSAGE(lo < 9.0f, g_msg);      // under-reports at the start of a bucket
-    TEST_ASSERT_TRUE_MESSAGE(hi > 9.5f, g_msg);      // recovers by the end of it
-    TEST_ASSERT_TRUE_MESSAGE(hi - lo > 1.0f, g_msg); // and the sawtooth is the jitter defect
+    TEST_ASSERT_TRUE_MESSAGE(lo > 9.5f, g_msg);      // no longer under-reports at the start of a bucket
+    TEST_ASSERT_TRUE_MESSAGE(hi <= 10.05f, g_msg);   // nor over-reports by the end of it
+    TEST_ASSERT_TRUE_MESSAGE(hi - lo < 0.5f, g_msg); // the sawtooth is what interpolation removes
 }
 
 // A saturated channel is 100.0% occupied, and no window may report more than its own length. Held
@@ -980,11 +989,10 @@ void test_tx_utilization_clears_only_the_minutes_crossed()
     const float all = (1000 + 2000 + 3000 + 4000) / (float)MS_IN_HOUR * 100.0f;
     TEST_ASSERT_FLOAT_WITHIN(0.001f, all, a.utilizationTXPercent());
 
-    // t = 60 min. Minute 0 is reused, and it holds 1000 + 2000: the packet logged at t = 60 s was on
-    // air from 58 s, which is minute 0, not the minute it completed in. What is lost to the reuse is
-    // real airtime still inside the true trailing hour - the coverage deficit, not the split.
+    // t = 60 min. The spare slot still holds minute 0, and at phase 0 all of it is inside the hour,
+    // so nothing is lost: every millisecond logged is genuinely within the true trailing hour.
     Time::advanceTestMillis(56u * 60u * 1000u);
-    const float withoutFirst = (3000 + 4000) / (float)MS_IN_HOUR * 100.0f;
+    const float withoutFirst = (1000 + 2000 + 3000 + 4000) / (float)MS_IN_HOUR * 100.0f;
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, withoutFirst, a.utilizationTXPercent(),
                                      "only the crossed minute buckets are cleared");
 }
@@ -999,7 +1007,10 @@ void test_tx_utilization_clear_boundary_is_exactly_sixty_minutes()
     TEST_ASSERT_TRUE_MESSAGE(a.utilizationTXPercent() > 0.0f, "59 min: still inside the hour");
 
     Time::advanceTestMillis(60u * 1000u);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0001f, 0.0f, a.utilizationTXPercent(), "60 min: the bucket is reused");
+    TEST_ASSERT_TRUE_MESSAGE(a.utilizationTXPercent() > 0.0f, "60 min: still exactly covered");
+
+    Time::advanceTestMillis(60u * 1000u);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0001f, 0.0f, a.utilizationTXPercent(), "61 min: the slot is reused");
 }
 
 void test_tx_utilization_counts_only_transmissions()
@@ -1016,9 +1027,9 @@ void test_tx_utilization_counts_only_transmissions()
     TEST_ASSERT_TRUE(a.utilizationTXPercent() > 0.0f);
 }
 
-// CHARACTERISATION. The same quantisation defect on the hour window: 10x
-// smaller because N is 60 rather than 6, but not zero.
-void test_tx_utilization_quantisation_error()
+// The hour window reports what was actually on air in it. This carried the same deficit as the
+// channel window, 10x smaller because N is 60 rather than 6; the spare slot removes both.
+void test_tx_utilization_matches_the_truth()
 {
     Time::setTestMillis(0);
     AirTime a;
@@ -1031,15 +1042,14 @@ void test_tx_utilization_quantisation_error()
     const float reported = a.utilizationTXPercent();
 
     snprintf(g_msg, sizeof(g_msg), "true %.4f%%, reported %.4f%%", truth, reported);
-    TEST_ASSERT_TRUE_MESSAGE(reported < truth, g_msg);
-    TEST_ASSERT_TRUE_MESSAGE(reported > truth * 0.95f, g_msg); // ~1/60, not gross
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(reported - truth) < 0.01f, g_msg);
 }
 
 // --- TX gates ----------------------------------------------------------------
 
 void test_isTxAllowedChannelUtil_polite_threshold_is_lower()
 {
-    Time::setTestMillis(0);
+    Time::setTestMillis(120u * 1000u);
     AirTime a;
     a.logAirtime(RX_LOG, 18000); // 30% of the 60s window
 
@@ -1050,7 +1060,7 @@ void test_isTxAllowedChannelUtil_polite_threshold_is_lower()
 // The compare is `< percentage`, so exactly the threshold must block.
 void test_isTxAllowedChannelUtil_boundary_is_exclusive()
 {
-    Time::setTestMillis(0);
+    Time::setTestMillis(120u * 1000u);
     AirTime a;
     a.logAirtime(RX_LOG, 24000); // exactly 40.0%
 
@@ -1600,14 +1610,14 @@ void setup()
     RUN_TEST(test_channel_utilization_is_independent_of_scheduler_rate);
     RUN_TEST(test_channel_utilization_never_exceeds_100_percent);
     RUN_TEST(test_channel_utilization_counts_each_packet_once);
-    RUN_TEST(test_channel_utilization_covers_less_than_its_denominator);
-    RUN_TEST(test_channel_utilization_quantisation_error_by_phase);
+    RUN_TEST(test_channel_utilization_covers_its_denominator);
+    RUN_TEST(test_channel_utilization_holds_steady_across_bucket_phase);
     RUN_TEST(test_channel_utilization_never_exceeds_100_percent_on_long_slow);
     RUN_TEST(test_tx_utilization_ages_out_oldest_first);
     RUN_TEST(test_tx_utilization_clears_only_the_minutes_crossed);
     RUN_TEST(test_tx_utilization_clear_boundary_is_exactly_sixty_minutes);
     RUN_TEST(test_tx_utilization_counts_only_transmissions);
-    RUN_TEST(test_tx_utilization_quantisation_error);
+    RUN_TEST(test_tx_utilization_matches_the_truth);
     RUN_TEST(test_isTxAllowedChannelUtil_polite_threshold_is_lower);
     RUN_TEST(test_isTxAllowedChannelUtil_boundary_is_exclusive);
     RUN_TEST(test_isTxAllowedAirUtil_allows_when_override_is_set);

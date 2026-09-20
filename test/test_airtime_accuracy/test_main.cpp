@@ -35,23 +35,21 @@
 // D7's absolute level is NOT comparable to design4 §6.9 - this scenario parks the offered load on
 // the gate rather than ramping through it, so only the stage-to-stage movement means anything.
 //
-// STAGE 2 loosened D4, D6 and D7 rather than tightening them, which is the one thing this file
-// exists to prevent. It is recorded, not absorbed: whole-packet attribution over-counted while the
-// coverage deficit under-counts, so the two partially cancelled, and removing the first exposes the
-// second in full. D3 reads 96.09 and D4's mean is -3.91 - the same number twice, which is how we
-// know this is the coverage deficit and not a new fault. Stage 3 is what pays it back and must take
-// all three BELOW their stage-0 values. Until it lands the channel gate is worse than before, and
-// more permissive: these two stages should not ship apart.
-#define D1_SPREAD_BOUND 1       // min   - stage 1 took 18 -> 0
-#define D2_ERR_BOUND 1.0f       // min   - stage 1 took 5.95 spread / 26.60 concentrated -> 0
-#define D3_PEAK_BOUND 100.0f    // %     - stage 2 took 118.03 -> 96.09; <=100 is now an invariant
-#define D4_MEAN_BOUND 4.5f      // pp    - stage 2 measured -3.91, WORSE than stage 0's -2.79
-#define D4_WORST_BOUND 9.0f     // pp    - stage 2 measured -7.97, worse than stage 0's -6.78
-#define D5_SAWTOOTH_BOUND 9.0f  // pp    - stage 2 measured 7.97
-#define D6_DISAGREE_BOUND 21.0f // %     - stage 2 measured 19.0, worse than stage 0's 11.8
-#define D7_BOUND 52.0f          // %     - stage 2 measured 48.7 peak, worse than stage 0's 40.1
-#define D8_MEAN_BOUND 0.10f     // pp    - measured -0.041
-#define D8_WORST_BOUND 0.10f    // pp    - measured -0.056
+// STAGE 2 loosened D4, D6 and D7 rather than tightening them - whole-packet attribution had been
+// over-counting while the coverage deficit under-counts, so removing the first exposed the second.
+// STAGE 3 paid it back: every bound above is now below its stage-0 value, which is the bar that
+// makes the pair worth shipping. They still should not ship apart, because stage 2 alone leaves the
+// channel gate more permissive than before it.
+#define D1_SPREAD_BOUND 1      // min   - stage 1 took 18 -> 0
+#define D2_ERR_BOUND 1.2f      // min   - stage 1 took 5.95 / 26.60 -> 0; stage 3 rounds up by 1
+#define D3_PEAK_BOUND 100.0f   // %     - stage 2 took 118.03 -> 96.09, stage 3 to 99.43; <=100 is invariant
+#define D4_MEAN_BOUND 1.0f     // pp    - stage 0 -2.79, stage 2 -3.91, stage 3 -0.26
+#define D4_WORST_BOUND 3.0f    // pp    - stage 0 -6.78, stage 2 -7.97, stage 3 -2.43
+#define D5_SAWTOOTH_BOUND 5.0f // pp    - stage 0 8.48, stage 2 7.97, stage 3 4.34
+#define D6_DISAGREE_BOUND 6.0f // %     - stage 0 11.8, stage 2 19.0, stage 3 4.3
+#define D7_BOUND 24.0f         // %     - stage 0 peak 40.1, stage 2 48.7, stage 3 20.6
+#define D8_MEAN_BOUND 0.01f    // pp    - stage 0 -0.041, stage 3 -0.000
+#define D8_WORST_BOUND 0.01f   // pp    - stage 0 -0.056, stage 3 -0.001
 static meshtastic_Config_LoRaConfig_RegionCode savedRegion;
 static meshtastic_Config_DeviceConfig_Role savedRole;
 static bool savedOverrideDutyCycle;

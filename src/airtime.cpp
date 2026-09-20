@@ -66,12 +66,12 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
     // frame runs 14.164 s, longer than a whole channel-utilisation bucket, so crediting it whole to
     // the completing bucket lets a bucket hold more than its own period and the window report more
     // than its own length.
-    // A packet that completed sooner after boot than its own airtime overlapped boot itself, so
-    // there are no earlier buckets to spread it across. Credit it whole to the current bucket, as
-    // the unsplit code always did, rather than truncating it against uptime 0 and losing airtime.
+    // A packet that completed sooner after boot than its own airtime overlapped boot itself. Only
+    // the part after boot is inside any window this node can answer for, so clamp the start there
+    // rather than sliding the span forward into buckets that have not happened yet - syncNow()
+    // clears those on arrival, which loses the airtime and drags the reading down.
     const uint64_t endMs = (uint64_t)this->secSinceBoot * 1000u;
-    const bool spans = endMs >= airtime_ms;
-    const uint64_t startMs = spans ? endMs - airtime_ms : endMs;
+    const uint64_t startMs = endMs > airtime_ms ? endMs - airtime_ms : 0;
 
     // The caller logs, once the lock is released.
     if (reportType == TX_LOG) {
@@ -79,10 +79,10 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
         // 1 and collide with rotate-on-crossing. Deliberately left whole: 14.164 s misplaced in a
         // 3600 s bucket is 0.4% of a figure that only feeds the HTTP report.
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
-        if (spans)
-            addSpanned(this->utilizationTX, MINUTES_IN_HOUR, TXUTIL_PERIOD_MS, startMs, endMs);
-        else
-            this->utilizationTX[this->getPeriodUtilHour(held)] += airtime_ms;
+        if (endMs > 0)
+            addSpanned(this->utilizationTX, TXUTIL_SLOTS, TXUTIL_PERIOD_MS, startMs, endMs);
+        else // logged at uptime 0: no span to spread, and a bucket may hold at most its own period
+            this->utilizationTX[this->getPeriodUtilHour(held)] += std::min(airtime_ms, (uint32_t)TXUTIL_PERIOD_MS);
     } else if (reportType == RX_LOG) {
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
@@ -90,27 +90,64 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
     }
 
     // Log all airtime type for channel utilization
-    if (spans)
-        addSpanned(this->channelUtilization, CHANNEL_UTILIZATION_PERIODS, CHANUTIL_PERIOD_MS, startMs, endMs);
+    if (endMs > 0)
+        addSpanned(this->channelUtilization, CHANNEL_UTILIZATION_SLOTS, CHANUTIL_PERIOD_MS, startMs, endMs);
     else
-        this->channelUtilization[this->getPeriodUtilMinute(held)] += airtime_ms;
+        this->channelUtilization[this->getPeriodUtilMinute(held)] += std::min(airtime_ms, (uint32_t)CHANUTIL_PERIOD_MS);
 }
 
 uint8_t AirTime::Windows::getPeriodUtilMinute(const Held &)
 {
-    return (secSinceBoot / 10) % CHANNEL_UTILIZATION_PERIODS;
+    return (secSinceBoot / 10) % CHANNEL_UTILIZATION_SLOTS;
 }
 
 uint8_t AirTime::Windows::getPeriodUtilHour(const Held &)
 {
-    return (secSinceBoot / 60) % MINUTES_IN_HOUR;
+    return (secSinceBoot / 60) % TXUTIL_SLOTS;
+}
+
+uint32_t AirTime::Windows::phaseMs(uint32_t periodSecs) const
+{
+    return (this->secSinceBoot % periodSecs) * 1000u + this->msInSec;
+}
+
+/// The slot `k` periods before `cur`, without relying on unsigned wraparound landing anywhere
+/// useful: `cur - k` underflows long before the modulus sees it.
+static inline uint8_t slotBack(uint32_t cur, uint32_t k, uint8_t nSlots)
+{
+    return (uint8_t)((cur + nSlots - (k % nSlots)) % nSlots);
+}
+
+/// Sum of the window: the N most recent buckets whole, plus the part of the one N back that has not
+/// yet expired. Coverage is then (N-1)p + phase + (p - phase) = Np exactly, which is what the
+/// denominator has always claimed.
+static uint32_t windowSum(const uint32_t *slots, uint8_t nWindow, uint8_t nSlots, uint32_t periodMs, uint32_t cur,
+                          uint32_t phaseMs)
+{
+    uint32_t sum = 0;
+    for (uint32_t k = 0; k < nWindow; k++)
+        sum += slots[slotBack(cur, k, nSlots)];
+
+    const uint32_t expiring = slots[slotBack(cur, nWindow, nSlots)];
+    sum += (uint32_t)(((uint64_t)expiring * (periodMs - phaseMs)) / periodMs);
+    return sum;
 }
 
 void AirTime::Windows::syncNow(const Held &held)
 {
     // Monotonic uptime, not RTC/network time: a user, GPS, or NTP clock change must not move
     // airtime accounting. Pure read; the main loop publishes the wrap carry it derives from.
-    uint32_t nowSecs = Time::getUptimeSecs();
+    // Taken in milliseconds so the sub-second remainder is available to the interpolation; the one
+    // division here is the one getUptimeSecs() was performing internally anyway.
+    //
+    // getMillisMonotonic() is not ISR-safe (UptimeClock.h): lock-free std::atomic is not guaranteed
+    // on every supported toolchain. logAirtime() reaches this from onNotify(), the deferred worker
+    // rather than a raw ISR, so it qualifies - do not let it migrate into an ISR later.
+    const uint64_t nowMs = Time::getMillisMonotonic();
+    const uint32_t nowSecs = (uint32_t)(nowMs / 1000u);
+    // Before the early return below: the sub-second phase moves even when the second does not, and
+    // a stale phase would step the interpolation weight once a second instead of continuously.
+    this->msInSec = (uint16_t)(nowMs - (uint64_t)nowSecs * 1000u);
 
     if (firstTime) {
         memset(this->utilizationTX, 0, sizeof(this->utilizationTX));
@@ -159,11 +196,11 @@ void AirTime::Windows::syncNow(const Held &held)
     // Clear every bucket crossed while asleep so old airtime decays by real elapsed time.
     uint32_t elapsedUtilPeriods = (this->secSinceBoot / 10) - (oldSecSinceBoot / 10);
     // Fold one reading per crossed bucket, each before that bucket is cleared, so one delayed sync
-    // lands where the same number of 10 s syncs would have. Bounded: six clears empty the window.
-    const uint32_t steppedUtilPeriods = std::min<uint32_t>(elapsedUtilPeriods, CHANNEL_UTILIZATION_PERIODS);
+    // lands where the same number of 10 s syncs would have. Bounded: clearing every slot empties it.
+    const uint32_t steppedUtilPeriods = std::min<uint32_t>(elapsedUtilPeriods, CHANNEL_UTILIZATION_SLOTS);
     for (uint32_t i = 1; i <= steppedUtilPeriods; i++) {
         foldChannelUtil(channelUtilizationPercentRaw(held), 1, held);
-        this->channelUtilization[((oldSecSinceBoot / 10) + i) % CHANNEL_UTILIZATION_PERIODS] = 0;
+        this->channelUtilization[((oldSecSinceBoot / 10) + i) % CHANNEL_UTILIZATION_SLOTS] = 0;
     }
     // Anything past a full window is elapsed time against an already-empty ring, so it folds as
     // idle in closed form rather than looping over a sleep that may have lasted days.
@@ -171,11 +208,11 @@ void AirTime::Windows::syncNow(const Held &held)
 
     // TX utilization is a rolling 60-minute view used by duty-cycle checks.
     uint32_t elapsedUtilTXPeriods = (this->secSinceBoot / 60) - (oldSecSinceBoot / 60);
-    if (elapsedUtilTXPeriods >= MINUTES_IN_HOUR) {
+    if (elapsedUtilTXPeriods >= TXUTIL_SLOTS) {
         memset(this->utilizationTX, 0, sizeof(this->utilizationTX));
     } else {
         for (uint32_t i = 1; i <= elapsedUtilTXPeriods; i++) {
-            this->utilizationTX[((oldSecSinceBoot / 60) + i) % MINUTES_IN_HOUR] = 0;
+            this->utilizationTX[((oldSecSinceBoot / 60) + i) % TXUTIL_SLOTS] = 0;
         }
     }
 }
@@ -205,12 +242,10 @@ bool AirTime::Windows::airtimeReport(reportTypes reportType, uint32_t *out, size
 
 float AirTime::Windows::channelUtilizationPercentRaw(const Held &)
 {
-    uint32_t sum = 0;
-    for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
-        sum += this->channelUtilization[i];
-    }
+    const uint32_t sum = windowSum(this->channelUtilization, CHANNEL_UTILIZATION_PERIODS, CHANNEL_UTILIZATION_SLOTS,
+                                   CHANUTIL_PERIOD_MS, this->secSinceBoot / 10, phaseMs(10));
 
-    return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
+    return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * CHANUTIL_PERIOD_MS)) * 100;
 }
 
 float AirTime::Windows::channelUtilizationPercent(const Held &held)
@@ -258,12 +293,8 @@ float AirTime::Windows::smoothedChannelUtilizationPercent(const Held &held)
 
 uint32_t AirTime::Windows::utilizationTXMsec(const Held &)
 {
-    uint32_t sum = 0;
-    for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
-        sum += this->utilizationTX[i];
-    }
-
-    return sum;
+    return windowSum(this->utilizationTX, MINUTES_IN_HOUR, TXUTIL_SLOTS, TXUTIL_PERIOD_MS, this->secSinceBoot / SECONDS_IN_MINUTE,
+                     phaseMs(SECONDS_IN_MINUTE));
 }
 
 float AirTime::Windows::utilizationTXPercent(const Held &held)
@@ -282,13 +313,23 @@ uint8_t AirTime::Windows::getSilentMinutes(float dutyCycle, const Held &held)
 
     // Whole milliseconds, and `<=` is the exact complement of the caller's `> dutyCycle` abort.
     const uint32_t limitMs = (uint32_t)(dutyCycle * (MS_IN_HOUR / 100.0f));
+    const uint32_t cur = this->secSinceBoot / SECONDS_IN_MINUTE;
+    const uint32_t phase = phaseMs(SECONDS_IN_MINUTE);
     uint32_t sum = utilizationTXMsec(held);
-    const uint8_t cur = getPeriodUtilHour(held);
 
     for (uint8_t m = 0; m < MINUTES_IN_HOUR; m++) {
         if (sum <= limitMs)
             return m;
-        sum -= this->utilizationTX[(cur + 1 + m) % MINUTES_IN_HOUR];
+
+        // A minute of silence does not shed one whole bucket: the straddler moves along, so it
+        // sheds what is left of the expiring bucket and the leading part of the one behind it.
+        // Truncating each term rounds the answer UP, which is the safe direction for "you can send
+        // again in %d mins".
+        const uint32_t behind = this->utilizationTX[slotBack(cur, MINUTES_IN_HOUR - m - 1, TXUTIL_SLOTS)];
+        const uint32_t expiring = this->utilizationTX[slotBack(cur, MINUTES_IN_HOUR - m, TXUTIL_SLOTS)];
+        const uint32_t shed = (uint32_t)(((uint64_t)behind * phase) / TXUTIL_PERIOD_MS) +
+                              (uint32_t)(((uint64_t)expiring * (TXUTIL_PERIOD_MS - phase)) / TXUTIL_PERIOD_MS);
+        sum = sum > shed ? sum - shed : 0;
     }
 
     return MINUTES_IN_HOUR;
