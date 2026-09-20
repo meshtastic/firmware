@@ -24,12 +24,6 @@ struct DMShellSession {
     uint32_t nextExpectedRxSeq = 1;
     uint32_t highestSeenRxSeq = 0;
     uint32_t lastActivityMs = 0;
-    // --- Half-duplex turn-taking ("talking stick") state ---
-    bool turnManaged = false;    // becomes true once the peer uses turn-taking flags; enables gating
-    bool hasToken = false;       // do we currently hold the right to transmit?
-    uint32_t lastRtsMs = 0;      // last time we asked the client for a turn (rate-limit)
-    uint32_t turnDeadlineMs = 0; // while holding the turn, keep it until this time (extended on output)
-    uint32_t turnFramesSent = 0; // output frames sent in the current held turn (vs TURN_BUDGET_FRAMES)
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
@@ -76,14 +70,6 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void sendAck(uint32_t replayFromSeq = 0);
     void sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember = true);
     void sendError(const char *message, NodeNum peer = 0);
-
-    // --- Turn-taking helpers ---
-    void applyTurnFlags(const meshtastic_RemoteShell &frame);
-    bool ptyHasOutput();
-    void serviceTurn();
-    void sendOutputFrame(const uint8_t *data, size_t len, uint32_t extraFlags);
-    void sendTurnGrant(bool more);
-    void sendRts();
 };
 
 extern DMShellModule *dmShellModule;
