@@ -32,10 +32,15 @@ DEFAULT_API_PORT = 4403
 DEFAULT_HOP_LIMIT = 3
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
-# A gap the peer cannot fill (its replay ring is bounded in frames, so a fast preset outruns it in
-# seconds) used to be retried at a flat 1/sec until the 5-minute idle timeout. Back off instead, so
-# an unanswerable request costs a handful of packets rather than hundreds.
-MISSING_SEQ_RETRY_MAX_SEC = 30.0
+# A gap the peer cannot fill used to be retried at a flat 1/sec until the 5-minute idle timeout, so
+# the retry needs *some* bound. But measured on hardware, every repeat within the first few attempts
+# was a collision on a gap that did fill (8 of 8 recovered, worst case 5 attempts), and backing off
+# there only delays a recovery that was going to work - visibly, in an interactive shell. So hold the
+# base interval for the first few attempts and only grow once "unfillable" is the better hypothesis.
+# The ceiling is low because the firmware now reports a genuinely evicted frame in one round trip;
+# this only has to bound the residue (a peer without that fix, or a lost teardown).
+MISSING_SEQ_RETRY_FLAT_ATTEMPTS = 4
+MISSING_SEQ_RETRY_MAX_SEC = 8.0
 INPUT_BATCH_WINDOW_SEC = .5
 INPUT_BATCH_MAX_BYTES = 64
 HEARTBEAT_IDLE_DELAY_SEC = 5.0
@@ -109,6 +114,10 @@ def load_proto_modules() -> object:
         "mesh.proto",
         "channel.proto", 
         "config.proto",
+        # config.proto imports this. protoc resolves it via -I for compilation but only emits a
+        # _pb2 module for files named on the command line, so without it config_pb2 imports a
+        # module that was never generated and the client cannot start.
+        "field_metadata.proto",
         "device_ui.proto",
         "module_config.proto",
         "atak.proto",
@@ -326,6 +335,7 @@ class SessionState:
     last_requested_missing_seq: int = 0
     last_missing_request_time: float = 0.0
     missing_request_interval: float = MISSING_SEQ_RETRY_INTERVAL_SEC
+    missing_request_attempts: int = 0
     legacy_recovery: bool = False
     requested_missing_seqs: set[int] = field(default_factory=set)
     replay_log_lock: threading.Lock = field(default_factory=threading.Lock)
@@ -391,6 +401,7 @@ class SessionState:
             if self.last_requested_missing_seq != 0 and self.next_expected_rx_seq > self.last_requested_missing_seq:
                 self.last_requested_missing_seq = 0
                 self.missing_request_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
+                self.missing_request_attempts = 0
             if seq > self.highest_seen_rx_seq:
                 self.highest_seen_rx_seq = seq
             if self.highest_seen_rx_seq < self.next_expected_rx_seq:
@@ -425,9 +436,11 @@ class SessionState:
             if same_seq and (now - self.last_missing_request_time) < self.missing_request_interval:
                 return None
             if same_seq and not self.legacy_recovery:
-                # Still stuck on the same hole: each repeat is evidence the peer cannot fill it.
-                self.missing_request_interval = min(self.missing_request_interval * 2, MISSING_SEQ_RETRY_MAX_SEC)
+                self.missing_request_attempts += 1
+                if self.missing_request_attempts > MISSING_SEQ_RETRY_FLAT_ATTEMPTS:
+                    self.missing_request_interval = min(self.missing_request_interval * 2, MISSING_SEQ_RETRY_MAX_SEC)
             else:
+                self.missing_request_attempts = 1
                 self.missing_request_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
             self.last_requested_missing_seq = self.next_expected_rx_seq
             self.last_missing_request_time = now
@@ -496,6 +509,19 @@ class SessionState:
     def replay_frames_from(self, start_seq: int) -> list[SentShellFrame]:
         with self.tx_lock:
             return [frame for frame in self.tx_history if frame.seq >= start_seq]
+
+    def oldest_retained_tx_seq(self) -> Optional[int]:
+        """Lowest sequence number the replay ring still holds, or None while it is empty.
+
+        tx_history is appended in send order and sequence numbers are allocated monotonically, so
+        the leftmost entry is the oldest. Note prune_sent_frames() has no live call site, which
+        makes this a flat last-50-sent ring - the same shape as the firmware's txHistory, and
+        outrun the same way.
+        """
+        with self.tx_lock:
+            for frame in self.tx_history:
+                return frame.seq
+            return None
 
 
 def send_toradio(transport, toradio) -> None:
@@ -598,6 +624,20 @@ def send_ack_frame(transport, state: SessionState, replay_from: Optional[int] = 
 def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
     frame = next((f for f in state.replay_frames_from(start_seq) if f.seq == start_seq), None)
     if frame is None:
+        oldest = state.oldest_retained_tx_seq()
+        if not state.legacy_recovery and oldest is not None and 0 < start_seq < oldest:
+            # The mirror of the firmware's eviction path. The peer is asking for a frame our own
+            # ring has already dropped, so it can never be answered, and the peer will not advance
+            # past the hole: it would keep asking until the idle timeout. End the session instead,
+            # and say why, so the run's log distinguishes this from a lossy link.
+            state.log_replay_event("replay_evicted", start_seq, f"oldest_retained={oldest}")
+            state.event_queue.put(
+                f"peer asked to replay seq={start_seq}, which has aged out of our {state.tx_history.maxlen}-frame history; closing session"
+            )
+            send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE, remember=False)
+            state.active = False
+            state.closed_event.set()
+            return
         #state.event_queue.put(f"replay unavailable from seq={start_seq}")
         state.log_replay_event("replay_unavailable", start_seq)
         return

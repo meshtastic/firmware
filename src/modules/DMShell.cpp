@@ -488,6 +488,13 @@ void DMShellModule::processPendingChildReap()
     }
 }
 
+// Invariant, relied on by DMShellTxHistoryWindow: every sequence number drawn from nextTxSeq gets
+// stored here exactly once, in order, so the retained range can be derived arithmetically rather than
+// scanned. Anything that consumes a sequence number without being remembered breaks that - so a new
+// send site passes remember=true, and an unsequenced frame uses seq=0 (as ACK does) rather than
+// burning a number. Getting it wrong degrades to the pre-fix behaviour rather than corrupting
+// anything: resendFramesFrom still scans the ring and falls through to "not found in history" if
+// classify() was optimistic.
 void DMShellModule::rememberSentFrame(meshtastic_RemoteShell frame)
 {
     if (frame.seq == 0 || frame.op == meshtastic_RemoteShell_OpCode_ACK) {
