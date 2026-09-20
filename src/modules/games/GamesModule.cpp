@@ -270,7 +270,7 @@ int GamesModule::handleInputEvent(const InputEvent *event)
             disable();
             requestRedraw();
         } else if (active) {
-            active->handleInput(ev, event->kbchar);
+            active->handleInput(event);
             if (!active->isPlaying()) {
                 enterGameOver();
                 return 1;

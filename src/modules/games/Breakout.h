@@ -121,7 +121,7 @@ class Breakout : public Game
     uint32_t score() const override { return game.score(); }
     int32_t tickIntervalMs() const override;
 
-    void handleInput(input_broker_event ev, unsigned char kbchar) override;
+    void handleInput(const InputEvent *event) override;
     // Claim BACK/CANCEL (the gamepad's B) while the ball waits on the paddle, so it serves instead
     // of pausing. Released as soon as the ball is in play, so BACK pauses normally again.
     bool wantsBackButton() const override { return game.isBallDocked(); }

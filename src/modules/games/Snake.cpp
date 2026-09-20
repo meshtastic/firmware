@@ -181,8 +181,11 @@ int32_t Snake::tickIntervalMs() const
     return iv < 70 ? 70 : iv;
 }
 
-void Snake::handleInput(input_broker_event ev, unsigned char kbchar)
+void Snake::handleInput(const InputEvent *event)
 {
+    const input_broker_event ev = event->inputEvent;
+    const unsigned char kbchar = event->kbchar;
+
     // Shoulder-button steering: a gamepad button mapped to left/right turns the snake relative to
     // where it is already heading (L counter-clockwise, R clockwise) rather than setting an
     // absolute heading. The D-pad and keyboard keep steering absolutely -- the D-pad is an axis,

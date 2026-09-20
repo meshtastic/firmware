@@ -181,9 +181,10 @@ ChirpyRunner::ChirpyRunner()
     scores_.load();
 }
 
-void ChirpyRunner::handleInput(input_broker_event ev, unsigned char kbchar)
+void ChirpyRunner::handleInput(const InputEvent *event)
 {
     // SELECT is the jump (as requested); UP is accepted as a convenient alternate.
+    const input_broker_event ev = event->inputEvent;
     if (ev == INPUT_BROKER_SELECT || ev == INPUT_BROKER_SELECT_LONG || ev == INPUT_BROKER_UP)
         game.jump();
 }

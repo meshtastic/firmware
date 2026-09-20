@@ -1,4 +1,5 @@
 #include "Breakout.h"
+#include <cstring> // strcmp, for the joystick-source test in handleInput()
 
 // ===========================================================================
 // Pure BreakoutGame logic (no display/FS dependencies; always compiled)
@@ -242,24 +243,28 @@ bool Breakout::tick()
     return game.step();
 }
 
-void Breakout::handleInput(input_broker_event ev, unsigned char kbchar)
+void Breakout::handleInput(const InputEvent *event)
 {
+    const input_broker_event ev = event->inputEvent;
     switch (ev) {
     case INPUT_BROKER_LEFT:
     case INPUT_BROKER_RIGHT:
 #if ARCH_PORTDUINO && defined(__linux__)
         // While the stick is held, tick() polls heldXZone() and moves the paddle itself, so the
-        // matching discrete (and slow) repeat events would double-move. Suppress just those.
+        // joystick's own discrete (and slow) repeat events would double-move. Suppress exactly
+        // those and nothing else.
         //
-        // Both halves of the test matter. kbchar == 0 means no button produced this, so it came
-        // from an axis; a shoulder button mapped to left/right is a real discrete press the axis
-        // poll knows nothing about and must still nudge the paddle. heldXZone() != 0 means the
-        // stick is driving right now: LinuxJoystick assigns heldX before it emits, and only
-        // auto-repeats while heldX is set, so every axis LEFT/RIGHT arrives with a zone held and
-        // nothing else does. Without it this also swallowed LEFT/RIGHT from the keyboard,
-        // trackball and ExpressLRS -- aLinuxJoystick is constructed on every Linux host, gamepad
-        // configured or not, so the old check was true even with no joystick attached at all.
-        if (aLinuxJoystick && kbchar == 0 && aLinuxJoystick->heldXZone() != 0)
+        // All three parts are load-bearing:
+        //   source  -- the event actually came from this gamepad. Without it, LEFT/RIGHT from the
+        //              keyboard or touchscreen is swallowed too; aLinuxJoystick is constructed on
+        //              every Linux host whether or not a gamepad is configured, so a pointer check
+        //              alone is true even with nothing attached.
+        //   kbchar  -- no button produced it, so it is the D-pad axis. A shoulder button mapped to
+        //              left/right is a discrete press the axis poll knows nothing about, and must
+        //              still nudge the paddle.
+        //   heldX   -- the axis is what is driving right now, so tick() already has it covered.
+        if (aLinuxJoystick && event->kbchar == 0 && event->source && aLinuxJoystick->originName() &&
+            strcmp(event->source, aLinuxJoystick->originName()) == 0 && aLinuxJoystick->heldXZone() != 0)
             break;
 #endif
         if (ev == INPUT_BROKER_LEFT)
