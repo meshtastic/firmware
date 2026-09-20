@@ -60,6 +60,11 @@
 #ifndef BLE_GATT_MESH_PROBE_RETRY_MS
 #define BLE_GATT_MESH_PROBE_RETRY_MS 2000
 #endif
+// How long a started probe may stay unanswered before it counts as a miss. A backgrounded iPhone on
+// a long connection interval answers later than Bluefruit's own 100 ms write timeout but inside this.
+#ifndef BLE_GATT_MESH_PROBE_WAIT_MS
+#define BLE_GATT_MESH_PROBE_WAIT_MS 1500
+#endif
 #endif
 
 // (from, id) -> arrival peer, so a relay is never written back to the peer that delivered it.
@@ -155,12 +160,22 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     /// gone quiet. A test drives both with its own clock.
     void pumpGreet(uint32_t nowMs);
     void pumpLiveness(uint32_t nowMs);
-    /// Ask `peer` for proof of life - a write it must acknowledge. False means it is gone. A platform
-    /// that cannot ask says true, and never sheds a link for silence.
-    virtual bool platformProbe(BLEGattPeerId peer)
+    /// What became of the probe last started on a link.
+    enum class ProbeAnswer : uint8_t { Pending, Answered, Refused };
+    /// Ask `peer` for proof of life - a write it must acknowledge - and return at once; the answer is
+    /// read by platformProbeAnswer on later pumps. False means it could not even be asked (the stack
+    /// is busy, or the link is already gone), which counts as a miss. Never blocks: this runs on the
+    /// main task, which also times LoRa transmissions. A platform that cannot ask says true and
+    /// answers at once, and so never sheds a link for silence.
+    virtual bool platformProbeStart(BLEGattPeerId peer)
     {
         (void)peer;
         return true;
+    }
+    virtual ProbeAnswer platformProbeAnswer(BLEGattPeerId peer)
+    {
+        (void)peer;
+        return ProbeAnswer::Answered;
     }
 
     int32_t runOnce() override;
@@ -226,6 +241,7 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
         uint32_t heardMs;    // last chunk of any kind from this peer, or when the link was first listed
         uint32_t probedMs;   // last proof-of-life asked of it
         uint8_t probeMisses; // unanswered probes in a row; two is gone, one may be a busy stack
+        bool probing;        // a probe is out and its answer not yet read
     };
     std::array<Greeting, BLE_GATT_MESH_MAX_PEERS * 2> greetings{};
     Greeting *greeting(BLEGattPeerId peer, bool create);

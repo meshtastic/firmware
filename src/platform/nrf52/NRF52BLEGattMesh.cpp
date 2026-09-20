@@ -175,11 +175,8 @@ uint32_t cooldownSinceMs = 0;
 
 // The proof-of-life write request in flight on the dialled link, and how it ended. Bluefruit's own
 // write_resp() gives the peer 100 ms, which a backgrounded iPhone on a long connection interval
-// misses while still answering every time; this waits a few intervals and reads the response event
-// through the mesh's event tap instead.
-#ifndef BLE_GATT_MESH_PROBE_WAIT_MS
-#define BLE_GATT_MESH_PROBE_WAIT_MS 1500
-#endif
+// misses while still answering every time; the response event is read through the mesh's event tap
+// instead, and the handler gives it BLE_GATT_MESH_PROBE_WAIT_MS across its pumps.
 enum ProbeState : uint8_t { PROBE_IDLE, PROBE_PENDING, PROBE_ANSWERED, PROBE_REFUSED };
 volatile uint16_t probeConn = BLE_CONN_HANDLE_INVALID;
 volatile uint8_t probeState = PROBE_IDLE;
@@ -497,7 +494,7 @@ bool NRF52BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, s
     return meshPeerCharacteristic.notify(peer, data, (uint16_t)len);
 }
 
-bool NRF52BLEGattMesh::platformProbe(BLEGattPeerId peer)
+bool NRF52BLEGattMesh::platformProbeStart(BLEGattPeerId peer)
 {
 #if BLE_GATT_MESH_DIAL
     bool outbound = false;
@@ -528,18 +525,29 @@ bool NRF52BLEGattMesh::platformProbe(BLEGattPeerId peer)
         probeState = PROBE_IDLE; // the stack is busy with another procedure; the retry will ask again
         return false;
     }
-    // This runs on the main task; the response lands on the BLE task, and delay() yields to it.
-    const uint32_t started = millis();
-    while (probeState == PROBE_PENDING && Bluefruit.Central.connected(peer) &&
-           Throttle::isWithinTimespanMs(started, BLE_GATT_MESH_PROBE_WAIT_MS))
-        delay(10);
-    const bool answered = probeState == PROBE_ANSWERED;
-    probeState = PROBE_IDLE;
-    probeConn = BLE_CONN_HANDLE_INVALID;
-    return answered;
+    // The response lands on the BLE task as a write-response event; the handler reads it on a later
+    // pump through platformProbeAnswer, so the main task never waits here.
+    return true;
 #else
     (void)peer;
     return true;
+#endif
+}
+
+BLEGattMeshHandler::ProbeAnswer NRF52BLEGattMesh::platformProbeAnswer(BLEGattPeerId peer)
+{
+#if BLE_GATT_MESH_DIAL
+    if (peer != probeConn)
+        return ProbeAnswer::Answered; // never asked on this link, so nothing is owed
+    const uint8_t state = probeState;
+    if (state == PROBE_PENDING)
+        return Bluefruit.Central.connected(peer) ? ProbeAnswer::Pending : ProbeAnswer::Refused;
+    probeState = PROBE_IDLE;
+    probeConn = BLE_CONN_HANDLE_INVALID;
+    return state == PROBE_ANSWERED ? ProbeAnswer::Answered : ProbeAnswer::Refused;
+#else
+    (void)peer;
+    return ProbeAnswer::Answered;
 #endif
 }
 

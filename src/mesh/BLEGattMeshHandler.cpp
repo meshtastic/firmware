@@ -163,6 +163,7 @@ BLEGattMeshHandler::Greeting *BLEGattMeshHandler::greeting(BLEGattPeerId peer, b
         g.heard = false;
         g.heardMs = 0;
         g.probedMs = 0;
+        g.probing = false;
         g.probeMisses = 0;
         return &g;
     }
@@ -201,6 +202,22 @@ void BLEGattMeshHandler::pumpLiveness(uint32_t nowMs)
         Greeting *g = greeting(all[i].id, false); // pumpGreet listed it first, with the clock started
         if (!g)
             continue;
+        // A probe is out: read its answer, and give it the wait before calling silence a miss.
+        if (g->probing) {
+            const ProbeAnswer answer = platformProbeAnswer(all[i].id);
+            if (answer == ProbeAnswer::Pending && nowMs - g->probedMs < BLE_GATT_MESH_PROBE_WAIT_MS)
+                continue;
+            g->probing = false;
+            if (answer == ProbeAnswer::Answered) {
+                g->probeMisses = 0;
+                continue;
+            }
+            if (++g->probeMisses < 2)
+                continue;
+            LOG_WARN("BLE GATT mesh: dialled conn %u answers nothing; shedding it", all[i].id);
+            platformShedOutbound(all[i].id);
+            continue;
+        }
         // Quiet for less than the idle window: nothing to ask. Asked already: wait the window, or the
         // short retry after a miss.
         if (nowMs - g->heardMs < BLE_GATT_MESH_PROBE_IDLE_MS)
@@ -209,8 +226,8 @@ void BLEGattMeshHandler::pumpLiveness(uint32_t nowMs)
         if (g->probedMs != 0 && nowMs - g->probedMs < wait)
             continue;
         g->probedMs = nowMs;
-        if (platformProbe(all[i].id)) {
-            g->probeMisses = 0;
+        if (platformProbeStart(all[i].id)) {
+            g->probing = true;
             continue;
         }
         if (++g->probeMisses < 2)

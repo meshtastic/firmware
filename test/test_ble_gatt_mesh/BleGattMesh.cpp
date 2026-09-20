@@ -32,6 +32,7 @@ class FakeGattMesh : public BLEGattMeshHandler
     std::vector<BLEGattPeerId> shed;
     std::map<BLEGattPeerId, int> probed;
     std::vector<BLEGattPeerId> dead;
+    std::vector<BLEGattPeerId> slow; // asked, and never answers: the wait must run out
     std::deque<std::pair<BLEGattPeerId, std::vector<uint8_t>>> inbound;
     std::vector<meshtastic_MeshPacket> received;
     bool ready = true;
@@ -85,10 +86,16 @@ class FakeGattMesh : public BLEGattMeshHandler
         return true;
     }
     void platformShedOutbound(BLEGattPeerId peer) override { shed.push_back(peer); }
-    bool platformProbe(BLEGattPeerId peer) override
+    bool platformProbeStart(BLEGattPeerId peer) override
     {
         probed[peer]++;
-        return std::find(dead.begin(), dead.end(), peer) == dead.end();
+        return true;
+    }
+    ProbeAnswer platformProbeAnswer(BLEGattPeerId peer) override
+    {
+        if (std::find(slow.begin(), slow.end(), peer) != slow.end())
+            return ProbeAnswer::Pending;
+        return std::find(dead.begin(), dead.end(), peer) == dead.end() ? ProbeAnswer::Answered : ProbeAnswer::Refused;
     }
     bool platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len) override
     {
@@ -653,11 +660,14 @@ void test_a_dead_dialled_link_is_shed(void)
     h.feed(1, helloWith(0x11), 0);
     h.liveness(30000);
     TEST_ASSERT_EQUAL(1, h.probed[1]);
+    h.liveness(30010); // the refusal is read on the next pump, never on the one that asked
     TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "one miss may be a busy stack");
     h.liveness(31000);
     TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "the retry waits its two seconds");
     h.liveness(32000);
     TEST_ASSERT_EQUAL(2, h.probed[1]);
+    TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "asked again, not yet answered");
+    h.liveness(32005);
     TEST_ASSERT_EQUAL_MESSAGE(1, h.shed.size(), "two misses: shed");
     TEST_ASSERT_EQUAL(1, h.shed[0]);
     // Still listed until the platform reports the disconnect, and not asked again meanwhile.
@@ -694,12 +704,34 @@ void test_one_missed_probe_is_forgiven_when_the_retry_answers(void)
     h.dead = {1};
     h.liveness(30000);
     TEST_ASSERT_EQUAL(1, h.probed[1]);
+    h.liveness(30010); // the miss is read
     h.dead.clear();
     h.liveness(32000);
     TEST_ASSERT_EQUAL(2, h.probed[1]);
+    h.liveness(32010);
     TEST_ASSERT_EQUAL_MESSAGE(0, h.shed.size(), "the retry answered: kept");
     h.liveness(40000);
     TEST_ASSERT_EQUAL_MESSAGE(2, h.probed[1], "back to the long window");
+}
+
+void test_a_probe_nobody_answers_is_a_miss_after_the_wait(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 244, true}};
+    h.slow = {1};
+    h.liveness(0);
+    h.liveness(30000);
+    TEST_ASSERT_EQUAL(1, h.probed[1]);
+    h.liveness(31000);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "a second in: still waiting, and not asked again");
+    TEST_ASSERT_EQUAL(0, h.shed.size());
+    h.liveness(31600);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.probed[1], "past the wait: a miss, and the retry waits its two seconds");
+    h.liveness(32000);
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.probed[1], "the retry goes out two seconds after the ask");
+    h.liveness(33600);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.shed.size(), "silence twice: shed");
 }
 
 void test_an_inbound_link_is_never_probed(void)
@@ -770,6 +802,7 @@ void setup()
     RUN_TEST(test_a_dead_dialled_link_is_shed);
     RUN_TEST(test_a_fresh_dialled_link_gets_its_full_window);
     RUN_TEST(test_one_missed_probe_is_forgiven_when_the_retry_answers);
+    RUN_TEST(test_a_probe_nobody_answers_is_a_miss_after_the_wait);
     RUN_TEST(test_an_inbound_link_is_never_probed);
     exit(UNITY_END());
 }

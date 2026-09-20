@@ -50,7 +50,8 @@ class NRF52BLEGattMesh : public BLEGattMeshHandler
     bool platformNotify(BLEGattPeerId peer, const uint8_t *data, size_t len) override;
     bool platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len) override;
     void platformShedOutbound(BLEGattPeerId peer) override;
-    bool platformProbe(BLEGattPeerId peer) override;
+    bool platformProbeStart(BLEGattPeerId peer) override;
+    ProbeAnswer platformProbeAnswer(BLEGattPeerId peer) override;
 };
 
 #endif // HAS_BLE_GATT_MESH && ARCH_NRF52
