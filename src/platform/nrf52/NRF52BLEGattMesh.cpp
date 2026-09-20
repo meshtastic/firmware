@@ -8,6 +8,7 @@
 #include "concurrency/LockGuard.h"
 #include "main.h"
 #include "mesh/Throttle.h"
+#include <InternalFileSystem.h>
 #include <array>
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -181,6 +182,71 @@ enum ProbeState : uint8_t { PROBE_IDLE, PROBE_PENDING, PROBE_ANSWERED, PROBE_REF
 volatile uint16_t probeConn = BLE_CONN_HANDLE_INVALID;
 volatile uint8_t probeState = PROBE_IDLE;
 
+// The identities of the phones bonded to this node's phone API, so the one-link gate in onScanReport
+// can tell "the phone already linked to us, advertising under a rotated address" from a stranger.
+// Without this a dual-role phone that reached this node by itself is redialled under every rotated
+// address it advertises, and refused (0x3e) each time. Resolved here in software with each bond's
+// IRK (Bluefruit's resolveAddress, one ECB block each): the SoftDevice resolves for the app only when
+// it runs with privacy enabled, which would put this radio itself behind a rotating address, and the
+// device identity list alone left every report unresolved (measured 2026-09-19). Read once at setup;
+// a phone that pairs later is known after the next boot. Bluefruit keeps the bond files and never
+// reads the IRKs back for this.
+ble_gap_id_key_t bondedIdentities[BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT];
+uint8_t bondedCount = 0;
+
+// The bonded phone `addr` belongs to, or null: a public or static address is its own identity and
+// needs no bond, and a private address that resolves to no bond is a stranger's.
+const ble_gap_id_key_t *bondedIdentityOf(const ble_gap_addr_t &addr)
+{
+    if (addr.addr_type != BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_RESOLVABLE)
+        return nullptr;
+    for (uint8_t i = 0; i < bondedCount; i++) {
+        if (Bluefruit.Security.resolveAddress(&addr, &bondedIdentities[i].id_info))
+            return &bondedIdentities[i];
+    }
+    return nullptr;
+}
+
+// Whether two addresses are one device: the same address, or two private addresses of one bonded phone.
+bool sameDevice(const ble_gap_addr_t &a, const ble_gap_addr_t &b, bool &byIdentity)
+{
+    byIdentity = false;
+    if (a.addr_type == b.addr_type && memcmp(a.addr, b.addr, sizeof(a.addr)) == 0)
+        return true;
+    const ble_gap_id_key_t *ia = bondedIdentityOf(a);
+    byIdentity = ia != nullptr && ia == bondedIdentityOf(b);
+    return byIdentity;
+}
+
+void loadBondedIdentities()
+{
+    uint8_t n = 0;
+    Adafruit_LittleFS_Namespace::File dir(BOND_DIR_PRPH, Adafruit_LittleFS_Namespace::FILE_O_READ, InternalFS);
+    Adafruit_LittleFS_Namespace::File file(InternalFS);
+    while (n < BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT && (file = dir.openNextFile(Adafruit_LittleFS_Namespace::FILE_O_READ))) {
+        bond_keys_t keys;
+        // The file is one length byte, the keys, then the peer's name; bond_load_keys reads it the same way.
+        if (!file.isDirectory() && file.read() == (int)sizeof(keys) &&
+            file.read((uint8_t *)&keys, sizeof(keys)) == sizeof(keys)) {
+            bool hasIrk = false;
+            for (uint8_t b : keys.peer_id.id_info.irk)
+                hasIrk |= b != 0;
+            if (hasIrk)
+                bondedIdentities[n++] = keys.peer_id;
+        }
+        file.close();
+    }
+    dir.close();
+    bondedCount = n;
+    if (n > 0)
+        LOG_INFO("BLE GATT mesh: %u bonded phone identit%s loaded, so a rotated address resolves", n, n == 1 ? "y" : "ies");
+}
+
+// Per link, the last advertiser passed over because it is that link's peer, so the skip is logged once
+// per address per link rather than on every report - two held peers advertising would otherwise
+// alternate and flood the log (they did, 2026-09-19).
+ble_gap_addr_t lastSkipped[BLE_MAX_CONNECTION]{};
+
 void armCooldown()
 {
     cooldownAddr = dialAddr;
@@ -283,6 +349,7 @@ void NRF52BLEGattMesh::setupService()
         // leaves the dial pending forever and this node never dials again.
         Bluefruit.Scanner.getParams()->timeout = BLE_GATT_MESH_DIAL_TIMEOUT_MS / 10;
     }
+    loadBondedIdentities();
 #endif
     {
         concurrency::LockGuard guard(&lock);
@@ -349,19 +416,11 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
     // A scan-response report carries the advertiser's connectable bit too (every overflow response
     // logged on 2026-09-19 read conn=1 rsp=1), so this one gate covers both the ADV_IND and the
     // response, and a scannable-but-not-connectable advertiser is never dialled.
-    if (!report->type.connectable || dialing || Bluefruit.Central.connected() > 0)
+    if (!report->type.connectable || dialing)
         return;
     // A controller holds one link per peer address, so a peer already connected the other way - a
     // phone that dialled this node first - cannot be dialled: the CONNECT_IND is ignored and the
     // attempt ends in 0x3e. The dial is for the peer that cannot dial, an iPhone in the background.
-    for (uint16_t c = 0; c < BLE_MAX_CONNECTION; c++) {
-        BLEConnection *bc = Bluefruit.Connection(c);
-        if (!bc || !bc->connected())
-            continue;
-        const ble_gap_addr_t peer = bc->getPeerAddr();
-        if (peer.addr_type == report->peer_addr.addr_type && memcmp(peer.addr, report->peer_addr.addr, sizeof(peer.addr)) == 0)
-            return;
-    }
     if (cooldownArmed && memcmp(&cooldownAddr, &report->peer_addr, sizeof(cooldownAddr)) == 0 &&
         Throttle::isWithinTimespanMs(cooldownSinceMs, BLE_GATT_MESH_DIAL_COOLDOWN_MS))
         return;
@@ -378,6 +437,27 @@ void NRF52BLEGattMesh::onScanReport(const ble_gap_evt_adv_report_t *report)
     if (!reportHasIosOverflowBit(report))
         return;
 #endif
+    // A bonded phone is known by identity, so this holds across its address rotations; a stranger's
+    // holds only until it rotates. After the advertiser filter, since resolving costs an ECB block per bond.
+    for (uint16_t c = 0; c < BLE_MAX_CONNECTION; c++) {
+        BLEConnection *bc = Bluefruit.Connection(c);
+        if (!bc || !bc->connected())
+            continue;
+        bool byIdentity = false;
+        if (sameDevice(bc->getPeerAddr(), report->peer_addr, byIdentity)) {
+            if (memcmp(&lastSkipped[c], &report->peer_addr, sizeof(lastSkipped[c])) != 0) {
+                lastSkipped[c] = report->peer_addr;
+                const uint8_t *a = report->peer_addr.addr;
+                LOG_INFO("BLE GATT mesh: not dialling %02x:%02x:%02x:%02x:%02x:%02x (%s), already linked on conn %u", a[5], a[4],
+                         a[3], a[2], a[1], a[0], byIdentity ? "identity" : "address", c);
+            }
+            return;
+        }
+    }
+    // One central link, so nothing is dialled while it is held - checked after the peer comparison so
+    // the held peer's own rotated address is still recognised and logged as such.
+    if (Bluefruit.Central.connected() > 0)
+        return;
     dialing = true;
     dialAddr = report->peer_addr;
     if (!Bluefruit.Central.connect(report)) {
