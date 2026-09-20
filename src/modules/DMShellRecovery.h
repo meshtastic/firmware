@@ -1,0 +1,160 @@
+#pragma once
+
+// Sequence and replay bookkeeping for DMShell, split out of DMShellModule so it pulls in no
+// platform headers and the native test suite can drive it directly. Time is always passed in
+// rather than read from millis(), so the tests are deterministic.
+
+#include "mesh/Throttle.h"
+#include <stdint.h>
+
+/// What the receive side wants done with one inbound sequenced frame.
+struct DMShellRxDecision {
+    bool process = false;       ///< In order: hand it to the session.
+    bool requestReplay = false; ///< Ask the peer to replay replaySeq.
+    uint32_t replaySeq = 0;
+};
+
+/// Whether a sequence number the peer asked us to replay is still available.
+enum class DMShellReplayLookup : uint8_t {
+    Found,      ///< Still in the ring: replay it.
+    NotSentYet, ///< At or past our next sequence number, so we never sent it. Ignore.
+    Evicted,    ///< Sent, but aged out of the ring. Unrecoverable.
+};
+
+/// Receive-side sequence state.
+///
+/// Damping matters: without it every frame arriving above the gap produces its own replay
+/// request, so one loss costs as many requests as the sender has frames in flight, and each
+/// request costs the sender a duplicate replay.
+class DMShellRxWindow
+{
+  public:
+    /// Seed from the sequence number of the OPEN that started the session.
+    void reset(uint32_t openSeq)
+    {
+        lastInOrderSeq = openSeq;
+        nextExpectedSeq = openSeq + 1;
+        highestSeenSeq = openSeq;
+        requestedSeq = 0;
+        nextRequestAllowedMs = 0;
+        everRequested = false;
+    }
+
+    uint32_t lastInOrder() const { return lastInOrderSeq; }
+    uint32_t nextExpected() const { return nextExpectedSeq; }
+
+    /// Classify one inbound frame. replayIntervalMs of 0 disables damping.
+    DMShellRxDecision classify(uint32_t seq, uint32_t nowMs, uint32_t replayIntervalMs)
+    {
+        DMShellRxDecision decision;
+
+        if (seq == 0) {
+            decision.process = true; // unsequenced control frame (ACK, and anything else seq-less)
+            return decision;
+        }
+
+        if (seq < nextExpectedSeq) {
+            // A duplicate or a replay we no longer need. Only worth a request if we are still
+            // waiting on something below the highest sequence number we have seen.
+            if (highestSeenSeq >= nextExpectedSeq) {
+                askFor(nextExpectedSeq, nowMs, replayIntervalMs, decision);
+            }
+            return decision;
+        }
+
+        if (seq > nextExpectedSeq) {
+            if (seq > highestSeenSeq) {
+                highestSeenSeq = seq;
+            }
+            askFor(nextExpectedSeq, nowMs, replayIntervalMs, decision);
+            return decision;
+        }
+
+        lastInOrderSeq = seq;
+        nextExpectedSeq = seq + 1;
+        if (seq > highestSeenSeq) {
+            highestSeenSeq = seq;
+        }
+        decision.process = true;
+
+        if (highestSeenSeq >= nextExpectedSeq) {
+            // This frame filled one hole but a later one is still open.
+            askFor(nextExpectedSeq, nowMs, replayIntervalMs, decision);
+        } else {
+            highestSeenSeq = 0; // fully caught up
+        }
+        return decision;
+    }
+
+  private:
+    void askFor(uint32_t seq, uint32_t nowMs, uint32_t replayIntervalMs, DMShellRxDecision &decision)
+    {
+        // Re-asking for the same sequence number before a replay could plausibly have arrived is
+        // pure channel load. A different sequence number is always allowed through immediately.
+        if (everRequested && requestedSeq == seq && !Throttle::deadlinePassedAt(nowMs, nextRequestAllowedMs)) {
+            return;
+        }
+        everRequested = true;
+        requestedSeq = seq;
+        nextRequestAllowedMs = nowMs + replayIntervalMs;
+        decision.requestReplay = true;
+        decision.replaySeq = seq;
+    }
+
+    uint32_t lastInOrderSeq = 0;
+    uint32_t nextExpectedSeq = 1;
+    uint32_t highestSeenSeq = 0;
+    uint32_t requestedSeq = 0;
+    uint32_t nextRequestAllowedMs = 0;
+    bool everRequested = false;
+};
+
+/// Tracks which sent sequence numbers the replay ring still holds.
+///
+/// The ring is bounded in frames, so the wall-clock span it covers shrinks with the modem preset -
+/// 50 frames is about two minutes on LongFast but under seven seconds on ShortTurbo. Once a
+/// requested frame has aged out no amount of retrying can recover it, so the caller has to be able
+/// to tell that case apart from a request it can still answer.
+class DMShellTxHistoryWindow
+{
+  public:
+    explicit DMShellTxHistoryWindow(uint32_t capacity) : ringCapacity(capacity ? capacity : 1) {}
+
+    void reset()
+    {
+        oldestRetainedSeq = 0;
+        newestStoredSeq = 0;
+    }
+
+    /// Call once per frame added to the ring, in send order. Replays must not be passed here: they
+    /// reuse an existing sequence number and do not displace anything.
+    void noteStored(uint32_t seq)
+    {
+        if (seq == 0) {
+            return;
+        }
+        if (oldestRetainedSeq == 0) {
+            oldestRetainedSeq = seq;
+        }
+        newestStoredSeq = seq;
+        if (newestStoredSeq - oldestRetainedSeq >= ringCapacity) {
+            oldestRetainedSeq = newestStoredSeq - ringCapacity + 1;
+        }
+    }
+
+    DMShellReplayLookup classify(uint32_t seq, uint32_t nextTxSeq) const
+    {
+        if (seq == 0 || seq >= nextTxSeq || oldestRetainedSeq == 0) {
+            return DMShellReplayLookup::NotSentYet;
+        }
+        if (seq < oldestRetainedSeq) {
+            return DMShellReplayLookup::Evicted;
+        }
+        return DMShellReplayLookup::Found;
+    }
+
+  private:
+    uint32_t ringCapacity;
+    uint32_t oldestRetainedSeq = 0; // 0 while nothing has been stored
+    uint32_t newestStoredSeq = 0;
+};
