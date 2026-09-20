@@ -79,12 +79,15 @@ static int axisZone(int value)
     return 0;
 }
 
-void LinuxJoystick::emitEvent(input_broker_event event)
+// kbchar carries which physical button produced the event (0 for the D-pad, which is an axis
+// rather than a button). Several buttons can be mapped to one action, so this is how a consumer
+// tells them apart -- see joyButtonToKbchar() in InputBroker.h.
+void LinuxJoystick::emitEvent(input_broker_event event, unsigned char kbchar)
 {
     InputEvent e = {};
     e.inputEvent = event;
     e.source = this->_originName;
-    e.kbchar = 0;
+    e.kbchar = kbchar;
     // LOG_DEBUG("joystick: %s event %d", this->_originName, event);
     this->notifyObservers(&e);
 }
@@ -158,7 +161,7 @@ int32_t LinuxJoystick::runOnce()
                 // Buttons fire once per press (no auto-repeat).
                 auto mapped = buttonMap.find(code);
                 if (mapped != buttonMap.end())
-                    emitEvent(mapped->second);
+                    emitEvent(mapped->second, joyButtonToKbchar(code));
             }
         }
     }
