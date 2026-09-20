@@ -86,6 +86,10 @@
 #define MINUTES_IN_HOUR 60
 #define SECONDS_IN_MINUTE 60
 #define MS_IN_HOUR (MINUTES_IN_HOUR * SECONDS_IN_MINUTE * 1000)
+// Bucket widths of the two modular rings, in ms. Named because the split write needs them and
+// because narrowing the channel window later is a change to one of these and nothing else.
+#define CHANUTIL_PERIOD_MS 10000
+#define TXUTIL_PERIOD_MS 60000
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
