@@ -69,6 +69,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     RadioInterface *getRadioIface() { return iface.get(); }
 
+    /// Bytes on air of the largest ack or nak we send: header + Data (ROUTING_APP, error_reason, 8-byte
+    /// proof, request_id, bitfield) under PKC. Pinned by test_ack_frame_bytes_covers_a_real_ack.
+    static constexpr uint32_t ACK_FRAME_BYTES = sizeof(PacketHeader) + 24 + MESHTASTIC_PKC_OVERHEAD;
+
+    /// Time-on-air of one explicit ack under the current preset: the slice of the duty cycle every
+    /// packet below ack priority must leave unspent, so an ack can always follow it.
+    uint32_t ackAirtimeMsec() { return iface ? iface->getPacketTime(ACK_FRAME_BYTES) : 0; }
+
     /**
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.

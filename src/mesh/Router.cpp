@@ -482,9 +482,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     // Abort sending if this packet would take us over the duty cycle. Admission counts the packet's
     // own airtime, so the one that would cross the line is refused rather than the one after it.
+    // Acks and naks take the whole allowance; everything else leaves one ack's worth of it. A node
+    // that cannot ack does not save airtime - the sender retries, and the mesh pays for each one.
+    // Our acks carry Priority_ACK from allocAckNak(); a relayed one is opaque and takes no reserve.
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
-        const uint32_t proposedMs = iface ? iface->getPacketTime(p) : 0;
+        const uint32_t reserveMs = p->priority >= meshtastic_MeshPacket_Priority_ACK ? 0 : ackAirtimeMsec();
+        const uint32_t proposedMs = (iface ? iface->getPacketTime(p) : 0) + reserveMs;
         if (airTime->wouldExceedDutyCycle(proposedMs, effectiveDutyCycle)) {
             uint8_t silentMinutes = airTime->getSilentMinutes(effectiveDutyCycle, proposedMs);
 

@@ -1683,6 +1683,72 @@ void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
     initRegion();
 }
 
+// The reserve is sized from Router::ACK_FRAME_BYTES, so that constant has to cover the largest
+// ack this node builds: every field allocAckNak() sets, an error_reason in the nak case, a full
+// ack proof, and the bitfield Router::send() stamps on our own packets.
+void test_ack_frame_bytes_covers_a_real_ack(void)
+{
+    meshtastic_Routing r = meshtastic_Routing_init_default;
+    r.which_variant = meshtastic_Routing_error_reason_tag;
+    r.error_reason = meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY; // the widest error_reason varint
+    r.ack_proof.size = 8;
+    memset(r.ack_proof.bytes, 0xff, sizeof(r.ack_proof.bytes));
+
+    meshtastic_Data d = meshtastic_Data_init_zero;
+    d.portnum = meshtastic_PortNum_ROUTING_APP;
+    d.payload.size = pb_encode_to_bytes(d.payload.bytes, sizeof(d.payload.bytes), &meshtastic_Routing_msg, &r);
+    d.request_id = 0xffffffffu;
+    d.has_bitfield = true;
+    d.bitfield = 0xff;
+
+    uint8_t buf[256];
+    const size_t dataBytes = pb_encode_to_bytes(buf, sizeof(buf), &meshtastic_Data_msg, &d);
+    const size_t onAir = sizeof(PacketHeader) + dataBytes + MESHTASTIC_PKC_OVERHEAD;
+    char msg[96];
+    snprintf(msg, sizeof(msg), "a worst-case ack is %u bytes on air, ACK_FRAME_BYTES is %u", (unsigned)onAir,
+             (unsigned)Router::ACK_FRAME_BYTES);
+    TEST_ASSERT_TRUE_MESSAGE(onAir <= Router::ACK_FRAME_BYTES, msg);
+}
+
+// Ten milliseconds of the allowance left, and the fake radio charges 7 ms a frame. A reliable DM
+// must also leave an ack's 7 ms behind it, so it needs 14 and is refused; the ack itself needs
+// only 7 and goes. The retry stays pending exactly as C14 requires of any duty-cycle refusal.
+void test_C14b_ack_is_admitted_from_the_reserve_a_dm_is_not(void)
+{
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868; // 10%: a 360 000 ms allowance
+    config.lora.override_duty_cycle = false;
+    initRegion();
+
+    static AirTime nearlySpent;
+    c14SavedAirTime = airTime;
+    airTime = &nearlySpent;
+    Time::setTestMillis(2u * MS_IN_HOUR);
+    Time::serviceMonotonic();
+    nearlySpent.logAirtime(TX_LOG, 360000 - 10);
+    TEST_ASSERT_EQUAL_UINT32(7, pipelineRouter->ackAirtimeMsec());
+
+    meshtastic_MeshPacket dm = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    dm.id = 0xC14B0001;
+    dm.want_ack = true;
+    auto *dmPacket = packetPool.allocCopy(dm);
+    TEST_ASSERT_NOT_NULL(dmPacket);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(dmPacket),
+                              "a DM must leave one ack's worth of the allowance unspent");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(), "...and its retry stays pending");
+
+    meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    ack.id = 0xC14B0002;
+    ack.decoded.request_id = 0xC14B0000;
+    ack.priority = meshtastic_MeshPacket_Priority_ACK;
+    auto *ackPacket = packetPool.allocCopy(ack);
+    TEST_ASSERT_NOT_NULL(ackPacket);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(ackPacket),
+                                  "an ack takes the reserve the DM had to leave");
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+}
+
 void test_C15_reliable_unicast_tracks_five_total_attempts(void)
 {
     meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
@@ -2309,6 +2375,8 @@ void setup()
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
     RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
+    RUN_TEST(test_ack_frame_bytes_covers_a_real_ack);
+    RUN_TEST(test_C14b_ack_is_admitted_from_the_reserve_a_dm_is_not);
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
