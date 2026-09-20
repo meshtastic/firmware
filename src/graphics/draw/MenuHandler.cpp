@@ -159,12 +159,7 @@ uint8_t test_count = 0;
 void menuHandler::loraMenu()
 {
     static const char *optionsArray[] = {
-        "Back",
-        "Device Role",
-        "Radio Preset",
-        "Frequency Slot",
-        "LoRa Region",
-        "Transmit Enabled",
+        "Back",    "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region", "Transmit Enabled",
 #if HAS_LORA_FEM
         "FEM LNA",
 #endif
