@@ -10,12 +10,10 @@
 
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): Import/env/Return are SCons-injected globals
-# trunk-ignore-all(ruff/E402)
-# trunk-ignore-all(flake8/E402): stdlib imports must follow Import("env")
-Import("env")
-
 import glob
 import os
+
+Import("env")
 
 framework_dir = env.PioPlatform().get_package_dir("framework-arduinopico")
 if not framework_dir:

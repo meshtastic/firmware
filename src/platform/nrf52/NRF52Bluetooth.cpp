@@ -3,11 +3,14 @@
 #include "BluetoothCommon.h"
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
+#include "SPILock.h"
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
+#include <InternalFileSystem.h>
 #include <bluefruit.h>
 #include <utility/bonding.h>
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
@@ -20,7 +23,44 @@ static BLEDis bledis;             // DIS (Device Information Service) helper cla
 static BLEBas blebas;             // BAS (Battery Service) helper class instance
 static int lastBatteryLevel = -1; // last value written to BAS, to skip redundant writes/notifies
 #ifndef BLE_DFU_SECURE
-static BLEDfu bledfu; // DFU software update helper service
+namespace
+{
+// The library's DFU handler jumps to the bootloader from the callback task with no flash quiesce, so
+// wrap it: wait out any write in flight first, and unlock again if it comes back without jumping.
+class QuiescingBLEDfu : public BLEDfu
+{
+    struct Peek : BLECharacteristic {
+        using BLECharacteristic::_wr_authorize_cb;
+    };
+    static BLECharacteristic::write_authorize_cb_t libraryCb;
+
+    static void onControlWrite(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_write_t *request)
+    {
+        // Only START_DFU resets, and the library reads this byte without checking len, so match it exactly.
+        if (request->data[0] != 1) {
+            libraryCb(conn_hdl, chr, request);
+            return;
+        }
+        nrf52FlashQuiesce();
+        // The handler reloads the bond keys through LittleFS, so it cannot run under the FS mutex; spiLock still
+        // fences every other writer until the jump.
+        InternalFS._unlockFS();
+        libraryCb(conn_hdl, chr, request);
+        spiLock->unlock();
+    }
+
+  public:
+    err_t begin() override
+    {
+        err_t err = BLEDfu::begin();
+        libraryCb = _chr_control.*(&Peek::_wr_authorize_cb);
+        _chr_control.setWriteAuthorizeCallback(onControlWrite);
+        return err;
+    }
+};
+BLECharacteristic::write_authorize_cb_t QuiescingBLEDfu::libraryCb;
+} // namespace
+static QuiescingBLEDfu bledfu; // DFU software update helper service
 #else
 static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
 #endif
@@ -244,8 +284,12 @@ void NRF52Bluetooth::shutdown()
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
-    disconnect();
+
+    // Clear the auto-restart flag before dropping the link: our DISCONNECTED event is only processed
+    // after this callback returns and would re-start advertising. startAdv()/resumeAdvertising() re-set it.
+    Bluefruit.Advertising.restartOnDisconnect(false);
     Bluefruit.Advertising.stop();
+    disconnect();
 }
 void NRF52Bluetooth::startDisabled()
 {
@@ -254,7 +298,7 @@ void NRF52Bluetooth::startDisabled()
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
-    LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
+    LOG_INFO("Disable NRF52 BT (tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
 {
@@ -282,7 +326,7 @@ void NRF52Bluetooth::setup()
         // current Bluefruit config. Without this check the node would silently run without BLE.
         // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
         // raise the ORIGIN accordingly.
-        LOG_ERROR("Bluefruit.begin failed - SoftDevice RAM reservation too small for this config");
+        LOG_ERROR("Bluefruit.begin failed: SoftDevice RAM too small");
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
@@ -398,7 +442,7 @@ void updateBatteryLevel(uint8_t level)
 }
 void NRF52Bluetooth::clearBonds()
 {
-    LOG_INFO("Clear bluetooth bonds!");
+    LOG_INFO("Clear bluetooth bonds");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -445,7 +489,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 
     if (match_request) {
         uint32_t start_time = millis();
-        while (millis() < start_time + 30000) {
+        while (Throttle::isWithinTimespanMs(start_time, 30000)) {
             if (!Bluefruit.connected(conn_handle))
                 break;
         }
@@ -466,17 +510,23 @@ bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passk
 // Disconnect any BLE connections
 void NRF52Bluetooth::disconnect()
 {
+    static constexpr uint32_t DISCONNECT_TIMEOUT_MSEC = 1000;
     uint8_t connection_num = Bluefruit.connected();
     if (connection_num) {
         // Close all connections. We're only expecting one.
         for (uint8_t i = 0; i < connection_num; i++)
             Bluefruit.disconnect(i);
 
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
+        // Best-effort wait: on Bluefruit's BLE event task the DISCONNECTED event can't be processed
+        // until this callback returns, so an unbounded wait would deadlock until the watchdog fires.
+        uint32_t start = millis();
+        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, DISCONNECT_TIMEOUT_MSEC))
+            delay(1);
 
-        LOG_INFO("Ended BLE connection");
+        if (Bluefruit.connected())
+            LOG_WARN("BLE disconnect unconfirmed after %ums, shutdown anyway", millis() - start);
+        else
+            LOG_INFO("Ended BLE connection");
     }
 }
 
@@ -487,7 +537,7 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
         meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
         bluetoothStatus->updateStatus(&newConnectedStatus);
     } else {
-        LOG_INFO("BLE pair failed");
+        LOG_INFO("BLE pair failed, status 0x%02x", auth_status);
         // Notify UI (or any other interested firmware components)
         meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newDisconnectedStatus);

@@ -66,7 +66,7 @@ class AmbientLightingThread : public concurrency::OSThread
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
         _type = type;
         if (_type == ScanI2C::DeviceType::NONE) {
-            LOG_DEBUG("AmbientLighting Disable due to no RGB leds found on I2C bus");
+            LOG_DEBUG("AmbientLighting disabled: no RGB leds on I2C");
             disable();
             return;
         }
@@ -92,7 +92,7 @@ class AmbientLightingThread : public concurrency::OSThread
                 pixels.setBrightness(moduleConfig.ambient_lighting.current);
 #endif
                 if (!moduleConfig.ambient_lighting.led_state) {
-                    LOG_DEBUG("AmbientLighting Disable due to moduleConfig.ambient_lighting.led_state OFF");
+                    LOG_DEBUG("AmbientLighting disabled: led_state OFF");
                     disable();
                     return;
                 }

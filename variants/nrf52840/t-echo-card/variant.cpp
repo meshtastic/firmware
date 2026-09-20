@@ -36,13 +36,13 @@ void initVariant()
     // No plain GPIO LEDs on this board (only WS2812 addressable LEDs, not driven here).
 }
 
-// Reproduces the vendor firmware's boot sequence from
-// examples/original_test/original_test.ino. Runs before Meshtastic touches
-// PIN_POWER_EN, so the RT9080 LDO gets a clean reset pulse and peripherals
-// whose EN pins must be LOW at boot (GPS_EN, GPS_RF_EN, BUZZER) aren't left
-// floating while the 3V3 rail is ramping.
+// Runs before Meshtastic touches PIN_POWER_EN. Hold the GPS RF front end
+// disabled before toggling the RT9080 rail.
 void earlyInitVariant()
 {
+    pinMode(PIN_GPS_RF_EN, OUTPUT);
+    digitalWrite(PIN_GPS_RF_EN, LOW);
+
     // 3.3V rail: toggle RT9080_EN HIGH → LOW → HIGH with 100 ms dwell so the
     // LDO enters enable from a known state. The single-shot HIGH in main.cpp
     // is not enough on this hardware - if the chip was in a half-enabled
@@ -55,12 +55,8 @@ void earlyInitVariant()
     digitalWrite(PIN_POWER_EN, HIGH);
     delay(100);
 
-    // Park peripherals with active-high enables LOW so they don't sink
+    // Park the remaining peripherals with active-high enables LOW so they don't sink
     // current while the rest of setup() runs.
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, LOW);
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, LOW);
-    pinMode(PIN_BUZZER, OUTPUT);
-    digitalWrite(PIN_BUZZER, LOW);
 }

@@ -39,15 +39,20 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     int16_t getCurrentRSSI() override;
 
+    /// Transceiver firmware version as (major << 8 | minor), and which LR11x0 part this is. Captured at
+    /// init() from getVersionInfo(); 0 if the query failed.
+    uint16_t transceiverFw = 0;
+    uint8_t transceiverDevice = 0;
+
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora.setIrqAction(callback); }
+    virtual void setRadioIsr(void (*callback)()) override { lora.setIrqAction(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
@@ -73,5 +78,21 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+  private:
+    /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
+    int16_t programModemParams();
+
+    /** Reset and re-begin() a chip that lost its runtime configuration (reset/brownout) */
+    bool reinitChip();
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
+    /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
+    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
+
+    /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
+    float resolvedTcxoVoltage = 0;
 };
 #endif

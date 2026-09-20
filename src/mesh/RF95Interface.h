@@ -4,12 +4,18 @@
 #include "RadioLibInterface.h"
 #include "RadioLibRF95.h"
 
+#include <memory>
+
 /**
  * Our new not radiohead adapter for RF95 style radios
  */
 class RF95Interface : public RadioLibInterface
 {
-    RadioLibRF95 *lora = NULL; // Either a RFM95 or RFM96 depending on what was stuffed on this board
+    // Either a RFM95 or RFM96 depending on what was stuffed on this board.
+    // Owned here; every other radio interface holds its driver by value, but this one is
+    // constructed in init(), so unique_ptr keeps it from leaking when init() fails and the
+    // interface is destroyed.
+    std::unique_ptr<RadioLibRF95> lora;
 
   public:
     RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -35,14 +41,14 @@ class RF95Interface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     int16_t getCurrentRSSI() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora->setDio0Action(callback, RISING); }
+    virtual void setRadioIsr(void (*callback)()) override { lora->setDio0Action(callback, RISING); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
@@ -72,5 +78,17 @@ class RF95Interface : public RadioLibInterface
   private:
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
+
+    /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
+    int16_t programModemParams();
+
+    /** begin() and chip-side setup, shared by init() and by reconfigure()'s recovery of a chip that lost its state */
+    bool reinitChip();
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
+    /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
+    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 };
 #endif

@@ -1,7 +1,9 @@
 #include "ReliableRouter.h"
+#include "AckProof.h"
 #include "Default.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "memGet.h"
 #include "mesh-pb-constants.h"
@@ -16,13 +18,24 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+    if (isBlockedEventCoordinatePacket(p)) {
+        LOG_DEBUG("Suppress reliable coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
+    const GlobalPacketId key(p);
+    const bool retransmitting = p->want_ack;
+
     if (p->want_ack) {
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
 
-        if (copy)
-            startRetransmission(copy, NUM_RELIABLE_RETX);
+        if (copy) {
+            const uint8_t totalAttempts = isBroadcast(p->to) ? NUM_RELIABLE_RETX : NUM_RELIABLE_UNICAST_ATTEMPTS;
+            startRetransmission(copy, totalAttempts);
+        }
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an
@@ -34,37 +47,51 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    ErrorCode result = isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    // Duty-cycle rejections may clear before the scheduled retry.
+    if (retransmitting && result != ERRNO_OK && result != meshtastic_Routing_Error_DUTY_CYCLE_LIMIT)
+        stopRetransmission(key);
+
+    return result;
+}
+
+void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *p)
+{
+    // Note: do not use getFrom() here, because we want to ignore messages sent from phone
+    if (p->from != getNodeNum())
+        return;
+
+    printPacket("Rx someone rebroadcasting for us", p);
+
+    // We are seeing someone rebroadcast one of our transmissions. If this is the first time we saw
+    // this, cancel any retransmissions we have queued up and generate an internal ack for the
+    // original sending process. Header-only (from/id), so it works even for a packet we cannot
+    // decrypt - notably a PKI DM we originated, which is opaque to us when overheard.
+
+    // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
+    // from the intended recipient.
+    auto key = GlobalPacketId(getFrom(p), p->id);
+    auto old = findPendingPacket(key);
+    if (old) {
+        LOG_DEBUG("Generate implicit ack");
+        // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
+        // marked as wantAck
+        // Pass the overheard rebroadcast as the relay source so the ack carries the relaying node's id
+        // and the RSSI/SNR we heard it at.
+        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel, 0, false, p);
+
+        // Only stop retransmissions if the rebroadcast came via LoRa
+        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+            stopRetransmission(key);
+        }
+    } else {
+        LOG_DEBUG("Didn't find pending packet");
+    }
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
-    // Note: do not use getFrom() here, because we want to ignore messages sent from phone
-    if (p->from == getNodeNum()) {
-        printPacket("Rx someone rebroadcasting for us", p);
-
-        // We are seeing someone rebroadcast one of our broadcast attempts.
-        // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
-        // the original sending process.
-
-        // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
-        // from the intended recipient.
-        auto key = GlobalPacketId(getFrom(p), p->id);
-        auto old = findPendingPacket(key);
-        if (old) {
-            LOG_DEBUG("Generate implicit ack");
-            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
-            // marked as wantAck
-            sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
-
-            // Only stop retransmissions if the rebroadcast came via LoRa
-            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-                stopRetransmission(key);
-            }
-        } else {
-            LOG_DEBUG("Didn't find pending packet");
-        }
-    }
+    perhapsGenerateImplicitAckForOwnOverheard(p);
 
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,
@@ -146,7 +173,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if ((ackId || nakId) &&
+        if ((ackId || nakId) && ackProofPermitsAction(p, ackId ? ackId : nakId) &&
             // Implicit ACKs from MQTT should not stop retransmissions
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
             LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
@@ -155,7 +182,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 // M3: an end-to-end ACK proves the directed route to the ACK's sender currently works,
                 // so clear its failure count and refresh freshness (keeps a good route pinned).
                 if (!isBroadcast(getFrom(p)))
-                    noteRouteSuccess(getFrom(p), millis());
+                    noteRouteSuccess(getFrom(p), Time::stampMillis());
             } else {
                 stopRetransmission(p->to, nakId);
             }
@@ -164,6 +191,44 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
     // handle the packet as normal
     isBroadcast(p->to) ? FloodingRouter::sniffReceived(p, c) : NextHopRouter::sniffReceived(p, c);
+}
+
+bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId)
+{
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // Cheap gate FIRST: verification costs one X25519 per call (setDHPublicKey runs Curve25519::dh2
+    // and nothing caches the result), and an attacker with the channel key picks when we pay it. A
+    // packet id is visible in the cleartext header, so without this gate a forged ack for any id at
+    // all forces a DH. With it, only ids we genuinely have outstanding can, and only while pending.
+    PendingPacket *orig = findPendingPacket(p->to, originalId);
+    if (!orig)
+        return true;
+    const bool expected = orig->packet && orig->packet->pki_encrypted;
+
+    switch (ackProofVerify(p, originalId)) {
+    case AckProofResult::VALID:
+        LOG_DEBUG("ACK proof OK for 0x%08x", originalId);
+        return true;
+    case AckProofResult::INVALID:
+        // Somebody produced an ack for our packet without holding the shared secret.
+        LOG_WARN("ACK proof MISMATCH for 0x%08x from 0x%08x%s", originalId, getFrom(p),
+                 ACK_PROOF_ENFORCE ? ", ignoring ack" : " (advisory)");
+        return !ACK_PROOF_ENFORCE;
+    case AckProofResult::NO_KEY:
+        LOG_DEBUG("ACK proof present for 0x%08x but no authoritative key for 0x%08x", originalId, getFrom(p));
+        return true;
+    case AckProofResult::ABSENT:
+        // What every current firmware sends, and what every non-PKI peer will always send, so this
+        // can only ever be reported - never enforced. See ACK_PROOF_ENFORCE in AckProof.h.
+        if (expected)
+            LOG_INFO("Unproven ack for PKI packet 0x%08x from 0x%08x", originalId, getFrom(p));
+        return true;
+    }
+#else
+    (void)p;
+    (void)originalId;
+#endif
+    return true;
 }
 
 /**

@@ -1,12 +1,23 @@
 name: Update protobufs and regenerate classes
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      protobufs_branch:
+        description: Branch of meshtastic/protobufs to generate from
+        required: true
+        type: choice
+        default: same-as-this-branch
+        options:
+          - same-as-this-branch
+          - master
+          - develop
 
 permissions: read-all
 
 jobs:
   update-protobufs:
     runs-on: ubuntu-latest
-    permissions: # Needed for peter-evans/create-pull-request.
+    permissions:
       contents: write
       pull-requests: write
     steps:
@@ -14,22 +25,50 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: true
+          persist-credentials: false
+
+      - name: Resolve protobufs branch
+        id: resolve
+        env:
+          INPUT_BRANCH: ${{ inputs.protobufs_branch }}
+          TRIGGER_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$INPUT_BRANCH" = "same-as-this-branch" ]; then
+            BRANCH="$TRIGGER_BRANCH"
+          else
+            BRANCH="$INPUT_BRANCH"
+          fi
+          case "$BRANCH" in
+            master | develop) ;;
+            *)
+              echo "::error::Refusing to generate from branch '$BRANCH'"
+              exit 1
+              ;;
+          esac
+          echo "branch=$BRANCH" >>"$GITHUB_OUTPUT"
 
       - name: Update submodule
-        if: ${{ github.ref_name == 'master' || github.ref_name == 'develop' }}
         working-directory: protobufs
         env:
-          # Use the branch that triggered the workflow as the protobuf branch.
-          GIT_BRANCH: ${{ github.ref_name }}
+          GIT_BRANCH: ${{ steps.resolve.outputs.branch }}
         run: |
-          git fetch --prune origin $GIT_BRANCH
-          git checkout FETCH_HEAD
+          set -euo pipefail
+          git fetch --prune origin "+refs/heads/${GIT_BRANCH}:refs/remotes/origin/${GIT_BRANCH}"
+          git checkout --detach "refs/remotes/origin/${GIT_BRANCH}"
+          git rev-parse HEAD
 
       - name: Download nanopb
+        env:
+          NANOPB_VERSION: 0.4.9.1
+          NANOPB_SHA256: 951a9ab2385424a4cdf245d0c84f4c88c6ccbc65a0dade4b246d50c068f24128
         run: |
-          wget https://github.com/nanopb/nanopb/releases/download/nanopb-0.4.9.1/nanopb-0.4.9.1-linux-x86.tar.gz
-          tar xvzf nanopb-0.4.9.1-linux-x86.tar.gz
-          mv nanopb-0.4.9.1-linux-x86 nanopb-0.4.9
+          set -euo pipefail
+          TARBALL="nanopb-${NANOPB_VERSION}-linux-x86.tar.gz"
+          wget -q "https://github.com/nanopb/nanopb/releases/download/nanopb-${NANOPB_VERSION}/${TARBALL}"
+          echo "${NANOPB_SHA256}  ${TARBALL}" | sha256sum -c -
+          tar xzf "${TARBALL}"
+          mv "nanopb-${NANOPB_VERSION}-linux-x86" nanopb-0.4.9
 
       - name: Re-generate protocol buffers
         run: |
@@ -38,10 +77,12 @@ jobs:
       - name: Create pull request
         uses: peter-evans/create-pull-request@v8
         with:
-          branch: create-pull-request/update-protobufs-${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: create-pull-request/update-protobufs-${{ github.ref_name }}-from-${{ steps.resolve.outputs.branch }}
           labels: submodules
           title: Update protobufs and classes
           commit-message: Update protobufs
           add-paths: |
             protobufs
             src/mesh
+

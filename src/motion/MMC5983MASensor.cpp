@@ -6,7 +6,7 @@
 #include "detect/ScanI2CTwoWire.h"
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 #endif
 
 static constexpr float MMC5983MA_ZERO_FIELD = 131072.0f;
@@ -108,7 +108,8 @@ int32_t MMC5983MASensor::runOnce()
         }
         heading = FusionCompass(ga, ma, FusionConventionNed) + MMC5983MA_HEADING_OFFSET_DEG;
     } else {
-        heading = atan2f(magY, magX) * RAD_TO_DEG + MMC5983MA_HEADING_OFFSET_DEG;
+        // Double atan2 on purpose: already linked, atan2f would add a float copy.
+        heading = atan2(double(magY), double(magX)) * RAD_TO_DEG + MMC5983MA_HEADING_OFFSET_DEG;
     }
 
     if (heading >= 360.0f)

@@ -1,0 +1,5 @@
+# FAULT: only the first 22 PA points are stored (num_pa_points is min(size, 22)), so
+# everything past the 22nd is silently dropped.
+Lora:
+  Module: sx1262
+  TX_GAIN_LORA: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]

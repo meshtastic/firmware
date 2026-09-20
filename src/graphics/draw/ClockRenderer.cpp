@@ -50,7 +50,7 @@ void drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale)
 
     uint16_t cellHeight = (segmentWidth * 2) + (segmentHeight * 3) + 8;
 
-    uint16_t topAndBottomX = x + static_cast<uint16_t>(4 * scale);
+    uint16_t topAndBottomX = x + 3;
 
     uint16_t quarterCellHeight = cellHeight / 4;
 
@@ -178,13 +178,15 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     snprintf(secondString, sizeof(secondString), "%02d", second);
 
     static bool scaleInitialized = false;
-    static float scale = 0.75f;
+    static float scale = 0.15f;
     static float segmentWidth = SEGMENT_WIDTH * 0.75f;
     static float segmentHeight = SEGMENT_HEIGHT * 0.75f;
 
     if (!scaleInitialized) {
 #ifdef DISPLAY_FORCE_SMALL_FONTS
         float screenwidth_target_ratio = 0.70f; // Target 70% of display width (adjustable)
+#elif defined(BICOLOR_OLED_DISPLAY)
+        float screenwidth_target_ratio = 0.60f;     // Forced for BICOLOR_OLED_DISPLAY due to two color display
 #else
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
 #endif
@@ -192,11 +194,15 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         float step = 0.05f;     // Step increment per iteration
 
         float target_width = display->getWidth() * screenwidth_target_ratio;
+#if !defined(OLED_COMPACT_UI)
         float target_height =
             display->getHeight() -
             ((currentResolution == ScreenResolution::High)
                  ? 46
                  : 33); // Be careful adjusting this number, we have to account for header and the text under the time
+#else
+        float target_height = display->getHeight(); // OLED compact UI has no header or footer, so we can use the full height
+#endif
 
         float calculated_width_size = 0.0f;
         float calculated_height_size = 0.0f;
@@ -206,7 +212,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             segmentHeight = SEGMENT_HEIGHT * scale;
 
             calculated_width_size = segmentHeight + ((segmentWidth + (segmentHeight * 2) + 4) * 4);
-            calculated_height_size = segmentHeight + ((segmentHeight + (segmentHeight * 2) + 4) * 2);
+            calculated_height_size = (segmentWidth * 2) + (segmentHeight * 3) + 8;
 
             if (calculated_width_size >= target_width || calculated_height_size >= target_height || scale >= max_scale) {
                 break;
@@ -227,13 +233,22 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
     // calculate hours:minutes string width
     size_t len = strlen(timeString);
-    uint16_t timeStringWidth = len * 5;
+#ifdef OLED_COMPACT_UI
+#define CLOCK_CHAR_GAP 2
+#else
+#define CLOCK_CHAR_GAP 5
+#endif
+    uint16_t timeStringWidth = (len - 1) * CLOCK_CHAR_GAP; // gaps sit between characters, not after the last one
 
     for (size_t i = 0; i < len; i++) {
         char character = timeString[i];
 
+        // Must mirror the advances used by the draw loop below, or the clock won't be centered.
         if (character == ':') {
-            timeStringWidth += segmentHeight;
+            timeStringWidth += segmentHeight + 6;
+            if (scale >= 2.0f) {
+                timeStringWidth += (uint16_t)(4.5f * scale);
+            }
         } else {
             timeStringWidth += segmentWidth + (segmentHeight * 2) + 4;
         }
@@ -243,6 +258,12 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     uint16_t startingHourMinuteTextX = hourMinuteTextX;
 
     uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2) + 2;
+
+#if !defined(OLED_COMPACT_UI)
+    const uint16_t bottomRowY = hourMinuteTextY + ((uint16_t)segmentWidth * 2) + ((uint16_t)segmentHeight * 3) + 8 + 1;
+#else
+    const uint16_t bottomRowY = (display->getHeight() - hourMinuteTextY) + 1;
+#endif
 
     // iterate over characters in hours:minutes string and draw segmented characters
     for (size_t i = 0; i < len; i++) {
@@ -261,34 +282,23 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             hourMinuteTextX += segmentWidth + (segmentHeight * 2) + 4;
         }
 
-        hourMinuteTextX += 5;
+        hourMinuteTextX += CLOCK_CHAR_GAP;
     }
 
     // draw seconds string + AM/PM
     display->setFont(FONT_SMALL);
-    int xOffset = -1;
-    if (currentResolution == ScreenResolution::High) {
-        xOffset = 0;
-    }
-    if (hour >= 10) {
-        if (currentResolution == ScreenResolution::High) {
-            xOffset += 32;
-        } else {
-            xOffset += 18;
-        }
-    }
 
     if (config.display.use_12h_clock) {
-        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - 1, isPM ? "pm" : "am");
+#if !defined(OLED_COMPACT_UI)
+        const char *period = isPM ? "pm" : "am";
+#else
+        const char *period = isPM ? "p" : "a";
+#endif
+        display->drawString(startingHourMinuteTextX, bottomRowY, period);
     }
 
 #ifndef USE_EINK
-    xOffset = (currentResolution == ScreenResolution::High) ? 18 : 10;
-    if (scale >= 2.0f) {
-        xOffset -= (int)(4.5f * scale);
-    }
-    display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - 1,
-                        secondString);
+    display->drawString(hourMinuteTextX - CLOCK_CHAR_GAP - display->getStringWidth(secondString), bottomRowY, secondString);
 #endif
 
     graphics::drawCommonFooter(display, x, y);
@@ -315,6 +325,9 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t radius = (std::min(display->getWidth(), display->getHeight()) / 2) * 0.9;
 #ifdef T_WATCH_S3
     radius = (display->getWidth() / 2) * 0.8;
+#elif defined(BICOLOR_OLED_DISPLAY)
+    centerY += 6;
+    radius = (display->getHeight() / 2) * 0.7;
 #endif
 
     // noon (0 deg) coordinates (outermost circle)

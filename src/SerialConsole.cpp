@@ -1,10 +1,13 @@
-#include "SerialConsole.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "Default.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "SerialConsole.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #include "main.h"
 #include "time.h"
 
@@ -12,6 +15,11 @@
 #define IS_USB_SERIAL
 #ifdef SERIAL_HAS_ON_RECEIVE
 #undef SERIAL_HAS_ON_RECEIVE
+#endif
+// Port is HWCDC only in hardware USB-Serial/JTAG mode. With ARDUINO_USB_MODE=0 it is TinyUSB
+// USBCDC, the PHY is routed away from the USJ peripheral, and isPlugged() would never see a SOF.
+#if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE
+#define IS_USB_HWCDC
 #endif
 #include "HWCDC.h"
 #endif
@@ -122,9 +130,15 @@ int32_t SerialConsole::runOnce()
 
     int32_t delay = runOncePart();
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
+    // Nothing wakes the idle sleep for "TX space freed" or a bounded-drain remainder
+    // (#11164), so keep polling while the API holds undelivered output.
+    if (hasPendingOutput())
+        return delay < 25 ? delay : 25; // 0 continues a budget slice; else short-poll TX drain
     return Port.available() ? delay : INT32_MAX;
-#elif defined(IS_USB_SERIAL)
-    return HWCDC::isPlugged() ? delay : (1000 * 20);
+#elif defined(IS_USB_HWCDC)
+    // isPlugged() is a SOF watchdog that flaps false while USB is fine (#11864), and nothing wakes
+    // this thread on RX, so cap the idle sleep at the rate readStream() already idles at.
+    return HWCDC::isPlugged() ? delay : 250;
 #else
     return delay;
 #endif
@@ -206,6 +220,17 @@ bool SerialConsole::finishPendingFrame()
     return frameWriter.finishPendingFrame(Port);
 #else
     return true;
+#endif
+}
+
+/// Report a retained USB CDC frame awaiting TX space.
+bool SerialConsole::hasRetainedFrame()
+{
+#ifdef IS_USB_SERIAL
+    concurrency::LockGuard guard(&streamLock);
+    return !frameWriter.isIdle();
+#else
+    return false;
 #endif
 }
 

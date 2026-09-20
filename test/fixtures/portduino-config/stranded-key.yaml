@@ -1,0 +1,6 @@
+# FAULT: spidev left at the top level instead of inside a section, where it does
+# nothing. Expect an ERROR that names the sections it IS valid in, so the fix is to
+# indent it one level.
+Lora:
+  Module: sx1262
+spidev: /dev/spidev0.0

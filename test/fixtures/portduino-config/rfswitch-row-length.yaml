@@ -1,0 +1,8 @@
+# FAULT: three pins are declared, but MODE_STBY gives two values and MODE_RX gives
+# four. Expect one ERROR per mismatched row.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7]
+    MODE_STBY: [LOW, LOW]
+    MODE_RX: [HIGH, LOW, LOW, LOW]

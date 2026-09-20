@@ -5,6 +5,16 @@
 #include <iterator>
 #include <stdint.h>
 
+/// Keep a function out of line even when the compiler would rather inline it. Use on helpers that
+/// hold a large object on the stack: inlining several of them into one caller makes that caller's
+/// frame reserve every helper's locals at once, which on our 8 KB Arduino loopTask is enough to
+/// overflow the stack (see issue #11237).
+#if defined(__GNUC__)
+#define NOINLINE __attribute__((noinline))
+#else
+#define NOINLINE
+#endif
+
 /// C++ v17+ clamp function, limits a given value to a range defined by lo and hi
 template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi)
 {
@@ -60,6 +70,10 @@ const std::string vformat(const char *const zcFormat, ...);
 // Get actual string length for nanopb char array fields.
 size_t pb_string_length(const char *str, size_t max_len);
 
+// strtof() for plain decimals: [+-]digits[.digits] after leading whitespace, 0 when no digits. No exponent,
+// inf or nan, which keeps newlib's strtod (~4.5 KB) out of the image.
+float parseDecimalFloat(const char *s);
+
 // Sanitize a fixed-size char buffer in-place by replacing invalid UTF-8 sequences with '?'.
 // Ensures the result is null-terminated within bufSize. Returns true if any bytes were replaced.
 bool sanitizeUtf8(char *buf, size_t bufSize);
@@ -74,6 +88,15 @@ bool sanitizeUtf8(char *buf, size_t bufSize);
 // to MAX_LONG_NAME_BYTES bytes of content, fixing any partial UTF-8 sequence
 // left at the cut.
 void clampLongName(char *longName);
+
+// Is a received Waypoint still live? The clients send expire == 0 for "never expires" and expire == 1
+// to delete; now == 0 means we have no trustworthy clock, which must not expire anything.
+static inline bool waypointIsActive(uint32_t expire, uint32_t now)
+{
+    if (expire <= 1)
+        return expire == 0;
+    return now == 0 || expire > now;
+}
 
 /// Calculate 2^n without calling pow() - used for spreading factor and other calculations
 inline uint32_t pow_of_2(uint32_t n)

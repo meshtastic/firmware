@@ -23,8 +23,8 @@ jobs:
         series:
           - jammy # 22.04 LTS
           - noble # 24.04 LTS
-          - questing # 25.10
           - resolute # 26.04 LTS
+          - stonking # 26.10
     uses: ./.github/workflows/package_ppa.yml
     with:
       ppa_repo: |-
@@ -93,11 +93,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # Always use master branch for version bumps
-          ref: master
+          # Always use the default branch for version bumps
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: 3.x
 

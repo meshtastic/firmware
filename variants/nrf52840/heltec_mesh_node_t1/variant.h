@@ -28,7 +28,9 @@
 extern "C" {
 #endif // __cplusplus
 
+#ifndef HELTEC_MESH_NODE_T1
 #define HELTEC_MESH_NODE_T1
+#endif
 
 // Display (ST7735, 80x160 TFT via SPI1)
 #define HAS_SPI_TFT 1

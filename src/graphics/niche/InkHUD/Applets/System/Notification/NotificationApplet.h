@@ -15,8 +15,10 @@ Feature should be optional; enable disable via on-screen menu
 #include "configuration.h"
 
 #include "concurrency/OSThread.h"
-
 #include "graphics/niche/InkHUD/SystemApplet.h"
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+struct GeofenceNotificationEvent;
+#endif
 
 namespace NicheGraphics::InkHUD
 {
@@ -39,6 +41,9 @@ class NotificationApplet : public SystemApplet
     void onNavRight() override;
 
     int onReceiveTextMessage(const meshtastic_MeshPacket *p);
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    int onGeofenceEvent(const GeofenceNotificationEvent *event);
+#endif
 
     bool isApproved(); // Does a foreground applet make notification redundant?
     void dismiss();    // Close the Notification Popup
@@ -47,10 +52,16 @@ class NotificationApplet : public SystemApplet
     // Get notified when a new text message arrives
     CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<NotificationApplet, const meshtastic_MeshPacket *>(this, &NotificationApplet::onReceiveTextMessage);
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    CallbackObserver<NotificationApplet, const GeofenceNotificationEvent *> geofenceObserver =
+        CallbackObserver<NotificationApplet, const GeofenceNotificationEvent *>(this, &NotificationApplet::onGeofenceEvent);
+#endif
 
+    void showNotification(const Notification &n);
+    void openGeofenceOnMap();
     std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
-    bool hasNotification = false;                      // Only used for assert. Todo: remove?
+    bool hasNotification = false;
     Notification currentNotification = Notification(); // Set when something notification-worthy happens. Used by render()
 };
 

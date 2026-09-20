@@ -1,0 +1,8 @@
+# CLEAN, and a regression guard. TX_GAIN_LORA accepts a bare scalar as well as a list:
+# loadConfig() has an else branch reading .as<int>(0). An earlier version of the checker
+# treated the list shape as the only legal one and reported this working config as a
+# fatal error -- a false positive is worse than a missing check, so this file must stay
+# clean.
+Lora:
+  Module: sx1262
+  TX_GAIN_LORA: 5

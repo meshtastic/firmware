@@ -63,7 +63,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         // {
         //     LOG_INFO("%02x,", msg[i]);
         // }
-        // LOG_INFO("");
+        // LOG_INFO(".");
         switch (msg[0]) {
         case RAK_IPSO_CAPACITY:
             dc_prec = msg[1];
@@ -91,7 +91,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         // {
         //     LOG_INFO("%02x,", msg[i]);
         // }
-        // LOG_INFO("");
+        // LOG_INFO(".");
 
         switch (msg[0]) {
         case RAK_IPSO_CAPACITY:

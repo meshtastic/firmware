@@ -12,6 +12,7 @@
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "mesh/Throttle.h"
 #if HAS_BUTTON
 #include "input/ButtonThread.h"
 #endif
@@ -84,7 +85,7 @@ static inline graphics::NotificationRenderer::BannerFont parseFontTagPrefix(cons
 {
     // Tags must be at the start of the line:
     // [S] small, [M] medium, [L] large
-    if (p && p[0] == '[' && p[2] == ']' && p[1] != '\0') {
+    if (p && p[0] == '[' && p[1] != '\0' && p[2] == ']') {
         char t = p[1];
         if (t == 'S') {
             p += 3;
@@ -134,6 +135,26 @@ static inline uint8_t effectiveLineHeightForBannerLine(graphics::NotificationRen
         break;
     }
     return (height > 3) ? (height - 3) : height;
+}
+
+const char *graphics::NotificationRenderer::resolveBannerLine(uint16_t lineIndex, const char *rawLine, BannerFont &lineFont)
+{
+    lineFont = BANNER_FONT_DEFAULT;
+    bool tagAware = (current_notification_type == notificationTypeEnum::text_banner ||
+                     current_notification_type == notificationTypeEnum::pairing_pin) &&
+                    alertBannerOptions == 0;
+    if (!tagAware)
+        return rawLine;
+    if (lineIndex < alertBannerLineCount) {
+        lineFont = alertBannerLineFonts[lineIndex];
+        return alertBannerLines[lineIndex];
+    }
+    // The parsed-line cache doesn't cover this line (the banner text was stored without a
+    // re-parse, or a draw raced the parse from another task): strip the tag here too, so it
+    // acts as a font change and never renders as literal text - the BLE pair PIN banner
+    // prefixes its PIN line with [M].
+    lineFont = parseFontTagPrefix(rawLine);
+    return rawLine;
 }
 
 void graphics::NotificationRenderer::parseBannerMessageWithFonts(const char *message)
@@ -233,7 +254,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     // Handle text_input notifications first - they have their own timeout/banner logic
     if (current_notification_type == notificationTypeEnum::text_input) {
         // Check for timeout and reset if needed for text input
-        if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+        if (alertBannerUntil > 0 && Throttle::deadlinePassed(alertBannerUntil)) {
             resetBanner();
             return;
         }
@@ -241,13 +262,19 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
-    if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+    // 0 means "no deadline set", and reads as long expired - test it first.
+    if (alertBannerUntil > 0 && Throttle::deadlinePassed(alertBannerUntil)) {
         resetBanner();
     }
 
     // Exit if no banner is showing or banner is paused
     if (!isOverlayBannerShowing() || pauseBanner) {
         return;
+    }
+
+    // Compact panels: DOWN cancels menus instead of scrolling (covers every picker below).
+    if (graphics::isCompactPanel(display) && inEvent.inputEvent == INPUT_BROKER_DOWN) {
+        inEvent.inputEvent = INPUT_BROKER_CANCEL;
     }
 
     switch (current_notification_type) {
@@ -641,8 +668,12 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
                 const int arrowWidth = (currentResolution == ScreenResolution::High)
                                            ? UIRenderer::measureStringWithEmotes(display, ">  <")
                                            : UIRenderer::measureStringWithEmotes(display, "><");
-                const int maxTextWidth = std::max(0, display->getWidth() - 28 - arrowWidth);
-                UIRenderer::truncateStringWithEmotes(display, rawName, tempName, sizeof(tempName), maxTextWidth);
+                const bool compactPanel = graphics::isCompactPanel(display);
+                // Compact panels: box spans the full width, so just a small edge margin.
+                const int margin = compactPanel ? 4 : 28;
+                const int maxTextWidth = std::max(0, display->getWidth() - margin - arrowWidth);
+                UIRenderer::truncateStringWithEmotes(display, rawName, tempName, sizeof(tempName), maxTextWidth,
+                                                     compactPanel ? "" : "...");
             }
         } else {
             snprintf(tempName, sizeof(tempName), "(%04X)", (uint16_t)(node ? (node->num & 0xFFFF) : 0));
@@ -688,8 +719,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     const char *lineStarts[MAX_LINES + 1] = {0};
     uint16_t lineCount = 0;
     char lineBuffer[40] = {0};
-    bool useTaggedTextBanner =
-        (current_notification_type == notificationTypeEnum::text_banner && alertBannerOptions == 0 && alertBannerLineCount > 0);
+    bool useTaggedTextBanner = ((current_notification_type == notificationTypeEnum::text_banner ||
+                                 current_notification_type == notificationTypeEnum::pairing_pin) &&
+                                alertBannerOptions == 0 && alertBannerLineCount > 0);
 
     if (useTaggedTextBanner) {
         lineCount = std::min<uint8_t>(alertBannerLineCount, MAX_LINES);
@@ -770,12 +802,15 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     uint16_t screenHeight = display->height();
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
-    uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
+    // Pairing PIN: pass every line, drawNotificationBox fits them (tiny panels spread them over the full screen).
+    uint8_t visibleTotalLines = (current_notification_type == notificationTypeEnum::pairing_pin)
+                                    ? totalLines
+                                    : std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
     uint8_t linesShown = lineCount;
     const char *linePointers[visibleTotalLines + 1] = {0}; // this is sort of a dynamic allocation
 
     // copy the linestarts to display to the linePointers holder
-    for (int i = 0; i < lineCount; i++) {
+    for (uint16_t i = 0; i < lineCount && i < visibleTotalLines; i++) {
         linePointers[i] = lineStarts[i];
     }
 
@@ -835,7 +870,6 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     BannerFont lineFonts[totalLines] = {};
     uint8_t lineEffectiveHeights[totalLines] = {0};
     const char *renderLines[totalLines] = {0};
-    bool useTaggedBannerFonts = (current_notification_type == notificationTypeEnum::text_banner && alertBannerOptions == 0);
 
     if (maxWidth != 0)
         is_picker = true;
@@ -848,12 +882,8 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     uint16_t widestLineWithBars = 0;
 
     while (lines[lineCount] != nullptr) {
-        const char *renderText = lines[lineCount];
         BannerFont lineFont = BANNER_FONT_DEFAULT;
-        if (useTaggedBannerFonts && lineCount < alertBannerLineCount) {
-            renderText = alertBannerLines[lineCount];
-            lineFont = alertBannerLineFonts[lineCount];
-        }
+        const char *renderText = resolveBannerLine(lineCount, lines[lineCount], lineFont);
         renderLines[lineCount] = renderText;
         lineFonts[lineCount] = lineFont;
         lineEffectiveHeights[lineCount] = effectiveLineHeightForBannerLine(lineFont);
@@ -867,10 +897,10 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
         if (current_notification_type == notificationTypeEnum::node_picker) {
             char measureBuffer[64] = {0};
-            strncpy(measureBuffer, lines[lineCount], std::min<size_t>(lineLengths[lineCount], sizeof(measureBuffer) - 1));
+            strncpy(measureBuffer, renderText, std::min<size_t>(lineLengths[lineCount], sizeof(measureBuffer) - 1));
             lineWidths[lineCount] = UIRenderer::measureStringWithEmotes(display, measureBuffer);
         } else {
-            lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+            lineWidths[lineCount] = display->getStringWidth(renderText, lineLengths[lineCount], true);
         }
 
         // Consider extra width for signal bars on lines that contain "Signal:"
@@ -913,10 +943,16 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
     uint8_t visibleTotalLines = 0;
     uint16_t contentHeight = 0;
+#if defined(OLED_TINY)
+    // Tiny panels: the pairing PIN takes the whole screen, all lines shown and spread evenly over it.
+    const bool fullScreenPin = (current_notification_type == notificationTypeEnum::pairing_pin);
+#else
+    const bool fullScreenPin = false;
+#endif
     const uint16_t availableHeight = (screenHeight > (vPadding * 2)) ? (screenHeight - vPadding * 2) : 0;
     for (uint8_t i = 0; i < lineCount; i++) {
         uint8_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
-        if (contentHeight + thisLineHeight > availableHeight) {
+        if (!fullScreenPin && contentHeight + thisLineHeight > availableHeight) {
             break;
         }
         contentHeight += thisLineHeight;
@@ -937,18 +973,25 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     }
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
     boxHeight += (currentResolution == ScreenResolution::High) ? 2 : 1;
+    if (fullScreenPin || graphics::isCompactPanel(display)) {
+        boxLeft = 0;
+        boxTop = 0;
+        boxWidth = display->width();
+        boxHeight = display->height();
+    } else {
 #if defined(OLED_TINY)
-    if (visibleTotalLines == 1) {
-        boxTop += 25;
-    }
-    if (alertBannerOptions < 3) {
-        int missingLines = 3 - alertBannerOptions;
-        int moveUp = missingLines * (effectiveLineHeight / 2);
-        boxTop -= moveUp;
-        if (boxTop < 0)
-            boxTop = 0;
-    }
+        if (visibleTotalLines == 1) {
+            boxTop += 25;
+        }
+        if (alertBannerOptions < 3) {
+            int missingLines = 3 - alertBannerOptions;
+            int moveUp = missingLines * (effectiveLineHeight / 2);
+            boxTop -= moveUp;
+            if (boxTop < 0)
+                boxTop = 0;
+        }
 #endif
+    }
 
     // Draw Box
     display->setColor(BLACK);
@@ -974,6 +1017,11 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     for (int i = 0; i < visibleTotalLines; i++) {
         display->setFont(fontForBannerLine(lineFonts[i]));
         int16_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
+        if (fullScreenPin) {
+            // Equal slots over the full height (10 rows each on a 32px panel, glyphs sit in rows 3..9).
+            thisLineHeight = boxHeight / visibleTotalLines;
+            lineY = i * thisLineHeight;
+        }
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
         if (needs_bell && i == 0) {
             int fontHeight = thisLineHeight + 3;
@@ -1009,7 +1057,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             }
 #endif
             display->setColor(BLACK);
-            int yOffset = 3;
+            const int yOffset = graphics::isCompactPanel(display) ? 2 : 3;
             if (current_notification_type == notificationTypeEnum::node_picker) {
                 UIRenderer::drawStringWithEmotes(display, textX, lineY - yOffset, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
             } else {
@@ -1194,7 +1242,16 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 
 bool NotificationRenderer::isOverlayBannerShowing()
 {
-    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+    // Here 0 means "show indefinitely", so it must short-circuit the comparison.
+    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || !Throttle::deadlinePassed(alertBannerUntil));
+}
+
+bool NotificationRenderer::isMenuShowing()
+{
+    // A menu, picker, keyboard, or pairing-PIN overlay - anything interactive, as opposed to a plain
+    // informational text banner (which has no options and type text_banner). Menus don't set a
+    // notificationType of their own, so options are the only thing distinguishing them.
+    return isOverlayBannerShowing() && (alertBannerOptions > 0 || current_notification_type != notificationTypeEnum::text_banner);
 }
 
 } // namespace graphics

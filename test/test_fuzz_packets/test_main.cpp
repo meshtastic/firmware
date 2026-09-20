@@ -616,6 +616,7 @@ void test_E7_nodedb_update_fuzz(void)
             mp.id = rngNext();
             mp.rx_snr = (float)((int)rngRange(60) - 30);
             mp.rx_rssi = (int32_t)rngRange(256) - 128;
+            mp.has_rx_rssi = (rngRange(2) != 0); // exercise both the presence and absence paths
             mp.hop_start = (uint8_t)rngRange(8);
             mp.hop_limit = (uint8_t)rngRange(8);
             mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
@@ -666,6 +667,7 @@ static void fuzzRxHeader(meshtastic_MeshPacket &mp, meshtastic_PortNum portnum)
     mp.channel = (uint8_t)rngRange(channels.getNumChannels());
     mp.rx_snr = (float)((int)rngRange(40) - 20);
     mp.rx_rssi = -(int)rngRange(130);
+    mp.has_rx_rssi = (rngRange(2) != 0); // exercise both the presence and absence paths
     mp.hop_start = (uint8_t)rngRange(8); // 0..7, wire-bounded
     mp.hop_limit = (uint8_t)rngRange(8);
     mp.want_ack = (rngRange(2) == 0);
