@@ -19,6 +19,7 @@
 NodeInfoModule *nodeInfoModule;
 
 static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
+static constexpr uint32_t OwnerSyncRetryMs = 30 * 1000;
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
@@ -95,14 +96,15 @@ void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
         pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
 }
 
-bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
+bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout,
+                                     bool bypassCadenceThrottle)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
     DEBUG_HEAP_BEFORE;
-    meshtastic_MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocNodeInfo(bypassCadenceThrottle);
     DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
 
     if (p) { // Check whether we didn't ignore it
@@ -136,7 +138,21 @@ void NodeInfoModule::triggerImmediateNodeInfoCheck()
     setIntervalFromNow(0);
 }
 
+void NodeInfoModule::requestOwnerSync()
+{
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN)
+        return;
+
+    ownerSyncPending = true;
+    setIntervalFromNow(0);
+}
+
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
+{
+    return allocNodeInfo(false);
+}
+
+meshtastic_MeshPacket *NodeInfoModule::allocNodeInfo(bool bypassCadenceThrottle)
 {
     // Only apply suppression when actually replying to someone else's request, not for periodic broadcasts.
     const bool isReplyingToExternalRequest = currentRequest &&
@@ -160,11 +176,12 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
     // Use graduated scaling based on active mesh size (10 minute base, scales with congestion coefficient)
     uint32_t timeoutMs = Default::getConfiguredOrDefaultMsScaled(0, 10 * 60, nodeStatus->getNumOnline());
     uint32_t lastNodeInfo = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP) : 0;
-    if (!shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
+    if (!bypassCadenceThrottle && !shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
         LOG_DEBUG("Skip send NodeInfo since we sent it <%us ago", timeoutMs / 1000);
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
-    } else if (shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
+    } else if (!bypassCadenceThrottle && shorterTimeout && lastNodeInfo &&
+               Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
         // For interactive/urgent requests (e.g., user-triggered or implicit requests), use a shorter 60s timeout
         LOG_DEBUG("Skip send NodeInfo since we sent it <60s ago");
         ignoreRequest = true;
@@ -229,10 +246,15 @@ int32_t NodeInfoModule::runOnce()
 {
     if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         // If we changed channels, ask everyone else for their latest info
-        bool requestReplies = currentGeneration != radioGeneration;
+        const bool isOwnerSync = ownerSyncPending;
+        bool requestReplies = !isOwnerSync && currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
-        if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies))
+        if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies, 0, isOwnerSync, isOwnerSync)) {
             currentGeneration = radioGeneration; // only a send that went out consumes the channel change
+            ownerSyncPending = false;
+        }
     }
+    if (ownerSyncPending)
+        return OwnerSyncRetryMs;
     return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }
