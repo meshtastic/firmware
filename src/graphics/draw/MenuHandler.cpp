@@ -5,6 +5,9 @@
 #include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MenuHandler.h"
+#if HAS_HOST_POWEROFF
+#include "platform/portduino/LinuxPower.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
@@ -2607,9 +2610,9 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce };
-    static const char *optionsArray[5] = {"Back"};
-    static int optionsEnumArray[5] = {Back};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce, HostPowerOff };
+    static const char *optionsArray[6] = {"Back"};
+    static int optionsEnumArray[6] = {Back};
     int options = 1;
 
     optionsArray[options] = "Number Picker";
@@ -2620,6 +2623,11 @@ void menuHandler::testMenu()
 #ifdef HAS_I2S
     optionsArray[options] = "Test Announce";
     optionsEnumArray[options++] = TestAnnounce;
+#endif
+#if HAS_HOST_POWEROFF
+    // Halts the computer meshtasticd runs on, not just the node. See hostPowerOffMenu().
+    optionsArray[options] = "Power Off Host";
+    optionsEnumArray[options++] = HostPowerOff;
 #endif
 
     BannerOverlayOptions bannerOptions;
@@ -2639,12 +2647,47 @@ void menuHandler::testMenu()
 #ifdef HAS_I2S
             audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
 #endif
+        } else if (selected == HostPowerOff) {
+#if HAS_HOST_POWEROFF
+            menuQueue = HostPowerOffMenu;
+            screen->runNow();
+#endif
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+// Separate from shutdownMenu(): that one ends the node, this one ends the machine. Worth its own
+// confirmation because on a headless node nothing else will bring the host back.
+void menuHandler::hostPowerOffMenu()
+{
+#if HAS_HOST_POWEROFF
+    static const char *optionsArray[] = {"Back", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Power Off Host?";
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Power Off?";
+    }
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            // Raise the flag first, then run the ordinary shutdown so the NodeDB and message store
+            // are saved exactly as they would be for a normal one; Power.cpp halts the host at the
+            // end instead of just exiting.
+            hostPowerOffRequested = true;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else {
+            menuQueue = TestMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
 }
 
 void menuHandler::numberTest()
@@ -3245,6 +3288,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case TraceRouteMenu:
         traceRouteMenu();
+        break;
+    case HostPowerOffMenu:
+        hostPowerOffMenu();
         break;
     case TestMenu:
         testMenu();
