@@ -83,6 +83,11 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
+#if HAS_LIBNOTIFY
+        // Catches the case where traffic stops right after a failure, so the state change still
+        // gets reported without waiting for the next inbound alert.
+        reportNotifyStatus();
+#endif
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
         bool isRtttlPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
@@ -644,9 +649,14 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 /// Cap on undelivered notifications. A burst of traffic shouldn't grow the queue without bound while
 /// the notification daemon is slow; the oldest entries are the ones worth keeping.
 static constexpr size_t maxQueuedNotifications = 16;
-/// Consecutive show() failures before we stop trying. One failure can be a daemon restart; a run of
-/// them means there is nothing listening, and retrying per message just burns work and spams the log.
+/// Consecutive show() failures before we back off. One failure can be a daemon restart; a run of
+/// them means there is nothing listening right now.
 static constexpr int maxNotifyFailures = 3;
+/// Backoff bounds. The packaged daemon runs as a system service with no session bus, so "nothing is
+/// listening" is an ordinary steady state rather than an error worth retrying per message - but a
+/// desktop session can appear at any point, so it must never become permanent either.
+static constexpr uint32_t notifyBackoffInitialMs = 30 * 1000;
+static constexpr uint32_t notifyBackoffMaxMs = 15 * 60 * 1000;
 
 void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp)
 {
@@ -667,9 +677,15 @@ void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp
     std::string notificationSummary = "From: " + senderName;
     std::string notificationBody((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
 
+    reportNotifyStatus();
+
     {
         std::lock_guard<std::mutex> lock(notifyLock);
-        if (notifyDisabled)
+        if (notifyShutdown)
+            return;
+        // Inside a backoff window nothing is queued at all. The first message after the window
+        // expires is the probe that finds out whether the daemon came back.
+        if (notifyRetryArmed && !Throttle::deadlinePassed(notifyRetryAfter))
             return;
         if (notifyQueue.size() >= maxQueuedNotifications) {
             LOG_WARN("Desktop notification queue full, dropping notification");
@@ -682,21 +698,32 @@ void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp
     notifyWake.notify_one();
 }
 
+void ExternalNotificationModule::reportNotifyStatus()
+{
+    NotifyStatus status;
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        if (!notifyStatus.pending)
+            return;
+        status = notifyStatus;
+        notifyStatus.pending = false;
+    }
+    // Logged once the lock is released: LOG_* formats into RedirectablePrint's shared buffer and
+    // writes the logfile, neither of which belongs in a critical section the worker waits on.
+    if (status.recovered) {
+        LOG_INFO("Desktop notifications working again");
+    } else {
+        LOG_WARN("Desktop notifications unavailable (%s), retry in %us", status.reason, status.retryInMs / 1000);
+    }
+}
+
 void ExternalNotificationModule::notifyWorker()
 {
-    if (!notify_is_initted() && !notify_init("Meshtasticd")) {
-        LOG_WARN("Failed to initialize libnotify, disabling desktop notifications");
-        std::lock_guard<std::mutex> lock(notifyLock);
-        notifyDisabled = true;
-        notifyQueue.clear();
-        return;
-    }
-
     int consecutiveFailures = 0;
     std::unique_lock<std::mutex> lock(notifyLock);
     while (true) {
-        notifyWake.wait(lock, [this] { return notifyDisabled || !notifyQueue.empty(); });
-        if (notifyDisabled)
+        notifyWake.wait(lock, [this] { return notifyShutdown || !notifyQueue.empty(); });
+        if (notifyShutdown)
             return;
 
         std::pair<std::string, std::string> entry = std::move(notifyQueue.front());
@@ -704,31 +731,60 @@ void ExternalNotificationModule::notifyWorker()
 
         // Unlocked for the DBus round trip so handleReceived() never blocks behind the daemon.
         lock.unlock();
-        bool failed = true;
-        NotifyNotification *notification =
-            notify_notification_new(entry.first.c_str(), entry.second.c_str(), "org.meshtastic.meshtasticd");
-        if (notification) {
-            GError *error = nullptr;
-            if (notify_notification_show(notification, &error)) {
-                failed = false;
-            } else {
-                LOG_WARN("Failed to show notification: %s", error ? error->message : "unknown error");
-                if (error)
-                    g_error_free(error);
-            }
-            g_object_unref(G_OBJECT(notification));
+        char errorText[sizeof(NotifyStatus::reason)];
+        const char *failure = nullptr;
+        // Init is attempted per delivery rather than once before the loop, so a retry after a
+        // backoff window can still pick up a session bus that was absent at startup.
+        if (!notify_is_initted() && !notify_init("Meshtasticd")) {
+            failure = "libnotify init failed";
         } else {
-            LOG_WARN("Failed to create notification");
+            NotifyNotification *notification =
+                notify_notification_new(entry.first.c_str(), entry.second.c_str(), "org.meshtastic.meshtasticd");
+            if (notification) {
+                GError *error = nullptr;
+                if (!notify_notification_show(notification, &error)) {
+                    snprintf(errorText, sizeof(errorText), "%s", error && error->message ? error->message : "unknown error");
+                    failure = errorText;
+                    if (error)
+                        g_error_free(error);
+                }
+                g_object_unref(G_OBJECT(notification));
+            } else {
+                failure = "could not create notification";
+            }
         }
         lock.lock();
 
-        consecutiveFailures = failed ? consecutiveFailures + 1 : 0;
-        if (consecutiveFailures >= maxNotifyFailures) {
-            LOG_WARN("Disabling desktop notifications after %d consecutive failures", consecutiveFailures);
-            notifyDisabled = true;
-            notifyQueue.clear();
-            return;
+        if (!failure) {
+            consecutiveFailures = 0;
+            notifyBackoffMs = 0;
+            // Only worth a line if we had actually stopped trying.
+            if (notifyRetryArmed) {
+                notifyRetryArmed = false;
+                notifyStatus.pending = true;
+                notifyStatus.recovered = true;
+            }
+            continue;
         }
+
+        if (++consecutiveFailures < maxNotifyFailures)
+            continue;
+
+        // Back off instead of latching off for the process lifetime. The queue is dropped rather
+        // than held: a burst of popups for messages from fifteen minutes ago is noise, not a
+        // backlog worth delivering.
+        notifyBackoffMs = notifyBackoffMs ? notifyBackoffMs * 2 : notifyBackoffInitialMs;
+        if (notifyBackoffMs > notifyBackoffMaxMs)
+            notifyBackoffMs = notifyBackoffMaxMs;
+        notifyRetryAfter = millis() + notifyBackoffMs;
+        notifyRetryArmed = true;
+        notifyQueue.clear();
+        consecutiveFailures = 0;
+
+        notifyStatus.pending = true;
+        notifyStatus.recovered = false;
+        notifyStatus.retryInMs = notifyBackoffMs;
+        snprintf(notifyStatus.reason, sizeof(notifyStatus.reason), "%s", failure);
     }
 }
 
@@ -736,7 +792,7 @@ ExternalNotificationModule::~ExternalNotificationModule()
 {
     {
         std::lock_guard<std::mutex> lock(notifyLock);
-        notifyDisabled = true;
+        notifyShutdown = true;
         notifyQueue.clear();
     }
     notifyWake.notify_one();

@@ -133,11 +133,34 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     /// notification daemon would otherwise stall packet handling.
     void notifyWorker();
 
+    /// Emit whatever state change notifyWorker() recorded, on the calling (main) thread.
+    void reportNotifyStatus();
+
     std::thread notifyThread;
     std::mutex notifyLock;
     std::condition_variable notifyWake;
     std::deque<std::pair<std::string, std::string>> notifyQueue; // <summary, body>, guarded by notifyLock
-    bool notifyDisabled = false;                                 // latched once libnotify looks unusable
+
+    /// Set only by the destructor, and the worker's only exit path. Kept separate from the backoff
+    /// state below so a failing notification daemon can never end the thread.
+    bool notifyShutdown = false;
+
+    /// Backoff window. notifyRetryAfter is read only while notifyRetryArmed is set, so it reserves
+    /// no sentinel value of its own. Guarded by notifyLock.
+    bool notifyRetryArmed = false;
+    uint32_t notifyRetryAfter = 0;
+    uint32_t notifyBackoffMs = 0;
+
+    /// A state change the worker recorded for the main thread to log. The worker must not call the
+    /// LOG_ macros itself: RedirectablePrint formats into a shared static buffer that nothing
+    /// guards, and every other writer to it is on the main thread.
+    struct NotifyStatus {
+        bool pending = false;   // there is something to report
+        bool recovered = false; // false: started failing; true: working again
+        uint32_t retryInMs = 0;
+        char reason[128] = {};
+    };
+    NotifyStatus notifyStatus; // guarded by notifyLock
 #endif
 };
 
