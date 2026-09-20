@@ -638,6 +638,7 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
     }
     return 0;
 }
+#endif
 
 #if HAS_LIBNOTIFY
 /// Cap on undelivered notifications. A burst of traffic shouldn't grow the queue without bound while
