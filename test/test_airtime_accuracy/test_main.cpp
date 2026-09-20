@@ -34,14 +34,22 @@
 // which at a 40% reading is the -2.79 / -6.78 pp seen here. D3 and D8 reproduce it almost exactly.
 // D7's absolute level is NOT comparable to design4 §6.9 - this scenario parks the offered load on
 // the gate rather than ramping through it, so only the stage-to-stage movement means anything.
-#define D1_SPREAD_BOUND 20      // min   - measured 18
-#define D2_ERR_BOUND 28.0f      // min   - measured 5.95 spread, 26.60 concentrated
-#define D3_PEAK_BOUND 120.0f    // %     - measured 118.03 against a true 100.0
-#define D4_MEAN_BOUND 3.5f      // pp    - measured -2.79
-#define D4_WORST_BOUND 8.0f     // pp    - measured -6.78
-#define D5_SAWTOOTH_BOUND 10.0f // pp    - measured 8.48
-#define D6_DISAGREE_BOUND 14.0f // %     - measured 11.8, of which 99% permissive
-#define D7_BOUND 45.0f          // %     - measured 26.6-40.1 across the five spacings
+//
+// STAGE 2 loosened D4, D6 and D7 rather than tightening them, which is the one thing this file
+// exists to prevent. It is recorded, not absorbed: whole-packet attribution over-counted while the
+// coverage deficit under-counts, so the two partially cancelled, and removing the first exposes the
+// second in full. D3 reads 96.09 and D4's mean is -3.91 - the same number twice, which is how we
+// know this is the coverage deficit and not a new fault. Stage 3 is what pays it back and must take
+// all three BELOW their stage-0 values. Until it lands the channel gate is worse than before, and
+// more permissive: these two stages should not ship apart.
+#define D1_SPREAD_BOUND 1       // min   - stage 1 took 18 -> 0
+#define D2_ERR_BOUND 1.0f       // min   - stage 1 took 5.95 spread / 26.60 concentrated -> 0
+#define D3_PEAK_BOUND 100.0f    // %     - stage 2 took 118.03 -> 96.09; <=100 is now an invariant
+#define D4_MEAN_BOUND 4.5f      // pp    - stage 2 measured -3.91, WORSE than stage 0's -2.79
+#define D4_WORST_BOUND 9.0f     // pp    - stage 2 measured -7.97, worse than stage 0's -6.78
+#define D5_SAWTOOTH_BOUND 9.0f  // pp    - stage 2 measured 7.97
+#define D6_DISAGREE_BOUND 21.0f // %     - stage 2 measured 19.0, worse than stage 0's 11.8
+#define D7_BOUND 52.0f          // %     - stage 2 measured 48.7 peak, worse than stage 0's 40.1
 #define D8_MEAN_BOUND 0.10f     // pp    - measured -0.041
 #define D8_WORST_BOUND 0.10f    // pp    - measured -0.056
 static meshtastic_Config_LoRaConfig_RegionCode savedRegion;

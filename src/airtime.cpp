@@ -32,16 +32,57 @@ AirTime::Held::~Held()
 // Every method here requires the lock, and says so in its signature. None can take it: Windows has
 // no lock to reach.
 
+/// Credit [startMs, endMs) to a modular ring of `nSlots` buckets of `periodMs`, giving each bucket
+/// only the part of the span that fell inside it. Anything older than the ring is dropped: it is
+/// outside every window this ring can answer for.
+static void addSpanned(uint32_t *slots, uint8_t nSlots, uint32_t periodMs, uint64_t startMs, uint64_t endMs)
+{
+    if (endMs <= startMs)
+        return;
+
+    // The clamp is not optional: it is all that stands between a future preset whose packet outlasts
+    // the whole ring and a wrapped write. It never fires on any preset shipping today.
+    const uint64_t windowMs = (uint64_t)nSlots * periodMs;
+    if (endMs > windowMs && startMs < endMs - windowMs)
+        startMs = endMs - windowMs;
+
+    for (uint64_t t = startMs; t < endMs;) {
+        const uint64_t bucketEnd = ((t / periodMs) + 1) * (uint64_t)periodMs;
+        const uint64_t hi = bucketEnd < endMs ? bucketEnd : endMs;
+        slots[(t / periodMs) % nSlots] += (uint32_t)(hi - t);
+        t = hi;
+    }
+}
+
 void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, const Held &held)
 {
-    // A packet may be logged immediately after waking from light sleep. Sync first so
-    // the packet is counted in the current wall-time bucket, not a stale awake-time bucket.
+    // A packet may be logged immediately after waking from light sleep. Sync first so the packet is
+    // counted against wall time, not a stale awake-time bucket - and, since syncNow() clears every
+    // bucket the elapsed time crossed, so that the split below cannot write its tail into a slot
+    // that is about to be zeroed.
     syncNow(held);
+
+    // A packet occupied the air from when it started, not all at once when it finished: a LONG_SLOW
+    // frame runs 14.164 s, longer than a whole channel-utilisation bucket, so crediting it whole to
+    // the completing bucket lets a bucket hold more than its own period and the window report more
+    // than its own length.
+    // A packet that completed sooner after boot than its own airtime overlapped boot itself, so
+    // there are no earlier buckets to spread it across. Credit it whole to the current bucket, as
+    // the unsplit code always did, rather than truncating it against uptime 0 and losing airtime.
+    const uint64_t endMs = (uint64_t)this->secSinceBoot * 1000u;
+    const bool spans = endMs >= airtime_ms;
+    const uint64_t startMs = spans ? endMs - airtime_ms : endMs;
 
     // The caller logs, once the lock is released.
     if (reportType == TX_LOG) {
+        // airtimes.period* is shift-ordered rather than a ring, so a split would have to write slot
+        // 1 and collide with rotate-on-crossing. Deliberately left whole: 14.164 s misplaced in a
+        // 3600 s bucket is 0.4% of a figure that only feeds the HTTP report.
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
-        this->utilizationTX[this->getPeriodUtilHour(held)] += airtime_ms;
+        if (spans)
+            addSpanned(this->utilizationTX, MINUTES_IN_HOUR, TXUTIL_PERIOD_MS, startMs, endMs);
+        else
+            this->utilizationTX[this->getPeriodUtilHour(held)] += airtime_ms;
     } else if (reportType == RX_LOG) {
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
@@ -49,7 +90,10 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
     }
 
     // Log all airtime type for channel utilization
-    this->channelUtilization[this->getPeriodUtilMinute(held)] += airtime_ms;
+    if (spans)
+        addSpanned(this->channelUtilization, CHANNEL_UTILIZATION_PERIODS, CHANUTIL_PERIOD_MS, startMs, endMs);
+    else
+        this->channelUtilization[this->getPeriodUtilMinute(held)] += airtime_ms;
 }
 
 uint8_t AirTime::Windows::getPeriodUtilMinute(const Held &)

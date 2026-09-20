@@ -1653,6 +1653,10 @@ static void useDutyCycleSaturatedAirTime()
     static AirTime saturated;
     c14SavedAirTime = airTime;
     airTime = &saturated;
+    // An hour of uptime first: a packet logged at uptime 0 is clamped to one bucket's worth, since
+    // it cannot have been on air before boot. From here the hour-long span covers every bucket.
+    Time::setTestMillis(2u * MS_IN_HOUR);
+    Time::serviceMonotonic();
     saturated.logAirtime(TX_LOG, MS_IN_HOUR); // utilizationTXPercent() sums every bucket -> 100%
 }
 
