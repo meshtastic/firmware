@@ -9,6 +9,7 @@
 #include "configuration.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/mesh-pb-constants.h"
+#include "meshUtils.h"
 #include "pb_decode.h"
 #include "pb_encode.h"
 #include <errno.h>
@@ -29,12 +30,53 @@ namespace
 constexpr uint16_t PTY_COLS_DEFAULT = 120;
 constexpr uint16_t PTY_ROWS_DEFAULT = 40;
 constexpr size_t MAX_MESSAGE_SIZE = 200;
+
+// Bounds on the replay-request interval. The floor keeps a fast preset from degenerating into a
+// request per inbound frame; the ceiling keeps a slow one from parking a recoverable gap for
+// longer than a user will wait.
+constexpr uint32_t REPLAY_REQUEST_MIN_MS = 250;
+constexpr uint32_t REPLAY_REQUEST_MAX_MS = 10000;
+// Covers our request reaching the peer and the replay coming back past contention on both legs.
+constexpr uint32_t REPLAY_REQUEST_MARGIN_MS = 250;
+
+/// DMSHELL_LEGACY_RECOVERY=1 restores the pre-damping behaviour on the same build, so a session
+/// can be measured with and without the fix without reflashing.
+bool legacyRecoveryRequested()
+{
+    const char *value = getenv("DMSHELL_LEGACY_RECOVERY");
+    return value && *value && strcmp(value, "0") != 0;
+}
 } // namespace
 
 DMShellModule::DMShellModule()
     : SinglePortModule("DMShellModule", meshtastic_PortNum_REMOTE_SHELL_APP), concurrency::OSThread("DMShell", 100)
 {
     LOG_WARN("DMShell enabled on Portduino: remote shell access is dangerous and intended for trusted debugging only");
+    legacyRecovery = legacyRecoveryRequested();
+    if (legacyRecovery) {
+        LOG_WARN("DMShell: DMSHELL_LEGACY_RECOVERY set, replay-request damping and eviction reporting are OFF");
+    }
+}
+
+/// How long to wait before asking for the same missing sequence number again.
+///
+/// One full frame's airtime is about 100 msec on ShortTurbo and over 2 sec on LongFast, so a fixed
+/// interval either floods a slow preset with requests the peer has not had time to answer, or
+/// leaves a fast one idle. Derive it from the modem config instead.
+uint32_t DMShellModule::replayRequestIntervalMs() const
+{
+    if (legacyRecovery) {
+        return 0; // no damping: one request per inbound frame, as before
+    }
+
+    uint32_t frameMsec = 0;
+    if (RadioLibInterface::instance != nullptr) {
+        // Null on a node whose radio is not RadioLib-backed (--sim, SerialHal): fall back to the floor.
+        frameMsec = RadioLibInterface::instance->getPacketTime((uint32_t)MAX_LORA_PAYLOAD_LEN);
+    }
+
+    const uint32_t interval = 2 * frameMsec + REPLAY_REQUEST_MARGIN_MS;
+    return clamp(interval, REPLAY_REQUEST_MIN_MS, REPLAY_REQUEST_MAX_MS);
 }
 
 ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -85,6 +127,15 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
                      frame.session_id, session.sessionId, mp.from, session.peer, frame.op);
         }
         sendError("invalid_session", getFrom(&mp));
+        return ProcessMessage::STOP;
+    }
+
+    // A teardown must not sit behind a gap. The session checks above have already established that
+    // this is our peer on our session, and sequence state is discarded by the close anyway, so act on
+    // it before the ordering check rather than asking for a replay and holding the shell open until
+    // the idle timeout. The client applies the same rule to CLOSED.
+    if (frame.op == meshtastic_RemoteShell_OpCode_CLOSE) {
+        closeSession("peer_close", true);
         return ProcessMessage::STOP;
     }
 
@@ -139,6 +190,9 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         const uint32_t nextMissingForPeer = peerLastRxSeq + 1;
         if (nextMissingForPeer > 0 && nextMissingForPeer < session.nextTxSeq) {
             resendFramesFrom(nextMissingForPeer);
+            if (!session.active) {
+                break; // the replay was unrecoverable and the session is gone
+            }
         }
 
         meshtastic_RemoteShell frame = {
@@ -156,9 +210,6 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         sendFrameToPeer(session.peer, frame, true);
         break;
     }
-    case meshtastic_RemoteShell_OpCode_CLOSE:
-        closeSession("peer_close", true);
-        break;
     default:
         sendError("unsupported_op");
         break;
@@ -319,8 +370,8 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.childPid = childPid;
     session.nextTxSeq = 1;
     session.lastAckedRxSeq = frame.seq;
-    session.nextExpectedRxSeq = frame.seq + 1;
-    session.highestSeenRxSeq = frame.seq;
+    session.rxWindow.reset(frame.seq);
+    session.txHistoryWindow.reset();
     session.lastActivityMs = millis();
 
     meshtastic_RemoteShell newFrame = {
@@ -458,11 +509,24 @@ void DMShellModule::rememberSentFrame(meshtastic_RemoteShell frame)
     }
 
     session.txHistoryNext = (session.txHistoryNext + 1) % session.txHistory.size();
+    session.txHistoryWindow.noteStored(frame.seq);
 }
 
 void DMShellModule::resendFramesFrom(uint32_t startSeq)
 {
     if (startSeq == 0) {
+        return;
+    }
+
+    // The ring is bounded in frames, so on a fast preset it can be outrun while a request is still
+    // in flight. Once that happens the peer will never get this frame, and it will not advance past
+    // the hole either - so it asks again forever. Say so and tear the session down instead.
+    if (!legacyRecovery && session.txHistoryWindow.classify(startSeq, session.nextTxSeq) == DMShellReplayLookup::Evicted) {
+        LOG_ERROR("DMShell: replay request for seq=%u aged out of the %u-frame history, closing session", startSeq,
+                  (unsigned)DMShellSession::TX_HISTORY_LEN);
+        // The CLOSED frame carries the reason, so no separate ERROR: a non-terminal ERROR has to stay
+        // on the peer's ordered path, and this gap is exactly what it could not get past.
+        closeSession("replay_evicted", true);
         return;
     }
 
@@ -496,11 +560,15 @@ void DMShellModule::resendFramesFrom(uint32_t startSeq)
     sendFrameToPeer(session.peer, frame, false);
 }
 
-void DMShellModule::sendAck(uint32_t replayFromSeq)
+void DMShellModule::sendReplayRequest(uint32_t replayFromSeq)
 {
-    if (replayFromSeq > 0) {
-        LOG_WARN("DMShell: requesting replay from seq=%u", replayFromSeq);
+    if (replayFromSeq == 0) {
+        // Would underflow last_rx_seq to 0xffffffff, which the peer reads as a replay request for a
+        // sequence number it has never sent.
+        return;
     }
+
+    LOG_WARN("DMShell: requesting replay from seq=%u", replayFromSeq);
     meshtastic_RemoteShell frame = {
         .op = meshtastic_RemoteShell_OpCode_ACK,
         .session_id = session.sessionId,
@@ -517,38 +585,17 @@ void DMShellModule::sendAck(uint32_t replayFromSeq)
 
 bool DMShellModule::shouldProcessIncomingFrame(const meshtastic_RemoteShell &frame)
 {
-    if (frame.seq == 0) {
-        return true;
+    const DMShellRxDecision decision = session.rxWindow.classify(frame.seq, millis(), replayRequestIntervalMs());
+
+    if (decision.requestReplay) {
+        sendReplayRequest(decision.replaySeq);
     }
 
-    if (frame.seq < session.nextExpectedRxSeq) {
-        if (session.highestSeenRxSeq >= session.nextExpectedRxSeq) {
-            sendAck(session.nextExpectedRxSeq);
-        } else {
-            sendAck();
-        }
-        return false;
+    if (decision.process && frame.seq != 0) {
+        session.lastAckedRxSeq = frame.seq;
     }
 
-    if (frame.seq > session.nextExpectedRxSeq) {
-        if (frame.seq > session.highestSeenRxSeq) {
-            session.highestSeenRxSeq = frame.seq;
-        }
-        sendAck(session.nextExpectedRxSeq);
-        return false;
-    }
-
-    session.lastAckedRxSeq = frame.seq;
-    session.nextExpectedRxSeq = frame.seq + 1;
-    if (frame.seq > session.highestSeenRxSeq) {
-        session.highestSeenRxSeq = frame.seq;
-    }
-    if (session.highestSeenRxSeq >= session.nextExpectedRxSeq) {
-        sendAck(session.nextExpectedRxSeq);
-    } else {
-        session.highestSeenRxSeq = 0;
-    }
-    return true;
+    return decision.process;
 }
 
 void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember)

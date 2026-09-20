@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DMShellRecovery.h"
 #include "MeshModule.h"
 #include "Router.h"
 #include "SinglePortModule.h"
@@ -21,9 +22,8 @@ struct DMShellSession {
     int childPid = -1;
     uint32_t nextTxSeq = 1;
     uint32_t lastAckedRxSeq = 0;
-    uint32_t nextExpectedRxSeq = 1;
-    uint32_t highestSeenRxSeq = 0;
     uint32_t lastActivityMs = 0;
+    DMShellRxWindow rxWindow;
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
@@ -36,8 +36,10 @@ struct DMShellSession {
         uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
         size_t payloadLen = 0;
     };
-    std::array<SentFrame, 50> txHistory = {};
+    static constexpr size_t TX_HISTORY_LEN = 50;
+    std::array<SentFrame, TX_HISTORY_LEN> txHistory = {};
     size_t txHistoryNext = 0;
+    DMShellTxHistoryWindow txHistoryWindow{TX_HISTORY_LEN};
 };
 
 class DMShellModule : private concurrency::OSThread, public SinglePortModule
@@ -55,6 +57,10 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
 
     DMShellSession session;
     pid_t pendingChildPid = -1;
+    // Set once at construction from DMSHELL_LEGACY_RECOVERY; see the constructor.
+    bool legacyRecovery = false;
+
+    uint32_t replayRequestIntervalMs() const;
 
     bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;
@@ -67,7 +73,8 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
 
     void rememberSentFrame(meshtastic_RemoteShell frame);
     void resendFramesFrom(uint32_t startSeq);
-    void sendAck(uint32_t replayFromSeq = 0);
+    /// Ask the peer to replay replayFromSeq. Never called with 0; see the definition.
+    void sendReplayRequest(uint32_t replayFromSeq);
     void sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember = true);
     void sendError(const char *message, NodeNum peer = 0);
 };

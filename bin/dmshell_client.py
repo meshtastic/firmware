@@ -32,6 +32,10 @@ DEFAULT_API_PORT = 4403
 DEFAULT_HOP_LIMIT = 3
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
+# A gap the peer cannot fill (its replay ring is bounded in frames, so a fast preset outruns it in
+# seconds) used to be retried at a flat 1/sec until the 5-minute idle timeout. Back off instead, so
+# an unanswerable request costs a handful of packets rather than hundreds.
+MISSING_SEQ_RETRY_MAX_SEC = 30.0
 INPUT_BATCH_WINDOW_SEC = .5
 INPUT_BATCH_MAX_BYTES = 64
 HEARTBEAT_IDLE_DELAY_SEC = 5.0
@@ -73,6 +77,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--close-after", type=float, default=2.0, help="seconds to wait before closing in command mode")
     parser.add_argument("--timeout", type=float, default=10.0, help="seconds to wait for API/session events")
     parser.add_argument("--verbose", action="store_true", help="print extra protocol events")
+    parser.add_argument(
+        "--legacy-recovery",
+        action="store_true",
+        help="retry a missing sequence number at a flat 1/sec instead of backing off "
+        "(pair with DMSHELL_LEGACY_RECOVERY=1 on the node to measure the pre-fix behaviour)",
+    )
     return parser.parse_args()
 
 
@@ -315,6 +325,8 @@ class SessionState:
     pending_rx_frames: dict[int, object] = field(default_factory=dict)
     last_requested_missing_seq: int = 0
     last_missing_request_time: float = 0.0
+    missing_request_interval: float = MISSING_SEQ_RETRY_INTERVAL_SEC
+    legacy_recovery: bool = False
     requested_missing_seqs: set[int] = field(default_factory=set)
     replay_log_lock: threading.Lock = field(default_factory=threading.Lock)
     replay_log_file: Optional[TextIO] = None
@@ -378,6 +390,7 @@ class SessionState:
             self.next_expected_rx_seq = seq + 1
             if self.last_requested_missing_seq != 0 and self.next_expected_rx_seq > self.last_requested_missing_seq:
                 self.last_requested_missing_seq = 0
+                self.missing_request_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
             if seq > self.highest_seen_rx_seq:
                 self.highest_seen_rx_seq = seq
             if self.highest_seen_rx_seq < self.next_expected_rx_seq:
@@ -408,11 +421,14 @@ class SessionState:
             if self.highest_seen_rx_seq < self.next_expected_rx_seq:
                 return None
             now = time.monotonic()
-            if (
-                self.last_requested_missing_seq == self.next_expected_rx_seq
-                and (now - self.last_missing_request_time) < MISSING_SEQ_RETRY_INTERVAL_SEC
-            ):
+            same_seq = self.last_requested_missing_seq == self.next_expected_rx_seq
+            if same_seq and (now - self.last_missing_request_time) < self.missing_request_interval:
                 return None
+            if same_seq and not self.legacy_recovery:
+                # Still stuck on the same hole: each repeat is evidence the peer cannot fill it.
+                self.missing_request_interval = min(self.missing_request_interval * 2, MISSING_SEQ_RETRY_MAX_SEC)
+            else:
+                self.missing_request_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
             self.last_requested_missing_seq = self.next_expected_rx_seq
             self.last_missing_request_time = now
             return self.last_requested_missing_seq
@@ -657,12 +673,6 @@ def reader_loop(transport, state: SessionState) -> None:
             sanitized = message.replace("\n", "\\n")
             state.log_replay_event("error_received", shell.seq, f"message={sanitized}")
             state.event_queue.put(f"remote error: {message}")
-        elif shell.op == state.pb2.mesh.RemoteShell.CLOSED:
-            message = shell.payload.decode("utf-8", errors="replace")
-            state.event_queue.put(f"session closed: {message}")
-            state.closed_event.set()
-            state.active = False
-            return True
         elif shell.op == state.pb2.mesh.RemoteShell.PONG:
             remote_last_tx_seq = shell.last_tx_seq
             remote_last_rx_seq = shell.last_rx_seq
@@ -695,6 +705,17 @@ def reader_loop(transport, state: SessionState) -> None:
                 continue
             state.note_inbound_packet()
             #state.prune_sent_frames(shell.ack_seq)
+            if shell.op == state.pb2.mesh.RemoteShell.CLOSED:
+                # Terminal, so act on it regardless of sequence order. Buffering a CLOSED behind a
+                # gap the peer has just told us it cannot fill left us retrying until the idle
+                # timeout. ERROR deliberately stays on the ordered path below: it is not always
+                # terminal, and skipping its sequence number would open a gap of its own.
+                message = shell.payload.decode("utf-8", errors="replace")
+                state.event_queue.put(f"session closed: {message}")
+                state.closed_event.set()
+                state.active = False
+                return
+
             if shell.op == state.pb2.mesh.RemoteShell.ACK:
                 #state.event_queue.put("peer requested replay")
                 replay_from = shell.last_rx_seq + 1 if shell.last_rx_seq > 0 else None
@@ -921,6 +942,7 @@ def main() -> int:
         channel=args.channel,
         verbose=args.verbose,
         hop_limit=args.hop_limit,
+        legacy_recovery=args.legacy_recovery,
     )
 
     cols, rows = resolve_initial_terminal_size(args.cols, args.rows)
