@@ -32,25 +32,23 @@ AirTime::Held::~Held()
 // Every method here requires the lock, and says so in its signature. None can take it: Windows has
 // no lock to reach.
 
-/// Credit [startMs, endMs) to a modular ring of `nSlots` buckets of `periodMs`, giving each bucket
-/// only the part of the span that fell inside it. Anything older than the ring is dropped: it is
-/// outside every window this ring can answer for.
-static void addSpanned(uint32_t *slots, uint8_t nSlots, uint32_t periodMs, uint64_t startMs, uint64_t endMs)
+/// The slot `k` periods before `cur`, without relying on unsigned wraparound landing anywhere
+/// useful: `cur - k` underflows long before the modulus sees it.
+static inline uint8_t slotBack(uint32_t cur, uint32_t k, uint8_t nSlots)
 {
-    if (endMs <= startMs)
-        return;
+    return (uint8_t)((cur + nSlots - (k % nSlots)) % nSlots);
+}
 
-    // The clamp is not optional: it is all that stands between a future preset whose packet outlasts
-    // the whole ring and a wrapped write. It never fires on any preset shipping today.
-    const uint64_t windowMs = (uint64_t)nSlots * periodMs;
-    if (endMs > windowMs && startMs < endMs - windowMs)
-        startMs = endMs - windowMs;
-
-    for (uint64_t t = startMs; t < endMs;) {
-        const uint64_t bucketEnd = ((t / periodMs) + 1) * (uint64_t)periodMs;
-        const uint64_t hi = bucketEnd < endMs ? bucketEnd : endMs;
-        slots[(t / periodMs) % nSlots] += (uint32_t)(hi - t);
-        t = hi;
+/// Credit `ms` of airtime that ended `phaseMs` into bucket `cur` (the `cur`th since boot) to a modular
+/// ring of `nSlots` buckets of `periodMs`, walking back so each bucket gets only the part that fell
+/// inside it. Anything older than the ring, or before boot, is outside every window it answers for.
+static void creditBack(uint32_t *slots, uint8_t nSlots, uint32_t periodMs, uint32_t cur, uint32_t phaseMs, uint32_t ms)
+{
+    uint32_t room = phaseMs;
+    for (uint32_t k = 0; ms && k < nSlots && k <= cur; k++, room = periodMs) {
+        const uint32_t part = ms < room ? ms : room;
+        slots[slotBack(cur, k, nSlots)] += part;
+        ms -= part;
     }
 }
 
@@ -71,8 +69,8 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
     // rather than sliding the span forward into buckets that have not happened yet - syncNow()
     // clears those on arrival, which loses the airtime and drags the reading down.
     // Whole milliseconds: at the second, a packet ending at :00.900 would be credited as ending at :00.
-    const uint64_t endMs = (uint64_t)this->secSinceBoot * 1000u + this->msInSec;
-    const uint64_t startMs = endMs > airtime_ms ? endMs - airtime_ms : 0;
+    // Logged at uptime 0 there is no span to spread; it goes whole to bucket 0, capped at one period.
+    const bool atBoot = this->secSinceBoot == 0 && this->msInSec == 0;
 
     // The caller logs, once the lock is released.
     if (reportType == TX_LOG) {
@@ -80,10 +78,11 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
         // 1 and collide with rotate-on-crossing. Deliberately left whole: 14.164 s misplaced in a
         // 3600 s bucket is 0.4% of a figure that only feeds the HTTP report.
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
-        if (endMs > 0)
-            addSpanned(this->utilizationTX, TXUTIL_SLOTS, TXUTIL_PERIOD_MS, startMs, endMs);
-        else // logged at uptime 0: no span to spread, and a bucket may hold at most its own period
-            this->utilizationTX[this->getPeriodUtilHour(held)] += std::min(airtime_ms, (uint32_t)TXUTIL_PERIOD_MS);
+        if (!atBoot)
+            creditBack(this->utilizationTX, TXUTIL_SLOTS, TXUTIL_PERIOD_MS, this->secSinceBoot / SECONDS_IN_MINUTE,
+                       phaseMs(SECONDS_IN_MINUTE), airtime_ms);
+        else
+            this->utilizationTX[0] += std::min(airtime_ms, (uint32_t)TXUTIL_PERIOD_MS);
     } else if (reportType == RX_LOG) {
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
@@ -91,10 +90,11 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
     }
 
     // Log all airtime type for channel utilization
-    if (endMs > 0)
-        addSpanned(this->channelUtilization, CHANNEL_UTILIZATION_SLOTS, CHANUTIL_PERIOD_MS, startMs, endMs);
+    if (!atBoot)
+        creditBack(this->channelUtilization, CHANNEL_UTILIZATION_SLOTS, CHANUTIL_PERIOD_MS, this->secSinceBoot / 10, phaseMs(10),
+                   airtime_ms);
     else
-        this->channelUtilization[this->getPeriodUtilMinute(held)] += std::min(airtime_ms, (uint32_t)CHANUTIL_PERIOD_MS);
+        this->channelUtilization[0] += std::min(airtime_ms, (uint32_t)CHANUTIL_PERIOD_MS);
 }
 
 uint8_t AirTime::Windows::getPeriodUtilMinute(const Held &)
@@ -112,16 +112,10 @@ uint32_t AirTime::Windows::phaseMs(uint32_t periodSecs) const
     return (this->secSinceBoot % periodSecs) * 1000u + this->msInSec;
 }
 
-/// The slot `k` periods before `cur`, without relying on unsigned wraparound landing anywhere
-/// useful: `cur - k` underflows long before the modulus sees it.
-static inline uint8_t slotBack(uint32_t cur, uint32_t k, uint8_t nSlots)
-{
-    return (uint8_t)((cur + nSlots - (k % nSlots)) % nSlots);
-}
-
 /// Sum of the window: the N most recent buckets whole, plus the part of the one N back that has not
 /// yet expired. Coverage is then (N-1)p + phase + (p - phase) = Np exactly, which is what the
-/// denominator has always claimed.
+/// denominator has always claimed. The product is widened: a bucket can hold more than its period
+/// (the at-boot credit stacks on a frame that ended on the boundary), so it does not fit 32 bits.
 static uint32_t windowSum(const uint32_t *slots, uint8_t nWindow, uint8_t nSlots, uint32_t periodMs, uint32_t cur,
                           uint32_t phaseMs)
 {
