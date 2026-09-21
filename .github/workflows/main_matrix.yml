@@ -52,7 +52,7 @@ permissions: read-all
 
 jobs:
   setup:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -105,7 +105,7 @@ jobs:
       all: ${{ steps.jsonStep.outputs.all }}
 
   version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Get release version string
@@ -127,7 +127,7 @@ jobs:
         check: ${{ fromJson(needs.setup.outputs.all) }}
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Only run checks for PRs and Merge Queue runs.
     if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
     steps:
@@ -226,7 +226,7 @@ jobs:
     with:
       distro: ${{ matrix.distro }}
       platform: ${{ matrix.platform }}
-      runs-on: ${{ contains(matrix.platform, 'arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+      runs-on: ${{ contains(matrix.platform, 'arm') && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
       pio_env: ${{ matrix.pio_env }}
       push: false
 
@@ -268,7 +268,7 @@ jobs:
           - rp2040
           - rp2350
           - stm32
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [version, build]
     steps:
       - name: Checkout code
@@ -334,7 +334,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [build]
     steps:
       - uses: actions/checkout@v7
@@ -457,7 +457,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [build]
     steps:
       - uses: actions/checkout@v7
@@ -481,7 +481,7 @@ jobs:
   release-artifacts:
     permissions: # Needed for 'gh release upload'.
       contents: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -590,7 +590,7 @@ jobs:
           - rp2040
           - rp2350
           - stm32
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     needs: [release-artifacts, version]
     steps:
@@ -642,7 +642,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-firmware:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     needs: [release-firmware, version]
     env:
@@ -731,7 +731,7 @@ jobs:
   # nightly=true dispatch) and never creates a GitHub release. The bucket's
   # release_notes.md is published from .github/nightly/ in this repo.
   publish-nightly:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: github.repository_owner == 'meshtastic' && (github.event_name == 'schedule' || github.event.inputs.nightly == 'true')
     needs: [setup, version, gather-artifacts]
     env:

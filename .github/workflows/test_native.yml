@@ -30,7 +30,11 @@ env:
   SAVE_CACHE: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
   # No --directory: callers add it, since shards capture from .pio/build/<env>/src. Keeping the
   # include/exclude filters shared is what stops a shard capturing a different file set.
-  LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --base-directory "${PWD}"
+  # --ignore-errors inconsistent: gcov spans a lambda's operator() from its introducer line to its
+  # closing brace, and that same line is where the enclosing function builds the closure - so a
+  # lambda that is constructed but never called reads as "function unhit, line hit", which lcov >= 2.2
+  # rejects. The body lines are correctly zero.
+  LCOV_CAPTURE_FLAGS: --quiet --capture --ignore-errors inconsistent --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --base-directory "${PWD}"
 
 jobs:
   # Tripwire against the native suite set shrinking by accident. `platformio test` discovers and
@@ -99,7 +103,7 @@ jobs:
     # Name is load-bearing: upstream branch protection matches the check by name. Widen the guard,
     # not this string.
     name: Naive millis() Deadline Compare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -118,7 +122,7 @@ jobs:
           #
           # Line comments are stripped before matching, so prose may name the broken idiom (this
           # guard's own documentation does). Block comments are not stripped; keep `millis() >` out
-          # of /* */ blocks. mawk-compatible - ubuntu-latest has no gawk.
+          # of /* */ blocks. mawk-compatible - ubuntu-26.04 has no gawk.
           find src -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.ino' \) \
                ! -path 'src/mesh/generated/*' -print0 |
             xargs -0 awk '
@@ -157,7 +161,7 @@ jobs:
 
   simulator-tests:
     name: Native Simulator Tests
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -266,7 +270,7 @@ jobs:
     name: Native Test Shards
     # ubuntu-latest, not the slim image: this needs a python3 to run bin/test-shards.py, and it is
     # on the critical path of every shard, so it must not have to install one.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
@@ -329,7 +333,7 @@ jobs:
   platformio-tests:
     name: Suites (${{ matrix.shard }})
     needs: discover
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     # Measured cold-cache shards run 5-12 minutes. Without this a hung suite, or a runner that
     # stops reporting, holds a runner until GitHub's 6-hour default - times twelve shards.
     timeout-minutes: 30
@@ -473,7 +477,7 @@ jobs:
   # Its own job because it relinks $BUILD_DIR/$PROGNAME, which no shard build dir can survive.
   attribution-canary:
     name: Attribution Canary
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     steps:
@@ -527,7 +531,7 @@ jobs:
   # only here can the union be checked against the canonical set.
   generate-reports:
     name: Generate Test Reports
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions: # Needed for dorny/test-reporter.
       contents: read
       actions: read
@@ -630,7 +634,9 @@ jobs:
         # Merge every tracefile the jobs produced: coverage_base.info (zeroed baseline),
         # coverage_integration.info, and one coverage_tests_<shard>.info per shard. lcov
         # sums hit counts across them, so the merged report is the union of all shards -
-        # identical to running the whole suite in one job.
+        # identical to running the whole suite in one job. Both readers need the same
+        # --ignore-errors inconsistent as LCOV_CAPTURE_FLAGS: ignoring the error keeps the
+        # offending record, so genhtml would otherwise trip over it next.
         if: always()
         run: |
           sudo apt-get install -y lcov
@@ -638,8 +644,10 @@ jobs:
           for f in code-coverage-report/coverage_*.info; do
             args+=(--add-tracefile "$f")
           done
-          lcov --quiet "${args[@]}" --output-file code-coverage-report/coverage_src.info
-          genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
+          lcov --quiet --ignore-errors inconsistent "${args[@]}" \
+            --output-file code-coverage-report/coverage_src.info
+          genhtml --quiet --ignore-errors inconsistent --legend --prefix "${PWD}" \
+            code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
       - name: Save Code Coverage Report
         if: always()
