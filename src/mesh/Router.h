@@ -77,6 +77,13 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// packet below ack priority must leave unspent, so an ack can always follow it.
     uint32_t ackAirtimeMsec() { return iface ? iface->getPacketTime(ACK_FRAME_BYTES) : 0; }
 
+    /// Minutes of silence before `p` may go under the duty cycle; 0 if it may go now. No side effects,
+    /// so a retry ladder can ask before it commits to a rung.
+    uint8_t dutyCycleWaitMinutes(const meshtastic_MeshPacket *p);
+    /// Tell our client that `p` was refused for duty cycle and how long to wait. `retry`: the packet
+    /// went out once already and it is the retry that has no airtime.
+    void notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, bool retry);
+
     /**
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
