@@ -42,6 +42,11 @@ DEFAULT_API_PORT = 4403
 # here. Raise it with --hop-limit only to restore the old behaviour for a comparison.
 DEFAULT_HOP_LIMIT = 0
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
+# The floor, and the bootstrap before a single round trip has been observed. It is not the interval:
+# a flat 1 s is shorter than one frame's time on air at LongFast (~2.2 s), so repeating on it queues
+# a second copy of a frame that is still being transmitted, and a third behind that. The live
+# interval is derived from the measured acknowledgement latency instead - see
+# _retransmit_base_interval_locked.
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
 # A gap the peer cannot fill used to be retried at a flat 1/sec until the 5-minute idle timeout, so
 # the retry needs *some* bound. But measured on hardware, every repeat within the first few attempts
@@ -52,6 +57,13 @@ MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
 # this only has to bound the residue (a peer without that fix, or a lost teardown).
 MISSING_SEQ_RETRY_FLAT_ATTEMPTS = 4
 MISSING_SEQ_RETRY_MAX_SEC = 8.0
+# How much of a new acknowledgement-latency sample to believe. Low, because the quantity we want is
+# the preset's frame time, which does not change within a session, while any single sample also
+# carries that frame's queueing and its collisions.
+ACK_LATENCY_SMOOTHING = 0.25
+# The interval is this multiple of the estimate: one frame out and one acknowledgement back are
+# already in the estimate, so the margin is for the peer's own queue.
+RETRANSMIT_LATENCY_MULTIPLIER = 2.0
 INPUT_BATCH_WINDOW_SEC = .5
 INPUT_BATCH_MAX_BYTES = 64
 HEARTBEAT_IDLE_DELAY_SEC = 5.0
@@ -386,6 +398,10 @@ class SentShellFrame:
     flags: int = 0
     last_tx_seq: int = 0
     last_rx_seq: int = 0
+    # When this frame was last handed to the API, retransmissions included. Read for two things: no
+    # frame is repeated before it has been outstanding for a full interval, and the interval itself
+    # is measured from how long acknowledgement actually takes on this link.
+    sent_time: float = 0.0
 
 
 @dataclass
@@ -439,6 +455,9 @@ class SessionState:
     input_retransmit_interval: float = MISSING_SEQ_RETRY_INTERVAL_SEC
     input_retransmit_seq: int = 0
     input_retransmits: int = 0
+    # Smoothed time from sending a frame to seeing the peer's cursor pass it. None until the first
+    # sample, which the OPEN/OPEN_OK exchange supplies before any input is sent.
+    ack_latency: Optional[float] = None
 
     def alloc_seq(self) -> int:
         with self.tx_lock:
@@ -503,13 +522,59 @@ class SessionState:
             cursor = min(cursor, highest_sent)
             if cursor <= self.peer_acked_tx_seq:
                 return
+            self._sample_ack_latency_locked(cursor)
             self.peer_acked_tx_seq = cursor
             # Progress proves the server is alive, so the run that would eventually declare it gone
-            # starts over, and the next stall gets a fresh interval.
+            # starts over, and the next stall gets a fresh interval. Clearing the deadline does not
+            # make the next frame instantly repeatable: input_retransmit_due re-arms it from that
+            # frame's own send time.
             self.next_input_retransmit_time = 0.0
-            self.input_retransmit_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
+            self.input_retransmit_interval = self._retransmit_base_interval_locked()
             self.input_retransmit_seq = 0
             self.input_retransmits = 0
+
+    def _sent_time_locked(self, seq: int) -> Optional[float]:
+        """When we last transmitted seq, or None if the ring no longer holds it. Caller holds tx_lock."""
+        for frame in reversed(self.tx_history):
+            if frame.seq == seq:
+                return frame.sent_time or None
+        return None
+
+    def _sample_ack_latency_locked(self, cursor: int) -> None:
+        """Fold the round trip for the frame the cursor just reached into the estimate.
+
+        The sample is the whole path we have to wait out before repeating anything: our frame's time
+        on air, the peer's processing, and its reply's time on air. Measuring it beats deriving it,
+        because this side cannot see the modem preset and the derivation would have to guess at
+        queueing. The first sample comes from OPEN/OPEN_OK, which is why an estimate exists before
+        any keystroke is sent. Caller holds tx_lock.
+        """
+        sent_at = self._sent_time_locked(cursor)
+        if sent_at is None:
+            return
+        sample = time.monotonic() - sent_at
+        if sample <= 0:
+            return
+        if self.ack_latency is None:
+            self.ack_latency = sample
+        else:
+            self.ack_latency += ACK_LATENCY_SMOOTHING * (sample - self.ack_latency)
+
+    def _retransmit_base_interval_locked(self) -> float:
+        """Give the first interval to wait before repeating anything. Caller holds tx_lock."""
+        if self.ack_latency is None:
+            return MISSING_SEQ_RETRY_INTERVAL_SEC
+        scaled = RETRANSMIT_LATENCY_MULTIPLIER * self.ack_latency
+        return min(max(scaled, MISSING_SEQ_RETRY_INTERVAL_SEC), MISSING_SEQ_RETRY_MAX_SEC)
+
+    def note_frame_resent(self, seq: int) -> None:
+        """Restamp a frame we have just put back on the wire, so the next wait is measured from it."""
+        now = time.monotonic()
+        with self.tx_lock:
+            for frame in reversed(self.tx_history):
+                if frame.seq == seq:
+                    frame.sent_time = now
+                    return
 
     def outstanding_input(self) -> int:
         with self.tx_lock:
@@ -567,7 +632,15 @@ class SessionState:
             if missing != self.input_retransmit_seq:
                 self.input_retransmit_seq = missing
                 self.input_retransmits = 0
-                self.input_retransmit_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
+                self.input_retransmit_interval = self._retransmit_base_interval_locked()
+                # The deadline for a sequence number we have not repeated yet belongs to the frame,
+                # not to the tick that noticed it. Without this, the cursor advancing clears the
+                # deadline and the very next frame - which may still be on the air - is repeated on
+                # the following poll, which is how one keystroke turned into several copies.
+                sent_at = self._sent_time_locked(missing)
+                if sent_at is not None and now < sent_at + self.input_retransmit_interval:
+                    self.next_input_retransmit_time = sent_at + self.input_retransmit_interval
+                    return (None, False)
             if self.input_retransmits >= MAX_INPUT_RETRANSMITS:
                 return (missing, True)
             self.input_retransmits += 1
@@ -597,7 +670,7 @@ class SessionState:
             self.next_expected_rx_seq = seq + 1
             if self.last_requested_missing_seq != 0 and self.next_expected_rx_seq > self.last_requested_missing_seq:
                 self.last_requested_missing_seq = 0
-                self.missing_request_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
+                self.missing_request_interval = self._retransmit_base_interval_locked()
                 self.missing_request_attempts = 0
             if seq > self.highest_seen_rx_seq:
                 self.highest_seen_rx_seq = seq
@@ -641,7 +714,7 @@ class SessionState:
                     self.missing_request_interval = min(self.missing_request_interval * 2, MISSING_SEQ_RETRY_MAX_SEC)
             else:
                 self.missing_request_attempts = 1
-                self.missing_request_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
+                self.missing_request_interval = self._retransmit_base_interval_locked()
             self.last_requested_missing_seq = self.next_expected_rx_seq
             self.last_missing_request_time = now
             return self.last_requested_missing_seq
@@ -833,6 +906,7 @@ def _send_shell_frame_locked(
                 flags=flags,
                 last_tx_seq=last_tx_seq,
                 last_rx_seq=last_rx_seq,
+                sent_time=time.monotonic(),
             )
         )
     state.note_outbound_packet(heartbeat=heartbeat)
@@ -887,6 +961,7 @@ def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
         last_rx_seq=frame.last_rx_seq,
         remember=False,
     )
+    state.note_frame_resent(frame.seq)
 
 
 def log_input_window_transition(state: SessionState) -> None:
