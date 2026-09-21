@@ -467,7 +467,15 @@ typedef enum _meshtastic_ExcludedModules {
     /* Bluetooth config (not technically a module, but used to indicate bluetooth capabilities) */
     meshtastic_ExcludedModules_BLUETOOTH_CONFIG = 8192,
     /* Network config (not technically a module, but used to indicate network capabilities) */
-    meshtastic_ExcludedModules_NETWORK_CONFIG = 16384
+    meshtastic_ExcludedModules_NETWORK_CONFIG = 16384,
+    /* Status Message module */
+    meshtastic_ExcludedModules_STATUSMESSAGE_CONFIG = 32768,
+    /* Traffic Management module */
+    meshtastic_ExcludedModules_TRAFFICMANAGEMENT_CONFIG = 65536,
+    /* TAK module */
+    meshtastic_ExcludedModules_TAK_CONFIG = 131072,
+    /* Mesh Beacon module */
+    meshtastic_ExcludedModules_MESHBEACON_CONFIG = 262144
 } meshtastic_ExcludedModules;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
@@ -655,6 +663,31 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     /* Arrived via Unicast UDP */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8
 } meshtastic_MeshPacket_TransportMechanism;
+
+/* Outcome of checking Routing.ack_proof on a received ack or nak.
+
+ Reported, never enforced: an ack without a usable proof is acted on exactly as it was before
+ proofs existed. The value exists so a client can tell a proven delivery receipt from an
+ unproven one, and can tell "nobody proved this" from "somebody tried and failed". */
+typedef enum _meshtastic_MeshPacket_AckProofStatus {
+    /* No proof was carried. The default, and what every ack from firmware predating
+ Routing.ack_proof looks like, so an absent field and an absent proof read the same. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT = 0,
+    /* A proof was carried and verified against the public key of the node the acknowledged packet
+ was addressed to. The only value that means "the recipient received it".
+
+ Verifying against the key of whoever the ack claims to be from is NOT sufficient: the proof
+ only shows its author holds a pairwise secret with us, and every keyed peer holds one, so
+ any of them could otherwise mint a receipt for a packet addressed to someone else. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID = 1,
+    /* A proof was carried and did not verify. Someone produced an ack for an outstanding packet
+ without holding the pairwise secret, so this is an attempted forgery rather than a quiet
+ absence, and is worth surfacing differently from ACK_PROOF_ABSENT. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_INVALID = 2,
+    /* A proof was carried but no authoritative public key was available to check it against, so
+ the ack is neither proven nor disproven. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY = 3
+} meshtastic_MeshPacket_AckProofStatus;
 
 /* Log levels, chosen to match python logging conventions. */
 typedef enum _meshtastic_LogRecord_Level {
@@ -1185,6 +1218,16 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_TransportMechanism transport_mechanism;
     /* Indicates whether the packet has a valid signature */
     bool xeddsa_signed;
+    /* *Never* sent over the radio links.
+ Set by the firmware on a received ack or nak, reporting whether its Routing.ack_proof proved
+ that the node we addressed is the one acknowledging. Clients are not supposed to set this, and
+ the firmware clears whatever arrives here before evaluating a packet - an inbound value is
+ attacker-controlled, since MQTT and the client API both carry whole MeshPacket protobufs.
+
+ Distinct from xeddsa_signed, which is an identity signature any holder of the sender's public
+ key can check. This is a pairwise MAC that only the original sender can check, and it attests
+ to delivery rather than to authorship. */
+    meshtastic_MeshPacket_AckProofStatus ack_proof_status;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -1683,8 +1726,8 @@ extern "C" {
 #define _meshtastic_FirmwareEdition_ARRAYSIZE ((meshtastic_FirmwareEdition)(meshtastic_FirmwareEdition_DIY_EDITION+1))
 
 #define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
-#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_NETWORK_CONFIG
-#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_NETWORK_CONFIG+1))
+#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_MESHBEACON_CONFIG
+#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_MESHBEACON_CONFIG+1))
 
 #define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
 #define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL
@@ -1718,6 +1761,10 @@ extern "C" {
 #define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP
 #define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP+1))
 
+#define _meshtastic_MeshPacket_AckProofStatus_MIN meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT
+#define _meshtastic_MeshPacket_AckProofStatus_MAX meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY
+#define _meshtastic_MeshPacket_AckProofStatus_ARRAYSIZE ((meshtastic_MeshPacket_AckProofStatus)(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY+1))
+
 #define _meshtastic_LogRecord_Level_MIN meshtastic_LogRecord_Level_UNSET
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
@@ -1749,6 +1796,7 @@ extern "C" {
 #define meshtastic_MeshPacket_priority_ENUMTYPE meshtastic_MeshPacket_Priority
 #define meshtastic_MeshPacket_delayed_ENUMTYPE meshtastic_MeshPacket_Delayed
 #define meshtastic_MeshPacket_transport_mechanism_ENUMTYPE meshtastic_MeshPacket_TransportMechanism
+#define meshtastic_MeshPacket_ack_proof_status_ENUMTYPE meshtastic_MeshPacket_AckProofStatus
 
 
 #define meshtastic_MyNodeInfo_firmware_edition_ENUMTYPE meshtastic_FirmwareEdition
@@ -1800,7 +1848,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0, _meshtastic_MeshPacket_AckProofStatus_MIN}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1839,7 +1887,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0, _meshtastic_MeshPacket_AckProofStatus_MIN}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1985,6 +2033,7 @@ extern "C" {
 #define meshtastic_MeshPacket_tx_after_tag       20
 #define meshtastic_MeshPacket_transport_mechanism_tag 21
 #define meshtastic_MeshPacket_xeddsa_signed_tag  22
+#define meshtastic_MeshPacket_ack_proof_status_tag 23
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -2277,7 +2326,8 @@ X(a, STATIC,   SINGULAR, UINT32,   next_hop,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   relay_node,       19) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_after,         20) \
 X(a, STATIC,   SINGULAR, UENUM,    transport_mechanism,  21) \
-X(a, STATIC,   SINGULAR, BOOL,     xeddsa_signed,    22)
+X(a, STATIC,   SINGULAR, BOOL,     xeddsa_signed,    22) \
+X(a, STATIC,   SINGULAR, UENUM,    ack_proof_status,  23)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -2648,7 +2698,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LockdownStatus_size           53
 #define meshtastic_LogRecord_size                426
 #define meshtastic_LowEntropyKey_size            0
-#define meshtastic_MeshPacket_size               450
+#define meshtastic_MeshPacket_size               453
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
