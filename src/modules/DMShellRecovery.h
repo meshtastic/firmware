@@ -171,6 +171,57 @@ class DMShellTxWindow
     uint32_t peerAckedSeq = 0;
 };
 
+/// Counts consecutive retransmissions of one sequence number, so a sender that is talking to nobody
+/// eventually stops.
+///
+/// Bounding the outstanding data left exactly one unbounded behaviour behind: a sender whose window
+/// is shut repeats the frame the peer's cursor says is missing, forever. It never evicts anything and
+/// the idle timeout keeps being refreshed while the peer is still sending, so nothing else ends the
+/// session. Measured on hardware, a healthy link needed at most 11 repeats of a single sequence
+/// number and a peer that had genuinely vanished reached 88 without stopping, so a bound in between
+/// separates the two cleanly.
+class DMShellRetransmitRun
+{
+  public:
+    /// maxRepeats of 0 leaves the run unbounded, for measuring against the old behaviour.
+    void reset(uint32_t maxRepeats)
+    {
+        limit = maxRepeats;
+        clear();
+    }
+
+    /// Call whenever the peer's cursor advances: progress means the peer is alive, whatever happened
+    /// before it.
+    void clear()
+    {
+        currentSeq = 0;
+        repeats = 0;
+    }
+
+    /// Call before each retransmission. Returns false once the allowance for this sequence number is
+    /// spent, which is the caller's signal to give up on the peer rather than keep transmitting.
+    bool allowRetransmit(uint32_t seq)
+    {
+        if (seq != currentSeq) {
+            currentSeq = seq;
+            repeats = 0;
+        }
+        if (limit != 0 && repeats >= limit) {
+            return false;
+        }
+        repeats++;
+        return true;
+    }
+
+    /// How many retransmissions of the current sequence number have been allowed.
+    uint32_t repeatCount() const { return repeats; }
+
+  private:
+    uint32_t limit = 0; // 0 = unbounded
+    uint32_t currentSeq = 0;
+    uint32_t repeats = 0;
+};
+
 /// Tracks which sent sequence numbers the replay ring still holds.
 ///
 /// The ring is bounded in frames, so the wall-clock span it covers shrinks with the modem preset -
