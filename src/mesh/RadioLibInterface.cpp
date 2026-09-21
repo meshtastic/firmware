@@ -451,6 +451,14 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
+                        // The weak half of carrier sense, and the only one that was silent. busyRx in
+                        // canSendImmediately() is a latched PREAMBLE_DETECTED/HEADER_VALID IRQ and logs
+                        // its deferrals; this is a 2-symbol CAD, and it has already been established
+                        // clear by the time we get here - so every line below is a packet the strong
+                        // check missed and this one caught. Without the count there is no way to tell
+                        // how often the CAD is carrying carrier sense on its own, and no baseline
+                        // against which a suspected miss means anything.
+                        LOG_DEBUG("Can not send yet, channelActive, packet 0x%08x", txp->id);
                         if (!RadioTxHooks::holdsRadio(txp)) {
                             startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
                         }
