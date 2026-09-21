@@ -24,10 +24,11 @@
 
 // --- the bounds ---------------------------------------------------------------------------------
 //
-// STAGE 0 (this commit): every bound below is a CHARACTERISATION - it encodes today's measured
-// wrong number, so a later stage's improvement shows up as an edit here and nowhere else. A stage
-// tightens only the bounds for the defect it claims, leaving the rest pinned, so a regression
-// elsewhere fails this suite rather than being absorbed into a new number.
+// Every bound below is a CHARACTERISATION - it encodes the measured number for the stage named in
+// its trailing comment, so a later stage's improvement shows up as an edit here and nowhere else.
+// A stage tightens only the bounds for the defect it claims, leaving the rest pinned, so a
+// regression elsewhere fails this suite rather than being absorbed into a new number. The bounds
+// as committed encode STAGE 3.
 //
 // These are MEASURED on develop @ fa87e7d, not carried over from design4's simulation. Where the
 // two differ the measurement wins: design4's chanutil figures (-8.3 / -16.7) are RELATIVE percent,
