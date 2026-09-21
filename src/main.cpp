@@ -45,6 +45,9 @@
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#if HAS_BLE_GATT_MESH && defined(ARCH_NRF52)
+#include "platform/nrf52/NRF52BLEGattMesh.h"
+#endif
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
@@ -1074,6 +1077,14 @@ void setup()
     }
 #endif
 #endif
+
+#if HAS_BLE_GATT_MESH && defined(ARCH_NRF52)
+    // The service is registered by NRF52Bluetooth's setupMeshService(); this is the pump.
+    bleGattMeshHandler = new NRF52BLEGattMesh();
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER)
+        bleGattMeshHandler->start();
+#endif
+
     service = new MeshService();
     service->init();
 
