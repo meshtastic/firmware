@@ -376,6 +376,9 @@ class SessionState:
     replay_log_file: Optional[TextIO] = None
     replay_log_path: Optional[Path] = None
     last_transport_activity_time: float = field(default_factory=time.monotonic)
+    # Inbound only. The heartbeat has to key off the peer's silence, not off any traffic: our own
+    # keystrokes used to suppress it (see heartbeat_due).
+    last_inbound_time: float = field(default_factory=time.monotonic)
     last_heartbeat_sent_time: float = 0.0
 
     def alloc_seq(self) -> int:
@@ -405,14 +408,24 @@ class SessionState:
 
     def note_inbound_packet(self) -> None:
         with self.tx_lock:
-            self.last_transport_activity_time = time.monotonic()
+            now = time.monotonic()
+            self.last_transport_activity_time = now
+            self.last_inbound_time = now
 
     def heartbeat_due(self) -> bool:
+        """Whether to probe a peer that has gone quiet.
+
+        Keyed on inbound silence alone. It used to key on traffic in either direction, so our own
+        keystrokes reset it - and typing faster than HEARTBEAT_IDLE_DELAY_SEC suppressed the heartbeat
+        entirely. That mattered because the server's PING handler is what retransmits a frame we are
+        missing, so an interactive user typing into a stalled session silenced their own recovery. A
+        healthy stream still sends no heartbeats, because inbound traffic keeps arriving.
+        """
         with self.tx_lock:
             now = time.monotonic()
-            if (now - self.last_transport_activity_time) < HEARTBEAT_IDLE_DELAY_SEC:
+            if (now - self.last_inbound_time) < HEARTBEAT_IDLE_DELAY_SEC:
                 return False
-            if self.last_heartbeat_sent_time <= self.last_transport_activity_time:
+            if self.last_heartbeat_sent_time <= self.last_inbound_time:
                 return True
             return (now - self.last_heartbeat_sent_time) >= HEARTBEAT_REPEAT_SEC
 

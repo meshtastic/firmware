@@ -308,6 +308,7 @@ int32_t DMShellModule::runOnce()
             LOG_INFO("DMShell: window closed at %u unacknowledged frames, waiting for the peer",
                      (unsigned)session.txWindow.outstanding());
         }
+        retransmitOldestUnacked();
         return 100;
     }
 
@@ -449,6 +450,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.txHistoryWindow.reset();
     session.txWindow.reset(txWindowFrames);
     session.txWindowBlocked = false;
+    session.nextRetransmitMs = 0;
     session.lastActivityMs = millis();
 
     meshtastic_RemoteShell newFrame = {
@@ -605,7 +607,46 @@ void DMShellModule::rememberSentFrame(meshtastic_RemoteShell frame)
 void DMShellModule::notePeerReceiveCursor(const meshtastic_RemoteShell &frame)
 {
     const uint32_t cursor = frame.last_rx_seq > frame.ack_seq ? frame.last_rx_seq : frame.ack_seq;
+    const uint32_t before = session.txWindow.peerAcked();
     session.txWindow.notePeerAcked(cursor);
+    if (session.txWindow.peerAcked() != before) {
+        session.nextRetransmitMs = 0; // progress: the next stall gets a fresh interval
+    }
+}
+
+/// Retransmit the oldest frame the peer has not acknowledged, while the window is shut.
+///
+/// Recovery here was purely receiver-driven: the peer asked for a replay, and it only asked when a
+/// frame arrived carrying a higher sequence number. Bounding the sender removed exactly that
+/// stimulus. Once the window shuts the peer sees nothing new, so it never re-asks, and its cursor can
+/// never advance past the gap that shut the window - a silent, permanent latch. Measured on hardware:
+/// the session stopped after ~20 s with frames still arriving from the peer and the window never
+/// reopening.
+///
+/// So the sender takes responsibility for its own unacknowledged data, which is the missing piece
+/// the original analysis called out as "no sender-side retransmit timer". We know the peer's
+/// cumulative cursor, so we know exactly which frame it is waiting for; resend that rather than
+/// something new, because sending something new would push us further ahead of the gap, which is the
+/// thing the window exists to prevent.
+void DMShellModule::retransmitOldestUnacked()
+{
+    if (legacyRecovery) {
+        return; // legacy mode has no window, so it never blocks here
+    }
+
+    const uint32_t missing = session.txWindow.peerAcked() + 1;
+    if (missing == 0 || missing >= session.nextTxSeq) {
+        return; // the peer is level with us; the window is shut for some other reason
+    }
+
+    if (session.nextRetransmitMs != 0 && !Throttle::deadlinePassedAt(millis(), session.nextRetransmitMs)) {
+        return;
+    }
+    // One round trip, derived from the modem config the same way replay requests are.
+    session.nextRetransmitMs = millis() + replayRequestIntervalMs();
+
+    LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting", missing);
+    resendFramesFrom(missing);
 }
 
 void DMShellModule::resendFramesFrom(uint32_t startSeq)

@@ -336,6 +336,53 @@ void test_dmshell_tx_window_reset_clears_peer_state()
     TEST_ASSERT_FALSE(w.canSend());
 }
 
+void test_dmshell_tx_window_reports_peer_cursor_for_retransmission()
+{
+    DMShellTxWindow w;
+    w.reset(4);
+    for (uint32_t seq = 1; seq <= 4; seq++) {
+        w.noteSent(seq);
+    }
+    w.notePeerAcked(2);
+
+    // A blocked sender works out what to retransmit from this, so it has to be the clamped, monotone
+    // value rather than whatever the last frame happened to claim.
+    TEST_ASSERT_EQUAL_UINT32(2, w.peerAcked());
+    w.notePeerAcked(1);
+    TEST_ASSERT_EQUAL_UINT32(2, w.peerAcked());
+    w.notePeerAcked(99);
+    TEST_ASSERT_EQUAL_UINT32(4, w.peerAcked());
+}
+
+void test_dmshell_tx_window_latches_when_peer_cursor_freezes()
+{
+    DMShellTxWindow w;
+    w.reset(4);
+
+    // The failure measured on hardware. The peer loses frame 3, so its cumulative cursor freezes at
+    // 2 however many frames arrive afterwards, and the sender fills the window against a cursor that
+    // will never move on its own.
+    w.noteSent(1);
+    w.noteSent(2);
+    w.notePeerAcked(2);
+    for (uint32_t seq = 3; seq <= 6; seq++) {
+        w.noteSent(seq);
+    }
+
+    TEST_ASSERT_FALSE(w.canSend());
+    TEST_ASSERT_EQUAL_UINT32(4, w.outstanding());
+
+    // Nothing here reopens it, which is why the sender has to retransmit peerAcked() + 1 rather than
+    // wait to be asked: with the window shut the peer never sees a higher sequence number, so it
+    // never re-asks, and the session latches silently.
+    TEST_ASSERT_EQUAL_UINT32(3, w.peerAcked() + 1);
+
+    // The retransmission lands and the cursor jumps past the whole run the peer had buffered.
+    w.notePeerAcked(6);
+    TEST_ASSERT_TRUE(w.canSend());
+    TEST_ASSERT_EQUAL_UINT32(0, w.outstanding());
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -360,6 +407,8 @@ void setup()
     RUN_TEST(test_dmshell_tx_window_ignores_stale_and_overreaching_cursors);
     RUN_TEST(test_dmshell_tx_window_of_one_is_strict_request_response);
     RUN_TEST(test_dmshell_tx_window_reset_clears_peer_state);
+    RUN_TEST(test_dmshell_tx_window_reports_peer_cursor_for_retransmission);
+    RUN_TEST(test_dmshell_tx_window_latches_when_peer_cursor_freezes);
     exit(UNITY_END());
 }
 
