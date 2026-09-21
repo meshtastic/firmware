@@ -1,4 +1,5 @@
 #include "FloodingRouter.h"
+#include "MeshTransportBase.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "configuration.h"
@@ -147,9 +148,14 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    // Only LoRa duplicates mean another node has already rebroadcast this packet over RF.
-    if (p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA)
+    // Strictly same-medium: an overhear on one medium is no evidence about who heard this node
+    // on another. LoRa cancels its own queue; any other medium asks the transport that owns it.
+    if (p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+        if (roleAllowsCancelingDupe(p) && MeshTransportBase::cancelTransportsOn(p->transport_mechanism, p->from, p->id))
+            txRelayCanceled++;
+        // Only LoRa duplicates mean another node has already rebroadcast this packet over RF.
         return;
+    }
 
     // Only a duplicate of a packet we still have queued can cancel anything, or take a tracker slot
     if (roleAllowsCancelingDupe(p) && findInTxQueue(p->from, p->id)) {
