@@ -28,6 +28,8 @@ struct DMShellSession {
     // Purely for logging: the window opens and closes many times a second, so only transitions are
     // worth a line, and without them there is no way to tell from a log whether it ever engaged.
     bool txWindowBlocked = false;
+    // Sender-side retransmission of the oldest unacknowledged frame while the window is shut.
+    uint32_t nextRetransmitMs = 0;
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
@@ -68,6 +70,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
 
     uint32_t replayRequestIntervalMs() const;
     void notePeerReceiveCursor(const meshtastic_RemoteShell &frame);
+    void retransmitOldestUnacked();
 
     bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;
