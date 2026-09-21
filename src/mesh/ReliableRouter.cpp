@@ -205,6 +205,25 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
         return true;
     const bool expected = orig->packet && orig->packet->pki_encrypted;
 
+    // Only the node we ADDRESSED can prove receipt. The MAC only proves its author holds a pairwise
+    // key with us, and every keyed peer holds one - so verifying against the key of whoever the ack
+    // claims to be from would accept a proof minted by any of them. C, whose key we hold, can read
+    // our packet id out of the cleartext header and mint a VALID-looking receipt for a packet that
+    // went to B. Bind to orig->packet->to instead.
+    //
+    // Bailing out here rather than verifying against the recipient key and reporting INVALID is
+    // deliberate on both counts: it skips the X25519 an attacker would otherwise choose when we
+    // pay, and a third-party ack is "not a receipt" rather than "a forged receipt" - naks from
+    // intermediates (NO_CHANNEL, PKI_UNKNOWN_PUBKEY, MAX_RETRANSMIT) legitimately arrive from a
+    // node that is not the destination, and must not be logged as proof mismatches.
+    //
+    // A broadcast original has no single recipient to bind to, so there is nothing to check.
+    if (!orig->packet || isBroadcast(orig->packet->to) || getFrom(p) != orig->packet->to) {
+        LOG_DEBUG("Ack for 0x%08x is not from the node we addressed, not a receipt", originalId);
+        return true;
+    }
+
+    // Safe to key off getFrom(p) below only because it is now known equal to orig->packet->to.
     switch (ackProofVerify(p, originalId)) {
     case AckProofResult::VALID:
         LOG_DEBUG("ACK proof OK for 0x%08x", originalId);
