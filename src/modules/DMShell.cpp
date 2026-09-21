@@ -266,7 +266,7 @@ void DMShellModule::applySessionFrame(const meshtastic_RemoteShell &frame)
             uint8_t outBuf[MAX_MESSAGE_SIZE];
             const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
             if (bytesRead > 0) {
-                LOG_WARN("DMShell: read %zd bytes from PTY", bytesRead);
+                LOG_TRACE("DMShell: read %zd bytes from PTY", bytesRead);
                 meshtastic_RemoteShell frame = {
                     .op = meshtastic_RemoteShell_OpCode_OUTPUT,
                     .session_id = session.sessionId,
@@ -383,7 +383,7 @@ int32_t DMShellModule::runOnce()
     while (session.masterFd >= 0) {
         const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
         if (bytesRead > 0) {
-            LOG_WARN("DMShell: read %zd bytes from PTY", bytesRead);
+            LOG_TRACE("DMShell: read %zd bytes from PTY", bytesRead);
 
             meshtastic_RemoteShell frame = {
                 .op = meshtastic_RemoteShell_OpCode_OUTPUT,
@@ -910,8 +910,8 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
     if (!packet) {
         return;
     }
-    LOG_WARN("DMShell: building packet op=%u session=0x%x seq=%u payloadLen=%zu", frame.op, frame.session_id, frame.seq,
-             frame.payload.size);
+    LOG_TRACE("DMShell: building packet op=%u session=0x%x seq=%u payloadLen=%zu", frame.op, frame.session_id, frame.seq,
+              frame.payload.size);
     const size_t encoded = pb_encode_to_bytes(packet->decoded.payload.bytes, sizeof(packet->decoded.payload.bytes),
                                               meshtastic_RemoteShell_fields, &frame);
     if (encoded == 0) {
