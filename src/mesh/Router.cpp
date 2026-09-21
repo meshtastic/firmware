@@ -1207,35 +1207,6 @@ static bool signedDataFits(meshtastic_Data *d)
     return sized && encodedSize + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
 }
 
-// Mirrors perhapsEncode()'s sizing decisions - the bitfield, a signature that fits, PKC overhead -
-// by setting and restoring the fields it would set, the way signedDataFits() does.
-size_t Router::onAirBytes(meshtastic_MeshPacket *p)
-{
-    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
-        return p->encrypted.size + MESHTASTIC_HEADER_LENGTH;
-
-    meshtastic_Data *d = &p->decoded;
-    const pb_size_t prevSig = d->xeddsa_signature.size;
-    const bool prevHasBitfield = d->has_bitfield;
-    if (isFromUs(p)) {
-        d->has_bitfield = true;
-        d->xeddsa_signature.size = 0;
-#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-        if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(d))
-            d->xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
-#endif
-    }
-    size_t n;
-    if (!pb_get_encoded_size(&n, &meshtastic_Data_msg, d))
-        n = d->payload.size; // cannot size it: the payload alone, and never under
-    d->xeddsa_signature.size = prevSig;
-    d->has_bitfield = prevHasBitfield;
-
-    n += MESHTASTIC_HEADER_LENGTH;
-    if (willUsePki(p))
-        n += MESHTASTIC_PKC_OVERHEAD;
-    return n;
-}
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -1298,6 +1269,50 @@ static bool ackNeedsPkcFallback(const meshtastic_MeshPacket *p, ChannelIndex chI
 
 /** Return 0 for success or a Routing_Error code for failure
  */
+// The overhead perhapsEncode() will add to a decoded packet, decided the way it decides: PKC for a
+// DM that will use it or an ack with no channel to ride, else the AEAD tag where the channel has it.
+static size_t encryptionOverheadBytes(const meshtastic_MeshPacket *p)
+{
+    const ChannelIndex chIndex = p->channel;
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+    bool haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
+    if (!haveDestKey && p->pki_encrypted && p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP &&
+        crypto->getPendingPublicKey(p->to, destKey))
+        haveDestKey = true;
+    if (ackNeedsPkcFallback(p, chIndex, haveDestKey) || wouldEncryptWithPKC(p, chIndex, haveDestKey))
+        return MESHTASTIC_PKC_OVERHEAD;
+#endif
+    return chIndex < MAX_NUM_CHANNELS && channels.isAEADEnabled(chIndex) ? MESHTASTIC_AEAD_OVERHEAD : 0;
+}
+
+// Mirrors perhapsEncode()'s sizing decisions - the bitfield, a signature that fits, the encryption
+// overhead - by setting and restoring the fields it would set, the way signedDataFits() does.
+size_t Router::onAirBytes(meshtastic_MeshPacket *p)
+{
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return p->encrypted.size + MESHTASTIC_HEADER_LENGTH;
+
+    meshtastic_Data *d = &p->decoded;
+    const pb_size_t prevSig = d->xeddsa_signature.size;
+    const bool prevHasBitfield = d->has_bitfield;
+    if (isFromUs(p)) {
+        d->has_bitfield = true;
+        d->xeddsa_signature.size = 0;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(d))
+            d->xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+#endif
+    }
+    size_t n;
+    if (!pb_get_encoded_size(&n, &meshtastic_Data_msg, d))
+        n = d->payload.size; // cannot size it: the payload alone, and never under
+    d->xeddsa_signature.size = prevSig;
+    d->has_bitfield = prevHasBitfield;
+
+    return n + MESHTASTIC_HEADER_LENGTH + encryptionOverheadBytes(p);
+}
+
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);

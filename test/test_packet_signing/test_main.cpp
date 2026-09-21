@@ -1116,9 +1116,13 @@ void test_B14_ack_with_no_usable_channel_falls_back_to_pkc(void)
     ack.decoded.request_id = 0xFEED5150;
     ack.channel = deadChannel;
 
+    // willUsePki() says no for ROUTING_APP; the admission size must still see the PKC overhead.
+    const size_t predicted = pipelineRouter->onAirBytes(&ack);
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(&ack),
                               "ack on an unusable channel must not fail to send");
     TEST_ASSERT_TRUE_MESSAGE(ack.pki_encrypted, "it must have gone out over PKC");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(ack.encrypted.size + MESHTASTIC_HEADER_LENGTH, predicted,
+                                     "the ack's on-air size was predicted with its PKC fallback overhead");
 }
 
 // The fallback must not paper over a genuinely unsendable ack: with no key for the destination there
