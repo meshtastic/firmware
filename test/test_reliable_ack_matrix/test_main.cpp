@@ -151,16 +151,20 @@ class TimedCaptureRadio : public RadioInterface
         return packetTimeMsec;
     }
 
+    uint32_t queuedAirtimeMsec() override { return queuedMsec; }
+
     void reset()
     {
         sentPackets.clear();
         cancelCount = 0;
         packetTimeMsec = 0;
+        queuedMsec = 0;
     }
 
     std::vector<meshtastic_MeshPacket> sentPackets;
     uint32_t cancelCount = 0;
     uint32_t packetTimeMsec = 0;
+    uint32_t queuedMsec = 0;
 };
 
 class MockRoutingModule : public RoutingModule
@@ -956,6 +960,30 @@ void test_quoted_wait_covers_the_whole_ladder(void)
                                     "...which is the ring's own answer for that much airtime");
 }
 
+// Admission counts what the radio already holds. A packet admitted a moment ago is in the queue,
+// not the ring, until it completes; a burst that only asked the ring would let every packet in.
+void test_admission_counts_airtime_already_queued_at_the_radio(void)
+{
+    radio->packetTimeMsec = 7;
+    useAirTimeWithRemaining(30);
+
+    auto plain = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/false);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, reliableShim->dutyCycleWaitMinutes(&plain), "7 ms and a 7 ms reserve fit in 30");
+
+    radio->queuedMsec = 20; // admitted earlier, still waiting at the radio
+    TEST_ASSERT_TRUE_MESSAGE(reliableShim->dutyCycleWaitMinutes(&plain) > 0, "7 + 7 + 20 queued do not");
+
+    radio->queuedMsec = 10;
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, reliableShim->dutyCycleWaitMinutes(&plain), "7 + 7 + 10 queued do");
+
+    // The queued packet completes: it leaves the radio and its 10 ms is logged to the ring in the
+    // same step. Counted once, it still fits; still at the radio as well, it would not.
+    airTime->logAirtime(TX_LOG, 10);
+    TEST_ASSERT_TRUE_MESSAGE(reliableShim->dutyCycleWaitMinutes(&plain) > 0, "in the ring and still queued: twice");
+    radio->queuedMsec = 0;
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, reliableShim->dutyCycleWaitMinutes(&plain), "in the ring alone: once, and it fits");
+}
+
 // The control: with airtime for the rung, the ladder runs exactly as before.
 void test_admitted_retry_rung_still_goes(void)
 {
@@ -1040,6 +1068,7 @@ void setup()
     RUN_TEST(test_refused_retry_rung_ends_a_relayed_ladder_quietly);
     RUN_TEST(test_admitted_retry_rung_still_goes);
     RUN_TEST(test_quoted_wait_covers_the_whole_ladder);
+    RUN_TEST(test_admission_counts_airtime_already_queued_at_the_radio);
 
     int result = UNITY_END();
     airTimeFixture.reset();

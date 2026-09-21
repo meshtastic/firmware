@@ -46,4 +46,7 @@ class MeshPacketQueue
 
     /* Attempt to find a packet from this queue. Return true if it was found. */
     bool find(const NodeNum from, const PacketId id);
+
+    /** Every packet waiting, for a read-only walk. */
+    const std::vector<meshtastic_MeshPacket *> &packets() const { return queue; }
 };

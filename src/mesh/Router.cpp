@@ -484,13 +484,16 @@ uint8_t Router::dutyCycleWaitMinutes(meshtastic_MeshPacket *p)
     const uint32_t reserveMs = ackTier ? 0 : ackAirtimeMsec();
     // Sized as it will go on air, signature and PKC overhead included, not as it sits decoded.
     const uint32_t packetMs = iface ? iface->getPacketTime(onAirBytes(p)) : 0;
-    if (!airTime->wouldExceedDutyCycle(packetMs + reserveMs, effectiveDutyCycle))
+    // Packets admitted ahead of this one are not in the ring until they complete; count them now, read
+    // live from the queue so a completed packet moves to the ring and is never counted twice.
+    const uint32_t queuedMs = iface ? iface->queuedAirtimeMsec() : 0;
+    if (!airTime->wouldExceedDutyCycle(packetMs + reserveMs + queuedMs, effectiveDutyCycle))
         return 0;
 
     // Refused. Quote the wait for the ladder the packet is entitled to, not for the one rung that
     // was just refused: at least one minute, since one rung already did not fit.
     const uint32_t attempts = std::min<uint32_t>(sendAttempts(p), DUTY_CYCLE_QUOTED_ATTEMPTS);
-    const uint8_t minutes = airTime->getSilentMinutes(effectiveDutyCycle, attempts * packetMs + reserveMs);
+    const uint8_t minutes = airTime->getSilentMinutes(effectiveDutyCycle, attempts * packetMs + reserveMs + queuedMs);
     return minutes ? minutes : 1;
 }
 

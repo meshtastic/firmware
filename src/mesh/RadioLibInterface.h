@@ -27,7 +27,7 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings) {};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
@@ -59,7 +59,7 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
   public:
     STM32WLx_ModuleWrapper(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                            RADIOLIB_PIN_TYPE busy)
-        : STM32WLx_Module(){};
+        : STM32WLx_Module() {};
 };
 #endif
 
@@ -257,6 +257,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
+    uint32_t queuedAirtimeMsec() override;
 
     /**
      * Update the noise floor measurement by sampling RSSI from a slow path.
