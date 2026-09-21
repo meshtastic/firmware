@@ -24,15 +24,14 @@ on:
       - "**.md"
       - version.properties
 
+  # No paths-ignore here: ci-gate is the required status check, and a PR that
+  # never runs this workflow never reports it, so a docs-only PR cannot merge.
   pull_request:
     branches:
       - master
       - develop
       - event/*
       - feature/*
-    paths-ignore:
-      - "**.md"
-      #- "**.yml"
 
   schedule:
     # Nightly develop build, published to the meshtastic-firmware-nightly R2
