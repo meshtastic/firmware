@@ -21,6 +21,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <unistd.h>
 
 DMShellModule *dmShellModule;
@@ -54,6 +55,15 @@ constexpr uint32_t DEFAULT_TX_WINDOW_FRAMES = 4;
 /// Above the replay ring there is nothing left to bound, so a larger value is a configuration error.
 constexpr uint32_t MAX_TX_WINDOW_FRAMES = (uint32_t)DMShellSession::TX_HISTORY_LEN;
 
+/// Consecutive retransmissions of one sequence number before the peer is declared gone.
+///
+/// Measured on hardware: in healthy operation the most any single sequence number needed was 11, and
+/// a peer that had actually vanished reached 88 and was still climbing. 25 sits in the gap with wide
+/// margin on both sides. It is a frame count rather than a duration on purpose - the retransmission
+/// interval is already derived from the modem config, so this scales with the preset by itself,
+/// giving about 11 s on ShortTurbo and 114 s on LongFast.
+constexpr uint32_t DEFAULT_MAX_CONSECUTIVE_RETRANSMITS = 25;
+
 /// DMSHELL_LEGACY_RECOVERY=1 restores the pre-damping behaviour on the same build, so a session
 /// can be measured with and without the fix without reflashing.
 bool legacyRecoveryRequested()
@@ -61,6 +71,24 @@ bool legacyRecoveryRequested()
     const char *value = getenv("DMSHELL_LEGACY_RECOVERY");
     return value && *value && strcmp(value, "0") != 0;
 }
+
+/// How many times the server repeats one unacknowledged frame before giving up on the peer.
+/// DMSHELL_MAX_RETRANSMITS=0 restores the unbounded behaviour.
+uint32_t maxRetransmitsFromEnv()
+{
+    const char *value = getenv("DMSHELL_MAX_RETRANSMITS");
+    if (!value || !*value) {
+        return DEFAULT_MAX_CONSECUTIVE_RETRANSMITS;
+    }
+    char *end = nullptr;
+    const unsigned long parsed = strtoul(value, &end, 10);
+    if (end == value) {
+        LOG_WARN("DMShell: ignoring unparseable DMSHELL_MAX_RETRANSMITS=%s", value);
+        return DEFAULT_MAX_CONSECUTIVE_RETRANSMITS;
+    }
+    return (uint32_t)parsed; // 0 disables the bound
+}
+
 /// How many frames of unacknowledged data the server will keep in flight. DMSHELL_TX_WINDOW=0
 /// restores the unbounded behaviour, so the bound can be measured with and without on one build.
 uint32_t txWindowFromEnv()
@@ -91,6 +119,7 @@ DMShellModule::DMShellModule()
     }
 
     // Legacy mode means "reproduce the pre-fix behaviour", and the pre-fix behaviour was unbounded.
+    maxConsecutiveRetransmits = maxRetransmitsFromEnv();
     txWindowFrames = legacyRecovery ? 0 : txWindowFromEnv();
     if (txWindowFrames == 0) {
         LOG_WARN("DMShell: outstanding-data window disabled, the sender may run away from a gap");
@@ -451,6 +480,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.txWindow.reset(txWindowFrames);
     session.txWindowBlocked = false;
     session.nextRetransmitMs = 0;
+    session.retransmitRun.reset(maxConsecutiveRetransmits);
     session.lastActivityMs = millis();
 
     meshtastic_RemoteShell newFrame = {
@@ -469,6 +499,37 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     return true;
 }
 
+/// Discard output the peer has already given up on, when its input carries an interrupt.
+///
+/// A local terminal does this for free: the line discipline flushes the output queue when it raises
+/// SIGINT, unless NOFLSH is set. Over LoRa the same backlog has to be transmitted one frame at a time,
+/// and the PTY holds about 15 KiB before a runaway child blocks on write - roughly 77 frames, about
+/// 17 s of airtime on ShortTurbo and nearly three minutes on LongFast, all of it output the user has
+/// just cancelled. Flush before writing the interrupt, so the shell's own response to it survives.
+void DMShellModule::flushPendingOutputOnInterrupt(const meshtastic_RemoteShell &frame)
+{
+    struct termios tio = {};
+    if (tcgetattr(session.masterFd, &tio) != 0 || (tio.c_lflag & ISIG) == 0) {
+        return; // signals are not being generated, so nothing here would be cancelled
+    }
+
+    const cc_t intr = tio.c_cc[VINTR];
+    if (intr == _POSIX_VDISABLE) {
+        return;
+    }
+
+    for (size_t i = 0; i < frame.payload.size; i++) {
+        if (frame.payload.bytes[i] != intr) {
+            continue;
+        }
+        // TCIFLUSH from the master's point of view: data written by the child and not yet read by us.
+        if (tcflush(session.masterFd, TCIFLUSH) == 0) {
+            LOG_INFO("DMShell: interrupt in input, discarded pending shell output");
+        }
+        return;
+    }
+}
+
 bool DMShellModule::writeSessionInput(const meshtastic_RemoteShell &frame)
 {
     if (session.masterFd < 0) {
@@ -477,6 +538,8 @@ bool DMShellModule::writeSessionInput(const meshtastic_RemoteShell &frame)
     if (frame.payload.size == 0) {
         return true;
     }
+
+    flushPendingOutputOnInterrupt(frame);
 
     const ssize_t bytesWritten = write(session.masterFd, frame.payload.bytes, frame.payload.size);
     return bytesWritten >= 0;
@@ -610,7 +673,10 @@ void DMShellModule::notePeerReceiveCursor(const meshtastic_RemoteShell &frame)
     const uint32_t before = session.txWindow.peerAcked();
     session.txWindow.notePeerAcked(cursor);
     if (session.txWindow.peerAcked() != before) {
-        session.nextRetransmitMs = 0; // progress: the next stall gets a fresh interval
+        // Progress: the next stall gets a fresh interval, and the run of retransmissions that would
+        // eventually declare the peer gone starts over.
+        session.nextRetransmitMs = 0;
+        session.retransmitRun.clear();
     }
 }
 
@@ -645,7 +711,18 @@ void DMShellModule::retransmitOldestUnacked()
     // One round trip, derived from the modem config the same way replay requests are.
     session.nextRetransmitMs = millis() + replayRequestIntervalMs();
 
-    LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting", missing);
+    // Measured on hardware, a sender that never stops repeating one frame is talking to a peer that
+    // has gone away - its teardown did not survive - so the session is already over. The reason names
+    // the peer rather than the link, because that is what the evidence shows.
+    if (!session.retransmitRun.allowRetransmit(missing)) {
+        LOG_ERROR("DMShell: peer has not acknowledged seq=%u after %u retransmissions, closing session", missing,
+                  (unsigned)session.retransmitRun.repeatCount());
+        closeSession("peer_unresponsive", true);
+        return;
+    }
+
+    LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting (%u)", missing,
+             (unsigned)session.retransmitRun.repeatCount());
     resendFramesFrom(missing);
 }
 
