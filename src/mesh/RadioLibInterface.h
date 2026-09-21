@@ -326,10 +326,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
     uint32_t activeReceiveStart = 0;
     /// When receiveDetected() last ran, and so how long it had been since anything looked at the IRQ
-    /// flags. The HEADER_VALID deadline is a multiple of symbol time and knows nothing about the
-    /// scheduler or the SPI bus, so the two are only comparable if both are measured. Reported on
-    /// every false-detection verdict, and acted on by shouldDeferPreambleVerdict(): a verdict reached
-    /// by a look older than the deadline it judges has not observed the window at all.
+    /// flags. Looks come from the transmit path, one per CSMA backoff; the HEADER_VALID deadline is a
+    /// multiple of symbol time. Both are derived from the same modem preset and they scale apart, so
+    /// the two are only comparable if both are measured. Reported on every false-detection verdict, and
+    /// acted on by shouldDeferPreambleVerdict(): a verdict reached by a look older than the deadline it
+    /// judges has not observed the window at all.
     uint32_t lastReceiveDetectedMs = 0;
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
