@@ -933,6 +933,29 @@ void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h->consecutiveFailures, "the next hop is not charged for our airtime");
 }
 
+// The minutes quoted to the client are for the ladder, not the rung. 89 990 ms spent in two
+// buckets fifty minutes ago, 8 s frames: one rung and its ack need 16 s, which fit once the older
+// bucket (29 990 ms) has aged out - nine minutes; a reliable DM's five rungs need 48 s and must
+// wait for the fuller one too - ten.
+void test_quoted_wait_covers_the_whole_ladder(void)
+{
+    radio->packetTimeMsec = 8000;
+    useAirTimeWithRemaining(10);
+    Time::advanceTestMillis(50u * 60u * 1000u);
+    Time::serviceMonotonic();
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    auto plain = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/false);
+
+    TEST_ASSERT_EQUAL_UINT8(NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS, reliableShim->sendAttempts(&dm));
+    TEST_ASSERT_EQUAL_UINT8(1, reliableShim->sendAttempts(&plain));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(9, reliableShim->dutyCycleWaitMinutes(&plain), "one rung and its ack: nine minutes");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(10, reliableShim->dutyCycleWaitMinutes(&dm), "five rungs and an ack: ten");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(airTime->getSilentMinutes(2.5f, 5u * 8000u + 8000u), reliableShim->dutyCycleWaitMinutes(&dm),
+                                    "...which is the ring's own answer for that much airtime");
+}
+
 // The control: with airtime for the rung, the ladder runs exactly as before.
 void test_admitted_retry_rung_still_goes(void)
 {
@@ -1016,6 +1039,7 @@ void setup()
     RUN_TEST(test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once);
     RUN_TEST(test_refused_retry_rung_ends_a_relayed_ladder_quietly);
     RUN_TEST(test_admitted_retry_rung_still_goes);
+    RUN_TEST(test_quoted_wait_covers_the_whole_ladder);
 
     int result = UNITY_END();
     airTimeFixture.reset();

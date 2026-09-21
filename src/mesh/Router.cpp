@@ -14,6 +14,7 @@
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
 #include <ErriezCRC32.h>
+#include <algorithm>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
@@ -476,9 +477,15 @@ uint8_t Router::dutyCycleWaitMinutes(const meshtastic_MeshPacket *p)
         return 0;
 
     const uint32_t reserveMs = p->priority >= meshtastic_MeshPacket_Priority_ACK ? 0 : ackAirtimeMsec();
-    const uint32_t proposedMs = (iface ? iface->getPacketTime(p) : 0) + reserveMs;
-    // Zero exactly when the packet is admitted: getSilentMinutes() is the complement of the gate.
-    return airTime->getSilentMinutes(effectiveDutyCycle, proposedMs);
+    const uint32_t packetMs = iface ? iface->getPacketTime(p) : 0;
+    if (!airTime->wouldExceedDutyCycle(packetMs + reserveMs, effectiveDutyCycle))
+        return 0;
+
+    // Refused. Quote the wait for the ladder the packet is entitled to, not for the one rung that
+    // was just refused: at least one minute, since one rung already did not fit.
+    const uint32_t attempts = std::min<uint32_t>(sendAttempts(p), DUTY_CYCLE_QUOTED_ATTEMPTS);
+    const uint8_t minutes = airTime->getSilentMinutes(effectiveDutyCycle, attempts * packetMs + reserveMs);
+    return minutes ? minutes : 1;
 }
 
 void Router::notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, bool retry)
