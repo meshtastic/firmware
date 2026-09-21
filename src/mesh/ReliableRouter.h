@@ -33,7 +33,7 @@ class ReliableRouter : public NextHopRouter
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
 
     /**
-     * Implicit ACK for our own packet overheard being relayed: (from,id) match, and for an encrypted copy the
+     * Implicit ACK for our own packet overheard being relayed: (from,id) match, and for a PKI DM the exact
      * ciphertext send() recorded. Needs no decode, so it runs from the opaque short-circuit too.
      */
     virtual void perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *p) override;

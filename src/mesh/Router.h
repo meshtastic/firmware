@@ -142,14 +142,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
 
     /**
-     * ACK our own pending packet when we overhear it being relayed: header match (from/id) plus, for an
-     * encrypted copy, our exact ciphertext. Split out of shouldFilterReceived() so it also runs when the
+     * ACK our own pending packet when we overhear it being relayed: header match (from/id) plus, for a
+     * PKI DM, our exact ciphertext. Split out of shouldFilterReceived() so it also runs when the
      * auth gate short-circuits a packet we cannot decrypt (a PKI DM we originated is opaque to us, so
      * without this the client never sees "Delivered to mesh" for DMs).
      */
     virtual void perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *) {}
 
-    /** Called by send() with the encoded packet, so a retransmitting router can record its wire form. */
+    /** Called by send() with the encoded packet, so a retransmitting router can record a PKI frame's wire form. */
     virtual void noteWireForm(const meshtastic_MeshPacket *) {}
 
     /**

@@ -377,23 +377,17 @@ PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
 
 void NextHopRouter::noteWireForm(const meshtastic_MeshPacket *p)
 {
-    if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
+    // Only a PKI payload is bound to the exact bytes: a relay that holds the channel key re-encodes what it
+    // forwards (traceroute rewrites it, an older firmware drops fields it does not know), so those keep the
+    // header-only ACK. The pending copy stays decoded, so a retry re-encodes and re-records here.
+    if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag || !p->pki_encrypted)
         return;
     // p->from for origin safety: by here Router::send() has replaced a phone-originated 0 with our own
     // node number, so this is an address we set, not one a client chose. Before that line, use getFrom().
     PendingPacket *rec = findPendingPacket(p->from, p->id);
-    if (!rec || !rec->packet)
+    if (!rec)
         return;
-    if (p->encrypted.size > sizeof(rec->packet->encrypted.bytes)) {
-        LOG_ERROR("Wire form %u exceeds packet capacity, not recorded", (unsigned)p->encrypted.size);
-        return; // leave the copy decoded: no record, no implicit ACK
-    }
-    // The retransmission copy becomes the frame we actually sent. Router::send() only encodes a
-    // decoded packet, so a retry now re-sends these exact bytes instead of re-encoding - which also
-    // keeps every copy on the air identical when a signature mixes in fresh randomness per encode.
-    memcpy(rec->packet->encrypted.bytes, p->encrypted.bytes, p->encrypted.size);
-    rec->packet->encrypted.size = p->encrypted.size;
-    rec->packet->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    rec->wire.assign(p->encrypted.bytes, p->encrypted.bytes + p->encrypted.size);
 }
 
 /**

@@ -878,6 +878,29 @@ void test_implicit_ack_for_opaque_own_packet(void)
     reliableShim->clearPendingForTest();
 }
 
+// A retry is the pending copy sent again through Router::send(), so it must be encoded again: the same
+// channel hash in the header byte as the first frame, not the index the copy was queued with. A retry
+// carrying the index is undecodable to every neighbour.
+void test_retry_frame_carries_the_same_channel_hash_as_the_first(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    const auto first = seedViaSend(original);
+    TEST_ASSERT_NOT_EQUAL(1, first.channel); // fixture: the hash must differ from the index for this to prove anything
+
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    reliableShim->runDueRetries();
+
+    TEST_ASSERT_EQUAL_UINT32(2, reliableRadio->sentPackets.size());
+    const auto &retry = reliableRadio->sentPackets.back();
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, retry.which_payload_variant);
+    TEST_ASSERT_EQUAL_UINT8(first.channel, retry.channel);
+    TEST_ASSERT_EQUAL_UINT32(first.encrypted.size, retry.encrypted.size);
+    TEST_ASSERT_EQUAL_MEMORY(first.encrypted.bytes, retry.encrypted.bytes, first.encrypted.size); // same key, same nonce
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+
+    reliableShim->clearPendingForTest();
+}
+
 // Someone else's traffic must never mint an ACK, even with a colliding id.
 void test_implicit_ack_ignores_foreign_pkt(void)
 {
@@ -1149,6 +1172,7 @@ void setup()
 
     printf("\n=== pending retransmission bookkeeping ===\n");
     RUN_TEST(test_implicit_ack_for_opaque_own_packet);
+    RUN_TEST(test_retry_frame_carries_the_same_channel_hash_as_the_first);
     RUN_TEST(test_implicit_ack_ignores_foreign_pkt);
     RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
     RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
