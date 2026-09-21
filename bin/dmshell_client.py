@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import os
 import queue
 import random
@@ -14,7 +15,7 @@ import termios
 import threading
 import time
 import tty
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, TextIO
@@ -179,6 +180,17 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_OPEN_TIMEOUT_SEC,
         help="seconds to wait for OPEN_OK (needs to be generous on slow presets; default %(default)s)",
+    )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="print a traffic summary to stderr when the session ends",
+    )
+    parser.add_argument(
+        "--stats-json",
+        type=Path,
+        default=None,
+        help="write the same traffic summary to this file as JSON (implies --stats)",
     )
     parser.add_argument("--verbose", action="store_true", help="print extra protocol events")
     parser.add_argument(
@@ -451,6 +463,12 @@ class SessionState:
     peer_log_file: Optional[TextIO] = None
     peer_log_path: Optional[Path] = None
     peer_log_records: int = 0
+    # Cumulative counters behind their own lock, for the end-of-session summary. Every one is
+    # monotonic for the life of the session, unlike input_retransmits and missing_request_attempts,
+    # which reset per sequence number and so describe the current gap rather than the run.
+    stats_lock: threading.Lock = field(default_factory=threading.Lock)
+    stats: Counter = field(default_factory=Counter)
+    stats_started_at: float = field(default_factory=time.monotonic)
     last_transport_activity_time: float = field(default_factory=time.monotonic)
     # Inbound only. The heartbeat has to key off the peer's silence, not off any traffic: our own
     # keystrokes used to suppress it (see heartbeat_due).
@@ -664,6 +682,7 @@ class SessionState:
             if self.input_retransmits >= MAX_INPUT_RETRANSMITS:
                 return (missing, True)
             self.input_retransmits += 1
+            self.bump("input_retransmits_total")
             if self.input_retransmits > MISSING_SEQ_RETRY_FLAT_ATTEMPTS:
                 self.input_retransmit_interval = min(self.input_retransmit_interval * 2, MISSING_SEQ_RETRY_MAX_SEC)
             self.next_input_retransmit_time = now + self.input_retransmit_interval
@@ -675,6 +694,15 @@ class SessionState:
                 self.highest_seen_rx_seq = seq
 
     def note_received_seq(self, seq: int) -> tuple[str, Optional[int]]:
+        outcome = self._note_received_seq_locked(seq)
+        if seq != 0:
+            # Sequenced frames only. A control frame carries seq 0 and is counted by op instead, so
+            # rx_frames_total stays comparable with the peer's highest sent sequence number.
+            self.bump("rx_frames_total")
+            self.bump(f"rx_frames_{outcome[0]}")
+        return outcome
+
+    def _note_received_seq_locked(self, seq: int) -> tuple[str, Optional[int]]:
         with self.tx_lock:
             if seq == 0:
                 return ("process", None)
@@ -707,8 +735,13 @@ class SessionState:
                 return
             if shell.seq not in self.pending_rx_frames:
                 self.pending_rx_frames[shell.seq] = shell
+                held = True
+            else:
+                held = False
             if shell.seq > self.highest_seen_rx_seq:
                 self.highest_seen_rx_seq = shell.seq
+        if held:
+            self.bump("rx_frames_held_for_gap")
 
     def pop_next_buffered_frame(self):
         with self.tx_lock:
@@ -761,6 +794,7 @@ class SessionState:
             self.replay_log_file.flush()
 
     def log_replay_event(self, event: str, seq: int, detail: str = "") -> None:
+        self.bump(f"replay_{event}")
         with self.replay_log_lock:
             if self.replay_log_file is None:
                 return
@@ -798,9 +832,97 @@ class SessionState:
             except OSError:
                 pass
 
+    def bump(self, name: str, n: int = 1) -> None:
+        with self.stats_lock:
+            self.stats[name] += n
+
+    def op_names(self) -> dict[int, str]:
+        """Op number -> name, read off the compiled protobuf rather than hard-coded."""
+        names = {}
+        for name in ("OPEN", "OPEN_OK", "INPUT", "OUTPUT", "RESIZE", "ACK", "PING", "PONG", "CLOSE", "CLOSED", "ERROR"):
+            value = getattr(self.pb2.mesh.RemoteShell, name, None)
+            if isinstance(value, int):
+                names[value] = name
+        return names
+
+    def stats_summary(self) -> dict:
+        """A session's traffic, as counts and the two ratios worth comparing between runs.
+
+        Everything here is cumulative over the session. The loss figures are one-directional: we can
+        only count what arrived, so inbound loss is inferred from the gap between the peer's highest
+        sequence number and what we delivered in order, and outbound loss is not observable from this
+        end at all - our retransmission count is the proxy.
+        """
+        with self.stats_lock:
+            c = dict(self.stats)
+        elapsed = max(time.monotonic() - self.stats_started_at, 1e-6)
+        with self.tx_lock:
+            peer_highest = max(self.highest_seen_rx_seq, self.last_rx_seq)
+            our_originated = max(self.next_seq - 1, 0)
+
+        rx_total = c.get("rx_frames_total", 0)
+        rx_ok = c.get("rx_frames_process", 0)
+        rx_dup = c.get("rx_frames_duplicate", 0)
+        tx_total = c.get("tx_frames_total", 0)
+
+        out = {
+            "elapsed_sec": round(elapsed, 1),
+            "peer_highest_seq": peer_highest,
+            "inbound": {
+                "frames_arrived": rx_total,
+                "delivered_in_order": rx_ok,
+                "duplicates": rx_dup,
+                "classified_as_gap": c.get("rx_frames_gap", 0),
+                "held_for_gap": c.get("rx_frames_held_for_gap", 0),
+                # Frames the peer numbered that we never delivered. Negative is impossible; zero
+                # with a non-zero peer_highest_seq is a clean run.
+                "never_delivered": max(peer_highest - rx_ok, 0),
+                "loss_rate": round(1 - (rx_ok / peer_highest), 4) if peer_highest else None,
+                "duplicate_rate": round(rx_dup / rx_total, 4) if rx_total else None,
+                "output_bytes": c.get("rx_output_bytes", 0),
+                "output_bytes_per_sec": round(c.get("rx_output_bytes", 0) / elapsed, 1),
+            },
+            "outbound": {
+                "frames_transmitted": tx_total,
+                "frames_originated": our_originated,
+                # Transmissions spent per frame we had to originate. 1.0 is perfect; above 1.0 is
+                # retransmissions, replays and acks. This is the airtime cost of the recovery scheme.
+                "transmissions_per_frame": round(tx_total / our_originated, 3) if our_originated else None,
+                "input_retransmits": c.get("input_retransmits_total", 0),
+                "payload_bytes": c.get("tx_payload_bytes", 0),
+                "by_op": {},
+            },
+            "recovery": {
+                "replay_requests_sent": c.get("replay_requests_sent", 0),
+                "replays_received": c.get("replay_replay_received", 0),
+                "replays_sent_to_peer": c.get("replay_replay_sent", 0),
+                "replay_unavailable": c.get("replay_replay_unavailable", 0),
+                "replay_evicted": c.get("replay_replay_evicted", 0),
+                "distinct_gaps": c.get("distinct_gaps", 0),
+                "request_reasons": {
+                    k[len("replay_requests_sent_"):]: v
+                    for k, v in sorted(c.items())
+                    if k.startswith("replay_requests_sent_")
+                },
+            },
+        }
+        names = self.op_names()
+        for key, value in sorted(c.items()):
+            if key.startswith("tx_frames_op_"):
+                op = int(key[len("tx_frames_op_"):])
+                out["outbound"]["by_op"][names.get(op, f"op{op}")] = value
+        return out
+
     def note_missing_seq_requested(self, seq: int, reason: str) -> None:
         with self.tx_lock:
+            first_time = seq not in self.requested_missing_seqs
             self.requested_missing_seqs.add(seq)
+        self.bump("replay_requests_sent")
+        self.bump(f"replay_requests_sent_{reason}")
+        if first_time:
+            # Distinct gaps, not requests. A gap asked about five times is one gap, and the ratio
+            # between the two is the damping working.
+            self.bump("distinct_gaps")
         self.log_replay_event("missing_requested", seq, f"reason={reason}")
 
     def note_replayed_seq_received(self, seq: int) -> None:
@@ -899,10 +1021,18 @@ def send_shell_frame(
     # Held across allocation and transmission both: the input, heartbeat and reader threads all send,
     # and a sequence number that reaches the radio out of order reads as a gap at the far end.
     with state.socket_lock:
-        return _send_shell_frame_locked(
+        sent = _send_shell_frame_locked(
             transport, state, op, payload, cols, rows, session_id, ack_seq, seq, flags, last_tx_seq, last_rx_seq,
             remember, heartbeat,
         )
+    # Outside the socket lock: this is the only path every outbound frame takes, so counting here
+    # makes tx_frames_total the number of transmissions the radio was asked for, retransmissions and
+    # replays included. That is the denominator the resend ratio needs.
+    state.bump("tx_frames_total")
+    state.bump(f"tx_frames_op_{op}")
+    if payload:
+        state.bump("tx_payload_bytes", len(payload))
+    return sent
 
 
 def _send_shell_frame_locked(
@@ -1178,6 +1308,7 @@ def reader_loop(transport, state: SessionState) -> None:
                 state.event_queue.put(f"replay log: {state.replay_log_path}")
         elif shell.op == state.pb2.mesh.RemoteShell.OUTPUT:
             if shell.payload:
+                state.bump("rx_output_bytes", len(shell.payload))
                 sys.stdout.buffer.write(shell.payload)
                 sys.stdout.buffer.flush()
         elif shell.op == state.pb2.mesh.RemoteShell.ERROR:
@@ -1480,6 +1611,54 @@ def run_interactive_mode(transport, state: SessionState) -> None:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
 
 
+def report_session_stats(state: SessionState, json_path: Optional[Path]) -> None:
+    """Print the session's traffic summary, and optionally write it as JSON for an A/B."""
+    summary = state.stats_summary()
+    if json_path is not None:
+        try:
+            json_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            print(f"[dmshell] wrote traffic summary to {json_path}", file=sys.stderr)
+        except OSError as exc:
+            # Never let a bad path lose the numbers: they still go to stderr below.
+            print(f"[dmshell] could not write {json_path}: {exc}", file=sys.stderr)
+
+    inbound = summary["inbound"]
+    outbound = summary["outbound"]
+    recovery = summary["recovery"]
+    lines = [
+        f"session {summary['elapsed_sec']}s, peer reached seq {summary['peer_highest_seq']}",
+        "  in : {arrived} frames arrived, {ok} delivered in order, {dup} duplicate, {held} held for a gap".format(
+            arrived=inbound["frames_arrived"], ok=inbound["delivered_in_order"],
+            dup=inbound["duplicates"], held=inbound["held_for_gap"],
+        ),
+        "       {never} never delivered, loss {loss}, duplicate {duprate}".format(
+            never=inbound["never_delivered"],
+            loss=_as_percent(inbound["loss_rate"]),
+            duprate=_as_percent(inbound["duplicate_rate"]),
+        ),
+        "       {b} output bytes, {bps}/s".format(b=inbound["output_bytes"], bps=inbound["output_bytes_per_sec"]),
+        "  out: {tx} transmissions for {orig} originated frames ({ratio} per frame), {rt} input retransmits".format(
+            tx=outbound["frames_transmitted"], orig=outbound["frames_originated"],
+            ratio=outbound["transmissions_per_frame"], rt=outbound["input_retransmits"],
+        ),
+        "       by op: " + (", ".join(f"{k}={v}" for k, v in sorted(outbound["by_op"].items())) or "none"),
+        "  rec: {req} replay requests over {gaps} distinct gaps, {got} replays received, "
+        "{sent} sent to peer, {unavail} unavailable, {evict} evicted".format(
+            req=recovery["replay_requests_sent"], gaps=recovery["distinct_gaps"],
+            got=recovery["replays_received"], sent=recovery["replays_sent_to_peer"],
+            unavail=recovery["replay_unavailable"], evict=recovery["replay_evicted"],
+        ),
+    ]
+    if recovery["request_reasons"]:
+        lines.append("       request reasons: " + ", ".join(f"{k}={v}" for k, v in recovery["request_reasons"].items()))
+    for line in lines:
+        print(f"[dmshell] {line}", file=sys.stderr)
+
+
+def _as_percent(value: Optional[float]) -> str:
+    return "n/a" if value is None else f"{value * 100:.2f}%"
+
+
 def main() -> int:
     args = parse_args()
     pb2 = load_proto_modules()
@@ -1534,6 +1713,8 @@ def main() -> int:
         if args.peer_log is not None:
             state.close_peer_log()
             print(f"[dmshell] captured {state.peer_log_records} log records from the node", file=sys.stderr)
+        if args.stats or args.stats_json is not None:
+            report_session_stats(state, args.stats_json)
 
     return 0
 
