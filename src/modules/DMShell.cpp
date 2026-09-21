@@ -303,7 +303,17 @@ int32_t DMShellModule::runOnce()
         // returning before the read also stops lastActivityMs being refreshed below, which is what
         // lets SESSION_IDLE_TIMEOUT_MS finally mean something - a peer that has vanished no longer
         // keeps us transmitting, because we stop and then time out.
+        if (!session.txWindowBlocked) {
+            session.txWindowBlocked = true;
+            LOG_INFO("DMShell: window closed at %u unacknowledged frames, waiting for the peer",
+                     (unsigned)session.txWindow.outstanding());
+        }
         return 100;
+    }
+
+    if (session.txWindowBlocked) {
+        session.txWindowBlocked = false;
+        LOG_INFO("DMShell: window reopened, %u unacknowledged frames", (unsigned)session.txWindow.outstanding());
     }
 
     uint8_t outBuf[MAX_MESSAGE_SIZE];
@@ -438,6 +448,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.rxWindow.reset(frame.seq);
     session.txHistoryWindow.reset();
     session.txWindow.reset(txWindowFrames);
+    session.txWindowBlocked = false;
     session.lastActivityMs = millis();
 
     meshtastic_RemoteShell newFrame = {

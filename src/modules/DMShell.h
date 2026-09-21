@@ -25,6 +25,9 @@ struct DMShellSession {
     uint32_t lastActivityMs = 0;
     DMShellRxWindow rxWindow;
     DMShellTxWindow txWindow;
+    // Purely for logging: the window opens and closes many times a second, so only transitions are
+    // worth a line, and without them there is no way to tell from a log whether it ever engaged.
+    bool txWindowBlocked = false;
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
