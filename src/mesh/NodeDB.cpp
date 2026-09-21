@@ -839,8 +839,10 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 #if !MESHTASTIC_EXCLUDE_BEACON
     // A userPrefs build writes broadcast targets and the offer straight into moduleConfig, so this
     // is the only point that catches a combination no radio can key up on. Channels are live above.
-    if (moduleConfig.has_mesh_beacon)
+    if (moduleConfig.has_mesh_beacon) {
         MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
+        MeshBeaconModule::upsertByValueChannels(moduleConfig.mesh_beacon);
+    }
 #endif
 }
 
@@ -1602,22 +1604,11 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
     moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
 #endif
-// The by-value default channel, inherited by any target that names no index of its own.
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
-            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
-    moduleConfig.mesh_beacon.broadcast_on_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1] = '\0';
-#endif
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
-    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
-    {
-        static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
-        static_assert(sizeof(beaconOnPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes),
-                      "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
-        memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
-        moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
-    }
+// The by-value default target channel (broadcast_on_channel) is not in the released proto, so a
+// preconfigured target names its channel by table index.
+#if defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_ON_CHANNEL_PSK)
+#error                                                                                                                           \
+    "USERPREFS_MESH_BEACON_ON_CHANNEL_{NAME,PSK} removed; provision the channel and use USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX"
 #endif
 // A destination's region, preset and slot now live on the target that uses them.
 #ifdef USERPREFS_MESH_BEACON_ON_REGION

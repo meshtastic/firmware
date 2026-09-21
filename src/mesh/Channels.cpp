@@ -475,9 +475,11 @@ static uint8_t canonicalPsk(const uint8_t *psk, uint8_t pskLen, uint8_t *out)
 // Identity is the name and the PSK only; role is the caller's business. The name compares
 // case-sensitively because generateHash() xors the raw bytes, so two spellings differing only in
 // case are different channels on the air and must not be collapsed onto one slot.
-static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantName, const uint8_t *wantKey, uint8_t wantKeyLen)
+static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantName, const uint8_t *wantKey, uint8_t wantKeyLen,
+                                bool wantAead)
 {
-    if (!ch.has_settings)
+    // AEAD and CTR on one key are two channels: each rejects the other's packets.
+    if (!ch.has_settings || ch.settings.use_aead != wantAead)
         return false;
     uint8_t haveKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
     const uint8_t haveKeyLen = canonicalPsk(ch.settings.psk.bytes, (uint8_t)ch.settings.psk.size, haveKey);
@@ -488,7 +490,7 @@ static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantNa
     return strcmp(have, wantName) == 0;
 }
 
-int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen)
+int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead)
 {
     char want[sizeof(meshtastic_ChannelSettings::name)];
     resolveIdentityName(name, want, sizeof(want));
@@ -499,18 +501,18 @@ int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t p
         const meshtastic_Channel &ch = channelFile.channels[i];
         if (ch.role == meshtastic_Channel_Role_DISABLED)
             continue;
-        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen))
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen, useAead))
             return i;
     }
     return -1;
 }
 
-int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen)
+int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead)
 {
     if (pskLen > sizeof(meshtastic_ChannelSettings::psk.bytes))
         return -1;
 
-    const int16_t live = findByIdentity(name, psk, pskLen);
+    const int16_t live = findByIdentity(name, psk, pskLen, useAead);
     if (live >= 0)
         return live; // already in the table, write nothing
 
@@ -529,7 +531,7 @@ int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t p
             continue;
         if (slot < 0)
             slot = i;
-        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen)) {
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen, useAead)) {
             slot = i;
             break;
         }
@@ -544,6 +546,7 @@ int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t p
     strncpy(c.settings.name, name, sizeof(c.settings.name) - 1);
     c.settings.psk.size = pskLen;
     memcpy(c.settings.psk.bytes, psk, pskLen);
+    c.settings.use_aead = useAead;
     setChannel(c);
     onConfigChanged();
     return slot;

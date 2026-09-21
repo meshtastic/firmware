@@ -92,7 +92,7 @@ class MeshBeaconModule
     /**
      * Reject only what can never become valid; sendBeacon() resolves the rest against the settings
      * in force. Called on an admin write, at boot, and when a LoRa change moves what can be run.
-     * Every destination comes from broadcast_targets; broadcast_on_channel is only their default.
+     * Every destination comes from broadcast_targets.
      */
     static void sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
@@ -120,9 +120,9 @@ class MeshBeaconModule
     // would refuse the response and NAK our own client, leaving the administrator only silence.
     static bool fitsRemoteAdmin(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
-    // Place the by-value offer and target channels in the channel table, so the TX path can find
-    // their keys. An entry whose channel will not fit is withheld, never re-pointed at another
-    // channel, and no live channel is ever evicted. Returns true when the table was written.
+    // Place the by-value offer channel in the channel table, so the node holds what it advertises.
+    // An offer whose channel will not fit is withheld, never re-pointed at another channel, and no
+    // live channel is ever evicted. Returns true when the table was written.
     static bool upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     /** Copy every offer field from config onto an outgoing beacon. */
@@ -141,8 +141,10 @@ class MeshBeaconModule
 
     // Default a blank name to the TARGET preset's display name - not Channels::getName(), which
     // resolves it against the RUNNING preset. A node joining on the target preset derives the same.
+    // usePreset=false resolves to "Custom", as getName() does for a node on custom modem params.
     static meshtastic_ChannelSettings beaconChannelSettings(const meshtastic_ChannelSettings &base,
-                                                            meshtastic_Config_LoRaConfig_ModemPreset preset);
+                                                            meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                                            bool usePreset = true);
 
     /** Where a target transmits: the channel-table slot, and the name its frequency slot hashes from. */
     struct BeaconChannel {
@@ -153,7 +155,8 @@ class MeshBeaconModule
 
     // Out of range or disabled means the target is skipped, so admin validation and the TX path
     // cannot disagree about which channel a target runs on, nor which slot it lands on.
-    static BeaconChannel resolveBeaconChannel(bool hasIndex, uint32_t index, meshtastic_Config_LoRaConfig_ModemPreset preset);
+    static BeaconChannel resolveBeaconChannel(bool hasIndex, uint32_t index, meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                              bool usePreset = true);
 
   protected:
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
@@ -232,7 +235,7 @@ class MeshBeaconListenerModule : public ProtobufModule<meshtastic_MeshBeacon>, p
         bool valid;
         NodeNum sender;
         bool has_channel;
-        meshtastic_ChannelIdentity channel;
+        meshtastic_ChannelSettings channel;
         meshtastic_Config_LoRaConfig_RegionCode region;
         meshtastic_Config_LoRaConfig_ModemPreset preset;
         // Present only when the sender could not expect us to derive it; unset means derive.

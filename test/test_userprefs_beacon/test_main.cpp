@@ -27,30 +27,19 @@
 void setUp(void) {}
 void tearDown(void) {}
 
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
 
-static const uint8_t kOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
 static const uint8_t kOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
 
-// The by-value default: name and PSK carried outright, so a vendor never has to describe a channel
-// table index that may not hold what they expect.
-static void test_on_channel_carries_its_own_name_and_psk()
-{
-    const auto &b = moduleConfig.mesh_beacon;
-    TEST_ASSERT_TRUE(b.has_broadcast_on_channel);
-    TEST_ASSERT_EQUAL_UINT(sizeof(kOnPsk), b.broadcast_on_channel.psk.size);
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(kOnPsk, b.broadcast_on_channel.psk.bytes, sizeof(kOnPsk));
-}
-
-// ChannelIdentity.name is a char[12] and the fixture name is longer; the old ON_* block this
+// ChannelSettings.name is a char[12] and the fixture name is longer; the old ON_* block this
 // replaces is where a strcpy would have run off the end.
-static void test_over_long_on_channel_name_is_truncated_and_terminated()
+static void test_over_long_offer_channel_name_is_truncated_and_terminated()
 {
-    const auto &name = moduleConfig.mesh_beacon.broadcast_on_channel.name;
-    TEST_ASSERT_TRUE(strlen(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME) >= sizeof(name));
+    const auto &name = moduleConfig.mesh_beacon.broadcast_offer_channel.name;
+    TEST_ASSERT_TRUE(strlen(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME) >= sizeof(name));
     TEST_ASSERT_EQUAL_UINT(sizeof(name) - 1, strlen(name));
     TEST_ASSERT_EQUAL_CHAR('\0', name[sizeof(name) - 1]);
-    TEST_ASSERT_EQUAL_MEMORY(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME, name, sizeof(name) - 1);
+    TEST_ASSERT_EQUAL_MEMORY(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME, name, sizeof(name) - 1);
 }
 
 // Region carries no has_ flag - UNSET is the absence - so an in-process writer that sets only the
@@ -65,14 +54,15 @@ static void test_target_region_preset_and_slot_are_applied()
     TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_TARGET_0_PRESET, t.preset);
     TEST_ASSERT_TRUE(t.has_frequency_slot);
     TEST_ASSERT_EQUAL_UINT32(USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT, t.frequency_slot);
-    TEST_ASSERT_FALSE_MESSAGE(t.has_channel_index, "it inherits the by-value default rather than naming a slot");
+    TEST_ASSERT_FALSE_MESSAGE(t.has_channel_index, "no index named, so it transmits on the primary");
 }
 
 static void test_offer_channel_is_applied()
 {
     const auto &b = moduleConfig.mesh_beacon;
     TEST_ASSERT_TRUE(b.has_broadcast_offer_channel);
-    TEST_ASSERT_EQUAL_STRING(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME, b.broadcast_offer_channel.name);
+    TEST_ASSERT_EQUAL_MEMORY(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME, b.broadcast_offer_channel.name,
+                             sizeof(b.broadcast_offer_channel.name) - 1);
     TEST_ASSERT_EQUAL_UINT(sizeof(kOfferPsk), b.broadcast_offer_channel.psk.size);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(kOfferPsk, b.broadcast_offer_channel.psk.bytes, sizeof(kOfferPsk));
     TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_OFFER_REGION, b.broadcast_offer_region);
@@ -95,19 +85,29 @@ static void test_below_floor_interval_is_clamped()
     TEST_ASSERT_EQUAL_UINT32(default_mesh_beacon_min_broadcast_interval_secs, moduleConfig.mesh_beacon.broadcast_interval_secs);
 }
 
-// The fixture names no indexed target, so the by-value half is the one that stands.
+// The fixture's target and offer are valid, so the boot gate must leave both standing.
 static void test_by_value_target_is_not_cleared_by_the_boot_gate()
 {
-    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_offer_channel);
     TEST_ASSERT_EQUAL_UINT(1, moduleConfig.mesh_beacon.broadcast_targets_count);
 
     // Idempotent: running the gate again must not erode a config it already accepted.
     MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
-    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_channel);
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_offer_channel);
     TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_TARGET_0_REGION, moduleConfig.mesh_beacon.broadcast_targets[0].region);
 }
 
-// A vendor shipping both channels by value must still be administrable from a phone over LoRa.
+// A vendor build never passes through AdminModule either for placement: the boot gate is where the
+// offered channel enters the table, so the node holds what it advertises from the first boot.
+static void test_offer_channel_is_placed_in_the_table_at_boot()
+{
+    const auto &ch = moduleConfig.mesh_beacon.broadcast_offer_channel;
+    const int16_t idx = channels.findByIdentity(ch.name, ch.psk.bytes, (uint8_t)ch.psk.size, ch.use_aead);
+    TEST_ASSERT_GREATER_THAN_INT16_MESSAGE(0, idx, "placed as a secondary, never in the primary slot");
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(idx).role);
+}
+
+// A vendor shipping the offer by value must still be administrable from a phone over LoRa.
 static void test_shipped_config_fits_a_remote_admin_read_back()
 {
     TEST_ASSERT_TRUE(MeshBeaconModule::fitsRemoteAdmin(moduleConfig.mesh_beacon));
@@ -118,7 +118,6 @@ static void test_shipped_config_fits_a_remote_admin_read_back()
 static void test_stock_build_ships_no_beacon_target()
 {
     const auto &b = moduleConfig.mesh_beacon;
-    TEST_ASSERT_FALSE(b.has_broadcast_on_channel);
     TEST_ASSERT_FALSE(b.has_broadcast_offer_channel);
     TEST_ASSERT_EQUAL_UINT(0, b.broadcast_targets_count);
 }
@@ -135,10 +134,9 @@ UPB_TEST_ENTRY void setup()
 
     UNITY_BEGIN();
 
-#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
     printf("\n=== by-value beacon userPrefs ===\n");
-    RUN_TEST(test_on_channel_carries_its_own_name_and_psk);
-    RUN_TEST(test_over_long_on_channel_name_is_truncated_and_terminated);
+    RUN_TEST(test_over_long_offer_channel_name_is_truncated_and_terminated);
     RUN_TEST(test_target_region_preset_and_slot_are_applied);
     RUN_TEST(test_offer_channel_is_applied);
     RUN_TEST(test_flags_and_message_are_applied);
@@ -146,6 +144,7 @@ UPB_TEST_ENTRY void setup()
     printf("\n=== the boot gate ===\n");
     RUN_TEST(test_below_floor_interval_is_clamped);
     RUN_TEST(test_by_value_target_is_not_cleared_by_the_boot_gate);
+    RUN_TEST(test_offer_channel_is_placed_in_the_table_at_boot);
     RUN_TEST(test_shipped_config_fits_a_remote_admin_read_back);
 #else
     printf("\n=== stock defaults (no beacon userPrefs) ===\n");

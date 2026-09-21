@@ -458,6 +458,26 @@ void test_upsert_places_new_channel_in_lowest_disabled_slot()
     TEST_ASSERT_EQUAL_INT16(1, channels.upsertIdentity("offered", offered, sizeof(offered)));
 }
 
+// AEAD and CTR on one name and key are two channels: each rejects the other's packets, so an
+// identity carries the flag and an upsert never resolves across it.
+void test_identity_aead_is_a_different_channel()
+{
+    static const uint8_t psk[16] = {0xAE, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    seedTableWithPrimary("mymesh", psk, sizeof(psk)); // CTR
+
+    TEST_ASSERT_EQUAL_INT16(0, channels.findByIdentity("mymesh", psk, sizeof(psk), false));
+    TEST_ASSERT_EQUAL_INT16(-1, channels.findByIdentity("mymesh", psk, sizeof(psk), true));
+
+    const int16_t placed = channels.upsertIdentity("mymesh", psk, sizeof(psk), true);
+    TEST_ASSERT_EQUAL_INT16(1, placed);
+    TEST_ASSERT_TRUE(channels.getByIndex(1).settings.use_aead);
+    TEST_ASSERT_FALSE(channels.getByIndex(0).settings.use_aead);
+    // And each identity now resolves to its own slot.
+    TEST_ASSERT_EQUAL_INT16(0, channels.findByIdentity("mymesh", psk, sizeof(psk), false));
+    TEST_ASSERT_EQUAL_INT16(1, channels.findByIdentity("mymesh", psk, sizeof(psk), true));
+}
+
 void test_upsert_same_name_different_psk_does_not_overwrite()
 {
     static const uint8_t oldPsk[1] = {0x01};
@@ -793,6 +813,7 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_upsert_prefers_the_disabled_slot_that_held_this_identity);
     RUN_TEST(test_upsert_pskSpellingsOfOneKeyShareASlot);
     RUN_TEST(test_identity_nameCaseIsSignificant);
+    RUN_TEST(test_identity_aead_is_a_different_channel);
 
     printf("\n=== decryptForHash bounds (#11046) ===\n");
     RUN_TEST(test_decryptforhash_rejects_out_of_range_index);

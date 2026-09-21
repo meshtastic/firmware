@@ -219,12 +219,12 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
 
 // Already present means nothing to write; absent means claim a disabled slot. wrote records
 // whether the table actually changed, so the caller knows to save SEGMENT_CHANNELS.
-static bool placeChannelIdentity(const meshtastic_ChannelIdentity &id, bool &wrote)
+static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, bool &wrote)
 {
     const uint8_t pskLen = (uint8_t)id.psk.size;
-    if (channels.findByIdentity(id.name, id.psk.bytes, pskLen) >= 0)
+    if (channels.findByIdentity(id.name, id.psk.bytes, pskLen, id.use_aead) >= 0)
         return true;
-    const int16_t idx = channels.upsertIdentity(id.name, id.psk.bytes, pskLen);
+    const int16_t idx = channels.upsertIdentity(id.name, id.psk.bytes, pskLen, id.use_aead);
     if (idx < 0)
         return false;
     wrote = true;
@@ -243,11 +243,6 @@ bool MeshBeaconModule::upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconC
         bcfg.has_broadcast_offer_preset = false;
         bcfg.has_broadcast_offer_frequency_slot = false;
     }
-
-    // The default target channel is different: the TX path needs its key to encrypt. The request
-    // is kept even when placement fails, so the entries inheriting it are skipped, not redirected.
-    if (bcfg.has_broadcast_on_channel && !placeChannelIdentity(bcfg.broadcast_on_channel, wrote))
-        LOG_WARN("Beacon: channel table full, broadcast_on_channel cannot be placed");
     return wrote;
 }
 
@@ -374,10 +369,11 @@ bool MeshBeaconModule::offerIsPlaceable(const meshtastic_ModuleConfig_MeshBeacon
         return true;
     meshtastic_Config_LoRaConfig probe = config.lora;
     probe.use_preset = true;
-    if (bcfg.has_broadcast_offer_preset)
-        probe.modem_preset = bcfg.broadcast_offer_preset;
     if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
         probe.region = bcfg.broadcast_offer_region;
+    // Same preset rule as offerFrequencySlot(), so the bound and the derivation agree.
+    probe.modem_preset =
+        bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : getRegion(probe.region)->getDefaultPreset();
     return bcfg.broadcast_offer_frequency_slot <= RadioInterface::frequencySlotCount(probe);
 }
 
@@ -391,9 +387,14 @@ void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic
     }
     if (bcfg.has_broadcast_offer_channel) {
         beacon.has_offer_channel = true;
-        beacon.offer_channel = bcfg.broadcast_offer_channel;
-        // PSK is included intentionally: this beacon is a public join-invitation. The offered
-        // channel is not secret - the PSK here is a convenience token, not a security boundary.
+        // What a joiner needs and nothing else: id, uplink/downlink and module_settings describe
+        // this node's posture, not the mesh. PSK is included intentionally: this beacon is a public
+        // join-invitation, and the PSK here is a convenience token, not a security boundary.
+        const meshtastic_ChannelSettings zeroed = meshtastic_ChannelSettings_init_zero;
+        beacon.offer_channel = zeroed;
+        memcpy(beacon.offer_channel.name, bcfg.broadcast_offer_channel.name, sizeof(beacon.offer_channel.name));
+        beacon.offer_channel.psk = bcfg.broadcast_offer_channel.psk;
+        beacon.offer_channel.use_aead = bcfg.broadcast_offer_channel.use_aead;
     }
     beacon.has_offer_preset = bcfg.has_broadcast_offer_preset;
     beacon.offer_preset = bcfg.broadcast_offer_preset;
@@ -413,13 +414,15 @@ uint32_t MeshBeaconModule::offerFrequencySlot(const meshtastic_ModuleConfig_Mesh
 {
     meshtastic_ChannelSettings offerCh;
     const bool hasOfferCh = offerChannelSettings(bcfg, offerCh);
-    const auto preset = bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : config.lora.modem_preset;
-
     meshtastic_Config_LoRaConfig probe = config.lora;
     probe.use_preset = true;
-    probe.modem_preset = preset;
     if (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
         probe.region = bcfg.broadcast_offer_region;
+    // An unset preset means the offered region's default, which is what the proto tells a receiver
+    // to derive with - not whatever this node happens to run.
+    const auto preset =
+        bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : getRegion(probe.region)->getDefaultPreset();
+    probe.modem_preset = preset;
 
     // An offer with no channel leaves this empty, which resolveFrequencySlot() reads as "hash the
     // preset name" - what a receiver derives when the offer names no channel to hash.
@@ -449,23 +452,27 @@ bool MeshBeaconModule::offerChannelSettings(const meshtastic_ModuleConfig_MeshBe
     strncpy(out.name, bcfg.broadcast_offer_channel.name, sizeof(out.name) - 1);
     out.psk.size = bcfg.broadcast_offer_channel.psk.size;
     memcpy(out.psk.bytes, bcfg.broadcast_offer_channel.psk.bytes, out.psk.size);
+    out.use_aead = bcfg.broadcast_offer_channel.use_aead; // part of the identity: CTR and AEAD twins differ
     return true;
 }
 
 meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtastic_ChannelSettings &base,
-                                                                   meshtastic_Config_LoRaConfig_ModemPreset preset)
+                                                                   meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                                                   bool usePreset)
 {
     meshtastic_ChannelSettings ch = base;
     // A blank name defaults to the preset's display name, so the beacon channel is identifiable
-    // rather than borrowing whatever the running node happens to call its primary.
+    // rather than borrowing whatever the running node happens to call its primary. Custom modem
+    // params resolve to "Custom": that is what every node on that mesh hashes its slot from.
     if (ch.name[0] == '\0')
-        strncpy(ch.name, DisplayFormatters::getModemPresetDisplayName(preset, false, true), sizeof(ch.name) - 1);
+        strncpy(ch.name, DisplayFormatters::getModemPresetDisplayName(preset, false, usePreset), sizeof(ch.name) - 1);
     ch.name[sizeof(ch.name) - 1] = '\0';
     return ch;
 }
 
 MeshBeaconModule::BeaconChannel MeshBeaconModule::resolveBeaconChannel(bool hasIndex, uint32_t index,
-                                                                       meshtastic_Config_LoRaConfig_ModemPreset preset)
+                                                                       meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                                                       bool usePreset)
 {
     BeaconChannel out = {};
     out.index = channels.getPrimaryIndex();
@@ -477,7 +484,7 @@ MeshBeaconModule::BeaconChannel MeshBeaconModule::resolveBeaconChannel(bool hasI
         if (out.usable)
             out.index = (ChannelIndex)index;
     }
-    const meshtastic_ChannelSettings resolved = beaconChannelSettings(channels.getByIndex(out.index).settings, preset);
+    const meshtastic_ChannelSettings resolved = beaconChannelSettings(channels.getByIndex(out.index).settings, preset, usePreset);
     strncpy(out.name, resolved.name, sizeof(out.name) - 1);
     out.name[sizeof(out.name) - 1] = '\0';
     return out;
@@ -752,7 +759,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
     // The mesh the offer describes, resolved the same way a target's is so the two compare. The
     // index is only for the redundancy test below; the offer itself never needs the table.
     const int16_t offerChannelIndex =
-        hasOfferChannel ? channels.findByIdentity(offerCh.name, offerCh.psk.bytes, (uint8_t)offerCh.psk.size) : -1;
+        hasOfferChannel ? channels.findByIdentity(offerCh.name, offerCh.psk.bytes, (uint8_t)offerCh.psk.size, offerCh.use_aead)
+                        : -1;
     const auto offerPreset = bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : config.lora.modem_preset;
     const auto offerRegion = (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                                  ? bcfg.broadcast_offer_region
@@ -763,17 +771,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const uint16_t homeSlot =
         (uint16_t)RadioInterface::resolveFrequencySlot(config.lora, channels.getName(channels.getPrimaryIndex()));
 
-    // The by-value default an entry inherits when it names no index. Resolved once - the table
-    // cannot change mid-loop, and findByIdentity is not free.
-    const int16_t defaultChannelIndex =
-        bcfg.has_broadcast_on_channel
-            ? channels.findByIdentity(bcfg.broadcast_on_channel.name, bcfg.broadcast_on_channel.psk.bytes,
-                                      (uint8_t)bcfg.broadcast_on_channel.psk.size)
-            : -1;
-    if (bcfg.has_broadcast_on_channel && defaultChannelIndex < 0)
-        LOG_WARN("Beacon: broadcast_on_channel is not in the table, entries without an index are skipped");
-
-    // An empty list still beacons once, on the node's running preset and region over the default
+    // An empty list still beacons once, on the node's running preset and region over the primary
     // channel. Each entry below overrides only what it sets.
     const int targetCount = bcfg.broadcast_targets_count > 0 ? (int)bcfg.broadcast_targets_count : 1;
 
@@ -808,14 +806,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         // The channel decides both the key and, through its name, the frequency slot. An index that
         // is out of range or disabled cannot be transmitted on - see resolveBeaconChannel.
         const bool ownIndex = bt && bt->has_channel_index;
-        // A named default missing from the table leaves an inheriting entry nothing to encrypt
-        // with, so it is skipped rather than sent on the primary that nobody asked for.
-        if (!ownIndex && bcfg.has_broadcast_on_channel && defaultChannelIndex < 0) {
-            LOG_DEBUG("Beacon: target %d inherits an unplaced broadcast_on_channel, skip", ti);
-            continue;
-        }
-        const uint32_t wantIndex = ownIndex ? bt->channel_index : (uint32_t)defaultChannelIndex;
-        const BeaconChannel bc = resolveBeaconChannel(ownIndex || defaultChannelIndex >= 0, wantIndex, tgt.preset);
+        const uint32_t wantIndex = ownIndex ? bt->channel_index : 0;
+        const BeaconChannel bc = resolveBeaconChannel(ownIndex, wantIndex, tgt.preset, tgt.usePreset);
         if (!bc.usable) {
             // Skipped, not redirected: the config still asks for that channel, so turning it back
             // on brings this target back without the operator having to rewrite anything.

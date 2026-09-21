@@ -17,16 +17,12 @@
  Listeners deliver the text message to the local inbox and cache any offered
  channel/preset for the client app to act on - the firmware never auto-applies them. */
 typedef struct _meshtastic_MeshBeacon {
-    /* Human-readable beacon message. Max 60 bytes enforced by firmware on send. */
+    /* Human-readable beacon message. Max 100 bytes enforced by firmware on send. */
     char message[61];
     /* Optional channel (name + PSK) being advertised to listening clients.
- A client app may offer to switch the user to this channel; firmware never applies it automatically.
- ChannelIdentity rather than ChannelSettings: only the name and PSK are needed to join, and the
- rest of a ChannelSettings - id, uplink_enabled, downlink_enabled, module_settings - described
- the advertising node's own posture and had no business on the air. Wire compatible with the
- ChannelSettings this tag carried in v2.8.0, in both directions. */
+ A client app may offer to switch the user to this channel; firmware never applies it automatically. */
     bool has_offer_channel;
-    meshtastic_ChannelIdentity offer_channel;
+    meshtastic_ChannelSettings offer_channel;
     /* Optional region being advertised alongside offer_preset. */
     meshtastic_Config_LoRaConfig_RegionCode offer_region;
     /* Optional modem preset being advertised.
@@ -50,8 +46,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_MeshBeacon_init_default       {"", false, meshtastic_ChannelIdentity_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, 0}
-#define meshtastic_MeshBeacon_init_zero          {"", false, meshtastic_ChannelIdentity_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, 0}
+#define meshtastic_MeshBeacon_init_default       {"", false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, 0}
+#define meshtastic_MeshBeacon_init_zero          {"", false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_MeshBeacon_message_tag        1
@@ -69,7 +65,7 @@ X(a, STATIC,   OPTIONAL, UENUM,    offer_preset,      4) \
 X(a, STATIC,   OPTIONAL, UINT32,   offer_frequency_slot,   5)
 #define meshtastic_MeshBeacon_CALLBACK NULL
 #define meshtastic_MeshBeacon_DEFAULT NULL
-#define meshtastic_MeshBeacon_offer_channel_MSGTYPE meshtastic_ChannelIdentity
+#define meshtastic_MeshBeacon_offer_channel_MSGTYPE meshtastic_ChannelSettings
 
 extern const pb_msgdesc_t meshtastic_MeshBeacon_msg;
 
@@ -78,7 +74,7 @@ extern const pb_msgdesc_t meshtastic_MeshBeacon_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_MESH_BEACON_PB_H_MAX_SIZE meshtastic_MeshBeacon_size
-#define meshtastic_MeshBeacon_size               121
+#define meshtastic_MeshBeacon_size               148
 
 #ifdef __cplusplus
 } /* extern "C" */

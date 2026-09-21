@@ -1,7 +1,7 @@
 [submodule "protobufs"]
 	path = protobufs
 	url = https://github.com/NomDeTom/Meshtasticprotobufs
-	branch = beacon-frequency-slot
+	branch = pr-1059-on-master
 [submodule "meshtestic"]
 	path = meshtestic
 	url = https://github.com/meshtastic/meshTestic

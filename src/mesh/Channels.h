@@ -57,11 +57,11 @@ class Channels
 
     /** Index of a live (non-DISABLED) channel with this name and PSK, or -1. A blank name resolves
      * to the running preset's display name, the same way getName() resolves a slot's. */
-    int16_t findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen);
+    int16_t findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead = false);
 
     /** Find that channel, or place it in a DISABLED slot as SECONDARY. Returns the index used, or
      * -1 when every slot is live. Never overwrites a live channel - callers withhold instead. */
-    int16_t upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen);
+    int16_t upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead = false);
 
     /**
      * Return a globally unique channel ID usable with MQTT.

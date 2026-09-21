@@ -1168,16 +1168,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 
 #if !MESHTASTIC_EXCLUDE_BEACON
-        // Applies live, no reboot, so nothing else re-checks the beacon against the radio it now
-        // inherits.
-        if (moduleConfig.has_mesh_beacon &&
+        // The cached offer derives its slot from the running region and preset, so rebuild it.
+        // Nothing to re-validate: sanitiseConfig() is independent of the running radio.
+        if (meshBeaconBroadcastModule && moduleConfig.has_mesh_beacon &&
             (validatedLora.region != oldLoraConfig.region || validatedLora.modem_preset != oldLoraConfig.modem_preset ||
-             validatedLora.use_preset != oldLoraConfig.use_preset)) {
-            MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
-            changes |= SEGMENT_MODULECONFIG;
-            if (meshBeaconBroadcastModule)
-                meshBeaconBroadcastModule->invalidateCache();
-        }
+             validatedLora.use_preset != oldLoraConfig.use_preset))
+            meshBeaconBroadcastModule->invalidateCache();
 #endif
 
         break;
@@ -1432,14 +1428,15 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
     return true;
 }
 
-// A channel edit changes what the beacon can transmit on, so re-check it against the table as it
-// now stands.
-static void recheckBeaconAfterChannelEdit(ChannelIndex index)
+// A channel edit changes what the beacon can transmit on, so drop targets that named a slot now
+// retired. Returns true when the module config changed and needs saving.
+static bool recheckBeaconAfterChannelEdit(ChannelIndex index)
 {
 #if !MESHTASTIC_EXCLUDE_BEACON
     if (!moduleConfig.has_mesh_beacon)
-        return;
+        return false;
     auto &beacon = moduleConfig.mesh_beacon;
+    const pb_size_t before = beacon.broadcast_targets_count;
 
     // Deleted, not left pointed at the slot: an unrelated channel provisioned there later would
     // otherwise inherit the beacon. Clearing only the index would redirect it onto the primary.
@@ -1458,12 +1455,10 @@ static void recheckBeaconAfterChannelEdit(ChannelIndex index)
         }
         beacon.broadcast_targets_count = kept;
     }
-
-    MeshBeaconModule::sanitiseConfig(beacon);
-    if (meshBeaconBroadcastModule)
-        meshBeaconBroadcastModule->invalidateCache();
+    return beacon.broadcast_targets_count != before;
 #else
     (void)index;
+    return false;
 #endif
 }
 
@@ -1480,7 +1475,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     channels.onConfigChanged(); // tell the radios about this change
 
     // After onConfigChanged(), so the beacon is re-checked against the channel table as it now is.
-    recheckBeaconAfterChannelEdit(cc.index);
+    const bool beaconChanged = recheckBeaconAfterChannelEdit(cc.index);
 
     // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
     // that inherit a now-public primary key) and warn the client once if anything was coarsened.
@@ -1497,7 +1492,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS | SEGMENT_MODULECONFIG, false);
+    saveChanges(SEGMENT_CHANNELS | (beaconChanged ? SEGMENT_MODULECONFIG : 0), false);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
