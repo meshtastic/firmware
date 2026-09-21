@@ -179,7 +179,10 @@ void SimRadio::onNotify(uint32_t notification)
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                    // LOG_DEBUG("Channel is active: set random delay");
+                    // Same line as the RadioLib path, so a sim run and a hardware run can be counted
+                    // the same way. Note sim carrier sense is perfect and instantaneous, so this fires
+                    // for a different reason than it does on a radio.
+                    LOG_DEBUG("Can not send yet, channelActive, packet 0x%08x", txQueue.getFront()->id);
                     setTransmitDelay(); // reset random delay
                 } else {
                     // Send any outgoing packets we have ready
