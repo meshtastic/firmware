@@ -129,12 +129,14 @@ class TimedCaptureRadio : public RadioInterface
         return ERRNO_OK;
     }
 
+    // Answers `cancelResult`: true plays a copy still waiting in the TX queue, withdrawn by this call.
     bool cancelSending(NodeNum from, PacketId id) override
     {
-        (void)from;
-        (void)id;
         cancelCount++;
-        return false;
+        lastCancel = GlobalPacketId(from, id);
+        const bool r = cancelResult;
+        cancelResult = false;
+        return r;
     }
 
     bool findInTxQueue(NodeNum from, PacketId id) override
@@ -157,12 +159,16 @@ class TimedCaptureRadio : public RadioInterface
     {
         sentPackets.clear();
         cancelCount = 0;
+        cancelResult = false;
+        lastCancel = GlobalPacketId(0, 0);
         packetTimeMsec = 0;
         queuedMsec = 0;
     }
 
     std::vector<meshtastic_MeshPacket> sentPackets;
     uint32_t cancelCount = 0;
+    bool cancelResult = false;
+    GlobalPacketId lastCancel{0, 0};
     uint32_t packetTimeMsec = 0;
     uint32_t queuedMsec = 0;
 };
@@ -859,6 +865,7 @@ void test_receive_extends_all_pending_deadlines(void)
 // rung is not an attempt: nothing is sent, nothing is decremented, the route is not charged, and
 // the ladder ends. Ours tells the client once - the packet went out and is unconfirmed - and NAKs
 // DUTY_CYCLE_LIMIT, not MAX_RETRANSMIT, so the app stops waiting and the reason is the true one. A
+// copy still waiting at the radio is withdrawn first, so nothing goes out under that NAK. A
 // relayed one ends quietly.
 
 // The scene: EU_866 at CLIENT, 2.5% - 90 000 ms an hour - on the suite's own AirTime under a test
@@ -975,6 +982,45 @@ void test_refused_retry_notice_counts_the_rungs_that_went_out(void)
     TEST_ASSERT_EQUAL_UINT32(2, radio->sentPackets.size());
     TEST_ASSERT_EQUAL_UINT32(1, mockService->notificationCount);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockService->lastMessage, "Sent 3 of 5 attempts"), mockService->lastMessage);
+}
+
+// The ladder's counter is decremented when a rung is handed to the radio, not when it goes out. If
+// the deadline passes while the first copy is still queued, the refusal must withdraw it - a copy
+// left queued would go out under a terminal "not sent" NAK - and the notice must not count it.
+void test_refused_retry_rung_withdraws_a_copy_still_queued_and_does_not_count_it(void)
+{
+    radio->packetTimeMsec = 7;
+    enterDutyCycleScene();
+    spendAirtimeLeaving(10);
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    seedDueRetry(dm, 2);
+    radio->cancelResult = true; // the original is still in the TX queue
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, radio->cancelCount, "the queued copy is withdrawn");
+    TEST_ASSERT_TRUE(radio->lastCancel == GlobalPacketId(kLocalNode, dm.id));
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL_UINT32(1, mockService->notificationCount);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockService->lastMessage, "Not sent"), mockService->lastMessage);
+}
+
+// The control: the original went out and is unconfirmed, so nothing is withdrawn and it counts.
+void test_refused_retry_rung_counts_a_copy_that_went_out(void)
+{
+    radio->packetTimeMsec = 7;
+    enterDutyCycleScene();
+    spendAirtimeLeaving(10);
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    seedDueRetry(dm, 2);
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, reliableShim->pendingCount(), "the ladder is over");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockService->lastMessage, "Sent 1 of 2 attempts"), mockService->lastMessage);
 }
 
 void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
@@ -1133,6 +1179,8 @@ void setup()
     RUN_TEST(test_admitted_retry_rung_still_goes);
     RUN_TEST(test_refused_retry_rung_naks_the_client_with_the_reason);
     RUN_TEST(test_refused_retry_notice_counts_the_rungs_that_went_out);
+    RUN_TEST(test_refused_retry_rung_withdraws_a_copy_still_queued_and_does_not_count_it);
+    RUN_TEST(test_refused_retry_rung_counts_a_copy_that_went_out);
     RUN_TEST(test_quoted_wait_covers_the_whole_ladder);
     RUN_TEST(test_admission_counts_airtime_already_queued_at_the_radio);
 

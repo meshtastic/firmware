@@ -473,9 +473,14 @@ int32_t NextHopRouter::doRetransmissions()
                 // would charge a route never tried. The ladder ends: our client is told and NAKed with the
                 // reason, so the message is not left pending; a relay owes nothing.
                 LOG_WARN("No airtime to retry id=0x%08x for %u mins, stop retrying", p.packet->id, waitMinutes);
+                // The ladder's counter is decremented at enqueue, so a rung may still be waiting at the
+                // radio. The NAK is terminal: withdraw the copy, and do not count it as sent.
+                const bool mayWithdraw = isFromUs(p.packet) || roleAllowsCancelingFromTxQueue(p.packet);
+                const bool withdrawn = mayWithdraw && cancelSending(getFrom(p.packet), p.packet->id);
                 if (isFromUs(p.packet)) {
                     const uint8_t attempts = p.initialNumRetransmissions + 1;
-                    notifyDutyCycleRefusal(p.packet, waitMinutes, attempts - p.numRetransmissions, attempts);
+                    const uint8_t sent = attempts - p.numRetransmissions - (withdrawn ? 1 : 0);
+                    notifyDutyCycleRefusal(p.packet, waitMinutes, sent, attempts);
                     sendAckNak(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 stopRetransmission(it->first);
