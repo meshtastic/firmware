@@ -45,14 +45,7 @@ Lock::Lock()
 
 void Lock::lock()
 {
-    if (locked) {
-        LOG_INFO("Attempt to lock an already locked Lock!");
-    }
     pthread_mutex_lock(&mutex);
-    locked = true;
-
-    if (console)
-        LOG_WARN("Lock");
 }
 
 bool Lock::lock(uint32_t)
@@ -66,7 +59,6 @@ bool Lock::lock(uint32_t)
 void Lock::unlock()
 {
     pthread_mutex_unlock(&mutex);
-    locked = false;
 }
 
 Lock::~Lock()
