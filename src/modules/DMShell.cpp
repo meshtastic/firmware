@@ -39,12 +39,45 @@ constexpr uint32_t REPLAY_REQUEST_MAX_MS = 10000;
 // Covers our request reaching the peer and the replay coming back past contention on both legs.
 constexpr uint32_t REPLAY_REQUEST_MARGIN_MS = 250;
 
+/// Frames of unacknowledged output allowed in flight.
+///
+/// Four rather than one or two so the channel stays busy while an acknowledgement is in flight: the
+/// peer acknowledges every second frame, so a smaller window makes the stream wait a round trip per
+/// frame. It has to stay well under the replay ring, which is the whole point - a sender at most four
+/// frames ahead of a gap can always still answer the replay request for it, at any preset, which is
+/// what a bigger ring on one side of the link could never achieve.
+///
+/// The peer's acknowledgement interval must not exceed this, or the sender blocks with the window
+/// full and the peer still waiting to accumulate frames, and the stream only advances when the peer's
+/// idle heartbeat eventually fires.
+constexpr uint32_t DEFAULT_TX_WINDOW_FRAMES = 4;
+/// Above the replay ring there is nothing left to bound, so a larger value is a configuration error.
+constexpr uint32_t MAX_TX_WINDOW_FRAMES = (uint32_t)DMShellSession::TX_HISTORY_LEN;
+
 /// DMSHELL_LEGACY_RECOVERY=1 restores the pre-damping behaviour on the same build, so a session
 /// can be measured with and without the fix without reflashing.
 bool legacyRecoveryRequested()
 {
     const char *value = getenv("DMSHELL_LEGACY_RECOVERY");
     return value && *value && strcmp(value, "0") != 0;
+}
+/// How many frames of unacknowledged data the server will keep in flight. DMSHELL_TX_WINDOW=0
+/// restores the unbounded behaviour, so the bound can be measured with and without on one build.
+uint32_t txWindowFromEnv()
+{
+    const char *value = getenv("DMSHELL_TX_WINDOW");
+    if (!value || !*value) {
+        return DEFAULT_TX_WINDOW_FRAMES;
+    }
+    char *end = nullptr;
+    const unsigned long parsed = strtoul(value, &end, 10);
+    if (end == value || parsed > MAX_TX_WINDOW_FRAMES) {
+        // A window larger than the replay ring bounds nothing, so it is a configuration error rather
+        // than a preference worth honouring.
+        LOG_WARN("DMShell: ignoring DMSHELL_TX_WINDOW=%s, expected 0-%u", value, (unsigned)MAX_TX_WINDOW_FRAMES);
+        return DEFAULT_TX_WINDOW_FRAMES;
+    }
+    return (uint32_t)parsed;
 }
 } // namespace
 
@@ -55,6 +88,14 @@ DMShellModule::DMShellModule()
     legacyRecovery = legacyRecoveryRequested();
     if (legacyRecovery) {
         LOG_WARN("DMShell: DMSHELL_LEGACY_RECOVERY set, replay-request damping and eviction reporting are OFF");
+    }
+
+    // Legacy mode means "reproduce the pre-fix behaviour", and the pre-fix behaviour was unbounded.
+    txWindowFrames = legacyRecovery ? 0 : txWindowFromEnv();
+    if (txWindowFrames == 0) {
+        LOG_WARN("DMShell: outstanding-data window disabled, the sender may run away from a gap");
+    } else {
+        LOG_INFO("DMShell: bounding unacknowledged output to %u frames", (unsigned)txWindowFrames);
     }
 }
 
@@ -93,8 +134,15 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
     }
 
     if (frame.op == meshtastic_RemoteShell_OpCode_ACK) {
-        if (session.active && frame.session_id == session.sessionId && getFrom(&mp) == session.peer && frame.last_rx_seq > 0) {
-            resendFramesFrom(frame.last_rx_seq + 1);
+        if (session.active && frame.session_id == session.sessionId && getFrom(&mp) == session.peer) {
+            // A bare ACK carries no sequence number of its own and never reaches the ordered path
+            // below, so this is the only place its receive cursor can be read. It is also the only
+            // signal a peer with nothing to say can give us, and therefore the one that keeps the
+            // window open during a one-way stream.
+            notePeerReceiveCursor(frame);
+            if (frame.last_rx_seq > 0) {
+                resendFramesFrom(frame.last_rx_seq + 1);
+            }
         }
         return ProcessMessage::CONTINUE;
     }
@@ -130,6 +178,13 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::STOP;
     }
 
+    // Both of these read the peer's state, not ours, so they belong here rather than past the ordering
+    // gate below. An out-of-order frame is still proof the peer is alive, and still carries a valid
+    // receive cursor - during a gap it may be the only kind of frame arriving, and the cursor is what
+    // reopens our send window.
+    session.lastActivityMs = millis();
+    notePeerReceiveCursor(frame);
+
     // A teardown must not sit behind a gap. The session checks above have already established that
     // this is our peer on our session, and sequence state is discarded by the close anyway, so act on
     // it before the ordering check rather than asking for a replay and holding the shell open until
@@ -143,12 +198,14 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::STOP;
     }
 
-    session.lastActivityMs = millis();
-
     switch (frame.op) {
     case meshtastic_RemoteShell_OpCode_INPUT:
         if (!writeSessionInput(frame)) {
             sendError("input_write_failed");
+        } else if (!session.txWindow.canSend()) {
+            // Same bound as runOnce's path. Skipping the read rather than dropping the frame leaves
+            // the bytes in the PTY for runOnce to pick up once the window reopens.
+            LOG_DEBUG("DMShell: window closed, deferring output after INPUT");
         } else {
             uint8_t outBuf[MAX_MESSAGE_SIZE];
             const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
@@ -239,6 +296,14 @@ int32_t DMShellModule::runOnce()
     // Null on a node whose radio is not RadioLib-backed (--sim, SerialHal): nothing to throttle against.
     if (RadioLibInterface::instance != nullptr && RadioLibInterface::instance->packetsInTxQueue() > 1) {
         return 50;
+    }
+
+    if (!session.txWindow.canSend()) {
+        // Window closed: leave the bytes in the PTY buffer, which is the backpressure. Deliberately
+        // returning before the read also stops lastActivityMs being refreshed below, which is what
+        // lets SESSION_IDLE_TIMEOUT_MS finally mean something - a peer that has vanished no longer
+        // keeps us transmitting, because we stop and then time out.
+        return 100;
     }
 
     uint8_t outBuf[MAX_MESSAGE_SIZE];
@@ -372,6 +437,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.lastAckedRxSeq = frame.seq;
     session.rxWindow.reset(frame.seq);
     session.txHistoryWindow.reset();
+    session.txWindow.reset(txWindowFrames);
     session.lastActivityMs = millis();
 
     meshtastic_RemoteShell newFrame = {
@@ -517,6 +583,18 @@ void DMShellModule::rememberSentFrame(meshtastic_RemoteShell frame)
 
     session.txHistoryNext = (session.txHistoryNext + 1) % session.txHistory.size();
     session.txHistoryWindow.noteStored(frame.seq);
+    session.txWindow.noteSent(frame.seq);
+}
+
+/// Feed the peer's cumulative receive cursor into the send window.
+///
+/// Both fields mean "the highest sequence number I have in order": ack_seq is set on every frame the
+/// peer originates, and last_rx_seq is set explicitly when it asks for a replay. Taking the larger
+/// tolerates a peer that populates only one of them; DMShellTxWindow clamps and refuses to regress.
+void DMShellModule::notePeerReceiveCursor(const meshtastic_RemoteShell &frame)
+{
+    const uint32_t cursor = frame.last_rx_seq > frame.ack_seq ? frame.last_rx_seq : frame.ack_seq;
+    session.txWindow.notePeerAcked(cursor);
 }
 
 void DMShellModule::resendFramesFrom(uint32_t startSeq)

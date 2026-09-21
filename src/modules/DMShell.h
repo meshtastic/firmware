@@ -24,6 +24,7 @@ struct DMShellSession {
     uint32_t lastAckedRxSeq = 0;
     uint32_t lastActivityMs = 0;
     DMShellRxWindow rxWindow;
+    DMShellTxWindow txWindow;
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
@@ -57,10 +58,13 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
 
     DMShellSession session;
     pid_t pendingChildPid = -1;
+    // Set once at construction from DMSHELL_TX_WINDOW (0 = unbounded); see the constructor.
+    uint32_t txWindowFrames = 0;
     // Set once at construction from DMSHELL_LEGACY_RECOVERY; see the constructor.
     bool legacyRecovery = false;
 
     uint32_t replayRequestIntervalMs() const;
+    void notePeerReceiveCursor(const meshtastic_RemoteShell &frame);
 
     bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;
