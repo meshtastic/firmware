@@ -794,7 +794,7 @@ float getEffectiveDutyCycle()
 uint32_t getMaxPacketAirtimeMsec()
 {
     RadioInterface *rif = router ? router->getRadioIface() : nullptr;
-    return rif ? rif->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader)) : 0;
+    return rif ? rif->getPacketTime(MAX_LORA_PAYLOAD_LEN) : 0;
 }
 
 uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool received)
