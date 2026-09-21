@@ -96,9 +96,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
 
     const uint32_t pauseMs = getTxPauseDurationMs();
     if (lastTxEndTime != 0 && !Throttle::hasElapsed(lastTxEndTime, pauseMs)) {
-        uint32_t deadline = lastTxEndTime + pauseMs;
-        if (deadline == 0)
-            deadline = 1;
+        uint32_t deadline = Time::skipZero(lastTxEndTime + pauseMs);
         if (!p->tx_after || !Throttle::deadlinePassedAt(p->tx_after, deadline))
             p->tx_after = deadline;
         const uint32_t now = Time::getMillis();
@@ -110,9 +108,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
     if (!performCarrierSense(iface)) {
         busyCount++;
         const uint32_t backoffMs = computeBackoffMs(busyCount);
-        uint32_t deadline = Time::getMillis() + backoffMs;
-        if (deadline == 0)
-            deadline = 1;
+        uint32_t deadline = Time::timerEndsAtMillis(backoffMs);
         if (!p->tx_after || !Throttle::deadlinePassedAt(p->tx_after, deadline))
             p->tx_after = deadline;
         LOG_DEBUG("JP LBT: channel busy (attempt %u), backing off %ums for packet 0x%08x", busyCount, backoffMs, p->id);
@@ -131,9 +127,7 @@ void JapanTxHook::postTransmit(RadioInterface *iface, const meshtastic_MeshPacke
     if (!isJapanRegion())
         return;
     resetBusyCount();
-    lastTxEndTime = Time::getMillis();
-    if (lastTxEndTime == 0)
-        lastTxEndTime = 1;
+    lastTxEndTime = Time::stampMillis();
 }
 
 void JapanTxHook::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
