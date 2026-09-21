@@ -262,6 +262,15 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
     return txQueue.find(from, id);
 }
 
+uint32_t RadioLibInterface::queuedAirtimeMsec()
+{
+    // Cooperative threads: nothing dequeues while this walks.
+    uint32_t ms = sendingPacket ? getPacketTime(sendingPacket) : 0;
+    for (const meshtastic_MeshPacket *p : txQueue.packets())
+        ms += getPacketTime(p);
+    return ms;
+}
+
 void RadioLibInterface::updateNoiseFloor()
 {
     // Only sample from idle receive mode. TX/RX-critical paths must return to radio work quickly.
