@@ -24,12 +24,23 @@ START1 = 0x94
 START2 = 0xC3
 HEADER_LEN = 4
 DEFAULT_API_PORT = 4403
-# Must be > 0: the firmware sets hop_start = hop_limit when it originates the packet, and the
-# receiver's pre-hop drop policy (classifyHopStart, which runs *before* decryption so it can't see
-# the bitfield) discards packets that arrive with hop_start == 0. hop_limit=0 therefore gets us
-# silently dropped at the far end. On a direct 2-node link any non-zero value works; the
-# destination receives it directly and does not rebroadcast a DM addressed to itself.
-DEFAULT_HOP_LIMIT = 3
+# Zero, and this is about airtime rather than reachability. A non-zero hop limit arms two
+# mechanisms in the firmware that DMShell wants nothing from. NextHopRouter::sendWithNextHop starts
+# its own relay retransmissions for the packet - its gate is (hop_limit > 0 || want_ack) with a
+# known next hop - and those repeats reuse the packet id, so the far end discards them in
+# shouldFilterReceived as dupes after paying for them on the air. Then, to stop them,
+# ReliableRouter::sniffReceived answers every single frame with a 0-hop routing ACK, which is an
+# extra transmission from the peer in the same direction as its own shell output, on a half-duplex
+# channel. Neither is visible to this protocol: DMShell carries its own sequence numbers and
+# cursors, and sets want_ack = False for exactly that reason.
+#
+# Zero is also symmetric with the firmware, which already sends its side of the session with
+# hop_limit = 0, so DMShell is a direct-neighbour protocol in both directions either way. It
+# survives the receiver's pre-hop drop policy because hop_start == 0 is accepted when the Data
+# bitfield is present (classifyHopStart in NodeDB.cpp) and perhapsEncode sets that on every
+# locally-originated packet - which is what makes the firmware's own hop_limit = 0 frames arrive
+# here. Raise it with --hop-limit only to restore the old behaviour for a comparison.
+DEFAULT_HOP_LIMIT = 0
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
 # A gap the peer cannot fill used to be retried at a flat 1/sec until the 5-minute idle timeout, so
@@ -133,7 +144,8 @@ def parse_args() -> argparse.Namespace:
         "--hop-limit",
         type=int,
         default=DEFAULT_HOP_LIMIT,
-        help="hop limit (must be > 0 or the far end drops our packets via the pre-hop policy)",
+        help="hop limit (default %(default)s; non-zero arms the firmware's relay retransmissions "
+        "and makes the peer routing-ACK every frame)",
     )
     parser.add_argument("--cols", type=int, default=None, help="initial terminal columns (default: detect local terminal)")
     parser.add_argument("--rows", type=int, default=None, help="initial terminal rows (default: detect local terminal)")
