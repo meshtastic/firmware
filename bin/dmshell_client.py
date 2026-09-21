@@ -64,6 +64,8 @@ ACK_LATENCY_SMOOTHING = 0.25
 # The interval is this multiple of the estimate: one frame out and one acknowledgement back are
 # already in the estimate, so the margin is for the peer's own queue.
 RETRANSMIT_LATENCY_MULTIPLIER = 2.0
+# Report the estimate again once it has moved this much, which on a settled link is never.
+ACK_LATENCY_REPORT_CHANGE = 0.25
 INPUT_BATCH_WINDOW_SEC = .5
 INPUT_BATCH_MAX_BYTES = 64
 HEARTBEAT_IDLE_DELAY_SEC = 5.0
@@ -458,6 +460,10 @@ class SessionState:
     # Smoothed time from sending a frame to seeing the peer's cursor pass it. None until the first
     # sample, which the OPEN/OPEN_OK exchange supplies before any input is sent.
     ack_latency: Optional[float] = None
+    # The last value reported, so a run's log shows what the interval was derived from even when no
+    # retransmission ever happens. A diagnostic that only appears on the busy path describes the
+    # traffic rather than the mechanism.
+    ack_latency_reported: Optional[float] = None
 
     def alloc_seq(self) -> int:
         with self.tx_lock:
@@ -964,6 +970,28 @@ def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
     state.note_frame_resent(frame.seq)
 
 
+def log_ack_latency(state: SessionState) -> None:
+    """Report the round-trip estimate the retransmission interval is derived from.
+
+    Called from the poll rather than from a retransmission, so a run that never retransmits still
+    records what this side measured. The first sample also goes to the transcript, because it is what
+    tells the operator whether the interval matches the preset in use.
+    """
+    with state.tx_lock:
+        latest = state.ack_latency
+        if latest is None:
+            return
+        previous = state.ack_latency_reported
+        if previous is not None and abs(latest - previous) < ACK_LATENCY_REPORT_CHANGE * previous:
+            return
+        state.ack_latency_reported = latest
+        interval = state._retransmit_base_interval_locked()
+        first = previous is None
+    state.log_replay_event("ack_latency", 0, f"estimate={latest:.2f}s interval={interval:g}s")
+    if first:
+        state.event_queue.put(f"round trip measured at {latest:.2f}s; retransmission interval {interval:g}s")
+
+
 def log_input_window_transition(state: SessionState) -> None:
     """Record the window opening and closing, independently of whether input is waiting.
 
@@ -1020,6 +1048,7 @@ def service_input_window(transport, state: SessionState) -> None:
     if not state.active or state.closed_event.is_set():
         return
     log_input_window_transition(state)
+    log_ack_latency(state)
     if state.input_window_open():
         return
     missing, exhausted = state.input_retransmit_due()
@@ -1038,9 +1067,10 @@ def service_input_window(transport, state: SessionState) -> None:
     # recovering at all: a healthy gap clears in a handful, and an attempt count climbing toward
     # MAX_INPUT_RETRANSMITS on one sequence number is a direction of the link that is not passing
     # traffic, not a flow-control problem.
+    latency = "unmeasured" if state.ack_latency is None else f"{state.ack_latency:.2f}s"
     state.log_replay_event("input_retransmit", missing,
                            f"attempt={state.input_retransmits} of {MAX_INPUT_RETRANSMITS} "
-                           f"interval={state.input_retransmit_interval:g}s")
+                           f"interval={state.input_retransmit_interval:g}s latency={latency}")
     replay_frames_from(transport, state, missing)
 
 
