@@ -86,58 +86,98 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     return true;
 }
 
+/** Write a little-endian uint32 - the encoding is pinned by the protocol, not by the host. */
+static void putLE32(uint8_t *out, uint32_t v)
+{
+    out[0] = (uint8_t)(v & 0xff);
+    out[1] = (uint8_t)((v >> 8) & 0xff);
+    out[2] = (uint8_t)((v >> 16) & 0xff);
+    out[3] = (uint8_t)((v >> 24) & 0xff);
+}
+
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 /**
- * Build a signing buffer that covers packet metadata and payload:
- *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]                               (base)
- *   [fromNode(4) | packetId(4) | portnum(4) | request_id(4) | reply_id(4) | payload(N)] (extended)
+ * Build the buffer a signature covers. One fixed layout, always:
  *
- * The extended layout is used exactly when request_id or reply_id is nonzero. Those two fields live
- * in the Data envelope rather than the payload, so the base layout leaves them unsigned - and
- * channel crypto is AES-CTR with no MAC, so they are malleable in flight. A signed reply can
- * therefore be re-pointed at a different message today.
+ *   version(1) | from(4) | id(4) | to(4) | portnum(4) | request_id(4) | reply_id(4)
+ *             | emoji(4) | bitfield(4) | flags(1) | payload(N)
  *
- * Packets with neither field keep the base layout, byte-identical to what v2.8.0 alphas already
- * emit, so their signatures stay verifiable in both directions across the upgrade. Both sides
- * derive the layout from the packet's own decoded fields, so nothing is transmitted to select it.
+ * Everything in the Data envelope is covered, not just Data.payload. Those envelope fields ride
+ * outside the payload, and channel crypto is AES-CTR with no MAC, so anything left out of here is
+ * rewritable in flight by any PSK holder while the signature still verifies:
  *
- * The conditional layout is theoretically ambiguous - a base-layout payload could begin with bytes
- * that parse as the extended header - but a forgery additionally requires identical
- * fromNode/packetId/portnum plus an honest signer emitting a zero-request packet whose payload
- * prefix is attacker-useful on the same portnum. See the PR discussion for why a format byte is
- * the better long-term answer and what it would cost.
+ *  - reply_id: re-points a signed reply or tapback at a different message.
+ *  - emoji: turns a signed reply into a signed reaction, or the reverse. Binding reply_id without
+ *    it leaves the reaction attack half-open, so the two belong together.
+ *  - bitfield: carries OK_TO_MQTT, the sender's consent to being uploaded to a public broker, and
+ *    the exploitable direction (0 -> 1) is the one that leaks. The whole uint32 is covered rather
+ *    than the two defined bits, so bits 2..31 are protected before anything uses them.
+ *  - want_response: bit 1 of bitfield mirrors it and Router.cpp merges them with |=, so signing one
+ *    without the other protects neither. Both, in the flags byte.
+ *  - to: without it a signed broadcast can be re-addressed as a direct message and still verify,
+ *    delivering a public statement as an apparent private one. Relays rewrite hop_limit, next_hop
+ *    and relay_node, never `to`, so it is stable end to end.
+ *  - request_id: only reachable in ham mode, where licensed nodes sign unicasts too, but free.
  *
- * Covering the metadata prevents replay, reattribution, and portnum redirection attacks.
+ * Deliberately NOT covered: dest and source (one write in the tree, no readers), channel (the wire
+ * carries a hash where the decoded packet carries an index), and the hop fields, which relays
+ * rewrite by design. Data.payload IS covered, and always was - note that this makes TRACEROUTE_APP
+ * unsignable, since every hop rewrites the RouteDiscovery in place.
+ *
+ * Fixed-length header, so the payload boundary is total - XEDDSA_SIGNED_HEADER_LEN and never
+ * depends on content. That is what makes the encoding unambiguous: with a conditional layout, a
+ * payload could be re-split into header fields to produce identical bytes, letting an attacker move
+ * payload bytes into request_id/reply_id and truncate a signed message without breaking it.
+ *
+ * Integers are little-endian explicitly, so the value is a property of the protocol rather than of
+ * the compiler that built the node.
+ *
+ * Covering the metadata also prevents replay, reattribution, and portnum redirection.
  */
-static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 uint32_t requestId, uint32_t replyId, const uint8_t *payload, size_t payloadLen)
+static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t toNode,
+                                 const meshtastic_Data *d)
 {
-    size_t headerLen = sizeof(uint32_t) * 3;
-    const bool extended = requestId != 0 || replyId != 0;
-    size_t totalLen = headerLen + payloadLen + (extended ? sizeof(uint32_t) * 2 : 0);
+    if (!d)
+        return 0;
+    const size_t totalLen = XEDDSA_SIGNED_HEADER_LEN + d->payload.size;
     if (totalLen > bufSize)
         return 0;
-    // May need endian conversion for oddball platforms.
-    memcpy(buf, &fromNode, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
-    if (extended) {
-        memcpy(buf + sizeof(uint32_t) * 3, &requestId, sizeof(uint32_t));
-        memcpy(buf + sizeof(uint32_t) * 4, &replyId, sizeof(uint32_t));
-        headerLen += sizeof(uint32_t) * 2;
-    }
-    memcpy(buf + headerLen, payload, payloadLen);
+
+    uint8_t *w = buf;
+    *w++ = XEDDSA_SIGNING_VERSION;
+    putLE32(w, fromNode);
+    w += sizeof(uint32_t);
+    putLE32(w, packetId);
+    w += sizeof(uint32_t);
+    putLE32(w, toNode);
+    w += sizeof(uint32_t);
+    putLE32(w, (uint32_t)d->portnum);
+    w += sizeof(uint32_t);
+    putLE32(w, d->request_id);
+    w += sizeof(uint32_t);
+    putLE32(w, d->reply_id);
+    w += sizeof(uint32_t);
+    putLE32(w, d->emoji);
+    w += sizeof(uint32_t);
+    // Absent bitfield signs as zero; its presence is carried in the flags byte, so stripping the
+    // field is not the same as sending it empty.
+    putLE32(w, d->has_bitfield ? d->bitfield : 0);
+    w += sizeof(uint32_t);
+    *w++ = (uint8_t)((d->want_response ? XEDDSA_SIGNED_FLAG_WANT_RESPONSE : 0) |
+                     (d->has_bitfield ? XEDDSA_SIGNED_FLAG_HAS_BITFIELD : 0));
+
+    if (d->payload.size)
+        memcpy(w, d->payload.bytes, d->payload.size);
     return totalLen;
 }
 
-bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, uint32_t requestId, uint32_t replyId,
-                               const uint8_t *payload, size_t payloadLen, uint8_t *signature)
+bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t toNode, const meshtastic_Data *d,
+                               uint8_t *signature)
 {
     if (memfll(xeddsa_private_key, 0, sizeof(xeddsa_private_key)))
         return false;
-    uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen =
-        buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
+    uint8_t sigBuf[XEDDSA_SIGN_BUF_LEN];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, toNode, d);
     if (sigLen == 0)
         return false;
     // XEdDSA::sign mixes signature[0..31] into the nonce as the spec's random Z (meshtastic/Crypto#3)
@@ -149,18 +189,16 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
     return true;
 }
 
-bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 uint32_t requestId, uint32_t replyId, const uint8_t *payload, size_t payloadLen,
-                                 const uint8_t *signature)
+bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t toNode,
+                                 const meshtastic_Data *d, const uint8_t *signature)
 {
     // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
     if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
         curve_to_ed_pub(pubKey, cached_ed_pubkey);
         memcpy(cached_curve_pubkey, pubKey, 32);
     }
-    uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen =
-        buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
+    uint8_t sigBuf[XEDDSA_SIGN_BUF_LEN];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, toNode, d);
     if (sigLen == 0)
         return false;
     return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
@@ -319,15 +357,6 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
 static const char ACK_PROOF_LABEL[] = "ack";
 #define ACK_PROOF_LABEL_LEN (sizeof(ACK_PROOF_LABEL) - 1) // no trailing NUL on the wire
 
-/** Write a little-endian uint32 - the encoding is pinned by the protocol, not by the host. */
-static void ackProofPutLE32(uint8_t *out, uint32_t v)
-{
-    out[0] = (uint8_t)(v & 0xff);
-    out[1] = (uint8_t)((v >> 8) & 0xff);
-    out[2] = (uint8_t)((v >> 16) & 0xff);
-    out[3] = (uint8_t)((v >> 24) & 0xff);
-}
-
 bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, uint32_t ackTo, uint32_t requestId,
                                    const uint8_t *routing, size_t routingLen, uint8_t *proofOut)
 {
@@ -343,9 +372,9 @@ bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, 
 
     uint8_t header[ACK_PROOF_LABEL_LEN + 3 * sizeof(uint32_t)];
     memcpy(header, ACK_PROOF_LABEL, ACK_PROOF_LABEL_LEN);
-    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN, ackFrom);
-    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN + 4, ackTo);
-    ackProofPutLE32(header + ACK_PROOF_LABEL_LEN + 8, requestId);
+    putLE32(header + ACK_PROOF_LABEL_LEN, ackFrom);
+    putLE32(header + ACK_PROOF_LABEL_LEN + 4, ackTo);
+    putLE32(header + ACK_PROOF_LABEL_LEN + 8, requestId);
 
     uint8_t digest[32];
     SHA256 mac;
