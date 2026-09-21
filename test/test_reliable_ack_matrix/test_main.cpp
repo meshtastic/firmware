@@ -212,7 +212,6 @@ static TimedCaptureRadio *radio = nullptr;
 static MockRoutingModule *mockRoutingModule = nullptr;
 static std::unique_ptr<ScopedAirTimeFixture> airTimeFixture;
 static MockMeshService *mockService = nullptr;
-static AirTime *dutyCycleSavedAirTime = nullptr;
 static PacketId nextTestPacketId = 0x7A000000;
 
 // ---------------------------------------------------------------------------
@@ -335,18 +334,12 @@ void setUp(void)
     configureChannels();
 }
 
+static void leaveDutyCycleScene();
+
 void tearDown(void)
 {
-    // Group 7 swaps the clock, the region and the AirTime; an aborted body must not leak them.
-    Time::useRealClock();
-    Time::resetMonotonicForTests();
-    config.lora.override_duty_cycle = true;
-    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    initRegion();
-    if (dutyCycleSavedAirTime) {
-        airTime = dutyCycleSavedAirTime;
-        dutyCycleSavedAirTime = nullptr;
-    }
+    // Group 7 enters a scene; an aborted body must not leave it behind.
+    leaveDutyCycleScene();
 }
 
 // ===========================================================================
@@ -868,37 +861,61 @@ void test_receive_extends_all_pending_deadlines(void)
 // DUTY_CYCLE_LIMIT, not MAX_RETRANSMIT, so the app stops waiting and the reason is the true one. A
 // relayed one ends quietly.
 
-// EU_866 at CLIENT is 2.5%: 90 000 ms an hour. Leave `remainingMs` of it, under a clock an hour
-// past boot so the span is credited across the ring rather than clamped at uptime 0.
-static void useAirTimeWithRemaining(uint32_t remainingMs)
+// The scene: EU_866 at CLIENT, 2.5% - 90 000 ms an hour - on the suite's own AirTime under a test
+// clock. One entry per case; tearDown() leaves it whether or not the body ran to the end.
+//
+// The AirTime remembers the uptime of its last sync, so the scene clock only ever moves forward:
+// each entry starts two hours past the last, and every bucket the previous case filled has aged
+// out. Nothing is swapped and nothing is saved, so there is nothing to restore but the config.
+static uint32_t sceneClockMs = 0;
+static bool inDutyCycleScene = false;
+
+static void advanceClock(uint32_t ms)
 {
-    static AirTime nearlySpent;
+    sceneClockMs += ms;
+    Time::setTestMillis(sceneClockMs);
+    Time::serviceMonotonic();
+}
+
+static void enterDutyCycleScene()
+{
+    TEST_ASSERT_FALSE_MESSAGE(inDutyCycleScene, "the scene is entered once per case");
+    inDutyCycleScene = true;
     config.lora.override_duty_cycle = false;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
     initRegion();
-    // The static persists across cases: two hours further on each call, so its window is empty.
-    static uint32_t clockMs = 0;
-    clockMs += 2u * MS_IN_HOUR;
     Time::resetMonotonicForTests();
-    Time::setTestMillis(clockMs);
-    Time::serviceMonotonic();
-    dutyCycleSavedAirTime = airTime;
-    airTime = &nearlySpent;
-    nearlySpent.logAirtime(TX_LOG, 90000 - remainingMs);
+    advanceClock(2u * MS_IN_HOUR);
+}
+
+static void leaveDutyCycleScene()
+{
+    inDutyCycleScene = false;
+    Time::useRealClock();
+    Time::resetMonotonicForTests();
+    config.lora.override_duty_cycle = true;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+}
+
+// Spends the hour's allowance down to `remainingMs`, at the current clock.
+static void spendAirtimeLeaving(uint32_t remainingMs)
+{
+    airTime->logAirtime(TX_LOG, 90000 - remainingMs);
 }
 
 // Seeds `p` on the ladder with `attempts` and moves the clock past its first deadline.
 static void seedDueRetry(const meshtastic_MeshPacket &p, uint8_t attempts)
 {
     reliableShim->seedRetry(p, attempts);
-    Time::advanceTestMillis(5u * 60u * 1000u); // well past any getRetransmissionMsec()
-    Time::serviceMonotonic();
+    advanceClock(5u * 60u * 1000u); // well past any getRetransmissionMsec()
 }
 
 void test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once(void)
 {
     radio->packetTimeMsec = 7; // every frame, the ack included: a rung needs 14 ms
-    useAirTimeWithRemaining(10);
+    enterDutyCycleScene();
+    spendAirtimeLeaving(10);
 
     auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
     reliableShim->noteRouteLearned(kRemoteNode, 0xAB, Time::getMillis());
@@ -921,7 +938,8 @@ void test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once(void)
 void test_refused_retry_rung_naks_the_client_with_the_reason(void)
 {
     radio->packetTimeMsec = 7;
-    useAirTimeWithRemaining(10);
+    enterDutyCycleScene();
+    spendAirtimeLeaving(10);
 
     auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
     seedDueRetry(dm, 2);
@@ -939,19 +957,20 @@ void test_refused_retry_rung_naks_the_client_with_the_reason(void)
 void test_refused_retry_notice_counts_the_rungs_that_went_out(void)
 {
     radio->packetTimeMsec = 7;
-    useAirTimeWithRemaining(1000);
+    enterDutyCycleScene();
+    spendAirtimeLeaving(1000);
 
     auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
     seedDueRetry(dm, 5);
     reliableShim->runOnce(); // rung 2
-    Time::advanceTestMillis(5u * 60u * 1000u);
-    Time::serviceMonotonic();
+    advanceClock(5u * 60u * 1000u);
     reliableShim->runOnce(); // rung 3
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, radio->sentPackets.size(), "two rungs went out");
     TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
 
-    useAirTimeWithRemaining(10); // the clock moves two hours on; the ladder is long overdue
-    reliableShim->runOnce();     // rung 4, refused
+    advanceClock(2u * MS_IN_HOUR); // the ring has aged out and the ladder is long overdue
+    spendAirtimeLeaving(10);
+    reliableShim->runOnce(); // rung 4, refused
 
     TEST_ASSERT_EQUAL_UINT32(2, radio->sentPackets.size());
     TEST_ASSERT_EQUAL_UINT32(1, mockService->notificationCount);
@@ -961,7 +980,8 @@ void test_refused_retry_notice_counts_the_rungs_that_went_out(void)
 void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
 {
     radio->packetTimeMsec = 7;
-    useAirTimeWithRemaining(10);
+    enterDutyCycleScene();
+    spendAirtimeLeaving(10);
 
     auto relayed = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kThirdNode, 1, /*wantAck=*/true);
     relayed.next_hop = 0x33;
@@ -986,9 +1006,9 @@ void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
 void test_quoted_wait_covers_the_whole_ladder(void)
 {
     radio->packetTimeMsec = 8000;
-    useAirTimeWithRemaining(10);
-    Time::advanceTestMillis(50u * 60u * 1000u);
-    Time::serviceMonotonic();
+    enterDutyCycleScene();
+    spendAirtimeLeaving(10);
+    advanceClock(50u * 60u * 1000u);
 
     auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
     auto plain = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/false);
@@ -1007,7 +1027,8 @@ void test_quoted_wait_covers_the_whole_ladder(void)
 void test_admission_counts_airtime_already_queued_at_the_radio(void)
 {
     radio->packetTimeMsec = 7;
-    useAirTimeWithRemaining(30);
+    enterDutyCycleScene();
+    spendAirtimeLeaving(30);
 
     auto plain = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/false);
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, reliableShim->dutyCycleWaitMinutes(&plain), "7 ms and a 7 ms reserve fit in 30");
@@ -1030,7 +1051,8 @@ void test_admission_counts_airtime_already_queued_at_the_radio(void)
 void test_admitted_retry_rung_still_goes(void)
 {
     radio->packetTimeMsec = 7;
-    useAirTimeWithRemaining(1000);
+    enterDutyCycleScene();
+    spendAirtimeLeaving(1000);
 
     auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
     seedDueRetry(dm, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
