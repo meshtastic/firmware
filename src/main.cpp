@@ -76,12 +76,6 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#ifdef ARCH_NRF54L15
-void nrf54l15Setup();
-void nrf54l15Loop();
-NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
-#endif
-
 #ifdef MESHTASTIC_ENABLE_APPROTECT
 #include "security/APProtect.h"
 #endif
@@ -852,9 +846,6 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
-#ifdef ARCH_NRF54L15
-    nrf54l15Setup();
-#endif
 
 #ifdef ARCH_RP2040
     rp2040Setup();
@@ -1092,6 +1083,13 @@ void setup()
     osk_found = true;
 #endif
 #endif
+#if ARCH_PORTDUINO && defined(__linux__)
+    // Same idea for a gamepad: it can drive the on-screen keyboard but cannot type, so without a
+    // configured keyboard device it is the only way to compose freetext on this host.
+    if (portduino_config.joystickDevice != "" && portduino_config.keyboardDevice == "") {
+        osk_found = true;
+    }
+#endif
 
     // Now that the mesh service is created, create any modules
     setupModules();
@@ -1197,7 +1195,7 @@ void setup()
 
 #ifndef ARCH_PORTDUINO
 
-        // Initialize Wifi
+    // Initialize Wifi
 #if HAS_WIFI
     initWifi();
 #endif
@@ -1405,7 +1403,7 @@ void loop()
         if (nodeDB->disableLockdownToPlaintext()) {
             LOG_INFO("Lockdown: disabled, reboot to normal mode");
             PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         } else {
             // Revert failed mid-way (a file couldn't be decrypted/rewritten).
             // The DEK file is still present (it's deleted last), so the device
@@ -1459,7 +1457,7 @@ void loop()
                 EncryptedStorage::lockNow();
                 PhoneAPI::revokeAllAuth();
                 PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
-                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+                rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
             } else {
                 uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
                 LOG_WARN("Lockdown: session expired, next budget slot (boots=%u left)", newBoots);
@@ -1482,9 +1480,6 @@ void loop()
 #endif
 #ifdef ARCH_NRF52
     nrf52Loop();
-#endif
-#ifdef ARCH_NRF54L15
-    nrf54l15Loop();
 #endif
 #ifdef ARCH_RP2040
     rp2040Loop();
@@ -1551,7 +1546,7 @@ void loop()
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
             }
-            rebootAtMsec = millis() + 25;
+            rebootAtMsec = Time::timerEndsAtMillis(25);
         }
     }
 #if HAS_TFT && HAS_SCREEN

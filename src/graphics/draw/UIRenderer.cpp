@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CompassRenderer.h"
@@ -90,8 +91,9 @@ static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int
     // between north/south halves to prevent seam bleed while rotating.
     const float scaledDiam = compassDiam * 0.76f;
     const float gapNormHalf = (centerGapPx * 0.5f) / scaledDiam;
-    const float sinHeading = sinf(headingRadian);
-    const float cosHeading = cosf(headingRadian);
+    // Double sin/cos on purpose: GeoCoord already links them, sinf/cosf would add ~3 KB of float libm.
+    const float sinHeading = sin(double(headingRadian));
+    const float cosHeading = cos(double(headingRadian));
 
     StandardCompassNeedlePoints points{};
     transformNeedlePoint(0.0f, -0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.northTipX, points.northTipY);
@@ -278,8 +280,8 @@ static inline void drawCompassCardinalLabels(OLEDDisplay *display, int16_t compa
 {
     const float northAngle = getCompassRingAngleOffset(heading);
     const float radius = compassRadius - 1.0f;
-    const float sinNorth = sinf(northAngle);
-    const float cosNorth = cosf(northAngle);
+    const float sinNorth = sin(double(northAngle));
+    const float cosNorth = cos(double(northAngle));
 
     const int16_t nX = compassX + static_cast<int16_t>(radius * sinNorth);
     const int16_t nY = compassY - static_cast<int16_t>(radius * cosNorth);
@@ -309,10 +311,10 @@ static inline void drawCompassDegreeMarkers(OLEDDisplay *display, int16_t compas
 
     display->setColor(WHITE);
     constexpr float kStepAngle = 15.0f * DEG_TO_RAD;
-    const float sinStep = sinf(kStepAngle);
-    const float cosStep = cosf(kStepAngle);
-    float sinAngle = sinf(baseAngle);
-    float cosAngle = cosf(baseAngle);
+    const float sinStep = sin(double(kStepAngle));
+    const float cosStep = cos(double(kStepAngle));
+    float sinAngle = sin(double(baseAngle));
+    float cosAngle = cos(double(baseAngle));
     bool isMajor = true;
     for (int tick = 0; tick < 24; tick++) {
         const int16_t tickLen = isMajor ? majorLen : minorLen;
@@ -973,14 +975,24 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
 #if GRAPHICS_TFT_COLORING_ENABLED
         const int usernameWidth = UIRenderer::measureStringWithEmotes(display, username);
+
+        // Check the row gap to make sure we don't turn the next line a color
+        const int usernameRowGap = getTextPositions(display)[line + 1] - getTextPositions(display)[line];
+        const int usernameMaxHighlightHeight =
+            (usernameRowGap > 0 && usernameRowGap < FONT_HEIGHT_SMALL) ? usernameRowGap : FONT_HEIGHT_SMALL;
+
+        // Once in awhile we need some extra padding, this can be tweaked as necessary. Initially for T096 sized LCDs
+        constexpr int kUsernameHighlightPad = 2;
+        const int usernameHighlightHeight = usernameMaxHighlightHeight + kUsernameHighlightPad;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
         if (nodeInfoLiteHasXeddsaSigned(node)) {
             setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black,
-                                       x + usernameWidth, getTextPositions(display)[line], username_buffer, FONT_HEIGHT_SMALL);
+                                       x + usernameWidth, getTextPositions(display)[line], username_buffer,
+                                       usernameHighlightHeight);
         }
 #endif
         setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black, x,
-                                   getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
+                                   getTextPositions(display)[line], usernameWidth, usernameHighlightHeight);
 #endif
         UIRenderer::drawStringWithEmotes(display, x + username_buffer, getTextPositions(display)[line++], username,
                                          FONT_HEIGHT_SMALL, 1, false);
@@ -2212,12 +2224,12 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (navBarVisible && !navBarPrevVisible) {
         EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when showing nav bar
         cosmeticRefreshDone = false;
-        navBarLastShown = millis();
+        navBarLastShown = Time::skipZero(Time::getMillis());
     }
 
     if (!navBarVisible && navBarPrevVisible) {
-        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when hiding nav bar
-        navBarLastShown = millis();               // Mark when it disappeared
+        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST);            // Fast refresh when hiding nav bar
+        navBarLastShown = Time::skipZero(Time::getMillis()); // Mark when it disappeared
     }
 
     if (!navBarVisible && navBarLastShown != 0 && !cosmeticRefreshDone) {

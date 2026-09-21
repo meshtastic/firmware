@@ -100,7 +100,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
                !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
-               !nodeDB->isFull()) {
+               nodeDB->isHalfEmpty()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
@@ -163,6 +163,10 @@ void MeshService::reloadConfig(int saveWhat)
         nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
         configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+
+        // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
+        // a client rolling through presets just moves this and moves it back.
+        nodeDB->refreshCommittedLoraSlot();
     }
     nodeDB->saveToDisk(saveWhat);
 }

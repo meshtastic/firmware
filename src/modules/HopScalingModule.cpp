@@ -7,6 +7,7 @@
 #include "FSCommon.h"
 #include "NodeDB.h"
 #include "SPILock.h"
+#include "airtime.h"
 #include "concurrency/LockGuard.h"
 #include "mesh-pb-constants.h"
 #include <algorithm>
@@ -92,13 +93,8 @@ void HopScalingModule::saveToDisk() const
     memcpy(state.entries, entries, sizeof(state.entries));
     auto file = SafeFile(HISTOGRAM_STATE_FILE, true);
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&state), sizeof(state));
-    if (file.close() && written == sizeof(state)) {
-        LOG_DEBUG("[HOPSCALE] Saved: count=%u samp=1/%u filt=1/%u holdRollsRemaining=%u", count, samplingDenominator,
-                  filteringDenominator, state.filterDenomHoldRollsRemaining);
-    } else {
-        LOG_WARN("[HOPSCALE] Failed to write %s (%u of %u bytes)", HISTOGRAM_STATE_FILE, static_cast<unsigned>(written),
-                 static_cast<unsigned>(sizeof(state)));
-    }
+    if (!file.close() || written != sizeof(state))
+        LOG_WARN("[HOPSCALE] State save failed");
 #endif
 }
 
@@ -118,8 +114,6 @@ void HopScalingModule::loadFromDisk()
         state.filteringDenominator < state.samplingDenominator || state.filteringDenominator > DENOM_MAX ||
         !is_pow_of_2(state.samplingDenominator) || !is_pow_of_2(state.filteringDenominator) ||
         state.filterDenomHoldRollsRemaining > FILTER_DENOM_HOLD_ROLLS) {
-        LOG_DEBUG("[HOPSCALE] No valid persisted state (magic=%08x ver=%u samp=%u filt=%u hold=%u), starting fresh", state.magic,
-                  state.version, state.samplingDenominator, state.filteringDenominator, state.filterDenomHoldRollsRemaining);
         return;
     }
     // Derive count by scanning: active entries have seenHoursAgo != 0; pack them to the front.
@@ -130,7 +124,7 @@ void HopScalingModule::loadFromDisk()
             entries[restored++] = state.entries[i];
         }
     }
-    count = restored;
+    this->count = restored;
     samplingDenominator = state.samplingDenominator;
     filteringDenominator = state.filteringDenominator;
     filteringDenomHoldRollsRemaining = state.filterDenomHoldRollsRemaining;
@@ -138,8 +132,6 @@ void HopScalingModule::loadFromDisk()
     // the first few post-reboot scaledPerHour values use a safe (slightly conservative) multiplier.
     memset(denominatorHistory, filteringDenominator, sizeof(denominatorHistory));
     hashSeed = state.hashSeed;
-    LOG_INFO("[HOPSCALE] Restored: count=%u samp=1/%u filt=1/%u holdRollsRemaining=%u", count, samplingDenominator,
-             filteringDenominator, state.filterDenomHoldRollsRemaining);
 #endif
 }
 
@@ -181,9 +173,7 @@ void HopScalingModule::samplePacketForHistogram(uint32_t nodeId, uint8_t hopCoun
         entries[count].seenHoursAgo = 1u; // mark current hour
         this->count++;
     } else {
-        LOG_WARN("[HOPSCALE] Histogram full at samp=1/%u (DENOM_MAX=%u); dropping node hash=0x%04x; hop recommendation may be "
-                 "skewed!!",
-                 samplingDenominator, DENOM_MAX, hash);
+        LOG_WARN("[HOPSCALE] Histogram full, node dropped");
     }
 }
 
@@ -245,23 +235,15 @@ void HopScalingModule::rollHour()
     }
     lastPerHopCounts = counts;
 
-    // 1b. Compute politeness factor from the 0-2 h vs 1-3 h activity ratio.
-    {
-        const uint32_t recent = static_cast<uint32_t>(hourlyRaw[0]) + hourlyRaw[1];
-        const uint32_t older = static_cast<uint32_t>(hourlyRaw[1]) + hourlyRaw[2];
-        if (older > 1 && recent > 1) {
-            const uint32_t r = static_cast<uint32_t>(recent) * ACTIVITY_WEIGHT_SCALE;
-            const uint32_t o = static_cast<uint32_t>(older);
-            if (r < o * ACTIVITY_WEIGHT_GENEROUS_MAX_NUMER)
-                lastPoliteNumer = POLITENESS_GENEROUS;
-            else if (r > o * ACTIVITY_WEIGHT_STRICT_MIN_NUMER)
-                lastPoliteNumer = POLITENESS_STRICT;
-            else
-                lastPoliteNumer = POLITENESS_DEFAULT;
-        } else {
-            lastPoliteNumer = POLITENESS_DEFAULT;
-        }
-    }
+    // 1b. Pick the politeness factor from measured channel utilization.  How far the walk may
+    //     stretch and whether it is applied at all now read the same signal, so a node cannot be
+    //     told the mesh is filling up by node counts while the channel says it is idle.
+    if (smoothedUtilPct() >= CONGESTION_STRICT_PCT)
+        lastPoliteNumer = POLITENESS_STRICT;
+    else if (smoothedUtilPct() >= CONGESTION_ENGAGE_PCT)
+        lastPoliteNumer = POLITENESS_DEFAULT;
+    else
+        lastPoliteNumer = POLITENESS_GENEROUS;
 
     // 1c. Scale and cache trend stats (denominatorHistory already advanced above).
     {
@@ -309,29 +291,7 @@ void HopScalingModule::rollHour()
     }
     lastSuggestedHop = suggested;
 
-    // 3. Log scaled per-hop counts and recommendation.
-    {
-        uint16_t scaled[MAX_HOP + 1];
-        for (uint8_t h = 0; h <= MAX_HOP; h++) {
-            const uint32_t s = static_cast<uint32_t>(counts.perHop[h]) * filteringDenominator;
-            scaled[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
-        }
-        const uint32_t scaledTotal = static_cast<uint32_t>(counts.total) * filteringDenominator;
-        memcpy(lastScaledPerHop, scaled, sizeof(lastScaledPerHop));
-        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%u/4", count,
-                 samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
-                 lastPoliteNumer);
-
-        const auto &ts = lastTrendStats;
-        LOG_INFO("[HOPSCALE] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", ts.scaledPerHour[0],
-                 ts.scaledPerHour[1], ts.scaledPerHour[2], ts.scaledPerHour[3], ts.scaledPerHour[4], ts.scaledPerHour[5],
-                 ts.scaledPerHour[6], ts.scaledPerHour[7], ts.scaledPerHour[8], ts.scaledPerHour[9], ts.scaledPerHour[10],
-                 ts.scaledPerHour[11], ts.scaledPerHour[12]);
-        LOG_INFO("[HOPSCALE] trend: new=%u returning=%u lapsed=%u olderThan4h=%u agingOut=%u", ts.newThisHour,
-                 ts.returningThisHour, ts.lapsedSinceLastHour, ts.olderThan4h, ts.agingOut);
-    }
-
-    // 4. Scale-down check: if fewer than FILL_LOW_PCT% of capacity pass the filteringDenominator
+    // 3. Scale-down check: if fewer than FILL_LOW_PCT% of capacity pass the filteringDenominator
     //    gate and are active, halve samplingDenominator to admit more nodes.
     //    Note: during a filteringDenominator hold period, lowering samplingDenominator does not
     //    immediately improve counts.total (new admissions don't pass the elevated
@@ -339,16 +299,14 @@ void HopScalingModule::rollHour()
     //    consecutive hours, cascading samplingDenominator toward DENOM_MIN.  This is intentional:
     //    rapid re-admission allows quick recovery if the mesh returns.  The hop recommendation
     //    stays conservative (MAX_HOP) throughout because filteringDenominator remains elevated;
-    //    step 5 below re-synchronises the denominators once the hold expires.
+    //    step 4 below re-synchronises the denominators once the hold expires.
     if (counts.total * 100u < static_cast<uint32_t>(CAPACITY) * FILL_LOW_PCT) {
         if (samplingDenominator > DENOM_MIN) {
             samplingDenominator = static_cast<uint8_t>(samplingDenominator / 2u);
-            LOG_INFO("[HOPSCALE] Scale-down: sampling denom halved to %u (filter denom=%u)", samplingDenominator,
-                     filteringDenominator);
         }
     }
 
-    // 5. Tick down the hold counter; once it reaches zero, halve filteringDenominator toward
+    // 4. Tick down the hold counter; once it reaches zero, halve filteringDenominator toward
     //    samplingDenominator once per rollHour() (= once per hour) rather than a single jump:
     //    avoids a sudden large change in the hop-walk count when samplingDenominator cascaded
     //    down significantly during the hold period.  No new hold is placed on each step - the
@@ -361,11 +319,10 @@ void HopScalingModule::rollHour()
         if (filteringDenomHoldRollsRemaining == 0) {
             const uint8_t stepped = static_cast<uint8_t>(filteringDenominator / 2u);
             filteringDenominator = (stepped > samplingDenominator) ? stepped : samplingDenominator;
-            LOG_INFO("[HOPSCALE] Filter denom stepped to %u (samp=1/%u)", filteringDenominator, samplingDenominator);
         }
     }
 
-    // 6. Shift all seen bitmaps left by one slot (opens a fresh slot for the new hour).
+    // 5. Shift all seen bitmaps left by one slot (opens a fresh slot for the new hour).
     for (uint8_t i = 0; i < count; i++) {
         rollSeenBits(entries[i]);
     }
@@ -409,7 +366,6 @@ void HopScalingModule::trimIfNeeded()
         // subsample where N is the new filteringDenominator, not the old smaller value.
         for (uint8_t h = 0; h < 13; h++)
             denominatorHistory[h] = std::max(denominatorHistory[h], filteringDenominator);
-        LOG_INFO("[HOPSCALE] Scale-up: samp denom doubled to %u (filt=%u)", samplingDenominator, filteringDenominator);
 
         newCount = 0;
         for (uint8_t i = 0; i < count; i++) {
@@ -424,30 +380,40 @@ void HopScalingModule::trimIfNeeded()
     }
 }
 
-void HopScalingModule::logStatusReport(bool didHourlyUpdate) const
+float HopScalingModule::channelUtil()
 {
-    const bool histActive = (histogramRollCount > 0 && count > 0);
-    const auto &histCounts = lastPerHopCounts;
-    const uint8_t runsRemaining = didHourlyUpdate ? RUNS_PER_HOUR : (RUNS_PER_HOUR - runsSinceLastHourlyUpdate);
-    const uint8_t minsUntilRollover = runsRemaining * (RUN_INTERVAL_MS / (60 * 1000UL));
+#ifdef PIO_UNIT_TESTING
+    return s_testChannelUtil;
+#else
+    return airTime ? airTime->smoothedChannelUtilizationPercent() : 0.0f;
+#endif
+}
 
-    LOG_INFO("[HOPSCALE] hop=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u lastCounted=%u polite=%u/4 "
-             "nextRoll=%umin",
-             lastRequiredHop, histActive ? 1u : 0u, getFillPercentage(), samplingDenominator, filteringDenominator, count,
-             histCounts.total, lastPoliteNumer, minsUntilRollover);
+void HopScalingModule::updateCongestion()
+{
+    // AirTime folds its own EMA once per 10 s bucket, so this reads a figure that already covers
+    // the whole interval between ticks rather than only the 60 s before each one.
+    utilizationAvg = channelUtil();
 
-    LOG_INFO("[HOPSCALE] nodes perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
-             histCounts.perHop[2], histCounts.perHop[3], histCounts.perHop[4], histCounts.perHop[5], histCounts.perHop[6],
-             histCounts.perHop[7]);
-    LOG_INFO("[HOPSCALE] last scaled perHop: [%u %u %u %u %u %u %u %u]", lastScaledPerHop[0], lastScaledPerHop[1],
-             lastScaledPerHop[2], lastScaledPerHop[3], lastScaledPerHop[4], lastScaledPerHop[5], lastScaledPerHop[6],
-             lastScaledPerHop[7]);
+    // Separate engage/release thresholds, each confirmed over several ticks, so a mesh sitting
+    // near a threshold does not flap the hop limit between rolls.
+    const uint8_t util = smoothedUtilPct();
+    const bool wantsFlip = congested ? (util <= CONGESTION_RELEASE_PCT) : (util >= CONGESTION_ENGAGE_PCT);
+    congestionConfirmRuns = wantsFlip ? static_cast<uint8_t>(congestionConfirmRuns + 1u) : 0u;
+    if (congestionConfirmRuns >= CONGESTION_CONFIRM_RUNS) {
+        congested = !congested;
+        congestionConfirmRuns = 0;
+        LOG_INFO("[HOPSCALE] Congestion %s, util %u%%", congested ? "on" : "off", static_cast<unsigned>(utilizationAvg));
+    }
 }
 
 int32_t HopScalingModule::runOnce()
 {
     const bool isFirstRun = !hasCompletedInitialRun;
     bool didHourlyUpdate = false;
+
+    // Sampled every tick, not only on a roll, so the gate reacts within minutes of a change.
+    updateCongestion();
 
     if (isFirstRun) {
         hasCompletedInitialRun = true;
@@ -466,26 +432,40 @@ int32_t HopScalingModule::runOnce()
     }
 
     if (didHourlyUpdate) {
-        uint8_t suggested = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
-        // Role-based hop floor: TRACKER/TAK_TRACKER always reach at least 2 hops,
-        // SENSOR reaches at least 1, so these reporting roles remain reachable even
-        // on a dense mesh where the histogram recommends a lower hop count.
-        uint8_t roleFloor = 0;
-        switch (config.device.role) {
-        case meshtastic_Config_DeviceConfig_Role_TRACKER:
-        case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
-            roleFloor = 2;
-            break;
-        case meshtastic_Config_DeviceConfig_Role_SENSOR:
-            roleFloor = 1;
-            break;
-        default:
-            break;
+        if (!congested) {
+            // Density alone is not a reason to throttle.  Hand a hop back per roll rather than
+            // jumping to HOP_MAX, so a mesh that just quietened does not un-throttle all at once.
+            if (lastRequiredHop < HOP_MAX)
+                lastRequiredHop++;
+        } else {
+            uint8_t suggested = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
+            // Role-based hop floor: TRACKER/TAK_TRACKER always reach at least 2 hops, SENSOR reaches
+            // at least 1, and the infrastructure roles reach INFRASTRUCTURE_HOP_FLOOR, so these
+            // reporting roles remain reachable even on a dense mesh recommending fewer hops.
+            // The infrastructure set matches the one Router.cpp uses for zero-cost hops.
+            uint8_t roleFloor = 0;
+            switch (config.device.role) {
+            case meshtastic_Config_DeviceConfig_Role_ROUTER:
+            case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
+            case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE:
+                roleFloor = INFRASTRUCTURE_HOP_FLOOR;
+                break;
+            case meshtastic_Config_DeviceConfig_Role_TRACKER:
+            case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
+                roleFloor = 2;
+                break;
+            case meshtastic_Config_DeviceConfig_Role_SENSOR:
+                roleFloor = 1;
+                break;
+            default:
+                break;
+            }
+            lastRequiredHop = std::max(suggested, roleFloor);
         }
-        lastRequiredHop = std::max(suggested, roleFloor);
     }
 
-    logStatusReport(didHourlyUpdate);
+    LOG_INFO("[HOPSCALE] hop=%u util=%u%% nodes=%u samp=1/%u filt=1/%u", lastRequiredHop, static_cast<unsigned>(utilizationAvg),
+             count, samplingDenominator, filteringDenominator);
 
     return RUN_INTERVAL_MS;
 }

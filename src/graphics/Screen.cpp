@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
@@ -327,7 +328,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::parseBannerMessageWithFonts(NotificationRenderer::alertBannerMessage);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
     NotificationRenderer::alertBannerUntil =
-        (banner_overlay_options.durationMs == 0) ? 0 : millis() + banner_overlay_options.durationMs;
+        (banner_overlay_options.durationMs == 0) ? 0 : Time::timerEndsAtMillis(banner_overlay_options.durationMs);
     NotificationRenderer::optionsArrayPtr = banner_overlay_options.optionsArrayPtr;
     NotificationRenderer::optionsEnumPtr = banner_overlay_options.optionsEnumPtr;
     NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
@@ -351,7 +352,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -373,7 +374,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -402,7 +403,7 @@ void Screen::showAlphanumericPicker(const char *message, const char *initialText
 
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::textInputCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -439,7 +440,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
     // Store the message and set the expiration timestamp (use same pattern as other notifications)
     strncpy(NotificationRenderer::alertBannerMessage, header ? header : "Text Input", 255);
     NotificationRenderer::alertBannerMessage[255] = '\0';
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::current_notification_type = notificationTypeEnum::text_input;
 
@@ -492,7 +493,7 @@ float Screen::estimatedHeading(double lat, double lon)
     static double oldLat, oldLon;
     static float b = -1.0f;
     static uint32_t lastHeadingAtMs = 0;
-    const uint32_t now = millis();
+    const uint32_t now = Time::stampMillis();
     const uint32_t gpsUpdateIntervalSecs =
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
     uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
@@ -2274,18 +2275,8 @@ int Screen::handleInputEvent(const InputEvent *event)
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {
 
-        // Ask any MeshModules if they're handling keyboard input right now
-        bool inputIntercepted = false;
-        for (MeshModule *module : moduleFrames) {
-            if (module && module->interceptingKeyboardInput())
-                inputIntercepted = true;
-        }
-#if BASEUI_HAS_GAMES
-        // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
-        // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
-        if (gamesModule && gamesModule->interceptingKeyboardInput())
-            inputIntercepted = true;
-#endif
+        // Ask any MeshModules (and the games frame) if they're handling keyboard input right now
+        const bool inputIntercepted = anyModuleInterceptingInput();
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
@@ -2446,6 +2437,47 @@ bool Screen::isTextMessageFrameShown() const
 bool Screen::isGamesFrameShown()
 {
     return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
+}
+
+void Screen::showHomeFrame()
+{
+    if (!ui)
+        return;
+    // Home is optional -- setFrames() only adds it when !hiddenFrames.home, leaving the position
+    // 255. Bouncing to nothing would strand the caller on the frame it wanted to leave, so fall
+    // back to the messages frame, which setFrames() always adds.
+    const uint8_t target =
+        (framesetInfo.positions.home != 255) ? framesetInfo.positions.home : framesetInfo.positions.textMessage;
+    if (target != 255)
+        ui->switchToFrame(target);
+}
+
+bool Screen::anyModuleInterceptingInput()
+{
+    for (MeshModule *module : moduleFrames) {
+        if (module && module->interceptingKeyboardInput())
+            return true;
+    }
+#if BASEUI_HAS_GAMES
+    // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it owns
+    // the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
+    if (gamesModule && gamesModule->interceptingKeyboardInput())
+        return true;
+#endif
+    return false;
+}
+
+bool Screen::isInteractionBusy()
+{
+    // Something is holding the D-pad -- the user is mid-interaction. A modal module owns the whole
+    // screen; an intercepting one owns the keys on its own frame.
+    if (hasModalModule() || anyModuleInterceptingInput())
+        return true;
+    // An interactive overlay (picker / text entry) is open. Showing a transient banner REPLACES the
+    // active overlay, so this would silently discard whatever the user was entering. A plain
+    // text_banner is itself transient, so superseding one of those is fine.
+    const notificationTypeEnum nt = NotificationRenderer::current_notification_type;
+    return nt != notificationTypeEnum::none && nt != notificationTypeEnum::text_banner;
 }
 
 } // namespace graphics

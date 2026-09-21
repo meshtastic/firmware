@@ -22,6 +22,7 @@
 #include "Router.h"
 #include "SPILock.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
@@ -244,7 +245,7 @@ static void clearAuthSlot_LH(const PhoneAPI *p)
 
 PhoneAPI::PhoneAPI()
 {
-    lastContactMsec = millis();
+    lastContactMsec = Time::skipZero(Time::getMillis());
     std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
 }
 
@@ -436,7 +437,7 @@ bool PhoneAPI::checkConnectionTimeout()
 bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
-    lastContactMsec = millis();
+    lastContactMsec = Time::skipZero(Time::getMillis());
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
@@ -1178,6 +1179,9 @@ void PhoneAPI::sendConfigComplete()
     onConfigComplete();
 
     pauseBluetoothLogging = false;
+
+    // Re-arm polling for anything queued while live-packet notifications were suppressed during sync.
+    service->nudgeFromNum();
 }
 
 void PhoneAPI::releasePhonePacket()
@@ -2102,7 +2106,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         revokeAllAuth();
         queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "", 0, 0, 0);
         zeroPassphrase();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         return true;
     }
 

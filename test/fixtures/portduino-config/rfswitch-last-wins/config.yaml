@@ -1,0 +1,4 @@
+# Primary config for the rfswitch_table last-wins case. The two files in config.d/
+# each define a Lora.rfswitch_table; the one loaded last should fully replace it.
+General:
+  ConfigDirectory: config.d/
