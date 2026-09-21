@@ -417,7 +417,11 @@ bool DMShellModule::parseFrame(const meshtastic_MeshPacket &mp, meshtastic_Remot
     }
 
     if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_RemoteShell_fields, &outFrame)) {
-        LOG_INFO("Received a DMShell message");
+        // op and seq, because without them the log cannot answer the question that matters when a gap
+        // will not close: did the peer's replay arrive and get discarded, or did it never arrive at
+        // all. Logged before the session and ordering checks, so a frame rejected by either still
+        // shows up here.
+        LOG_INFO("Received a DMShell message op=%u seq=%u", outFrame.op, outFrame.seq);
     } else {
         LOG_ERROR("Error decoding DMShell message!");
         return false;
