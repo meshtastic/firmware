@@ -607,6 +607,7 @@ class SessionState:
 
     def note_frame_resent(self, seq: int) -> None:
         """Restamp a frame we have just put back on the wire, so the next wait is measured from it."""
+        self.bump("frames_resent")
         now = time.monotonic()
         with self.tx_lock:
             for frame in reversed(self.tx_history):
@@ -694,12 +695,23 @@ class SessionState:
                 self.highest_seen_rx_seq = seq
 
     def note_received_seq(self, seq: int) -> tuple[str, Optional[int]]:
+        with self.tx_lock:
+            expected = self.next_expected_rx_seq
         outcome = self._note_received_seq_locked(seq)
         if seq != 0:
             # Sequenced frames only. A control frame carries seq 0 and is counted by op instead, so
             # rx_frames_total stays comparable with the peer's highest sent sequence number.
             self.bump("rx_frames_total")
-            self.bump(f"rx_frames_{outcome[0]}")
+            # What the frame is, judged against the cursor before this frame moved it.
+            if seq < expected:
+                self.bump("rx_frames_duplicate")
+            elif seq > expected:
+                self.bump("rx_frames_ahead_of_cursor")
+            else:
+                self.bump("rx_frames_new_in_order")
+            # And what we did about it, which is not the same thing: a duplicate arriving while a gap
+            # is open is classified as a gap, because that is the action it triggers.
+            self.bump(f"rx_action_{outcome[0]}")
         return outcome
 
     def _note_received_seq_locked(self, seq: int) -> tuple[str, Optional[int]]:
@@ -861,9 +873,10 @@ class SessionState:
             our_originated = max(self.next_seq - 1, 0)
 
         rx_total = c.get("rx_frames_total", 0)
-        rx_ok = c.get("rx_frames_process", 0)
+        rx_ok = c.get("rx_frames_new_in_order", 0)
         rx_dup = c.get("rx_frames_duplicate", 0)
         tx_total = c.get("tx_frames_total", 0)
+        resends = c.get("frames_resent", 0)
 
         out = {
             "elapsed_sec": round(elapsed, 1),
@@ -871,8 +884,12 @@ class SessionState:
             "inbound": {
                 "frames_arrived": rx_total,
                 "delivered_in_order": rx_ok,
+                # Frames the peer put on the wire twice, i.e. its resends reaching us. Judged on the
+                # sequence number alone, so a duplicate arriving during a gap still counts here even
+                # though the action it triggered was a replay request.
                 "duplicates": rx_dup,
-                "classified_as_gap": c.get("rx_frames_gap", 0),
+                "ahead_of_cursor": c.get("rx_frames_ahead_of_cursor", 0),
+                "triggered_replay_request": c.get("rx_action_gap", 0),
                 "held_for_gap": c.get("rx_frames_held_for_gap", 0),
                 # Frames the peer numbered that we never delivered. Negative is impossible; zero
                 # with a non-zero peer_highest_seq is a clean run.
@@ -885,9 +902,15 @@ class SessionState:
             "outbound": {
                 "frames_transmitted": tx_total,
                 "frames_originated": our_originated,
-                # Transmissions spent per frame we had to originate. 1.0 is perfect; above 1.0 is
-                # retransmissions, replays and acks. This is the airtime cost of the recovery scheme.
-                "transmissions_per_frame": round(tx_total / our_originated, 3) if our_originated else None,
+                # Frames we put back on the wire: our replays for the peer and our own input
+                # retransmissions, both of which route through note_frame_resent. This is the
+                # resend number; it is not the same thing as total overhead.
+                "resends": resends,
+                "resend_ratio": round(resends / our_originated, 4) if our_originated else None,
+                # Every frame handed to the radio over the frames we originated. Read this as total
+                # airtime overhead, NOT as a resend ratio: in a session where the server is streaming
+                # output, our ACKs dominate it and it says nothing about loss.
+                "transmissions_per_originated_frame": round(tx_total / our_originated, 3) if our_originated else None,
                 "input_retransmits": c.get("input_retransmits_total", 0),
                 "payload_bytes": c.get("tx_payload_bytes", 0),
                 "by_op": {},
@@ -1627,9 +1650,10 @@ def report_session_stats(state: SessionState, json_path: Optional[Path]) -> None
     recovery = summary["recovery"]
     lines = [
         f"session {summary['elapsed_sec']}s, peer reached seq {summary['peer_highest_seq']}",
-        "  in : {arrived} frames arrived, {ok} delivered in order, {dup} duplicate, {held} held for a gap".format(
+        "  in : {arrived} frames arrived, {ok} new in order, {dup} duplicate (the peer's resends), "
+        "{ahead} ahead of the cursor, {held} held for a gap".format(
             arrived=inbound["frames_arrived"], ok=inbound["delivered_in_order"],
-            dup=inbound["duplicates"], held=inbound["held_for_gap"],
+            dup=inbound["duplicates"], ahead=inbound["ahead_of_cursor"], held=inbound["held_for_gap"],
         ),
         "       {never} never delivered, loss {loss}, duplicate {duprate}".format(
             never=inbound["never_delivered"],
@@ -1637,9 +1661,14 @@ def report_session_stats(state: SessionState, json_path: Optional[Path]) -> None
             duprate=_as_percent(inbound["duplicate_rate"]),
         ),
         "       {b} output bytes, {bps}/s".format(b=inbound["output_bytes"], bps=inbound["output_bytes_per_sec"]),
-        "  out: {tx} transmissions for {orig} originated frames ({ratio} per frame), {rt} input retransmits".format(
-            tx=outbound["frames_transmitted"], orig=outbound["frames_originated"],
-            ratio=outbound["transmissions_per_frame"], rt=outbound["input_retransmits"],
+        "  out: {orig} frames originated, {resent} resent ({rratio} per originated frame), "
+        "{rt} input retransmits".format(
+            orig=outbound["frames_originated"], resent=outbound["resends"],
+            rratio=outbound["resend_ratio"], rt=outbound["input_retransmits"],
+        ),
+        "       {tx} transmissions in total ({ratio} per originated frame), acks included - "
+        "total airtime overhead, not a resend ratio".format(
+            tx=outbound["frames_transmitted"], ratio=outbound["transmissions_per_originated_frame"],
         ),
         "       by op: " + (", ".join(f"{k}={v}" for k, v in sorted(outbound["by_op"].items())) or "none"),
         "  rec: {req} replay requests over {gaps} distinct gaps, {got} replays received, "
