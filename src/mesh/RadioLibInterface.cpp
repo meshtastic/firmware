@@ -122,22 +122,31 @@ bool RadioLibInterface::canSendImmediately()
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
     bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
+    const uint32_t nowMsec = Time::getMillis();
+    // How long since anything last read the IRQ flags. The deadline below is 2 * preambleTimeMsec,
+    // derived from symbol time alone - about 8 ms at SF7/BW500 - and on a host where the radio thread
+    // is cooperative and the SPI bus may be a USB bridge, one look can easily be further apart than
+    // that. Then the flag is declared false because nobody looked, not because no packet arrived.
+    const uint32_t sinceLastLookMsec = lastReceiveDetectedMs ? nowMsec - lastReceiveDetectedMs : 0;
+    lastReceiveDetectedMs = Time::skipZero(nowMsec);
     // Handle false detections
     if (detected) {
         if (!activeReceiveStart) {
-            activeReceiveStart = Time::skipZero(Time::getMillis());
+            activeReceiveStart = Time::skipZero(nowMsec);
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
             if (!(irq & syncWordHeaderValidFlag)) {
                 // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
                 activeReceiveStart = 0;
-                LOG_TRACE("Ignore false preamble detection");
+                LOG_TRACE("Ignore false preamble detection, deadline %ums, last look %ums ago", 2 * preambleTimeMsec,
+                          sinceLastLookMsec);
                 return false;
             } else {
                 uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
                 if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
                     // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
                     activeReceiveStart = 0;
-                    LOG_TRACE("Ignore false header detection");
+                    LOG_TRACE("Ignore false header detection, deadline %ums, last look %ums ago", maxPacketTimeMsec,
+                              sinceLastLookMsec);
                     return false;
                 }
             }
