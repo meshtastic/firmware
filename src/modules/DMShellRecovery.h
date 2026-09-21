@@ -155,6 +155,9 @@ class DMShellTxWindow
 
     uint32_t outstanding() const { return highestSentSeq - peerAckedSeq; }
 
+    /// The peer's cumulative cursor, so a blocked sender can work out which frame to retransmit.
+    uint32_t peerAcked() const { return peerAckedSeq; }
+
     /// Whether another frame of new data may be generated. Control frames and replays deliberately
     /// ignore this: blocking a teardown behind a closed window is the same class of bug as buffering
     /// one behind a sequence gap.
