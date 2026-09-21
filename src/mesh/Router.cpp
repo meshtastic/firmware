@@ -536,7 +536,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
             // Never exceed user-configured hop_limit
             if (variableHopLimit < p->hop_limit) {
-                LOG_DEBUG("[HOPSCALE] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);
                 p->hop_limit = variableHopLimit;
             }
             break;
@@ -1207,6 +1206,36 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
            // to handle the case where the remote node has our key, but we don't have theirs.
            !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey);
 }
+
+/**
+ * PKC fallback for an ack that has no channel in common with the sender.
+ *
+ * PKI needs only the two keys, so a DM can reach us over a channel we do not carry. Its ack is a
+ * ROUTING packet, which wouldEncryptWithPKC() excludes, so it would be channel-encoded, fail at
+ * setActiveByIndex() with NO_CHANNEL, and never be sent - leaving the sender to retransmit to
+ * exhaustion for a message that was in fact delivered.
+ *
+ * This is the one place an ack is deliberately made opaque to relays. Normally that costs next-hop
+ * learning and intermediate retransmission cancel, which is why ROUTING is PKC-excluded in general;
+ * here there is no readable alternative to lose, because without this the ack does not exist.
+ *
+ * Scoped as tightly as that argument reaches: a unicast ROUTING packet we originate, carrying a
+ * request_id, to a destination whose key we hold, under the same ham/sim/private-key preconditions
+ * PKC always has - and only when the channel index does not resolve. It tests channels.getHash()
+ * rather than setActiveByIndex() so the predicate has no side effect; generateHash already returns
+ * -1 for an invalid key, so the two agree on which indexes are unusable. The range check has to come
+ * first and stay first: getHash() is a bare hashes[i] with no bounds test of its own.
+ */
+static bool ackNeedsPkcFallback(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
+{
+    return isFromUs(p) &&
+#if ARCH_PORTDUINO
+           !portduino_config.force_simradio &&
+#endif
+           !owner.is_licensed && config.security.private_key.size == 32 && haveDestKey && !isBroadcast(p->to) &&
+           p->decoded.portnum == meshtastic_PortNum_ROUTING_APP && p->decoded.request_id != 0 &&
+           (chIndex >= MAX_NUM_CHANNELS || channels.getHash(chIndex) < 0);
+}
 #endif
 
 /** Return 0 for success or a Routing_Error code for failure
@@ -1300,9 +1329,18 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             crypto->getPendingPublicKey(p->to, destKey)) {
             haveDestKey = true;
         }
+        const bool ackFallback = ackNeedsPkcFallback(p, chIndex, haveDestKey);
+        if (ackFallback)
+            LOG_INFO("No usable channel %d for ack of 0x%08x, send it over PKC", chIndex, p->decoded.request_id);
+
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
-        if (wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
+        //
+        // ackFallback is tested first so an out-of-range chIndex short-circuits: wouldEncryptWithPKC
+        // reaches channels.getName(chIndex) before its portnum exclusion, and getByIndex() logs
+        // "Invalid channel index" on the way past. Without the short-circuit this path would print
+        // an error and then go on to encode the packet successfully.
+        if (ackFallback || wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
             LOG_DEBUG("Use PKI");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;

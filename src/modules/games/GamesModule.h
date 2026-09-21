@@ -67,12 +67,18 @@ class GamesModule : public SinglePortModule, public Observable<const UIFrameEven
     CallbackObserver<GamesModule, const InputEvent *> inputObserver =
         CallbackObserver<GamesModule, const InputEvent *>(this, &GamesModule::handleInputEvent);
 
+    // After this long with no input while the games frame is up, bounce back to the home frame so a
+    // walked-away device clearly reads as a Meshtastic node rather than sitting on a game screen.
+    static constexpr uint32_t INACTIVITY_TIMEOUT_MS = 15000;
+
     // === State transitions ===
     void startPlaying();
     void enterGameOver();
     void exitToIdle();
     void requestRedraw();
     void kickTick();
+    void noteActivity() { lastActivityMs = millis(); } // reset the inactivity timer
+    void goHome();                                     // exit any game and switch to the home frame
 
     // === Shared game-over / high-score flow ===
     void promptForInitials();
@@ -94,6 +100,7 @@ class GamesModule : public SinglePortModule, public Observable<const UIFrameEven
     int lastRank = -1;            // rank achieved last game (-1 == didn't place)
     bool lastWasNewTop = false;   // last game set a new all-time #1
     uint32_t lastAwakeKickMs = 0; // throttles the power-FSM wake nudge during long runs
+    uint32_t lastActivityMs = 0;  // millis() of the last input / becoming-visible (inactivity timer)
 };
 
 extern GamesModule *gamesModule;

@@ -27,7 +27,8 @@ Meshtastic is an open-source LoRa mesh networking project for long-range, low-po
 ### Supported Hardware Platforms
 
 - **ESP32** (ESP32, ESP32-S3, ESP32-C3, ESP32-C6) - Most common platform
-- **nRF52** (nRF52840, nRF52833) - Low power Nordic chips
+- **nRF52** (nRF52840) - Low power Nordic chips
+- **nRF54** - `ARCH_NRF54L`, its own platform layer in `src/platform/nrf54` (`architecture.h`, `main-nrf54.cpp`; env base `nrf54_base` in `variants/nrf54l15/nrf54.ini`) that shares only `NRF52Bluetooth.cpp`, `Nrf52SaadcLock.cpp`, `alloc.cpp` and `hardfault.cpp` with `src/platform/nrf52`, built through the out-of-tree `meshtastic/platform-nordicnrf54` platform and its s145 SoftDevice Arduino core. Boards under `variants/nrf54l15/`: `xiao_nrf54l15_lr2021` is the per-PR canary, `xiao_nrf54l15` and `nrf54l15dk` are `board_level = extra`. Memory class SMALL: 120 hot nodes, 100 warm in `/prefs/warm.dat` (not the nRF52840 raw-flash ring)
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
 - **Linux/Portduino** - Native Linux builds (Raspberry Pi, etc.)
@@ -213,11 +214,13 @@ Every code path that drops a node from the header table must also evict the sate
 
 ### Warm tier (long-tail identity)
 
-On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node - primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
+The tier is gated on `WARM_NODE_COUNT > 0`. `MESHTASTIC_MEM_CLASS <= MEM_CLASS_TINY` sets it to `0` and compiles the tier out; STM32WL is the only such part, so every other arch has the tier.
+
+Where it is enabled, a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node - primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
 
 - **Write:** `getOrCreateMeshNode`'s eviction and `demoteOldestHotNodesToWarm` (the over-cap boot migration) call `warmStore.absorb(num, last_heard, key)` _before_ the node leaves the header.
 - **Read-back:** `getOrCreateMeshNode` calls `warmStore.take()` to rehydrate `last_heard` + key when a warm node is re-admitted; `copyPublicKey()` falls back to the warm tier so the PKI send path finds keys for evicted peers.
-- **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Everywhere else: a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
+- **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Every other arch (nRF54 included): a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
 - **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap - 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 picks 100/200/250 at boot from its flash size). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
 - **`MAX_NUM_NODES` on native is not in that header and is not a constant.** `variants/native/portduino{,-buildroot}/variant.h` define it as `portduino_config.MaxNodes` - resolved at **runtime**, default **200**, overridable per-host with `General: MaxNodes` in the portduino YAML. `variant.h` is reached first, so the `ARCH_PORTDUINO` branch in `mesh-pb-constants.h` never fires; it is now `#error`-guarded rather than holding a plausible-looking `250`. Reading 250 there yields a protected-node cap of 248 when the real one is 198 (`numProtectedNodes() < MAX_NUM_NODES - 2`), which has already produced one wrong diagnosis. The separate 250 in `NodeDB::getMaxNodesAllocatedSize()` is `NODEDB_MIGRATION_LOAD_CEILING`, a decode allowance for files from larger-cap firmware - not a cap.
 

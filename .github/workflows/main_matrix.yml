@@ -24,15 +24,14 @@ on:
       - "**.md"
       - version.properties
 
+  # No paths-ignore here: ci-gate is the required status check, and a PR that
+  # never runs this workflow never reports it, so a docs-only PR cannot merge.
   pull_request:
     branches:
       - master
       - develop
       - event/*
       - feature/*
-    paths-ignore:
-      - "**.md"
-      #- "**.yml"
 
   schedule:
     # Nightly develop build, published to the meshtastic-firmware-nightly R2
@@ -168,10 +167,9 @@ jobs:
       fail-fast: false
       matrix:
         macos_ver:
+          - "27" # ARM64
           - "26" # ARM64
           # - '26-intel' # x86_64
-          - "15" # ARM64
-          # - '15-intel' # x86_64
     uses: ./.github/workflows/build_macos_bin.yml
     with:
       macos_ver: ${{ matrix.macos_ver }}
