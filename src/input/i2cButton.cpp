@@ -26,7 +26,7 @@ extern void i2c_read_byte(uint8_t addr, uint8_t reg, uint8_t *value);
 extern void i2c_write_byte(uint8_t addr, uint8_t reg, uint8_t value);
 
 #define PI4IO_M_ADDR 0x43
-#define getbit(x, y) ((x) >> (y)&0x01)
+#define getbit(x, y) ((x) >> (y) & 0x01)
 #define PI4IO_REG_IRQ_STA 0x13
 #define PI4IO_REG_IN_STA 0x0F
 #define PI4IO_REG_CHIP_RESET 0x01

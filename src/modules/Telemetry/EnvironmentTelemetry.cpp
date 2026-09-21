@@ -417,8 +417,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
-                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
-                // sensormap here.
+            // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+            // sensormap here.
 #ifdef HAS_RAKPROT
             if (rak9154Sensor.hasSensor())
                 result = rak9154Sensor.runOnce();
