@@ -27,6 +27,10 @@ struct DMShellSession {
     uint32_t framesSinceOutbound = 0;
     uint32_t lastActivityMs = 0;
     DMShellRxWindow rxWindow;
+    // Frames that arrived above a gap, held until the gap fills. Slot bookkeeping lives in rxReorder;
+    // these are the slots it hands out.
+    DMShellRxReorder rxReorder;
+    meshtastic_RemoteShell rxReorderFrames[DMShellRxReorder::SLOTS] = {};
     DMShellTxWindow txWindow;
     // Purely for logging: the window opens and closes many times a second, so only transitions are
     // worth a line, and without them there is no way to tell from a log whether it ever engaged.
@@ -80,10 +84,14 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void flushPendingOutputOnInterrupt(const meshtastic_RemoteShell &frame);
     void sendBareAck();
 
+    void applySessionFrame(const meshtastic_RemoteShell &frame);
+    void rememberOutOfOrderFrame(const meshtastic_RemoteShell &frame);
+    bool takeBufferedFrame(uint32_t seq, meshtastic_RemoteShell &outFrame);
+    void drainBufferedFrames();
     bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;
     bool openSession(const meshtastic_MeshPacket &mp, const meshtastic_RemoteShell &frame);
-    bool shouldProcessIncomingFrame(const meshtastic_RemoteShell &frame);
+    DMShellRxDecision classifyIncomingFrame(const meshtastic_RemoteShell &frame);
     bool writeSessionInput(const meshtastic_RemoteShell &frame);
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
