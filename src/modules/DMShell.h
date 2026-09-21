@@ -30,6 +30,7 @@ struct DMShellSession {
     bool txWindowBlocked = false;
     // Sender-side retransmission of the oldest unacknowledged frame while the window is shut.
     uint32_t nextRetransmitMs = 0;
+    DMShellRetransmitRun retransmitRun;
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
@@ -65,12 +66,15 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     pid_t pendingChildPid = -1;
     // Set once at construction from DMSHELL_TX_WINDOW (0 = unbounded); see the constructor.
     uint32_t txWindowFrames = 0;
+    // Set once at construction from DMSHELL_MAX_RETRANSMITS (0 = no bound).
+    uint32_t maxConsecutiveRetransmits = 0;
     // Set once at construction from DMSHELL_LEGACY_RECOVERY; see the constructor.
     bool legacyRecovery = false;
 
     uint32_t replayRequestIntervalMs() const;
     void notePeerReceiveCursor(const meshtastic_RemoteShell &frame);
     void retransmitOldestUnacked();
+    void flushPendingOutputOnInterrupt(const meshtastic_RemoteShell &frame);
 
     bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;

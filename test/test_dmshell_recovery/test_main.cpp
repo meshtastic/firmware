@@ -383,6 +383,67 @@ void test_dmshell_tx_window_latches_when_peer_cursor_freezes()
     TEST_ASSERT_EQUAL_UINT32(0, w.outstanding());
 }
 
+void test_dmshell_retransmit_run_allows_exactly_the_bound()
+{
+    DMShellRetransmitRun r;
+    r.reset(3);
+
+    for (uint32_t attempt = 1; attempt <= 3; attempt++) {
+        TEST_ASSERT_TRUE(r.allowRetransmit(7));
+        TEST_ASSERT_EQUAL_UINT32(attempt, r.repeatCount());
+    }
+
+    // The fourth ask is refused and stays refused, so the caller tears the session down once rather
+    // than alternating between giving up and trying again.
+    TEST_ASSERT_FALSE(r.allowRetransmit(7));
+    TEST_ASSERT_FALSE(r.allowRetransmit(7));
+    TEST_ASSERT_EQUAL_UINT32(3, r.repeatCount());
+}
+
+void test_dmshell_retransmit_run_restarts_on_a_new_sequence_number()
+{
+    DMShellRetransmitRun r;
+    r.reset(2);
+
+    TEST_ASSERT_TRUE(r.allowRetransmit(7));
+    TEST_ASSERT_TRUE(r.allowRetransmit(7));
+    TEST_ASSERT_FALSE(r.allowRetransmit(7));
+
+    // A different gap is a different problem. Healthy recovery walks through many sequence numbers,
+    // so the allowance has to be per sequence number or a long session would eventually trip it.
+    TEST_ASSERT_TRUE(r.allowRetransmit(8));
+    TEST_ASSERT_EQUAL_UINT32(1, r.repeatCount());
+}
+
+void test_dmshell_retransmit_run_clear_forgives_a_peer_that_caught_up()
+{
+    DMShellRetransmitRun r;
+    r.reset(2);
+    TEST_ASSERT_TRUE(r.allowRetransmit(7));
+    TEST_ASSERT_TRUE(r.allowRetransmit(7));
+
+    // The peer's cursor advanced, which proves it is alive; the frames it needed next must not
+    // inherit a nearly spent allowance.
+    r.clear();
+    TEST_ASSERT_EQUAL_UINT32(0, r.repeatCount());
+    TEST_ASSERT_TRUE(r.allowRetransmit(7));
+    TEST_ASSERT_TRUE(r.allowRetransmit(7));
+    TEST_ASSERT_FALSE(r.allowRetransmit(7));
+}
+
+void test_dmshell_retransmit_run_unbounded_when_limit_zero()
+{
+    DMShellRetransmitRun r;
+    r.reset(0);
+
+    // The measured pre-fix behaviour, kept reachable so one build can be A/B tested: 88 repeats of a
+    // single sequence number and still going.
+    for (uint32_t attempt = 0; attempt < 200; attempt++) {
+        TEST_ASSERT_TRUE(r.allowRetransmit(7));
+    }
+    TEST_ASSERT_EQUAL_UINT32(200, r.repeatCount());
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -409,6 +470,10 @@ void setup()
     RUN_TEST(test_dmshell_tx_window_reset_clears_peer_state);
     RUN_TEST(test_dmshell_tx_window_reports_peer_cursor_for_retransmission);
     RUN_TEST(test_dmshell_tx_window_latches_when_peer_cursor_freezes);
+    RUN_TEST(test_dmshell_retransmit_run_allows_exactly_the_bound);
+    RUN_TEST(test_dmshell_retransmit_run_restarts_on_a_new_sequence_number);
+    RUN_TEST(test_dmshell_retransmit_run_clear_forgives_a_peer_that_caught_up);
+    RUN_TEST(test_dmshell_retransmit_run_unbounded_when_limit_zero);
     exit(UNITY_END());
 }
 
