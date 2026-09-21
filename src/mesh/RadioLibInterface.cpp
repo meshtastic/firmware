@@ -124,9 +124,14 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
     bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
     const uint32_t nowMsec = Time::getMillis();
     // How long since anything last read the IRQ flags. The deadline below is 2 * preambleTimeMsec,
-    // derived from symbol time alone - about 8 ms at SF7/BW500 - and on a host where the radio thread
-    // is cooperative and the SPI bus may be a USB bridge, one look can easily be further apart than
-    // that. Then the flag is declared false because nobody looked, not because no packet arrived.
+    // derived from symbol time alone - about 8 ms at SF7/BW500 - but nothing polls the flags on that
+    // cadence. This function runs from canSendImmediately(), so a look happens once per CSMA backoff
+    // while something is queued, and getTxDelayMsec() draws that backoff as
+    // random(0, 2^CWsize) * slotTimeMsec. slotTimeMsec carries a fixed 7.6 ms propagation/turnaround
+    // term while preambleTimeMsec is pure symbol time, so the two scale apart: an 8 ms deadline against
+    // a 0-56 ms backoff at ShortTurbo, but 262 ms against 0-196 ms at LongFast. At a fast preset the
+    // flag is therefore declared false because nobody looked in time, not because no packet arrived -
+    // on any platform, whatever the bus costs.
     const uint32_t sinceLastLookMsec = lastReceiveDetectedMs ? nowMsec - lastReceiveDetectedMs : 0;
     lastReceiveDetectedMs = Time::skipZero(nowMsec);
     // Handle false detections
