@@ -1,7 +1,6 @@
 #include "Lock.h"
 #include "configuration.h"
 #include <cassert>
-#include <logging.h>
 
 namespace concurrency
 {
@@ -38,7 +37,7 @@ void Lock::unlock()
         abort();
     }
 }
-#else
+#elif defined(ARCH_PORTDUINO)
 Lock::Lock()
 {
     pthread_mutex_init(&mutex, NULL);
@@ -74,6 +73,21 @@ Lock::~Lock()
 {
     pthread_mutex_destroy(&mutex);
 }
+#else
+// Neither FreeRTOS nor pthreads: single-threaded targets such as STM32WL, whose newlib has no
+// pthread at all. Unchanged from upstream - the real implementation above is Portduino's.
+Lock::Lock() {}
+
+Lock::~Lock() {}
+
+void Lock::lock() {}
+
+bool Lock::lock(uint32_t)
+{
+    return true;
+}
+
+void Lock::unlock() {}
 #endif
 
 } // namespace concurrency
