@@ -41,7 +41,6 @@ class Lock
     SemaphoreHandle_t handle;
 #elif defined(ARCH_PORTDUINO)
     pthread_mutex_t mutex;
-    bool locked = false;
 #endif
 };
 
