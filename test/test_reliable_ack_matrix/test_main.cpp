@@ -20,6 +20,7 @@
 #include "support/MockMeshService.h"
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <list>
 #include <memory>
 #include <tuple>
@@ -195,10 +196,15 @@ class MockRoutingModule : public RoutingModule
                 {true, relaySource->relay_node, relaySource->has_rx_rssi, relaySource->rx_rssi, relaySource->rx_snr});
         else
             relaySources.push_back({false, NO_RELAY_NODE, false, 0, 0.0f});
+        // The real module hands a NAK to ourselves straight to handleReceived(), and the router
+        // sniffs it before sendAckNak() returns. Off by default: most cases want the record alone.
+        if (loopback && to == myNodeInfo.my_node_num)
+            loopback(err, to, idFrom, chIndex);
     }
 
     std::list<std::tuple<meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t, bool>> ackNaks;
     std::vector<RelaySource> relaySources;
+    std::function<void(meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex)> loopback;
 };
 
 class ScopedAirTimeFixture
@@ -336,6 +342,7 @@ void setUp(void)
     radio->reset();
     mockRoutingModule->ackNaks.clear();
     mockRoutingModule->relaySources.clear();
+    mockRoutingModule->loopback = nullptr;
     mockService->notificationCount = 0;
     configureChannels();
 }
@@ -1007,6 +1014,51 @@ void test_refused_retry_rung_withdraws_a_copy_still_queued_and_does_not_count_it
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockService->lastMessage, "Not sent"), mockService->lastMessage);
 }
 
+// The NAK to ourselves is sniffed before sendAckNak() returns, and sniffReceived() erases the
+// pending entry then and there. doRetransmissions() must not touch the entry after the NAK.
+static void sniffNakSynchronously(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+{
+    auto nak = makeDecodedPacket(meshtastic_PortNum_ROUTING_APP, kLocalNode, to, chIndex);
+    nak.decoded.request_id = idFrom;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.which_variant = meshtastic_Routing_error_reason_tag;
+    routing.error_reason = err;
+    reliableShim->sniffForTest(&nak, &routing);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, reliableShim->pendingCount(), "the NAK itself ended the ladder");
+}
+
+void test_refused_retry_rung_survives_its_own_nak_ending_the_ladder_first(void)
+{
+    radio->packetTimeMsec = 7;
+    enterDutyCycleScene();
+    spendAirtimeLeaving(10);
+    mockRoutingModule->loopback = sniffNakSynchronously;
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    seedDueRetry(dm, 2);
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+    TEST_ASSERT_EQUAL_UINT32(1, mockService->notificationCount);
+}
+
+// The exhausted ladder takes the same path with MAX_RETRANSMIT, and must survive it the same way.
+void test_exhausted_ladder_survives_its_own_nak_ending_it_first(void)
+{
+    mockRoutingModule->loopback = sniffNakSynchronously;
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    seedDueRetry(dm, 1); // no rungs left: the next deadline is the give-up
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_MAX_RETRANSMIT, std::get<0>(mockRoutingModule->ackNaks.front()), "");
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+}
+
 // The control: the original went out and is unconfirmed, so nothing is withdrawn and it counts.
 void test_refused_retry_rung_counts_a_copy_that_went_out(void)
 {
@@ -1181,6 +1233,8 @@ void setup()
     RUN_TEST(test_refused_retry_notice_counts_the_rungs_that_went_out);
     RUN_TEST(test_refused_retry_rung_withdraws_a_copy_still_queued_and_does_not_count_it);
     RUN_TEST(test_refused_retry_rung_counts_a_copy_that_went_out);
+    RUN_TEST(test_refused_retry_rung_survives_its_own_nak_ending_the_ladder_first);
+    RUN_TEST(test_exhausted_ladder_survives_its_own_nak_ending_it_first);
     RUN_TEST(test_quoted_wait_covers_the_whole_ladder);
     RUN_TEST(test_admission_counts_airtime_already_queued_at_the_radio);
 
