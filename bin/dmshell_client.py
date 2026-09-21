@@ -46,6 +46,33 @@ INPUT_BATCH_MAX_BYTES = 64
 HEARTBEAT_IDLE_DELAY_SEC = 5.0
 HEARTBEAT_REPEAT_SEC = 15.0
 HEARTBEAT_POLL_INTERVAL_SEC = 0.25
+# The server bounds how much unacknowledged output it keeps in flight, so it needs our receive cursor
+# to make progress. On a one-way stream we would otherwise transmit nothing at all - the heartbeat is
+# suppressed while inbound traffic keeps arriving - so the stream would advance one window per
+# heartbeat instead of continuously. Every frame we send already carries ack_seq, so this only has to
+# fire when we have nothing else to say.
+#
+# Must not exceed the server's window (DMSHELL_TX_WINDOW, default 4), or it stalls: the server blocks
+# with its window full while we are still waiting to accumulate frames, and only the heartbeat breaks
+# the deadlock.
+
+
+def _ack_after_frames() -> int:
+    raw = os.environ.get("DMSHELL_ACK_EVERY", "")
+    if not raw:
+        return 2
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        print(f"[dmshell] ignoring unparseable DMSHELL_ACK_EVERY={raw!r}", file=sys.stderr)
+        return 2
+
+
+ACK_AFTER_FRAMES = _ack_after_frames()
+# A lost OPEN or OPEN_OK costs a full frame airtime, which is ~2.2 s on LongFast against ~0.1 s on
+# ShortTurbo, so the handshake needs far more headroom than the API socket does. Measured: a LongFast
+# session needed 150 s to open.
+DEFAULT_OPEN_TIMEOUT_SEC = 180.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,6 +108,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--command", action="append", default=[], help="send a command line after opening")
     parser.add_argument("--close-after", type=float, default=2.0, help="seconds to wait before closing in command mode")
     parser.add_argument("--timeout", type=float, default=10.0, help="seconds to wait for API/session events")
+    parser.add_argument(
+        "--open-timeout",
+        type=float,
+        default=DEFAULT_OPEN_TIMEOUT_SEC,
+        help="seconds to wait for OPEN_OK (needs to be generous on slow presets; default %(default)s)",
+    )
     parser.add_argument("--verbose", action="store_true", help="print extra protocol events")
     parser.add_argument(
         "--legacy-recovery",
@@ -336,6 +369,7 @@ class SessionState:
     last_missing_request_time: float = 0.0
     missing_request_interval: float = MISSING_SEQ_RETRY_INTERVAL_SEC
     missing_request_attempts: int = 0
+    frames_since_outbound: int = 0
     legacy_recovery: bool = False
     requested_missing_seqs: set[int] = field(default_factory=set)
     replay_log_lock: threading.Lock = field(default_factory=threading.Lock)
@@ -361,6 +395,9 @@ class SessionState:
     def note_outbound_packet(self, heartbeat: bool = False) -> None:
         with self.tx_lock:
             now = time.monotonic()
+            # Anything we send carries our receive cursor in ack_seq, so it settles the flow-control
+            # debt whatever its opcode.
+            self.frames_since_outbound = 0
             if heartbeat:
                 self.last_heartbeat_sent_time = now
             else:
@@ -406,6 +443,9 @@ class SessionState:
                 self.highest_seen_rx_seq = seq
             if self.highest_seen_rx_seq < self.next_expected_rx_seq:
                 self.highest_seen_rx_seq = 0
+            # Only an in-order frame moves the cursor the server is waiting on, so only this case
+            # creates a flow-control debt.
+            self.frames_since_outbound += 1
             return ("process", None)
 
     def remember_out_of_order_frame(self, shell) -> None:
@@ -445,6 +485,11 @@ class SessionState:
             self.last_requested_missing_seq = self.next_expected_rx_seq
             self.last_missing_request_time = now
             return self.last_requested_missing_seq
+
+    def flow_control_ack_due(self) -> bool:
+        """Whether the server is likely waiting on our receive cursor to reopen its send window."""
+        with self.tx_lock:
+            return self.frames_since_outbound >= ACK_AFTER_FRAMES
 
     def set_receive_cursor(self, seq: int) -> None:
         with self.tx_lock:
@@ -797,6 +842,10 @@ def reader_loop(transport, state: SessionState) -> None:
             if req is not None:
                 state.note_missing_seq_requested(req, "post_process_gap")
                 send_ack_frame(transport, state, replay_from=req)
+            elif state.flow_control_ack_due():
+                # Bare ack: replay_from is None so last_rx_seq stays 0 and the peer does not read it
+                # as a replay request, but ack_seq still carries the cursor that reopens its window.
+                send_ack_frame(transport, state)
         elif state.verbose and variant:
             state.event_queue.put(f"fromradio {variant}")
 
@@ -995,7 +1044,7 @@ def main() -> int:
         reader.start()
 
         send_shell_frame(transport, state, pb2.mesh.RemoteShell.OPEN, cols=cols, rows=rows)
-        if not state.opened_event.wait(timeout=args.timeout):
+        if not state.opened_event.wait(timeout=max(args.open_timeout, args.timeout)):
             raise SystemExit("timed out waiting for OPEN_OK from remote DMShell")
 
         heartbeat = threading.Thread(target=heartbeat_loop, args=(transport, state), daemon=True)
