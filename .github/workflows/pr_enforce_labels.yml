@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   check-label:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Check for PR labels
         uses: actions/github-script@v9
