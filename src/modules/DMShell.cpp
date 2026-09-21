@@ -235,10 +235,25 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::STOP;
     }
 
-    if (!shouldProcessIncomingFrame(frame)) {
+    const DMShellRxDecision decision = classifyIncomingFrame(frame);
+    if (!decision.process) {
+        if (!decision.duplicate) {
+            // Above the gap: it arrived intact, so hold it rather than making the peer send it again
+            // once the gap fills. A duplicate is already past us, and seq 0 is never out of order.
+            rememberOutOfOrderFrame(frame);
+        }
         return ProcessMessage::STOP;
     }
 
+    applySessionFrame(frame);
+    drainBufferedFrames();
+    return ProcessMessage::STOP;
+}
+
+/// Act on one in-order frame. Reached both from the radio and from the reorder buffer, so everything
+/// here must be safe to run against a frame that arrived some time ago.
+void DMShellModule::applySessionFrame(const meshtastic_RemoteShell &frame)
+{
     switch (frame.op) {
     case meshtastic_RemoteShell_OpCode_INPUT:
         if (!writeSessionInput(frame)) {
@@ -312,8 +327,6 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         sendError("unsupported_op");
         break;
     }
-
-    return ProcessMessage::STOP;
 }
 
 int32_t DMShellModule::runOnce()
@@ -500,6 +513,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.nextTxSeq = 1;
     session.lastAckedRxSeq = frame.seq;
     session.rxWindow.reset(frame.seq);
+    session.rxReorder.reset();
     session.txHistoryWindow.reset();
     session.txWindow.reset(txWindowFrames);
     session.txWindowBlocked = false;
@@ -822,11 +836,15 @@ void DMShellModule::sendReplayRequest(uint32_t replayFromSeq)
     sendFrameToPeer(session.peer, frame, false);
 }
 
-bool DMShellModule::shouldProcessIncomingFrame(const meshtastic_RemoteShell &frame)
+DMShellRxDecision DMShellModule::classifyIncomingFrame(const meshtastic_RemoteShell &frame)
 {
     const DMShellRxDecision decision = session.rxWindow.classify(frame.seq, millis(), replayRequestIntervalMs());
 
-    if (decision.requestReplay) {
+    // Asking for a frame we are already holding is pure channel load, and the ordering window cannot
+    // know what the reorder buffer has - it deals only in sequence numbers it has passed to the
+    // session. So the suppression belongs here, and it has to run on every classification, including
+    // the ones made while draining the buffer.
+    if (decision.requestReplay && !session.rxReorder.holds(decision.replaySeq)) {
         sendReplayRequest(decision.replaySeq);
     }
 
@@ -844,7 +862,46 @@ bool DMShellModule::shouldProcessIncomingFrame(const meshtastic_RemoteShell &fra
         sendBareAck();
     }
 
-    return decision.process;
+    return decision;
+}
+
+/// Hold a frame that arrived above a gap, rather than discarding something that arrived intact.
+void DMShellModule::rememberOutOfOrderFrame(const meshtastic_RemoteShell &frame)
+{
+    const int slot = session.rxReorder.claimSlotFor(frame.seq);
+    if (slot < 0) {
+        return; // already held, or the buffer is full of frames we need sooner
+    }
+    session.rxReorderFrames[slot] = frame;
+    LOG_DEBUG("DMShell: holding out-of-order seq=%u, %u frame(s) buffered", frame.seq, (unsigned)session.rxReorder.count());
+}
+
+bool DMShellModule::takeBufferedFrame(uint32_t seq, meshtastic_RemoteShell &outFrame)
+{
+    const int slot = session.rxReorder.find(seq);
+    if (slot < 0) {
+        return false;
+    }
+    outFrame = session.rxReorderFrames[slot];
+    // Freed before the caller applies it, so a frame can never be applied twice and the drain loop
+    // always makes progress.
+    session.rxReorder.release(slot);
+    return true;
+}
+
+/// Deliver whatever the gap was holding back, in order, now that it has filled.
+void DMShellModule::drainBufferedFrames()
+{
+    while (session.active && session.rxReorder.count() > 0) {
+        meshtastic_RemoteShell next = meshtastic_RemoteShell_init_zero;
+        if (!takeBufferedFrame(session.rxWindow.nextExpected(), next)) {
+            return; // the next frame in order is still missing
+        }
+        if (!classifyIncomingFrame(next).process) {
+            return; // cannot happen with a contiguous cursor, but never spin on it
+        }
+        applySessionFrame(next);
+    }
 }
 
 void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember)

@@ -114,6 +114,96 @@ class DMShellRxWindow
     bool everRequested = false;
 };
 
+/// Slot bookkeeping for a small out-of-order receive buffer.
+///
+/// Without one, a frame that arrives above a gap is discarded even though it arrived intact, and the
+/// peer has to send it again once the gap fills - so one loss costs a round trip per frame that was
+/// already in hand. Measured on hardware at LongFast: the sequence numbers the receiver kept asking
+/// for had arrived a dozen times each, and the session advanced roughly one frame per round trip while
+/// delivering almost nothing.
+///
+/// Only sequence numbers live here; the frames themselves stay with the module, because this header
+/// deliberately pulls in no protobuf or platform headers.
+class DMShellRxReorder
+{
+  public:
+    /// Slots are indices into the caller's frame array. 8 is twice the peer's default send window, so a
+    /// well-behaved peer can never fill it, and a peer running unbounded is bounded here instead.
+    static constexpr int SLOTS = 8;
+
+    void reset()
+    {
+        for (int i = 0; i < SLOTS; i++) {
+            slotSeq[i] = 0;
+        }
+    }
+
+    /// The slot holding seq, or -1.
+    int find(uint32_t seq) const
+    {
+        if (seq == 0) {
+            return -1;
+        }
+        for (int i = 0; i < SLOTS; i++) {
+            if (slotSeq[i] == seq) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    bool holds(uint32_t seq) const { return find(seq) >= 0; }
+
+    /// Where to store seq, or -1 if it should be dropped: already held, or the buffer is full of
+    /// sequence numbers we need sooner. Claims the slot, so the caller must write the frame into it.
+    int claimSlotFor(uint32_t seq)
+    {
+        if (seq == 0 || holds(seq)) {
+            return -1;
+        }
+        for (int i = 0; i < SLOTS; i++) {
+            if (slotSeq[i] == 0) {
+                slotSeq[i] = seq;
+                return i;
+            }
+        }
+        // Full. The lowest sequence numbers are the ones needed soonest, so the highest is the one
+        // worth losing - and only to something lower than it.
+        int highest = 0;
+        for (int i = 1; i < SLOTS; i++) {
+            if (slotSeq[i] > slotSeq[highest]) {
+                highest = i;
+            }
+        }
+        if (seq >= slotSeq[highest]) {
+            return -1;
+        }
+        slotSeq[highest] = seq;
+        return highest;
+    }
+
+    void release(int slot)
+    {
+        if (slot >= 0 && slot < SLOTS) {
+            slotSeq[slot] = 0;
+        }
+    }
+
+    uint32_t count() const
+    {
+        uint32_t held = 0;
+        for (int i = 0; i < SLOTS; i++) {
+            if (slotSeq[i] != 0) {
+                held++;
+            }
+        }
+        return held;
+    }
+
+  private:
+    uint32_t slotSeq[SLOTS] = {}; // 0 = empty
+};
+
 /// Sender-side bound on how far ahead of the peer's acknowledgements we are willing to transmit.
 ///
 /// Without one, a lost frame is fatal rather than transient: the sender keeps streaming, the

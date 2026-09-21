@@ -497,6 +497,135 @@ void test_dmshell_rx_duplicate_behind_a_gap_asks_instead()
     TEST_ASSERT_EQUAL_UINT32(3, d.replaySeq);
 }
 
+void test_dmshell_rx_reorder_holds_and_returns_slots()
+{
+    DMShellRxReorder r;
+    r.reset();
+
+    const int slot = r.claimSlotFor(5);
+    TEST_ASSERT_TRUE(slot >= 0);
+    TEST_ASSERT_TRUE(r.holds(5));
+    TEST_ASSERT_EQUAL_INT(slot, r.find(5));
+    TEST_ASSERT_EQUAL_UINT32(1, r.count());
+
+    // The same sequence number arriving again must not take a second slot, or a retransmitting peer
+    // would fill the buffer with copies of one frame.
+    TEST_ASSERT_EQUAL_INT(-1, r.claimSlotFor(5));
+    TEST_ASSERT_EQUAL_UINT32(1, r.count());
+
+    r.release(slot);
+    TEST_ASSERT_FALSE(r.holds(5));
+    TEST_ASSERT_EQUAL_UINT32(0, r.count());
+}
+
+void test_dmshell_rx_reorder_never_holds_seq_zero()
+{
+    DMShellRxReorder r;
+    r.reset();
+
+    // Unsequenced control frames are always processed in order, so they have nothing to reorder, and
+    // 0 is the empty marker.
+    TEST_ASSERT_EQUAL_INT(-1, r.claimSlotFor(0));
+    TEST_ASSERT_FALSE(r.holds(0));
+    TEST_ASSERT_EQUAL_INT(-1, r.find(0));
+}
+
+void test_dmshell_rx_reorder_full_buffer_keeps_the_lowest()
+{
+    DMShellRxReorder r;
+    r.reset();
+    for (uint32_t seq = 20; seq < 20 + (uint32_t)DMShellRxReorder::SLOTS; seq++) {
+        TEST_ASSERT_TRUE(r.claimSlotFor(seq) >= 0);
+    }
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)DMShellRxReorder::SLOTS, r.count());
+
+    // Full. A frame further out than everything held is the one to drop, because the gap fills from
+    // below and the lowest sequence numbers are needed soonest.
+    TEST_ASSERT_EQUAL_INT(-1, r.claimSlotFor(99));
+    TEST_ASSERT_FALSE(r.holds(99));
+
+    // A frame nearer the gap displaces the furthest one.
+    TEST_ASSERT_TRUE(r.claimSlotFor(10) >= 0);
+    TEST_ASSERT_TRUE(r.holds(10));
+    TEST_ASSERT_FALSE(r.holds(20 + (uint32_t)DMShellRxReorder::SLOTS - 1));
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)DMShellRxReorder::SLOTS, r.count());
+}
+
+void test_dmshell_rx_reorder_drains_in_order_after_the_gap_fills()
+{
+    // The measured failure: frames above a gap arrived intact and were discarded, so the peer had to
+    // resend each one after the gap filled - a round trip per frame it already had. Here they are held
+    // and the whole run is delivered as soon as the missing frame lands.
+    DMShellRxWindow w;
+    DMShellRxReorder r;
+    w.reset(10);
+    r.reset();
+
+    for (uint32_t seq = 12; seq <= 15; seq++) {
+        DMShellRxDecision d = w.classify(seq, 1000 + seq, 500);
+        TEST_ASSERT_FALSE(d.process);
+        TEST_ASSERT_FALSE(d.duplicate);
+        TEST_ASSERT_TRUE(r.claimSlotFor(seq) >= 0);
+    }
+    TEST_ASSERT_EQUAL_UINT32(4, r.count());
+
+    DMShellRxDecision d = w.classify(11, 3000, 500);
+    TEST_ASSERT_TRUE(d.process);
+
+    // The window wants 12 next and asks for it, but we are holding it - which is what the caller's
+    // suppression check is for, so no replay request goes out for a frame already in hand.
+    TEST_ASSERT_TRUE(d.requestReplay);
+    TEST_ASSERT_EQUAL_UINT32(12, d.replaySeq);
+    TEST_ASSERT_TRUE(r.holds(d.replaySeq));
+
+    uint32_t delivered = 0;
+    while (r.count() > 0) {
+        const int slot = r.find(w.nextExpected());
+        if (slot < 0) {
+            break;
+        }
+        const uint32_t seq = w.nextExpected();
+        r.release(slot);
+        TEST_ASSERT_TRUE(w.classify(seq, 3100 + seq, 500).process);
+        delivered++;
+    }
+    TEST_ASSERT_EQUAL_UINT32(4, delivered);
+    TEST_ASSERT_EQUAL_UINT32(0, r.count());
+    TEST_ASSERT_EQUAL_UINT32(15, w.lastInOrder());
+
+    // Fully caught up, so nothing is outstanding and the next frame in sequence just flows.
+    TEST_ASSERT_TRUE(w.classify(16, 4000, 500).process);
+}
+
+void test_dmshell_rx_reorder_a_hole_inside_the_buffer_still_asks()
+{
+    DMShellRxWindow w;
+    DMShellRxReorder r;
+    w.reset(10);
+    r.reset();
+
+    // 13 is lost as well, so draining stops at it and the window has to ask for that one.
+    const uint32_t arrived[] = {12, 14, 15};
+    for (uint32_t seq : arrived) {
+        w.classify(seq, 1000 + seq, 500);
+        r.claimSlotFor(seq);
+    }
+    TEST_ASSERT_TRUE(w.classify(11, 3000, 500).process);
+
+    const int slot = r.find(w.nextExpected());
+    TEST_ASSERT_TRUE(slot >= 0);
+    r.release(slot);
+    DMShellRxDecision d = w.classify(12, 3100, 500);
+    TEST_ASSERT_TRUE(d.process);
+    TEST_ASSERT_TRUE(d.requestReplay);
+    TEST_ASSERT_EQUAL_UINT32(13, d.replaySeq);
+
+    // Not held, so this request is the one that must actually go out.
+    TEST_ASSERT_FALSE(r.holds(13));
+    TEST_ASSERT_EQUAL_INT(-1, r.find(w.nextExpected()));
+    TEST_ASSERT_EQUAL_UINT32(2, r.count());
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -530,6 +659,11 @@ void setup()
     RUN_TEST(test_dmshell_rx_duplicate_is_flagged_for_a_bare_ack);
     RUN_TEST(test_dmshell_rx_damped_gap_is_not_a_duplicate);
     RUN_TEST(test_dmshell_rx_duplicate_behind_a_gap_asks_instead);
+    RUN_TEST(test_dmshell_rx_reorder_holds_and_returns_slots);
+    RUN_TEST(test_dmshell_rx_reorder_never_holds_seq_zero);
+    RUN_TEST(test_dmshell_rx_reorder_full_buffer_keeps_the_lowest);
+    RUN_TEST(test_dmshell_rx_reorder_drains_in_order_after_the_gap_fills);
+    RUN_TEST(test_dmshell_rx_reorder_a_hole_inside_the_buffer_still_asks);
     exit(UNITY_END());
 }
 
