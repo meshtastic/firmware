@@ -470,14 +470,20 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 }
 // Admit on the packet's own airtime, so the crossing packet is the one refused. Everything below
 // Priority_ACK leaves one ack's worth: a node that cannot ack costs the mesh the sender's retries.
-uint8_t Router::dutyCycleWaitMinutes(const meshtastic_MeshPacket *p)
+uint8_t Router::dutyCycleWaitMinutes(meshtastic_MeshPacket *p)
 {
     const float effectiveDutyCycle = getEffectiveDutyCycle();
     if (config.lora.override_duty_cycle || effectiveDutyCycle >= 100)
         return 0;
 
-    const uint32_t reserveMs = p->priority >= meshtastic_MeshPacket_Priority_ACK ? 0 : ackAirtimeMsec();
-    const uint32_t packetMs = iface ? iface->getPacketTime(p) : 0;
+    // The tier fixPriority() will assign: it runs after this gate, and a ROUTING_APP packet that
+    // arrives unset is an ack or nak that must be allowed the reserve, not made to leave it.
+    const bool ackTier =
+        p->priority >= meshtastic_MeshPacket_Priority_ACK ||
+        (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->decoded.portnum == meshtastic_PortNum_ROUTING_APP);
+    const uint32_t reserveMs = ackTier ? 0 : ackAirtimeMsec();
+    // Sized as it will go on air, signature and PKC overhead included, not as it sits decoded.
+    const uint32_t packetMs = iface ? iface->getPacketTime(onAirBytes(p)) : 0;
     if (!airTime->wouldExceedDutyCycle(packetMs + reserveMs, effectiveDutyCycle))
         return 0;
 
@@ -1199,6 +1205,36 @@ static bool signedDataFits(meshtastic_Data *d)
     const bool sized = pb_get_encoded_size(&encodedSize, &meshtastic_Data_msg, d);
     d->xeddsa_signature.size = prevSize;
     return sized && encodedSize + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
+}
+
+// Mirrors perhapsEncode()'s sizing decisions - the bitfield, a signature that fits, PKC overhead -
+// by setting and restoring the fields it would set, the way signedDataFits() does.
+size_t Router::onAirBytes(meshtastic_MeshPacket *p)
+{
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return p->encrypted.size + MESHTASTIC_HEADER_LENGTH;
+
+    meshtastic_Data *d = &p->decoded;
+    const pb_size_t prevSig = d->xeddsa_signature.size;
+    const bool prevHasBitfield = d->has_bitfield;
+    if (isFromUs(p)) {
+        d->has_bitfield = true;
+        d->xeddsa_signature.size = 0;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(d))
+            d->xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+#endif
+    }
+    size_t n;
+    if (!pb_get_encoded_size(&n, &meshtastic_Data_msg, d))
+        n = d->payload.size; // cannot size it: the payload alone, and never under
+    d->xeddsa_signature.size = prevSig;
+    d->has_bitfield = prevHasBitfield;
+
+    n += MESHTASTIC_HEADER_LENGTH;
+    if (willUsePki(p))
+        n += MESHTASTIC_PKC_OVERHEAD;
+    return n;
 }
 #endif
 
