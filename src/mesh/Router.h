@@ -87,7 +87,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
     /// Minutes before `p` may go under the duty cycle, 0 if now. Admits one rung plus the ack reserve,
     /// quotes for the ladder; no side effects.
-    uint8_t dutyCycleWaitMinutes(const meshtastic_MeshPacket *p);
+    uint8_t dutyCycleWaitMinutes(meshtastic_MeshPacket *p);
+    /// Bytes `p` will occupy on air once encoded - signature and PKC overhead included - without
+    /// encoding it. An already-encrypted packet answers with its final size.
+    size_t onAirBytes(meshtastic_MeshPacket *p);
     /// Tell our client that `p` was refused for duty cycle and how long to wait. `retry`: the packet
     /// went out once already and it is the retry that has no airtime.
     void notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, bool retry);
