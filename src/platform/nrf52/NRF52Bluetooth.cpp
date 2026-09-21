@@ -13,6 +13,11 @@
 #include <InternalFileSystem.h>
 #include <bluefruit.h>
 #include <utility/bonding.h>
+#if HAS_BLE_MESH
+// Set once Bluefruit is up; NRF52BLEMesh polls it before touching the SoftDevice (NRF52Bluetooth.h).
+bool nrf52BluetoothReady = false;
+#endif
+
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
@@ -62,7 +67,7 @@ BLECharacteristic::write_authorize_cb_t QuiescingBLEDfu::libraryCb;
 } // namespace
 static QuiescingBLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
+static BLEDfuSecure bledfusecure; // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -194,6 +199,12 @@ void startAdv(void)
     Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
+
+#if HAS_BLE_MESH
+    // A flag rather than a call into bleMeshHandler: setup() can run before main() constructs the
+    // handler, so a direct call is a race that silently does nothing. The handler polls this.
+    nrf52BluetoothReady = true;
+#endif
 }
 // Just ack that the caller is allowed to read
 static void authorizeRead(uint16_t conn_hdl)
@@ -320,7 +331,16 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
+#if HAS_BLE_MESH && defined(BLE_MESH_NRF52_CENTRAL)
+    // BLE mesh scans, and scanning needs a central link: Bluefruit.begin() defaults to (1, 0), so
+    // sd_ble_gap_scan_start fails outright without one. The central link raises the SoftDevice's RAM
+    // requirement past the shared linker script's origin, so only an env that also selects
+    // nrf52840_s140_v6_blemesh.ld (rak4631_blemesh) may set this flag.
+    Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
+    if (!Bluefruit.begin(1, 1)) {
+#else
     if (!Bluefruit.begin()) {
+#endif
         // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
         // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
         // current Bluefruit config. Without this check the node would silently run without BLE.
