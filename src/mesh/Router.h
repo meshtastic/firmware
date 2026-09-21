@@ -91,9 +91,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Bytes `p` will occupy on air once encoded - signature and PKC overhead included - without
     /// encoding it. An already-encrypted packet answers with its final size.
     size_t onAirBytes(meshtastic_MeshPacket *p);
-    /// Tell our client that `p` was refused for duty cycle and how long to wait. `retry`: the packet
-    /// went out once already and it is the retry that has no airtime.
-    /** `sent` of `attempts` went out before the refusal; 0 means the first send was refused. */
+    /// Tell our client that `p` was refused for duty cycle and how long to wait. `sent` of `attempts`
+    /// went out before the refusal; 0 means the first send was refused.
     void notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, uint8_t sent = 0, uint8_t attempts = 0);
 
     /**
