@@ -325,6 +325,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
+    /// When receiveDetected() last ran, so it can report how long it had been since anything looked at
+    /// the IRQ flags. The HEADER_VALID deadline is a multiple of symbol time and does not know about
+    /// the scheduler or the SPI bus, so the two numbers are only comparable if both are logged.
+    uint32_t lastReceiveDetectedMs = 0;
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
