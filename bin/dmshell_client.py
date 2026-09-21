@@ -161,6 +161,14 @@ def parse_args() -> argparse.Namespace:
         help="hop limit (default %(default)s; non-zero arms the firmware's relay retransmissions "
         "and makes the peer routing-ACK every frame)",
     )
+    parser.add_argument(
+        "--peer-log",
+        type=Path,
+        default=None,
+        help="write the node's own LogRecords to this file. They arrive on the same API stream as "
+        "everything else, so this captures the radio's log during a live session without needing a "
+        "second port. Needs config.security.debug_log_api_enabled set on the node.",
+    )
     parser.add_argument("--cols", type=int, default=None, help="initial terminal columns (default: detect local terminal)")
     parser.add_argument("--rows", type=int, default=None, help="initial terminal rows (default: detect local terminal)")
     parser.add_argument("--command", action="append", default=[], help="send a command line after opening")
@@ -437,6 +445,12 @@ class SessionState:
     replay_log_lock: threading.Lock = field(default_factory=threading.Lock)
     replay_log_file: Optional[TextIO] = None
     replay_log_path: Optional[Path] = None
+    # The node's own log, arriving as FromRadio.log_record on this same stream. Separate lock and
+    # handle from the replay log: this one can run to thousands of lines a minute at trace level.
+    peer_log_lock: threading.Lock = field(default_factory=threading.Lock)
+    peer_log_file: Optional[TextIO] = None
+    peer_log_path: Optional[Path] = None
+    peer_log_records: int = 0
     last_transport_activity_time: float = field(default_factory=time.monotonic)
     # Inbound only. The heartbeat has to key off the peer's silence, not off any traffic: our own
     # keystrokes used to suppress it (see heartbeat_due).
@@ -756,6 +770,34 @@ class SessionState:
             )
             self.replay_log_file.flush()
 
+    def open_peer_log(self, path: Path) -> None:
+        handle = path.open("a", encoding="utf-8", errors="replace")
+        with self.peer_log_lock:
+            self.peer_log_file = handle
+            self.peer_log_path = path
+
+    def close_peer_log(self) -> None:
+        with self.peer_log_lock:
+            handle, self.peer_log_file = self.peer_log_file, None
+        if handle is not None:
+            handle.close()
+
+    def log_peer_record(self, record) -> None:
+        """Write one of the node's own log lines.
+
+        Called from the reader loop, so it must never raise: losing the session because a log file
+        filled up would be worse than losing the log.
+        """
+        with self.peer_log_lock:
+            if self.peer_log_file is None:
+                return
+            self.peer_log_records += 1
+            try:
+                self.peer_log_file.write(format_peer_log_record(record))
+                self.peer_log_file.flush()
+            except OSError:
+                pass
+
     def note_missing_seq_requested(self, seq: int, reason: str) -> None:
         with self.tx_lock:
             self.requested_missing_seqs.add(seq)
@@ -970,6 +1012,24 @@ def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
     state.note_frame_resent(frame.seq)
 
 
+# The node reports the level as an enum value. TRACE is 5 in the protobuf, but firmware older than the
+# 'T' case in RedirectablePrint::getLogLevel() reports every LOG_TRACE as UNSET, so a capture full of
+# UNSET lines is an old node rather than a broken one.
+PEER_LOG_LEVEL_NAMES = {0: "UNSET", 5: "TRACE", 10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR", 50: "CRIT"}
+
+
+def format_peer_log_record(record) -> str:
+    """One line per record: local clock, the node's own clock, level, thread, message.
+
+    The local timestamp is what correlates this against the client transcript and the far node's log;
+    the record's own time is kept beside it because it can be zero or wrong before the RTC is set.
+    """
+    level = PEER_LOG_LEVEL_NAMES.get(record.level, str(record.level))
+    source = record.source or "-"
+    message = record.message.rstrip("\n")
+    return f"{time.strftime('%Y-%m-%d %H:%M:%S')} node_time={record.time} {level:5} {source} {message}\n"
+
+
 def log_ack_latency(state: SessionState) -> None:
     """Report the round-trip estimate the retransmission interval is derived from.
 
@@ -1153,6 +1213,11 @@ def reader_loop(transport, state: SessionState) -> None:
             return
 
         variant = fromradio.WhichOneof("payload_variant")
+        if variant == "log_record":
+            # The node's own log, on the same stream as its packets. Nothing else in this client cares
+            # about it, and it is dropped unless --peer-log asked for it.
+            state.log_peer_record(fromradio.log_record)
+            continue
         if variant == "packet":
             shell = decode_shell_packet(state, fromradio.packet)
             if not shell:
@@ -1435,6 +1500,10 @@ def main() -> int:
 
     cols, rows = resolve_initial_terminal_size(args.cols, args.rows)
 
+    if args.peer_log is not None:
+        state.open_peer_log(args.peer_log)
+        print(f"[dmshell] writing the node's own log to {args.peer_log}", file=sys.stderr)
+
     transport = open_transport(args)
     try:
         wait_for_config_complete(transport, pb2, args.timeout, args.verbose)
@@ -1462,6 +1531,9 @@ def main() -> int:
         state.close_replay_log()
     finally:
         transport.close()
+        if args.peer_log is not None:
+            state.close_peer_log()
+            print(f"[dmshell] captured {state.peer_log_records} log records from the node", file=sys.stderr)
 
     return 0
 
