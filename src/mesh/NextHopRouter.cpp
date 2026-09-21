@@ -472,8 +472,10 @@ int32_t NextHopRouter::doRetransmissions()
                 // No airtime for this rung. Asked before the route failure and next_hop reset below, which
                 // would charge a route never tried. The ladder ends: our client is told, a relay owes nothing.
                 LOG_WARN("No airtime to retry id=0x%08x for %u mins, stop retrying", p.packet->id, waitMinutes);
-                if (isFromUs(p.packet))
-                    notifyDutyCycleRefusal(p.packet, waitMinutes, true);
+                if (isFromUs(p.packet)) {
+                    const uint8_t attempts = p.initialNumRetransmissions + 1;
+                    notifyDutyCycleRefusal(p.packet, waitMinutes, attempts - p.numRetransmissions, attempts);
+                }
                 stopRetransmission(it->first);
                 stillValid = false;
             } else {

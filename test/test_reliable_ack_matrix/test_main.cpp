@@ -937,6 +937,52 @@ void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h->consecutiveFailures, "the next hop is not charged for our airtime");
 }
 
+// The notice counts the rungs that went out, taken from the ladder's own counters. Two rungs go
+// out on top of the first send before the airtime runs out, so the count is one a constant cannot
+// produce: "Sent 3 of 5".
+void test_refused_retry_notice_counts_the_rungs_that_went_out(void)
+{
+    radio->packetTimeMsec = 7;
+    useAirTimeWithRemaining(1000);
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    seedDueRetry(dm, 5);
+    reliableShim->runOnce(); // rung 2
+    Time::advanceTestMillis(5u * 60u * 1000u);
+    Time::serviceMonotonic();
+    reliableShim->runOnce(); // rung 3
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, radio->sentPackets.size(), "two rungs went out");
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+
+    useAirTimeWithRemaining(10); // the clock moves two hours on; the ladder is long overdue
+    reliableShim->runOnce();     // rung 4, refused
+
+    TEST_ASSERT_EQUAL_UINT32(2, radio->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, mockService->notificationCount);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockService->lastMessage, "Sent 3 of 5 attempts"), mockService->lastMessage);
+}
+
+void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
+{
+    radio->packetTimeMsec = 7;
+    useAirTimeWithRemaining(10);
+
+    auto relayed = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kThirdNode, 1, /*wantAck=*/true);
+    relayed.next_hop = 0x33;
+    reliableShim->noteRouteLearned(kThirdNode, 0x33, Time::getMillis());
+    seedDueRetry(relayed, 2); // the route-charging rung, as above
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32(0, radio->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, reliableShim->pendingCount(), "the relay owes nothing further");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockService->notificationCount, "no client to tell");
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+    RouteHealth *h = reliableShim->findRouteHealth(kThirdNode);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h->consecutiveFailures, "the next hop is not charged for our airtime");
+}
+
 // The minutes quoted to the client are for the ladder, not the rung. 89 990 ms spent in two
 // buckets fifty minutes ago, 8 s frames: one rung and its ack need 16 s, which fit once the older
 // bucket (29 990 ms) has aged out - nine minutes; a reliable DM's five rungs need 48 s and must
@@ -1067,6 +1113,7 @@ void setup()
     RUN_TEST(test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once);
     RUN_TEST(test_refused_retry_rung_ends_a_relayed_ladder_quietly);
     RUN_TEST(test_admitted_retry_rung_still_goes);
+    RUN_TEST(test_refused_retry_notice_counts_the_rungs_that_went_out);
     RUN_TEST(test_quoted_wait_covers_the_whole_ladder);
     RUN_TEST(test_admission_counts_airtime_already_queued_at_the_radio);
 

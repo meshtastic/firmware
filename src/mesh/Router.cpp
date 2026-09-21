@@ -497,7 +497,7 @@ uint8_t Router::dutyCycleWaitMinutes(meshtastic_MeshPacket *p)
     return minutes ? minutes : 1;
 }
 
-void Router::notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, bool retry)
+void Router::notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, uint8_t sent, uint8_t attempts)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (!cn)
@@ -506,11 +506,14 @@ void Router::notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t wait
     cn->reply_id = p->id;
     cn->level = meshtastic_LogRecord_Level_WARNING;
     cn->time = getValidTime(RTCQualityFromNet);
-    // Two truths: a refused first send never went out; a refused retry did, once, and is unconfirmed.
-    snprintf(cn->message, sizeof(cn->message),
-             retry ? "Sent once, unconfirmed: no airtime to retry. You can send again in %u mins"
-                   : "Not sent: duty cycle limit exceeded. You can send again in %u mins",
-             waitMinutes);
+    // Two truths: a refused first send never went out; a refused retry did, `sent` times, unconfirmed.
+    if (sent)
+        snprintf(cn->message, sizeof(cn->message),
+                 "Sent %u of %u attempts, unconfirmed: no airtime to retry. You can send again in %u mins", sent, attempts,
+                 waitMinutes);
+    else
+        snprintf(cn->message, sizeof(cn->message), "Not sent: duty cycle limit exceeded. You can send again in %u mins",
+                 waitMinutes);
     service->sendClientNotification(cn);
 }
 
@@ -533,7 +536,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         LOG_WARN("Duty cycle limit exceeded, abort send, retry in %u mins", waitMinutes);
         const meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
         if (isFromUs(p)) { // only notify and NAK the API, not the mesh
-            notifyDutyCycleRefusal(p, waitMinutes, false);
+            notifyDutyCycleRefusal(p, waitMinutes);
             abortSendAndNak(err, p);
         } else {
             packetPool.release(p);
