@@ -18,6 +18,14 @@
 //    so the request repeats until the session idles out five minutes later. DMShellModule relies on
 //    the Evicted verdict to close the session instead.
 //
+// 3. The sender will not transmit more than a fixed number of frames past the peer's acknowledgements.
+//    This is what makes contracts 1 and 2 stop mattering: measured on hardware, whichever end has the
+//    higher frame rate outruns its own replay ring first, so a bigger ring on one side just moves the
+//    failure to the other. A sender that cannot get more than a window ahead of a gap can always
+//    answer a replay request. The window also bounds the send path in wall-clock terms, which is what
+//    lets an idle timeout detect a peer that has vanished - a blocked sender goes quiet and times out,
+//    where an unbounded one transmitted to nobody for as long as its command kept producing output.
+//
 // The regression guarded: if these assertions are deleted or relaxed, the storm comes back, and it
 // comes back invisibly - the failing session looks like a flaky radio link rather than a protocol
 // bug, which is exactly how it was originally misdiagnosed.
@@ -236,6 +244,98 @@ void test_dmshell_tx_history_reset_forgets_everything()
     ASSERT_LOOKUP(DMShellReplayLookup::Found, h.classify(1, 2));
 }
 
+void test_dmshell_tx_window_unbounded_when_capacity_zero()
+{
+    DMShellTxWindow w;
+    w.reset(0);
+
+    // DMSHELL_TX_WINDOW=0 and legacy mode both reproduce the pre-window behaviour on one build, so
+    // the bound can be measured with and without it without reflashing.
+    for (uint32_t seq = 1; seq <= 500; seq++) {
+        w.noteSent(seq);
+        TEST_ASSERT_TRUE(w.canSend());
+    }
+    TEST_ASSERT_EQUAL_UINT32(500, w.outstanding());
+}
+
+void test_dmshell_tx_window_closes_at_capacity()
+{
+    DMShellTxWindow w;
+    w.reset(2);
+
+    w.noteSent(1);
+    TEST_ASSERT_TRUE(w.canSend());
+    w.noteSent(2);
+    TEST_ASSERT_FALSE(w.canSend()); // two outstanding, nothing acknowledged
+    TEST_ASSERT_EQUAL_UINT32(2, w.outstanding());
+}
+
+void test_dmshell_tx_window_reopens_on_ack()
+{
+    DMShellTxWindow w;
+    w.reset(2);
+    w.noteSent(1);
+    w.noteSent(2);
+    TEST_ASSERT_FALSE(w.canSend());
+
+    // A cumulative cursor, so one acknowledgement can free several slots.
+    w.notePeerAcked(1);
+    TEST_ASSERT_TRUE(w.canSend());
+    TEST_ASSERT_EQUAL_UINT32(1, w.outstanding());
+
+    w.notePeerAcked(2);
+    TEST_ASSERT_EQUAL_UINT32(0, w.outstanding());
+}
+
+void test_dmshell_tx_window_ignores_stale_and_overreaching_cursors()
+{
+    DMShellTxWindow w;
+    w.reset(2);
+    w.noteSent(1);
+    w.noteSent(2);
+    w.notePeerAcked(2);
+
+    // A duplicate or reordered frame carrying an older cursor must not close the window again.
+    w.notePeerAcked(1);
+    TEST_ASSERT_EQUAL_UINT32(0, w.outstanding());
+
+    // A peer claiming to have received more than we ever sent cannot buy itself extra credit; the
+    // cursor is clamped, so the window reflects our own progress once we do send more.
+    w.notePeerAcked(999);
+    w.noteSent(3);
+    w.noteSent(4);
+    TEST_ASSERT_EQUAL_UINT32(2, w.outstanding());
+    TEST_ASSERT_FALSE(w.canSend());
+}
+
+void test_dmshell_tx_window_of_one_is_strict_request_response()
+{
+    DMShellTxWindow w;
+    w.reset(1);
+
+    w.noteSent(1);
+    TEST_ASSERT_FALSE(w.canSend());
+    w.notePeerAcked(1);
+    TEST_ASSERT_TRUE(w.canSend());
+}
+
+void test_dmshell_tx_window_reset_clears_peer_state()
+{
+    DMShellTxWindow w;
+    w.reset(2);
+    w.noteSent(1);
+    w.noteSent(2);
+    w.notePeerAcked(2);
+
+    // A new session restarts sequence numbering at 1, so a stale cursor would grant credit for
+    // frames the new session has not sent.
+    w.reset(2);
+    TEST_ASSERT_EQUAL_UINT32(0, w.outstanding());
+    w.noteSent(1);
+    w.noteSent(2);
+    TEST_ASSERT_FALSE(w.canSend());
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -254,6 +354,12 @@ void setup()
     RUN_TEST(test_dmshell_tx_history_ignores_unsent_sequence);
     RUN_TEST(test_dmshell_tx_history_empty_ring_is_not_eviction);
     RUN_TEST(test_dmshell_tx_history_reset_forgets_everything);
+    RUN_TEST(test_dmshell_tx_window_unbounded_when_capacity_zero);
+    RUN_TEST(test_dmshell_tx_window_closes_at_capacity);
+    RUN_TEST(test_dmshell_tx_window_reopens_on_ack);
+    RUN_TEST(test_dmshell_tx_window_ignores_stale_and_overreaching_cursors);
+    RUN_TEST(test_dmshell_tx_window_of_one_is_strict_request_response);
+    RUN_TEST(test_dmshell_tx_window_reset_clears_peer_state);
     exit(UNITY_END());
 }
 

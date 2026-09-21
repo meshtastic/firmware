@@ -109,6 +109,65 @@ class DMShellRxWindow
     bool everRequested = false;
 };
 
+/// Sender-side bound on how far ahead of the peer's acknowledgements we are willing to transmit.
+///
+/// Without one, a lost frame is fatal rather than transient: the sender keeps streaming, the
+/// receiver will not advance past the hole, and by the time a replay is asked for the frame has
+/// aged out of the ring. Measured on hardware at both ends of the preset range - whichever side has
+/// the higher frame rate outruns its own ring first, so enlarging a ring only moves the failure to
+/// the other end. Bounding the outstanding data instead makes the ring size irrelevant, because the
+/// sender can never get more than a window ahead of the gap.
+///
+/// It also bounds the send path in wall-clock terms, which is what makes an idle timeout mean
+/// something: a sender blocked on a closed window stops transmitting, so a peer that vanishes no
+/// longer leaves it talking to nobody indefinitely.
+class DMShellTxWindow
+{
+  public:
+    /// capacity is in frames; 0 disables the bound entirely (the pre-window behaviour).
+    void reset(uint32_t capacity)
+    {
+        windowFrames = capacity;
+        highestSentSeq = 0;
+        peerAckedSeq = 0;
+    }
+
+    /// Call with the sequence number of each sequenced frame handed to the radio.
+    void noteSent(uint32_t seq)
+    {
+        if (seq > highestSentSeq) {
+            highestSentSeq = seq;
+        }
+    }
+
+    /// Call with the peer's cumulative receive cursor, from any inbound frame that carries one.
+    /// Clamped to what we have actually sent, so a confused or malicious peer cannot open the
+    /// window past our own progress, and monotone, so a stale frame cannot close it again.
+    void notePeerAcked(uint32_t seq)
+    {
+        if (seq > highestSentSeq) {
+            seq = highestSentSeq;
+        }
+        if (seq > peerAckedSeq) {
+            peerAckedSeq = seq;
+        }
+    }
+
+    uint32_t outstanding() const { return highestSentSeq - peerAckedSeq; }
+
+    /// Whether another frame of new data may be generated. Control frames and replays deliberately
+    /// ignore this: blocking a teardown behind a closed window is the same class of bug as buffering
+    /// one behind a sequence gap.
+    bool canSend() const { return windowFrames == 0 || outstanding() < windowFrames; }
+
+    uint32_t capacity() const { return windowFrames; }
+
+  private:
+    uint32_t windowFrames = 0; // 0 = unbounded
+    uint32_t highestSentSeq = 0;
+    uint32_t peerAckedSeq = 0;
+};
+
 /// Tracks which sent sequence numbers the replay ring still holds.
 ///
 /// The ring is bounded in frames, so the wall-clock span it covers shrinks with the modem preset -
