@@ -812,6 +812,12 @@ uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
            PROCESSING_TIME_MSEC;
 }
 
+bool shouldDeferPreambleVerdict(uint32_t sinceLastLookMsec, uint32_t deadlineMsec, uint32_t elapsedMsec,
+                                uint32_t maxPacketTimeMsec)
+{
+    return sinceLastLookMsec > deadlineMsec && elapsedMsec < maxPacketTimeMsec;
+}
+
 /** The delay to use when we want to send something */
 uint32_t RadioInterface::getTxDelayMsec()
 {
