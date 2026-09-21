@@ -4550,6 +4550,13 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         }
 #endif
         LOG_INFO("Add node to database: %i nodes, %u bytes free", numMeshNodes, memGet.getFreeHeap());
+
+        // Otherwise only saved on sleep or shutdown, which a node without power saving never reaches.
+        static uint32_t lastNewNodeSaveMs = 0;
+        if (lastNewNodeSaveMs == 0 || Throttle::hasElapsed(lastNewNodeSaveMs, 60 * 1000)) {
+            lastNewNodeSaveMs = Time::skipZero(Time::getMillis());
+            saveNodeDatabaseToDisk();
+        }
     }
 
     return lite;
