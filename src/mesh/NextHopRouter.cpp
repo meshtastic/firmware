@@ -470,11 +470,13 @@ int32_t NextHopRouter::doRetransmissions()
                 stillValid = false; // just deleted it
             } else if (const uint8_t waitMinutes = dutyCycleWaitMinutes(p.packet)) {
                 // No airtime for this rung. Asked before the route failure and next_hop reset below, which
-                // would charge a route never tried. The ladder ends: our client is told, a relay owes nothing.
+                // would charge a route never tried. The ladder ends: our client is told and NAKed with the
+                // reason, so the message is not left pending; a relay owes nothing.
                 LOG_WARN("No airtime to retry id=0x%08x for %u mins, stop retrying", p.packet->id, waitMinutes);
                 if (isFromUs(p.packet)) {
                     const uint8_t attempts = p.initialNumRetransmissions + 1;
                     notifyDutyCycleRefusal(p.packet, waitMinutes, attempts - p.numRetransmissions, attempts);
+                    sendAckNak(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 stopRetransmission(it->first);
                 stillValid = false;

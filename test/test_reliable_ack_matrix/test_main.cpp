@@ -864,8 +864,9 @@ void test_receive_extends_all_pending_deadlines(void)
 //
 // doRetransmissions() asks Router::dutyCycleWaitMinutes() before a rung's side effects. A refused
 // rung is not an attempt: nothing is sent, nothing is decremented, the route is not charged, and
-// the ladder ends. Ours tells the client once - the packet went out on rung one and is unconfirmed
-// - with no NAK, because "failed" would be untrue. A relayed one ends quietly.
+// the ladder ends. Ours tells the client once - the packet went out and is unconfirmed - and NAKs
+// DUTY_CYCLE_LIMIT, not MAX_RETRANSMIT, so the app stops waiting and the reason is the true one. A
+// relayed one ends quietly.
 
 // EU_866 at CLIENT is 2.5%: 90 000 ms an hour. Leave `remainingMs` of it, under a clock an hour
 // past boot so the span is credited across the ring rather than clamped at uptime 0.
@@ -910,31 +911,26 @@ void test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio->sentPackets.size(), "nothing went to the radio");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, reliableShim->pendingCount(), "the ladder is over");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockService->notificationCount, "the client is told once");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRoutingModule->ackNaks.size(), "...but not NAKed: rung one went out");
     RouteHealth *h = reliableShim->findRouteHealth(kRemoteNode);
     TEST_ASSERT_NOT_NULL(h);
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h->consecutiveFailures, "a rung never tried is not a route failure");
 }
 
-void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
+// The app drives message state from Routing packets, not notifications: without a NAK the message
+// sits pending for good. The reason is the true one, DUTY_CYCLE_LIMIT, not MAX_RETRANSMIT.
+void test_refused_retry_rung_naks_the_client_with_the_reason(void)
 {
     radio->packetTimeMsec = 7;
     useAirTimeWithRemaining(10);
 
-    auto relayed = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kThirdNode, 1, /*wantAck=*/true);
-    relayed.next_hop = 0x33;
-    reliableShim->noteRouteLearned(kThirdNode, 0x33, Time::getMillis());
-    seedDueRetry(relayed, 2); // the route-charging rung, as above
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    seedDueRetry(dm, 2);
 
     reliableShim->runOnce();
 
-    TEST_ASSERT_EQUAL_UINT32(0, radio->sentPackets.size());
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, reliableShim->pendingCount(), "the relay owes nothing further");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockService->notificationCount, "no client to tell");
-    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
-    RouteHealth *h = reliableShim->findRouteHealth(kThirdNode);
-    TEST_ASSERT_NOT_NULL(h);
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h->consecutiveFailures, "the next hop is not charged for our airtime");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRoutingModule->ackNaks.size(), "NAKed, so the message is not left pending");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, std::get<0>(mockRoutingModule->ackNaks.front()),
+                              "with the reason, not MAX_RETRANSMIT");
 }
 
 // The notice counts the rungs that went out, taken from the ladder's own counters. Two rungs go
@@ -1113,6 +1109,7 @@ void setup()
     RUN_TEST(test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once);
     RUN_TEST(test_refused_retry_rung_ends_a_relayed_ladder_quietly);
     RUN_TEST(test_admitted_retry_rung_still_goes);
+    RUN_TEST(test_refused_retry_rung_naks_the_client_with_the_reason);
     RUN_TEST(test_refused_retry_notice_counts_the_rungs_that_went_out);
     RUN_TEST(test_quoted_wait_covers_the_whole_ladder);
     RUN_TEST(test_admission_counts_airtime_already_queued_at_the_radio);
