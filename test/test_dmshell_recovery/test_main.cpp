@@ -444,6 +444,59 @@ void test_dmshell_retransmit_run_unbounded_when_limit_zero()
     TEST_ASSERT_EQUAL_UINT32(200, r.repeatCount());
 }
 
+void test_dmshell_rx_duplicate_is_flagged_for_a_bare_ack()
+{
+    DMShellRxWindow w;
+    w.reset(1);
+
+    // Nothing missing, so there is no replay request to carry our cursor. The peer is repeating a
+    // frame we already have, which is what a sender whose window has shut looks like, and the caller
+    // answers with a bare ACK.
+    DMShellRxDecision d = w.classify(2, 1000, 500);
+    TEST_ASSERT_TRUE(d.process);
+    TEST_ASSERT_FALSE(d.duplicate);
+
+    d = w.classify(2, 1100, 500);
+    TEST_ASSERT_FALSE(d.process);
+    TEST_ASSERT_TRUE(d.duplicate);
+    TEST_ASSERT_FALSE(d.requestReplay);
+}
+
+void test_dmshell_rx_damped_gap_is_not_a_duplicate()
+{
+    DMShellRxWindow w;
+    w.reset(1);
+
+    // A frame above the gap, then another while the request is damped. The second is silent on
+    // purpose - answering every frame behind a hole is exactly the load the damping exists to avoid -
+    // so it must not be mistaken for a duplicate.
+    DMShellRxDecision d = w.classify(4, 1000, 500);
+    TEST_ASSERT_TRUE(d.requestReplay);
+    TEST_ASSERT_FALSE(d.duplicate);
+
+    d = w.classify(5, 1100, 500);
+    TEST_ASSERT_FALSE(d.process);
+    TEST_ASSERT_FALSE(d.requestReplay);
+    TEST_ASSERT_FALSE(d.duplicate);
+}
+
+void test_dmshell_rx_duplicate_behind_a_gap_asks_instead()
+{
+    DMShellRxWindow w;
+    w.reset(1);
+
+    w.classify(4, 1000, 500); // opens a gap at 2 and damps the request
+    DMShellRxDecision d = w.classify(2, 2000, 500);
+    TEST_ASSERT_TRUE(d.process);
+
+    // Still waiting on 3, and a replay request carries the same cursor a bare ACK would, so the
+    // caller has nothing extra to send.
+    d = w.classify(2, 3000, 500);
+    TEST_ASSERT_TRUE(d.duplicate);
+    TEST_ASSERT_TRUE(d.requestReplay);
+    TEST_ASSERT_EQUAL_UINT32(3, d.replaySeq);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -474,6 +527,9 @@ void setup()
     RUN_TEST(test_dmshell_retransmit_run_restarts_on_a_new_sequence_number);
     RUN_TEST(test_dmshell_retransmit_run_clear_forgives_a_peer_that_caught_up);
     RUN_TEST(test_dmshell_retransmit_run_unbounded_when_limit_zero);
+    RUN_TEST(test_dmshell_rx_duplicate_is_flagged_for_a_bare_ack);
+    RUN_TEST(test_dmshell_rx_damped_gap_is_not_a_duplicate);
+    RUN_TEST(test_dmshell_rx_duplicate_behind_a_gap_asks_instead);
     exit(UNITY_END());
 }
 

@@ -11,6 +11,7 @@
 struct DMShellRxDecision {
     bool process = false;       ///< In order: hand it to the session.
     bool requestReplay = false; ///< Ask the peer to replay replaySeq.
+    bool duplicate = false;     ///< Already had it in order: the peer has not seen our receive cursor.
     uint32_t replaySeq = 0;
 };
 
@@ -54,8 +55,12 @@ class DMShellRxWindow
         }
 
         if (seq < nextExpectedSeq) {
-            // A duplicate or a replay we no longer need. Only worth a request if we are still
-            // waiting on something below the highest sequence number we have seen.
+            // A duplicate or a replay we no longer need. The peer would not be repeating a frame we
+            // already have unless it has not seen our cursor - which is what a sender whose own window
+            // has shut looks like - so the caller owes it one, and asking for a replay says the same
+            // thing. Only worth a request if we are still waiting on something below the highest
+            // sequence number we have seen.
+            decision.duplicate = true;
             if (highestSeenSeq >= nextExpectedSeq) {
                 askFor(nextExpectedSeq, nowMs, replayIntervalMs, decision);
             }

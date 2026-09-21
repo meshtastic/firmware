@@ -69,6 +69,38 @@ def _ack_after_frames() -> int:
 
 
 ACK_AFTER_FRAMES = _ack_after_frames()
+
+
+def _input_window_frames() -> int:
+    raw = os.environ.get("DMSHELL_INPUT_WINDOW", "")
+    if not raw:
+        return 4
+    try:
+        value = int(raw)
+    except ValueError:
+        print(f"[dmshell] ignoring unparseable DMSHELL_INPUT_WINDOW={raw!r}", file=sys.stderr)
+        return 4
+    if value < 0 or value > 50:
+        print(f"[dmshell] DMSHELL_INPUT_WINDOW={raw!r} outside 0-50, using 4", file=sys.stderr)
+        return 4
+    return value
+
+
+# The mirror of the server's DMSHELL_TX_WINDOW, and the other half of the same failure. The server
+# bounds its output; nothing bounded our input, so at LongFast - where we emit keystrokes far faster
+# than the server drains them - our own 50-frame replay ring was outrun and the session died with
+# replay_evicted, exactly as the server's did at ShortTurbo before it was bounded. 0 restores the
+# unbounded behaviour for measuring one build both ways.
+INPUT_WINDOW_FRAMES = _input_window_frames()
+# Bytes of typed input held locally while the window is shut. The keystrokes are the user's, so
+# dropping them is not an option; this is the backpressure, and the shape of the local terminal's own
+# tty buffer. Generous, because the frames it holds are small and the alternative is losing input.
+PENDING_INPUT_MAX_BYTES = 4096
+# Consecutive retransmissions of one input frame before we give up on the server, matching the
+# firmware's bound. The interval escalates the way a replay re-ask does, because unlike the firmware
+# we cannot read the modem config: that puts the allowance at roughly 1 s x 4 then doubling to an 8 s
+# ceiling, so 25 repeats span about two and a half minutes.
+MAX_INPUT_RETRANSMITS = 25
 # A lost OPEN or OPEN_OK costs a full frame airtime, which is ~2.2 s on LongFast against ~0.1 s on
 # ShortTurbo, so the handshake needs far more headroom than the API socket does. Measured: a LongFast
 # session needed 150 s to open.
@@ -380,6 +412,21 @@ class SessionState:
     # keystrokes used to suppress it (see heartbeat_due).
     last_inbound_time: float = field(default_factory=time.monotonic)
     last_heartbeat_sent_time: float = 0.0
+    # Outbound flow control, mirroring the firmware's txWindow. peer_acked_tx_seq is the server's
+    # cumulative receive cursor over our frames; see note_peer_receive_cursor.
+    input_window_frames: int = INPUT_WINDOW_FRAMES
+    peer_acked_tx_seq: int = 0
+    input_window_blocked: bool = False
+    # Held across taking bytes off pending_input and transmitting them. The input thread and the
+    # heartbeat thread both flush, and two takes that interleave with two sends would put the user's
+    # keystrokes on the wire out of order.
+    input_lock: threading.Lock = field(default_factory=threading.Lock)
+    pending_input: bytearray = field(default_factory=bytearray)
+    pending_input_dropped: int = 0
+    next_input_retransmit_time: float = 0.0
+    input_retransmit_interval: float = MISSING_SEQ_RETRY_INTERVAL_SEC
+    input_retransmit_seq: int = 0
+    input_retransmits: int = 0
 
     def alloc_seq(self) -> int:
         with self.tx_lock:
@@ -428,6 +475,94 @@ class SessionState:
             if self.last_heartbeat_sent_time <= self.last_inbound_time:
                 return True
             return (now - self.last_heartbeat_sent_time) >= HEARTBEAT_REPEAT_SEC
+
+    def note_peer_receive_cursor(self, ack_seq: int, last_rx_seq: int) -> None:
+        """Take the server's cumulative cursor over our frames from any inbound frame.
+
+        Both fields mean "the highest sequence number I have in order": the server sets ack_seq on
+        every frame it originates and last_rx_seq explicitly when it asks for a replay, so the larger
+        is the cursor. Clamped to what we have actually sent, so a confused peer cannot grant credit
+        past our own progress, and monotone, so a replay carrying a stale cursor cannot close the
+        window again. The mirror of the firmware's notePeerReceiveCursor().
+        """
+        cursor = max(ack_seq, last_rx_seq)
+        with self.tx_lock:
+            highest_sent = max(0, self.next_seq - 1)
+            cursor = min(cursor, highest_sent)
+            if cursor <= self.peer_acked_tx_seq:
+                return
+            self.peer_acked_tx_seq = cursor
+            # Progress proves the server is alive, so the run that would eventually declare it gone
+            # starts over, and the next stall gets a fresh interval.
+            self.next_input_retransmit_time = 0.0
+            self.input_retransmit_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
+            self.input_retransmit_seq = 0
+            self.input_retransmits = 0
+
+    def outstanding_input(self) -> int:
+        with self.tx_lock:
+            return max(0, self.next_seq - 1) - self.peer_acked_tx_seq
+
+    def input_window_open(self) -> bool:
+        with self.tx_lock:
+            if self.input_window_frames == 0:
+                return True
+            return (max(0, self.next_seq - 1) - self.peer_acked_tx_seq) < self.input_window_frames
+
+    def queue_input(self, data: bytes) -> int:
+        """Hold typed input until the window reopens. Returns how many bytes had to be dropped."""
+        with self.tx_lock:
+            room = PENDING_INPUT_MAX_BYTES - len(self.pending_input)
+            if room <= 0:
+                self.pending_input_dropped += len(data)
+                return len(data)
+            kept = data[:room]
+            dropped = len(data) - len(kept)
+            self.pending_input.extend(kept)
+            self.pending_input_dropped += dropped
+            return dropped
+
+    def take_queued_input(self, limit: int) -> bytes:
+        with self.tx_lock:
+            if not self.pending_input:
+                return b""
+            chunk = bytes(self.pending_input[:limit])
+            del self.pending_input[:len(chunk)]
+            return chunk
+
+    def has_queued_input(self) -> bool:
+        with self.tx_lock:
+            return bool(self.pending_input)
+
+    def input_retransmit_due(self) -> tuple[Optional[int], bool]:
+        """The input frame to repeat while the window is shut, and whether the allowance is spent.
+
+        Symmetric to the firmware's retransmitOldestUnacked, and needed for the same reason: with our
+        window full the server never sees a sequence number above the gap, so it never asks for the
+        replay that would reopen us. Its only trigger is an arriving frame, and we have stopped
+        sending. Without this the session latches silently.
+        """
+        with self.tx_lock:
+            if self.input_window_frames == 0 or self.legacy_recovery:
+                return (None, False)
+            highest_sent = max(0, self.next_seq - 1)
+            missing = self.peer_acked_tx_seq + 1
+            if missing > highest_sent:
+                return (None, False)
+            now = time.monotonic()
+            if now < self.next_input_retransmit_time:
+                return (None, False)
+            if missing != self.input_retransmit_seq:
+                self.input_retransmit_seq = missing
+                self.input_retransmits = 0
+                self.input_retransmit_interval = MISSING_SEQ_RETRY_INTERVAL_SEC
+            if self.input_retransmits >= MAX_INPUT_RETRANSMITS:
+                return (missing, True)
+            self.input_retransmits += 1
+            if self.input_retransmits > MISSING_SEQ_RETRY_FLAT_ATTEMPTS:
+                self.input_retransmit_interval = min(self.input_retransmit_interval * 2, MISSING_SEQ_RETRY_MAX_SEC)
+            self.next_input_retransmit_time = now + self.input_retransmit_interval
+            return (missing, False)
 
     def note_peer_reported_tx_seq(self, seq: int) -> None:
         with self.tx_lock:
@@ -628,6 +763,31 @@ def send_shell_frame(
     remember: bool = True,
     heartbeat: bool = False,
 ) -> int:
+    # Held across allocation and transmission both: the input, heartbeat and reader threads all send,
+    # and a sequence number that reaches the radio out of order reads as a gap at the far end.
+    with state.socket_lock:
+        return _send_shell_frame_locked(
+            transport, state, op, payload, cols, rows, session_id, ack_seq, seq, flags, last_tx_seq, last_rx_seq,
+            remember, heartbeat,
+        )
+
+
+def _send_shell_frame_locked(
+    transport,
+    state: SessionState,
+    op: int,
+    payload: bytes,
+    cols: int,
+    rows: int,
+    session_id: Optional[int],
+    ack_seq: Optional[int],
+    seq: Optional[int],
+    flags: int,
+    last_tx_seq: int,
+    last_rx_seq: int,
+    remember: bool,
+    heartbeat: bool,
+) -> int:
     if seq is None:
         seq = 0 if op == state.pb2.mesh.RemoteShell.ACK else state.alloc_seq()
     if ack_seq is None:
@@ -647,8 +807,7 @@ def send_shell_frame(
     shell.last_rx_seq = last_rx_seq
     if payload:
         shell.payload = payload
-    with state.socket_lock:
-        send_toradio(transport, make_toradio_packet(state.pb2, state, shell))
+    send_toradio(transport, make_toradio_packet(state.pb2, state, shell))
     if remember:
         state.remember_sent_frame(
             SentShellFrame(
@@ -716,6 +875,64 @@ def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
         last_rx_seq=frame.last_rx_seq,
         remember=False,
     )
+
+
+def flush_pending_input(transport, state: SessionState) -> None:
+    """Send as much held input as the window allows, oldest bytes first."""
+    with state.input_lock:
+        _flush_pending_input_locked(transport, state)
+
+
+def _flush_pending_input_locked(transport, state: SessionState) -> None:
+    while state.active and not state.closed_event.is_set() and state.has_queued_input():
+        if not state.input_window_open():
+            if not state.input_window_blocked:
+                state.input_window_blocked = True
+                state.log_replay_event("input_window_closed", state.peer_acked_tx_seq,
+                                       f"outstanding={state.outstanding_input()}")
+            return
+        if state.input_window_blocked:
+            state.input_window_blocked = False
+            state.log_replay_event("input_window_reopened", state.peer_acked_tx_seq)
+        chunk = state.take_queued_input(INPUT_BATCH_MAX_BYTES)
+        if not chunk:
+            return
+        send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.INPUT, chunk)
+
+
+def send_input(transport, state: SessionState, data: bytes) -> None:
+    """Queue typed input and send what the window allows.
+
+    Everything goes through the queue even when the window is open, so bytes can only ever leave in
+    the order they were typed.
+    """
+    dropped = state.queue_input(data)
+    if dropped:
+        state.event_queue.put(f"input buffer full, dropped {dropped} byte(s); the remote is not keeping up")
+    flush_pending_input(transport, state)
+
+
+def service_input_window(transport, state: SessionState) -> None:
+    """Keep a blocked input stream moving. Called from the heartbeat thread, which already polls."""
+    flush_pending_input(transport, state)
+    if not state.active or state.closed_event.is_set():
+        return
+    if state.input_window_open():
+        return
+    missing, exhausted = state.input_retransmit_due()
+    if missing is None:
+        return
+    if exhausted:
+        state.log_replay_event("peer_unresponsive", missing, f"retransmits={MAX_INPUT_RETRANSMITS}")
+        state.event_queue.put(
+            f"remote has not acknowledged input seq={missing} after {MAX_INPUT_RETRANSMITS} retransmissions; closing session"
+        )
+        send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE, remember=False)
+        state.active = False
+        state.closed_event.set()
+        return
+    state.log_replay_event("input_retransmit", missing)
+    replay_frames_from(transport, state, missing)
 
 
 def wait_for_config_complete(transport, pb2, timeout: float, verbose: bool) -> None:
@@ -802,6 +1019,10 @@ def reader_loop(transport, state: SessionState) -> None:
             if not shell:
                 continue
             state.note_inbound_packet()
+            # Before every opcode branch, including the ones that continue: an out-of-order frame is
+            # still proof the peer is alive and still carries a valid cursor, and during a gap it may
+            # be the only kind arriving. Mirrors where the firmware calls notePeerReceiveCursor().
+            state.note_peer_receive_cursor(shell.ack_seq, shell.last_rx_seq)
             #state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.RemoteShell.CLOSED:
                 # Terminal, so act on it regardless of sequence order. Buffering a CLOSED behind a
@@ -828,6 +1049,12 @@ def reader_loop(transport, state: SessionState) -> None:
                 if req is not None:
                     state.note_missing_seq_requested(req, "duplicate")
                     send_ack_frame(transport, state, replay_from=req)
+                else:
+                    # We already have this in order, so the peer has not seen our cursor - which is
+                    # what a sender whose window is shut looks like. Answer with the cursor rather
+                    # than nothing, or it retransmits until its own bound closes the session. The
+                    # firmware answers our duplicates the same way.
+                    send_ack_frame(transport, state)
                 continue
             if action == "gap":
                 state.remember_out_of_order_frame(shell)
@@ -877,6 +1104,13 @@ def heartbeat_loop(transport, state: SessionState) -> None:
         if not state.active:
             time.sleep(HEARTBEAT_POLL_INTERVAL_SEC)
             continue
+        try:
+            service_input_window(transport, state)
+        except Exception as exc:
+            if not state.stopped:
+                state.event_queue.put(f"input window error: {exc}")
+                state.closed_event.set()
+                return
         if state.heartbeat_due():
             try:
                 send_shell_frame(
@@ -898,8 +1132,15 @@ def heartbeat_loop(transport, state: SessionState) -> None:
 
 def run_command_mode(transport, state: SessionState, commands: list[str], close_after: float) -> None:
     for command in commands:
-        send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.INPUT, (command + "\n").encode("utf-8"))
-    time.sleep(close_after)
+        send_input(transport, state, (command + "\n").encode("utf-8"))
+    # The window may still be holding part of a command, so give it the same grace the output gets
+    # before tearing the session down.
+    deadline = time.monotonic() + close_after
+    while state.has_queued_input() and not state.closed_event.is_set() and time.monotonic() < deadline:
+        time.sleep(HEARTBEAT_POLL_INTERVAL_SEC)
+    remaining = deadline - time.monotonic()
+    if remaining > 0:
+        time.sleep(remaining)
     send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE)
     state.closed_event.wait(timeout=close_after + 5.0)
 
@@ -977,7 +1218,7 @@ def run_interactive_mode(transport, state: SessionState) -> None:
             if not data:
                 send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE)
                 break
-            send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.INPUT, data)
+            send_input(transport, state, data)
         return
 
     fd = sys.stdin.fileno()
@@ -988,6 +1229,7 @@ def run_interactive_mode(transport, state: SessionState) -> None:
             drain_events(state)
             ready, _, _ = select.select([sys.stdin], [], [], 0.05)
             if not ready:
+                flush_pending_input(transport, state)
                 continue
 
             data = os.read(fd, 1)
@@ -1024,7 +1266,7 @@ def run_interactive_mode(transport, state: SessionState) -> None:
                 deadline = time.monotonic() + INPUT_BATCH_WINDOW_SEC
 
             if batched:
-                send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.INPUT, bytes(batched))
+                send_input(transport, state, bytes(batched))
 
             if enter_local_command:
                 keep_running = handle_local_command(read_local_command())
@@ -1045,7 +1287,12 @@ def main() -> int:
         verbose=args.verbose,
         hop_limit=args.hop_limit,
         legacy_recovery=args.legacy_recovery,
+        input_window_frames=0 if args.legacy_recovery else INPUT_WINDOW_FRAMES,
     )
+    if state.input_window_frames == 0:
+        print("[dmshell] input window disabled, typed input may run away from a gap", file=sys.stderr)
+    else:
+        print(f"[dmshell] bounding unacknowledged input to {state.input_window_frames} frames", file=sys.stderr)
 
     cols, rows = resolve_initial_terminal_size(args.cols, args.rows)
 
