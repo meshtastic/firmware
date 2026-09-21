@@ -467,6 +467,37 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         return send(p);
     }
 }
+// Admit on the packet's own airtime, so the crossing packet is the one refused. Everything below
+// Priority_ACK leaves one ack's worth: a node that cannot ack costs the mesh the sender's retries.
+uint8_t Router::dutyCycleWaitMinutes(const meshtastic_MeshPacket *p)
+{
+    const float effectiveDutyCycle = getEffectiveDutyCycle();
+    if (config.lora.override_duty_cycle || effectiveDutyCycle >= 100)
+        return 0;
+
+    const uint32_t reserveMs = p->priority >= meshtastic_MeshPacket_Priority_ACK ? 0 : ackAirtimeMsec();
+    const uint32_t proposedMs = (iface ? iface->getPacketTime(p) : 0) + reserveMs;
+    // Zero exactly when the packet is admitted: getSilentMinutes() is the complement of the gate.
+    return airTime->getSilentMinutes(effectiveDutyCycle, proposedMs);
+}
+
+void Router::notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, bool retry)
+{
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    cn->has_reply_id = true;
+    cn->reply_id = p->id;
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->time = getValidTime(RTCQualityFromNet);
+    // Two truths: a refused first send never went out; a refused retry did, once, and is unconfirmed.
+    snprintf(cn->message, sizeof(cn->message),
+             retry ? "Sent once, unconfirmed: no airtime to retry. You can send again in %u mins"
+                   : "Not sent: duty cycle limit exceeded. You can send again in %u mins",
+             waitMinutes);
+    service->sendClientNotification(cn);
+}
+
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
@@ -480,39 +511,18 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
 
-    // Abort sending if this packet would take us over the duty cycle. Admission counts the packet's
-    // own airtime, so the one that would cross the line is refused rather than the one after it.
-    // Acks and naks take the whole allowance; everything else leaves one ack's worth of it. A node
-    // that cannot ack does not save airtime - the sender retries, and the mesh pays for each one.
-    // Our acks carry Priority_ACK from allocAckNak(); a relayed one is opaque and takes no reserve.
-    float effectiveDutyCycle = getEffectiveDutyCycle();
-    if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
-        const uint32_t reserveMs = p->priority >= meshtastic_MeshPacket_Priority_ACK ? 0 : ackAirtimeMsec();
-        const uint32_t proposedMs = (iface ? iface->getPacketTime(p) : 0) + reserveMs;
-        if (airTime->wouldExceedDutyCycle(proposedMs, effectiveDutyCycle)) {
-            uint8_t silentMinutes = airTime->getSilentMinutes(effectiveDutyCycle, proposedMs);
-
-            LOG_WARN("Duty cycle limit exceeded, abort send, retry in %d mins", silentMinutes);
-
-            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            if (cn) {
-                cn->has_reply_id = true;
-                cn->reply_id = p->id;
-                cn->level = meshtastic_LogRecord_Level_WARNING;
-                cn->time = getValidTime(RTCQualityFromNet);
-                snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins",
-                         silentMinutes);
-                service->sendClientNotification(cn);
-            }
-
-            meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
-            if (isFromUs(p)) { // only send NAK to API, not to the mesh
-                abortSendAndNak(err, p);
-            } else {
-                packetPool.release(p);
-            }
-            return err;
+    // Abort sending if this packet would take us over the duty cycle. Nothing is held back for
+    // later: the client is told how long to wait and resends. A relayed packet is dropped quietly.
+    if (const uint8_t waitMinutes = dutyCycleWaitMinutes(p)) {
+        LOG_WARN("Duty cycle limit exceeded, abort send, retry in %u mins", waitMinutes);
+        const meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
+        if (isFromUs(p)) { // only notify and NAK the API, not the mesh
+            notifyDutyCycleRefusal(p, waitMinutes, false);
+            abortSendAndNak(err, p);
+        } else {
+            packetPool.release(p);
         }
+        return err;
     }
 
     // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;

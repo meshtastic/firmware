@@ -468,6 +468,14 @@ int32_t NextHopRouter::doRetransmissions()
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
+            } else if (const uint8_t waitMinutes = dutyCycleWaitMinutes(p.packet)) {
+                // No airtime for this rung. Asked before the route failure and next_hop reset below, which
+                // would charge a route never tried. The ladder ends: our client is told, a relay owes nothing.
+                LOG_WARN("No airtime to retry id=0x%08x for %u mins, stop retrying", p.packet->id, waitMinutes);
+                if (isFromUs(p.packet))
+                    notifyDutyCycleRefusal(p.packet, waitMinutes, true);
+                stopRetransmission(it->first);
+                stillValid = false;
             } else {
                 LOG_DEBUG("Send retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);

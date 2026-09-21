@@ -1676,8 +1676,8 @@ void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(packet));
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
                                      "duty-cycle rejection must still notify the originating client");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(),
-                                     "duty-cycle rejection must retain the retry for when airtime is available");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "a duty-cycle refusal is final: the client was told how long to wait, and resends");
 
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
@@ -1712,7 +1712,7 @@ void test_ack_frame_bytes_covers_a_real_ack(void)
 
 // Ten milliseconds of the allowance left, and the fake radio charges 7 ms a frame. A reliable DM
 // must also leave an ack's 7 ms behind it, so it needs 14 and is refused; the ack itself needs
-// only 7 and goes. The retry stays pending exactly as C14 requires of any duty-cycle refusal.
+// only 7 and goes. The refusal is final, as C14 requires of any duty-cycle refusal.
 void test_C14b_ack_is_admitted_from_the_reserve_a_dm_is_not(void)
 {
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868; // 10%: a 360 000 ms allowance
@@ -1734,7 +1734,7 @@ void test_C14b_ack_is_admitted_from_the_reserve_a_dm_is_not(void)
     TEST_ASSERT_NOT_NULL(dmPacket);
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(dmPacket),
                               "a DM must leave one ack's worth of the allowance unspent");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(), "...and its retry stays pending");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(), "...and nothing is held back for later");
 
     meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
     ack.id = 0xC14B0002;

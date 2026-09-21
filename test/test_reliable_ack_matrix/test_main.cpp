@@ -7,6 +7,7 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/RTC.h"
@@ -16,6 +17,7 @@
 #include "mesh/ReliableRouter.h"
 #include "mesh/Throttle.h"
 #include "modules/RoutingModule.h"
+#include "support/MockMeshService.h"
 #include <cstdio>
 #include <cstring>
 #include <list>
@@ -205,6 +207,8 @@ static ReliableRouterTestShim *reliableShim = nullptr;
 static TimedCaptureRadio *radio = nullptr;
 static MockRoutingModule *mockRoutingModule = nullptr;
 static std::unique_ptr<ScopedAirTimeFixture> airTimeFixture;
+static MockMeshService *mockService = nullptr;
+static AirTime *dutyCycleSavedAirTime = nullptr;
 static PacketId nextTestPacketId = 0x7A000000;
 
 // ---------------------------------------------------------------------------
@@ -323,10 +327,23 @@ void setUp(void)
     radio->reset();
     mockRoutingModule->ackNaks.clear();
     mockRoutingModule->relaySources.clear();
+    mockService->notificationCount = 0;
     configureChannels();
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{
+    // Group 7 swaps the clock, the region and the AirTime; an aborted body must not leak them.
+    Time::useRealClock();
+    Time::resetMonotonicForTests();
+    config.lora.override_duty_cycle = true;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    if (dutyCycleSavedAirTime) {
+        airTime = dutyCycleSavedAirTime;
+        dutyCycleSavedAirTime = nullptr;
+    }
+}
 
 // ===========================================================================
 // Group 1 - want_ack ACK variants (decoded packets to us)
@@ -838,6 +855,101 @@ void test_receive_extends_all_pending_deadlines(void)
 }
 
 // ===========================================================================
+// Group 7 - a retry rung with no airtime under the duty cycle
+// ===========================================================================
+//
+// doRetransmissions() asks Router::dutyCycleWaitMinutes() before a rung's side effects. A refused
+// rung is not an attempt: nothing is sent, nothing is decremented, the route is not charged, and
+// the ladder ends. Ours tells the client once - the packet went out on rung one and is unconfirmed
+// - with no NAK, because "failed" would be untrue. A relayed one ends quietly.
+
+// EU_866 at CLIENT is 2.5%: 90 000 ms an hour. Leave `remainingMs` of it, under a clock an hour
+// past boot so the span is credited across the ring rather than clamped at uptime 0.
+static void useAirTimeWithRemaining(uint32_t remainingMs)
+{
+    static AirTime nearlySpent;
+    config.lora.override_duty_cycle = false;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    initRegion();
+    // The static persists across cases: two hours further on each call, so its window is empty.
+    static uint32_t clockMs = 0;
+    clockMs += 2u * MS_IN_HOUR;
+    Time::resetMonotonicForTests();
+    Time::setTestMillis(clockMs);
+    Time::serviceMonotonic();
+    dutyCycleSavedAirTime = airTime;
+    airTime = &nearlySpent;
+    nearlySpent.logAirtime(TX_LOG, 90000 - remainingMs);
+}
+
+// Seeds `p` on the ladder with `attempts` and moves the clock past its first deadline.
+static void seedDueRetry(const meshtastic_MeshPacket &p, uint8_t attempts)
+{
+    reliableShim->seedRetry(p, attempts);
+    Time::advanceTestMillis(5u * 60u * 1000u); // well past any getRetransmissionMsec()
+    Time::serviceMonotonic();
+}
+
+void test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once(void)
+{
+    radio->packetTimeMsec = 7; // every frame, the ack included: a rung needs 14 ms
+    useAirTimeWithRemaining(10);
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    reliableShim->noteRouteLearned(kRemoteNode, 0xAB, Time::getMillis());
+    // Two attempts: the due rung is the last-but-one, the one that marks the route failed and
+    // clears next_hop before it sends. Refused first, it must do neither.
+    seedDueRetry(dm, 2);
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio->sentPackets.size(), "nothing went to the radio");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, reliableShim->pendingCount(), "the ladder is over");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockService->notificationCount, "the client is told once");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRoutingModule->ackNaks.size(), "...but not NAKed: rung one went out");
+    RouteHealth *h = reliableShim->findRouteHealth(kRemoteNode);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h->consecutiveFailures, "a rung never tried is not a route failure");
+}
+
+void test_refused_retry_rung_ends_a_relayed_ladder_quietly(void)
+{
+    radio->packetTimeMsec = 7;
+    useAirTimeWithRemaining(10);
+
+    auto relayed = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kThirdNode, 1, /*wantAck=*/true);
+    relayed.next_hop = 0x33;
+    reliableShim->noteRouteLearned(kThirdNode, 0x33, Time::getMillis());
+    seedDueRetry(relayed, 2); // the route-charging rung, as above
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32(0, radio->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, reliableShim->pendingCount(), "the relay owes nothing further");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockService->notificationCount, "no client to tell");
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+    RouteHealth *h = reliableShim->findRouteHealth(kThirdNode);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h->consecutiveFailures, "the next hop is not charged for our airtime");
+}
+
+// The control: with airtime for the rung, the ladder runs exactly as before.
+void test_admitted_retry_rung_still_goes(void)
+{
+    radio->packetTimeMsec = 7;
+    useAirTimeWithRemaining(1000);
+
+    auto dm = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    seedDueRetry(dm, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+
+    reliableShim->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, radio->sentPackets.size(), "the rung went out");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, reliableShim->pendingCount(), "...and the ladder continues");
+    TEST_ASSERT_EQUAL_UINT32(0, mockService->notificationCount);
+}
+
+// ===========================================================================
 
 void setup()
 {
@@ -855,6 +967,8 @@ void setup()
 
     mockRoutingModule = new MockRoutingModule();
     routingModule = mockRoutingModule;
+    mockService = new MockMeshService();
+    service = mockService;
 
     printf("\n=== want_ack ACK variants ===\n");
     RUN_TEST(test_text_dm_want_ack_gets_want_ack_ack);
@@ -897,6 +1011,11 @@ void setup()
     printf("\n=== pending-timer airtime extension ===\n");
     RUN_TEST(test_send_extends_other_pending_deadlines_not_own);
     RUN_TEST(test_receive_extends_all_pending_deadlines);
+
+    printf("\n=== retry rungs under the duty cycle ===\n");
+    RUN_TEST(test_refused_retry_rung_ends_our_ladder_and_tells_the_client_once);
+    RUN_TEST(test_refused_retry_rung_ends_a_relayed_ladder_quietly);
+    RUN_TEST(test_admitted_retry_rung_still_goes);
 
     int result = UNITY_END();
     airTimeFixture.reset();
