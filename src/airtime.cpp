@@ -70,7 +70,8 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
     // the part after boot is inside any window this node can answer for, so clamp the start there
     // rather than sliding the span forward into buckets that have not happened yet - syncNow()
     // clears those on arrival, which loses the airtime and drags the reading down.
-    const uint64_t endMs = (uint64_t)this->secSinceBoot * 1000u;
+    // Whole milliseconds: at the second, a packet ending at :00.900 would be credited as ending at :00.
+    const uint64_t endMs = (uint64_t)this->secSinceBoot * 1000u + this->msInSec;
     const uint64_t startMs = endMs > airtime_ms ? endMs - airtime_ms : 0;
 
     // The caller logs, once the lock is released.
