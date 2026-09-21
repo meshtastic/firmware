@@ -22,6 +22,9 @@ struct DMShellSession {
     int childPid = -1;
     uint32_t nextTxSeq = 1;
     uint32_t lastAckedRxSeq = 0;
+    // In-order frames processed since we last originated one carrying lastAckedRxSeq. The peer bounds
+    // its own unacknowledged input, so it needs this cursor even when we have no output to send.
+    uint32_t framesSinceOutbound = 0;
     uint32_t lastActivityMs = 0;
     DMShellRxWindow rxWindow;
     DMShellTxWindow txWindow;
@@ -75,6 +78,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void notePeerReceiveCursor(const meshtastic_RemoteShell &frame);
     void retransmitOldestUnacked();
     void flushPendingOutputOnInterrupt(const meshtastic_RemoteShell &frame);
+    void sendBareAck();
 
     bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;

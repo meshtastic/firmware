@@ -55,6 +55,18 @@ constexpr uint32_t DEFAULT_TX_WINDOW_FRAMES = 4;
 /// Above the replay ring there is nothing left to bound, so a larger value is a configuration error.
 constexpr uint32_t MAX_TX_WINDOW_FRAMES = (uint32_t)DMShellSession::TX_HISTORY_LEN;
 
+/// In-order frames the peer may send before we owe it a bare ACK carrying our receive cursor.
+///
+/// The peer bounds its own unacknowledged input the way we bound our output, so it needs our cursor
+/// to make progress. Input that produces no output - a keystroke a program swallows, a password
+/// prompt - would otherwise leave us silent until its window filled and latched. Anything we
+/// originate carries the cursor already, so this only fires when we have nothing else to say.
+///
+/// Keeping it below the peer's window means a healthy stream never has to stall for one. It does not
+/// have to be: a peer whose window shut early retransmits, and shouldProcessIncomingFrame answers a
+/// duplicate with a bare ACK directly, so the pair recovers whatever the two numbers are.
+constexpr uint32_t ACK_AFTER_RX_FRAMES = 2;
+
 /// Consecutive retransmissions of one sequence number before the peer is declared gone.
 ///
 /// Measured on hardware: in healthy operation the most any single sequence number needed was 11, and
@@ -327,6 +339,14 @@ int32_t DMShellModule::runOnce()
         return 50;
     }
 
+    // Ahead of the window gate on purpose: while our own window is shut we retransmit, and a
+    // retransmission carries a stale cursor, so this is the only thing that keeps the peer's window
+    // open when both directions are blocked at once.
+    if (session.framesSinceOutbound >= ACK_AFTER_RX_FRAMES) {
+        sendBareAck();
+        return 50;
+    }
+
     if (!session.txWindow.canSend()) {
         // Window closed: leave the bytes in the PTY buffer, which is the backpressure. Deliberately
         // returning before the read also stops lastActivityMs being refreshed below, which is what
@@ -481,6 +501,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.txWindowBlocked = false;
     session.nextRetransmitMs = 0;
     session.retransmitRun.reset(maxConsecutiveRetransmits);
+    session.framesSinceOutbound = 0;
     session.lastActivityMs = millis();
 
     meshtastic_RemoteShell newFrame = {
@@ -807,6 +828,16 @@ bool DMShellModule::shouldProcessIncomingFrame(const meshtastic_RemoteShell &fra
 
     if (decision.process && frame.seq != 0) {
         session.lastAckedRxSeq = frame.seq;
+        // Only an in-order frame moves the cursor the peer is waiting on, so only this case creates a
+        // debt. Mirrors the client's note_received_seq().
+        session.framesSinceOutbound++;
+    } else if (decision.duplicate && !decision.requestReplay) {
+        // The peer is repeating a frame we already have, which means it has not seen our cursor - a
+        // sender whose own window has shut looks exactly like this. Answering directly is what makes
+        // any peer window size safe, rather than relying on ACK_AFTER_RX_FRAMES being the smaller of
+        // the two numbers. A replay request carries the same cursor, so it counts as the answer; a
+        // damped gap deliberately stays silent, which is what the damping is for.
+        sendBareAck();
     }
 
     return decision.process;
@@ -831,6 +862,12 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
         rememberSentFrame(frame);
     }
 
+    // Anything carrying the current cursor settles the debt, whatever its opcode. A replay carries the
+    // cursor it was first sent with, so a stale one deliberately does not.
+    if (frame.ack_seq == session.lastAckedRxSeq) {
+        session.framesSinceOutbound = 0;
+    }
+
     packet->to = peer;
     packet->hop_limit = 0;
     packet->hop_start = 0;
@@ -839,6 +876,28 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
     packet->pki_encrypted = true;
     packet->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     service->sendToMesh(packet);
+}
+
+/// Tell the peer where our receive cursor is when we have nothing else to send.
+///
+/// seq 0 keeps it out of the peer's ordering window, and last_rx_seq stays 0 so the peer does not read
+/// it as a replay request; ack_seq alone carries the cursor. Not remembered: it is unsequenced, so
+/// there is nothing to replay.
+void DMShellModule::sendBareAck()
+{
+    meshtastic_RemoteShell frame = {
+        .op = meshtastic_RemoteShell_OpCode_ACK,
+        .session_id = session.sessionId,
+        .seq = 0,
+        .ack_seq = session.lastAckedRxSeq,
+        .cols = 0,
+        .rows = 0,
+        .flags = 0,
+        .last_tx_seq = 0,
+        .last_rx_seq = 0,
+    };
+    frame.payload.size = 0;
+    sendFrameToPeer(session.peer, frame, false);
 }
 
 void DMShellModule::sendError(const char *message, NodeNum peer)
