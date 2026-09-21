@@ -353,9 +353,11 @@ int32_t DMShellModule::runOnce()
     }
 
     // Ahead of the window gate on purpose: while our own window is shut we retransmit, and a
-    // retransmission carries a stale cursor, so this is the only thing that keeps the peer's window
-    // open when both directions are blocked at once.
-    if (session.framesSinceOutbound >= ACK_AFTER_RX_FRAMES) {
+    // retransmission carries a stale cursor, so a bare ACK is the only thing that keeps the peer's
+    // window open when both directions are blocked at once. Deliberately limited to that case. With
+    // the window open an OUTPUT frame carries the same cursor for free, so paying the debt here would
+    // spend a frame on what the next one does anyway; that case is settled after the PTY read below.
+    if (session.framesSinceOutbound >= ACK_AFTER_RX_FRAMES && !session.txWindow.canSend()) {
         sendBareAck();
         return 50;
     }
@@ -418,6 +420,15 @@ int32_t DMShellModule::runOnce()
         LOG_WARN("DMShell: PTY read error errno=%d", errno);
         closeSession("pty_read_error", true);
         break;
+    }
+
+    // Only reached when the PTY had nothing to carry the cursor: the send above returns directly, and
+    // sendFrameToPeer() zeroes framesSinceOutbound because every frame carries ack_seq. So the debt
+    // is paid by a frame of its own exactly when no frame of ours was going out anyway. The session
+    // check matters because the loop breaks here after closeSession() on EOF or a read error.
+    if (session.active && session.framesSinceOutbound >= ACK_AFTER_RX_FRAMES) {
+        sendBareAck();
+        return 50;
     }
 
     return 100;
