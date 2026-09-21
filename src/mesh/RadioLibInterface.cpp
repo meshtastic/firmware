@@ -134,14 +134,28 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
         if (!activeReceiveStart) {
             activeReceiveStart = Time::skipZero(nowMsec);
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
+            const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
             if (!(irq & syncWordHeaderValidFlag)) {
-                // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
+                // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag -
+                // but only when we were in a position to have seen it. The deadline is 2 * preambleTimeMsec, derived from
+                // symbol time alone, and a look that arrived later than that has not observed the window it is judging:
+                // the flag would have been read as absent whether or not a packet was arriving. Wait for a look that can
+                // answer the question instead of transmitting over what may be a real packet.
+                //
+                // Bounded by the maximum packet time, because past that no packet we could still collide with is in the
+                // air, so a loop that has stopped looking altogether cannot hold a transmission indefinitely. A build
+                // that polls faster than the deadline never takes this path at all, and behaves exactly as before.
+                if (shouldDeferPreambleVerdict(sinceLastLookMsec, 2 * preambleTimeMsec, nowMsec - activeReceiveStart,
+                                               maxPacketTimeMsec)) {
+                    LOG_TRACE("Defer false preamble verdict, deadline %ums, last look %ums ago, held %ums of %ums",
+                              2 * preambleTimeMsec, sinceLastLookMsec, nowMsec - activeReceiveStart, maxPacketTimeMsec);
+                    return detected;
+                }
                 activeReceiveStart = 0;
                 LOG_TRACE("Ignore false preamble detection, deadline %ums, last look %ums ago", 2 * preambleTimeMsec,
                           sinceLastLookMsec);
                 return false;
             } else {
-                uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
                 if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
                     // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
                     activeReceiveStart = 0;
