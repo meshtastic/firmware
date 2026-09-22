@@ -235,7 +235,12 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
         // attacker spoofing `from` and sending no proof gets through anyway, and ABSENT cannot be
         // made to block for the reasons recorded at ACK_PROOF_ENFORCE. The point is narrower: a
         // flag named "enforce" should not have a branch that silently ignores it.
-        return isAck ? !ACK_PROOF_ENFORCE : true;
+        //
+        // Written as an if rather than `isAck ? !ACK_PROOF_ENFORCE : true` because with the flag
+        // off both arms of that ternary are `true`, which cppcheck reports as duplicateValueTernary.
+        if (isAck && ACK_PROOF_ENFORCE)
+            return false;
+        return true;
     }
 
     // Safe to key off getFrom(p) below only because it is now known equal to orig->packet->to.
