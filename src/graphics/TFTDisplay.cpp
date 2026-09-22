@@ -1920,8 +1920,9 @@ void TFTDisplay::sendCommand(uint8_t com)
             digitalWrite(VTFT_CTRL, LOW); // rail up before the panel is addressed
 #endif
             // SLPOUT within 120 ms of SLPIN is ignored, e.g. a button press as the timeout fires.
-            if (Throttle::isWithinTimespanMs(sleepInMs, kSleepOutSettleMs))
-                delay(kSleepOutSettleMs);
+            // Wait out what is left of that window, not a fresh 120 ms on top of it.
+            if (uint32_t settleLeft = Throttle::remainingMs(sleepInMs, kSleepOutSettleMs))
+                delay(settleLeft);
             tft->writecommand(kCmdSleepOut);
             delay(kSleepOutSettleMs); // datasheet minimum before the panel accepts DISPON
             tft->writecommand(kCmdDispOn);
