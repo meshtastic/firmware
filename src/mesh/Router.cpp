@@ -480,7 +480,8 @@ uint8_t Router::dutyCycleWaitMinutes(meshtastic_MeshPacket *p)
     // arrives unset is an ack or nak that must be allowed the reserve, not made to leave it.
     const bool ackTier =
         p->priority >= meshtastic_MeshPacket_Priority_ACK ||
-        (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->decoded.portnum == meshtastic_PortNum_ROUTING_APP);
+        (p->priority == meshtastic_MeshPacket_Priority_UNSET && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+         p->decoded.portnum == meshtastic_PortNum_ROUTING_APP);
     const uint32_t reserveMs = ackTier ? 0 : ackAirtimeMsec();
     // Sized as it will go on air, signature and PKC overhead included, not as it sits decoded.
     const uint32_t packetMs = iface ? iface->getPacketTime(onAirBytes(p)) : 0;
