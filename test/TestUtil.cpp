@@ -172,6 +172,12 @@ void initializeTestEnvironment()
     // function on Portduino; it is a real mutex now, so the call has to have something to lock.
     if (!spiLock)
         initSPI();
+
+    // Same story for cryptLock, which perhapsDecode() and the ack-proof paths take. Router's
+    // constructor makes one, but plenty of suites reach those paths without building a Router.
+    // Router reuses this one rather than allocating its own, so making it here is safe either way.
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
 #if ARCH_PORTDUINO
     baselineEnvironment();
 
@@ -185,12 +191,6 @@ void initializeTestEnvironment()
     // Baseline the sandbox before the first RUN_TEST, so writes made during suite setup are not
     // charged to whichever test happens to run first.
     testStateCheckpoint(nullptr, nullptr);
-}
-
-void testEnsureCryptLock()
-{
-    if (!cryptLock)
-        cryptLock = new concurrency::Lock();
 }
 
 void testDelay(unsigned long ms)

@@ -658,7 +658,6 @@ void setup()
 {
     delay(10);
     initializeTestEnvironment();
-    testEnsureCryptLock();
     UNITY_BEGIN();
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_remote_setter_without_session_is_rejected);

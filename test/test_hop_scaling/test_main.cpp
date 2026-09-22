@@ -1067,7 +1067,6 @@ void tearDown(void)
 void setup()
 {
     initializeTestEnvironment();
-    testEnsureCryptLock();
     nodeDB = mockNodeDB;
 
     UNITY_BEGIN();

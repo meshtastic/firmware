@@ -5,11 +5,6 @@
 // Initialize testing environment.
 void initializeTestEnvironment();
 
-// Create cryptLock if nothing has. Router's constructor normally makes it, and asserts it is unset
-// when it does, so this cannot live in initializeTestEnvironment() - a suite that builds a Router
-// would then trip that assert. Call it from a suite that reaches a cryptLock path without one.
-void testEnsureCryptLock();
-
 // Portable delay for tests (Arduino or host).
 void testDelay(unsigned long ms);
 
