@@ -2,6 +2,7 @@
 // variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
 #include "configuration.h"
 
+#include "SPILock.h"
 #include "SerialConsole.h"
 #include "concurrency/OSThread.h"
 #include "gps/RTC.h"
@@ -164,6 +165,12 @@ void initializeTestEnvironment()
 {
     concurrency::hasBeenSetup = true;
     consoleInit();
+
+    // NodeDB's constructor reaches spiLock through loadFromDisk(), and no test runs main.cpp, so
+    // nothing has created it. Suites got away with the null pointer while Lock::lock() was an empty
+    // function on Portduino; it is a real mutex now, so the call has to have something to lock.
+    if (!spiLock)
+        initSPI();
 #if ARCH_PORTDUINO
     baselineEnvironment();
 
