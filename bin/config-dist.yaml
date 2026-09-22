@@ -211,10 +211,18 @@ Input:
 #  JoystickDevice: /dev/input/by-id/usb-0079_USB_Gamepad-event-joystick
 ### Map evdev button codes (hex or decimal) to actions. Omit to use built-in
 ### defaults (select=0x121, cancel=0x122). Actions: select, cancel, back, up,
-### down, left, right, user.
+### down, left, right, user. Give an action a list of codes to bind several
+### physical buttons to it -- e.g. the shoulder buttons alongside the D-pad.
+### Games can tell which physical button was pressed even when several share an
+### action: in Snake the shoulders turn relative to the snake's heading while
+### the D-pad steers absolutely, and Start pauses in play while selecting
+### everywhere else.
+### The codes below are an example only -- confirm yours with `evtest`.
 #  JoystickButtons:
-#    select: 0x122
-#    cancel: 0x121
+#    select: [0x121, 0x123, 0x129] # A, Y and Start
+#    cancel: [0x122, 0x120] # B and X
+#    left: [0x124]          # L shoulder, alongside the D-pad
+#    right: [0x125]         # R shoulder
 
 ### Standard User Button Config
 #  UserButton: 6
