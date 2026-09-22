@@ -398,6 +398,7 @@ void test_proof_covers_unknown_routing_fields(void)
 void setup()
 {
     initializeTestEnvironment();
+    testEnsureCryptLock();
     UNITY_BEGIN();
     RUN_TEST(test_proof_is_pairwise_and_symmetric);
     RUN_TEST(test_proof_binds_request_id);

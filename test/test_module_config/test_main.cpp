@@ -183,6 +183,7 @@ void setup()
 {
     delay(10);
     initializeTestEnvironment();
+    testEnsureCryptLock();
     UNITY_BEGIN();
 
     RUN_TEST(test_tagRangeMatchesTypeRange);

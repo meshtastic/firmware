@@ -785,6 +785,7 @@ void test_E10_neighborinfo_handler_fuzz(void)
 void setup()
 {
     initializeTestEnvironment();
+    testEnsureCryptLock();
     UNITY_BEGIN();
 
     printf("\n=== Group E1: perhapsDecode ciphertext fuzz ===\n");

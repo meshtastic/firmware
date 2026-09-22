@@ -6,6 +6,7 @@
 #include "SerialConsole.h"
 #include "concurrency/OSThread.h"
 #include "gps/RTC.h"
+#include "mesh/CryptoEngine.h"
 
 #include "TestUtil.h"
 
@@ -184,6 +185,12 @@ void initializeTestEnvironment()
     // Baseline the sandbox before the first RUN_TEST, so writes made during suite setup are not
     // charged to whichever test happens to run first.
     testStateCheckpoint(nullptr, nullptr);
+}
+
+void testEnsureCryptLock()
+{
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
 }
 
 void testDelay(unsigned long ms)
