@@ -1,5 +1,6 @@
 #include "airtime.h"
 #include "NodeDB.h"
+#include "Router.h"
 #include "UptimeClock.h"
 #include "configuration.h"
 #include <algorithm>
@@ -428,10 +429,14 @@ bool AirTime::isRoutineBroadcastAllowed()
         // No packet exists yet, so admit the widest frame the preset can carry. Rounding up is the
         // safe direction, and on the fast presets it is a fraction of a percent of the share.
         const uint32_t widestMs = getMaxPacketAirtimeMsec();
+        // Admitted but not yet in the ring: counted as Router's gate counts it, so several modules
+        // firing in one window cannot each pass the share and overshoot it together.
+        RadioInterface *radio = router ? router->getRadioIface() : nullptr;
+        const uint32_t queuedMs = radio ? radio->queuedAirtimeMsec() : 0;
         bool exceeds;
         {
             Held held(this);
-            exceeds = w.wouldExceedDutyCycle(widestMs, share, held);
+            exceeds = w.wouldExceedDutyCycle(widestMs + queuedMs, share, held);
         }
 
         if (!exceeds)

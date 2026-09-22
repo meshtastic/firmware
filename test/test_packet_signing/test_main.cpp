@@ -1664,7 +1664,7 @@ static void useDutyCycleSaturatedAirTime()
     saturated.logAirtime(TX_LOG, MS_IN_HOUR); // utilizationTXPercent() sums every bucket -> 100%
 }
 
-void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
+void test_C14_duty_cycle_limited_reliable_send_is_refused_final(void)
 {
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     config.lora.override_duty_cycle = false;
@@ -2438,7 +2438,7 @@ void setup()
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
-    RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
+    RUN_TEST(test_C14_duty_cycle_limited_reliable_send_is_refused_final);
     RUN_TEST(test_ack_frame_bytes_covers_a_real_ack);
     RUN_TEST(test_onAirBytes_matches_the_encoded_frame);
     RUN_TEST(test_C14b_ack_is_admitted_from_the_reserve_a_dm_is_not);
