@@ -69,6 +69,9 @@ RETRANSMIT_LATENCY_MULTIPLIER = 2.0
 ACK_LATENCY_REPORT_CHANGE = 0.25
 INPUT_BATCH_WINDOW_SEC = .5
 INPUT_BATCH_MAX_BYTES = 64
+# The idle gap above restarts on every byte, so a steady typist can be held until the
+# byte cap. Bound the wait from the first byte so input latency stays predictable.
+INPUT_BATCH_MAX_HOLD_SEC = 2.0
 HEARTBEAT_IDLE_DELAY_SEC = 5.0
 HEARTBEAT_REPEAT_SEC = 15.0
 HEARTBEAT_POLL_INTERVAL_SEC = 0.25
@@ -1605,8 +1608,9 @@ def run_interactive_mode(transport, state: SessionState) -> None:
             batched = bytearray(data)
             enter_local_command = False
             deadline = time.monotonic() + INPUT_BATCH_WINDOW_SEC
+            hold_until = time.monotonic() + INPUT_BATCH_MAX_HOLD_SEC
             while len(batched) < INPUT_BATCH_MAX_BYTES:
-                remaining = deadline - time.monotonic()
+                remaining = min(deadline, hold_until) - time.monotonic()
                 if remaining <= 0:
                     break
                 more_ready, _, _ = select.select([sys.stdin], [], [], remaining)
