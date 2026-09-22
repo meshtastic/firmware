@@ -545,9 +545,23 @@ extern struct portduino_config_struct {
         if (joystickDevice != "")
             out << YAML::Key << "JoystickDevice" << YAML::Value << joystickDevice;
         if (!joystickButtons.empty()) {
-            out << YAML::Key << "JoystickButtons" << YAML::Value << YAML::BeginMap;
+            // Stored as code -> action; invert so each action lists every code bound to it.
+            // Several buttons may share one action, so a multi-code action emits a list.
+            std::map<std::string, std::vector<int>> codesByAction;
             for (const auto &button : joystickButtons)
-                out << YAML::Key << button.second << YAML::Value << button.first;
+                codesByAction[button.second].push_back(button.first);
+            out << YAML::Key << "JoystickButtons" << YAML::Value << YAML::BeginMap;
+            for (const auto &action : codesByAction) {
+                out << YAML::Key << action.first << YAML::Value;
+                if (action.second.size() == 1) {
+                    out << action.second.front();
+                } else {
+                    out << YAML::Flow << YAML::BeginSeq;
+                    for (const int code : action.second)
+                        out << code;
+                    out << YAML::EndSeq;
+                }
+            }
             out << YAML::EndMap;
         }
 
