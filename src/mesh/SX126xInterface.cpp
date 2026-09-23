@@ -372,16 +372,11 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // A bare PREAMBLE (no terminal RX event yet) means the chip is mid-reception. Do NOT treat it as a
-    // full RX event - that would repeatedly trigger readData(). The escape hatch (a noise preamble that
-    // never completes must not permanently block our own TX) runs only while a TX is queued, and clears
-    // ONLY the preamble. HEADER_VALID is evidence of a real inbound frame, so keep it latched: clearing
-    // it would make isActivelyReceiving() read idle mid-payload and let the queued TX stomp the frame.
-    // A stuck header can't block TX forever - receiveDetected() ages it out after maxPacketTimeMsec,
-    // and readData() clears everything once a real RX_DONE arrives.
+    // A bare PREAMBLE is mid-reception, not an RX event: readData() here would run on nothing. With a TX
+    // queued it goes through the same hold as the TX-path look; HEADER_VALID stays latched for readData().
     const bool preambleOnly = (irq & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
-    if (!pollTxMode && !txQueue.empty() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
-        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
+    if (!pollTxMode && hasQueuedTx() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
+        holdOnPreamble();
         scheduleIrqPollTick();
         return;
     }

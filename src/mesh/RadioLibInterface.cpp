@@ -119,31 +119,50 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+bool RadioLibInterface::preambleHoldActive()
+{
+    // Whatever sent the cleared preamble is off the air one max packet later.
+    if (preambleHoldStart && !Throttle::isWithinTimespanMs(
+                                 preambleHoldStart, getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))))
+        preambleHoldStart = 0;
+    return preambleHoldStart != 0;
+}
+
+void RadioLibInterface::holdOnPreamble()
+{
+    // During a hold a refire stays latched, so the first look after it sees an external source and holds again.
+    if (preambleHoldActive())
+        return;
+    iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    preambleHoldStart = Time::skipZero(Time::getMillis());
+    LOG_TRACE("Preamble seen, cleared, holding TX");
+}
+
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
-    bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
-    // Handle false detections
-    if (detected) {
+    if (preambleHoldActive())
+        return true;
+
+    if (irq & syncWordHeaderValidFlag) {
         if (!activeReceiveStart) {
             activeReceiveStart = Time::skipZero(Time::getMillis());
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
-            if (!(irq & syncWordHeaderValidFlag)) {
-                // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
-                activeReceiveStart = 0;
-                LOG_TRACE("Ignore false preamble detection");
-                return false;
-            } else {
-                uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
-                if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
-                    // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
-                    activeReceiveStart = 0;
-                    LOG_TRACE("Ignore false header detection");
-                    return false;
-                }
-            }
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart,
+                                                 getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader)))) {
+            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
+            activeReceiveStart = 0;
+            LOG_TRACE("Ignore false header detection");
+            return false;
         }
+        return true;
     }
-    return detected;
+
+    if (irq & preambleDetectedFlag) {
+        // Looks come once per CSMA backoff, too rarely to judge a preamble by symbol-time deadline (#11933).
+        // Clear it so the next look sees only a fresh one, and hold TX meanwhile; a clear never aborts RX.
+        holdOnPreamble();
+        return true;
+    }
+    return false;
 }
 
 /// Send a packet (possibly by enquing in a private fifo).  This routine will
@@ -616,6 +635,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     // Condition?
     const bool wasCadHandoff = cadHandoffRxStart != 0;
     cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
+    preambleHoldStart = 0; // likewise the reception a held preamble announced
 
     if (!isReceiving) {
         LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
