@@ -258,6 +258,9 @@ ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 #ifdef HAS_DRV2605
 Adafruit_DRV2605 drv;
 #endif
+#if defined(T_DECK_PRO) && defined(PIN_DRV_EN)
+bool drv_found = false;
+#endif
 
 bool isVibrating = false;
 
@@ -932,7 +935,16 @@ void setup()
     digitalWrite(PIN_DRV_EN, HIGH);
     delay(10);
 #endif
+#if defined(T_DECK_PRO) && defined(PIN_DRV_EN)
+    drv_found = drv.begin();
+    if (!drv_found) {
+        LOG_WARN("DRV2605 not found");
+        // Some T-Deck Pro boards wire this pin straight to the motor, so leaving it high vibrates nonstop
+        digitalWrite(PIN_DRV_EN, LOW);
+    }
+#else
     drv.begin();
+#endif
 
     // Bits	Field	        Value	Meaning
     // 7	N_ERM_LRA	    1	    LRA mode (vs 0 = ERM)

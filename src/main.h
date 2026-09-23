@@ -48,6 +48,9 @@ extern bool isUSBPowered;
 #include <Adafruit_DRV2605.h>
 extern Adafruit_DRV2605 drv;
 #endif
+#if defined(T_DECK_PRO) && defined(PIN_DRV_EN)
+extern bool drv_found;
+#endif
 
 #ifdef HAS_PCA9557
 #include <PCA9557.h>
