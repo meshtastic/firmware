@@ -1,0 +1,39 @@
+name: Photon nRF52 Test Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - photon-nrf52
+    paths:
+      - "variants/nrf52840/diy/meshsmith_photon_nrf52/**"
+      - ".github/workflows/photon-nrf52-build.yml"
+      - "src/**"
+      - "platformio.ini"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build MeshSmith Photon nRF52
+        run: pio run -e meshsmith_photon_nrf52
+
+      - name: Upload Photon UF2
+        uses: actions/upload-artifact@v4
+        with:
+          name: meshsmith-photon-nrf52-meshtastic
+          path: |
+            .pio/build/meshsmith_photon_nrf52/firmware.uf2
+            .pio/build/meshsmith_photon_nrf52/firmware.hex
+          if-no-files-found: error
