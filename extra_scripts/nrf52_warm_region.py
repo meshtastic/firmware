@@ -65,12 +65,5 @@ def _assert_warm_region_clear(source, target, env):
     )
 
 
-# AlwaysBuild, not a "buildprog" post-action: that only fired on a relink, so a no-change rerun
-# after a failure skipped the guard and reported SUCCESS.
-_warm_region_check = env.Alias(
-    "nrf52_warm_region_check",
-    "$BUILD_DIR/${PROGNAME}.elf",
-    env.VerboseAction(_assert_warm_region_clear, "Checking nrf52 warm-store region"),
-)
-env.AlwaysBuild(_warm_region_check)
-env.Depends(env.Alias("buildprog"), _warm_region_check)
+# Run by extra_scripts/nrf52_postlink_guards.py on every build and before every upload.
+env.Append(NRF52_POSTLINK_GUARDS=[_assert_warm_region_clear])
