@@ -350,8 +350,8 @@ class LGFX : public lgfx::LGFX_Device
 
             cfg.pclk_idle_high = 1;
             cfg.pclk_active_neg = ST7265_PCLK_ACTIVE_NEG; // 0;
-            // cfg.pclk_idle_high = 0;
-            // cfg.de_idle_high = 1;
+                                                          // cfg.pclk_idle_high = 0;
+                                                          // cfg.de_idle_high = 1;
 #endif
 
 #ifdef ST7262_HSYNC_POLARITY
@@ -367,8 +367,8 @@ class LGFX : public lgfx::LGFX_Device
 
             cfg.pclk_idle_high = 1;
             cfg.pclk_active_neg = ST7262_PCLK_ACTIVE_NEG; // 0;
-            // cfg.pclk_idle_high = 0;
-            // cfg.de_idle_high = 1;
+                                                          // cfg.pclk_idle_high = 0;
+                                                          // cfg.de_idle_high = 1;
 #endif
 
 #ifdef SC7277_HSYNC_POLARITY
@@ -384,8 +384,8 @@ class LGFX : public lgfx::LGFX_Device
 
             cfg.pclk_idle_high = 1;
             cfg.pclk_active_neg = SC7277_PCLK_ACTIVE_NEG; // 0;
-            // cfg.pclk_idle_high = 0;
-            // cfg.de_idle_high = 1;
+                                                          // cfg.pclk_idle_high = 0;
+                                                          // cfg.de_idle_high = 1;
 #endif
 
             _bus_instance.config(cfg);
@@ -463,22 +463,22 @@ class LGFX : public lgfx::LGFX_Device
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
 
-            cfg.memory_width = TFT_WIDTH;                 // Maximum width supported by the driver IC
-            cfg.memory_height = TFT_HEIGHT;               // Maximum height supported by the driver IC
-            cfg.panel_width = TFT_WIDTH;                  // actual displayable width
-            cfg.panel_height = TFT_HEIGHT;                // actual displayable height
-            cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
-            cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
-            cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+            cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
+            cfg.memory_height = TFT_HEIGHT;            // Maximum height supported by the driver IC
+            cfg.panel_width = TFT_WIDTH;               // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;               // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;               // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is mirrored)
 #ifdef TFT_DUMMY_READ_PIXELS
             cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
 #else
             cfg.dummy_read_pixel = 9; // Number of bits for dummy read before pixel readout
 #endif
-            cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
-            cfg.readable = true;                          // Set to true if data can be read
-            cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
-            cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
+            cfg.dummy_read_bits = 1; // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;     // Set to true if data can be read
+            cfg.invert = true;       // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;   // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
@@ -594,8 +594,8 @@ class TOUCH_CHSC6X : public ITouch
         return 0;
     };
 
-    void wakeup(void) override{};
-    void sleep(void) override{};
+    void wakeup(void) override {};
+    void sleep(void) override {};
 
   private:
     chsc6x *chsc6xTouch = nullptr;
@@ -633,7 +633,7 @@ class LGFX : public lgfx::LGFX_Device
 #ifdef SPI_3_WIRE
             cfg.spi_3wire = SPI_3_WIRE;
 #else
-            cfg.spi_3wire = true;                      // Set to true if reception is done on the MOSI pin
+            cfg.spi_3wire = true; // Set to true if reception is done on the MOSI pin
 #endif
             cfg.use_lock = true;               // Set to true to use transaction locking
             cfg.dma_channel = SPI_DMA_CH_AUTO; // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
@@ -662,8 +662,8 @@ class LGFX : public lgfx::LGFX_Device
             cfg.memory_width = 240;
             cfg.memory_height = 320;
             cfg.offset_x = 0;
-            cfg.offset_y = 0;                             // No vertical shift needed - panel is top-aligned
-            cfg.offset_rotation = 2;                      // Rotate 180° to correct upside-down layout
+            cfg.offset_y = 0;        // No vertical shift needed - panel is top-aligned
+            cfg.offset_rotation = 2; // Rotate 180° to correct upside-down layout
 #else
             cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
             cfg.memory_height = TFT_HEIGHT;            // Maximum height supported by the driver IC
@@ -676,14 +676,14 @@ class LGFX : public lgfx::LGFX_Device
 #ifdef TFT_DUMMY_READ_PIXELS
             cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
 #else
-            cfg.dummy_read_pixel = 9;                  // Number of bits for dummy read before pixel readout
+            cfg.dummy_read_pixel = 9; // Number of bits for dummy read before pixel readout
 #endif
-            cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
-            cfg.readable = true;                          // Set to true if data can be read
-            cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
-            cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
+            cfg.dummy_read_bits = 1; // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;     // Set to true if data can be read
+            cfg.invert = true;       // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;   // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
-                false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+                false; // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
 #if defined(HAS_SDCARD)
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
 #else
@@ -794,20 +794,20 @@ class LGFX : public lgfx::LGFX_Device
 
             // cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
             // cfg.memory_height = TFT_HEIGHT;            // Maximum height supported by the driver IC
-            cfg.panel_width = TFT_WIDTH;                  // actual displayable width
-            cfg.panel_height = TFT_HEIGHT;                // actual displayable height
-            cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
-            cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
-            cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+            cfg.panel_width = TFT_WIDTH;               // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;               // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;               // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is mirrored)
 #ifdef TFT_DUMMY_READ_PIXELS
             cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
 #else
             cfg.dummy_read_pixel = 8; // Number of bits for dummy read before pixel readout
 #endif
-            cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
-            cfg.readable = true;                          // Set to true if data can be read
-            cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
-            cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
+            cfg.dummy_read_bits = 1; // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;     // Set to true if data can be read
+            cfg.invert = true;       // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;   // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
