@@ -1,7 +1,6 @@
 [submodule "protobufs"]
 	path = protobufs
 	url = https://github.com/meshtastic/protobufs.git
-	branch = beacon-config-cleanup
 [submodule "meshtestic"]
 	path = meshtestic
 	url = https://github.com/meshtastic/meshTestic
