@@ -83,9 +83,11 @@ size_t sanitizeTextMessagePayload(char *buf, size_t size)
     for (size_t i = 0; i < size;) {
         const size_t seqLen = utf8SequenceLength(buf + i, size - i);
         const uint8_t b = (uint8_t)buf[i];
-        const bool isControl = (b < 0x20 || b == 0x7F) && b != '\n' && b != '\t';
+        // C2 80..C2 9F is valid UTF-8 but encodes the C1 controls U+0080-U+009F
+        const bool isControl =
+            ((b < 0x20 || b == 0x7F) && b != '\n' && b != '\t') || (seqLen == 2 && b == 0xC2 && (uint8_t)buf[i + 1] < 0xA0);
         if (seqLen == 0 || isControl) {
-            i++; // line noise or a control character - drop the byte
+            i += seqLen ? seqLen : 1; // line noise or a control character - drop it
             continue;
         }
         for (size_t j = 0; j < seqLen; j++)

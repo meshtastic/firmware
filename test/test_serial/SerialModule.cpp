@@ -203,6 +203,26 @@ void test_textMsgInvalidUtf8BytesDropped(void)
     TEST_ASSERT_EQUAL_MEMORY("abc", buf, 3);
 }
 
+// C2 80..C2 9F are the C1 controls; C2 A0 (no-break space) is the first printable code point after them.
+void test_textMsgC1ControlsStripped(void)
+{
+    char buf[16] = "a\xC2\x9F"
+                   "b\xC2\xA0"
+                   "c";
+
+    TEST_ASSERT_EQUAL_size_t(5, sanitizeTextMessagePayload(buf, 7));
+    TEST_ASSERT_EQUAL_MEMORY("ab\xC2\xA0"
+                             "c",
+                             buf, 5);
+}
+
+void test_textMsgC1ControlOnlyIsNotSent(void)
+{
+    char buf[8] = "\xC2\x80";
+
+    TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 2));
+}
+
 void test_textMsgEmptyPayloadIsNotSent(void)
 {
     char buf[8] = "";
@@ -234,6 +254,8 @@ void setup()
     RUN_TEST(test_textMsgInteriorNewlineAndTabKept);
     RUN_TEST(test_textMsgValidUtf8Preserved);
     RUN_TEST(test_textMsgInvalidUtf8BytesDropped);
+    RUN_TEST(test_textMsgC1ControlsStripped);
+    RUN_TEST(test_textMsgC1ControlOnlyIsNotSent);
     RUN_TEST(test_textMsgEmptyPayloadIsNotSent);
     exit(UNITY_END());
 }
