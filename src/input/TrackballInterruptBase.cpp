@@ -2,6 +2,9 @@
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "configuration.h"
+#ifdef ARCH_ESP32
+#include "sleep.h"
+#endif
 
 extern bool osk_found;
 
@@ -60,35 +63,83 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
     this->_eventRight = eventRight;
     this->_eventPressed = eventPressed;
     this->_eventPressedLong = eventPressedLong;
+    this->_onIntDown = onIntDown;
+    this->_onIntUp = onIntUp;
+    this->_onIntLeft = onIntLeft;
+    this->_onIntRight = onIntRight;
+    this->_onIntPress = onIntPress;
 
     if (pinPress != 255) {
         pinMode(pinPress, INPUT_PULLUP);
-        attachInterrupt(pinPress, onIntPress, TB_DIRECTION);
     }
     if (this->_pinDown != 255) {
         pinMode(this->_pinDown, INPUT_PULLUP);
-        attachInterrupt(this->_pinDown, onIntDown, TB_DIRECTION);
     }
     if (this->_pinUp != 255) {
         pinMode(this->_pinUp, INPUT_PULLUP);
-        attachInterrupt(this->_pinUp, onIntUp, TB_DIRECTION);
     }
     if (this->_pinLeft != 255) {
         pinMode(this->_pinLeft, INPUT_PULLUP);
-        attachInterrupt(this->_pinLeft, onIntLeft, TB_DIRECTION);
     }
     if (this->_pinRight != 255) {
         pinMode(this->_pinRight, INPUT_PULLUP);
-        attachInterrupt(this->_pinRight, onIntRight, TB_DIRECTION);
     }
+
+    attachTrackballInterrupts();
 
     LOG_DEBUG("Trackball GPIO initialized - UP:%d DOWN:%d LEFT:%d RIGHT:%d PRESS:%d", this->_pinUp, this->_pinDown,
               this->_pinLeft, this->_pinRight, pinPress);
 #ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
 #endif
+#ifdef ARCH_ESP32
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
     this->setInterval(100);
 }
+
+void TrackballInterruptBase::attachTrackballInterrupts()
+{
+    if (_pinPress != 255 && _onIntPress)
+        attachInterrupt(_pinPress, _onIntPress, TB_DIRECTION);
+    if (_pinDown != 255 && _onIntDown)
+        attachInterrupt(_pinDown, _onIntDown, TB_DIRECTION);
+    if (_pinUp != 255 && _onIntUp)
+        attachInterrupt(_pinUp, _onIntUp, TB_DIRECTION);
+    if (_pinLeft != 255 && _onIntLeft)
+        attachInterrupt(_pinLeft, _onIntLeft, TB_DIRECTION);
+    if (_pinRight != 255 && _onIntRight)
+        attachInterrupt(_pinRight, _onIntRight, TB_DIRECTION);
+}
+
+void TrackballInterruptBase::detachTrackballInterrupts()
+{
+    if (_pinPress != 255)
+        detachInterrupt(_pinPress);
+    if (_pinDown != 255)
+        detachInterrupt(_pinDown);
+    if (_pinUp != 255)
+        detachInterrupt(_pinUp);
+    if (_pinLeft != 255)
+        detachInterrupt(_pinLeft);
+    if (_pinRight != 255)
+        detachInterrupt(_pinRight);
+}
+
+#ifdef ARCH_ESP32
+int TrackballInterruptBase::beforeLightSleep(void *)
+{
+    detachTrackballInterrupts();
+    return 0;
+}
+
+int TrackballInterruptBase::afterLightSleep(esp_sleep_wakeup_cause_t)
+{
+    attachTrackballInterrupts();
+    return 0;
+}
+#endif
 
 int32_t TrackballInterruptBase::runOnce()
 {
