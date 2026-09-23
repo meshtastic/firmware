@@ -355,5 +355,17 @@ class RadioInterface
 
 std::unique_ptr<RadioInterface> initLoRa();
 
+// What the plain-RX poll does with PREAMBLE/HEADER flags that no RX_DONE has consumed.
+enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, Rearm };
+
+// RX_DONE clears every flag, so one still latched a max packet after first sight has no frame behind it.
+// A header may mean a wedged demodulator (SX1280 DS 16.2), so re-arm; a bare preamble is only cleared.
+constexpr StaleRxFlagAction staleRxFlagAction(bool headerSeen, uint32_t sinceFirstSeenMsec, uint32_t maxPacketTimeMsec)
+{
+    return sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
+           : headerSeen                           ? StaleRxFlagAction::Rearm
+                                                  : StaleRxFlagAction::ClearPreamble;
+}
+
 /// Debug printing for packets
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p);
