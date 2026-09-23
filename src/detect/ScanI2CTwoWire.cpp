@@ -920,6 +920,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(SCD30_ADDR, SCD30, "SCD30", (uint8_t)addr.address);
             case CST328_ADDR:
+#if !(defined(T_DECK_PRO) && defined(PIN_DRV_EN))
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
                 if (registerValue & 0x16) { // One-wire reset after power-on
@@ -927,6 +928,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
                 }
+#endif
                 // Do we have the CST328 or the CST226SE,CST3530
                 {
                     // T-Deck pro V1.1 new touch panel use CST3530
