@@ -65,6 +65,12 @@ def _assert_warm_region_clear(source, target, env):
     )
 
 
-# Attach to the phony "buildprog" alias (not the .elf node) so the guard runs
-# on incremental relinks too -- same reasoning as nrf52_lto.py's guard.
-env.AddPostAction("buildprog", _assert_warm_region_clear)
+# AlwaysBuild, not a "buildprog" post-action: that only fired on a relink, so a no-change rerun
+# after a failure skipped the guard and reported SUCCESS.
+_warm_region_check = env.Alias(
+    "nrf52_warm_region_check",
+    "$BUILD_DIR/${PROGNAME}.elf",
+    env.VerboseAction(_assert_warm_region_clear, "Checking nrf52 warm-store region"),
+)
+env.AlwaysBuild(_warm_region_check)
+env.Depends(env.Alias("buildprog"), _warm_region_check)
