@@ -43,6 +43,10 @@ extern float getEffectiveDutyCycle();
 /// duty-cycle proxy for a caller that has no packet in hand yet.
 extern uint32_t getMaxPacketAirtimeMsec();
 
+/// Time-on-air of one packet as it will go out, in ms; 0 with no radio. Encodes to measure, so
+/// it costs a protobuf pass per call.
+extern uint32_t packetAirtimeMsec(const meshtastic_MeshPacket *p);
+
 // True if `preset` appears in at least one region's preset list, i.e. it is a real preset
 // some region offers rather than a fabricated or long-retired enum value. Defined in
 // RadioInterface.cpp, where the region table lives.
