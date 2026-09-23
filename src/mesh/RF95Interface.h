@@ -60,6 +60,9 @@ class RF95Interface : public RadioLibInterface
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
 
+    // Carrier sense here reads modem status, not latched flags, and SX127x maps no PREAMBLE or HEADER_ERR.
+    void checkStaleRxFlags() override {}
+
     /**
      * Start waiting to receive a message
      */

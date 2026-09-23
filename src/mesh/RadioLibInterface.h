@@ -200,6 +200,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
 
+    // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
+    uint32_t rxFlagsSeenMs = 0;
+
+    /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
+    virtual void checkStaleRxFlags();
+
     /**
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.

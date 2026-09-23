@@ -739,6 +739,7 @@ void RadioLibInterface::startReceive()
     // This is the sole place the recovery ladder is cleared - nothing short of an armed RX counts as fixed.
     rxOffline = false;
     chipRecoveryFailures = 0;
+    rxFlagsSeenMs = 0;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -748,6 +749,7 @@ void RadioLibInterface::pollMissedIrqs()
     if (isReceiving) {
         checkRxDoneIrqFlag();
         checkCadHandoffTimeout();
+        checkStaleRxFlags();
     }
     if (sendingPacket) {
         checkTxDoneIrqFlag();
@@ -795,6 +797,43 @@ void RadioLibInterface::checkCadHandoffTimeout()
         LOG_WARN("CAD>RX timeout");
         cadHandoffRxStart = 0;
         startReceive();
+    }
+}
+
+void RadioLibInterface::checkStaleRxFlags()
+{
+    // A handoff RX has its own timeout, and a pending RX_DONE is about to clear every flag itself.
+    if (cadHandoffRxStart)
+        return;
+    const uint32_t irq = iface->getIrqFlags();
+    if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
+        return;
+    // HEADER_ERR counts: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
+    const bool headerSeen = irq & iface->getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_VALID) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+    const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    if (!headerSeen && !preambleSeen) {
+        rxFlagsSeenMs = 0;
+        return;
+    }
+    if (!rxFlagsSeenMs) {
+        rxFlagsSeenMs = Time::skipZero(Time::getMillis());
+        return;
+    }
+
+    const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    switch (staleRxFlagAction(headerSeen, Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
+    case StaleRxFlagAction::Keep:
+        break;
+    case StaleRxFlagAction::Rearm:
+        LOG_DEBUG("RX header stale, re-arm");
+        startReceive(); // clears rxFlagsSeenMs
+        break;
+    case StaleRxFlagAction::ClearPreamble:
+        // A clear never aborts a reception, unlike the standby inside startReceive().
+        LOG_DEBUG("RX preamble stale, cleared");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+        rxFlagsSeenMs = 0;
+        break;
     }
 }
 
