@@ -161,6 +161,16 @@ static void lsIdle()
                 bool pressed = false;
 #if defined(BUTTON_PIN)
                 pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#elif defined(INPUTDRIVER_ENCODER_BTN)
+#if defined(INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW) && !INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW
+                pressed = digitalRead(INPUTDRIVER_ENCODER_BTN);
+#else
+                pressed = !digitalRead(INPUTDRIVER_ENCODER_BTN);
+#endif
+#elif defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+                pressed = !digitalRead(INPUTDRIVER_TWO_WAY_ROCKER_BTN);
+#elif defined(TB_PRESS) && (TB_PRESS != 255)
+                pressed = !digitalRead(TB_PRESS);
 #elif defined(KB_INT)
                 // keyboard press (probably) triggered GPIO interrupt
                 pressed = true;
