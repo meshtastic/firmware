@@ -939,7 +939,7 @@ void setup()
     drv_found = drv.begin();
     if (!drv_found) {
         LOG_WARN("DRV2605 not found");
-        // Some T-Deck Pro boards wire this pin straight to the motor, so leaving it high vibrates nonstop
+        // Without a DRV2605 this pin drives the motor directly, so leaving it high vibrates nonstop
         digitalWrite(PIN_DRV_EN, LOW);
     }
 #else
