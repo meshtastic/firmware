@@ -1,4 +1,5 @@
 #include "MeshPacketQueue.h"
+#include "MeshRadio.h"
 #include "NodeDB.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
@@ -30,7 +31,20 @@ bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_Mes
     return (p1p != p2p) ? (p1p > p2p) : (!isFromUs(p1) && isFromUs(p2));
 }
 
-MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
+MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen)
+{
+    // enqueue() evicts rather than growing past maxLen and nothing ever shrinks the buffer, so
+    // reserving here means insert() never reallocates - a walker cannot be left holding freed memory.
+    queue.reserve(_maxLen);
+}
+
+uint32_t MeshPacketQueue::sumAirtimeMsec() const
+{
+    uint32_t ms = 0;
+    for (const meshtastic_MeshPacket *p : queue)
+        ms += packetAirtimeMsec(p);
+    return ms;
+}
 
 bool MeshPacketQueue::empty()
 {
@@ -88,6 +102,7 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p, bool *dropped)
     // Find the correct position using upper_bound to maintain a stable order
     auto it = std::upper_bound(queue.begin(), queue.end(), p, CompareMeshPacketFunc);
     queue.insert(it, p); // Insert packet at the found position
+    refreshAirtime();
     return true;
 }
 
@@ -99,6 +114,11 @@ meshtastic_MeshPacket *MeshPacketQueue::dequeue()
 
     auto *p = queue.front();
     queue.erase(queue.begin()); // Remove the highest-priority packet
+    // No walk here: the caller is between the channel scan and startSend() and settles the sum
+    // afterwards. Until then the sum reads high, which only ever refuses a send. An empty queue is
+    // the exception - it owes nothing, so say so now and a missed refresh cannot persist.
+    if (queue.empty())
+        queuedMs.store(0, std::memory_order_relaxed);
     return p;
 }
 
@@ -133,6 +153,7 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool t
         if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after)) &&
             (!hop_limit_lt || p->hop_limit < hop_limit_lt)) {
             queue.erase(it);
+            refreshAirtime();
             return p;
         }
     }
