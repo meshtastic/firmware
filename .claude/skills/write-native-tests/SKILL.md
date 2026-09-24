@@ -1,6 +1,6 @@
 ---
 name: write-native-tests
-description: Write or change a native C++ unit test under test/ - naming, the header comment, the trufflehog/Lob name trap, making code testable, and proving each test fails on broken code as well as passing on correct code. Use whenever adding or editing a test_* function or suite.
+description: Write or change a native C++ unit test under test/ - naming, the header comment, making code testable, and proving each test fails on broken code as well as passing on correct code. Use whenever adding or editing a test_* function or suite.
 ---
 
 # Writing native tests
@@ -9,20 +9,14 @@ The rules are in [`.github/copilot-instructions.md`](../../../.github/copilot-in
 
 ## 1. Make the behaviour reachable
 
-- Most suites never build `RadioLibInterface` or a driver. Factor the **decision** into a pure function (`constexpr` where possible) in a header the suite already includes, and test that. Example: `staleRxFlagAction()` in `src/mesh/RadioInterface.h`, pinned in `test_radio`. Don't create a new file for a ten-line helper.
+- Most suites never build `RadioLibInterface` or a driver. Factor the **decision** into a pure function (`constexpr` where possible) in a header the suite already includes, and test that. Example: `isLr20x0BandHop()` in `src/mesh/LR20x0Band.h`, pinned in `test_radio`. Don't create a new file for a ten-line helper.
 - To reach protected members, use a test shim subclass (`test/README.md`, "Test Shim"), not `#define private public`.
 - Register every case with `RUN_TEST(...)` in `setup()`, and end with `exit(UNITY_END())` on every branch. An unregistered test never runs and never fails.
 
 ## 2. Name it
 
 - A `test_` prefix, then `_`-separated segments. Case inside a segment is free. The suite directory is strictly `test_[a-z0-9_]+`.
-- **The trufflehog/Lob trap.** trufflehog's Lob detector matches `\b(test|live)_[A-Za-z0-9_]{35}\b`. A test name with **exactly 35 characters after `test_`** (underscores count) is flagged as a leaked API key, on both the definition and the `RUN_TEST` line, and CI's Trunk Check fails the PR. `trunk fmt` does not run trufflehog. Check before pushing:
-
-  ```bash
-  grep -o 'test_[A-Za-z0-9_]*' test/<suite>/test_main.cpp | sort -u | awk 'length($0)-5==35'
-  ```
-
-  It must print nothing. Rename (34 or 36 characters is fine). Never allow-list a name. Only new hits block, so the 35-character names already in the tree are no licence.
+- `.trunk/trunk.yaml` exempts every `test/**/test_main.cpp` from trufflehog, whose Lob detector would otherwise flag any `test_` name with exactly 35 characters after the prefix. That shape still trips it in any other file, such as a second source file in a suite.
 
 ## 3. Write the header comment
 
