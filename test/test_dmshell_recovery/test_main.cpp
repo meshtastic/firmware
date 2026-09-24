@@ -26,6 +26,11 @@
 //    lets an idle timeout detect a peer that has vanished - a blocked sender goes quiet and times out,
 //    where an unbounded one transmitted to nobody for as long as its command kept producing output.
 //
+// 4. A repeated OPEN from the peer that owns the running session is answered by resending OPEN_OK,
+//    not by opening a second session over the first. A lost OPEN_OK could not otherwise be recovered:
+//    OPEN_OK is always seq 1, and a replay request for seq 1 encodes as last_rx_seq 0, which both
+//    ends read as "no request". The client repeats its OPEN instead, and this makes that repeat safe.
+//
 // The regression guarded: if these assertions are deleted or relaxed, the storm comes back, and it
 // comes back invisibly - the failing session looks like a flaky radio link rather than a protocol
 // bug, which is exactly how it was originally misdiagnosed.
@@ -626,6 +631,53 @@ void test_dmshell_rx_reorder_a_hole_inside_the_buffer_still_asks()
     TEST_ASSERT_EQUAL_UINT32(2, r.count());
 }
 
+// An OPEN whose OPEN_OK was lost. Round 10 on hardware: the client waited out its full 180 s
+// --open-timeout while the server, which had accepted the session, streamed output to nobody. The
+// client now repeats its OPEN under the same session id, and this is the server's side of that.
+namespace
+{
+constexpr uint32_t kSession = 0x3b091724;
+constexpr uint32_t kPeer = 0x999312f2;
+} // namespace
+
+void test_dmshell_open_with_no_session_opens()
+{
+    TEST_ASSERT_EQUAL(DMShellOpenAction::Open, classifyOpen(false, 0, 0, kSession, kPeer, 0));
+}
+
+void test_dmshell_open_repeated_before_any_ack_resends_open_ok()
+{
+    // Preempting here would fork a second shell and discard the first one's output, which is what a
+    // naive client-side retry would have done.
+    TEST_ASSERT_EQUAL(DMShellOpenAction::ResendOpenOk, classifyOpen(true, kSession, kPeer, kSession, kPeer, 0));
+}
+
+void test_dmshell_open_repeated_after_the_peer_acked_is_ignored()
+{
+    // The peer has OPEN_OK. Answering would replay seq 1, and on a session long enough for seq 1 to
+    // have left the history, the replay path closes the session as evicted.
+    TEST_ASSERT_EQUAL(DMShellOpenAction::Ignore, classifyOpen(true, kSession, kPeer, kSession, kPeer, 1));
+    TEST_ASSERT_EQUAL(DMShellOpenAction::Ignore, classifyOpen(true, kSession, kPeer, kSession, kPeer, 500));
+}
+
+void test_dmshell_open_with_a_new_session_id_still_preempts()
+{
+    // A restarted client picks a fresh random id, and must still be able to take the shell over.
+    TEST_ASSERT_EQUAL(DMShellOpenAction::Open, classifyOpen(true, kSession, kPeer, kSession + 1, kPeer, 0));
+}
+
+void test_dmshell_open_from_another_peer_still_preempts()
+{
+    TEST_ASSERT_EQUAL(DMShellOpenAction::Open, classifyOpen(true, kSession, kPeer, kSession, kPeer + 1, 0));
+}
+
+void test_dmshell_open_with_session_id_zero_never_matches()
+{
+    // The module replaces an id of 0 with a random one, so a running session can never carry 0 - but a
+    // match on it must not be possible even if one somehow did.
+    TEST_ASSERT_EQUAL(DMShellOpenAction::Open, classifyOpen(true, 0, kPeer, 0, kPeer, 0));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -664,6 +716,12 @@ void setup()
     RUN_TEST(test_dmshell_rx_reorder_full_buffer_keeps_the_lowest);
     RUN_TEST(test_dmshell_rx_reorder_drains_in_order_after_the_gap_fills);
     RUN_TEST(test_dmshell_rx_reorder_a_hole_inside_the_buffer_still_asks);
+    RUN_TEST(test_dmshell_open_with_no_session_opens);
+    RUN_TEST(test_dmshell_open_repeated_before_any_ack_resends_open_ok);
+    RUN_TEST(test_dmshell_open_repeated_after_the_peer_acked_is_ignored);
+    RUN_TEST(test_dmshell_open_with_a_new_session_id_still_preempts);
+    RUN_TEST(test_dmshell_open_from_another_peer_still_preempts);
+    RUN_TEST(test_dmshell_open_with_session_id_zero_never_matches);
     exit(UNITY_END());
 }
 
