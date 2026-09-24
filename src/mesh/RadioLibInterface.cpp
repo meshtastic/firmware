@@ -130,7 +130,8 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
     if (preamble)
         iface->clearIrqFlags(preambleDetectedFlag);
 
-    const uint32_t maxPacketMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    // The PHY frame ceiling, not DATA_PAYLOAD_LEN + header: an encrypted payload can fill the frame to 255 bytes.
+    const uint32_t maxPacketMsec = getPacketTime(MAX_LORA_PAYLOAD_LEN);
     const bool busy = rxSighting.observe(nowMsec, preamble, header, maxPacketMsec);
     if (preamble && prevPeek)
         LOG_TRACE("Preamble seen, detected in the last %ums, hold TX %ums", nowMsec - prevPeek, maxPacketMsec);
