@@ -103,6 +103,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
+    /** How long the last trySetStandby() spent in each part, in ms, for the channel scan's step trace */
+    struct StandbySteps {
+        uint32_t notifyMs, cmdMs, detachMs;
+    } lastStandbySteps = {0, 0, 0};
+
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 };
