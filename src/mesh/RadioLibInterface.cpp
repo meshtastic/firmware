@@ -406,6 +406,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
     switch (notification) {
     case ISR_TX:
+        if (txDoneByCheck && !sendingPacket) {
+            // The timed check already completed this TX; this is the pin poll's late copy of the same edge.
+            txDoneByCheck = false;
+            break;
+        }
+        if (irqPolledOverUsb() && sendingPacket && !txDoneByCheck)
+            LOG_TRACE("TX done seen by poll after %u ms", (unsigned)(Time::getMillis() - lastTxStart));
         noteDeafFrom("tx");
         handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
         // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
@@ -427,6 +434,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     case ISR_POLL_TICK:
         handleSoftwareLoraIrqPoll();
+        break;
+    case TX_DONE_CHECK:
+        checkTxDone();
         break;
     case TRANSMIT_DELAY_COMPLETED:
 
@@ -580,6 +590,37 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
         return true;
     }
     return false;
+}
+
+bool RadioLibInterface::irqPolledOverUsb() const
+{
+#ifdef ARCH_PORTDUINO
+    return portduino_config.lora_spi_dev == "ch341";
+#else
+    return false;
+#endif
+}
+
+void RadioLibInterface::checkTxDone()
+{
+    if (!sendingPacket)
+        return; // the poll saw it first
+    if (iface->checkIrq(RADIOLIB_IRQ_TX_DONE) != 1) {
+        // getPacketTime() is whole milliseconds, so the first look can be a little early
+        if (txDoneChecksLeft > 1) {
+            txDoneChecksLeft--;
+            notifyLater(TX_DONE_RECHECK_MS, TX_DONE_CHECK, false);
+        } else {
+            txDoneChecksLeft = 0;
+            LOG_TRACE("TX done not seen by timed check, left to the poll");
+        }
+        return;
+    }
+    disableInterrupt(); // the poll must not deliver this edge a second time
+    txDoneByCheck = true;
+    LOG_TRACE("TX done seen by timed check after %u ms (tries %u)", (unsigned)(Time::getMillis() - lastTxStart),
+              (unsigned)(TX_DONE_CHECK_TRIES - txDoneChecksLeft + 1));
+    onNotify(ISR_TX);
 }
 
 void RadioLibInterface::handleTransmitInterrupt()
@@ -978,6 +1019,11 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             enableInterrupt(isrTxLevel0);
             // unset-sentinel-ok: busyTx/sendingPacket is the armed flag, so 0 is a legal stamp
             lastTxStart = Time::getMillis();
+            txDoneByCheck = false;
+            if (irqPolledOverUsb()) {
+                txDoneChecksLeft = TX_DONE_CHECK_TRIES;
+                notifyLater(getPacketTime(txp) + TX_DONE_CHECK_MARGIN_MS, TX_DONE_CHECK, false);
+            }
             printPacket("Started Tx", txp);
 #ifdef LED_LORA
             digitalWrite(LED_LORA, LED_STATE_ON);
