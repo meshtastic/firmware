@@ -125,7 +125,7 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 
 #define LOG_PRIMASK 0x07 /* mask to extract priority part (internal) */
                          /* extract priority */
-#define LOG_PRI(p) ((p)&LOG_PRIMASK)
+#define LOG_PRI(p) ((p) & LOG_PRIMASK)
 #define LOG_MAKEPRI(fac, pri) (((fac) << 3) | (pri))
 
 /* facility codes */
@@ -155,7 +155,7 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 #define LOG_NFACILITIES 24 /* current number of facilities */
 #define LOG_FACMASK 0x03f8 /* mask to extract facility part */
                            /* facility of pri */
-#define LOG_FAC(p) (((p)&LOG_FACMASK) >> 3)
+#define LOG_FAC(p) (((p) & LOG_FACMASK) >> 3)
 
 #define LOG_MASK(pri) (1 << (pri))             /* mask for one priority */
 #define LOG_UPTO(pri) ((1 << ((pri) + 1)) - 1) /* all priorities through pri */
