@@ -103,7 +103,7 @@
   //   "USERPREFS_MESH_BEACON_LEGACY_SPLIT": "true",               // When both text and offer are present, split into a separate MESH_BEACON_APP (offer) and TEXT_MESSAGE_APP (text) for legacy client compatibility
   // Broadcast targets, up to 4 (0-3), and the only way to name a destination. CHANNEL_INDEX is a
   // channel-table slot that must already be configured (its key encrypts the beacon); leave it out
-  // to inherit the by-value channel above. Targets resolving to the same preset, region and channel
+  // to transmit on the primary channel. Targets resolving to the same preset, region and channel
   // are deduplicated. With no targets at all the node beacons once on its running preset and region.
   // "USERPREFS_MESH_BEACON_TARGET_0_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST",
   // "USERPREFS_MESH_BEACON_TARGET_0_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",

@@ -1037,7 +1037,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         // If we're setting a new region, check the region is valid and then init the region or discard the change
         if (validatedLora.region != myRegion->code) {
             //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid
-            if (RadioInterface::validateConfigRegion(validatedLora) && RadioInterface::validateConfigLora(validatedLora)) {
+            // Announced: failing here reverts the whole change, so the client must hear why.
+            if (RadioInterface::validateConfigRegion(validatedLora) &&
+                RadioInterface::validateConfigLora(validatedLora, nullptr, true)) {
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
@@ -1414,6 +1416,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
         // The by-value channels need to be in the table for the TX path to find their keys.
         if (MeshBeaconModule::upsertByValueChannels(beaconCfg))
             extraSegments |= SEGMENT_CHANNELS;
+        if (!MeshBeaconModule::offerChannelHeld(beaconCfg))
+            sendWarningAndLog("Beacon offer saved but withheld: %s", owner.is_licensed
+                                                                         ? "a licensed node cannot hold its encrypted channel"
+                                                                         : "no free channel slot for its channel");
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
@@ -1428,42 +1434,45 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
     return true;
 }
 
-// A channel edit changes what the beacon can transmit on, so drop targets that named a slot now
-// retired. Returns true when the module config changed and needs saving.
-static bool recheckBeaconAfterChannelEdit(ChannelIndex index)
+// What a channel edit withheld from the beacon. Nothing is deleted: the config keeps what the operator asked
+// for, and sendBeacon() skips it until the channel is usable again (a later edit is the newer instruction).
+struct BeaconChannelEditReport {
+    uint8_t targetsWithheld = 0;
+    bool offerWithheld = false;
+};
+
+static BeaconChannelEditReport beaconAfterChannelEdit(ChannelIndex index, bool offerHeldBefore)
 {
+    BeaconChannelEditReport r;
 #if !MESHTASTIC_EXCLUDE_BEACON
     if (!moduleConfig.has_mesh_beacon)
-        return false;
-    auto &beacon = moduleConfig.mesh_beacon;
-    const pb_size_t before = beacon.broadcast_targets_count;
-
-    // Deleted, not left pointed at the slot: an unrelated channel provisioned there later would
-    // otherwise inherit the beacon. Clearing only the index would redirect it onto the primary.
-    // Disabled is the whole test: a blank name and an empty PSK are both valid on a live channel,
-    // and reading them as "retired" deleted the operator's targets on an ordinary edit.
-    const meshtastic_Channel &slot = channels.getByIndex(index);
-    if (slot.role == meshtastic_Channel_Role_DISABLED) {
-        pb_size_t kept = 0;
+        return r;
+    const auto &beacon = moduleConfig.mesh_beacon;
+    // Disabled is the whole test: a blank name and an empty PSK are both valid on a live channel.
+    if (channels.getByIndex(index).role == meshtastic_Channel_Role_DISABLED) {
         for (pb_size_t i = 0; i < beacon.broadcast_targets_count; i++) {
             const auto &t = beacon.broadcast_targets[i];
-            if (t.has_channel_index && t.channel_index == index) {
-                LOG_WARN("Beacon: channel %u retired, deleting broadcast_targets[%u]", index, i);
-                continue;
-            }
-            beacon.broadcast_targets[kept++] = beacon.broadcast_targets[i];
+            if (t.has_channel_index && t.channel_index == index)
+                r.targetsWithheld++;
         }
-        beacon.broadcast_targets_count = kept;
     }
-    return beacon.broadcast_targets_count != before;
+    r.offerWithheld = offerHeldBefore && !MeshBeaconModule::offerChannelHeld(beacon);
+    if (meshBeaconBroadcastModule)
+        meshBeaconBroadcastModule->invalidateCache(); // the offer is resolved against the table
 #else
     (void)index;
-    return false;
+    (void)offerHeldBefore;
 #endif
+    return r;
 }
 
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
+#if !MESHTASTIC_EXCLUDE_BEACON
+    const bool offerHeldBefore = moduleConfig.has_mesh_beacon && MeshBeaconModule::offerChannelHeld(moduleConfig.mesh_beacon);
+#else
+    const bool offerHeldBefore = false;
+#endif
     channels.setChannel(cc);
 
     if (channels.ensureLicensedOperation()) {
@@ -1475,7 +1484,12 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     channels.onConfigChanged(); // tell the radios about this change
 
     // After onConfigChanged(), so the beacon is re-checked against the channel table as it now is.
-    const bool beaconChanged = recheckBeaconAfterChannelEdit(cc.index);
+    const BeaconChannelEditReport beacon = beaconAfterChannelEdit(cc.index, offerHeldBefore);
+    if (beacon.targetsWithheld)
+        sendWarningAndLog("Channel %u disabled: %u beacon target(s) on it withheld until it is re-enabled", (unsigned)cc.index,
+                          (unsigned)beacon.targetsWithheld);
+    if (beacon.offerWithheld)
+        sendWarningAndLog("Beacon offer withheld: its channel is no longer in the table; the text still goes out");
 
     // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
     // that inherit a now-public primary key) and warn the client once if anything was coarsened.
@@ -1492,7 +1506,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS | (beaconChanged ? SEGMENT_MODULECONFIG : 0), false);
+    saveChanges(SEGMENT_CHANNELS, false);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)

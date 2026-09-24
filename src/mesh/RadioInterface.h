@@ -289,9 +289,10 @@ class RadioInterface
     // records a critical error, and sends a client notification.
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
-    // Check if a candidate radio configuration is valid. Side-effect free: pass channelName to
-    // evaluate against a channel other than the running primary.
-    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr);
+    // Check if a candidate radio configuration is valid. Side-effect free unless announce, which tells the
+    // client why it failed; pass channelName to evaluate against a channel other than the running primary.
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
+                                   bool announce = false);
 
     // Make a candidate radio configuration valid, even if it isn't; only applyModemConfig() applies
     // the verdict. announce=false asks about a config the node will not run, and stays silent.

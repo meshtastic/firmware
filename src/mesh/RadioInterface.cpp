@@ -100,10 +100,17 @@ Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
-    {                                                                                                                            \
-        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
-            wide_lora, &profile_ptr, default_preset, override_slot, #name                                                        \
-    }
+    {meshtastic_Config_LoRaConfig_RegionCode_##name,                                                                             \
+     freq_start,                                                                                                                 \
+     freq_end,                                                                                                                   \
+     duty_cycle,                                                                                                                 \
+     power_limit,                                                                                                                \
+     frequency_switching,                                                                                                        \
+     wide_lora,                                                                                                                  \
+     &profile_ptr,                                                                                                               \
+     default_preset,                                                                                                             \
+     override_slot,                                                                                                              \
+     #name}
 
 const RegionInfo regions[] = {
     /*
@@ -1178,9 +1185,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             } else {
                 snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s", presetName, newRegion->name);
             }
-            // Only announce when applying: validation is a question, not an event.
+            announceError(); // a no-op unless the caller asked to be told
             if (clamp) {
-                announceError();
                 loraConfig.modem_preset = newRegion->getDefaultPreset();
                 check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
             } else {
@@ -1202,9 +1208,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         snprintf(err_string, sizeof(err_string), "%s span %.0fkHz < requested %.0fkHz", newRegion->name, regionSpanKHz, check_bw);
-        // Only announce when applying: validation is a question, not an event.
+        announceError(); // a no-op unless the caller asked to be told
         if (clamp) {
-            announceError();
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
             check_bw = bwCodeToKHz(loraConfig.bandwidth);
 
@@ -1246,17 +1251,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         if (loraConfig.channel_num > numFreqSlots) {
             snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
                      newRegion->name, numFreqSlots);
-            // Only announce when applying: validation is a question, not an event.
+            announceError(); // a no-op unless the caller asked to be told
             if (clamp) {
-                announceError();
-                // The pin is what failed, so the repair is the region's own rule, which leaves the
-                // node on the default slot. Hash slots are 0-based, channel_num is 1-based.
-                if (newRegion->overrideSlot > 0)
-                    loraConfig.channel_num = newRegion->overrideSlot;
-                else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH)
-                    loraConfig.channel_num = presetNameHashSlot + 1;
-                else
-                    loraConfig.channel_num = channelNameHashSlot + 1;
+                // The pin is what failed, so it goes: 0 is "derive", so the region's own rule keeps following the
+                // channel name. Writing the derived slot back would read as a manual pin once that name changes.
+                loraConfig.channel_num = 0;
                 defaultSlot = true;
             } else {
                 return false;
@@ -1312,10 +1311,10 @@ uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig
     return (hash(hashOf) % numFreqSlots) + 1; // hash slots are 0-based, channel_num is 1-based
 }
 
-bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
+bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName, bool announce)
 {
     auto copy = loraConfig;
-    return checkOrClampConfigLora(copy, false, channelName);
+    return checkOrClampConfigLora(copy, false, channelName, announce);
 }
 
 RadioInterface::LoraSlotVerdict RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName,

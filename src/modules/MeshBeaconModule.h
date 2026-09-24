@@ -136,8 +136,10 @@ class MeshBeaconModule
     // itself. They differ only where the mesh deliberately pins a slot that derivation would miss.
     static uint32_t offerFrequencySlot(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, uint32_t *derivedOut = nullptr);
 
-    /** False only when a pinned offer slot does not exist in the region the offer is advertised for. */
+    /** False when the offer's channel is not held here, or its pinned slot is not in the offered region. */
     static bool offerIsPlaceable(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+    /** Whether the offer's by-value channel is live in the table; true when the offer names none. */
+    static bool offerChannelHeld(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     // Default a blank name to the TARGET preset's display name - not Channels::getName(), which
     // resolves it against the RUNNING preset. A node joining on the target preset derives the same.

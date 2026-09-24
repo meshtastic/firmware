@@ -182,6 +182,7 @@ static void resetConfig()
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
 
     myNodeInfo.my_node_num = kLocalNode;
+    owner.is_licensed = false; // a global; one case sets it, so every case must start from unlicensed
 
     // The sidecar is module state that outlives a case: the mock router never releases a packet,
     // so entries armed by an earlier test would otherwise still occupy the table.
@@ -668,10 +669,13 @@ static void test_adminValidation_offerChannelByValue_survivesWrite(void)
 }
 
 /**
- * Retiring a channel deletes the targets that name it by index. A by-value offer is untouched.
- * A dangling offer index does not fail loudly; the offer just quietly stops naming a channel.
+ * Disabling a channel withholds, never deletes, what depends on it. The operator's later edit is the
+ * newer instruction, so the target naming the slot and the by-value offer for that channel both stop
+ * going out - but the config still records what was asked for, and re-enabling the channel brings both
+ * back with no rewrite. Regression guarded: the old code deleted the target and, on the next boot,
+ * re-upserted the offer's channel, undoing the operator's delete.
  */
-static void test_adminValidation_retiredChannel_deletesTargetAndClearsOffer(void)
+static void test_adminValidation_disabledChannel_withholdsTargetAndOffer(void)
 {
     resetConfig();
     static const uint8_t homePsk[16] = {0xC3, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -686,22 +690,27 @@ static void test_adminValidation_retiredChannel_deletesTargetAndClearsOffer(void
     moduleConfig.mesh_beacon.broadcast_targets_count = 1;
     moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
     moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+    TEST_ASSERT_TRUE(MeshBeaconModule::offerIsPlaceable(moduleConfig.mesh_beacon));
 
     // Defer persistence: this asserts on the in-RAM edit, and a real SEGMENT_CHANNELS save needs
     // disk state the beacon fixture does not stand up.
     testAdmin->deferSaves();
-    meshtastic_Channel retired = channels.getByIndex(1);
-    retired.role = meshtastic_Channel_Role_DISABLED;
-    testAdmin->handleSetChannel(retired);
+    const meshtastic_Channel live = channels.getByIndex(1);
+    meshtastic_Channel disabled = live;
+    disabled.role = meshtastic_Channel_Role_DISABLED;
+    testAdmin->handleSetChannel(disabled);
 
-    TEST_ASSERT_EQUAL_MESSAGE(0, moduleConfig.mesh_beacon.broadcast_targets_count,
-                              "a target naming the retired channel is deleted, not left pointed at the slot - a later "
-                              "channel provisioned there must not inherit a beacon nobody asked for");
-    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel,
-                             "a by-value offer carries its own name and PSK, so retiring a table slot cannot invalidate it");
-    // The module config was edited, so it has to be in the save set or the clear is lost on reboot.
-    TEST_ASSERT_TRUE_MESSAGE(testAdmin->savedSegments() & SEGMENT_MODULECONFIG,
-                             "deleting a beacon reference must add SEGMENT_MODULECONFIG to the save");
+    TEST_ASSERT_EQUAL_MESSAGE(1, moduleConfig.mesh_beacon.broadcast_targets_count,
+                              "the target is withheld at send, not deleted from the config");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel, "the offer is kept as written");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::offerIsPlaceable(moduleConfig.mesh_beacon),
+                              "but it is withheld while its channel is not in the table");
+    TEST_ASSERT_FALSE_MESSAGE(testAdmin->savedSegments() & SEGMENT_MODULECONFIG,
+                              "nothing in the module config changed, so it is not rewritten");
+
+    testAdmin->handleSetChannel(live);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::offerIsPlaceable(moduleConfig.mesh_beacon),
+                             "re-enabling the channel restores the offer with no rewrite");
 }
 
 /**
@@ -4340,10 +4349,12 @@ static void test_byValue_existingChannel_isNotDuplicated(void)
 }
 
 /**
- * A channel named by value is in the table or it is not offered. A full table cannot take the
- * offered channel, so the whole offer goes rather than advertising a mesh this node cannot join.
+ * A channel named by value is in the table or it is not offered. A full table cannot take the offered
+ * channel, so the offer is withheld at send - but the write records it as the operator gave it, so it
+ * stands again once a slot is free. Regression guarded: the old code erased the channel, region and
+ * preset from the saved config and reported success, losing the request with no word to the client.
  */
-static void test_byValue_fullTable_offerIsWithheld(void)
+static void test_byValue_fullTable_offerIsKeptButWithheld(void)
 {
     resetConfig();
     fillChannelTable();
@@ -4361,11 +4372,39 @@ static void test_byValue_fullTable_offerIsWithheld(void)
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     const auto &out = moduleConfig.mesh_beacon;
-    TEST_ASSERT_FALSE_MESSAGE(out.has_broadcast_offer_channel, "an unplaceable offered channel is not advertised");
-    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_UNSET, out.broadcast_offer_region,
-                              "the rest of the offer goes with it - a region and preset alone invite onto no channel");
-    TEST_ASSERT_FALSE(out.has_broadcast_offer_preset);
+    TEST_ASSERT_TRUE_MESSAGE(out.has_broadcast_offer_channel, "the request is recorded, not the result");
+    TEST_ASSERT_EQUAL_STRING("Offered", out.broadcast_offer_channel.name);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, out.broadcast_offer_region);
+    TEST_ASSERT_TRUE(out.has_broadcast_offer_preset);
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::offerIsPlaceable(out), "withheld while its channel has no slot");
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(7).role, "no live channel was evicted");
+}
+
+/**
+ * Licensed (ham) operation forbids encryption, so a licensed node must not take an encrypted offered
+ * channel into its table. The offer is kept and withheld, as for a full table. Regression guarded: the
+ * upsert wrote the PSK with no is_licensed check, after the boot scrub had already run.
+ */
+static void test_byValue_licensedNode_refusesEncryptedOffer(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", nullptr, 0);
+    owner.is_licensed = true;
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "Offered", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = sizeof(kByValuePsk);
+    memcpy(bcfg.broadcast_offer_channel.psk.bytes, kByValuePsk, sizeof(kByValuePsk));
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_LESS_THAN_INT16_MESSAGE(0, channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk)),
+                                        "a licensed node holds no encrypted channel");
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel, "the offer is kept as written");
+    TEST_ASSERT_FALSE(MeshBeaconModule::offerIsPlaceable(moduleConfig.mesh_beacon));
+    owner.is_licensed = false;
 }
 
 /**
@@ -4711,7 +4750,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_offerFrequencySlotOutOfRangeInheritedRegion_isKept);
     RUN_TEST(test_adminValidation_offerFrequencySlotZero_isCleared);
     RUN_TEST(test_adminValidation_offerChannelByValue_survivesWrite);
-    RUN_TEST(test_adminValidation_retiredChannel_deletesTargetAndClearsOffer);
+    RUN_TEST(test_adminValidation_disabledChannel_withholdsTargetAndOffer);
     RUN_TEST(test_adminValidation_unrelatedChannelEdit_doesNotSaveModuleConfig);
     RUN_TEST(test_adminValidation_cleartextUnnamedPrimaryEdit_keepsBeaconRefs);
     RUN_TEST(test_adminValidation_channelRename_keepsBeaconRefs);
@@ -4862,7 +4901,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_offerChannel_isUpsertedIntoTable);
     RUN_TEST(test_byValue_existingChannel_isNotDuplicated);
     RUN_TEST(test_byValue_aeadOffer_isPlacedAsAeadNotOnTheCtrSlot);
-    RUN_TEST(test_byValue_fullTable_offerIsWithheld);
+    RUN_TEST(test_byValue_fullTable_offerIsKeptButWithheld);
+    RUN_TEST(test_byValue_licensedNode_refusesEncryptedOffer);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);

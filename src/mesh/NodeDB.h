@@ -742,6 +742,9 @@ class NodeDB
     /// The slot this radio is committed to; see refreshCommittedLoraSlot().
     uint16_t committedSlot = 0;
     bool loraSlotTransient = false;
+    // Set when the module config was installed from defaults, so the next resetRadioConfig() places a userPrefs
+    // offer's channel once. Never on an ordinary boot: a channel the operator deleted stays deleted.
+    bool beaconChannelsFromDefaults = false;
     LoraSlotSnapshot currentLoraSlot() const;
 
     /*

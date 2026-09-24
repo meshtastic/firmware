@@ -224,6 +224,9 @@ static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, bool &wro
     const uint8_t pskLen = (uint8_t)id.psk.size;
     if (channels.findByIdentity(id.name, id.psk.bytes, pskLen, id.use_aead) >= 0)
         return true;
+    // Licensed operation forbids encryption, so this node may not hold the key it would advertise.
+    if (owner.is_licensed && pskLen > 0)
+        return false;
     const int16_t idx = channels.upsertIdentity(id.name, id.psk.bytes, pskLen, id.use_aead);
     if (idx < 0)
         return false;
@@ -234,15 +237,9 @@ static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, bool &wro
 bool MeshBeaconModule::upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     bool wrote = false;
-    // A channel named by value is in the table or it is not offered. Advertising a mesh this node
-    // could not itself join invites others onto a channel it cannot verify it holds the key for.
-    if (bcfg.has_broadcast_offer_channel && !placeChannelIdentity(bcfg.broadcast_offer_channel, wrote)) {
-        LOG_WARN("Beacon: channel table full, the offered channel cannot be placed - offer withheld");
-        bcfg.has_broadcast_offer_channel = false;
-        bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-        bcfg.has_broadcast_offer_preset = false;
-        bcfg.has_broadcast_offer_frequency_slot = false;
-    }
+    // The offer stays as written either way; offerIsPlaceable() withholds it while its channel is absent.
+    if (bcfg.has_broadcast_offer_channel && !placeChannelIdentity(bcfg.broadcast_offer_channel, wrote))
+        LOG_WARN("Beacon: offered channel not placed (table full or licensed) - offer withheld until it is");
     return wrote;
 }
 
@@ -361,10 +358,22 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
     }
 }
 
-// The one thing that makes an offer impossible rather than merely unusual: a pinned slot the region
-// it is advertised for does not hold. A preset or region this node lacks is just a mesh elsewhere.
+bool MeshBeaconModule::offerChannelHeld(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+{
+    // A channel named by value is live in the table or it is not offered: a deleted one, or one never
+    // placed, would invite others onto a mesh this node cannot join.
+    if (!bcfg.has_broadcast_offer_channel)
+        return true;
+    const auto &ch = bcfg.broadcast_offer_channel;
+    return channels.findByIdentity(ch.name, ch.psk.bytes, (uint8_t)ch.psk.size, ch.use_aead) >= 0;
+}
+
+// What makes an offer unusable rather than merely unusual: its channel absent here, or a pinned slot the
+// region it is advertised for does not hold. A preset or region this node lacks is just a mesh elsewhere.
 bool MeshBeaconModule::offerIsPlaceable(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
+    if (!offerChannelHeld(bcfg))
+        return false;
     if (!bcfg.has_broadcast_offer_frequency_slot)
         return true;
     meshtastic_Config_LoRaConfig probe = config.lora;
@@ -380,9 +389,10 @@ bool MeshBeaconModule::offerIsPlaceable(const meshtastic_ModuleConfig_MeshBeacon
 void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
     // Withheld whole, not advertised on a substitute slot: a receiver that joins the derived slot
-    // is on a different mesh from the one the operator described. It stands again on a region move.
+    // is on a different mesh from the one the operator described. It stands again once that changes.
     if (!offerIsPlaceable(bcfg)) {
-        LOG_DEBUG("Beacon: offer_frequency_slot %u not in the offered region, no offer", bcfg.broadcast_offer_frequency_slot);
+        LOG_DEBUG("Beacon: offer channel not held, or slot %u not in the offered region; no offer",
+                  bcfg.broadcast_offer_frequency_slot);
         return;
     }
     if (bcfg.has_broadcast_offer_channel) {

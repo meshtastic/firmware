@@ -841,8 +841,10 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
     // is the only point that catches a combination no radio can key up on. Channels are live above.
     if (moduleConfig.has_mesh_beacon) {
         MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
-        MeshBeaconModule::upsertByValueChannels(moduleConfig.mesh_beacon);
+        if (beaconChannelsFromDefaults)
+            MeshBeaconModule::upsertByValueChannels(moduleConfig.mesh_beacon);
     }
+    beaconChannelsFromDefaults = false;
 #endif
 }
 
@@ -1625,7 +1627,7 @@ void NodeDB::installDefaultModuleConfig()
 #error "USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX removed; use USERPREFS_MESH_BEACON_OFFER_CHANNEL_{NAME,PSK}"
 #endif
 #ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
-#error "USERPREFS_MESH_BEACON_ON_CHANNEL_NUM removed; use USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT"
+#error "USERPREFS_MESH_BEACON_ON_CHANNEL_NUM removed; use USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT"
 #endif
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
     BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);
@@ -1713,6 +1715,7 @@ void NodeDB::installDefaultModuleConfig()
 #undef BEACON_TARGET_REGION
 #undef BEACON_TARGET_CH_INDEX
 #undef BEACON_TARGET_FREQ_SLOT
+    beaconChannelsFromDefaults = true;
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();

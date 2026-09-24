@@ -179,8 +179,10 @@ static void test_clampConfigLora_validPresetUnchanged()
 }
 
 // ---------------------------------------------------------------------------
-// Repairing an out-of-range frequency slot. The pin is the thing that failed, so the repair is the
-// region's own rule: overrideSlot -1 hashes the preset name, 0 the channel name, >0 is that slot.
+// Repairing an out-of-range frequency slot. The pin is the thing that failed, so the repair drops it:
+// channel_num 0 means "derive", and resolveFrequencySlot() applies the region's own rule from there
+// (overrideSlot -1 hashes the preset name, 0 the channel name, >0 is that slot). Writing the derived slot
+// back instead would read as a manual pin as soon as the channel is renamed, and stop following the name.
 // ---------------------------------------------------------------------------
 
 /** A region that names its own slot keeps it, whatever the channel happens to be called. */
@@ -194,7 +196,9 @@ static void test_clampSlot_regionSlotOutranksACustomName()
 
     const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
 
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(137, cfg.channel_num, "the region's slot, not the hash of the name");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, cfg.channel_num, "the failed pin is dropped, not replaced by a new one");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(137, RadioInterface::resolveFrequencySlot(cfg, "NYMesh"),
+                                     "the region's slot, not the hash of the name");
     TEST_ASSERT_TRUE_MESSAGE(verdict.usesDefaultFrequencySlot, "the region's own rule leaves it on the default slot");
     TEST_ASSERT_TRUE(verdict.usesCustomChannelName);
 }
@@ -214,7 +218,9 @@ static void test_clampSlot_channelHashRegionUsesTheGivenName()
 
     const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "NYMesh", false);
 
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "the repair must agree with resolveFrequencySlot()");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, cfg.channel_num, "the failed pin is dropped, not replaced by a new one");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, RadioInterface::resolveFrequencySlot(cfg, "NYMesh"),
+                                     "the repair must agree with resolveFrequencySlot()");
     TEST_ASSERT_TRUE(verdict.usesDefaultFrequencySlot);
 }
 
@@ -233,7 +239,9 @@ static void test_clampSlot_defaultNamedChannelTakesTheSamePath()
 
     const RadioInterface::LoraSlotVerdict verdict = RadioInterface::clampConfigLora(cfg, "LongFast", false);
 
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "the preset's own name is just a channel name here");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, cfg.channel_num, "the failed pin is dropped, not replaced by a new one");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, RadioInterface::resolveFrequencySlot(cfg, "LongFast"),
+                                     "the preset's own name is just a channel name here");
     TEST_ASSERT_FALSE(verdict.usesCustomChannelName);
     TEST_ASSERT_TRUE(verdict.usesDefaultFrequencySlot);
 }
@@ -256,9 +264,11 @@ static void test_clampSlot_customModemSettingsStillGetRepaired()
 
     RadioInterface::clampConfigLora(cfg, "Custom", false);
 
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, cfg.channel_num, "an invalid pin must not survive the clamp");
-    TEST_ASSERT_TRUE_MESSAGE(cfg.channel_num >= 1 && cfg.channel_num <= RadioInterface::frequencySlotCount(cfg),
-                             "and what replaces it must be a slot the region holds");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, cfg.channel_num, "an invalid pin must not survive the clamp");
+    const uint32_t landed = RadioInterface::resolveFrequencySlot(cfg, "Custom");
+    TEST_ASSERT_EQUAL_UINT32(expected, landed);
+    TEST_ASSERT_TRUE_MESSAGE(landed >= 1 && landed <= RadioInterface::frequencySlotCount(cfg),
+                             "and the slot it lands on must be one the region holds");
 }
 
 /** Validation answers the question without repairing anything. */
