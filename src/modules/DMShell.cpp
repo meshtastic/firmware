@@ -535,7 +535,15 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.lastAckedRxSeq = frame.seq;
     session.rxWindow.reset(frame.seq);
     session.rxReorder.reset();
+    // Entries are matched on seq alone, and every session numbers from 1, so anything left over from the
+    // previous session would answer for this one - a repeated OPEN could be sent the old OPEN_OK, whose
+    // session id the client would then adopt.
+    for (auto &entry : session.txHistory) {
+        entry.valid = false;
+    }
+    session.txHistoryNext = 0;
     session.txHistoryWindow.reset();
+    session.ackLatency.reset();
     session.txWindow.reset(txWindowFrames);
     session.txWindowBlocked = false;
     session.nextRetransmitMs = 0;
@@ -713,6 +721,7 @@ void DMShellModule::rememberSentFrame(meshtastic_RemoteShell frame)
     entry.rows = frame.rows;
     entry.flags = frame.flags;
     entry.payloadLen = frame.payload.size;
+    entry.lastSentMs = millis();
     if (frame.payload.size > 0) {
         memcpy(entry.payload, frame.payload.bytes, frame.payload.size);
     }
@@ -733,6 +742,12 @@ void DMShellModule::notePeerReceiveCursor(const meshtastic_RemoteShell &frame)
     const uint32_t before = session.txWindow.peerAcked();
     session.txWindow.notePeerAcked(cursor);
     if (session.txWindow.peerAcked() != before) {
+        // The time from last sending the frame the cursor has just reached to seeing it acknowledged is
+        // the whole wait a retransmission has to sit out: our queue, both frames' airtime, and both
+        // sides' channel backoff. The client samples the same point.
+        if (const DMShellSession::SentFrame *acked = findSentFrame(session.txWindow.peerAcked())) {
+            session.ackLatency.noteSample(millis() - acked->lastSentMs);
+        }
         // Progress: the next stall gets a fresh interval, and the run of retransmissions that would
         // eventually declare the peer gone starts over.
         session.nextRetransmitMs = 0;
@@ -768,8 +783,19 @@ void DMShellModule::retransmitOldestUnacked()
     if (session.nextRetransmitMs != 0 && !Throttle::deadlinePassedAt(millis(), session.nextRetransmitMs)) {
         return;
     }
-    // One round trip, derived from the modem config the same way replay requests are.
-    session.nextRetransmitMs = millis() + replayRequestIntervalMs();
+    // Measured, floored at the round trip derived from the modem config, which is all there is until the
+    // first acknowledgement arrives.
+    const uint32_t intervalMs = session.ackLatency.intervalMs(replayRequestIntervalMs(), REPLAY_REQUEST_MAX_MS);
+    // A cursor advance clears nextRetransmitMs, so without this the next unacknowledged frame - queued a
+    // moment ago, and very likely still waiting for the radio - was repeated on this very poll. Measured
+    // on hardware as a third of all frames arriving twice on a lossless bulk transfer. A frame that has
+    // left the history carries no send time, and falls through to resendFramesFrom() as before.
+    if (const DMShellSession::SentFrame *oldest = findSentFrame(missing)) {
+        if (!retransmitDue(millis(), oldest->lastSentMs, intervalMs)) {
+            return;
+        }
+    }
+    session.nextRetransmitMs = millis() + intervalMs;
 
     // Measured on hardware, a sender that never stops repeating one frame is talking to a peer that
     // has gone away - its teardown did not survive - so the session is already over. The reason names
@@ -784,6 +810,16 @@ void DMShellModule::retransmitOldestUnacked()
     LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting (%u)", missing,
              (unsigned)session.retransmitRun.repeatCount());
     resendFramesFrom(missing);
+}
+
+DMShellSession::SentFrame *DMShellModule::findSentFrame(uint32_t seq)
+{
+    for (auto &entry : session.txHistory) {
+        if (entry.valid && entry.seq == seq) {
+            return &entry;
+        }
+    }
+    return nullptr;
 }
 
 void DMShellModule::resendFramesFrom(uint32_t startSeq)
@@ -804,21 +840,15 @@ void DMShellModule::resendFramesFrom(uint32_t startSeq)
         return;
     }
 
-    DMShellSession::SentFrame *match = nullptr;
-    for (auto &entry : session.txHistory) {
-        if (!entry.valid || entry.seq != startSeq) {
-            continue;
-        }
-        match = &entry;
-        break;
-    }
-
+    DMShellSession::SentFrame *match = findSentFrame(startSeq);
     if (!match) {
         LOG_WARN("DMShell: replay request for seq=%u not found in history", startSeq);
         return;
     }
 
     LOG_INFO("DMShell: replaying frame seq=%u op=%d", match->seq, match->op);
+    // The next wait for this frame is measured from now, as the client does for its own resends.
+    match->lastSentMs = millis();
     meshtastic_RemoteShell frame = {
         .op = match->op,
         .session_id = match->sessionId,
