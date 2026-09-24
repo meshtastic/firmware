@@ -53,7 +53,7 @@ class STC8HKeyboard
   private:
     void writeRegister(uint8_t reg, uint8_t val);
 
-    uint8_t _I2C_addr = TSTC8_KB_ADDR;
+    uint8_t _I2C_addr = TSTC8_KB_V1_ADDR;
 
     TwoWire *_pWire = &Wire;
 
