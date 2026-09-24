@@ -359,6 +359,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
     RxSighting rxSighting;
 
+    /** Airtime of the longest frame we could be receiving: 255 bytes at CR 4/8 with CRC, whatever our own CR. */
+    uint32_t maxRxFrameMsec();
+
     /** Record a look at the RX flags and clear a PREAMBLE_DETECTED it found; true while a frame may be on air. */
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 

@@ -119,6 +119,17 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+uint32_t RadioLibInterface::maxRxFrameMsec()
+{
+    // A sender's header can carry any CR up to 4/8, and the hold starts before that header can be read.
+    DataRate_t dr = getDataRate();
+    dr.lora.codingRate = 8;
+    PacketConfig_t pc = getPacketConfig();
+    pc.lora.crcEnabled = true;
+    const RadioLibTime_t usec = iface->calculateTimeOnAir(modemType, dr, pc, MAX_LORA_PAYLOAD_LEN);
+    return isRadioLibTimeError(usec) ? getPacketTime(MAX_LORA_PAYLOAD_LEN) : (usec + 999) / 1000;
+}
+
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
     const uint32_t nowMsec = Time::getMillis();
@@ -130,8 +141,7 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
     if (preamble)
         iface->clearIrqFlags(preambleDetectedFlag);
 
-    // The PHY frame ceiling, not DATA_PAYLOAD_LEN + header: an encrypted payload can fill the frame to 255 bytes.
-    const uint32_t maxPacketMsec = getPacketTime(MAX_LORA_PAYLOAD_LEN);
+    const uint32_t maxPacketMsec = maxRxFrameMsec();
     const bool busy = rxSighting.observe(nowMsec, preamble, header, maxPacketMsec);
     if (preamble && prevPeek)
         LOG_TRACE("Preamble seen, detected in the last %ums, hold TX %ums", nowMsec - prevPeek, maxPacketMsec);
