@@ -495,9 +495,12 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
     };
 
+    const uint32_t tStandby = millis();
     int16_t err = trySetStandby();
+    const uint32_t tStartRx = millis();
     if (err == RADIOLIB_ERR_NONE)
         err = tryStartRx();
+    const uint32_t tStartRxEnd = millis();
 
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX126X %s %s%d", rxMethod, radioLibErr, err);
@@ -516,12 +519,14 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
     }
 
+    const uint32_t tArm = millis();
     RadioLibInterface::startReceive();
     rxArmedContinuous = continuousRx;
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
+    lastRxArmSteps = {tStartRx - tStandby, lastStandbySteps.cmdMs, tStartRxEnd - tStartRx, millis() - tArm};
 #endif
 }
 
