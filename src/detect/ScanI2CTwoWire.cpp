@@ -455,7 +455,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = BBQ10KB;
                 logFoundDevice("BB Q10", (uint8_t)addr.address);
                 break;
-                SCAN_SIMPLE_CASE(TSTC8_KB_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TSTC8_KB_V1_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TSTC8_KB_V2_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);

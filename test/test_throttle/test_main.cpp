@@ -55,6 +55,54 @@ void test_hasElapsed_boundary_is_inclusive()
     TEST_ASSERT_FALSE(Throttle::hasElapsed(9001, 1000)); // 999ms elapsed
 }
 
+// --- remainingMs() ---
+
+// The point of the helper: what is left of the window, not the whole window. A caller that waits
+// out the remainder must not pay again for time that has already gone by.
+void test_remainingMs_returns_only_what_is_left()
+{
+    Time::setTestMillis(10000);
+    TEST_ASSERT_EQUAL_UINT32(500, Throttle::remainingMs(9500, 1000));   // 500ms elapsed of a 1000ms window
+    TEST_ASSERT_EQUAL_UINT32(1, Throttle::remainingMs(9001, 1000));     // 999ms elapsed
+    TEST_ASSERT_EQUAL_UINT32(1000, Throttle::remainingMs(10000, 1000)); // nothing elapsed yet
+}
+
+// Saturates at 0 rather than underflowing to a ~49 day wait, which is what a bare
+// intervalMs - elapsed would produce once the interval has passed.
+void test_remainingMs_saturates_at_zero_once_elapsed()
+{
+    Time::setTestMillis(10000);
+    TEST_ASSERT_EQUAL_UINT32(0, Throttle::remainingMs(9000, 1000)); // exactly the interval
+    TEST_ASSERT_EQUAL_UINT32(0, Throttle::remainingMs(8000, 1000)); // well past it
+    TEST_ASSERT_EQUAL_UINT32(0, Throttle::remainingMs(0, 1000));
+}
+
+// Nonzero exactly while isWithinTimespanMs() is true, so `if (remainingMs(...))` is a drop-in for
+// the predicate at a call site that then waits out the rest.
+void test_remainingMs_is_nonzero_exactly_within_the_window()
+{
+    Time::setTestMillis(10000);
+    const uint32_t cases[][2] = {{9500, 1000}, {8000, 1000}, {9000, 1000}, {9001, 1000}, {10000, 1}, {0, 5000}};
+    for (auto &c : cases) {
+        TEST_ASSERT_EQUAL(Throttle::isWithinTimespanMs(c[0], c[1]), Throttle::remainingMs(c[0], c[1]) != 0);
+    }
+}
+
+void test_remainingMs_survives_millis_wrap()
+{
+    const uint32_t lastRun = 0xFFFFFF00u; // 256ms before the wrap
+    Time::setTestMillis(lastRun);
+
+    Time::advanceTestMillis(100); // still before the wrap
+    TEST_ASSERT_EQUAL_UINT32(900, Throttle::remainingMs(lastRun, 1000));
+
+    Time::advanceTestMillis(200); // wraps to 0x0000002C - 300ms elapsed in total
+    TEST_ASSERT_EQUAL_UINT32(700, Throttle::remainingMs(lastRun, 1000));
+
+    Time::advanceTestMillis(800); // 1100ms elapsed, past both the window and the wrap
+    TEST_ASSERT_EQUAL_UINT32(0, Throttle::remainingMs(lastRun, 1000));
+}
+
 // --- rollover: the headline property ---
 
 // A window opened just before the 32-bit wrap must still close correctly after it.
@@ -226,6 +274,10 @@ void setup()
     RUN_TEST(test_isWithinTimespan_boundary_is_exclusive);
     RUN_TEST(test_hasElapsed_is_complement_of_isWithinTimespan);
     RUN_TEST(test_hasElapsed_boundary_is_inclusive);
+    RUN_TEST(test_remainingMs_returns_only_what_is_left);
+    RUN_TEST(test_remainingMs_saturates_at_zero_once_elapsed);
+    RUN_TEST(test_remainingMs_is_nonzero_exactly_within_the_window);
+    RUN_TEST(test_remainingMs_survives_millis_wrap);
     RUN_TEST(test_isWithinTimespan_survives_millis_wrap);
     RUN_TEST(test_long_interval_survives_wrap);
     RUN_TEST(test_deadlinePassed_basic);
