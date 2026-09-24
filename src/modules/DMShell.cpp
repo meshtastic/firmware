@@ -807,8 +807,9 @@ void DMShellModule::retransmitOldestUnacked()
         return;
     }
 
-    LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting (%u)", missing,
-             (unsigned)session.retransmitRun.repeatCount());
+    LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting (%u) interval=%ums ack_latency=%ums",
+             missing, (unsigned)session.retransmitRun.repeatCount(), (unsigned)intervalMs,
+             (unsigned)session.ackLatency.estimateMs());
     resendFramesFrom(missing);
 }
 
