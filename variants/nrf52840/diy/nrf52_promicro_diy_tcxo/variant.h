@@ -184,7 +184,9 @@ https://github.com/brad112358/easy_E22
 // P1.06 is the last free pin, so it is the only one left for a TXEN line - but it is also the e-ink
 // panel's BUSY line, so every opt-in below is refused on an e-ink build. (The EasyProMicro pinout,
 // where P1.06 is SCL, takes the #else branch at the end of this block and never reaches these.)
-#if !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(USE_EINK)
+// configuration.h derives USE_EINK from MESHTASTIC_USE_EINK_UI only after including this file, so test both.
+#if !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(USE_EINK) &&                                                         \
+    !(defined(MESHTASTIC_USE_EINK_UI) && MESHTASTIC_USE_EINK_UI)
 #define PROMICRO_P106_FREE_FOR_TXEN
 #endif
 
