@@ -526,10 +526,30 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                                        .timeout = cadRxTimeoutUsec,
                                        .irqFlags = cadIrqFlags,
                                        .irqMask = cadIrqMask}};
+    // Each step is timed: on a USB-SPI host every command is a bus round trip, and a scan measured at a
+    // median 27 ms swallows a 10.4 ms SHORT_FAST preamble. This is lora.scanChannel(cfg), unrolled.
+    const uint32_t t0 = millis();
     setTransmitEnable(false);
+    const uint32_t tTxEn = millis();
     int16_t result = trySetStandby();
+    const uint32_t tStandby = millis();
     if (result == RADIOLIB_ERR_NONE) {
-        result = lora.scanChannel(cfg);
+        result = lora.startChannelScan(cfg);
+        const uint32_t tSetup = millis();
+        uint32_t tWait = tSetup;
+        unsigned polls = 0;
+        if (result == RADIOLIB_ERR_NONE) {
+            // What scanChannel() does between the two calls: wait for DIO1 to report the CAD finished.
+            while (!module.hal->digitalRead(module.getIrq())) {
+                polls++;
+                module.hal->yield();
+            }
+            tWait = millis();
+            result = lora.getChannelScanResult();
+        }
+        LOG_TRACE("Channel scan steps: txen %u, standby %u, setup %u, cad wait %u (%u polls), result %u ms",
+                  (unsigned)(tTxEn - t0), (unsigned)(tStandby - tTxEn), (unsigned)(tSetup - tStandby),
+                  (unsigned)(tWait - tSetup), polls, (unsigned)(millis() - tWait));
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX (GOTO_RX). Drop the latched CAD verdict so the pin releases and the
             // coming RX_DONE is a clean edge.
