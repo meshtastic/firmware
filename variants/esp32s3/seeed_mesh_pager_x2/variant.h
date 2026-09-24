@@ -100,8 +100,8 @@
 // LR2021 IRQ is on chip DIO8 (not the default DIO5).
 #define LR2021_IRQ_DIO_NUM 8
 
-// LR2021 TCXO supply voltage on DIO3 (1.8 V).
-#define LR2021_DIO3_TCXO_VOLTAGE 1.8
+// LR2021 TCXO supply voltage on DIO3 (3.0 V).
+#define LR2021_DIO3_TCXO_VOLTAGE 3.0
 #define LR2021_DIO_AS_RF_SWITCH
 
 // GPS/GNSS - L76K (UART)
