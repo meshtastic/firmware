@@ -28,5 +28,6 @@ _guards = env.Alias(
 env.AlwaysBuild(_guards)
 
 # Every nordicnrf52 upload protocol derives its firmware from one of these; an absent one is inert.
+# Requires, not Depends: the guards run first every time, without marking an up-to-date image stale.
 for _image in ("${PROGNAME}.hex", "${PROGNAME}.bin", "userfirmware.hex"):
-    env.Depends(os.path.join("$BUILD_DIR", _image), _guards)
+    env.Requires(os.path.join("$BUILD_DIR", _image), _guards)
