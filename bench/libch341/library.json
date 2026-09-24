@@ -1,0 +1,13 @@
+{
+    "name": "Pine libch341-spi Userspace library",
+    "version": "0.0.1",
+    "build": {
+      "srcDir": ".",
+      "srcFilter": [
+        "+<libpinedio-usb.*>"
+      ],
+      "flags": [
+        "-lusb-1.0"
+      ]
+    }
+  }
