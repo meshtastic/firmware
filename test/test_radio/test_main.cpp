@@ -648,6 +648,123 @@ void tearDown(void)
     mockMeshService = nullptr;
 }
 
+// RxSighting::observe() in src/mesh/RadioLibInterface.h - the "may a frame be on air right
+// now?" answer that RadioLibInterface::receiveDetected() gives the TX path for the SX126x, SX128x,
+// LR11x0 and LR20x0 drivers.
+//
+// The radio's PREAMBLE_DETECTED and HEADER_VALID flags are latched status bits, never routed to DIO,
+// and nothing reads them on a schedule: a look comes once per CSMA backoff, and from the noise-floor
+// and AGC paths. receiveDetected() clears PREAMBLE_DETECTED at every look that finds it, so a set bit
+// always means a detection since the previous look. Once cleared, the chip stays locked on that frame
+// and never raises the bit for it again, so the stamp is the only record that a frame started. Neither
+// flag says when the frame ends - a foreign sync word never produces HEADER_VALID at all - so each
+// sighting holds TX for one max-length packet from the look that found it. Only RX_DONE, CRC_ERR or
+// HEADER_ERR end a hold early, through the standby that reset() mirrors.
+//
+// Regressions guarded (#11933):
+//  - The old code released a bare preamble 2 * preambleTimeMsec after the first look that saw it
+//    (8 ms at SF7/BW500, 0-2 ms on 2.4 GHz presets), and TX went out over a frame still on air.
+//  - A noise preamble left latched hid a real one that started after it. Here the noise sighting is
+//    cleared, the real preamble latches again, and the hold restarts from the look that finds it.
+//  - A HEADER_VALID left latched by a missed RX interrupt must not hold TX for more than one
+//    max-length packet, and must not re-arm a fresh hold at every later look.
+
+// A max-length packet at SHORT_TURBO sub-GHz (SF7/BW500) is about 102 ms.
+static constexpr uint32_t kRxMaxPacketMs = 102;
+
+static void test_rxSighting_quietChannelNeverHolds()
+{
+    RxSighting s;
+    TEST_ASSERT_FALSE(s.observe(1000, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1001, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_EQUAL_UINT32(1001, s.lastPeek());
+    TEST_ASSERT_EQUAL_UINT32(0, s.preambleSeen());
+}
+
+static void test_rxSighting_barePreamble_holdsOneMaxPacket()
+{
+    // No header ever arrives - the foreign-sync-word case - so the hold runs its full length.
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(1000, true, false, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1060, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1000 + kRxMaxPacketMs - 1, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1000 + kRxMaxPacketMs, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_EQUAL_UINT32(0, s.preambleSeen());
+}
+
+static void test_rxSighting_retrigger_restartsTheHold()
+{
+    // Noise at 1000, then a real preamble at 1050 that is only visible because the noise latch was
+    // cleared. Its hold runs from the look at 1055, not from the noise.
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(1000, true, false, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1055, true, false, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1000 + kRxMaxPacketMs, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1055 + kRxMaxPacketMs - 1, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1055 + kRxMaxPacketMs, false, false, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_headerAfterPreamble_extendsTheHold()
+{
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(1000, true, false, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1040, false, true, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1040 + kRxMaxPacketMs - 1, false, true, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1040 + kRxMaxPacketMs, false, true, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_headerClearedByPoll_stillHolds()
+{
+    // LORA_DIO1_SOFTWARE_POLL clears HEADER_VALID after its look, so later looks see no flags while
+    // the frame is still on air. The first sighting must carry the hold.
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(1000, false, true, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1050, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1000 + kRxMaxPacketMs, false, false, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_stuckHeader_expiresAndDoesNotRearm()
+{
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(1000, false, true, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1000 + kRxMaxPacketMs, false, true, kRxMaxPacketMs));
+    // The old code restarted its timer here and held TX for another whole packet.
+    TEST_ASSERT_FALSE(s.observe(1000 + 3 * kRxMaxPacketMs, false, true, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_freshPreambleDuringStuckHeader_holds()
+{
+    // A stale header must not mask a new preamble: its own hold still applies.
+    RxSighting s;
+    s.observe(1000, false, true, kRxMaxPacketMs);
+    TEST_ASSERT_FALSE(s.observe(1200, false, true, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(1300, true, true, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1300 + kRxMaxPacketMs, false, true, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_resetEndsEveryHold()
+{
+    // RX_DONE, CRC_ERR and HEADER_ERR restart RX through standby: the frame is over, TX may go.
+    RxSighting s;
+    s.observe(1000, true, true, kRxMaxPacketMs);
+    s.reset();
+    TEST_ASSERT_FALSE(s.observe(1001, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_EQUAL_UINT32(0, s.headerSeen());
+    TEST_ASSERT_TRUE(s.observe(1002, false, true, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_millisWrap_andZeroAreHandled()
+{
+    // A sighting at millis() 0 must still count (skipZero), and elapsed time is wrap-safe.
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(0, true, false, kRxMaxPacketMs));
+    TEST_ASSERT_NOT_EQUAL(0, s.preambleSeen());
+    s.reset();
+    TEST_ASSERT_TRUE(s.observe(UINT32_MAX - 2, true, false, kRxMaxPacketMs));
+    TEST_ASSERT_TRUE(s.observe(50, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(kRxMaxPacketMs - 3, false, false, kRxMaxPacketMs));
+}
+
 void setup()
 {
     delay(10);
@@ -680,6 +797,15 @@ void setup()
     RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
     RUN_TEST(test_beginSending_oversizedPayloadIsClamped);
     RUN_TEST(test_beginSending_fittingPayloadIsSentWhole);
+    RUN_TEST(test_rxSighting_quietChannelNeverHolds);
+    RUN_TEST(test_rxSighting_barePreamble_holdsOneMaxPacket);
+    RUN_TEST(test_rxSighting_retrigger_restartsTheHold);
+    RUN_TEST(test_rxSighting_headerAfterPreamble_extendsTheHold);
+    RUN_TEST(test_rxSighting_headerClearedByPoll_stillHolds);
+    RUN_TEST(test_rxSighting_stuckHeader_expiresAndDoesNotRearm);
+    RUN_TEST(test_rxSighting_freshPreambleDuringStuckHeader_holds);
+    RUN_TEST(test_rxSighting_resetEndsEveryHold);
+    RUN_TEST(test_rxSighting_millisWrap_andZeroAreHandled);
     RUN_TEST(test_computePacketTime_txUsesTheRadiosOwnAnswer);
     RUN_TEST(test_computePacketTime_txFallsBackWhenTheRadioReportsAnError);
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
