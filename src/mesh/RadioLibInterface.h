@@ -27,7 +27,7 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings) {};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
@@ -59,7 +59,7 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
   public:
     STM32WLx_ModuleWrapper(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                            RADIOLIB_PIN_TYPE busy)
-        : STM32WLx_Module(){};
+        : STM32WLx_Module() {};
 };
 #endif
 
@@ -352,16 +352,22 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void setStandby();
 
+    /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
+    /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
+    /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
+    /// range; the slowest packet we can configure is ~229s, well clear of it.
+    static bool isRadioLibTimeError(RadioLibTime_t usec) { return usec == 0 || usec >= (RadioLibTime_t)0 - 32768; }
+
     /**
      * Derive packet time either for a received (using header info) or a transmitted packet
      */
     template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
     {
+        DataRate_t dr = getDataRate();
+        PacketConfig_t pc = getPacketConfig();
+
         if (received) {
             // Received packet configuration must be the same as configured, except for coding rate and CRC
-            DataRate_t dr = getDataRate();
-            PacketConfig_t pc = getPacketConfig();
-
             uint8_t rxCR = 0;
             bool hasCRC = true;
             if (lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE) {
@@ -381,11 +387,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                     pc.lora.crcEnabled = hasCRC;
                 }
             }
-
-            return lora.calculateTimeOnAir(modemType, dr, pc, pl) / 1000;
+        } else {
+            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM.
+            RadioLibTime_t reported = lora.getTimeOnAir(pl);
+            if (!isRadioLibTimeError(reported))
+                return reported / 1000;
+            LOG_WARN("%s%d from getTimeOnAir, use configured modem", radioLibErr, (int)(int16_t)reported);
         }
 
-        return lora.getTimeOnAir(pl) / 1000;
+        // Arithmetic on the config we asked for, with no readback to fail. Guarded too: once a code is
+        // in milliseconds nothing downstream can tell it from a duration.
+        RadioLibTime_t computed = lora.calculateTimeOnAir(modemType, dr, pc, pl);
+        if (isRadioLibTimeError(computed)) {
+            LOG_ERROR("%s%d from calculateTimeOnAir", radioLibErr, (int)(int16_t)computed);
+            return 0;
+        }
+
+        return computed / 1000;
     }
 
     const char *radioLibErr = "RadioLib err=";
