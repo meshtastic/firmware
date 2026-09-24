@@ -402,9 +402,12 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 
 template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 {
+    const uint32_t t0 = millis();
     checkNotification(); // handle any pending interrupts before we force standby
+    const uint32_t tNotify = millis();
 
     int16_t err = lora.standby();
+    const uint32_t tCmd = millis();
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_DEBUG("SX126x standby %s%d", radioLibErr, err);
@@ -414,7 +417,9 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 #endif
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
+    const uint32_t tDetach = millis();
     disableInterrupt();
+    lastStandbySteps = {tNotify - t0, tCmd - tNotify, millis() - tDetach};
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
     return err;
@@ -552,9 +557,11 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
             tWait = millis();
             result = lora.getChannelScanResult();
         }
-        LOG_TRACE("Channel scan steps: txen %u, standby %u, setup %u, cad wait %u (%u polls), result %u ms",
-                  (unsigned)(tTxEn - t0), (unsigned)(tStandby - tTxEn), (unsigned)(tSetup - tStandby),
-                  (unsigned)(tWait - tSetup), polls, (unsigned)(millis() - tWait));
+        LOG_TRACE("Channel scan steps: txen %u, standby %u, setup %u, cad wait %u (%u polls), result %u ms; "
+                  "standby split: notify %u, cmd %u, detach %u ms",
+                  (unsigned)(tTxEn - t0), (unsigned)(tStandby - tTxEn), (unsigned)(tSetup - tStandby), (unsigned)(tWait - tSetup),
+                  polls, (unsigned)(millis() - tWait), (unsigned)lastStandbySteps.notifyMs, (unsigned)lastStandbySteps.cmdMs,
+                  (unsigned)lastStandbySteps.detachMs);
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX (GOTO_RX). Drop the latched CAD verdict so the pin releases and the
             // coming RX_DONE is a clean edge.
