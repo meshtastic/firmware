@@ -201,7 +201,17 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     if (frame.op == meshtastic_RemoteShell_OpCode_OPEN) {
         LOG_WARN("DMShell: received OPEN from 0x%x sessionId=0x%x", mp.from, frame.session_id);
-        if (!openSession(mp, frame)) {
+        const DMShellOpenAction action =
+            legacyRecovery ? DMShellOpenAction::Open
+                           : classifyOpen(session.active, session.sessionId, session.peer, frame.session_id, getFrom(&mp),
+                                          session.txWindow.peerAcked());
+        if (action == DMShellOpenAction::ResendOpenOk) {
+            // OPEN_OK is always seq 1. The cursor check in classifyOpen() is what keeps it in the history.
+            LOG_INFO("DMShell: repeated OPEN for session=0x%x, resending OPEN_OK", session.sessionId);
+            resendFramesFrom(1);
+        } else if (action == DMShellOpenAction::Ignore) {
+            LOG_INFO("DMShell: late copy of OPEN for session=0x%x, peer already has OPEN_OK", session.sessionId);
+        } else if (!openSession(mp, frame)) {
             sendError("open_failed", getFrom(&mp));
         }
         return ProcessMessage::STOP;
