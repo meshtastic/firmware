@@ -186,6 +186,26 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void pollMissedIrqs();
 
+    // Time::getMillis() at which a CAD->RX handoff left the chip listening without us arming it, or 0
+    // if none is outstanding. 0 is a sentinel, so it must be tested before any elapsed comparison.
+    uint32_t cadHandoffRxStart = 0;
+
+    // True between the handoff and the rearmReceive() that consumes it: the chip is already in RX, so
+    // that one re-arm must not standby. Both fields are cleared by setStandby().
+    bool cadHandedToRx = false;
+
+    /** Record that CAD left the chip in RX: arms both the flag and the no-show window below. */
+    void noteCadHandoffToRx();
+
+    /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
+    void checkCadHandoffTimeout();
+
+    // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
+    uint32_t rxFlagsSeenMs = 0;
+
+    /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
+    virtual void checkStaleRxFlags();
+
     /**
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.
@@ -239,7 +259,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive();
 
-    /** can we detect a LoRa preamble on the current channel? */
+    /**
+     * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Normally a full
+     * startReceive(); after a CAD->RX handoff the chip is already listening, so that one re-arm
+     * re-attaches the MCU ISR only - a startReceive() there would standby over the packet CAD found.
+     */
+    void rearmReceive();
+
+    /** can we detect a LoRa preamble on the current channel?
+     *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
+     *  with rearmReceive() before anything else touches the radio. */
     virtual bool isChannelActive() = 0;
 
     /** are we actively receiving a packet (only called during receiving state)
@@ -325,18 +354,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
-    /// When receiveDetected() last ran, and so how long it had been since anything looked at the IRQ
-    /// flags. Looks come from the transmit path, one per CSMA backoff; the HEADER_VALID deadline is a
-    /// multiple of symbol time. Both are derived from the same modem preset and they scale apart, so
-    /// the two are only comparable if both are measured. Reported on every false-detection verdict, and
-    /// acted on by shouldDeferPreambleVerdict(): a verdict reached by a look older than the deadline it
-    /// judges has not observed the window at all.
-    uint32_t lastReceiveDetectedMs = 0;
     /// When the radio last began work that leaves it unable to receive, and what that work was, so the
     /// next startReceive() can report how long it was deaf. 0 when nothing is pending.
     uint32_t deafSinceMs = 0;
     const char *deafFor = nullptr;
     void noteDeafFrom(const char *what);
+
+    // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
+    uint32_t preambleHoldStart = 0;
+
+    /** True while a cleared preamble still holds TX; ends the hold once one max packet has passed. */
+    bool preambleHoldActive();
+
+    /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */
+    void holdOnPreamble();
+
+    /** Whether a packet is waiting to transmit; txQueue itself stays private. */
+    bool hasQueuedTx() { return !txQueue.empty(); }
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
@@ -370,16 +404,22 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void setStandby();
 
+    /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
+    /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
+    /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
+    /// range; the slowest packet we can configure is ~229s, well clear of it.
+    static bool isRadioLibTimeError(RadioLibTime_t usec) { return usec == 0 || usec >= (RadioLibTime_t)0 - 32768; }
+
     /**
      * Derive packet time either for a received (using header info) or a transmitted packet
      */
     template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
     {
+        DataRate_t dr = getDataRate();
+        PacketConfig_t pc = getPacketConfig();
+
         if (received) {
             // Received packet configuration must be the same as configured, except for coding rate and CRC
-            DataRate_t dr = getDataRate();
-            PacketConfig_t pc = getPacketConfig();
-
             uint8_t rxCR = 0;
             bool hasCRC = true;
             if (lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE) {
@@ -399,11 +439,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                     pc.lora.crcEnabled = hasCRC;
                 }
             }
-
-            return lora.calculateTimeOnAir(modemType, dr, pc, pl) / 1000;
+        } else {
+            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM.
+            RadioLibTime_t reported = lora.getTimeOnAir(pl);
+            if (!isRadioLibTimeError(reported))
+                return reported / 1000;
+            LOG_WARN("%s%d from getTimeOnAir, use configured modem", radioLibErr, (int)(int16_t)reported);
         }
 
-        return lora.getTimeOnAir(pl) / 1000;
+        // Arithmetic on the config we asked for, with no readback to fail. Guarded too: once a code is
+        // in milliseconds nothing downstream can tell it from a duration.
+        RadioLibTime_t computed = lora.calculateTimeOnAir(modemType, dr, pc, pl);
+        if (isRadioLibTimeError(computed)) {
+            LOG_ERROR("%s%d from calculateTimeOnAir", radioLibErr, (int)(int16_t)computed);
+            return 0;
+        }
+
+        return computed / 1000;
     }
 
     const char *radioLibErr = "RadioLib err=";

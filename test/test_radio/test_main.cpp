@@ -2,6 +2,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
+#include "RadioLibInterface.h"
 #include "TestUtil.h"
 #include "memory/MemAudit.h"
 #include <string.h>
@@ -473,6 +474,160 @@ static void test_beginSending_fittingPayloadIsSentWhole()
     testRadio->clearSendingPacketForTest();
     packetPool.release(p);
 }
+
+// -----------------------------------------------------------------------
+// computePacketTime(): RadioLib error codes must never be read as durations (#11935)
+// -----------------------------------------------------------------------
+
+// computePacketTime() is a template over the driver, so only the calls it makes have to exist.
+class FakeLoraRadio
+{
+  public:
+    RadioLibTime_t reportedTimeOnAir = 0;   // what getTimeOnAir() answers
+    RadioLibTime_t calculatedTimeOnAir = 0; // what calculateTimeOnAir() answers
+    int16_t headerInfoResult = RADIOLIB_ERR_UNSUPPORTED;
+    uint8_t headerCodingRate = 0;
+    bool headerCrcEnabled = true;
+
+    uint32_t calculateCalls = 0;
+    uint8_t lastCodingRate = 0;
+    bool lastCrcEnabled = false;
+
+    RadioLibTime_t getTimeOnAir(size_t) { return reportedTimeOnAir; }
+
+    RadioLibTime_t calculateTimeOnAir(ModemType_t, DataRate_t dr, PacketConfig_t pc, size_t)
+    {
+        calculateCalls++;
+        lastCodingRate = dr.lora.codingRate;
+        lastCrcEnabled = pc.lora.crcEnabled;
+        return calculatedTimeOnAir;
+    }
+
+    int16_t getLoRaRxHeaderInfo(uint8_t *cr, bool *crc)
+    {
+        if (headerInfoResult == RADIOLIB_ERR_NONE) {
+            *cr = headerCodingRate;
+            *crc = headerCrcEnabled;
+        }
+        return headerInfoResult;
+    }
+};
+
+// Test shim: no chip, just the modem parameters computePacketTime() reads.
+class TestableRadioLibInterface : public RadioLibInterface
+{
+  public:
+    TestableRadioLibInterface() : RadioLibInterface(nullptr, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC) {}
+
+    void setModem(uint8_t spreadFactor, float bandwidth, uint8_t codingRate)
+    {
+        sf = spreadFactor;
+        bw = bandwidth;
+        cr = codingRate;
+    }
+
+    uint32_t computePacketTimePublic(FakeLoraRadio &radio, uint32_t pl, bool received)
+    {
+        return computePacketTime(radio, pl, received);
+    }
+
+    static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
+
+    // Chip-specific hooks this test never reaches
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    int16_t getCurrentRSSI() override { return 0; }
+    bool isChannelActive() override { return false; }
+    bool isActivelyReceiving() override { return false; }
+    void addReceiveMetadata(meshtastic_MeshPacket *) override {}
+    void setRadioIsr(void (*)()) override {}
+    void clearRadioIsr() override {}
+};
+
+static TestableRadioLibInterface *makeTestableRadioLibInterface()
+{
+    auto *radioIf = new TestableRadioLibInterface();
+    radioIf->setModem(11, 250.0f, 5); // LONG_FAST
+    return radioIf;
+}
+
+// A healthy chip answers getTimeOnAir(), and that answer is what we report.
+static void test_computePacketTime_txUsesTheRadiosOwnAnswer()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.reportedTimeOnAir = 123456; // usec
+    radio.calculatedTimeOnAir = 999000;
+
+    TEST_ASSERT_EQUAL_UINT32(123, radioIf->computePacketTimePublic(radio, 32, false));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio.calculateCalls, "a working radio must not need the fallback");
+
+    delete radioIf;
+}
+
+// WRONG_MODEM read as a duration is 4294967ms of airtime for one packet, which stops the node
+// transmitting until it is rebooted.
+static void test_computePacketTime_txFallsBackWhenTheRadioReportsAnError()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.reportedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
+    radio.calculatedTimeOnAir = 500000; // usec, from the modem config we asked for
+
+    uint32_t msec = radioIf->computePacketTimePublic(radio, 32, false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(500, msec, "an error must fall back to the configured modem, not be divided by 1000");
+    TEST_ASSERT_EQUAL_UINT32(1, radio.calculateCalls);
+
+    delete radioIf;
+}
+
+// If the fallback fails too, report no airtime rather than let a code reach the airtime windows.
+static void test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.reportedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
+    radio.calculatedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_INVALID_CODING_RATE;
+
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->computePacketTimePublic(radio, 32, false));
+
+    delete radioIf;
+}
+
+// The RX path still takes coding rate and CRC from the header, and is guarded the same way.
+static void test_computePacketTime_rxUsesHeaderInfoAndIsGuarded()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.headerInfoResult = RADIOLIB_ERR_NONE;
+    radio.headerCodingRate = 2; // raw header value for 4/6
+    radio.headerCrcEnabled = false;
+    radio.calculatedTimeOnAir = 78000;
+
+    TEST_ASSERT_EQUAL_UINT32(78, radioIf->computePacketTimePublic(radio, 32, true));
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(6, radio.lastCodingRate, "raw header coding rate must become a denominator");
+    TEST_ASSERT_FALSE(radio.lastCrcEnabled);
+
+    radio.calculatedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->computePacketTimePublic(radio, 32, true));
+
+    delete radioIf;
+}
+
+// Every RADIOLIB_ERR_* is rejected, every duration a LoRa packet can actually take is kept.
+static void test_isRadioLibTimeError_separatesCodesFromDurations()
+{
+    TEST_ASSERT_TRUE(TestableRadioLibInterface::isRadioLibTimeErrorPublic((RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM));
+    TEST_ASSERT_TRUE(TestableRadioLibInterface::isRadioLibTimeErrorPublic((RadioLibTime_t)RADIOLIB_ERR_UNKNOWN));
+    TEST_ASSERT_TRUE(TestableRadioLibInterface::isRadioLibTimeErrorPublic((RadioLibTime_t)RADIOLIB_ERR_SPI_CMD_FAILED));
+    TEST_ASSERT_TRUE_MESSAGE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(0), "the PhysicalLayer stub answers 0");
+
+    TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(1));
+    TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(123456));
+    // ~229s: SF12 at 7.8kHz with a full 255-byte frame, the slowest packet that can be configured.
+    TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(229ul * 1000ul * 1000ul));
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -545,6 +700,41 @@ static void test_preambleVerdict_firstLookIsNotTreatedAsStale()
     TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(0, 8, 20, 99));
 }
 
+// staleRxFlagAction() in src/mesh/RadioInterface.h: the decision behind RadioLibInterface::checkStaleRxFlags(),
+// the plain-RX twin of checkCadHandoffTimeout(). Plain RX runs with no chip timeout, and the DIO mask carries
+// RX_DONE only, so a PREAMBLE_DETECTED, HEADER_VALID or HEADER_ERR that never completes stays latched until
+// something re-arms RX - on an idle node, never. RX_DONE clears every flag in readData(), so a flag still
+// latched one max packet after it was first seen has no frame behind it.
+//
+// Pinned: nothing happens inside that window (a frame may still be arriving); after it, a bare preamble is
+// only cleared, because a clear never aborts a reception; a header re-arms, because SX1280 DS rev 3.3 16.2
+// leaves RX wedged after a header error with no RX_DONE or timeout to follow, and a clear does not unwedge it.
+// Regressions guarded: re-arming on a preamble (startReceive() goes through standby, which aborts a frame
+// that is in fact arriving), acting before the window closes, or never acting at all.
+
+static void test_staleRxFlagAction_keepsFlagsInsideTheWindow()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(false, 0, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(true, 98, 99)));
+}
+
+static void test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket()
+{
+    // Inclusive at the boundary, matching Throttle::hasElapsed().
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 99, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 99, 99)));
+}
+
+static void test_staleRxFlagAction_barePreambleIsOnlyCleared()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 2200, 2115)));
+}
+
+static void test_staleRxFlagAction_staleHeaderIsRearmed()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 60000, 2115)));
+}
+
 void setup()
 {
     delay(10);
@@ -582,6 +772,15 @@ void setup()
     RUN_TEST(test_preambleVerdict_boundariesAreExclusiveOnBothSides);
     RUN_TEST(test_preambleVerdict_boundedSoAStalledLoopCannotHoldTheChannel);
     RUN_TEST(test_preambleVerdict_firstLookIsNotTreatedAsStale);
+    RUN_TEST(test_computePacketTime_txUsesTheRadiosOwnAnswer);
+    RUN_TEST(test_computePacketTime_txFallsBackWhenTheRadioReportsAnError);
+    RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
+    RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
+    RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
+    RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
+    RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
+    RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
+    RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
     exit(UNITY_END());
 }
 

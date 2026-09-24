@@ -119,59 +119,50 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+bool RadioLibInterface::preambleHoldActive()
+{
+    // Whatever sent the cleared preamble is off the air one max packet later.
+    if (preambleHoldStart && !Throttle::isWithinTimespanMs(
+                                 preambleHoldStart, getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))))
+        preambleHoldStart = 0;
+    return preambleHoldStart != 0;
+}
+
+void RadioLibInterface::holdOnPreamble()
+{
+    // During a hold a refire stays latched, so the first look after it sees an external source and holds again.
+    if (preambleHoldActive())
+        return;
+    iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    preambleHoldStart = Time::skipZero(Time::getMillis());
+    LOG_TRACE("Preamble seen, cleared, holding TX");
+}
+
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
-    bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
-    const uint32_t nowMsec = Time::getMillis();
-    // How long since anything last read the IRQ flags. The deadline below is 2 * preambleTimeMsec,
-    // derived from symbol time alone - about 8 ms at SF7/BW500 - but nothing polls the flags on that
-    // cadence. This function runs from canSendImmediately(), so a look happens once per CSMA backoff
-    // while something is queued, and getTxDelayMsec() draws that backoff as
-    // random(0, 2^CWsize) * slotTimeMsec. slotTimeMsec carries a fixed 7.6 ms propagation/turnaround
-    // term while preambleTimeMsec is pure symbol time, so the two scale apart: an 8 ms deadline against
-    // a 0-56 ms backoff at ShortTurbo, but 262 ms against 0-196 ms at LongFast. At a fast preset the
-    // flag is therefore declared false because nobody looked in time, not because no packet arrived -
-    // on any platform, whatever the bus costs.
-    const uint32_t sinceLastLookMsec = lastReceiveDetectedMs ? nowMsec - lastReceiveDetectedMs : 0;
-    lastReceiveDetectedMs = Time::skipZero(nowMsec);
-    // Handle false detections
-    if (detected) {
+    if (preambleHoldActive())
+        return true;
+
+    if (irq & syncWordHeaderValidFlag) {
         if (!activeReceiveStart) {
-            activeReceiveStart = Time::skipZero(nowMsec);
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
-            const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
-            if (!(irq & syncWordHeaderValidFlag)) {
-                // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag -
-                // but only when we were in a position to have seen it. The deadline is 2 * preambleTimeMsec, derived from
-                // symbol time alone, and a look that arrived later than that has not observed the window it is judging:
-                // the flag would have been read as absent whether or not a packet was arriving. Wait for a look that can
-                // answer the question instead of transmitting over what may be a real packet.
-                //
-                // Bounded by the maximum packet time, because past that no packet we could still collide with is in the
-                // air, so a loop that has stopped looking altogether cannot hold a transmission indefinitely. A build
-                // that polls faster than the deadline never takes this path at all, and behaves exactly as before.
-                if (shouldDeferPreambleVerdict(sinceLastLookMsec, 2 * preambleTimeMsec, nowMsec - activeReceiveStart,
-                                               maxPacketTimeMsec)) {
-                    LOG_TRACE("Defer false preamble verdict, deadline %ums, last look %ums ago, held %ums of %ums",
-                              2 * preambleTimeMsec, sinceLastLookMsec, nowMsec - activeReceiveStart, maxPacketTimeMsec);
-                    return detected;
-                }
-                activeReceiveStart = 0;
-                LOG_TRACE("Ignore false preamble detection, deadline %ums, last look %ums ago", 2 * preambleTimeMsec,
-                          sinceLastLookMsec);
-                return false;
-            } else {
-                if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
-                    // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
-                    activeReceiveStart = 0;
-                    LOG_TRACE("Ignore false header detection, deadline %ums, last look %ums ago", maxPacketTimeMsec,
-                              sinceLastLookMsec);
-                    return false;
-                }
-            }
+            activeReceiveStart = Time::skipZero(Time::getMillis());
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart,
+                                                 getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader)))) {
+            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
+            activeReceiveStart = 0;
+            LOG_TRACE("Ignore false header detection");
+            return false;
         }
+        return true;
     }
-    return detected;
+
+    if (irq & preambleDetectedFlag) {
+        // Looks come once per CSMA backoff, too rarely to judge a preamble by symbol-time deadline (#11933).
+        // Clear it so the next look sees only a fresh one, and hold TX meanwhile; a clear never aborts RX.
+        holdOnPreamble();
+        return true;
+    }
+    return false;
 }
 
 /// Send a packet (possibly by enquing in a private fifo).  This routine will
@@ -448,7 +439,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // standby first, so a frame that begins in this window is lost all the same.
         noteDeafFrom("rx");
         handleReceiveInterrupt();
-        startReceive();
+        // Re-arm for the next packet. rearmReceive() avoids a standby where the chip is already in RX,
+        // so a second packet that is already arriving is not aborted.
+        rearmReceive();
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
@@ -482,25 +475,21 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
+                    // Listen-before-talk: a CAD preamble scan immediately before we key up.
+                    LOG_DEBUG("CAD arm");
                     const uint32_t scanStartMs = Time::getMillis();
                     noteDeafFrom("scan");
                     const bool channelActive = isChannelActive();
                     LOG_TRACE("Channel scan %s in %u ms", channelActive ? "busy" : "clear",
                               (unsigned)(Time::getMillis() - scanStartMs));
-                    if (channelActive) { // check if there is currently a LoRa packet on the channel
-                        // The weak half of carrier sense, and the only one that was silent. busyRx in
-                        // canSendImmediately() is a latched PREAMBLE_DETECTED/HEADER_VALID IRQ and logs
-                        // its deferrals; this is a 2-symbol CAD, and it has already been established
-                        // clear by the time we get here - so every line below is a packet the strong
-                        // check missed and this one caught. Without the count there is no way to tell
-                        // how often the CAD is carrying carrier sense on its own, and no baseline
-                        // against which a suspected miss means anything.
-                        LOG_DEBUG("Can not send yet, channelActive, packet 0x%08x", txp->id);
-                        if (!RadioTxHooks::holdsRadio(txp)) {
-                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
-                        }
+                    if (channelActive) { // currently traffic on the channel?
+                        LOG_DEBUG("CAD busy");
+                        // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
+                        // config, so skipping this only ever left the node deaf in standby.
+                        rearmReceive();
                         setTransmitDelay();
                     } else {
+                        LOG_DEBUG("CAD free");
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -653,12 +642,27 @@ void RadioLibInterface::handleReceiveInterrupt()
 {
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
+    const bool wasCadHandoff = cadHandoffRxStart != 0;
+    cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
+    preambleHoldStart = 0; // likewise the reception a held preamble announced
+
     if (!isReceiving) {
         LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
         return;
     }
 
     isReceiving = false;
+
+    // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
+    // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
+        LOG_DEBUG("CAD>RX empty");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
+        return;
+    }
+
+    if (wasCadHandoff)
+        LOG_DEBUG("CAD>RX pkt");
 
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
@@ -777,6 +781,7 @@ void RadioLibInterface::startReceive()
     // This is the sole place the recovery ladder is cleared - nothing short of an armed RX counts as fixed.
     rxOffline = false;
     chipRecoveryFailures = 0;
+    rxFlagsSeenMs = 0;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -785,6 +790,8 @@ void RadioLibInterface::pollMissedIrqs()
     // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
     if (isReceiving) {
         checkRxDoneIrqFlag();
+        checkCadHandoffTimeout();
+        checkStaleRxFlags();
     }
     if (sendingPacket) {
         checkTxDoneIrqFlag();
@@ -794,6 +801,87 @@ void RadioLibInterface::pollMissedIrqs()
 void RadioLibInterface::resetAGC()
 {
     // Base implementation: no-op. Override in chip-specific subclasses.
+}
+
+void RadioLibInterface::noteCadHandoffToRx()
+{
+    LOG_DEBUG("CAD>RX started");
+    // The chip entered RX on its own at detection, so the deaf window ends here, not at rearmReceive().
+    if (deafSinceMs) {
+        LOG_TRACE("Radio back in RX after scan (CAD>RX), deaf %u ms", (unsigned)(Time::getMillis() - deafSinceMs));
+        deafSinceMs = 0;
+    }
+    cadHandedToRx = true;
+    // Same clock Throttle compares against, so a native test can drive both across the wrap. 0 is the
+    // "none outstanding" sentinel and getMillis() does land on it once per wrap, so step past it.
+    const uint32_t now = Time::getMillis();
+    cadHandoffRxStart = now ? now : 1;
+}
+
+void RadioLibInterface::rearmReceive()
+{
+    // The flag is spent here, so every later call takes the full path - including RX_DONE after a
+    // handoff, whose bounded RX has already dropped the chip to standby.
+    if (!cadHandedToRx) {
+        startReceive();
+        return;
+    }
+    cadHandedToRx = false;
+    // Same order the drivers' own startReceive() uses: mark receiving BEFORE arming, or an ISR that
+    // fires in between reaches handleReceiveInterrupt() while isReceiving is still false and is dropped.
+    RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
+    // The line is not known-low here, and the ISR is rising-edge: catch an RX_DONE that beat the arm.
+    checkRxDoneIrqFlag();
+}
+
+void RadioLibInterface::checkCadHandoffTimeout()
+{
+    // Backstop to the chip's own cadTimeout, which is the primary bound. Doubled so the hardware always
+    // expires first; this only catches an RX whose timer stopped on a header that never completed.
+    const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    if (cadHandoffRxStart && Throttle::hasElapsed(cadHandoffRxStart, 2 * maxPacketTimeMsec)) {
+        LOG_WARN("CAD>RX timeout");
+        cadHandoffRxStart = 0;
+        startReceive();
+    }
+}
+
+void RadioLibInterface::checkStaleRxFlags()
+{
+    // A handoff RX has its own timeout, and a pending RX_DONE is about to clear every flag itself.
+    if (cadHandoffRxStart)
+        return;
+    const uint32_t irq = iface->getIrqFlags();
+    if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
+        return;
+    // HEADER_ERR counts: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
+    const bool headerSeen = irq & iface->getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_VALID) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+    const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    if (!headerSeen && !preambleSeen) {
+        rxFlagsSeenMs = 0;
+        return;
+    }
+    if (!rxFlagsSeenMs) {
+        rxFlagsSeenMs = Time::skipZero(Time::getMillis());
+        return;
+    }
+
+    const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    switch (staleRxFlagAction(headerSeen, Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
+    case StaleRxFlagAction::Keep:
+        break;
+    case StaleRxFlagAction::Rearm:
+        LOG_DEBUG("RX header stale, re-arm");
+        startReceive(); // clears rxFlagsSeenMs
+        break;
+    case StaleRxFlagAction::ClearPreamble:
+        // A clear never aborts a reception, unlike the standby inside startReceive().
+        LOG_DEBUG("RX preamble stale, cleared");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+        rxFlagsSeenMs = 0;
+        break;
+    }
 }
 
 void RadioLibInterface::periodicRadioMaintenance()
@@ -862,6 +950,13 @@ void RadioLibInterface::configHardwareForSend()
 
 void RadioLibInterface::setStandby()
 {
+    // Any handoff is void once the chip leaves RX. Left set, the flag would make the next rearmReceive()
+    // a no-op on a standby chip - deaf with no recovery - and the window would re-arm over a live packet.
+    if (cadHandedToRx) // standby between the handoff and the re-arm that adopts it: should not happen
+        LOG_WARN("CAD>RX void");
+    cadHandedToRx = false;
+    cadHandoffRxStart = 0;
+
     // neither sending nor receiving
     powerMon->clearState(meshtastic_PowerMon_State_Lora_RXOn);
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
@@ -870,6 +965,8 @@ void RadioLibInterface::setStandby()
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
+    cadHandoffRxStart = 0; // TX ends any handoff wait; completeSending() re-arms RX itself
+
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
@@ -877,6 +974,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         // Never reaches completeSending(), so any per-packet radio state has to be released here.
         RadioTxHooks::packetReleased(this, txp);
         packetPool.release(txp);
+        // We got here through isChannelActive(), which left the chip in standby for a transmit that is
+        // no longer happening. Without this the node stays deaf until something else re-arms it.
+        startReceive();
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby
