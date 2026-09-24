@@ -391,3 +391,65 @@ inline DMShellOpenAction classifyOpen(bool sessionActive, uint32_t activeSession
     }
     return peerAcked == 0 ? DMShellOpenAction::ResendOpenOk : DMShellOpenAction::Ignore;
 }
+
+/// Smoothed acknowledgement latency, and the retransmission interval derived from it.
+///
+/// The window-shut retransmission waited one derived round trip - two maximum-length frames plus a
+/// margin - but the acknowledgement for the oldest unacknowledged frame queues behind up to a window of
+/// our own frames, each waiting out a CSMA backoff that grows with channel utilisation. So it fired
+/// before the acknowledgement could arrive, and on a lossless link about a third of what the peer
+/// received was copies. The client had the same defect and measures instead (0246db2); this is the same
+/// estimator, so the two ends agree.
+class DMShellAckLatency
+{
+  public:
+    void reset() { estimate = 0; }
+
+    /// Fold in the time from handing a frame to the radio to seeing the peer's cursor pass it. Smoothed
+    /// by a quarter, as the client is: the quantity wanted belongs to the link, and one frame's queueing
+    /// or collision should not move it far.
+    void noteSample(uint32_t sampleMs)
+    {
+        if (sampleMs == 0) {
+            return;
+        }
+        if (estimate == 0) {
+            estimate = sampleMs;
+            return;
+        }
+        const int64_t next = (int64_t)estimate + ((int64_t)sampleMs - (int64_t)estimate) / 4;
+        estimate = next > 0 ? (uint32_t)next : 1;
+    }
+
+    /// 0 until the first sample.
+    uint32_t estimateMs() const { return estimate; }
+
+    /// Twice the estimate: one frame out and its acknowledgement back are already in it, and the rest is
+    /// margin for the peer's queue. Never below floorMs, the derived round trip used before any sample
+    /// exists, and never above capMs.
+    uint32_t intervalMs(uint32_t floorMs, uint32_t capMs) const
+    {
+        uint64_t scaled = 2ull * estimate;
+        if (scaled < floorMs) {
+            scaled = floorMs;
+        }
+        if (scaled > capMs) {
+            scaled = capMs;
+        }
+        return (uint32_t)scaled;
+    }
+
+  private:
+    uint32_t estimate = 0;
+};
+
+/// Whether a frame last handed to the radio at lastSentMs may be repeated at nowMs.
+///
+/// The wait belongs to the frame, not to the poll that notices it. Measured from the poll, every cursor
+/// advance cleared the deadline, and the next unacknowledged frame - queued moments earlier and possibly
+/// still waiting for the radio - was repeated at once. Elapsed time is an unsigned difference, so this
+/// holds across the millis() wrap.
+inline bool retransmitDue(uint32_t nowMs, uint32_t lastSentMs, uint32_t intervalMs)
+{
+    return (uint32_t)(nowMs - lastSentMs) >= intervalMs;
+}
