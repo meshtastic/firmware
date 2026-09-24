@@ -203,12 +203,14 @@ class AuthPipelineModule : public SinglePortModule
 {
   public:
     AuthPipelineModule() : SinglePortModule("authPipeline", meshtastic_PortNum_POSITION_APP) {}
-    ProcessMessage handleReceived(const meshtastic_MeshPacket &) override
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
     {
         calls++;
+        lastAckProofStatus = mp.ack_proof_status;
         return ProcessMessage::CONTINUE;
     }
     uint32_t calls = 0;
+    meshtastic_MeshPacket_AckProofStatus lastAckProofStatus = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
 };
 
 class AuthPipelineMqtt : public MQTT
@@ -1725,6 +1727,30 @@ void test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only(void)
     TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&spoofed)));
 }
 
+// C18: MeshPacket.ack_proof_status is set only by our own ack verification. A value that arrives
+// with a packet must be gone by the time modules and the phone see it - including after the routing
+// auth cache restores its authenticated copy, which is how the clear was first lost.
+void test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->addNode(REMOTE_NODE);
+    meshtastic_MeshPacket injected = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    injected.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    injected.hop_start = 2; // a missing hop_start reads as pre-hop firmware and never reaches modules
+    injected.hop_limit = 1;
+    injected.ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+    pipelineModule->lastAckProofStatus = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+
+    runPipelineIngress(injected);
+
+    TEST_ASSERT_EQUAL(1, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT, pipelineModule->lastAckProofStatus);
+    meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT, toPhone->ack_proof_status);
+    packetPool.release(toPhone);
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2437,6 +2463,7 @@ void setup()
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
+    RUN_TEST(test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

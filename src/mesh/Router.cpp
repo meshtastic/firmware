@@ -804,6 +804,10 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 
 RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 {
+    // Only our own ack verification sets this. Cleared before the cache compare and both copies below,
+    // so neither the auth cache nor the MQTT/UDP uplink snapshot can carry an inbound value onward.
+    p->ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+
     // Routing still needs the original encrypted representation for byte-for-byte relay and for
     // MQTT uplink. Authenticate a copy here; handleReceived() performs the normal in-place decode
     // only after stateful routing filters have completed.

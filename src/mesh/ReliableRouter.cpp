@@ -119,6 +119,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
  */
 void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
+    lastAckProof = {};
     if (isToUs(p)) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
         if (!MeshModule::currentReply) {
             if (p->want_ack) {
@@ -193,6 +194,30 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     isBroadcast(p->to) ? FloodingRouter::sniffReceived(p, c) : NextHopRouter::sniffReceived(p, c);
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+static meshtastic_MeshPacket_AckProofStatus toAckProofStatus(AckProofResult result)
+{
+    switch (result) {
+    case AckProofResult::VALID:
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+    case AckProofResult::INVALID:
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_INVALID;
+    case AckProofResult::NO_KEY:
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY;
+    case AckProofResult::ABSENT:
+        break;
+    }
+    return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+}
+#endif
+
+meshtastic_MeshPacket_AckProofStatus ReliableRouter::ackProofStatusFor(const meshtastic_MeshPacket &p) const
+{
+    if (lastAckProof.from == getFrom(&p) && lastAckProof.id == p.id)
+        return lastAckProof.status;
+    return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+}
+
 bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId, bool isAck)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -244,7 +269,9 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
     }
 
     // Safe to key off getFrom(p) below only because it is now known equal to orig->packet->to.
-    switch (ackProofVerify(p, originalId)) {
+    const AckProofResult verdict = ackProofVerify(p, originalId);
+    lastAckProof = {getFrom(p), p->id, toAckProofStatus(verdict)};
+    switch (verdict) {
     case AckProofResult::VALID:
         LOG_DEBUG("ACK proof OK for 0x%08x", originalId);
         return true;
