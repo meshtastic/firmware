@@ -23,6 +23,7 @@
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
 #include "UptimeClock.h"
+#include "mesh/AckProof.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshRadio.h"
@@ -1751,6 +1752,51 @@ void test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone(void)
     packetPool.release(toPhone);
 }
 
+// C19: the other half of C18. A proven ack from the node we addressed, for a DM still pending, must
+// reach the phone reading ACK_PROOF_VALID - the verdict ReliableRouter reaches while sniffing has to
+// survive into the copy MeshService::handleFromRadio() queues, or the client never sees a receipt.
+void test_C19_proven_ack_reaches_phone_as_valid(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+
+    meshtastic_MeshPacket original = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    original.id = 0xC1900019;
+    pipelineRouter->addPending(original, UINT32_MAX);
+
+    meshtastic_MeshPacket ack = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_ROUTING_APP, 0);
+    ack.id = 0xC1900020;
+    ack.hop_start = 2;
+    ack.hop_limit = 1;
+    ack.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    ack.decoded.request_id = original.id;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.which_variant = meshtastic_Routing_error_reason_tag;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+    ack.decoded.payload.size =
+        pb_encode_to_bytes(ack.decoded.payload.bytes, sizeof(ack.decoded.payload.bytes), &meshtastic_Routing_msg, &routing);
+    TEST_ASSERT_GREATER_THAN(0, ack.decoded.payload.size);
+    crypto->setDHPrivateKey(remotePriv);
+    TEST_ASSERT_TRUE(ackProofAttachWithKey(&ack, localPub));
+    crypto->setDHPrivateKey(localPriv);
+
+    runPipelineIngress(ack);
+
+    meshtastic_MeshPacket *delivered = nullptr;
+    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
+        if (!delivered && queued->id == ack.id)
+            delivered = queued;
+        else
+            packetPool.release(queued);
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(delivered, "the ack must reach the phone");
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID, delivered->ack_proof_status);
+    packetPool.release(delivered);
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2464,6 +2510,7 @@ void setup()
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
     RUN_TEST(test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone);
+    RUN_TEST(test_C19_proven_ack_reaches_phone_as_valid);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
