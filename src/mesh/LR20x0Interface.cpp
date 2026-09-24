@@ -190,8 +190,8 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
-        // Some basic info about the module's explicit firmware version - no other info available
-        // Currently requires radiolib godmode
+    // Some basic info about the module's explicit firmware version - no other info available
+    // Currently requires radiolib godmode
 
 #if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE) {
@@ -217,8 +217,8 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
-        // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
-        // Currently requires radiolib godmode
+    // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
+    // Currently requires radiolib godmode
 #if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE) {
         uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
@@ -557,7 +557,7 @@ template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
     }
 
     isReceiving = false; // If we were receiving, not any more
-    activeReceiveStart = 0;
+    rxSighting.reset();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
