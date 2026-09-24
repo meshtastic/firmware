@@ -134,6 +134,14 @@ MAX_INPUT_RETRANSMITS = 25
 # ShortTurbo, so the handshake needs far more headroom than the API socket does. Measured: a LongFast
 # session needed 150 s to open.
 DEFAULT_OPEN_TIMEOUT_SEC = 180.0
+# Repeat the OPEN while no OPEN_OK has come back, doubling from the first interval to the ceiling. A lost
+# OPEN_OK cannot be recovered any other way: it is always seq 1, and a replay request for seq 1 encodes as
+# last_rx_seq 0, which both ends read as "no request". The firmware answers a repeat of the session it is
+# already running by resending OPEN_OK, so a repeat that crosses a slow OPEN_OK in flight costs one
+# duplicate frame and nothing else. The first interval sits just above a clean LongFast round trip, two
+# frames of about 2.2 s each, and is still a small fraction of the timeout on every faster preset.
+OPEN_RETRY_FIRST_SEC = 5.0
+OPEN_RETRY_MAX_SEC = 30.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -925,6 +933,7 @@ class SessionState:
                 "replay_unavailable": c.get("replay_replay_unavailable", 0),
                 "replay_evicted": c.get("replay_replay_evicted", 0),
                 "distinct_gaps": c.get("distinct_gaps", 0),
+                "open_retries": c.get("open_retries", 0),
                 "request_reasons": {
                     k[len("replay_requests_sent_"):]: v
                     for k, v in sorted(c.items())
@@ -1451,6 +1460,44 @@ def reader_loop(transport, state: SessionState) -> None:
             state.event_queue.put(f"fromradio {variant}")
 
 
+def wait_for_open_ok(transport, state: SessionState, cols: int, rows: int, timeout_sec: float) -> None:
+    """Send OPEN and wait for OPEN_OK, repeating the OPEN until one arrives or the timeout runs out.
+
+    Every repeat carries the same session id and sequence number as the first, which is what lets the
+    firmware recognise it as the same session rather than a new one that preempts it. Legacy mode sends
+    once, as before, so the same binary still gives an A/B baseline.
+    """
+    pb2 = state.pb2
+    open_seq = send_shell_frame(transport, state, pb2.mesh.RemoteShell.OPEN, cols=cols, rows=rows)
+    deadline = time.monotonic() + timeout_sec
+    interval = OPEN_RETRY_FIRST_SEC
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        wait = remaining if state.legacy_recovery else min(interval, remaining)
+        if state.opened_event.wait(timeout=wait):
+            return
+        if state.legacy_recovery or time.monotonic() >= deadline:
+            break
+        send_shell_frame(
+            transport, state, pb2.mesh.RemoteShell.OPEN, cols=cols, rows=rows, seq=open_seq, remember=False
+        )
+        state.bump("open_retries")
+        state.event_queue.put(f"no OPEN_OK after {interval:.0f} s, repeating OPEN")
+        drain_events(state)
+        interval = min(interval * 2, OPEN_RETRY_MAX_SEC)
+
+    # The server may have accepted the session and be streaming into it. Tell it we are gone rather than
+    # leave it transmitting to nobody until its own bounds notice. CLOSE is acted on out of order, so it
+    # needs no OPEN_OK to have arrived; if the server never opened anything it is rejected harmlessly.
+    try:
+        send_shell_frame(transport, state, pb2.mesh.RemoteShell.CLOSE, remember=False)
+    except Exception:
+        pass
+    raise SystemExit("timed out waiting for OPEN_OK from remote DMShell")
+
+
 def drain_events(state: SessionState) -> None:
     while True:
         try:
@@ -1723,9 +1770,7 @@ def main() -> int:
         reader = threading.Thread(target=reader_loop, args=(transport, state), daemon=True)
         reader.start()
 
-        send_shell_frame(transport, state, pb2.mesh.RemoteShell.OPEN, cols=cols, rows=rows)
-        if not state.opened_event.wait(timeout=max(args.open_timeout, args.timeout)):
-            raise SystemExit("timed out waiting for OPEN_OK from remote DMShell")
+        wait_for_open_ok(transport, state, cols, rows, max(args.open_timeout, args.timeout))
 
         heartbeat = threading.Thread(target=heartbeat_loop, args=(transport, state), daemon=True)
         heartbeat.start()

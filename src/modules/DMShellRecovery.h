@@ -366,3 +366,28 @@ class DMShellTxHistoryWindow
     uint32_t oldestRetainedSeq = 0; // 0 while nothing has been stored
     uint32_t newestStoredSeq = 0;
 };
+
+/// What to do with an OPEN, given whatever session is already running.
+enum class DMShellOpenAction : uint8_t {
+    Open,         ///< Start a session, preempting any other.
+    ResendOpenOk, ///< The peer is retrying an OPEN we already accepted, so its OPEN_OK was lost.
+    Ignore,       ///< A late copy of an OPEN whose OPEN_OK the peer has already acknowledged.
+};
+
+/// A client that hears no OPEN_OK sends its OPEN again under the same session id. Opening afresh on
+/// that retry would preempt the session the first OPEN created, killing its shell along with any output
+/// already sent, so a repeat is answered from the running session instead. A different session id or a
+/// different peer is a new session and preempts, as it always has; so does a session id of 0, which
+/// the module replaces with a random one and so can never match.
+///
+/// peerAcked is the peer's cumulative receive cursor. Anything above 0 means it already has the OPEN_OK,
+/// which is always seq 1, so a repeat is a stale copy. Answering one would replay seq 1, and on a long
+/// session that has aged out of the history - the replay path then closes the session as evicted.
+inline DMShellOpenAction classifyOpen(bool sessionActive, uint32_t activeSessionId, uint32_t activePeer, uint32_t openSessionId,
+                                      uint32_t openFrom, uint32_t peerAcked)
+{
+    if (!sessionActive || openSessionId == 0 || openSessionId != activeSessionId || openFrom != activePeer) {
+        return DMShellOpenAction::Open;
+    }
+    return peerAcked == 0 ? DMShellOpenAction::ResendOpenOk : DMShellOpenAction::Ignore;
+}
