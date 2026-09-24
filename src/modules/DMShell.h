@@ -38,6 +38,8 @@ struct DMShellSession {
     // Sender-side retransmission of the oldest unacknowledged frame while the window is shut.
     uint32_t nextRetransmitMs = 0;
     DMShellRetransmitRun retransmitRun;
+    // How long the peer takes to acknowledge a frame, measured, which sets the retransmission interval.
+    DMShellAckLatency ackLatency;
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
@@ -49,6 +51,7 @@ struct DMShellSession {
         uint32_t flags = 0;
         uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
         size_t payloadLen = 0;
+        uint32_t lastSentMs = 0; // when this frame was last handed to the radio, first send or resend
     };
     static constexpr size_t TX_HISTORY_LEN = 50;
     std::array<SentFrame, TX_HISTORY_LEN> txHistory = {};
@@ -99,6 +102,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
 
     void rememberSentFrame(meshtastic_RemoteShell frame);
     void resendFramesFrom(uint32_t startSeq);
+    DMShellSession::SentFrame *findSentFrame(uint32_t seq);
     /// Ask the peer to replay replayFromSeq. Never called with 0; see the definition.
     void sendReplayRequest(uint32_t replayFromSeq);
     void sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember = true);

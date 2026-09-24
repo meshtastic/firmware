@@ -31,6 +31,10 @@
 //    OPEN_OK is always seq 1, and a replay request for seq 1 encodes as last_rx_seq 0, which both
 //    ends read as "no request". The client repeats its OPEN instead, and this makes that repeat safe.
 //
+// 5. The sender's window-shut retransmission waits for the frame, not the poll, and for a measured
+//    acknowledgement latency rather than a derived one. Either half alone left a lossless bulk
+//    transfer with a third of its frames arriving twice.
+//
 // The regression guarded: if these assertions are deleted or relaxed, the storm comes back, and it
 // comes back invisibly - the failing session looks like a flaky radio link rather than a protocol
 // bug, which is exactly how it was originally misdiagnosed.
@@ -678,6 +682,80 @@ void test_dmshell_open_with_session_id_zero_never_matches()
     TEST_ASSERT_EQUAL(DMShellOpenAction::Open, classifyOpen(true, 0, kPeer, 0, kPeer, 0));
 }
 
+// The server's window-shut retransmission, timed the way the client's has been since 0246db2. Round 10
+// on hardware: a bulk transfer with zero loss had 34% of its arriving frames be copies, because the
+// retransmission fired on the poll after every cursor advance, and its interval was one derived round
+// trip where the acknowledgement it waits for queues behind a window of our own frames.
+
+void test_dmshell_ack_latency_first_sample_is_the_estimate()
+{
+    DMShellAckLatency l;
+    TEST_ASSERT_EQUAL_UINT32(0, l.estimateMs());
+    l.noteSample(800);
+    TEST_ASSERT_EQUAL_UINT32(800, l.estimateMs());
+}
+
+void test_dmshell_ack_latency_smooths_by_a_quarter()
+{
+    DMShellAckLatency l;
+    l.noteSample(800);
+    l.noteSample(1600); // 800 + (1600 - 800) / 4
+    TEST_ASSERT_EQUAL_UINT32(1000, l.estimateMs());
+    l.noteSample(200); // 1000 + (200 - 1000) / 4
+    TEST_ASSERT_EQUAL_UINT32(800, l.estimateMs());
+}
+
+void test_dmshell_ack_latency_ignores_a_zero_sample()
+{
+    // A zero sample means the send stamp and the acknowledgement landed on the same millisecond, which
+    // says nothing about the link. Taken as the first sample it would read as "no estimate".
+    DMShellAckLatency l;
+    l.noteSample(0);
+    TEST_ASSERT_EQUAL_UINT32(0, l.estimateMs());
+    l.noteSample(500);
+    l.noteSample(0);
+    TEST_ASSERT_EQUAL_UINT32(500, l.estimateMs());
+}
+
+void test_dmshell_ack_latency_interval_is_floored_before_any_sample()
+{
+    // No acknowledgement yet, so the derived round trip is all there is: the old behaviour.
+    DMShellAckLatency l;
+    TEST_ASSERT_EQUAL_UINT32(658, l.intervalMs(658, 10000));
+}
+
+void test_dmshell_ack_latency_interval_is_twice_the_estimate_within_bounds()
+{
+    DMShellAckLatency l;
+    l.noteSample(1200);
+    TEST_ASSERT_EQUAL_UINT32(2400, l.intervalMs(658, 10000));
+
+    DMShellAckLatency fast;
+    fast.noteSample(100); // 200 is below the derived round trip, which still wins
+    TEST_ASSERT_EQUAL_UINT32(658, fast.intervalMs(658, 10000));
+
+    DMShellAckLatency slow;
+    slow.noteSample(9000); // 18 s would sit out most of a LongFast session
+    TEST_ASSERT_EQUAL_UINT32(10000, slow.intervalMs(658, 10000));
+}
+
+void test_dmshell_retransmit_waits_for_the_frame_not_the_poll()
+{
+    // The frame went to the radio at 5000. A poll at 5010 - which is where a cursor advance used to
+    // send it again - must not; only a full interval after the frame's own send may.
+    TEST_ASSERT_FALSE(retransmitDue(5010, 5000, 1400));
+    TEST_ASSERT_FALSE(retransmitDue(6399, 5000, 1400));
+    TEST_ASSERT_TRUE(retransmitDue(6400, 5000, 1400)); // inclusive, as Throttle::hasElapsed()
+    TEST_ASSERT_TRUE(retransmitDue(9000, 5000, 1400));
+}
+
+void test_dmshell_retransmit_due_survives_millis_wrap()
+{
+    const uint32_t sent = 0xFFFFFF00u; // 256 ms before the wrap
+    TEST_ASSERT_FALSE(retransmitDue(0x00000100u, sent, 1400)); // 512 ms later, across the wrap
+    TEST_ASSERT_TRUE(retransmitDue(sent + 1400, sent, 1400));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -722,6 +800,13 @@ void setup()
     RUN_TEST(test_dmshell_open_with_a_new_session_id_still_preempts);
     RUN_TEST(test_dmshell_open_from_another_peer_still_preempts);
     RUN_TEST(test_dmshell_open_with_session_id_zero_never_matches);
+    RUN_TEST(test_dmshell_ack_latency_first_sample_is_the_estimate);
+    RUN_TEST(test_dmshell_ack_latency_smooths_by_a_quarter);
+    RUN_TEST(test_dmshell_ack_latency_ignores_a_zero_sample);
+    RUN_TEST(test_dmshell_ack_latency_interval_is_floored_before_any_sample);
+    RUN_TEST(test_dmshell_ack_latency_interval_is_twice_the_estimate_within_bounds);
+    RUN_TEST(test_dmshell_retransmit_waits_for_the_frame_not_the_poll);
+    RUN_TEST(test_dmshell_retransmit_due_survives_millis_wrap);
     exit(UNITY_END());
 }
 
