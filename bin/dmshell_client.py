@@ -205,6 +205,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--verbose", action="store_true", help="print extra protocol events")
     parser.add_argument(
+        "--drop-open-ok",
+        type=int,
+        default=0,
+        metavar="N",
+        help="test only: discard the first N OPEN_OK frames as if lost on air, to exercise the OPEN retry",
+    )
+    parser.add_argument(
         "--legacy-recovery",
         action="store_true",
         help="retry a missing sequence number at a flat 1/sec instead of backing off "
@@ -464,6 +471,7 @@ class SessionState:
     missing_request_attempts: int = 0
     frames_since_outbound: int = 0
     legacy_recovery: bool = False
+    drop_open_ok: int = 0
     requested_missing_seqs: set[int] = field(default_factory=set)
     replay_log_lock: threading.Lock = field(default_factory=threading.Lock)
     replay_log_file: Optional[TextIO] = None
@@ -934,6 +942,7 @@ class SessionState:
                 "replay_evicted": c.get("replay_replay_evicted", 0),
                 "distinct_gaps": c.get("distinct_gaps", 0),
                 "open_retries": c.get("open_retries", 0),
+                "open_ok_dropped": c.get("open_ok_dropped", 0),
                 "request_reasons": {
                     k[len("replay_requests_sent_"):]: v
                     for k, v in sorted(c.items())
@@ -1388,6 +1397,12 @@ def reader_loop(transport, state: SessionState) -> None:
             shell = decode_shell_packet(state, fromradio.packet)
             if not shell:
                 continue
+            if state.drop_open_ok > 0 and shell.op == state.pb2.mesh.RemoteShell.OPEN_OK:
+                # Fault injection for --drop-open-ok: gone before any accounting, as a frame lost on air is.
+                state.drop_open_ok -= 1
+                state.bump("open_ok_dropped")
+                state.event_queue.put(f"dropped OPEN_OK session=0x{shell.session_id:08x} (--drop-open-ok)")
+                continue
             state.note_inbound_packet()
             # Before every opcode branch, including the ones that continue: an out-of-order frame is
             # still proof the peer is alive and still carries a valid cursor, and during a gap it may
@@ -1750,6 +1765,7 @@ def main() -> int:
         verbose=args.verbose,
         hop_limit=args.hop_limit,
         legacy_recovery=args.legacy_recovery,
+        drop_open_ok=max(0, args.drop_open_ok),
         input_window_frames=0 if args.legacy_recovery else INPUT_WINDOW_FRAMES,
     )
     if state.input_window_frames == 0:
