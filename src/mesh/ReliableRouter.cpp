@@ -173,7 +173,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if ((ackId || nakId) && ackProofPermitsAction(p, ackId ? ackId : nakId, ackId != 0) &&
+        if ((ackId || nakId) && ackProofPermitsAction(p, ackId ? ackId : nakId) &&
             // Implicit ACKs from MQTT should not stop retransmissions
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
             LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
@@ -193,7 +193,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     isBroadcast(p->to) ? FloodingRouter::sniffReceived(p, c) : NextHopRouter::sniffReceived(p, c);
 }
 
-bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId, bool isAck)
+bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Cheap gate FIRST: verification costs one X25519 per call (setDHPublicKey runs Curve25519::dh2
@@ -205,45 +205,6 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
         return true;
     const bool expected = orig->packet && orig->packet->pki_encrypted;
 
-    // Only the node we ADDRESSED can prove receipt. The MAC only proves its author holds a pairwise
-    // key with us, and every keyed peer holds one - so verifying against the key of whoever the ack
-    // claims to be from would accept a proof minted by any of them. C, whose key we hold, can read
-    // our packet id out of the cleartext header and mint a VALID-looking receipt for a packet that
-    // went to B. Bind to orig->packet->to instead.
-    //
-    // Bailing out here rather than verifying against the recipient key and reporting INVALID is
-    // deliberate on both counts: it skips the X25519 an attacker would otherwise choose when we
-    // pay, and a third-party ack is "not a receipt" rather than "a forged receipt" - naks from
-    // intermediates (NO_CHANNEL, PKI_UNKNOWN_PUBKEY, MAX_RETRANSMIT) legitimately arrive from a
-    // node that is not the destination, and must not be logged as proof mismatches.
-    //
-    // A broadcast original has no single recipient to bind to, so there is nothing to check, and
-    // any recipient may answer it. That case permits unconditionally - holding it to the sender
-    // check under enforcement would stop every reliable broadcast from ever being acked.
-    if (!orig->packet || isBroadcast(orig->packet->to))
-        return true;
-
-    if (getFrom(p) != orig->packet->to) {
-        LOG_DEBUG("Ack for 0x%08x is not from the node we addressed, not a receipt", originalId);
-        // Advisory today, so both arms are true and this reads as dead code. It is not: under
-        // enforcement a bare `return true` here would be a hole, since the sender field is
-        // unauthenticated and an attacker would simply address the ack from anyone other than the
-        // node we sent to, skipping the proof requirement entirely. Only success acks are held to
-        // it; a nak from an intermediate is legitimate and keeps today's behavior either way.
-        //
-        // Closing this does NOT make enforcement sound on its own - ABSENT still permits, so an
-        // attacker spoofing `from` and sending no proof gets through anyway, and ABSENT cannot be
-        // made to block for the reasons recorded at ACK_PROOF_ENFORCE. The point is narrower: a
-        // flag named "enforce" should not have a branch that silently ignores it.
-        //
-        // Written as an if rather than `isAck ? !ACK_PROOF_ENFORCE : true` because with the flag
-        // off both arms of that ternary are `true`, which cppcheck reports as duplicateValueTernary.
-        if (isAck && ACK_PROOF_ENFORCE)
-            return false;
-        return true;
-    }
-
-    // Safe to key off getFrom(p) below only because it is now known equal to orig->packet->to.
     switch (ackProofVerify(p, originalId)) {
     case AckProofResult::VALID:
         LOG_DEBUG("ACK proof OK for 0x%08x", originalId);
@@ -266,7 +227,6 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
 #else
     (void)p;
     (void)originalId;
-    (void)isAck;
 #endif
     return true;
 }

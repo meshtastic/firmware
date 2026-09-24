@@ -30,20 +30,6 @@ struct CryptoKey {
 // Length of Routing.ack_proof, taken from the generated field so the protocol owns the number.
 static constexpr size_t ACK_PROOF_SIZE = sizeof(meshtastic_Routing_ack_proof_t::bytes);
 
-// Signing-buffer format. Bump this if the covered fields or their order ever change: it makes a
-// buffer built by one version impossible to reinterpret as one built by another.
-#define XEDDSA_SIGNING_VERSION 0x01
-// version(1) | from | id | to | portnum | request_id | reply_id | emoji | bitfield | flags(1)
-static constexpr size_t XEDDSA_SIGNED_HEADER_LEN = 1 + 8 * sizeof(uint32_t) + 1;
-// The signing buffer is local scratch and is never transmitted, so no wire limit applies to it.
-// Sized against the largest payload the Data schema can hold rather than against what the sender's
-// fits-on-air gate currently admits, so buildSigningBuffer cannot run out of room on a well-formed
-// packet however that gate is later tuned - an overflow there would silently stop signing.
-static constexpr size_t XEDDSA_SIGN_BUF_LEN = XEDDSA_SIGNED_HEADER_LEN + meshtastic_Constants_DATA_PAYLOAD_LEN;
-// Bit positions in the signing buffer's flags byte.
-#define XEDDSA_SIGNED_FLAG_WANT_RESPONSE 0x01
-#define XEDDSA_SIGNED_FLAG_HAS_BITFIELD 0x02
-
 class CryptoEngine
 {
   public:
@@ -59,12 +45,10 @@ class CryptoEngine
     virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 #endif
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
-    // The whole Data envelope is covered, not just its payload - see buildSigningBuffer. Takes the
-    // Data rather than a field list so adding a field to the covered set cannot silently miss a
-    // call site. toNode and fromNode come from the MeshPacket header; everything else is in `d`.
-    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t toNode, const meshtastic_Data *d, uint8_t *signature);
-    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t toNode, const meshtastic_Data *d,
-                       const uint8_t *signature);
+    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
+                     uint8_t *signature);
+    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
+                       size_t payloadLen, const uint8_t *signature);
 #endif
     /**
      * Derive the pairwise ACK proof carried in Routing.ack_proof.

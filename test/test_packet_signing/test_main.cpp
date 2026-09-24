@@ -253,7 +253,8 @@ static meshtastic_MeshPacket makeDecoded(NodeNum from, NodeNum to, meshtastic_Po
 // because perhapsEncode only auto-signs packets that originate from us.
 static void signWithCurrentKey(meshtastic_MeshPacket *p)
 {
-    bool ok = crypto->xeddsa_sign(p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes);
+    bool ok = crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
+                                  p->decoded.xeddsa_signature.bytes);
     TEST_ASSERT_TRUE_MESSAGE(ok, "xeddsa_sign failed in test setup");
     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 }
@@ -2222,136 +2223,6 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
-// E14: the reason this change exists. A signed broadcast reply (a tapback: the client sets reply_id
-// on an outgoing text, firmware signs the broadcast) has its reply_id in the Data envelope, outside
-// the signed payload. Channel crypto is AES-CTR with no MAC, so before this binding a listener
-// holding the PSK could re-point a signed tapback at a different message and it would still verify.
-void test_E14_decoded_signed_reply_retargeted_reply_id_dropped(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    p.decoded.reply_id = 0x5555AAAA;
-    signWithCurrentKey(&p);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-    TEST_ASSERT_TRUE(p.xeddsa_signed);
-
-    p.decoded.reply_id ^= 1; // re-point the tapback at a different message
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted reply must fail verification");
-    TEST_ASSERT_FALSE(p.xeddsa_signed);
-}
-
-// E15: the same for request_id. Nothing broadcast carries one today, so this is forward cover for
-// any future signed packet that does - and for licensed mode, where unicasts are signed.
-void test_E15_decoded_signed_response_retargeted_request_id_dropped(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    p.decoded.request_id = 0xAAAA5555;
-    signWithCurrentKey(&p);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-    p.decoded.request_id ^= 1;
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted response must fail verification");
-}
-
-// E16: an ordinary signed broadcast with no envelope fields set still verifies. The single layout
-// signs those fields as zero rather than omitting them, so the common case must stay unaffected.
-void test_E16_decoded_signed_broadcast_without_linkage_still_verifies(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    TEST_ASSERT_EQUAL(0, p.decoded.request_id);
-    TEST_ASSERT_EQUAL(0, p.decoded.reply_id);
-    signWithCurrentKey(&p);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-    TEST_ASSERT_TRUE(p.xeddsa_signed);
-}
-
-// E17: the other half of the reaction attack. A reaction is a TEXT_MESSAGE carrying the emoji in
-// the payload, reply_id naming the message reacted to, and the emoji flag telling the client to
-// render it as a reaction. Binding reply_id alone would still let a PSK holder flip that flag and
-// turn a signed reply into a signed reaction - or the reverse - on a message the sender never saw.
-void test_E17_decoded_signed_reaction_emoji_flag_flip_dropped(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    p.decoded.reply_id = 0x5555AAAA;
-    p.decoded.emoji = 1;
-    signWithCurrentKey(&p);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-    TEST_ASSERT_TRUE(p.xeddsa_signed);
-
-    p.decoded.emoji = 0; // render the reaction as a plain reply instead
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "flipping the emoji flag must fail verification");
-    TEST_ASSERT_FALSE(p.xeddsa_signed);
-}
-
-// E18: bitfield bit 0 is OK_TO_MQTT, the sender's consent to being uploaded to a public broker, and
-// MQTT.cpp reads it to decide. Unsigned, a PSK holder could set it on a message the sender marked
-// private and no gateway would know the difference. Stripping the optional field is covered too,
-// since presence is signed separately from the value.
-void test_E18_decoded_signed_broadcast_bitfield_tamper_dropped(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    p.decoded.has_bitfield = true;
-    p.decoded.bitfield = 0; // sender withheld MQTT consent
-    signWithCurrentKey(&p);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-
-    meshtastic_MeshPacket granted = p;
-    granted.decoded.bitfield |= BITFIELD_OK_TO_MQTT_MASK;
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&granted), "granting MQTT consent in flight must fail verification");
-
-    meshtastic_MeshPacket stripped = p;
-    stripped.decoded.has_bitfield = false;
-    stripped.decoded.bitfield = 0;
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&stripped), "stripping the bitfield must fail verification");
-}
-
-// E19: `to` lives in the cleartext header and relays never rewrite it, but it was outside the
-// signature. A signed broadcast could be re-addressed as a direct message and still verify,
-// delivering a public statement as an apparent private one from the same signer.
-void test_E19_decoded_signed_broadcast_readdressed_as_dm_dropped(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    signWithCurrentKey(&p);
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-
-    p.to = LOCAL_NODE; // re-addressed from the channel to us
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a re-addressed broadcast must fail verification");
-    TEST_ASSERT_FALSE(p.xeddsa_signed);
-}
-
 void setup()
 {
     initializeTestEnvironment();
@@ -2472,12 +2343,6 @@ void setup()
     RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
     RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
     RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
-    RUN_TEST(test_E14_decoded_signed_reply_retargeted_reply_id_dropped);
-    RUN_TEST(test_E15_decoded_signed_response_retargeted_request_id_dropped);
-    RUN_TEST(test_E16_decoded_signed_broadcast_without_linkage_still_verifies);
-    RUN_TEST(test_E17_decoded_signed_reaction_emoji_flag_flip_dropped);
-    RUN_TEST(test_E18_decoded_signed_broadcast_bitfield_tamper_dropped);
-    RUN_TEST(test_E19_decoded_signed_broadcast_readdressed_as_dm_dropped);
 
     const int result = UNITY_END();
     airTime = savedAirTime;
