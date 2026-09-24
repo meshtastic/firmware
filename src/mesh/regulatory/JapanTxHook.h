@@ -37,7 +37,7 @@ class JapanTxHook : public RadioTxHook
     static uint32_t computeBackoffMs(uint32_t count);
 
     // Valid RSSI must be strictly negative (< 0 rejects 0 fallback and positive saturation) and >= -192 dBm.
-    static bool isValidRssi(int16_t rssi) { return rssi < 0 && rssi >= RSSI_VALID_MIN; }
+    static bool isValidRssi(int16_t rssi) { return rssi < RSSI_UNAVAILABLE && rssi >= RSSI_VALID_MIN; }
 
     bool performCarrierSense(RadioInterface *iface);
 
