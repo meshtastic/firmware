@@ -434,6 +434,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
     switch (notification) {
     case ISR_TX:
+        noteDeafFrom("tx");
         handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
         // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
         // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
@@ -443,6 +444,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
         setTransmitDelay();
         break;
     case ISR_RX:
+        // The chip is still listening while the packet is read out, but startReceive() puts it into
+        // standby first, so a frame that begins in this window is lost all the same.
+        noteDeafFrom("rx");
         handleReceiveInterrupt();
         startReceive();
         setTransmitDelay();
@@ -478,7 +482,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
-                    if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
+                    const uint32_t scanStartMs = Time::getMillis();
+                    noteDeafFrom("scan");
+                    const bool channelActive = isChannelActive();
+                    LOG_TRACE("Channel scan %s in %u ms", channelActive ? "busy" : "clear",
+                              (unsigned)(Time::getMillis() - scanStartMs));
+                    if (channelActive) { // check if there is currently a LoRa packet on the channel
                         // The weak half of carrier sense, and the only one that was silent. busyRx in
                         // canSendImmediately() is a latched PREAMBLE_DETECTED/HEADER_VALID IRQ and logs
                         // its deferrals; this is a 2-symbol CAD, and it has already been established
@@ -748,8 +757,21 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 }
 
+void RadioLibInterface::noteDeafFrom(const char *what)
+{
+    deafSinceMs = Time::skipZero(Time::getMillis());
+    deafFor = what;
+}
+
 void RadioLibInterface::startReceive()
 {
+    // How long the radio could not hear, reported at the moment it can again. On a slow bus the
+    // transactions on either side of a scan, a transmission or a reception take long enough to swallow
+    // a whole preamble, and nothing else in the log says so.
+    if (deafSinceMs) {
+        LOG_TRACE("Radio back in RX after %s, deaf %u ms", deafFor, (unsigned)(Time::getMillis() - deafSinceMs));
+        deafSinceMs = 0;
+    }
     isReceiving = true;
     // Drivers only reach here once the chip actually accepted the RX start, so the radio is alive again.
     // This is the sole place the recovery ladder is cleared - nothing short of an armed RX counts as fixed.

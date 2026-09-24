@@ -332,6 +332,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// acted on by shouldDeferPreambleVerdict(): a verdict reached by a look older than the deadline it
     /// judges has not observed the window at all.
     uint32_t lastReceiveDetectedMs = 0;
+    /// When the radio last began work that leaves it unable to receive, and what that work was, so the
+    /// next startReceive() can report how long it was deaf. 0 when nothing is pending.
+    uint32_t deafSinceMs = 0;
+    const char *deafFor = nullptr;
+    void noteDeafFrom(const char *what);
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
