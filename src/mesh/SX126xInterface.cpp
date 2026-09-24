@@ -149,6 +149,12 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         lora.setPaRampTime(SX126X_PA_RAMP_US);
     }
 #endif
+    // Keep the oscillator running in standby: leaving STDBY_RC restarts a DIO3 TCXO, and BUSY stays high for its
+    // 5 ms start-up on every SET_RX, SET_CAD and SET_TX. Also sets the RX/TX fallback mode to STDBY_XOSC.
+    if (res == RADIOLIB_ERR_NONE && irqPolledOverUsb()) {
+        const int16_t xoscErr = lora.setStandbyXOSC(true);
+        LOG_DEBUG("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
+    }
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
