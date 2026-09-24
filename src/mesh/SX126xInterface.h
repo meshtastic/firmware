@@ -103,6 +103,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
+    /** RX was armed continuous and nothing has put the chip into standby since, so it is still listening */
+    bool rxArmedContinuous = false;
+
+    bool resumeRunningReceive() override;
+
     /** How long the last trySetStandby() spent in each part, in ms, for the channel scan's step trace */
     struct StandbySteps {
         uint32_t notifyMs, cmdMs, detachMs;

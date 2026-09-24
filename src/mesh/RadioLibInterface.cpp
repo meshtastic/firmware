@@ -844,7 +844,8 @@ void RadioLibInterface::rearmReceive()
     // The flag is spent here, so every later call takes the full path - including RX_DONE after a
     // handoff, whose bounded RX has already dropped the chip to standby.
     if (!cadHandedToRx) {
-        startReceive();
+        if (!resumeRunningReceive())
+            startReceive();
         return;
     }
     cadHandedToRx = false;

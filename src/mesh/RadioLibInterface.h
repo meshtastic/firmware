@@ -280,6 +280,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void rearmReceive();
 
+    /** Resume an RX the chip is still running instead of restarting it; false if it is not known to be running. */
+    virtual bool resumeRunningReceive() { return false; }
+
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
      *  with rearmReceive() before anything else touches the radio. */
