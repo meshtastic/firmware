@@ -377,6 +377,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     const char *deafFor = nullptr;
     void noteDeafFrom(const char *what);
 
+    /** How long the last startReceive() spent in each part, in ms, for the post-TX re-arm trace */
+    struct RxArmSteps {
+        uint32_t standbyMs, standbyCmdMs, startRxMs, armMs;
+    } lastRxArmSteps = {0, 0, 0, 0};
+
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
     /** Do any hardware setup needed on entry into send configuration for the radio.

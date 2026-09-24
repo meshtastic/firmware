@@ -414,12 +414,23 @@ void RadioLibInterface::onNotify(uint32_t notification)
         if (irqPolledOverUsb() && sendingPacket && !txDoneByCheck)
             LOG_TRACE("TX done seen by poll after %u ms", (unsigned)(Time::getMillis() - lastTxStart));
         noteDeafFrom("tx");
-        handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
-        // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
-        // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
-        // but it keeps the post-TX listen window on the channel we are about to transmit on.
-        (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
-        startReceive();
+        {
+            const uint32_t t0 = millis();
+            handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
+            const uint32_t tComplete = millis();
+            // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
+            // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
+            // but it keeps the post-TX listen window on the channel we are about to transmit on.
+            (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
+            const uint32_t tHooks = millis();
+            lastRxArmSteps = {0, 0, 0, 0};
+            startReceive();
+            if (irqPolledOverUsb())
+                LOG_TRACE("Post-TX re-arm: complete %u, hooks %u, standby %u (cmd %u), rx start %u, arm %u ms",
+                          (unsigned)(tComplete - t0), (unsigned)(tHooks - tComplete), (unsigned)lastRxArmSteps.standbyMs,
+                          (unsigned)lastRxArmSteps.standbyCmdMs, (unsigned)lastRxArmSteps.startRxMs,
+                          (unsigned)lastRxArmSteps.armMs);
+        }
         setTransmitDelay();
         break;
     case ISR_RX:
