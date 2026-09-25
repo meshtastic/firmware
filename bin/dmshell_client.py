@@ -1201,7 +1201,13 @@ def format_peer_log_record(record) -> str:
     level = PEER_LOG_LEVEL_NAMES.get(record.level, str(record.level))
     source = record.source or "-"
     message = record.message.rstrip("\n")
-    return f"{time.strftime('%Y-%m-%d %H:%M:%S')} node_time={record.time} {level:5} {source} {message}\n"
+    # Milliseconds, because correlating a radio event against the other nodes' logs needs better than
+    # the whole second strftime gives: a preamble is 10 ms and a busy scan's deaf window is about 13.
+    # This is the arrival time on this host, so it carries the node's API and serial latency with it;
+    # LogRecord.time is only seconds, so the node cannot tell us better than this today.
+    now = time.time()
+    stamp = f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))}.{int((now % 1) * 1000):03d}"
+    return f"{stamp} node_time={record.time} {level:5} {source} {message}\n"
 
 
 def log_ack_latency(state: SessionState) -> None:
