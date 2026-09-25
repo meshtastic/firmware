@@ -508,8 +508,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (Serial)       // Another check in case of disabled default serial, does nothing bad
         Serial.end(); // This may cause crashes as debug messages continue to flow.
 
-        // This causes troubles with waking up on nrf52 (on pro-micro in particular):
-        // we have no Serial1 in use on nrf52, check Serial and GPS modules.
+    // This causes troubles with waking up on nrf52 (on pro-micro in particular):
+    // we have no Serial1 in use on nrf52, check Serial and GPS modules.
 #ifdef PIN_SERIAL1_RX
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();

@@ -790,7 +790,7 @@ This mapping of emoji to control characters is fairly arbitrary. Selection was i
 | `0x05`     | 👋                                             |
 | `0x06`     | ☀                                              |
 | ~~`0x07`~~ | (bell char, unused)                            |
-| `0x08`     | 🌧                                             |
+| `0x08`     | 🌧                                              |
 | `0x09`     | ☁                                              |
 | ~~`0x0A`~~ | (line feed, unused)                            |
 | `0x0B`     | ♥                                              |

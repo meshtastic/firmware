@@ -47,8 +47,7 @@ bool BMA423Sensor::init()
 
 #ifdef BMA4XX_INT
     pinMode(BMA4XX_INT, INPUT);
-    attachInterrupt(
-        BMA4XX_INT, [] { BMA_IRQ = true; }, RISING);
+    attachInterrupt(BMA4XX_INT, [] { BMA_IRQ = true; }, RISING);
 #endif
 
     LOG_DEBUG("BMA423 init ok");

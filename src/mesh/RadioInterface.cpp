@@ -100,10 +100,17 @@ Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
-    {                                                                                                                            \
-        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
-            wide_lora, &profile_ptr, default_preset, override_slot, #name                                                        \
-    }
+    {meshtastic_Config_LoRaConfig_RegionCode_##name,                                                                             \
+     freq_start,                                                                                                                 \
+     freq_end,                                                                                                                   \
+     duty_cycle,                                                                                                                 \
+     power_limit,                                                                                                                \
+     frequency_switching,                                                                                                        \
+     wide_lora,                                                                                                                  \
+     &profile_ptr,                                                                                                               \
+     default_preset,                                                                                                             \
+     override_slot,                                                                                                              \
+     #name}
 
 const RegionInfo regions[] = {
     /*
