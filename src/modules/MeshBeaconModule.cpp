@@ -383,12 +383,8 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
                 t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
             }
         }
-        // Before the preset check, so the name hashed below is this target's. Range only:
-        // Role_DISABLED is the zero value, so an unprovisioned slot would read as disabled.
-        if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
-            clearingInvalid("target", i, "channel_index", t.channel_index);
-            t.has_channel_index = false;
-        }
+        // channel_index is kept whatever its value: clearing it would move the target onto the primary,
+        // and resolveBeaconChannel() skips an index the table does not hold.
         // As for the offer: only a value that is no preset at all, never one this region cannot run.
         if (t.has_preset && !isKnownModemPreset(t.preset)) {
             clearingInvalid("target", i, "preset", t.preset);

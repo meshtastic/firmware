@@ -435,21 +435,28 @@ static void test_adminValidation_targetInvalidPresetForRegion_keepsPresetAndChan
 }
 
 /**
- * Verify a channel_index beyond the channel-table capacity is cleared on write.
- * Important so the broadcaster never indexes out of bounds when resolving a target channel.
+ * A channel_index past the channel table is kept as written. Regression guarded: it was cleared on
+ * write, and a target with no index transmits on the primary, so a bad index was redirected onto a
+ * channel nobody named.
  */
-static void test_adminValidation_targetChannelIndexOutOfRange_isCleared(void)
+static void test_adminValidation_targetChannelIndexOutOfRange_isKeptAsWritten(void)
 {
     resetConfig();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets_count = 2;
     bcfg.broadcast_targets[0].has_channel_index = true;
     bcfg.broadcast_targets[0].channel_index = MAX_NUM_CHANNELS; // one past the last valid slot
+    bcfg.broadcast_targets[1].has_channel_index = true;
+    bcfg.broadcast_targets[1].channel_index = 50;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index);
+    for (int t = 0; t < 2; t++)
+        TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[t].has_channel_index,
+                                 "an out-of-range index is kept, so the target is skipped rather than moved to the primary");
+    TEST_ASSERT_EQUAL_UINT32(MAX_NUM_CHANNELS, moduleConfig.mesh_beacon.broadcast_targets[0].channel_index);
+    TEST_ASSERT_EQUAL_UINT32(50, moduleConfig.mesh_beacon.broadcast_targets[1].channel_index);
 }
 
 /**
@@ -1765,6 +1772,44 @@ static void test_broadcaster_targetChannelIndex_disabledSlotIsSkipped(void)
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
                                      "a disabled slot must take its target quiet, not borrow the primary");
+}
+
+/**
+ * A target whose channel_index is past the channel table is skipped at send, like a DISABLED slot,
+ * while a target on a held channel beside it still goes out. Neither index 8 nor 50 borrows the primary.
+ */
+static void test_broadcaster_targetChannelIndexPastTheTable_isSkippedNotSentOnPrimary(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAB, 0x02, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "Held", homePsk, sizeof(homePsk));
+
+    for (const uint32_t bad : {(uint32_t)MAX_NUM_CHANNELS, 50u}) {
+        mockRouter->sentPackets.clear();
+        MeshBeaconModule::clearAllTargetRadioSettings();
+        moduleConfig.has_mesh_beacon = true;
+        moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+        moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+        moduleConfig.mesh_beacon.broadcast_targets_count = 2;
+        moduleConfig.mesh_beacon.broadcast_targets[0] = meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero;
+        moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+        moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = bad;
+        moduleConfig.mesh_beacon.broadcast_targets[1] = meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_init_zero;
+        moduleConfig.mesh_beacon.broadcast_targets[1].has_channel_index = true;
+        moduleConfig.mesh_beacon.broadcast_targets[1].channel_index = 1;
+
+        MeshBeaconBroadcastModuleTestShim bcast;
+        bcast.sendBeacon();
+
+        char msg[96];
+        snprintf(msg, sizeof(msg), "index %u: only the held target goes out", (unsigned)bad);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), msg);
+        snprintf(msg, sizeof(msg), "index %u: the sent beacon is the held target's, not the primary's", (unsigned)bad);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets[0].channel, msg);
+    }
+    MeshBeaconModule::clearAllTargetRadioSettings();
 }
 
 /**
@@ -5154,7 +5199,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetUnknownRegion_isCleared);
     RUN_TEST(test_adminValidation_targetInvalidPresetForRegion_keepsPresetAndChannel);
     RUN_TEST(test_adminValidation_targetValidPresetForRegion_isPreserved);
-    RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isKeptAsWritten);
     RUN_TEST(test_adminValidation_targetChannelIndexInRange_isPreserved);
     RUN_TEST(test_adminValidation_targetFrequencySlotOutOfRangeExplicitPair_isCleared);
     RUN_TEST(test_adminValidation_targetFrequencySlotOutOfRangeInheritedRegion_isKept);
@@ -5223,6 +5268,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_targetChannelIndex_usesTableSlot);
     RUN_TEST(test_broadcaster_targetChannelIndex_blankSecondaryIsSent);
     RUN_TEST(test_broadcaster_targetChannelIndex_disabledSlotIsSkipped);
+    RUN_TEST(test_broadcaster_targetChannelIndexPastTheTable_isSkippedNotSentOnPrimary);
     RUN_TEST(test_broadcaster_duplicateTargets_dedupedToOnePacket);
     RUN_TEST(test_broadcaster_distinctTargets_bothSent);
 
