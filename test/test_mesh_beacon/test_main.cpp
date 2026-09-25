@@ -4351,6 +4351,28 @@ static const uint8_t kByValuePsk[16] = {0xB1, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
 static const uint8_t kHomePsk[16] = {0xA1, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                                      0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
 
+// An admin message the node pushed to the phone, with the packet's addressing.
+struct PushedAdmin {
+    NodeNum from;
+    NodeNum to;
+    meshtastic_AdminMessage msg;
+};
+
+// Everything the node pushed to the phone on the admin port, decoded; drains the queue.
+static std::vector<PushedAdmin> drainAdminToPhone()
+{
+    std::vector<PushedAdmin> out;
+    meshtastic_MeshPacket *p;
+    while ((p = mockSvc->getForPhone()) != nullptr) {
+        PushedAdmin a = {p->from, p->to, meshtastic_AdminMessage_init_zero};
+        if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP &&
+            pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_AdminMessage_msg, &a.msg))
+            out.push_back(a);
+        mockSvc->releaseToPool(p);
+    }
+    return out;
+}
+
 /**
  * The offered channel is placed too, so the node can join the mesh it advertises.
  */
@@ -4425,6 +4447,7 @@ static void test_byValue_fullTable_offerIsKeptButWithheld(void)
 {
     resetConfig();
     fillChannelTable();
+    drainAdminToPhone();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_offer_channel = true;
@@ -4445,6 +4468,7 @@ static void test_byValue_fullTable_offerIsKeptButWithheld(void)
     TEST_ASSERT_TRUE(out.has_broadcast_offer_preset);
     TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::offerIsPlaceable(out), "withheld while its channel has no slot");
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_SECONDARY, channels.getByIndex(7).role, "no live channel was evicted");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(0, drainAdminToPhone().size(), "no slot was claimed, so nothing is pushed");
 }
 
 /**
@@ -4457,6 +4481,7 @@ static void test_byValue_licensedNode_refusesEncryptedOffer(void)
     resetConfig();
     installTestPrimaryChannel("Home", nullptr, 0);
     owner.is_licensed = true;
+    drainAdminToPhone();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.has_broadcast_offer_channel = true;
@@ -4471,6 +4496,7 @@ static void test_byValue_licensedNode_refusesEncryptedOffer(void)
                                         "a licensed node holds no encrypted channel");
     TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel, "the offer is kept as written");
     TEST_ASSERT_FALSE(MeshBeaconModule::offerIsPlaceable(moduleConfig.mesh_beacon));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(0, drainAdminToPhone().size(), "a refused offer claims no slot, so nothing is pushed");
     owner.is_licensed = false;
 }
 
@@ -4879,21 +4905,6 @@ static void test_sidecar_evictedEntryStillQueued_isDroppedNotSentOnHome(void)
     MeshBeaconModule::clearAllTargetRadioSettings();
 }
 
-// The admin messages the node pushed to the phone, decoded; drains the queue.
-static std::vector<meshtastic_AdminMessage> drainAdminToPhone()
-{
-    std::vector<meshtastic_AdminMessage> out;
-    meshtastic_MeshPacket *p;
-    while ((p = mockSvc->getForPhone()) != nullptr) {
-        meshtastic_AdminMessage a = meshtastic_AdminMessage_init_zero;
-        if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP &&
-            pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_AdminMessage_msg, &a))
-            out.push_back(a);
-        mockSvc->releaseToPool(p);
-    }
-    return out;
-}
-
 /**
  * A local write whose offer claims a slot tells the phone about it with one get_channel_response.
  * Regression guarded: channels reach a phone only in the connect-time dump, so the writer showed a
@@ -4913,13 +4924,17 @@ static void test_byValue_localClaim_pushesTheClaimedChannelToThePhone(void)
 
     const int16_t placed = channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk));
     TEST_ASSERT_GREATER_THAN_INT16(0, placed);
-    const std::vector<meshtastic_AdminMessage> pushed = drainAdminToPhone();
+    const std::vector<PushedAdmin> pushed = drainAdminToPhone();
     TEST_ASSERT_EQUAL_UINT_MESSAGE(1, pushed.size(), "exactly one message for the one claimed slot");
-    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_get_channel_response_tag, pushed[0].which_payload_variant);
-    TEST_ASSERT_EQUAL_INT(placed, pushed[0].get_channel_response.index);
-    TEST_ASSERT_EQUAL_STRING("Offered", pushed[0].get_channel_response.settings.name);
-    TEST_ASSERT_EQUAL_UINT(sizeof(kByValuePsk), pushed[0].get_channel_response.settings.psk.size);
-    TEST_ASSERT_EQUAL_MEMORY(kByValuePsk, pushed[0].get_channel_response.settings.psk.bytes, sizeof(kByValuePsk));
+    // Android and Apple apply an unrequested get_channel_response only when it comes from the node itself.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(nodeDB->getNodeNum(), pushed[0].from, "from must be the node's own number");
+    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), pushed[0].to);
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_get_channel_response_tag, pushed[0].msg.which_payload_variant);
+    TEST_ASSERT_EQUAL_INT(placed, pushed[0].msg.get_channel_response.index);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_SECONDARY, pushed[0].msg.get_channel_response.role);
+    TEST_ASSERT_EQUAL_STRING("Offered", pushed[0].msg.get_channel_response.settings.name);
+    TEST_ASSERT_EQUAL_UINT(sizeof(kByValuePsk), pushed[0].msg.get_channel_response.settings.psk.size);
+    TEST_ASSERT_EQUAL_MEMORY(kByValuePsk, pushed[0].msg.get_channel_response.settings.psk.bytes, sizeof(kByValuePsk));
 }
 
 /**
@@ -4958,6 +4973,120 @@ static void test_byValue_remoteClaim_pushesNothingToTheLocalPhone(void)
 
     TEST_ASSERT_GREATER_THAN_INT16(0, channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk)));
     TEST_ASSERT_EQUAL_UINT(0, drainAdminToPhone().size());
+}
+
+/**
+ * Only the offer can claim a slot: targets name channels the node already holds, by index. A node with
+ * seven of eight slots in use, written four targets on four of them plus a new offer, claims the last
+ * slot for the offer and pushes that one channel, and nothing for the targets.
+ */
+static void test_byValue_sevenSlotsInUse_fourTargetsAndAnOffer_pushOnlyTheOfferSlot(void)
+{
+    resetConfig();
+    fillChannelTable();
+    channelFile.channels[7] = meshtastic_Channel_init_zero; // one free slot, the last
+    channelFile.channels[7].index = 7;
+    channels.onConfigChanged();
+    drainAdminToPhone();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    static const meshtastic_Config_LoRaConfig_ModemPreset presets[4] = {
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+        meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST};
+    bcfg.broadcast_targets_count = 4;
+    for (uint8_t t = 0; t < 4; t++) {
+        bcfg.broadcast_targets[t].has_channel_index = true;
+        bcfg.broadcast_targets[t].channel_index = t + 1; // Full1..Full4, all already held
+        bcfg.broadcast_targets[t].has_preset = true;
+        bcfg.broadcast_targets[t].preset = presets[t];
+    }
+    offerChannelByValue(bcfg, "Offered", kByValuePsk, sizeof(kByValuePsk));
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(4, moduleConfig.mesh_beacon.broadcast_targets_count, "all four targets are kept");
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(7, channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk)),
+                                    "the offer takes the one free slot");
+    for (uint8_t i = 1; i < 7; i++) {
+        char name[12];
+        snprintf(name, sizeof(name), "Full%u", i);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(name, channels.getByIndex(i).settings.name, "no held channel is touched");
+    }
+    const std::vector<PushedAdmin> pushed = drainAdminToPhone();
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, pushed.size(), "one push, for the offer slot; targets claim nothing");
+    TEST_ASSERT_EQUAL_INT(7, pushed[0].msg.get_channel_response.index);
+    TEST_ASSERT_EQUAL_STRING("Offered", pushed[0].msg.get_channel_response.settings.name);
+}
+
+/**
+ * Writing the same offer twice claims its slot once: the second write finds the channel held and
+ * pushes nothing.
+ */
+static void test_byValue_sameOfferWrittenTwice_pushesOnlyOnce(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    drainAdminToPhone();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    offerChannelByValue(bcfg, "Offered", kByValuePsk, sizeof(kByValuePsk));
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, drainAdminToPhone().size(), "the first write claims a slot and pushes it");
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(0, drainAdminToPhone().size(), "the second write finds it held");
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(2).role);
+}
+
+/**
+ * An empty-PSK offer named like a held cleartext channel is that channel once its PSK is spelled {0}, so
+ * it claims nothing and pushes nothing. Left as size 0 it would miss the match and claim a second slot.
+ */
+static void test_byValue_emptyPskOfferMatchingHeldCleartext_claimsAndPushesNothing(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    static const uint8_t off[1] = {0};
+    installTestSecondaryChannel(1, "Open", off, sizeof(off));
+    drainAdminToPhone();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "Open", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_EQUAL_INT16(1, channels.findByIdentity("Open", off, sizeof(off)));
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_DISABLED, channels.getByIndex(2).role, "no second slot is claimed");
+    TEST_ASSERT_EQUAL_UINT(0, drainAdminToPhone().size());
+    TEST_ASSERT_FALSE_MESSAGE(testAdmin->savedSegments() & SEGMENT_CHANNELS, "nothing was written");
+}
+
+/**
+ * The push does not depend on an edit transaction. The cases above write inside one (deferSaves opens
+ * it); a plain local write, saved at once, pushes the claimed slot the same way.
+ */
+static void test_byValue_localClaimOutsideAnEditTransaction_isPushedToo(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    drainAdminToPhone();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    offerChannelByValue(bcfg, "Offered", kByValuePsk, sizeof(kByValuePsk));
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    const int16_t placed = channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk));
+    TEST_ASSERT_GREATER_THAN_INT16(0, placed);
+    const std::vector<PushedAdmin> pushed = drainAdminToPhone();
+    TEST_ASSERT_EQUAL_UINT(1, pushed.size());
+    TEST_ASSERT_EQUAL_INT(placed, pushed[0].msg.get_channel_response.index);
 }
 
 // ===========================================================================
@@ -5198,6 +5327,10 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_localClaim_pushesTheClaimedChannelToThePhone);
     RUN_TEST(test_byValue_heldChannel_pushesNothing);
     RUN_TEST(test_byValue_remoteClaim_pushesNothingToTheLocalPhone);
+    RUN_TEST(test_byValue_sevenSlotsInUse_fourTargetsAndAnOffer_pushOnlyTheOfferSlot);
+    RUN_TEST(test_byValue_sameOfferWrittenTwice_pushesOnlyOnce);
+    RUN_TEST(test_byValue_emptyPskOfferMatchingHeldCleartext_claimsAndPushesNothing);
+    RUN_TEST(test_byValue_localClaimOutsideAnEditTransaction_isPushedToo);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);
