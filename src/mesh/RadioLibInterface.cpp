@@ -65,6 +65,9 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 
 void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 {
+#ifdef ARCH_PORTDUINO
+    lastIsrMillis = millis();
+#endif
     instance->disableInterrupt();
 
     BaseType_t xHigherPriorityTaskWoken;
@@ -89,6 +92,10 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 /** Our ISR code currently needs this to find our active instance
  */
 RadioLibInterface *RadioLibInterface::instance;
+
+#ifdef ARCH_PORTDUINO
+volatile uint32_t RadioLibInterface::lastIsrMillis;
+#endif
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
@@ -685,6 +692,10 @@ void RadioLibInterface::handleReceiveInterrupt()
     // Condition?
     const bool wasCadHandoff = cadHandoffRxStart != 0;
     cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
+#ifdef ARCH_PORTDUINO
+    const uint32_t isrAt = lastIsrMillis;
+    const uint32_t dispatchMs = millis() - isrAt;
+#endif
 
     if (!isReceiving) {
         LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
@@ -789,6 +800,15 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->encrypted.size = payloadLen;
 
             printPacket("Lora RX", mp);
+#ifdef ARCH_PORTDUINO
+            // The poll saw RX_DONE at most one poll interval after the chip raised it. Reached from pollMissedIrqs()
+            // instead, the interrupt stamp is an older one and the numbers are meaningless.
+            if (irqPolledOverUsb()) {
+                const uint32_t sinceIsrMs = millis() - isrAt;
+                LOG_TRACE("RX_DONE seen %u ms before Lora RX: dispatch %u, readout %u", sinceIsrMs, dispatchMs,
+                          sinceIsrMs - dispatchMs);
+            }
+#endif
 
 #ifdef LED_LORA
             loraRxPacketObservable.notifyObservers(mp->from);

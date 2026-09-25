@@ -111,6 +111,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     static void isrTxLevel0(), isrLevel0Common(PendingISR code);
 
+#ifdef ARCH_PORTDUINO
+    // millis() at the last radio interrupt, for the RX latency trace on a CH341 host (where the "ISR" is libch341's
+    // pin poll thread)
+    static volatile uint32_t lastIsrMillis;
+#endif
+
     ModemType_t modemType = RADIOLIB_MODEM_LORA;
     DataRate_t getDataRate() const { return {.lora = {.spreadingFactor = sf, .bandwidth = bw, .codingRate = cr}}; }
     PacketConfig_t getPacketConfig() const

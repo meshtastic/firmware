@@ -155,6 +155,12 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         const int16_t xoscErr = lora.setStandbyXOSC(true);
         LOG_DEBUG("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
     }
+#ifdef ARCH_PORTDUINO
+    if (irqPolledOverUsb()) {
+        const char *pollUs = getenv("PINEDIO_POLL_INTERVAL_US");
+        LOG_INFO("CH341 pin poll interval %s us", pollUs && *pollUs ? pollUs : "33000 (default)");
+    }
+#endif
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)

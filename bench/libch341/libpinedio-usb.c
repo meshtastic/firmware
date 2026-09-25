@@ -12,6 +12,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -202,6 +203,28 @@ static uint8_t reverse_byte(uint8_t x) {
   return x;
 }
 
+#define PIN_POLL_INTERVAL_DEFAULT_US ((1000 / 30) * 1000L)
+
+/* Bench only: PINEDIO_POLL_INTERVAL_US in the environment sets the sleep between pin polls, 0 to 1000000
+ * us, so one binary can run at the stock 30 Hz or poll faster. The interrupt latency is up to one
+ * interval plus one USB read. Read once, in pinedio_init(). */
+static long pin_poll_interval_us = PIN_POLL_INTERVAL_DEFAULT_US;
+
+static void pinedio_read_poll_interval(void) {
+  const char *env = getenv("PINEDIO_POLL_INTERVAL_US");
+  if (env == NULL || *env == '\0')
+    return;
+  char *end;
+  errno = 0;
+  long us = strtol(env, &end, 10);
+  if (errno != 0 || *end != '\0' || us < 0 || us > 1000000L) {
+    fprintf(stderr, "libch341: ignoring PINEDIO_POLL_INTERVAL_US=%s, keeping %ld us\n", env, pin_poll_interval_us);
+    return;
+  }
+  pin_poll_interval_us = us;
+  fprintf(stderr, "libch341: pin poll interval %ld us\n", pin_poll_interval_us);
+}
+
 int32_t pinedio_init(struct pinedio_inst *inst, void *driver) {
   int32_t ret;
   inst->int_running_cnt = 0;
@@ -211,6 +234,7 @@ int32_t pinedio_init(struct pinedio_inst *inst, void *driver) {
   }
 
   inst->options[PINEDIO_OPTION_AUTO_CS] = 1;
+  pinedio_read_poll_interval();
 
   ret = pthread_mutex_init(&inst->usb_access_mutex, NULL);
   if (ret != 0) {
@@ -541,8 +565,6 @@ int32_t pinedio_get_irq_state(struct pinedio_inst *inst, uint32_t pin) {
  * the handle cannot answer that. */
 static __thread bool this_is_pin_poll_thread = false;
 
-#define PIN_POLL_INTERVAL_MS (1000 / 30)
-
 /* Sleep one poll interval, or less if this thread is told to stop. A plain sleep made every detach of
  * the last pin wait out the rest of it in pthread_join(): 0-33 ms, on a path the radio calls before
  * every channel scan. Returns true if the thread should exit. */
@@ -553,7 +575,7 @@ static bool pinedio_pin_poll_wait(struct pinedio_inst *inst) {
 #else
   clock_gettime(CLOCK_REALTIME, &deadline);
 #endif
-  deadline.tv_nsec += PIN_POLL_INTERVAL_MS * 1000000L;
+  deadline.tv_nsec += pin_poll_interval_us * 1000L;
   if (deadline.tv_nsec >= 1000000000L) {
     deadline.tv_sec++;
     deadline.tv_nsec -= 1000000000L;
