@@ -1719,7 +1719,7 @@ void test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only(void)
     TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&foreign)));
 
     // Same undecodable frame claiming to be from us must still be dropped: OPAQUE_RELAY_ONLY would
-    // reach perhapsGenerateImplicitAckForOwnOverheard, which acts on header bytes alone.
+    // reach perhapsAckOurRelayedPacket(), which matches on the header and our own ciphertext.
     meshtastic_MeshPacket spoofed = foreign;
     spoofed.from = LOCAL_NODE;
     TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&spoofed)));

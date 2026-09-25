@@ -591,6 +591,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
+        if (isFromUs(p))
+            noteWireForm(p); // for a PKI frame, the bytes an overheard relay must carry
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt && p_decoded) {
@@ -1749,10 +1751,10 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     if (authVerdict == RoutingAuthVerdict::OPAQUE_RELAY_ONLY) {
         // A packet we originated but cannot decrypt (a PKI DM we sent, overheard being rebroadcast)
         // is opaque to us and would otherwise skip shouldFilterReceived entirely, so the implicit
-        // ACK that marks a DM "Delivered to mesh" never fires. The ACK is header-only (from/id), so
-        // generate it here from the still-encrypted packet before opaque relay.
+        // ACK that marks a DM "Delivered to mesh" never fires. It needs no decode - header plus the
+        // ciphertext we sent - so generate it here from the still-encrypted packet before opaque relay.
         if (isFromUs(p))
-            perhapsGenerateImplicitAckForOwnOverheard(p);
+            perhapsAckOurRelayedPacket(p);
         relayOpaquePacket(p);
         packetPool.release(p);
         return;

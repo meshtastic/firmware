@@ -268,7 +268,7 @@ class ReliableRouterTestShim : public ReliableRouter
         ReliableRouter::sniffReceived(p, routing);
     }
 
-    void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsGenerateImplicitAckForOwnOverheard(p); }
+    void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsAckOurRelayedPacket(p); }
 
     void clearPendingForTest()
     {
@@ -320,6 +320,19 @@ static NextHopRouterTestShim *shim = nullptr;
 static ReliableRouterTestShim *reliableShim = nullptr;
 static CaptureRadioInterface *nextHopRadio = nullptr;
 static CaptureRadioInterface *reliableRadio = nullptr;
+
+/// Send `p` through the router for real - send() encodes it and records the frame as the wire form a
+/// relay of ours must carry - and return the frame as it left the radio.
+static meshtastic_MeshPacket seedViaSend(const meshtastic_MeshPacket &p)
+{
+    auto *copy = packetPool.allocCopy(p);
+    TEST_ASSERT_NOT_NULL(copy);
+    const size_t before = reliableRadio->sentPackets.size();
+    TEST_ASSERT_EQUAL_INT(ERRNO_OK, reliableShim->send(copy));
+    TEST_ASSERT_EQUAL_MESSAGE(before + 1, reliableRadio->sentPackets.size(), "send() must hand exactly one frame to the radio");
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, reliableRadio->sentPackets.back().which_payload_variant);
+    return reliableRadio->sentPackets.back();
+}
 static MockRoutingModule *mockRoutingModule = nullptr;
 static std::unique_ptr<ScopedAirTimeFixture> airTimeFixture;
 static PacketId nextBehaviorPacketId = 0x70000000;
@@ -849,18 +862,10 @@ void test_reliableAckStopsNormalPendingTransmission(void)
 void test_implicit_ack_for_opaque_own_packet(void)
 {
     auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
-    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    auto overheard = seedViaSend(original); // the copy as a neighbour repeats it: our bytes, still encrypted
+    overheard.hop_limit--;
     TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
     mockRoutingModule->ackNaks.clear();
-
-    // The overheard copy as it actually arrives: still encrypted, nothing decoded.
-    meshtastic_MeshPacket overheard = meshtastic_MeshPacket_init_zero;
-    overheard.from = kLocalNode;
-    overheard.to = kRemoteNode;
-    overheard.id = original.id;
-    overheard.channel = 0;
-    overheard.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    overheard.encrypted.size = 32;
 
     reliableShim->implicitAckForTest(&overheard);
 
@@ -869,6 +874,29 @@ void test_implicit_ack_for_opaque_own_packet(void)
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, std::get<0>(ack));
     TEST_ASSERT_EQUAL_UINT32(kLocalNode, std::get<1>(ack)); // addressed to us -> reaches the phone
     TEST_ASSERT_EQUAL_UINT32(original.id, std::get<2>(ack));
+
+    reliableShim->clearPendingForTest();
+}
+
+// A retry is the pending copy sent again through Router::send(), so it must be encoded again: the same
+// channel hash in the header byte as the first frame, not the index the copy was queued with. A retry
+// carrying the index is undecodable to every neighbour.
+void test_retry_frame_carries_the_same_channel_hash_as_the_first(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    const auto first = seedViaSend(original);
+    TEST_ASSERT_NOT_EQUAL(1, first.channel); // fixture: the hash must differ from the index for this to prove anything
+
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    reliableShim->runDueRetries();
+
+    TEST_ASSERT_EQUAL_UINT32(2, reliableRadio->sentPackets.size());
+    const auto &retry = reliableRadio->sentPackets.back();
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, retry.which_payload_variant);
+    TEST_ASSERT_EQUAL_UINT8(first.channel, retry.channel);
+    TEST_ASSERT_EQUAL_UINT32(first.encrypted.size, retry.encrypted.size);
+    TEST_ASSERT_EQUAL_MEMORY(first.encrypted.bytes, retry.encrypted.bytes, first.encrypted.size); // same key, same nonce
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
 
     reliableShim->clearPendingForTest();
 }
@@ -1144,6 +1172,7 @@ void setup()
 
     printf("\n=== pending retransmission bookkeeping ===\n");
     RUN_TEST(test_implicit_ack_for_opaque_own_packet);
+    RUN_TEST(test_retry_frame_carries_the_same_channel_hash_as_the_first);
     RUN_TEST(test_implicit_ack_ignores_foreign_pkt);
     RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
     RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
