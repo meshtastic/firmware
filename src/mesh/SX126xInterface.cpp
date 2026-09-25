@@ -149,6 +149,25 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         lora.setPaRampTime(SX126X_PA_RAMP_US);
     }
 #endif
+#ifdef ARCH_PORTDUINO
+    // Bench: MESHTASTIC_TCXO_DELAY_US reprograms the DIO3 TCXO start-up, which begin() leaves at RadioLib's 5000 us.
+    // A clear CAD drops the chip to STDBY_RC, so every TX after one waits this long before the PA ramps.
+    if (res == RADIOLIB_ERR_NONE && irqPolledOverUsb() && tcxoVoltage > 0) {
+        const char *delayEnv = getenv("MESHTASTIC_TCXO_DELAY_US");
+        if (delayEnv && *delayEnv) {
+            char *end = nullptr;
+            const long delayUs = strtol(delayEnv, &end, 10);
+            if (*end != '\0' || delayUs < 0 || delayUs > 10000) {
+                LOG_WARN("Ignoring MESHTASTIC_TCXO_DELAY_US=%s, keeping 5000 us", delayEnv);
+            } else {
+                const int16_t tcxoErr = lora.setTCXO(tcxoVoltage, (uint32_t)delayUs);
+                LOG_INFO("TCXO start-up delay %ld us %s%d", delayUs, radioLibErr, tcxoErr);
+            }
+        } else {
+            LOG_INFO("TCXO start-up delay 5000 us (default)");
+        }
+    }
+#endif
     // Keep the oscillator running in standby: leaving STDBY_RC restarts a DIO3 TCXO, and BUSY stays high for its
     // 5 ms start-up on every SET_RX, SET_CAD and SET_TX. Also sets the RX/TX fallback mode to STDBY_XOSC.
     if (res == RADIOLIB_ERR_NONE && irqPolledOverUsb()) {
