@@ -32,11 +32,19 @@ static bool channelSlotUsable(const meshtastic_Channel &slot)
 static bool radioSwitched = false;
 static uint32_t switchedForId = 0;
 
+// The interval runOnce() schedules on: configured, else the default, never below the minimum.
+static uint32_t beaconIntervalMs()
+{
+    const uint32_t secs = Default::getConfiguredOrDefault(moduleConfig.mesh_beacon.broadcast_interval_secs,
+                                                          default_mesh_beacon_min_broadcast_interval_secs);
+    return Default::getConfiguredOrMinimumValue(secs, default_mesh_beacon_min_broadcast_interval_secs) * 1000;
+}
+
 // A beacon still queued a broadcast interval after it was armed describes a mesh that has moved on,
 // and the next cycle is due. Expire it so it cannot transmit, and so it frees its table slot.
 static bool targetRadioSettingsStale(const MeshBeaconModule_TargetRadioSettings &entry)
 {
-    return entry.idCount && Throttle::hasElapsed(entry.armedAtMs, default_mesh_beacon_min_broadcast_interval_secs * 1000UL);
+    return entry.idCount && Throttle::hasElapsed(entry.armedAtMs, beaconIntervalMs());
 }
 
 // The config this entry transmits on, right now. An inherited region is resolved here rather than
@@ -224,8 +232,10 @@ static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, bool &wro
     const uint8_t pskLen = (uint8_t)id.psk.size;
     if (channels.findByIdentity(id.name, id.psk.bytes, pskLen, id.use_aead) >= 0)
         return true;
-    // Licensed operation forbids encryption, so this node may not hold the key it would advertise.
-    if (owner.is_licensed && pskLen > 0)
+    // Licensed operation forbids encryption, so this node may not hold the key it would advertise. A 1-byte {0}
+    // is the explicit "encryption off" spelling, as Channels' canonicalPsk() reads it.
+    const bool encrypted = pskLen > 1 || (pskLen == 1 && id.psk.bytes[0] != 0);
+    if (owner.is_licensed && encrypted)
         return false;
     const int16_t idx = channels.upsertIdentity(id.name, id.psk.bytes, pskLen, id.use_aead);
     if (idx < 0)
@@ -771,10 +781,12 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const int16_t offerChannelIndex =
         hasOfferChannel ? channels.findByIdentity(offerCh.name, offerCh.psk.bytes, (uint8_t)offerCh.psk.size, offerCh.use_aead)
                         : -1;
-    const auto offerPreset = bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : config.lora.modem_preset;
     const auto offerRegion = (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
                                  ? bcfg.broadcast_offer_region
                                  : config.lora.region;
+    // An unset preset is the offered region's default, the rule offerFrequencySlot() and receivers use.
+    const auto offerPreset =
+        bcfg.has_broadcast_offer_preset ? bcfg.broadcast_offer_preset : getRegion(offerRegion)->getDefaultPreset();
     const uint16_t offerSlot = (uint16_t)offerFrequencySlot(bcfg);
 
     // The slot the node is already on, resolved the same way a target's is, so the two compare.
@@ -878,7 +890,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
         // A target already on the offered mesh gains nothing from the offer. Gated on the offer
         // actually carrying a channel: without one it is an announcement, valid on any target.
-        const bool offerRedundant = hasOfferChannel && (int16_t)tgt.channelIndex == offerChannelIndex &&
+        // An offer always names a preset, so a target on custom modem params is never already on it.
+        const bool offerRedundant = hasOfferChannel && (int16_t)tgt.channelIndex == offerChannelIndex && tgt.usePreset &&
                                     offerPreset == tgt.preset && offerRegion == resolvedRegion && offerSlot == tgt.slot;
         if (offerRedundant)
             LOG_DEBUG("Beacon: target %d already runs the offered mesh, omit offer", ti);
@@ -974,10 +987,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
 int32_t MeshBeaconBroadcastModule::runOnce()
 {
     const auto &bcfg = moduleConfig.mesh_beacon;
-    const uint32_t intervalSecs =
-        Default::getConfiguredOrDefault(bcfg.broadcast_interval_secs, default_mesh_beacon_min_broadcast_interval_secs);
-    const uint32_t intervalMs =
-        Default::getConfiguredOrMinimumValue(intervalSecs, default_mesh_beacon_min_broadcast_interval_secs) * 1000;
+    const uint32_t intervalMs = beaconIntervalMs();
 
     if ((bcfg.flags & MESH_BEACON_FLAG_BROADCAST_ENABLED) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {

@@ -2094,6 +2094,29 @@ static void test_sidecar_entryQueuedPastItsInterval_dropsThePacket(void)
 }
 
 /**
+ * Staleness is one configured broadcast interval, the cycle runOnce() schedules, not the minimum.
+ * Regression guarded: with a two-hour interval, a beacon queued ninety minutes was dropped as stale
+ * while it still described the current cycle.
+ */
+static void test_sidecar_staleness_followsTheConfiguredInterval(void)
+{
+    resetConfig();
+    moduleConfig.mesh_beacon.broadcast_interval_secs = 2 * default_mesh_beacon_min_broadcast_interval_secs;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0401;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true, 1,
+                                                                  false, meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Slow"));
+
+    backdateArmedAt(pkt, kBeaconIntervalMs + 1000);
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt),
+                              "past the minimum but inside the configured interval, it is still this cycle's beacon");
+    backdateArmedAt(pkt, 2 * kBeaconIntervalMs + 1000);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt), "past the configured interval, it is stale");
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+}
+
+/**
  * The table is one cycle deep, so an entry a previous cycle never sent must not hold its slot
  * against the next one - otherwise the new target evicts a live entry and keys up on the home config.
  */
@@ -2237,10 +2260,12 @@ static void test_broadcaster_unplaceableOfferNoText_sendsNothing(void)
 }
 
 /**
- * An offer whose channel_index names a disabled slot advertises no channel, so it is an
- * announcement - the redundancy gate must not swallow it just because the index was set.
+ * An offer whose channel sits only in a DISABLED slot is withheld: deleting the channel is the operator's
+ * newer instruction, and the node would otherwise invite others onto a mesh it no longer holds. The beacon
+ * is more than its offer, so its text still goes out. Regression guarded: the offer used to be advertised
+ * from what the operator once wrote, whatever the table later said.
  */
-static void test_broadcaster_offerByValue_survivesADisabledSlot(void)
+static void test_broadcaster_offerOnADisabledSlot_isWithheldButTextIsSent(void)
 {
     resetConfig();
     static const uint8_t psk[16] = {0xEF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -2254,6 +2279,7 @@ static void test_broadcaster_offerByValue_survivesADisabledSlot(void)
     offerChannelFromSlot(moduleConfig.mesh_beacon, 1);
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = config.lora.modem_preset;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "still here", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     // The target rides the primary, so only the OFFER names the retired slot - which is the case
     // under test. A target naming it would itself be skipped, which is a different rule.
     moduleConfig.mesh_beacon.broadcast_targets_count = 1;
@@ -2263,12 +2289,12 @@ static void test_broadcaster_offerByValue_survivesADisabledSlot(void)
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
 
-    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "an offer with no channel must not be suppressed");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "the text still makes a beacon");
     meshtastic_MeshBeacon decoded;
     TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
-    TEST_ASSERT_TRUE_MESSAGE(decoded.has_offer_channel,
-                             "the offer carries its own name and PSK, so a table slot going disabled cannot silence it - "
-                             "there is no retired PSK to leak because the operator stated the one to advertise");
+    TEST_ASSERT_EQUAL_STRING("still here", decoded.message);
+    TEST_ASSERT_FALSE_MESSAGE(decoded.has_offer_channel, "but the offer for a deleted channel is withheld");
+    TEST_ASSERT_FALSE(decoded.has_offer_preset);
 }
 
 /**
@@ -2369,6 +2395,10 @@ static void test_offer_onAir_carriesOnlyNamePskAndAead(void)
     ch.has_module_settings = true;
     ch.module_settings.position_precision = 13;
     ch.module_settings.is_muted = true;
+    // An offer is only advertised while its channel is held, so hold it.
+    installTestSecondaryChannel(1, "Posture", offerPsk, sizeof(offerPsk));
+    channelFile.channels[1].settings.use_aead = true;
+    channels.onConfigChanged();
 
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     MeshBeaconModule::fillOffer(beacon, bcfg);
@@ -2463,6 +2493,9 @@ static void test_sweep_us_everyPinnedOfferSlot_advertisedIffNotDerived(void)
     initRegion();
     installTestPrimaryChannel("Home", kSweepPsk, sizeof(kSweepPsk));
 
+    installTestSecondaryChannel(1, "Offer", kSweepPsk, sizeof(kSweepPsk)); // an offer is advertised only while held
+    channels.onConfigChanged();
+
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     offerChannelByValue(bcfg, "Offer", kSweepPsk, sizeof(kSweepPsk));
     bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
@@ -2492,6 +2525,33 @@ static void test_sweep_us_everyPinnedOfferSlot_advertisedIffNotDerived(void)
         if (k != derived)
             TEST_ASSERT_EQUAL_UINT32_MESSAGE(k, beacon.offer_frequency_slot, why);
     }
+}
+
+/**
+ * An offer with no preset names the offered region's default (what receivers derive with), so a node on
+ * another preset is not already on the offered mesh. US MediumSlow and LongFast are both 250 kHz, so the
+ * channel-name hash lands on the same slot for both. Regression guarded: the redundancy test read an
+ * unset offer preset as the running one, matched on that slot, and dropped the invitation.
+ */
+static void test_offerRedundancy_unsetPresetMeansTheRegionDefault(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
+    installTestPrimaryChannel("Foo", kSweepPsk, sizeof(kSweepPsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    auto &bcfg = moduleConfig.mesh_beacon;
+    bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    strncpy(bcfg.broadcast_message, "hi", sizeof(bcfg.broadcast_message) - 1);
+    offerChannelByValue(bcfg, "Foo", kSweepPsk, sizeof(kSweepPsk)); // no offer preset: US default, LongFast
+    sendOneCycle();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    meshtastic_MeshBeacon b;
+    TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], b));
+    TEST_ASSERT_TRUE_MESSAGE(b.has_offer_channel, "a MediumSlow node is not on the LongFast mesh it offers");
 }
 
 /**
@@ -2684,10 +2744,11 @@ static void test_offer_pinnedSlot_isAdvertised(void)
 }
 
 /**
- * A disabled slot keeps the settings of whatever channel was deleted from it, so the offer must
- * A by-value offer is unaffected: it advertises what the operator wrote, not what a table slot holds.
+ * A disabled slot keeps the settings of whatever channel was deleted from it, so matching the offer's name
+ * and PSK there does not mean the node holds the channel. The offer is withheld until it is live again.
+ * Regression guarded: the offer ignored the table's role, so deleting its channel did not stop the invitation.
  */
-static void test_offer_byValue_ignoresTheChannelTableRole(void)
+static void test_offer_byValue_onlyALiveChannelIsOffered(void)
 {
     resetConfig();
     static const uint8_t offerPsk[16] = {0xBB, 0x33, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -2704,8 +2765,13 @@ static void test_offer_byValue_ignoresTheChannelTableRole(void)
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     MeshBeaconModule::fillOffer(beacon, bcfg);
 
-    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_channel,
-                             "a by-value offer is not read from the channel table, so the slot's role is irrelevant");
+    TEST_ASSERT_FALSE_MESSAGE(beacon.has_offer_channel, "a DISABLED slot holding the identity is not a held channel");
+
+    retired.role = meshtastic_Channel_Role_PRIMARY;
+    channels.setChannel(retired);
+    meshtastic_MeshBeacon again = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(again, bcfg);
+    TEST_ASSERT_TRUE_MESSAGE(again.has_offer_channel, "re-enabled, the same offer goes out with no rewrite");
 }
 
 /**
@@ -4408,6 +4474,32 @@ static void test_byValue_licensedNode_refusesEncryptedOffer(void)
 }
 
 /**
+ * A 1-byte {0} PSK is the explicit "encryption off" spelling, so a licensed node may hold it. Regression
+ * guarded: the licensed check read any non-empty PSK as encryption and withheld a cleartext offer.
+ */
+static void test_byValue_licensedNode_acceptsExplicitCleartextOffer(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", nullptr, 0);
+    owner.is_licensed = true;
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "Clear", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = 1;
+    bcfg.broadcast_offer_channel.psk.bytes[0] = 0;
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    static const uint8_t off[1] = {0};
+    TEST_ASSERT_GREATER_OR_EQUAL_INT16_MESSAGE(0, channels.findByIdentity("Clear", off, sizeof(off)),
+                                               "a cleartext channel is licensed operation, so it is placed");
+    TEST_ASSERT_TRUE(MeshBeaconModule::offerIsPlaceable(moduleConfig.mesh_beacon));
+    owner.is_licensed = false;
+}
+
+/**
  * A new identity never lands in the primary slot, even when the table is malformed enough to mark
  * that slot DISABLED. An identity matching the primary resolves to it rather than being re-placed.
  */
@@ -4821,21 +4913,23 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sidecar_fourLegacySplitTargets_allFit);
     RUN_TEST(test_sidecar_entryQueuedPastItsInterval_dropsThePacket);
     RUN_TEST(test_sidecar_staleEntry_freesItsSlotForTheNextCycle);
+    RUN_TEST(test_sidecar_staleness_followsTheConfiguredInterval);
     RUN_TEST(test_offer_unplaceablePin_advertisesNothing);
     RUN_TEST(test_offer_pinPlaceableAfterRegionMove_isAdvertised);
     RUN_TEST(test_broadcaster_unplaceableOffer_sendsTextOnly);
     RUN_TEST(test_broadcaster_unplaceableOfferNoText_sendsNothing);
-    RUN_TEST(test_broadcaster_offerByValue_survivesADisabledSlot);
+    RUN_TEST(test_broadcaster_offerOnADisabledSlot_isWithheldButTextIsSent);
     RUN_TEST(test_offer_derivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_noPreset_derivesWithTheRegionDefault);
     RUN_TEST(test_offer_onAir_carriesOnlyNamePskAndAead);
     RUN_TEST(test_sweep_us_everyPinnedTargetSlot_landsOnThatSlot);
     RUN_TEST(test_sweep_us_everyPinnedOfferSlot_advertisedIffNotDerived);
     RUN_TEST(test_aead_ctrAndAeadTwins_areTwoTargets_andTheOfferKnowsWhich);
+    RUN_TEST(test_offerRedundancy_unsetPresetMeansTheRegionDefault);
     RUN_TEST(test_matrix_regionPresetPinChannel_invariantsHold);
     RUN_TEST(test_offer_pinnedButDerivableSlot_isNotAdvertised);
     RUN_TEST(test_offer_pinnedSlot_isAdvertised);
-    RUN_TEST(test_offer_byValue_ignoresTheChannelTableRole);
+    RUN_TEST(test_offer_byValue_onlyALiveChannelIsOffered);
     RUN_TEST(test_offer_cleartextUnnamedChannel_isAdvertised);
 
     printf("\n=== Radio switch/restore re-entrancy ===\n");
@@ -4903,6 +4997,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_aeadOffer_isPlacedAsAeadNotOnTheCtrSlot);
     RUN_TEST(test_byValue_fullTable_offerIsKeptButWithheld);
     RUN_TEST(test_byValue_licensedNode_refusesEncryptedOffer);
+    RUN_TEST(test_byValue_licensedNode_acceptsExplicitCleartextOffer);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);

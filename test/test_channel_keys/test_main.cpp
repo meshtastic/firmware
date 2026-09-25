@@ -550,6 +550,41 @@ void test_upsert_prefers_the_disabled_slot_that_held_this_identity()
     TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
 }
 
+// A live SECONDARY with an empty PSK is not cleartext: getKey() lends it the primary's key. Matching
+// it as cleartext let an offer for an open channel resolve to a slot that encrypts, and advertise that
+// slot's hash. A DISABLED slot is still matched raw, since it keys nothing.
+void test_identity_emptyPskSecondaryCarriesThePrimaryKey()
+{
+    static const uint8_t home[16] = {0x31, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+    seedTableWithPrimary("Home", home, sizeof(home));
+    meshtastic_Channel &side = channelFile.channels[1];
+    side.index = 1;
+    side.role = meshtastic_Channel_Role_SECONDARY;
+    side.has_settings = true;
+    strncpy(side.settings.name, "Side", sizeof(side.settings.name) - 1);
+    channels.onConfigChanged();
+
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1, channels.findByIdentity("Side", nullptr, 0), "it is not a cleartext channel");
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(1, channels.findByIdentity("Side", home, sizeof(home)), "it is Side on the primary's key");
+}
+
+// Placing a cleartext identity must spell it {0}. Stored empty, the new SECONDARY would borrow the
+// primary's key, and the node would hold an encrypted channel while advertising an open one.
+void test_upsert_cleartextIsStoredAsExplicitOff()
+{
+    static const uint8_t home[16] = {0x32, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+    seedTableWithPrimary("Home", home, sizeof(home));
+
+    const int16_t idx = channels.upsertIdentity("Open", nullptr, 0);
+    TEST_ASSERT_GREATER_THAN_INT16(0, idx);
+    const meshtastic_ChannelSettings &placed = channels.getByIndex(idx).settings;
+    TEST_ASSERT_EQUAL_UINT16(1, placed.psk.size);
+    TEST_ASSERT_EQUAL_UINT8(0, placed.psk.bytes[0]);
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(idx, channels.findByIdentity("Open", nullptr, 0), "and it is found as cleartext again");
+}
+
 // One key, two spellings. getKey() expands a 1-byte shorthand and zero-pads a short key, so a
 // table storing one form and an offer naming the other are the same channel - matching on raw
 // bytes would place a second slot holding a duplicate of a channel already there.
@@ -812,6 +847,8 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_identity_blank_name_matches_the_preset_name);
     RUN_TEST(test_upsert_prefers_the_disabled_slot_that_held_this_identity);
     RUN_TEST(test_upsert_pskSpellingsOfOneKeyShareASlot);
+    RUN_TEST(test_identity_emptyPskSecondaryCarriesThePrimaryKey);
+    RUN_TEST(test_upsert_cleartextIsStoredAsExplicitOff);
     RUN_TEST(test_identity_nameCaseIsSignificant);
     RUN_TEST(test_identity_aead_is_a_different_channel);
 

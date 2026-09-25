@@ -1097,6 +1097,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 }
                 if (!swapRegion || !RadioInterface::validateConfigLora(validatedLora)) {
                     LOG_WARN("Invalid LoRa config from another node, rejecting changes");
+                    (void)RadioInterface::validateConfigLora(validatedLora, nullptr, true); // say why, as it is rejected
                     // Rejecting means rejecting everything: a partial restore of region/preset
                     // could still apply other fields the validation already deemed invalid.
                     validatedLora = oldLoraConfig;
