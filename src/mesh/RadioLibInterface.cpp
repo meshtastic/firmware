@@ -262,6 +262,13 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
     return txQueue.find(from, id);
 }
 
+uint32_t RadioLibInterface::queuedAirtimeMsec()
+{
+    // The queue totals itself as it changes, so nothing is walked here. sendingPacket stays live:
+    // it is one aligned pointer, not a traversal, and the packet it names outlives the send.
+    return (sendingPacket ? getPacketTime(sendingPacket) : 0) + txQueue.queuedAirtimeMsec();
+}
+
 void RadioLibInterface::updateNoiseFloor()
 {
     // Only sample from idle receive mode. TX/RX-critical paths must return to radio work quickly.
@@ -446,6 +453,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     LOG_DEBUG("Drop Tx packet 0x%08x, refused before transmit", bad->id);
                     RadioTxHooks::packetReleased(this, bad);
                     packetPool.release(bad);
+                    txQueue.refreshAirtime();
                     setTransmitDelay();
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
@@ -461,6 +469,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
+                        txQueue.refreshAirtime(); // after the packet is away, not before it
                         LOG_TRACE("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }

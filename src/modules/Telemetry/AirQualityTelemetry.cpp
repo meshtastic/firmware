@@ -184,7 +184,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         bool telemetryAllowed =
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil();
+            airTime->isRoutineBroadcastAllowed();
 
         bool phoneAllowed = service->isToPhoneQueueEmpty();
 

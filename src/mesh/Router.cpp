@@ -14,6 +14,7 @@
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
 #include <ErriezCRC32.h>
+#include <algorithm>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !MESHTASTIC_EXCLUDE_GPS
@@ -467,6 +468,56 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         return send(p);
     }
 }
+// Admit on the packet's own airtime, so the crossing packet is the one refused. Everything below
+// Priority_ACK leaves one ack's worth: a node that cannot ack costs the mesh the sender's retries.
+uint8_t Router::dutyCycleWaitMinutes(meshtastic_MeshPacket *p)
+{
+    const float effectiveDutyCycle = getEffectiveDutyCycle();
+    if (config.lora.override_duty_cycle || effectiveDutyCycle >= 100)
+        return 0;
+
+    // The tier fixPriority() will assign: it runs after this gate, and a ROUTING_APP packet that
+    // arrives unset is an ack or nak that must be allowed the reserve, not made to leave it.
+    const bool ackTier =
+        p->priority >= meshtastic_MeshPacket_Priority_ACK ||
+        (p->priority == meshtastic_MeshPacket_Priority_UNSET && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+         p->decoded.portnum == meshtastic_PortNum_ROUTING_APP);
+    const uint32_t reserveMs = ackTier ? 0 : ackAirtimeMsec();
+    // Sized as it will go on air, signature and PKC overhead included, not as it sits decoded.
+    const uint32_t packetMs = iface ? iface->getPacketTime(onAirBytes(p)) : 0;
+    // Packets admitted ahead of this one are not in the ring until they complete; count them now, read
+    // live from the queue so a completed packet moves to the ring and is never counted twice.
+    const uint32_t queuedMs = iface ? iface->queuedAirtimeMsec() : 0;
+    if (!airTime->wouldExceedDutyCycle(packetMs + reserveMs + queuedMs, effectiveDutyCycle))
+        return 0;
+
+    // Refused. Quote the wait for the ladder the packet is entitled to, not for the one rung that
+    // was just refused: at least one minute, since one rung already did not fit.
+    const uint32_t attempts = std::min<uint32_t>(sendAttempts(p), DUTY_CYCLE_QUOTED_ATTEMPTS);
+    const uint8_t minutes = airTime->getSilentMinutes(effectiveDutyCycle, attempts * packetMs + reserveMs + queuedMs);
+    return minutes ? minutes : 1;
+}
+
+void Router::notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, uint8_t sent, uint8_t attempts)
+{
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    cn->has_reply_id = true;
+    cn->reply_id = p->id;
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->time = getValidTime(RTCQualityFromNet);
+    // Two truths: a refused first send never went out; a refused retry did, `sent` times, unconfirmed.
+    if (sent)
+        snprintf(cn->message, sizeof(cn->message),
+                 "Sent %u of %u attempts, unconfirmed: no airtime to retry. You can send again in %u mins", sent, attempts,
+                 waitMinutes);
+    else
+        snprintf(cn->message, sizeof(cn->message), "Not sent: duty cycle limit exceeded. You can send again in %u mins",
+                 waitMinutes);
+    service->sendClientNotification(cn);
+}
+
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
@@ -480,34 +531,18 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
 
-    // Abort sending if we are violating the duty cycle
-    float effectiveDutyCycle = getEffectiveDutyCycle();
-    if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
-        float hourlyTxPercent = airTime->utilizationTXPercent();
-        if (hourlyTxPercent > effectiveDutyCycle) {
-            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
-
-            LOG_WARN("Duty cycle limit exceeded, abort send, retry in %d mins", silentMinutes);
-
-            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            if (cn) {
-                cn->has_reply_id = true;
-                cn->reply_id = p->id;
-                cn->level = meshtastic_LogRecord_Level_WARNING;
-                cn->time = getValidTime(RTCQualityFromNet);
-                snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins",
-                         silentMinutes);
-                service->sendClientNotification(cn);
-            }
-
-            meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
-            if (isFromUs(p)) { // only send NAK to API, not to the mesh
-                abortSendAndNak(err, p);
-            } else {
-                packetPool.release(p);
-            }
-            return err;
+    // Abort sending if this packet would take us over the duty cycle. Nothing is held back for
+    // later: the client is told how long to wait and resends. A relayed packet is dropped quietly.
+    if (const uint8_t waitMinutes = dutyCycleWaitMinutes(p)) {
+        LOG_WARN("Duty cycle limit exceeded, abort send, retry in %u mins", waitMinutes);
+        const meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
+        if (isFromUs(p)) { // only notify and NAK the API, not the mesh
+            notifyDutyCycleRefusal(p, waitMinutes);
+            abortSendAndNak(err, p);
+        } else {
+            packetPool.release(p);
         }
+        return err;
     }
 
     // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
@@ -1176,6 +1211,7 @@ static bool signedDataFits(meshtastic_Data *d)
     d->xeddsa_signature.size = prevSize;
     return sized && encodedSize + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
 }
+
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -1238,6 +1274,50 @@ static bool ackNeedsPkcFallback(const meshtastic_MeshPacket *p, ChannelIndex chI
 
 /** Return 0 for success or a Routing_Error code for failure
  */
+// The overhead perhapsEncode() will add to a decoded packet, decided the way it decides: PKC for a
+// DM that will use it or an ack with no channel to ride, else the AEAD tag where the channel has it.
+static size_t encryptionOverheadBytes(const meshtastic_MeshPacket *p)
+{
+    const ChannelIndex chIndex = p->channel;
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+    bool haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
+    if (!haveDestKey && p->pki_encrypted && p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP &&
+        crypto->getPendingPublicKey(p->to, destKey))
+        haveDestKey = true;
+    if (ackNeedsPkcFallback(p, chIndex, haveDestKey) || wouldEncryptWithPKC(p, chIndex, haveDestKey))
+        return MESHTASTIC_PKC_OVERHEAD;
+#endif
+    return chIndex < MAX_NUM_CHANNELS && channels.isAEADEnabled(chIndex) ? MESHTASTIC_AEAD_OVERHEAD : 0;
+}
+
+// Mirrors perhapsEncode()'s sizing decisions - the bitfield, a signature that fits, the encryption
+// overhead - by setting and restoring the fields it would set, the way signedDataFits() does.
+size_t Router::onAirBytes(meshtastic_MeshPacket *p)
+{
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return p->encrypted.size + MESHTASTIC_HEADER_LENGTH;
+
+    meshtastic_Data *d = &p->decoded;
+    const pb_size_t prevSig = d->xeddsa_signature.size;
+    const bool prevHasBitfield = d->has_bitfield;
+    if (isFromUs(p)) {
+        d->has_bitfield = true;
+        d->xeddsa_signature.size = 0;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(d))
+            d->xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+#endif
+    }
+    size_t n;
+    if (!pb_get_encoded_size(&n, &meshtastic_Data_msg, d))
+        n = d->payload.size; // cannot size it: the payload alone, and never under
+    d->xeddsa_signature.size = prevSig;
+    d->has_bitfield = prevHasBitfield;
+
+    return n + MESHTASTIC_HEADER_LENGTH + encryptionOverheadBytes(p);
+}
+
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);

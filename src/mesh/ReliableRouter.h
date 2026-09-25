@@ -21,6 +21,15 @@ class ReliableRouter : public NextHopRouter
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+    /// The ladder send() would start for `p`: five for a reliable unicast, three for a reliable
+    /// broadcast, one without want_ack.
+    uint8_t sendAttempts(const meshtastic_MeshPacket *p) const override
+    {
+        if (!p->want_ack)
+            return 1;
+        return isBroadcast(p->to) ? NUM_RELIABLE_RETX : NUM_RELIABLE_UNICAST_ATTEMPTS;
+    }
+
   protected:
     /**
      * Look for acks/naks or someone retransmitting us

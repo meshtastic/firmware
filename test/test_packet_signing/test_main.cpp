@@ -1115,9 +1115,13 @@ void test_B14_ack_with_no_usable_channel_falls_back_to_pkc(void)
     ack.decoded.request_id = 0xFEED5150;
     ack.channel = deadChannel;
 
+    // willUsePki() says no for ROUTING_APP; the admission size must still see the PKC overhead.
+    const size_t predicted = pipelineRouter->onAirBytes(&ack);
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(&ack),
                               "ack on an unusable channel must not fail to send");
     TEST_ASSERT_TRUE_MESSAGE(ack.pki_encrypted, "it must have gone out over PKC");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(ack.encrypted.size + MESHTASTIC_HEADER_LENGTH, predicted,
+                                     "the ack's on-air size was predicted with its PKC fallback overhead");
 }
 
 // The fallback must not paper over a genuinely unsendable ack: with no key for the destination there
@@ -1652,10 +1656,14 @@ static void useDutyCycleSaturatedAirTime()
     static AirTime saturated;
     c14SavedAirTime = airTime;
     airTime = &saturated;
+    // An hour of uptime first: a packet logged at uptime 0 is clamped to one bucket's worth, since
+    // it cannot have been on air before boot. From here the hour-long span covers every bucket.
+    Time::setTestMillis(2u * MS_IN_HOUR);
+    Time::serviceMonotonic();
     saturated.logAirtime(TX_LOG, MS_IN_HOUR); // utilizationTXPercent() sums every bucket -> 100%
 }
 
-void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
+void test_C14_duty_cycle_limited_reliable_send_is_refused_final(void)
 {
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     config.lora.override_duty_cycle = false;
@@ -1671,8 +1679,134 @@ void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(packet));
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
                                      "duty-cycle rejection must still notify the originating client");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(),
-                                     "duty-cycle rejection must retain the retry for when airtime is available");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "a duty-cycle refusal is final: the client was told how long to wait, and resends");
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+}
+
+// The reserve is sized from Router::ACK_FRAME_BYTES, so that constant has to cover the largest
+// ack this node builds: every field allocAckNak() sets, an error_reason in the nak case, a full
+// ack proof, and the bitfield Router::send() stamps on our own packets.
+void test_ack_frame_bytes_covers_a_real_ack(void)
+{
+    meshtastic_Routing r = meshtastic_Routing_init_default;
+    r.which_variant = meshtastic_Routing_error_reason_tag;
+    r.error_reason = meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY; // the widest error_reason varint
+    r.ack_proof.size = 8;
+    memset(r.ack_proof.bytes, 0xff, sizeof(r.ack_proof.bytes));
+
+    meshtastic_Data d = meshtastic_Data_init_zero;
+    d.portnum = meshtastic_PortNum_ROUTING_APP;
+    d.payload.size = pb_encode_to_bytes(d.payload.bytes, sizeof(d.payload.bytes), &meshtastic_Routing_msg, &r);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, d.payload.size, "failed to encode the worst-case Routing ack");
+    d.request_id = 0xffffffffu;
+    d.has_bitfield = true;
+    d.bitfield = 0xff;
+
+    uint8_t buf[256];
+    const size_t dataBytes = pb_encode_to_bytes(buf, sizeof(buf), &meshtastic_Data_msg, &d);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, dataBytes, "failed to encode the ack Data");
+    const size_t onAir = sizeof(PacketHeader) + dataBytes + MESHTASTIC_PKC_OVERHEAD;
+    char msg[96];
+    snprintf(msg, sizeof(msg), "a worst-case ack is %u bytes on air, ACK_FRAME_BYTES is %u", (unsigned)onAir,
+             (unsigned)Router::ACK_FRAME_BYTES);
+    TEST_ASSERT_TRUE_MESSAGE(onAir <= Router::ACK_FRAME_BYTES, msg);
+}
+
+// Admission is sized on the frame as it will go on air, predicted without encoding. Each case
+// predicts, checks the packet was left as found, encodes for real, and compares.
+static void assertOnAirPrediction(meshtastic_MeshPacket &p, const char *what)
+{
+    const pb_size_t sigBefore = p.decoded.xeddsa_signature.size;
+    const bool bitfieldBefore = p.decoded.has_bitfield;
+    const size_t predicted = pipelineRouter->onAirBytes(&p);
+    TEST_ASSERT_EQUAL_MESSAGE(sigBefore, p.decoded.xeddsa_signature.size, "prediction must not leave a signature size behind");
+    TEST_ASSERT_EQUAL_MESSAGE(bitfieldBefore, p.decoded.has_bitfield, "prediction must not leave has_bitfield behind");
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(&p), what);
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%s: predicted %u bytes on air, encoded %u", what, (unsigned)predicted,
+             (unsigned)(p.encrypted.size + MESHTASTIC_HEADER_LENGTH));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(p.encrypted.size + MESHTASTIC_HEADER_LENGTH, predicted, msg);
+}
+
+void test_onAirBytes_matches_the_encoded_frame(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+
+    // Signed broadcast: the signature is the 66 bytes getPacketTime(p) never saw.
+    meshtastic_MeshPacket bcast = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    const size_t bcastBytes = pipelineRouter->onAirBytes(&bcast);
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(SMALL_PAYLOAD + MESHTASTIC_HEADER_LENGTH + XEDDSA_SIGNATURE_FIELD_BYTES, bcastBytes,
+                                         "a signed broadcast is sized with its signature");
+    assertOnAirPrediction(bcast, "signed broadcast");
+
+    // PKI DM: the 12 bytes of PKC overhead.
+    meshtastic_MeshPacket dm = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_TRUE(willUsePki(&dm));
+    assertOnAirPrediction(dm, "PKI DM");
+
+    // Already encrypted, as a relay is: the size is final.
+    meshtastic_MeshPacket relay = dm;
+    TEST_ASSERT_EQUAL_UINT32(relay.encrypted.size + MESHTASTIC_HEADER_LENGTH, pipelineRouter->onAirBytes(&relay));
+}
+
+// Ten milliseconds of the allowance left, and the fake radio charges 7 ms a frame. A reliable DM
+// must also leave an ack's 7 ms behind it, so it needs 14 and is refused; the ack itself needs
+// only 7 and goes. The refusal is final, as C14 requires of any duty-cycle refusal.
+void test_C14b_ack_is_admitted_from_the_reserve_a_dm_is_not(void)
+{
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868; // 10%: a 360 000 ms allowance
+    config.lora.override_duty_cycle = false;
+    initRegion();
+
+    static AirTime nearlySpent;
+    c14SavedAirTime = airTime;
+    airTime = &nearlySpent;
+    Time::setTestMillis(2u * MS_IN_HOUR);
+    Time::serviceMonotonic();
+    nearlySpent.logAirtime(TX_LOG, 360000 - 10);
+    TEST_ASSERT_EQUAL_UINT32(7, pipelineRouter->ackAirtimeMsec());
+
+    meshtastic_MeshPacket dm = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    dm.id = 0xC14B0001;
+    dm.want_ack = true;
+    auto *dmPacket = packetPool.allocCopy(dm);
+    TEST_ASSERT_NOT_NULL(dmPacket);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(dmPacket),
+                              "a DM must leave one ack's worth of the allowance unspent");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(), "...and nothing is held back for later");
+
+    meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    ack.id = 0xC14B0002;
+    ack.decoded.request_id = 0xC14B0000;
+    ack.priority = meshtastic_MeshPacket_Priority_ACK;
+    auto *ackPacket = packetPool.allocCopy(ack);
+    TEST_ASSERT_NOT_NULL(ackPacket);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(ackPacket),
+                                  "an ack takes the reserve the DM had to leave");
+
+    // The same ack with its priority still unset, as one that leans on fixPriority() arrives: the
+    // gate runs first and must tier it by portnum. (The ring is unchanged - the fake radio's send
+    // logs nothing - so the reserve is still there to take.)
+    meshtastic_MeshPacket unset = ack;
+    unset.id = 0xC14B0003;
+    unset.priority = meshtastic_MeshPacket_Priority_UNSET;
+    auto *unsetPacket = packetPool.allocCopy(unset);
+    TEST_ASSERT_NOT_NULL(unsetPacket);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(unsetPacket),
+                                  "an unset-priority ROUTING_APP packet is an ack and takes the reserve too");
 
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
@@ -2433,7 +2567,10 @@ void setup()
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
-    RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
+    RUN_TEST(test_C14_duty_cycle_limited_reliable_send_is_refused_final);
+    RUN_TEST(test_ack_frame_bytes_covers_a_real_ack);
+    RUN_TEST(test_onAirBytes_matches_the_encoded_frame);
+    RUN_TEST(test_C14b_ack_is_admitted_from_the_reserve_a_dm_is_not);
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);

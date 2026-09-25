@@ -133,6 +133,13 @@ bool SimRadio::isChannelActive()
 }
 
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
+uint32_t SimRadio::queuedAirtimeMsec()
+{
+    // Queue only: the sim logs a packet's airtime the moment it leaves the queue, so the one
+    // "in flight" is already in the ring.
+    return txQueue.queuedAirtimeMsec();
+}
+
 bool SimRadio::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
@@ -186,6 +193,7 @@ void SimRadio::onNotify(uint32_t notification)
                     meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
                     startSend(txp);
+                    txQueue.refreshAirtime(); // after the packet is away, not before it
                     // Packet has been sent, count it toward our TX airtime utilization.
                     uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
                     airTime->logAirtime(TX_LOG, xmitMsec);

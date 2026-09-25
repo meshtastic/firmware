@@ -69,6 +69,32 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     RadioInterface *getRadioIface() { return iface.get(); }
 
+    /// Bytes on air of the largest ack or nak we send: header + Data (ROUTING_APP, error_reason, 8-byte
+    /// proof, request_id, bitfield) under PKC. Pinned by test_ack_frame_bytes_covers_a_real_ack.
+    static constexpr uint32_t ACK_FRAME_BYTES = sizeof(PacketHeader) + 24 + MESHTASTIC_PKC_OVERHEAD;
+
+    /// Time-on-air of one explicit ack under the current preset: the slice of the duty cycle every
+    /// packet below ack priority must leave unspent, so an ack can always follow it.
+    uint32_t ackAirtimeMsec() { return iface ? iface->getPacketTime(ACK_FRAME_BYTES) : 0; }
+
+    /// How many times `p` goes on air if nothing acknowledges it. The base router sends once; a
+    /// reliable router answers with its retry ladder.
+    virtual uint8_t sendAttempts(const meshtastic_MeshPacket *) const { return 1; }
+
+    /// How many of the packet's attempts the quoted wait must fit: the full ladder today, 2 at the
+    /// least for a reliable packet.
+    static constexpr uint8_t DUTY_CYCLE_QUOTED_ATTEMPTS = 5;
+
+    /// Minutes before `p` may go under the duty cycle, 0 if now. Admits one rung plus the ack reserve,
+    /// quotes for the ladder; no side effects.
+    uint8_t dutyCycleWaitMinutes(meshtastic_MeshPacket *p);
+    /// Bytes `p` will occupy on air once encoded - signature and PKC overhead included - without
+    /// encoding it. An already-encrypted packet answers with its final size.
+    size_t onAirBytes(meshtastic_MeshPacket *p);
+    /// Tell our client that `p` was refused for duty cycle and how long to wait. `sent` of `attempts`
+    /// went out before the refusal; 0 means the first send was refused.
+    void notifyDutyCycleRefusal(const meshtastic_MeshPacket *p, uint8_t waitMinutes, uint8_t sent = 0, uint8_t attempts = 0);
+
     /**
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
