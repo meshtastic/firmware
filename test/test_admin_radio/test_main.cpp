@@ -1479,6 +1479,131 @@ static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
     TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
 }
 
+// How many frequency slots region has at its default preset.
+static uint32_t slotsAtDefaultPreset(const RegionInfo *region)
+{
+    meshtastic_Config_LoRaConfig lora = meshtastic_Config_LoRaConfig_init_zero;
+    lora.region = region->code;
+    lora.use_preset = true;
+    lora.modem_preset = region->getDefaultPreset();
+    return RadioInterface::frequencySlotCount(lora);
+}
+
+// Starts the node on from at its default preset, and returns a local set_config for to at its default preset.
+static meshtastic_Config startWithChannelNum(const RegionInfo *from, const RegionInfo *to, uint32_t channelNum)
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = from->code;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = from->getDefaultPreset();
+    initRegion();
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    capturedWarnings.clear();
+
+    meshtastic_Config c = makeLoraSetConfig(to->code, true, to->getDefaultPreset());
+    c.payload_variant.lora.channel_num = channelNum;
+    return c;
+}
+
+// Was the client told that channelNum does not fit region, by name?
+static bool toldChannelNumInvalidFor(uint32_t channelNum, const RegionInfo *region)
+{
+    char want[64];
+    snprintf(want, sizeof(want), "Channel number %u invalid for %s", (unsigned)channelNum, region->name);
+    for (const std::string &w : capturedWarnings)
+        if (w.find(want) != std::string::npos)
+            return true;
+    return false;
+}
+
+static const uint32_t kChannelNumsToTry[] = {50, 5000}; // 50 fits some regions and not others; 5000 fits none
+
+// A local client's channel_num is judged against the region it is written for. Where it fits, it is applied
+// silently; where it does not, it is clamped to 0 ("derive") and the ERROR notification names that region.
+// Channel 50 lands on both sides across the table, so the verdict follows the region, not a fixed bound.
+static void test_handleSetConfig_local_channelNum_judgedAgainstEachRegionsSlotCount()
+{
+    const bool wasLicensed = owner.is_licensed;
+    unsigned fits50 = 0, misses50 = 0;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        owner.is_licensed = r->profile->licensedOnly; // a licensed-only region is run by a licensed operator
+        const uint32_t slots = slotsAtDefaultPreset(r);
+        for (const uint32_t ch : kChannelNumsToTry) {
+            testAdmin->handleSetConfig(startWithChannelNum(r, r, ch), false); // a local client
+
+            char msg[112];
+            snprintf(msg, sizeof(msg), "%s (%u slots), channel_num %u", r->name, (unsigned)slots, (unsigned)ch);
+            TEST_ASSERT_EQUAL_MESSAGE(r->code, config.lora.region, msg);
+            if (ch <= slots) {
+                fits50 += (ch == 50);
+                TEST_ASSERT_EQUAL_UINT32_MESSAGE(ch, config.lora.channel_num, msg);
+                TEST_ASSERT_EQUAL_MESSAGE(meshtastic_CriticalErrorCode_NONE, error_code, msg);
+                TEST_ASSERT_FALSE_MESSAGE(toldChannelNumInvalidFor(ch, r), msg);
+            } else {
+                misses50 += (ch == 50);
+                TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, config.lora.channel_num, msg);
+                TEST_ASSERT_EQUAL_MESSAGE(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code, msg);
+                TEST_ASSERT_TRUE_MESSAGE(toldChannelNumInvalidFor(ch, r), msg);
+            }
+        }
+    }
+    owner.is_licensed = wasLicensed;
+    TEST_ASSERT_TRUE_MESSAGE(fits50 && misses50, "the region table must put channel 50 on both sides, or this proves nothing");
+}
+
+// A local write that also changes region is judged against the target region. A channel_num that fits the
+// target is applied with it; one that does not fails the region-change check, which rejects the whole write,
+// as develop does, and the client is told which region it did not fit.
+static void test_handleSetConfig_local_regionChange_channelNumJudgedAgainstTheTarget()
+{
+    const bool wasLicensed = owner.is_licensed;
+    const RegionInfo *home = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        if (r->code == home->code)
+            continue;
+        owner.is_licensed = r->profile->licensedOnly;
+        const uint32_t slots = slotsAtDefaultPreset(r);
+        for (const uint32_t ch : kChannelNumsToTry) {
+            testAdmin->handleSetConfig(startWithChannelNum(home, r, ch), false); // a local client
+
+            char msg[112];
+            snprintf(msg, sizeof(msg), "US -> %s (%u slots), channel_num %u", r->name, (unsigned)slots, (unsigned)ch);
+            if (ch <= slots) {
+                TEST_ASSERT_EQUAL_MESSAGE(r->code, config.lora.region, msg);
+                TEST_ASSERT_EQUAL_UINT32_MESSAGE(ch, config.lora.channel_num, msg);
+                TEST_ASSERT_FALSE_MESSAGE(toldChannelNumInvalidFor(ch, r), msg);
+            } else {
+                TEST_ASSERT_EQUAL_MESSAGE(home->code, config.lora.region, msg);
+                TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, config.lora.channel_num, msg);
+                TEST_ASSERT_TRUE_MESSAGE(toldChannelNumInvalidFor(ch, r), msg);
+            }
+        }
+    }
+    owner.is_licensed = wasLicensed;
+    initRegion();
+}
+
+// The same channel_num both ways between two regions: 50 fits US and not EU_868. Moving to US it is applied,
+// though the running EU_868 has no slot 50; moving to EU_868 it is refused, though the running US has one.
+static void test_handleSetConfig_local_channel50_followsTheTargetNotTheRunningRegion()
+{
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const RegionInfo *eu = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(50, slotsAtDefaultPreset(us), "precondition: US has a slot 50");
+    TEST_ASSERT_LESS_THAN_UINT32_MESSAGE(50, slotsAtDefaultPreset(eu), "precondition: EU_868 has no slot 50");
+
+    testAdmin->handleSetConfig(startWithChannelNum(eu, us, 50), false);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL_UINT32(50, config.lora.channel_num);
+    TEST_ASSERT_FALSE(toldChannelNumInvalidFor(50, us));
+
+    testAdmin->handleSetConfig(startWithChannelNum(us, eu, 50), false);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+    TEST_ASSERT_TRUE(toldChannelNumInvalidFor(50, eu));
+    initRegion();
+}
+
 // clampBandwidthCode: an unset (0) bandwidth code maps to the default; any other code is left as-is.
 static void test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged()
 {
@@ -2629,6 +2754,9 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
     RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_handleSetConfig_local_channelNum_judgedAgainstEachRegionsSlotCount);
+    RUN_TEST(test_handleSetConfig_local_regionChange_channelNumJudgedAgainstTheTarget);
+    RUN_TEST(test_handleSetConfig_local_channel50_followsTheTargetNotTheRunningRegion);
     RUN_TEST(test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged);
     RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthZeroClampedToDefault);
     RUN_TEST(test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault);
