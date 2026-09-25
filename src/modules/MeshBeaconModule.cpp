@@ -8,6 +8,7 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
+#include "meshUtils.h"
 #include <Throttle.h>
 #include <string.h>
 
@@ -286,8 +287,15 @@ static void clearingInvalid(const char *what, unsigned index, const char *field,
 
 void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
-    // Hard cap at whatever the schema allows, so a max_size change cannot leave this behind.
-    bcfg.broadcast_message[sizeof(bcfg.broadcast_message) - 1] = '\0';
+    // Hard cap at whatever the schema allows, so a max_size change cannot leave this behind, and never mid-character.
+    const size_t msgLen = strnlen(bcfg.broadcast_message, sizeof(bcfg.broadcast_message));
+    bcfg.broadcast_message[utf8TruncateLen(bcfg.broadcast_message, msgLen, sizeof(bcfg.broadcast_message) - 1)] = '\0';
+    // An empty offer PSK is cleartext, spelled {0} as upsertIdentity() stores it: a joiner adding a size-0 PSK as a
+    // SECONDARY would borrow its own primary's key instead.
+    if (bcfg.has_broadcast_offer_channel && bcfg.broadcast_offer_channel.psk.size == 0) {
+        bcfg.broadcast_offer_channel.psk.size = 1;
+        bcfg.broadcast_offer_channel.psk.bytes[0] = 0;
+    }
     // Enforce interval minimum (0 means unset/use default).
     if (bcfg.broadcast_interval_secs != 0 && bcfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
         bcfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;

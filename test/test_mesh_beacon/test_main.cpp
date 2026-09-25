@@ -4769,6 +4769,55 @@ static void test_broadcaster_offerWithOnlyFrequencySlot_isSent(void)
 } // namespace
 
 // ===========================================================================
+// Review fixes: empty offer PSK, reaped entries, claimed-slot push
+// ===========================================================================
+
+/**
+ * An empty offer PSK is saved, placed and advertised as the explicit cleartext {0}. Regression guarded:
+ * the air carried size 0 while the table held {0}, and a joiner adding size 0 as a SECONDARY borrows
+ * its own primary's key, so the two ends sat on different keys for one channel name.
+ */
+static void test_sanitise_emptyOfferPsk_isSavedAndAdvertisedAsExplicitCleartext(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "Open", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    const meshtastic_ModuleConfig_MeshBeaconConfig &saved = moduleConfig.mesh_beacon;
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, saved.broadcast_offer_channel.psk.size, "the saved config spells cleartext {0}");
+    TEST_ASSERT_EQUAL_UINT8(0, saved.broadcast_offer_channel.psk.bytes[0]);
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    MeshBeaconModule::fillOffer(beacon, saved);
+    TEST_ASSERT_TRUE_MESSAGE(beacon.has_offer_channel, "the placed cleartext channel is offered");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, beacon.offer_channel.psk.size, "and goes on air as {0}, not size 0");
+    TEST_ASSERT_EQUAL_UINT8(0, beacon.offer_channel.psk.bytes[0]);
+}
+
+/**
+ * The message cap never leaves half a character behind: a 2-byte character straddling the last
+ * byte is dropped whole.
+ */
+static void test_sanitise_messageCap_dropsAStraddlingCharacterWhole(void)
+{
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    const size_t cap = sizeof(bcfg.broadcast_message) - 1;
+    memset(bcfg.broadcast_message, 'a', cap - 1);
+    bcfg.broadcast_message[cap - 1] = (char)0xC3; // U+00E9 starts on the last byte kept...
+    bcfg.broadcast_message[cap] = (char)0xA9;     // ...and ends on the terminator's byte
+
+    MeshBeaconModule::sanitiseConfig(bcfg);
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(cap - 1, strlen(bcfg.broadcast_message), "the split character goes, the rest stays");
+}
+
+// ===========================================================================
 // Unity lifecycle
 // ===========================================================================
 
@@ -4999,6 +5048,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_fullTable_offerIsKeptButWithheld);
     RUN_TEST(test_byValue_licensedNode_refusesEncryptedOffer);
     RUN_TEST(test_byValue_licensedNode_acceptsExplicitCleartextOffer);
+    RUN_TEST(test_sanitise_emptyOfferPsk_isSavedAndAdvertisedAsExplicitCleartext);
+    RUN_TEST(test_sanitise_messageCap_dropsAStraddlingCharacterWhole);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);
