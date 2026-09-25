@@ -125,9 +125,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
+#if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE)
+    /** The chip select, kept for raw commands outside RadioLib, which does not expose it */
+    RADIOLIB_PIN_TYPE rawCs = RADIOLIB_NC;
+#endif
 #ifdef SX126X_STATE_SAMPLER_MS
-    /** The chip select, kept for the sampler's raw read: RadioLib does not expose it */
-    RADIOLIB_PIN_TYPE samplerCs = RADIOLIB_NC;
     /** What the last sample saw, so only changes are logged; 0xFF/0xFFFF until the first look */
     uint8_t sampledMode = 0xFF;
     uint16_t sampledIrq = 0xFFFF;
@@ -138,6 +140,19 @@ template <class T> class SX126xInterface : public RadioLibInterface
     bool rxArmedContinuous = false;
 
     bool resumeRunningReceive() override;
+
+#ifdef SX126X_RX_REARM_AT_TX_DONE
+    bool rearmReceiveFromIsr() override;
+    bool adoptReceiveArmedFromIsr() override;
+    /** One raw command from the ISR: wait briefly for BUSY, then write it without RadioLib or the SPI lock */
+    bool rawCommandFromIsr(const uint8_t *cmd, size_t len);
+    /** The HAL without its lock: the ISR has already taken the SPI lock without blocking */
+    ArduinoHal *isrHal = nullptr;
+    enum RearmOutcome : uint8_t { REARM_NONE, REARM_ARMED, REARM_SPI_BUSY, REARM_CHIP_BUSY };
+    volatile uint8_t rearmOutcome = REARM_NONE;
+    /** FreeRTOS tick count when the ISR re-armed RX */
+    volatile uint32_t rearmTicks = 0;
+#endif
 
     /** How long the last trySetStandby() spent in each part, in ms, for the channel scan's step trace */
     struct StandbySteps {

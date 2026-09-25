@@ -86,6 +86,8 @@ void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
+    // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
+    instance->rearmReceiveFromIsr();
     isrLevel0Common(ISR_TX);
 }
 
@@ -439,7 +441,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
             (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
             const uint32_t tHooks = millis();
             lastRxArmSteps = {0, 0, 0, 0};
-            startReceive();
+            if (!adoptReceiveArmedFromIsr())
+                startReceive();
             if (irqPolledOverUsb())
                 LOG_TRACE("Post-TX re-arm: complete %u, hooks %u, standby %u (cmd %u), rx start %u, arm %u ms",
                           (unsigned)(tComplete - t0), (unsigned)(tHooks - tComplete), (unsigned)lastRxArmSteps.standbyMs,
