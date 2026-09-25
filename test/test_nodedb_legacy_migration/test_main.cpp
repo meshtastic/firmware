@@ -208,7 +208,7 @@ meshtastic_LocalModuleConfig distinctiveModuleConfig()
     c.mqtt.enabled = true;
     strncpy(c.mqtt.address, "mqtt.example", sizeof(c.mqtt.address) - 1);
     c.has_telemetry = true;
-    c.telemetry.device_update_interval = 900;
+    c.telemetry.device_update_interval = 7200; // above the floor boot coerces default-channel telemetry to
     c.has_mesh_beacon = true;
     c.mesh_beacon.broadcast_interval_secs = 7200;
     c.mesh_beacon.has_broadcast_offer_channel = true;
@@ -222,7 +222,7 @@ void assertDistinctiveModulesSurvived(const meshtastic_LocalModuleConfig &c)
 {
     TEST_ASSERT_TRUE_MESSAGE(c.mqtt.enabled, "MQTT must survive the migration, not reset to defaults");
     TEST_ASSERT_EQUAL_STRING("mqtt.example", c.mqtt.address);
-    TEST_ASSERT_EQUAL_UINT32(900, c.telemetry.device_update_interval);
+    TEST_ASSERT_EQUAL_UINT32(7200, c.telemetry.device_update_interval);
     TEST_ASSERT_TRUE(c.has_mesh_beacon);
     TEST_ASSERT_EQUAL_UINT32(7200, c.mesh_beacon.broadcast_interval_secs);
     TEST_ASSERT_EQUAL_STRING("Open", c.mesh_beacon.broadcast_offer_channel.name);
