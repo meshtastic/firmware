@@ -3,7 +3,7 @@
 #ifdef HAS_CST226SE
 
 #include "input/TouchScreenImpl1.h"
-#include "touch/TouchDrvCST226.h"
+#include <TouchDrvCST.hpp>
 #include <Wire.h>
 
 #ifndef TOUCH_RST
@@ -31,11 +31,10 @@ uint8_t i2cAddress = 0;
 
 bool readTouch(int16_t *x, int16_t *y)
 {
-    int16_t x_array[1], y_array[1];
-    uint8_t touched = tsPanel.getPoint(x_array, y_array, 1);
-    if (touched > 0) {
-        *y = x_array[0];
-        *x = (screenWidth - y_array[0]);
+    const TouchPoints &points = tsPanel.getTouchPoints();
+    if (points.hasPoints()) {
+        *y = points.getPoint(0).x;
+        *x = screenWidth - points.getPoint(0).y;
         // Check bounds
         if (*x < 0 || *x >= screenWidth || *y < 0 || *y >= screenHeight) {
             return false;

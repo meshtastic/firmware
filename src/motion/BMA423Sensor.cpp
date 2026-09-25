@@ -1,6 +1,6 @@
 #include "BMA423Sensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BMA423) && __has_include(<SensorBMA423.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BMA423) && __has_include(<AccelerometerDrv.hpp>)
 
 #include "mesh/Throttle.h"
 
