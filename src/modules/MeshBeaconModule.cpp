@@ -27,6 +27,7 @@ static PacketId expiredIds[sizeof(targetRadioSettings) / sizeof(targetRadioSetti
                            sizeof(MeshBeaconModule_TargetRadioSettings::ids) / sizeof(PacketId)];
 static uint8_t expiredNext;
 
+// A ring, so overwriting is safe: ids are unique per boot, and only a queue-overflow release leaves one behind.
 static void rememberExpired(const MeshBeaconModule_TargetRadioSettings &entry)
 {
     for (uint8_t i = 0; i < entry.idCount; i++) {

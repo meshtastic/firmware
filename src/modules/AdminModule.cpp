@@ -1882,6 +1882,7 @@ void AdminModule::sendChannelToPhone(uint32_t channelIndex)
     r.get_channel_response = channels.getByIndex(channelIndex);
     r.which_payload_variant = meshtastic_AdminMessage_get_channel_response_tag;
     setPassKey(&r);
+    // allocForSending() sets from to our node number; clients apply an unrequested response only from the node itself.
     meshtastic_MeshPacket *p = allocDataProtobuf(r);
     if (!p)
         return;

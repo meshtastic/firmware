@@ -211,6 +211,7 @@ bool truncateLegacyBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, 
 
 bool NodeDB::migrateLegacyModuleConfig()
 {
+    // Re-read at the legacy maximum: loadProto() stops at the current one, which a pre-cut file can exceed.
     auto raw = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
     auto fixed = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
     if (!raw || !fixed)
