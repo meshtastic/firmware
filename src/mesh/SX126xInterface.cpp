@@ -167,12 +167,24 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
             LOG_INFO("TCXO start-up delay 5000 us (default)");
         }
     }
+#elif defined(SX126X_TCXO_DELAY_US)
+    // Bench: the build-time counterpart of MESHTASTIC_TCXO_DELAY_US, for an embedded board.
+    if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0) {
+        const int16_t tcxoErr = lora.setTCXO(tcxoVoltage, (uint32_t)(SX126X_TCXO_DELAY_US));
+        LOG_INFO("TCXO start-up delay %u us %s%d", (unsigned)(SX126X_TCXO_DELAY_US), radioLibErr, tcxoErr);
+    }
 #endif
     // Keep the oscillator running in standby: leaving STDBY_RC restarts a DIO3 TCXO, and BUSY stays high for its
     // 5 ms start-up on every SET_RX, SET_CAD and SET_TX. Also sets the RX/TX fallback mode to STDBY_XOSC.
-    if (res == RADIOLIB_ERR_NONE && irqPolledOverUsb()) {
+    // Always on a CH341 host; -DSX126X_STANDBY_XOSC turns it on for an embedded board (bench).
+#ifdef SX126X_STANDBY_XOSC
+    constexpr bool standbyXoscBuild = true;
+#else
+    constexpr bool standbyXoscBuild = false;
+#endif
+    if (res == RADIOLIB_ERR_NONE && (standbyXoscBuild || irqPolledOverUsb())) {
         const int16_t xoscErr = lora.setStandbyXOSC(true);
-        LOG_DEBUG("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
+        LOG_INFO("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
     }
 #ifdef ARCH_PORTDUINO
     if (irqPolledOverUsb()) {
