@@ -433,14 +433,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case TDECK_KB_ADDR:
-#if defined(T_LORA_PAGER)
-                // The Pager always has BQ27220 at 0x55 and TCA8418 at 0x34. A failed gauge can return zero
-                // from register 0x04, which the generic heuristic would misclassify as a T-Deck keyboard.
-                logFoundDevice("BQ27220", (uint8_t)addr.address);
-                type = BQ27220;
+#ifdef HAS_BQ27220
+                // A gauge needing a config reset reads zero at register 0x04, so skip the T-Deck keyboard heuristic.
+                SCAN_SIMPLE_CASE(BQ27220_ADDR, BQ27220, "BQ27220", (uint8_t)addr.address)
 #else
-                // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?
+            case TDECK_KB_ADDR:
+                // Do we have the T-Deck keyboard or a BQ27220 battery sensor?
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
                 if (registerValue != 0) {
                     logFoundDevice("BQ27220", (uint8_t)addr.address);
@@ -449,8 +447,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("TDECKKB", (uint8_t)addr.address);
                     type = TDECKKB;
                 }
-#endif
                 break;
+#endif
             case BBQ10_KB_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
