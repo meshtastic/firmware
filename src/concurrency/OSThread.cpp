@@ -83,7 +83,16 @@ void OSThread::run()
     auto heap = memGet.getFreeHeap();
 #endif
     currentThread = this;
+#ifdef MESHTASTIC_SLOW_THREAD_MS
+    const uint32_t startedMs = millis();
+#endif
     auto newDelay = runOnce();
+#ifdef MESHTASTIC_SLOW_THREAD_MS
+    // Bench: a thread that holds the main loop this long delays every other thread, the radio's RX handler included.
+    const uint32_t tookMs = millis() - startedMs;
+    if (tookMs >= MESHTASTIC_SLOW_THREAD_MS)
+        LOG_DEBUG("Thread %s ran %u ms", ThreadName.c_str(), (unsigned)tookMs);
+#endif
 #ifdef DEBUG_HEAP
     auto newHeap = memGet.getFreeHeap();
     if (newHeap < heap)

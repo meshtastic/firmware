@@ -33,6 +33,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
+#ifdef SX126X_STATE_SAMPLER_MS
+    /// Bench: read the chip's mode and IRQ flags, changing neither, and log them when they differ from the last look
+    void sampleChipState();
+#endif
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
     float tcxoVoltage = 0.0;
@@ -119,6 +124,15 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
+
+#ifdef SX126X_STATE_SAMPLER_MS
+    /** The chip select, kept for the sampler's raw read: RadioLib does not expose it */
+    RADIOLIB_PIN_TYPE samplerCs = RADIOLIB_NC;
+    /** What the last sample saw, so only changes are logged; 0xFF/0xFFFF until the first look */
+    uint8_t sampledMode = 0xFF;
+    uint16_t sampledIrq = 0xFFFF;
+    uint32_t lastSampleMs = 0;
+#endif
 
     /** RX was armed continuous and nothing has put the chip into standby since, so it is still listening */
     bool rxArmedContinuous = false;

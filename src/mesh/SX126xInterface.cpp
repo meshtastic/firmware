@@ -13,6 +13,10 @@
 
 #include "Throttle.h"
 #include "UptimeClock.h"
+#ifdef SX126X_STATE_SAMPLER_MS
+#include "concurrency/OSThread.h"
+#include <functional>
+#endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
@@ -29,7 +33,91 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
     LOG_DEBUG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+#ifdef SX126X_STATE_SAMPLER_MS
+    samplerCs = cs;
+#endif
 }
+
+#ifdef SX126X_STATE_SAMPLER_MS
+namespace
+{
+/** Bench: runs the chip state sample every SX126X_STATE_SAMPLER_MS on the main loop, between the other threads */
+class ChipStateSampler : public concurrency::OSThread
+{
+  public:
+    explicit ChipStateSampler(std::function<void()> sample)
+        : concurrency::OSThread("ChipState", SX126X_STATE_SAMPLER_MS), sample(std::move(sample))
+    {
+    }
+
+  protected:
+    int32_t runOnce() override
+    {
+        sample();
+        return SX126X_STATE_SAMPLER_MS;
+    }
+
+  private:
+    std::function<void()> sample;
+};
+
+const char *chipModeName(uint8_t mode)
+{
+    switch (mode) {
+    case 0x2:
+        return "STBY_RC";
+    case 0x3:
+        return "STBY_XOSC";
+    case 0x4:
+        return "FS";
+    case 0x5:
+        return "RX";
+    case 0x6:
+        return "TX";
+    case 0xB:
+        return "BUSY";
+    default:
+        return "?";
+    }
+}
+} // namespace
+
+template <typename T> void SX126xInterface<T>::sampleChipState()
+{
+    const uint32_t now = millis();
+    // Sampling runs on the main loop, so a late sample is a span in which nothing ran there, the RX handler included.
+    if (lastSampleMs && now - lastSampleMs > 2 * SX126X_STATE_SAMPLER_MS)
+        LOG_DEBUG("chip state: sampler late, %u ms since the last look", (unsigned)(now - lastSampleMs));
+    lastSampleMs = now;
+    if (samplerCs == RADIOLIB_NC)
+        return;
+
+    uint8_t mode = 0xB;
+    uint8_t status = 0;
+    uint16_t irq = sampledIrq;
+    // BUSY high: mid-command, waking or starting the TCXO. The chip would not answer, and waiting would stall the loop.
+    if (!module.hal->digitalRead(module.getGpio())) {
+        // GetIrqStatus returns the status byte (the chip mode) and then the IRQ word; unlike ClearIrqStatus it changes nothing.
+        uint8_t out[4] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
+                          RADIOLIB_SX126X_CMD_NOP};
+        uint8_t in[4] = {0, 0, 0, 0};
+        module.hal->spiBeginTransaction();
+        module.hal->digitalWrite(samplerCs, module.hal->GpioLevelLow);
+        module.hal->spiTransfer(out, sizeof(out), in);
+        module.hal->digitalWrite(samplerCs, module.hal->GpioLevelHigh);
+        module.hal->spiEndTransaction();
+        status = in[1];
+        mode = (status >> 4) & 0x7;
+        irq = ((uint16_t)in[2] << 8) | in[3];
+    }
+    if (mode == sampledMode && irq == sampledIrq)
+        return;
+    LOG_DEBUG("chip state: %s irq 0x%03x, was %s irq 0x%03x, status 0x%02x", chipModeName(mode), irq, chipModeName(sampledMode),
+              sampledIrq, status);
+    sampledMode = mode;
+    sampledIrq = irq;
+}
+#endif
 
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
@@ -104,6 +192,12 @@ template <typename T> bool SX126xInterface<T>::init()
         return false;
 
     startReceive(); // start receiving
+
+#ifdef SX126X_STATE_SAMPLER_MS
+    static ChipStateSampler *chipStateSampler = nullptr; // init() runs once per radio; never start a second sampler
+    if (!chipStateSampler)
+        chipStateSampler = new ChipStateSampler([this]() { sampleChipState(); });
+#endif
 
     return true;
 }
