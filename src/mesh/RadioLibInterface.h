@@ -434,6 +434,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Subclasses can customize, but must also call this base method */
     virtual void configHardwareForSend();
 
+    /** Put radioBuffer's first numbytes on air; a subclass may launch a payload it staged before the scan */
+    virtual int16_t launchTransmit(size_t numbytes);
+
+    /** The packet the running channel scan is clearing the way for, so the scan can stage it; null otherwise */
+    meshtastic_MeshPacket *scanForTx = nullptr;
+
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
 
