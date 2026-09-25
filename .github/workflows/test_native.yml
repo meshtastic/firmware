@@ -157,7 +157,7 @@ jobs:
 
   simulator-tests:
     name: Native Simulator Tests
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -329,7 +329,7 @@ jobs:
   platformio-tests:
     name: Suites (${{ matrix.shard }})
     needs: discover
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     # Measured cold-cache shards run 5-12 minutes. Without this a hung suite, or a runner that
     # stops reporting, holds a runner until GitHub's 6-hour default - times twelve shards.
     timeout-minutes: 30
@@ -473,7 +473,7 @@ jobs:
   # Its own job because it relinks $BUILD_DIR/$PROGNAME, which no shard build dir can survive.
   attribution-canary:
     name: Attribution Canary
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     steps:
