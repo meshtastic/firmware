@@ -212,7 +212,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         } else if (action == DMShellOpenAction::Ignore) {
             LOG_INFO("DMShell: late copy of OPEN for session=0x%x, peer already has OPEN_OK", session.sessionId);
         } else if (!openSession(mp, frame)) {
-            sendError("open_failed", getFrom(&mp));
+            sendSessionlessError("open_failed", getFrom(&mp), frame.session_id);
         }
         return ProcessMessage::STOP;
     }
@@ -225,7 +225,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
                      "op %d",
                      frame.session_id, session.sessionId, mp.from, session.peer, frame.op);
         }
-        sendError("invalid_session", getFrom(&mp));
+        sendSessionlessError("invalid_session", getFrom(&mp), frame.session_id);
         return ProcessMessage::STOP;
     }
 
@@ -1034,5 +1034,27 @@ void DMShellModule::sendError(const char *message, NodeNum peer)
         peer = session.peer;
     }
     sendFrameToPeer(peer, frame, true);
+}
+
+/// A sequenced ERROR outside the session took the next sequence number. With no session that was seq 1, which a
+/// client still waiting for its OPEN_OK took in order, and then dropped the real OPEN_OK (also seq 1) as a duplicate.
+void DMShellModule::sendSessionlessError(const char *message, NodeNum peer, uint32_t sessionId)
+{
+    const size_t len = strnlen(message, MAX_MESSAGE_SIZE);
+    meshtastic_RemoteShell frame = {
+        .op = meshtastic_RemoteShell_OpCode_ERROR,
+        .session_id = sessionId,
+        .seq = 0,
+        .ack_seq = 0,
+        .cols = 0,
+        .rows = 0,
+        .flags = 0,
+    };
+    if (message && len > 0) {
+        assert(len <= sizeof(frame.payload.bytes));
+        memcpy(frame.payload.bytes, message, len);
+        frame.payload.size = len;
+    }
+    sendFrameToPeer(peer, frame, false);
 }
 #endif

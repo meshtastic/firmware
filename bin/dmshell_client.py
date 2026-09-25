@@ -1403,6 +1403,15 @@ def reader_loop(transport, state: SessionState) -> None:
             shell = decode_shell_packet(state, fromradio.packet)
             if not shell:
                 continue
+            if shell.session_id != state.session_id:
+                # Another session's frame, typically the server's reply to a frame from an earlier run still on
+                # air when this one started. Its seq and cursor belong to that session: taking its seq 1 in order
+                # made us drop our own OPEN_OK, also seq 1, as a duplicate. Surface an ERROR; touch no counter.
+                state.bump("rx_frames_other_session")
+                if shell.op == state.pb2.mesh.RemoteShell.ERROR:
+                    message = shell.payload.decode("utf-8", errors="replace")
+                    state.event_queue.put(f"remote error for another session=0x{shell.session_id:08x}: {message}")
+                continue
             if state.drop_open_ok > 0 and shell.op == state.pb2.mesh.RemoteShell.OPEN_OK:
                 # Fault injection for --drop-open-ok: gone before any accounting, as a frame lost on air is.
                 state.drop_open_ok -= 1
