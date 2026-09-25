@@ -21,6 +21,41 @@ void earlyInitVariant()
     pinMode(GPS_RTC_INT, OUTPUT);
     digitalWrite(GPS_RTC_INT, LOW);
     delay(100);
+
+    // After a warm reboot (RTC_SW_CPU_RST) I2C slaves-can be left mid-transaction,
+    // holding SDA low. This causes ESP_ERR_INVALID_STATE during the I2C scan,
+    // which leaves the I2C peripheral generating spurious interrupt requests.
+    // Fix: send 9 SCL clock pulses (enough to clock out any stuck byte) plus a
+    // STOP condition on both buses before the Wire driver initialises them.  On
+    // a cold boot the SDA line is already high so the loop exits after the first
+    // check and the overhead is negligible (~10 µs).
+    auto recoverI2C = [](uint8_t sda, uint8_t scl) {
+        pinMode(scl, OUTPUT);
+        digitalWrite(scl, HIGH);
+        pinMode(sda, INPUT_PULLUP);
+        delayMicroseconds(5);
+        for (int i = 0; i < 9; i++) {
+            if (digitalRead(sda))
+                break; // SDA released - slave is no longer driving the bus
+            digitalWrite(scl, LOW);
+            delayMicroseconds(5);
+            digitalWrite(scl, HIGH);
+            delayMicroseconds(5);
+        }
+        // STOP condition: SDA goes LOW then HIGH while SCL remains HIGH.
+        digitalWrite(scl, HIGH);
+        delayMicroseconds(2);
+        pinMode(sda, OUTPUT);
+        digitalWrite(sda, LOW);
+        delayMicroseconds(5);
+        digitalWrite(sda, HIGH);
+        delayMicroseconds(5);
+        // Release both pins so Wire.begin() can claim them as I2C.
+        pinMode(scl, INPUT);
+        pinMode(sda, INPUT);
+    };
+    recoverI2C(I2C_SDA, I2C_SCL);
+    recoverI2C(I2C_SDA1, I2C_SCL1);
 }
 
 void initVariant()
