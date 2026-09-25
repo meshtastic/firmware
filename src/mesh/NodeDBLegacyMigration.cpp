@@ -9,12 +9,19 @@
 // This file (and the deviceonly_legacy proto) can be removed once
 // DEVICESTATE_MIN_VER advances past 24.
 
+#include "FSCommon.h"
 #include "NodeDB.h"
+#include "SPILock.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
+#include "security/SecureZero.h"
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -130,5 +137,118 @@ bool NodeDB::migrateLegacyNodeDatabase()
     numMeshNodes = nodeDatabase.nodes.size();
     LOG_INFO("Migrated %u nodes from legacy -> v%u (positions: %u, telemetry: %u)", (unsigned)numMeshNodes, DEVICESTATE_CUR_VER,
              (unsigned)posCount, (unsigned)telCount);
+    return true;
+}
+
+// Encoded maxima before the broadcast_message cut (max_size 101), from develop's generated localonly/module_config
+// headers. Remove this block, and its caller in loadFromDisk(), once pre-cut 2.8.0 builds are out of support.
+static constexpr size_t kLegacyLocalModuleConfigSize = 1044;
+static constexpr size_t kLegacyMeshBeaconConfigSize = 242;
+
+// Copies one length-delimited body, cutting field 4 (broadcast_message) to what the current struct holds.
+static bool truncateBeaconBody(const uint8_t *in, size_t inLen, pb_ostream_t *out, bool &cut)
+{
+    constexpr size_t maxMessage = sizeof(meshtastic_ModuleConfig_MeshBeaconConfig::broadcast_message) - 1;
+    pb_istream_t is = pb_istream_from_buffer(in, inLen);
+    while (is.bytes_left) {
+        const size_t start = inLen - is.bytes_left;
+        pb_wire_type_t wireType;
+        uint32_t tag;
+        bool eof;
+        if (!pb_decode_tag(&is, &wireType, &tag, &eof))
+            return false;
+        if (tag == meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_message_tag && wireType == PB_WT_STRING) {
+            uint32_t len;
+            if (!pb_decode_varint32(&is, &len) || len > is.bytes_left)
+                return false;
+            const char *msg = reinterpret_cast<const char *>(in + (inLen - is.bytes_left));
+            const size_t keep = utf8TruncateLen(msg, len, maxMessage);
+            if (keep < len) {
+                LOG_WARN("moduleConfig: beacon message %u bytes, over the %u limit, cut to %u", (unsigned)len,
+                         (unsigned)maxMessage, (unsigned)keep);
+                cut = true;
+            }
+            if (!pb_encode_tag(out, PB_WT_STRING, tag) || !pb_encode_string(out, (const pb_byte_t *)msg, keep) ||
+                !pb_read(&is, NULL, len))
+                return false;
+        } else {
+            if (!pb_skip_field(&is, wireType) || !pb_write(out, in + start, (inLen - is.bytes_left) - start))
+                return false;
+        }
+    }
+    return true;
+}
+
+bool truncateLegacyBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen)
+{
+    pb_istream_t is = pb_istream_from_buffer(in, inLen);
+    pb_ostream_t os = pb_ostream_from_buffer(out, outCap);
+    bool cut = false;
+    while (is.bytes_left) {
+        const size_t start = inLen - is.bytes_left;
+        pb_wire_type_t wireType;
+        uint32_t tag;
+        bool eof;
+        if (!pb_decode_tag(&is, &wireType, &tag, &eof))
+            return false;
+        if (tag == meshtastic_LocalModuleConfig_mesh_beacon_tag && wireType == PB_WT_STRING) {
+            uint32_t len;
+            if (!pb_decode_varint32(&is, &len) || len > is.bytes_left)
+                return false;
+            uint8_t body[kLegacyMeshBeaconConfigSize];
+            pb_ostream_t bodyOut = pb_ostream_from_buffer(body, sizeof(body));
+            if (!truncateBeaconBody(in + (inLen - is.bytes_left), len, &bodyOut, cut) || !pb_read(&is, NULL, len) ||
+                !pb_encode_tag(&os, PB_WT_STRING, tag) || !pb_encode_string(&os, body, bodyOut.bytes_written))
+                return false;
+        } else {
+            if (!pb_skip_field(&is, wireType) || !pb_write(&os, in + start, (inLen - is.bytes_left) - start))
+                return false;
+        }
+    }
+    outLen = os.bytes_written;
+    return cut;
+}
+
+bool NodeDB::migrateLegacyModuleConfig()
+{
+    auto raw = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
+    auto fixed = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
+    if (!raw || !fixed)
+        return false;
+
+    size_t rawLen = 0;
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    if (EncryptedStorage::isEncrypted(moduleConfigFileName)) {
+        if (!EncryptedStorage::readAndDecrypt(moduleConfigFileName, raw.get(), kLegacyLocalModuleConfigSize, rawLen))
+            return false;
+    } else
+#endif
+    {
+#ifdef FSCom
+        concurrency::LockGuard g(spiLock);
+        auto f = FSCom.open(moduleConfigFileName, FILE_O_READ);
+        if (!f)
+            return false;
+        const int got = f.read(raw.get(), kLegacyLocalModuleConfigSize);
+        f.close();
+        if (got <= 0)
+            return false;
+        rawLen = (size_t)got;
+#else
+        return false;
+#endif
+    }
+
+    size_t fixedLen = 0;
+    if (!truncateLegacyBeaconMessage(raw.get(), rawLen, fixed.get(), kLegacyLocalModuleConfigSize, fixedLen))
+        return false;
+
+    pb_istream_t stream = pb_istream_from_buffer(fixed.get(), fixedLen);
+    memset(&moduleConfig, 0, sizeof(moduleConfig));
+    if (!pb_decode(&stream, &meshtastic_LocalModuleConfig_msg, &moduleConfig)) {
+        LOG_ERROR("moduleConfig: still undecodable after the beacon message cut: %s", PB_GET_ERROR(&stream));
+        return false;
+    }
+    LOG_WARN("moduleConfig: migrated a save with an over-long beacon message");
     return true;
 }

@@ -551,6 +551,10 @@ NodeDB::NodeDB()
         saveNodeDatabaseToDisk();
         migrationSavePending = false;
     }
+    if (moduleConfigMigrationSavePending) {
+        saveToDisk(SEGMENT_MODULECONFIG);
+        moduleConfigMigrationSavePending = false;
+    }
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
@@ -2472,6 +2476,7 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    moduleConfigMigrationSavePending = false;
     configDecodeFailed = false;
     configLoadComplete = false;
 
@@ -2851,8 +2856,19 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CONFIG);
     }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    const bool corruptBeforeModuleConfig = storageCorruptThisLoad;
+#endif
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+    // A pre-cut 2.8.0 save with a long beacon message fails the decode; migrate it rather than wipe every module.
+    if (state == LoadFileResult::DECODE_FAILED && migrateLegacyModuleConfig()) {
+        state = LoadFileResult::LOAD_SUCCESS;
+        moduleConfigMigrationSavePending = true;
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        storageCorruptThisLoad = corruptBeforeModuleConfig; // the failed first decode was this file, now migrated
+#endif
+    }
     if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
@@ -3077,6 +3093,10 @@ bool NodeDB::reloadFromDisk()
     if (migrationSavePending) {
         saveNodeDatabaseToDisk();
         migrationSavePending = false;
+    }
+    if (moduleConfigMigrationSavePending) {
+        saveToDisk(SEGMENT_MODULECONFIG);
+        moduleConfigMigrationSavePending = false;
     }
 
     // Push the now-real config to the radio.
