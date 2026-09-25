@@ -4817,6 +4817,68 @@ static void test_sanitise_messageCap_dropsAStraddlingCharacterWhole(void)
     TEST_ASSERT_EQUAL_UINT_MESSAGE(cap - 1, strlen(bcfg.broadcast_message), "the split character goes, the rest stays");
 }
 
+/**
+ * A reaped entry whose packet is still queued must not turn that packet back into ordinary traffic.
+ * Regression guarded: the reaper freed the entry, the packet reached the head with no entry, and it
+ * keyed up on the home config carrying the target channel's key.
+ */
+static void test_sidecar_reapedEntryStillQueued_isDroppedNotSentOnHome(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket queued = meshtastic_MeshPacket_init_zero;
+    queued.id = 0x5EED0700;
+    MeshBeaconModule::setTargetRadioSettings(&queued,
+                                             targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Target"));
+    backdateArmedAt(queued, kBeaconIntervalMs + 1000);
+
+    meshtastic_MeshPacket next = meshtastic_MeshPacket_init_zero;
+    next.id = 0x5EED0701;
+    MeshBeaconModule::setTargetRadioSettings(&next,
+                                             targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Target"));
+
+    TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&queued), "the reaper freed the stale slot");
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&queued),
+                             "its packet, still queued, is dropped at the head rather than sent on the home config");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&next), "the new cycle's beacon is unaffected");
+
+    MeshBeaconModule::clearTargetRadioSettings(&queued); // what packetReleased() does after the drop
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&queued), "released, the id is forgotten");
+    MeshBeaconModule::clearTargetRadioSettings(&next);
+}
+
+/**
+ * An entry evicted from a full table is dropped at the head for the same reason: its packet may still
+ * be queued, and without the entry it would key up on the home config.
+ */
+static void test_sidecar_evictedEntryStillQueued_isDroppedNotSentOnHome(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket live[4];
+    for (int t = 0; t < 4; t++) {
+        live[t] = meshtastic_MeshPacket_init_zero;
+        live[t].id = 0x5EED0800 + t;
+        MeshBeaconModule::setTargetRadioSettings(
+            &live[t], targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, (uint16_t)(t + 1), false,
+                                     meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Live"));
+    }
+    meshtastic_MeshPacket extra = meshtastic_MeshPacket_init_zero;
+    extra.id = 0x5EED0810;
+    MeshBeaconModule::setTargetRadioSettings(&extra,
+                                             targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Extra"));
+
+    int evicted = -1;
+    for (int t = 0; t < 4; t++)
+        if (!MeshBeaconModule::getTargetRadioSettings(&live[t]))
+            evicted = t;
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(-1, evicted, "a full table evicts one entry for the new target");
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&live[evicted]),
+                             "the evicted entry's packet is dropped at the head, not sent on the home config");
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
 // ===========================================================================
 // Unity lifecycle
 // ===========================================================================
@@ -5050,6 +5112,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_licensedNode_acceptsExplicitCleartextOffer);
     RUN_TEST(test_sanitise_emptyOfferPsk_isSavedAndAdvertisedAsExplicitCleartext);
     RUN_TEST(test_sanitise_messageCap_dropsAStraddlingCharacterWhole);
+    RUN_TEST(test_sidecar_reapedEntryStillQueued_isDroppedNotSentOnHome);
+    RUN_TEST(test_sidecar_evictedEntryStillQueued_isDroppedNotSentOnHome);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);

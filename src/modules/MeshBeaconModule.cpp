@@ -21,6 +21,35 @@ bool MeshBeaconModule::originalUsePreset;
 // One entry per broadcast target - the proto holds 4 - each covering the legacy split pair.
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[4];
 
+// Ids of entries reaped or evicted while their packets may still be queued: without them such a packet would
+// reach the radio as ordinary traffic and key up on the home config with the target channel's key.
+static PacketId expiredIds[sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0]) *
+                           sizeof(MeshBeaconModule_TargetRadioSettings::ids) / sizeof(PacketId)];
+static uint8_t expiredNext;
+
+static void rememberExpired(const MeshBeaconModule_TargetRadioSettings &entry)
+{
+    for (uint8_t i = 0; i < entry.idCount; i++) {
+        expiredIds[expiredNext] = entry.ids[i];
+        expiredNext = (uint8_t)((expiredNext + 1) % (sizeof(expiredIds) / sizeof(expiredIds[0])));
+    }
+}
+
+static bool isExpiredId(PacketId id)
+{
+    for (const PacketId e : expiredIds)
+        if (id && e == id)
+            return true;
+    return false;
+}
+
+static void forgetExpired(PacketId id)
+{
+    for (PacketId &e : expiredIds)
+        if (id && e == id)
+            e = 0;
+}
+
 // Role_DISABLED is the zero value, so an unprovisioned slot reads as disabled. A blank name or an
 // empty PSK disqualifies nothing: both have meanings (the preset name; the primary's key, or clear).
 static bool channelSlotUsable(const meshtastic_Channel &slot)
@@ -110,6 +139,7 @@ int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, con
     for (auto &entry : targetRadioSettings) {
         if (targetRadioSettingsStale(entry)) {
             LOG_WARN("Beacon: target entry for 0x%08x expired unsent, freeing its slot", entry.ids[0]);
+            rememberExpired(entry);
             entry.idCount = 0;
         }
     }
@@ -146,6 +176,7 @@ int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, con
         }
         LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x", (unsigned)kEntries, target->ids[0],
                  p->id);
+        rememberExpired(*target);
     }
     *target = s;
     target->idCount = 1;
@@ -174,6 +205,7 @@ static void releaseIfNotQueued(ErrorCode sendResult, meshtastic_MeshPacket *p, P
 
 void MeshBeaconModule::clearTargetRadioSettingsById(PacketId id)
 {
+    forgetExpired(id);
     for (auto &entry : targetRadioSettings) {
         for (uint8_t i = 0; i < entry.idCount; i++) {
             if (entry.ids[i] != id)
@@ -197,13 +229,20 @@ void MeshBeaconModule::clearAllTargetRadioSettings()
 {
     for (auto &entry : targetRadioSettings)
         entry.idCount = 0;
+    for (PacketId &e : expiredIds)
+        e = 0;
 }
 
 bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
 {
     const MeshBeaconModule_TargetRadioSettings *s = getTargetRadioSettings(p);
-    if (!s)
+    if (!s) {
+        if (p && isExpiredId(p->id)) {
+            LOG_WARN("Beacon: packet 0x%08x lost its target entry while queued, drop", p->id);
+            return true;
+        }
         return false; // not a beacon-switch packet - nothing to validate, normal traffic unaffected
+    }
 
     // Queued for a whole broadcast interval: the mesh it advertises has moved on and the next
     // beacon is due, so drop it rather than transmit an hour-old description.
