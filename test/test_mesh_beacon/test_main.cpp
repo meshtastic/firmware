@@ -2290,11 +2290,12 @@ static void test_broadcaster_offerOnADisabledSlot_isWithheldButTextIsSent(void)
     bcast.sendBeacon();
 
     TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets.size(), "the text still makes a beacon");
-    meshtastic_MeshBeacon decoded;
-    TEST_ASSERT_TRUE(decodeBeaconPacket(mockRouter->sentPackets[0], decoded));
-    TEST_ASSERT_EQUAL_STRING("still here", decoded.message);
-    TEST_ASSERT_FALSE_MESSAGE(decoded.has_offer_channel, "but the offer for a deleted channel is withheld");
-    TEST_ASSERT_FALSE(decoded.has_offer_preset);
+    // With no offer left there is no MeshBeacon to send: the text goes out as a plain text message.
+    const meshtastic_MeshPacket &sent = mockRouter->sentPackets[0];
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_PortNum_TEXT_MESSAGE_APP, sent.decoded.portnum,
+                              "the offer for a deleted channel is withheld, so only the text is sent");
+    TEST_ASSERT_EQUAL_UINT32(strlen("still here"), sent.decoded.payload.size);
+    TEST_ASSERT_EQUAL_MEMORY("still here", sent.decoded.payload.bytes, strlen("still here"));
 }
 
 /**
