@@ -123,8 +123,12 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     }
 
     printPacket("Forwarding to phone", mp);
-    if (auto *toPhone = packetPool.allocCopy(*mp))
+    if (auto *toPhone = packetPool.allocCopy(*mp)) {
+        // Also overwrites whatever value arrived with the packet.
+        toPhone->ack_proof_status =
+            router ? router->ackProofStatusFor(*mp) : meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
         sendToPhone(toPhone);
+    }
 
     return 0;
 }
@@ -308,6 +312,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     p.from = 0;                          // We don't let clients assign nodenums to their sent messages
     p.next_hop = NO_NEXT_HOP_PREFERENCE; // We don't let clients assign next_hop to their sent messages
     p.relay_node = NO_RELAY_NODE;        // We don't let clients assign relay_node to their sent messages
+    p.ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT; // Only our own ack verification sets it
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
