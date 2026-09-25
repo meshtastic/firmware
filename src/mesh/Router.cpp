@@ -806,6 +806,9 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 {
     // Only our own ack verification sets this. Cleared before the cache compare and both copies below,
     // so neither the auth cache nor the MQTT/UDP uplink snapshot can carry an inbound value onward.
+    // It must stay ahead of routingAuthCacheMatches(): that compare is a memcmp over the whole packet,
+    // so a sender varying this field would otherwise miss the cache and force a fresh authentication
+    // on every packet.
     p->ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
 
     // Routing still needs the original encrypted representation for byte-for-byte relay and for

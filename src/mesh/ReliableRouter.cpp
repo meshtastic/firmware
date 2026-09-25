@@ -225,6 +225,12 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
     // and nothing caches the result), and an attacker with the channel key picks when we pay it. A
     // packet id is visible in the cleartext header, so without this gate a forged ack for any id at
     // all forces a DH. With it, only ids we genuinely have outstanding can, and only while pending.
+    //
+    // The cost of that gate: a relay's rebroadcast of our own DM already cleared this entry via
+    // perhapsGenerateImplicitAckForOwnOverheard, so on most multi-hop DMs the peer's genuine proof
+    // arrives after the entry is gone and reads ABSENT. Do not "fix" that by dropping the gate - it
+    // is the DoS guard. Checking the proof before the echo clears the entry, or keeping a short-lived
+    // record of completed sends to verify against, is the shape of a real fix.
     PendingPacket *orig = findPendingPacket(p->to, originalId);
     if (!orig)
         return true;
