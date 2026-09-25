@@ -621,7 +621,13 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     // Continuous RX on a CH341 host too: nothing to save there, and only a known-continuous RX can be resumed
     // after RX_DONE (resumeRunningReceive()) instead of restarted over the slow bus.
+#ifdef SX126X_RESUME_CONTINUOUS_RX
+    // Bench flag: the same resume on MCU boards. Costs nothing on presets where the duty cycle falls back to
+    // continuous anyway (SHORT_FAST's 16-symbol preamble against 8 wake symbols leaves no sleep).
+    const bool continuousRx = true;
+#else
     const bool continuousRx = irqPolledOverUsb();
+#endif
 #ifdef ARCH_PORTDUINO_WASM
     const char *rxMethod = "startReceive";
 #else
@@ -784,6 +790,9 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
     LOG_TRACE("Radio back in RX at TX_DONE, %u ms before the handler ran", (unsigned)heldMs);
     deafSinceMs = 0; // listening since the interrupt: no deaf window to report
     RadioLibInterface::startReceive();
+#ifdef SX126X_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // the interrupt armed SET_RX with no timeout
+#endif
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
     return true;
