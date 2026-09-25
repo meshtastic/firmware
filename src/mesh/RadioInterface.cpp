@@ -1522,7 +1522,13 @@ void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 {
     assert(!sendingPacket);
+    const size_t numbytes = encodeRadioBuffer(p);
+    sendingPacket = p;
+    return numbytes;
+}
 
+size_t RadioInterface::encodeRadioBuffer(meshtastic_MeshPacket *p)
+{
     // LOG_DEBUG("Send queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag); // It should have already been encoded by now
 
@@ -1553,6 +1559,5 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     memcpy(radioBuffer.payload, p->encrypted.bytes, payloadLen);
 
-    sendingPacket = p;
     return payloadLen + sizeof(PacketHeader);
 }

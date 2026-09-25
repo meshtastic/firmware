@@ -496,7 +496,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     LOG_DEBUG("CAD arm");
                     const uint32_t scanStartMs = Time::getMillis();
                     noteDeafFrom("scan");
+                    scanForTx = txp;
                     const bool channelActive = isChannelActive();
+                    scanForTx = nullptr;
                     LOG_TRACE("Channel scan %s in %u ms", channelActive ? "busy" : "clear",
                               (unsigned)(Time::getMillis() - scanStartMs));
                     if (channelActive) { // currently traffic on the channel?
@@ -1009,6 +1011,11 @@ void RadioLibInterface::configHardwareForSend()
     powerMon->setState(meshtastic_PowerMon_State_Lora_TXOn);
 }
 
+int16_t RadioLibInterface::launchTransmit(size_t numbytes)
+{
+    return iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+}
+
 void RadioLibInterface::setStandby()
 {
     // Any handoff is void once the chip leaves RX. Left set, the flag would make the next rearmReceive()
@@ -1044,7 +1051,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
         size_t numbytes = beginSending(txp);
 
-        int res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+        int res = launchTransmit(numbytes);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
