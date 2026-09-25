@@ -446,6 +446,9 @@ void setup()
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
         ourQuality = RTCQualityNTP;
+    } else if (access("/var/state/dnsmasqsec", F_OK) == 0) {
+        // OpenWrt marks the system time as valid after successful NTP synchronization.
+        ourQuality = RTCQualityNTP;
     }
 #endif
 

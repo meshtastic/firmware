@@ -336,7 +336,7 @@ __STATIC_INLINE uint32_t sd_nvic_DisableIRQ(IRQn_Type IRQn)
     }
 
     if (nrf_nvic_state.__cr_flag) {
-        nrf_nvic_state.__irq_masks[(uint32_t)((int32_t)IRQn) >> 5] &= ~(1UL << ((uint32_t)(IRQn)&0x1F));
+        nrf_nvic_state.__irq_masks[(uint32_t)((int32_t)IRQn) >> 5] &= ~(1UL << ((uint32_t)(IRQn) & 0x1F));
     } else {
         NVIC_DisableIRQ(IRQn);
     }

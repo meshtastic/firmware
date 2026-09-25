@@ -98,6 +98,16 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
     /**
+     * The ack proof verdict sniffReceived() reached for this packet, or ACK_PROOF_ABSENT when it
+     * reached none. Only valid until the next packet is sniffed.
+     */
+    virtual meshtastic_MeshPacket_AckProofStatus ackProofStatusFor(const meshtastic_MeshPacket &p) const
+    {
+        (void)p;
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+    }
+
+    /**
      * @return our local nodenum */
     [[nodiscard]] NodeNum getNodeNum();
 

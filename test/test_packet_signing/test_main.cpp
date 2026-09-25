@@ -23,6 +23,7 @@
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
 #include "UptimeClock.h"
+#include "mesh/AckProof.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshRadio.h"
@@ -203,12 +204,14 @@ class AuthPipelineModule : public SinglePortModule
 {
   public:
     AuthPipelineModule() : SinglePortModule("authPipeline", meshtastic_PortNum_POSITION_APP) {}
-    ProcessMessage handleReceived(const meshtastic_MeshPacket &) override
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
     {
         calls++;
+        lastAckProofStatus = mp.ack_proof_status;
         return ProcessMessage::CONTINUE;
     }
     uint32_t calls = 0;
+    meshtastic_MeshPacket_AckProofStatus lastAckProofStatus = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
 };
 
 class AuthPipelineMqtt : public MQTT
@@ -253,8 +256,7 @@ static meshtastic_MeshPacket makeDecoded(NodeNum from, NodeNum to, meshtastic_Po
 // because perhapsEncode only auto-signs packets that originate from us.
 static void signWithCurrentKey(meshtastic_MeshPacket *p)
 {
-    bool ok = crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
-                                  p->decoded.xeddsa_signature.bytes);
+    bool ok = crypto->xeddsa_sign(p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes);
     TEST_ASSERT_TRUE_MESSAGE(ok, "xeddsa_sign failed in test setup");
     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 }
@@ -1726,6 +1728,75 @@ void test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only(void)
     TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&spoofed)));
 }
 
+// C18: MeshPacket.ack_proof_status is set only by our own ack verification. A value that arrives
+// with a packet must be gone by the time modules and the phone see it - including after the routing
+// auth cache restores its authenticated copy, which is how the clear was first lost.
+void test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->addNode(REMOTE_NODE);
+    meshtastic_MeshPacket injected = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    injected.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    injected.hop_start = 2; // a missing hop_start reads as pre-hop firmware and never reaches modules
+    injected.hop_limit = 1;
+    injected.ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+    pipelineModule->lastAckProofStatus = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+
+    runPipelineIngress(injected);
+
+    TEST_ASSERT_EQUAL(1, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT, pipelineModule->lastAckProofStatus);
+    meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT, toPhone->ack_proof_status);
+    packetPool.release(toPhone);
+}
+
+// C19: the other half of C18. A proven ack from the node we addressed, for a DM still pending, must
+// reach the phone reading ACK_PROOF_VALID - the verdict ReliableRouter reaches while sniffing has to
+// survive into the copy MeshService::handleFromRadio() queues, or the client never sees a receipt.
+void test_C19_proven_ack_reaches_phone_as_valid(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+
+    meshtastic_MeshPacket original = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    original.id = 0xC1900019;
+    pipelineRouter->addPending(original, UINT32_MAX);
+
+    meshtastic_MeshPacket ack = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_ROUTING_APP, 0);
+    ack.id = 0xC1900020;
+    ack.hop_start = 2;
+    ack.hop_limit = 1;
+    ack.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    ack.decoded.request_id = original.id;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.which_variant = meshtastic_Routing_error_reason_tag;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+    ack.decoded.payload.size =
+        pb_encode_to_bytes(ack.decoded.payload.bytes, sizeof(ack.decoded.payload.bytes), &meshtastic_Routing_msg, &routing);
+    TEST_ASSERT_GREATER_THAN(0, ack.decoded.payload.size);
+    crypto->setDHPrivateKey(remotePriv);
+    TEST_ASSERT_TRUE(ackProofAttachWithKey(&ack, localPub));
+    crypto->setDHPrivateKey(localPriv);
+
+    runPipelineIngress(ack);
+
+    meshtastic_MeshPacket *delivered = nullptr;
+    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
+        if (!delivered && queued->id == ack.id)
+            delivered = queued;
+        else
+            packetPool.release(queued);
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(delivered, "the ack must reach the phone");
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID, delivered->ack_proof_status);
+    packetPool.release(delivered);
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2223,6 +2294,136 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
+// E14: the reason this change exists. A signed broadcast reply (a tapback: the client sets reply_id
+// on an outgoing text, firmware signs the broadcast) has its reply_id in the Data envelope, outside
+// the signed payload. Channel crypto is AES-CTR with no MAC, so before this binding a listener
+// holding the PSK could re-point a signed tapback at a different message and it would still verify.
+void test_E14_decoded_signed_reply_retargeted_reply_id_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.decoded.reply_id = 0x5555AAAA;
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+
+    p.decoded.reply_id ^= 1; // re-point the tapback at a different message
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted reply must fail verification");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E15: the same for request_id. Nothing broadcast carries one today, so this is forward cover for
+// any future signed packet that does - and for licensed mode, where unicasts are signed.
+void test_E15_decoded_signed_response_retargeted_request_id_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.decoded.request_id = 0xAAAA5555;
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    p.decoded.request_id ^= 1;
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted response must fail verification");
+}
+
+// E16: an ordinary signed broadcast with no envelope fields set still verifies. The single layout
+// signs those fields as zero rather than omitting them, so the common case must stay unaffected.
+void test_E16_decoded_signed_broadcast_without_linkage_still_verifies(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(0, p.decoded.request_id);
+    TEST_ASSERT_EQUAL(0, p.decoded.reply_id);
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+}
+
+// E17: the other half of the reaction attack. A reaction is a TEXT_MESSAGE carrying the emoji in
+// the payload, reply_id naming the message reacted to, and the emoji flag telling the client to
+// render it as a reaction. Binding reply_id alone would still let a PSK holder flip that flag and
+// turn a signed reply into a signed reaction - or the reverse - on a message the sender never saw.
+void test_E17_decoded_signed_reaction_emoji_flag_flip_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.decoded.reply_id = 0x5555AAAA;
+    p.decoded.emoji = 1;
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+
+    p.decoded.emoji = 0; // render the reaction as a plain reply instead
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "flipping the emoji flag must fail verification");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E18: bitfield bit 0 is OK_TO_MQTT, the sender's consent to being uploaded to a public broker, and
+// MQTT.cpp reads it to decide. Unsigned, a PSK holder could set it on a message the sender marked
+// private and no gateway would know the difference. Stripping the optional field is covered too,
+// since presence is signed separately from the value.
+void test_E18_decoded_signed_broadcast_bitfield_tamper_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.decoded.has_bitfield = true;
+    p.decoded.bitfield = 0; // sender withheld MQTT consent
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+
+    meshtastic_MeshPacket granted = p;
+    granted.decoded.bitfield |= BITFIELD_OK_TO_MQTT_MASK;
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&granted), "granting MQTT consent in flight must fail verification");
+
+    meshtastic_MeshPacket stripped = p;
+    stripped.decoded.has_bitfield = false;
+    stripped.decoded.bitfield = 0;
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&stripped), "stripping the bitfield must fail verification");
+}
+
+// E19: `to` lives in the cleartext header and relays never rewrite it, but it was outside the
+// signature. A signed broadcast could be re-addressed as a direct message and still verify,
+// delivering a public statement as an apparent private one from the same signer.
+void test_E19_decoded_signed_broadcast_readdressed_as_dm_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    signWithCurrentKey(&p);
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+
+    p.to = LOCAL_NODE; // re-addressed from the channel to us
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a re-addressed broadcast must fail verification");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -2308,6 +2509,8 @@ void setup()
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
+    RUN_TEST(test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone);
+    RUN_TEST(test_C19_proven_ack_reaches_phone_as_valid);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
@@ -2343,6 +2546,12 @@ void setup()
     RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
     RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
     RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
+    RUN_TEST(test_E14_decoded_signed_reply_retargeted_reply_id_dropped);
+    RUN_TEST(test_E15_decoded_signed_response_retargeted_request_id_dropped);
+    RUN_TEST(test_E16_decoded_signed_broadcast_without_linkage_still_verifies);
+    RUN_TEST(test_E17_decoded_signed_reaction_emoji_flag_flip_dropped);
+    RUN_TEST(test_E18_decoded_signed_broadcast_bitfield_tamper_dropped);
+    RUN_TEST(test_E19_decoded_signed_broadcast_readdressed_as_dm_dropped);
 
     const int result = UNITY_END();
     airTime = savedAirTime;

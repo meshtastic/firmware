@@ -5,7 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "HM330XSensor.h"
 
-HM330XSensor::HM330XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_HM330X, "HM330X"){};
+HM330XSensor::HM330XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_HM330X, "HM330X") {};
 
 bool HM330XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
