@@ -116,6 +116,12 @@ void RouterRetirementModule::restoreClientDefaults()
 
 bool RouterRetirementModule::commitRetirement()
 {
+    // The zeroed credit first: landing the new role over the old credit would demote it again on the next tick.
+    if (!saveToDisk()) {
+        LOG_WARN("Router retirement: credit save failed, retry before the role");
+        retirementSavePending = true;
+        return false;
+    }
     // Role defaults touch config, module config (telemetry interval) and the owner (devicestate).
     if (!nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE)) {
         LOG_WARN("Router retirement: role save failed, retry");
@@ -136,8 +142,7 @@ void RouterRetirementModule::retireOneRung()
 
     LOG_WARN("Router retirement: role %d -> %d after %u s", (int)current, (int)next, creditSecs);
     config.device.role = next;
-    creditSecs = 0; // fresh credit at the new rung
-    saveToDisk();
+    creditSecs = 0; // fresh credit at the new rung; commitRetirement() persists it before the role
     if (next == meshtastic_Config_DeviceConfig_Role_CLIENT)
         restoreClientDefaults(); // installRoleDefaults has no CLIENT branch
     else

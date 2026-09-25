@@ -57,6 +57,14 @@ static NodeDB *testNodeDB = nullptr;
 static MockMeshService *mockService = nullptr;
 static AdminModuleTestShim *admin = nullptr;
 
+// The admin-gate cases need the global module AdminModule calls into. The fixture owns it, so tearDown()
+// frees it on a failed assertion too: Unity longjmps out of the test body and skips its last statements.
+static RouterRetirementTestShim *buildAdminGateModule()
+{
+    routerRetirementModule = new RouterRetirementTestShim();
+    return static_cast<RouterRetirementTestShim *>(routerRetirementModule);
+}
+
 static void buildNodeDbAndAdmin()
 {
     mockService = new MockMeshService();
@@ -80,6 +88,8 @@ static void buildNodeDbAndAdmin()
 
 static void dropNodeDbAndAdmin()
 {
+    delete routerRetirementModule;
+    routerRetirementModule = nullptr;
     if (admin) {
         admin->drainReply();
         delete admin;
@@ -445,8 +455,7 @@ void test_below_threshold_keeps_role()
 void test_unauthorized_remote_admin_does_not_reset()
 {
     buildNodeDbAndAdmin();
-    routerRetirementModule = new RouterRetirementTestShim();
-    auto *m = static_cast<RouterRetirementTestShim *>(routerRetirementModule);
+    auto *m = buildAdminGateModule();
     m->setCredit(5 * HOUR);
 
     meshtastic_AdminMessage am;
@@ -455,16 +464,13 @@ void test_unauthorized_remote_admin_does_not_reset()
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_UINT32(5 * HOUR, m->credit());
-    delete m;
-    routerRetirementModule = nullptr;
 }
 
 // A remote setter that fails the session-key gate is rejected before the reset.
 void test_remote_setter_without_session_does_not_reset()
 {
     buildNodeDbAndAdmin();
-    routerRetirementModule = new RouterRetirementTestShim();
-    auto *m = static_cast<RouterRetirementTestShim *>(routerRetirementModule);
+    auto *m = buildAdminGateModule();
     m->setCredit(5 * HOUR);
 
     meshtastic_AdminMessage am = meshtastic_AdminMessage_init_zero;
@@ -476,16 +482,13 @@ void test_remote_setter_without_session_does_not_reset()
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_UINT32(5 * HOUR, m->credit());
-    delete m;
-    routerRetirementModule = nullptr;
 }
 
 // An authorized remote admin (PKC with an admin key) resets it...
 void test_authorized_remote_admin_resets()
 {
     buildNodeDbAndAdmin();
-    routerRetirementModule = new RouterRetirementTestShim();
-    auto *m = static_cast<RouterRetirementTestShim *>(routerRetirementModule);
+    auto *m = buildAdminGateModule();
     m->setCredit(5 * HOUR);
 
     meshtastic_AdminMessage am;
@@ -494,16 +497,13 @@ void test_authorized_remote_admin_resets()
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_UINT32(0, m->credit());
-    delete m;
-    routerRetirementModule = nullptr;
 }
 
 // ...and so does a local client (USB/BLE, from == 0), which PhoneAPI has already gated.
 void test_local_admin_resets()
 {
     buildNodeDbAndAdmin();
-    routerRetirementModule = new RouterRetirementTestShim();
-    auto *m = static_cast<RouterRetirementTestShim *>(routerRetirementModule);
+    auto *m = buildAdminGateModule();
     m->setCredit(5 * HOUR);
 
     meshtastic_AdminMessage am;
@@ -512,16 +512,13 @@ void test_local_admin_resets()
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_UINT32(0, m->credit());
-    delete m;
-    routerRetirementModule = nullptr;
 }
 
 // A response is a node *we* administer answering us; it says nothing about who manages this node.
 void test_admin_response_does_not_reset()
 {
     buildNodeDbAndAdmin();
-    routerRetirementModule = new RouterRetirementTestShim();
-    auto *m = static_cast<RouterRetirementTestShim *>(routerRetirementModule);
+    auto *m = buildAdminGateModule();
     m->setCredit(5 * HOUR);
 
     meshtastic_AdminMessage am = meshtastic_AdminMessage_init_zero;
@@ -535,8 +532,6 @@ void test_admin_response_does_not_reset()
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_UINT32(5 * HOUR, m->credit());
-    delete m;
-    routerRetirementModule = nullptr;
 }
 
 void setup()

@@ -63,7 +63,7 @@ class RouterRetirementModule : public concurrency::OSThread
     void loadFromDisk();
     bool saveToDisk() const;
     void retireOneRung();
-    /// Persist the demoted role; on success schedule the reboot that applies it.
+    /// Persist the zeroed credit, then the demoted role; only once both land, schedule the reboot.
     bool commitRetirement();
     /// Undo what installRoleDefaults(ROUTER/ROUTER_LATE) set, now that the role is CLIENT.
     static void restoreClientDefaults();
@@ -71,7 +71,7 @@ class RouterRetirementModule : public concurrency::OSThread
     /// Serialises the credit against noteAdminSession(), which the admin path may call from another task.
     concurrency::Lock lock;
     uint32_t creditSecs = 0;
-    /// A demotion whose config save failed (unsafe power); the next tick retries before rebooting.
+    /// A demotion whose credit or config save failed (unsafe power); the next tick retries both before rebooting.
     bool retirementSavePending = false;
 
 #ifdef PIO_UNIT_TESTING
