@@ -1271,6 +1271,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
 {
     int extraSegments = 0;
     bool shouldReboot = true;
+    int16_t claimedChannel = -1; // a slot the beacon offer claimed, which the phone has not seen
     // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
     // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
     // next PowerFSM transition. Everything else reboots, so take BLE down before the phone interferes.
@@ -1415,7 +1416,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
                               (unsigned)MeshBeaconModule::remoteAdminCeiling());
         }
         // The by-value channels need to be in the table for the TX path to find their keys.
-        if (MeshBeaconModule::upsertByValueChannels(beaconCfg))
+        claimedChannel = MeshBeaconModule::upsertByValueChannels(beaconCfg);
+        if (claimedChannel >= 0)
             extraSegments |= SEGMENT_CHANNELS;
         if (!MeshBeaconModule::offerChannelHeld(beaconCfg))
             sendWarningAndLog("Beacon offer saved but withheld: %s", owner.is_licensed
@@ -1432,6 +1434,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
 #endif
     }
     saveChanges(SEGMENT_MODULECONFIG | extraSegments, shouldReboot);
+    // Channels reach a phone only in the connect-time dump, so the local writer would show a stale list.
+    if (!fromOthers && claimedChannel >= 0)
+        sendChannelToPhone((uint32_t)claimedChannel);
     return true;
 }
 
@@ -1867,6 +1872,22 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (req.pki_encrypted) {
         myReply->pki_encrypted = true;
     }
+}
+
+void AdminModule::sendChannelToPhone(uint32_t channelIndex)
+{
+    if (!service || !router)
+        return;
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    r.get_channel_response = channels.getByIndex(channelIndex);
+    r.which_payload_variant = meshtastic_AdminMessage_get_channel_response_tag;
+    setPassKey(&r);
+    meshtastic_MeshPacket *p = allocDataProtobuf(r);
+    if (!p)
+        return;
+    p->to = nodeDB->getNodeNum();
+    p->decoded.want_response = false;
+    service->sendToPhone(p);
 }
 
 void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex)

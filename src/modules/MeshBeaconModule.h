@@ -122,8 +122,8 @@ class MeshBeaconModule
 
     // Place the by-value offer channel in the channel table, so the node holds what it advertises.
     // An offer whose channel will not fit is withheld, never re-pointed at another channel, and no
-    // live channel is ever evicted. Returns true when the table was written.
-    static bool upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+    // live channel is ever evicted. Returns the index written, or -1 when the table is unchanged.
+    static int16_t upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     /** Copy every offer field from config onto an outgoing beacon. */
     static void fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);

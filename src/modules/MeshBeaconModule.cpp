@@ -265,9 +265,9 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     return !RadioInterface::validateConfigLora(lora, s->channelName);
 }
 
-// Already present means nothing to write; absent means claim a disabled slot. wrote records
-// whether the table actually changed, so the caller knows to save SEGMENT_CHANNELS.
-static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, bool &wrote)
+// Already present means nothing to write; absent means claim a disabled slot. written is the index
+// claimed, or -1 when the table did not change, so the caller knows to save SEGMENT_CHANNELS.
+static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, int16_t &written)
 {
     const uint8_t pskLen = (uint8_t)id.psk.size;
     if (channels.findByIdentity(id.name, id.psk.bytes, pskLen, id.use_aead) >= 0)
@@ -280,17 +280,17 @@ static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, bool &wro
     const int16_t idx = channels.upsertIdentity(id.name, id.psk.bytes, pskLen, id.use_aead);
     if (idx < 0)
         return false;
-    wrote = true;
+    written = idx;
     return true;
 }
 
-bool MeshBeaconModule::upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+int16_t MeshBeaconModule::upsertByValueChannels(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
 {
-    bool wrote = false;
+    int16_t written = -1;
     // The offer stays as written either way; offerIsPlaceable() withholds it while its channel is absent.
-    if (bcfg.has_broadcast_offer_channel && !placeChannelIdentity(bcfg.broadcast_offer_channel, wrote))
+    if (bcfg.has_broadcast_offer_channel && !placeChannelIdentity(bcfg.broadcast_offer_channel, written))
         LOG_WARN("Beacon: offered channel not placed (table full or licensed) - offer withheld until it is");
-    return wrote;
+    return written;
 }
 
 // Length prefix width for a submessage body, plus its tag key.

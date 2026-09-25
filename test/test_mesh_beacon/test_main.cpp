@@ -4879,6 +4879,87 @@ static void test_sidecar_evictedEntryStillQueued_isDroppedNotSentOnHome(void)
     MeshBeaconModule::clearAllTargetRadioSettings();
 }
 
+// The admin messages the node pushed to the phone, decoded; drains the queue.
+static std::vector<meshtastic_AdminMessage> drainAdminToPhone()
+{
+    std::vector<meshtastic_AdminMessage> out;
+    meshtastic_MeshPacket *p;
+    while ((p = mockSvc->getForPhone()) != nullptr) {
+        meshtastic_AdminMessage a = meshtastic_AdminMessage_init_zero;
+        if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP &&
+            pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_AdminMessage_msg, &a))
+            out.push_back(a);
+        mockSvc->releaseToPool(p);
+    }
+    return out;
+}
+
+/**
+ * A local write whose offer claims a slot tells the phone about it with one get_channel_response.
+ * Regression guarded: channels reach a phone only in the connect-time dump, so the writer showed a
+ * stale list until it reconnected.
+ */
+static void test_byValue_localClaim_pushesTheClaimedChannelToThePhone(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    drainAdminToPhone();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    offerChannelByValue(bcfg, "Offered", kByValuePsk, sizeof(kByValuePsk));
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    const int16_t placed = channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk));
+    TEST_ASSERT_GREATER_THAN_INT16(0, placed);
+    const std::vector<meshtastic_AdminMessage> pushed = drainAdminToPhone();
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, pushed.size(), "exactly one message for the one claimed slot");
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_get_channel_response_tag, pushed[0].which_payload_variant);
+    TEST_ASSERT_EQUAL_INT(placed, pushed[0].get_channel_response.index);
+    TEST_ASSERT_EQUAL_STRING("Offered", pushed[0].get_channel_response.settings.name);
+    TEST_ASSERT_EQUAL_UINT(sizeof(kByValuePsk), pushed[0].get_channel_response.settings.psk.size);
+    TEST_ASSERT_EQUAL_MEMORY(kByValuePsk, pushed[0].get_channel_response.settings.psk.bytes, sizeof(kByValuePsk));
+}
+
+/**
+ * An offer whose channel the table already holds writes nothing, so nothing is pushed.
+ */
+static void test_byValue_heldChannel_pushesNothing(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    drainAdminToPhone();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    offerChannelByValue(bcfg, "Home", kHomePsk, sizeof(kHomePsk));
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_EQUAL_UINT(0, drainAdminToPhone().size());
+}
+
+/**
+ * A remote administrator's claim is not pushed to the local phone: that phone did not write it, and
+ * the remote client reads the node's channels on demand.
+ */
+static void test_byValue_remoteClaim_pushesNothingToTheLocalPhone(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    drainAdminToPhone();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    offerChannelByValue(bcfg, "Offered", kByValuePsk, sizeof(kByValuePsk));
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg), true);
+
+    TEST_ASSERT_GREATER_THAN_INT16(0, channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk)));
+    TEST_ASSERT_EQUAL_UINT(0, drainAdminToPhone().size());
+}
+
 // ===========================================================================
 // Unity lifecycle
 // ===========================================================================
@@ -5114,6 +5195,9 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sanitise_messageCap_dropsAStraddlingCharacterWhole);
     RUN_TEST(test_sidecar_reapedEntryStillQueued_isDroppedNotSentOnHome);
     RUN_TEST(test_sidecar_evictedEntryStillQueued_isDroppedNotSentOnHome);
+    RUN_TEST(test_byValue_localClaim_pushesTheClaimedChannelToThePhone);
+    RUN_TEST(test_byValue_heldChannel_pushesNothing);
+    RUN_TEST(test_byValue_remoteClaim_pushesNothingToTheLocalPhone);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);

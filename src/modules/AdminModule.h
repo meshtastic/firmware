@@ -73,6 +73,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     NOINLINE void handleGetConfig(const meshtastic_MeshPacket &req, uint32_t configType);
     NOINLINE void handleGetModuleConfig(const meshtastic_MeshPacket &req, uint32_t configType);
     NOINLINE void handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex);
+    // Unsolicited get_channel_response to the local phone, for a slot the firmware wrote on its own.
+    void sendChannelToPhone(uint32_t channelIndex);
     NOINLINE void handleGetDeviceMetadata(const meshtastic_MeshPacket &req);
     NOINLINE void handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req);
     NOINLINE void handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req);
