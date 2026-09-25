@@ -107,6 +107,8 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void sendReplayRequest(uint32_t replayFromSeq);
     void sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember = true);
     void sendError(const char *message, NodeNum peer = 0);
+    /// Reject a frame that belongs to no session of ours: unsequenced, and echoing the frame's own session id.
+    void sendSessionlessError(const char *message, NodeNum peer, uint32_t sessionId);
 };
 
 extern DMShellModule *dmShellModule;
