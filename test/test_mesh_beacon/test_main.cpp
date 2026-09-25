@@ -4972,8 +4972,8 @@ static void test_byValue_localClaim_pushesTheClaimedChannelToThePhone(void)
     const std::vector<PushedAdmin> pushed = drainAdminToPhone();
     TEST_ASSERT_EQUAL_UINT_MESSAGE(1, pushed.size(), "exactly one message for the one claimed slot");
     // Android and Apple apply an unrequested get_channel_response only when it comes from the node itself.
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(nodeDB->getNodeNum(), pushed[0].from, "from must be the node's own number");
-    TEST_ASSERT_EQUAL_UINT32(nodeDB->getNodeNum(), pushed[0].to);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(kLocalNode, pushed[0].from, "from must be the node's own number");
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, pushed[0].to);
     TEST_ASSERT_EQUAL(meshtastic_AdminMessage_get_channel_response_tag, pushed[0].msg.which_payload_variant);
     TEST_ASSERT_EQUAL_INT(placed, pushed[0].msg.get_channel_response.index);
     TEST_ASSERT_EQUAL(meshtastic_Channel_Role_SECONDARY, pushed[0].msg.get_channel_response.role);
@@ -5109,29 +5109,6 @@ static void test_byValue_emptyPskOfferMatchingHeldCleartext_claimsAndPushesNothi
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_DISABLED, channels.getByIndex(2).role, "no second slot is claimed");
     TEST_ASSERT_EQUAL_UINT(0, drainAdminToPhone().size());
     TEST_ASSERT_FALSE_MESSAGE(testAdmin->savedSegments() & SEGMENT_CHANNELS, "nothing was written");
-}
-
-/**
- * The push does not depend on an edit transaction. The cases above write inside one (deferSaves opens
- * it); a plain local write, saved at once, pushes the claimed slot the same way.
- */
-static void test_byValue_localClaimOutsideAnEditTransaction_isPushedToo(void)
-{
-    resetConfig();
-    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
-    drainAdminToPhone();
-
-    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    offerChannelByValue(bcfg, "Offered", kByValuePsk, sizeof(kByValuePsk));
-
-    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
-    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
-
-    const int16_t placed = channels.findByIdentity("Offered", kByValuePsk, sizeof(kByValuePsk));
-    TEST_ASSERT_GREATER_THAN_INT16(0, placed);
-    const std::vector<PushedAdmin> pushed = drainAdminToPhone();
-    TEST_ASSERT_EQUAL_UINT(1, pushed.size());
-    TEST_ASSERT_EQUAL_INT(placed, pushed[0].msg.get_channel_response.index);
 }
 
 // ===========================================================================
@@ -5376,7 +5353,6 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_sevenSlotsInUse_fourTargetsAndAnOffer_pushOnlyTheOfferSlot);
     RUN_TEST(test_byValue_sameOfferWrittenTwice_pushesOnlyOnce);
     RUN_TEST(test_byValue_emptyPskOfferMatchingHeldCleartext_claimsAndPushesNothing);
-    RUN_TEST(test_byValue_localClaimOutsideAnEditTransaction_isPushedToo);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);

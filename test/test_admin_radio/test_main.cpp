@@ -1232,6 +1232,59 @@ class HamModeMockRouter : public Router
     }
 };
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+// A local beacon write that claims a slot outside an edit transaction is saved at once, through the real
+// reloadConfig() and a real NodeDB, and still pushes the claimed channel to the phone. test_mesh_beacon covers
+// the in-transaction case; it has no NodeDB, so a non-deferred channel save cannot run there.
+static void test_handleSetModuleConfig_localBeaconClaimOutsideATransaction_pushesTheSlot()
+{
+    const meshtastic_LocalModuleConfig savedModuleConfig = moduleConfig;
+    hamMockRouter = new HamModeMockRouter();
+    router = hamMockRouter;
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = MAX_NUM_CHANNELS;
+    for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++)
+        channelFile.channels[i].index = i;
+    channelFile.channels[0].has_settings = true;
+    channelFile.channels[0].role = meshtastic_Channel_Role_PRIMARY;
+    channelFile.channels[0].settings.psk.size = 1;
+    channelFile.channels[0].settings.psk.bytes[0] = 1;
+    channels.onConfigChanged();
+    while (meshtastic_MeshPacket *stale = mockMeshService->getForPhone())
+        mockMeshService->releaseToPool(stale);
+
+    static const uint8_t psk[16] = {0xC1, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                    0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+    meshtastic_ModuleConfig c = meshtastic_ModuleConfig_init_zero;
+    c.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+    c.payload_variant.mesh_beacon.has_broadcast_offer_channel = true;
+    strncpy(c.payload_variant.mesh_beacon.broadcast_offer_channel.name, "Offered",
+            sizeof(c.payload_variant.mesh_beacon.broadcast_offer_channel.name) - 1);
+    c.payload_variant.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(psk);
+    memcpy(c.payload_variant.mesh_beacon.broadcast_offer_channel.psk.bytes, psk, sizeof(psk));
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    testAdmin->handleSetModuleConfig(c, false); // a local client, saved at once
+
+    const int16_t placed = channels.findByIdentity("Offered", psk, sizeof(psk));
+    TEST_ASSERT_GREATER_THAN_INT16(0, placed);
+    unsigned pushes = 0;
+    while (meshtastic_MeshPacket *p = mockMeshService->getForPhone()) {
+        meshtastic_AdminMessage a = meshtastic_AdminMessage_init_zero;
+        if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP &&
+            pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_AdminMessage_msg, &a) &&
+            a.which_payload_variant == meshtastic_AdminMessage_get_channel_response_tag) {
+            pushes++;
+            TEST_ASSERT_EQUAL_INT(placed, a.get_channel_response.index);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(nodeDB->getNodeNum(), p->from, "from must be the node's own number");
+        }
+        mockMeshService->releaseToPool(p);
+    }
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, pushes, "the claimed slot is pushed once, transaction or not");
+    moduleConfig = savedModuleConfig;
+}
+#endif
+
 // Pull the Routing error out of the ack/nak a handler queued in myReply.
 static bool decodeRoutingError(meshtastic_MeshPacket *reply, meshtastic_Routing_Error &out)
 {
@@ -2673,6 +2726,9 @@ void setup()
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
+#if !MESHTASTIC_EXCLUDE_BEACON
+    RUN_TEST(test_handleSetModuleConfig_localBeaconClaimOutsideATransaction_pushesTheSlot);
+#endif
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
