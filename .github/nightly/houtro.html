@@ -7,5 +7,42 @@
     <a href="https://github.com/meshtastic/firmware/issues">Report a bug</a>
   </footer>
 </main>
+<script>
+  // Cycles light -> dark -> auto. "auto" is the absence of a stored value, which is
+  // how the rest of the site represents it, so the three states stay in step.
+  (function () {
+    var btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+    var root = document.documentElement;
+    var label = btn.querySelector(".label");
+
+    function current() {
+      var t = root.getAttribute("data-theme");
+      return t === "light" || t === "dark" ? t : "auto";
+    }
+
+    function paint() {
+      var mode = current();
+      if (label) label.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+      btn.setAttribute("title", "Theme: " + mode + " (click to change)");
+      btn.setAttribute("aria-label", "Theme: " + mode + ". Click to change.");
+    }
+
+    btn.addEventListener("click", function () {
+      var next = { light: "dark", dark: "auto", auto: "light" }[current()];
+      try {
+        if (next === "auto") localStorage.removeItem("theme");
+        else localStorage.setItem("theme", next);
+      } catch (e) {
+        /* storage blocked: the choice still applies for this page view */
+      }
+      if (next === "auto") root.removeAttribute("data-theme");
+      else root.setAttribute("data-theme", next);
+      paint();
+    });
+
+    paint();
+  })();
+</script>
 </body>
 </html>
