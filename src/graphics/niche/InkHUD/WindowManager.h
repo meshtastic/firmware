@@ -10,6 +10,8 @@ Responsible for managing which applets are shown, and their sizes / positions
 
 #include "configuration.h"
 
+#include <memory>
+
 #include "./Applets/System/Notification/Notification.h" // The notification object, not the applet
 #include "./InkHUD.h"
 #include "./Persistence.h"
@@ -69,7 +71,8 @@ class WindowManager
 
     void findOrphanApplets(); // Find any applets left-behind when layout changes
 
-    std::vector<Tile *> userTiles; // Tiles which can host user applets
+    std::vector<std::unique_ptr<Tile>>
+        userTiles; // Tiles which can host user applets (owned here; applets hold raw back-pointers)
     bool keyboardOpen = false;
 
     // For convenience
