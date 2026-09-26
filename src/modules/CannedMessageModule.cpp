@@ -74,7 +74,12 @@ CannedMessageModule::CannedMessageModule()
         LOG_INFO("CannedMessage: none configured, disabled");
         this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
         disable();
-    } else {
+    } else if (!inputBroker) {
+        LOG_INFO("CannedMessage: no InputBroker, disabled");
+        this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
+        disable();
+    }
+    else {
         LOG_INFO("CannedMessageModule is enabled");
         moduleConfig.canned_message.enabled = true;
         this->inputObserver.observe(inputBroker);
@@ -544,12 +549,15 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 void CannedMessageModule::updateState(cannedMessageModuleRunState newState, bool shouldRequestFocus)
 {
     runState = newState;
-    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        inputBroker->menuMode =
-            false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
-    } else {
-        inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
+    if (inputBroker) {
+        if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            inputBroker->menuMode =
+                false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
+        } else {
+            inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
+        }
     }
+
     if (shouldRequestFocus) {
         requestFocus();
     }
