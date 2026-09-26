@@ -69,7 +69,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     /// Used as our notification from the ISR
-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK };
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK, TX_DONE_CHECK };
 
     /**
      * Raw ISR handler that just calls our polymorphic method
@@ -185,6 +185,20 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Poll as a backup to catch missed edge-triggered interrupts.
      */
     void pollMissedIrqs();
+
+    /** True where DIO1 is only seen through libch341's pin poll (a CH341 USB host), so an interrupt arrives
+     *  up to one poll interval plus a USB read after the chip raised it. */
+    bool irqPolledOverUsb() const;
+
+    // Timed TX_DONE check for irqPolledOverUsb() hosts: the chip drops to standby when a frame ends and is
+    // deaf until we notice, so look when the frame should have ended instead of waiting for the poll.
+    static constexpr uint32_t TX_DONE_CHECK_MARGIN_MS = 1;
+    static constexpr uint32_t TX_DONE_RECHECK_MS = 2;
+    static constexpr uint8_t TX_DONE_CHECK_TRIES = 4;
+    uint8_t txDoneChecksLeft = 0;
+    // Set when the timed check completed a TX, so the poll's late copy of the same edge is dropped.
+    bool txDoneByCheck = false;
+    void checkTxDone();
 
     /**
      * Reset AGC by power-cycling the analog frontend.
