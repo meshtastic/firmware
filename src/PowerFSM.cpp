@@ -59,6 +59,18 @@ static bool isPowered()
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
+/// Native USB-CDC console on USB power: light sleep kills that PHY and the host cannot re-enumerate.
+/// Needs a PMU, otherwise getHasUSB() cannot tell mains from a battery on the USB connector. #4206
+static bool nativeUsbSerialActive()
+{
+#if defined(ARDUINO_USB_MODE) && (ARDUINO_USB_MODE == 0) && defined(ARDUINO_USB_CDC_ON_BOOT) &&                     \
+    (ARDUINO_USB_CDC_ON_BOOT == 1) && defined(HAS_PMU)
+    return powerStatus && powerStatus->getHasUSB();
+#else
+    return false;
+#endif
+}
+
 #if defined(T5_S3_EPAPER_PRO)
 static void t5BacklightOffForSleep()
 {
@@ -128,6 +140,14 @@ static void lsIdle()
     // LOG_INFO("lsIdle begin ls_secs=%u", getPref_ls_secs());
 
 #ifdef ARCH_ESP32
+
+    // Re-check here: USB may have been plugged in after PowerFSM_setup() took its snapshot.
+    // A wake cycle is cheaper than losing the console to a physical replug.
+    if (nativeUsbSerialActive()) {
+        LOG_INFO("Native USB-CDC on USB power: leaving light sleep (keeps serial alive)");
+        powerFSM.trigger(EVENT_WAKE_TIMER);
+        return;
+    }
 
     // Do we have more sleeping to do?
     if (secsSlept < config.power.ls_secs) {
@@ -443,7 +463,14 @@ void PowerFSM_setup()
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 
-    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
+    // Already on USB power at boot: skip the light-sleep transitions entirely, so a mains powered
+    // node never churns through wake cycles. Cables plugged in later are caught by lsIdle().
+    bool nativeUsbSerialAttached = nativeUsbSerialActive();
+    if (nativeUsbSerialAttached)
+        LOG_INFO("Native USB-CDC on USB power: light sleep disabled (keeps serial alive)");
+
+    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor &&
+        !nativeUsbSerialAttached) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
