@@ -36,8 +36,11 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
     LOG_DEBUG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
-#if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE)
+#if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE) || defined(SX126X_RX_READOUT_TASK)
     rawCs = cs;
+#endif
+#ifdef SX126X_RX_READOUT_TASK
+    readoutHal = hal;
 #endif
 #ifdef SX126X_RX_REARM_AT_TX_DONE
     isrHal = hal;
@@ -323,6 +326,17 @@ template <typename T> bool SX126xInterface<T>::init()
         chipStateTaskStarted = xTaskCreate(chipStateTaskMain, "ChipState", 256, this, tskIDLE_PRIORITY + 2, nullptr) == pdPASS;
         LOG_INFO("Chip state sampler task %s, every %u ms", chipStateTaskStarted ? "started" : "not started",
                  (unsigned)SX126X_STATE_SAMPLER_MS);
+    }
+#endif
+#ifdef SX126X_RX_READOUT_TASK
+    // Above the Arduino loop task and the chip state sampler, so a main-loop hold cannot delay a readout. Until it
+    // exists, RX_DONE takes the usual path.
+    if (!rxReadoutTask) {
+        TaskHandle_t task = nullptr;
+        if (xTaskCreate(rxReadoutTaskMain, "RxReadout", 384, this, tskIDLE_PRIORITY + 3, &task) != pdPASS)
+            task = nullptr;
+        rxReadoutTask = task;
+        LOG_INFO("RX readout task %s", task ? "started" : "not started");
     }
 #endif
 
@@ -818,8 +832,15 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
         return false;
     // readData() clears these, but handleReceiveInterrupt()'s early outs do not, and a latched one would hold
     // DIO1 high past the re-arm. PREAMBLE/HEADER_VALID stay: they may belong to the next frame, already arriving.
-    lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR |
-                       RADIOLIB_SX126X_IRQ_TIMEOUT);
+#ifdef SX126X_RX_READOUT_TASK
+    // The readout task clears what it reads; a clear here could take the RX_DONE of a frame it has not read yet.
+    const bool clearHere = !rxReadoutTask;
+#else
+    const bool clearHere = true;
+#endif
+    if (clearHere)
+        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR |
+                           RADIOLIB_SX126X_IRQ_TIMEOUT);
     if (deafSinceMs) {
         LOG_TRACE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
                   (unsigned)(Time::getMillis() - deafSinceMs));
@@ -939,6 +960,185 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 #endif
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
+    return true;
+}
+#endif
+
+#ifdef SX126X_RX_READOUT_TASK
+#if !defined(ARCH_NRF52)
+#error "SX126X_RX_READOUT_TASK is a bench flag for nRF52 only: it reads the chip from a FreeRTOS task"
+#endif
+
+namespace
+{
+uint32_t ticksToMs(uint32_t ticks)
+{
+    return (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
+}
+} // namespace
+
+/// RX_DONE: wake the readout task and return. The SPI work runs there, with interrupts enabled, not here.
+template <typename T> bool SX126xInterface<T>::rxDoneFromIsr()
+{
+    if (!rxReadoutTask)
+        return false;
+    rxWakeTicks = xTaskGetTickCountFromISR();
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
+    portYIELD_FROM_ISR(woken);
+    return true;
+}
+
+template <typename T> bool SX126xInterface<T>::wakeRxReadout()
+{
+    if (!rxReadoutTask)
+        return false;
+    rxWakeTicks = xTaskGetTickCount();
+    xTaskNotifyGive(rxReadoutTask); // the task is above us, so it runs before this returns
+    return true;
+}
+
+template <typename T> void SX126xInterface<T>::rxReadoutTaskMain(void *arg)
+{
+    auto *self = static_cast<SX126xInterface<T> *>(arg);
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        self->readOutFromTask();
+    }
+}
+
+template <typename T> bool SX126xInterface<T>::rawTransferFromTask(uint8_t *out, uint8_t *in, size_t len)
+{
+    // The chip holds BUSY for microseconds after each command
+    for (unsigned i = 0; readoutHal->digitalRead(module.getGpio()); i++) {
+        if (i >= 200)
+            return false;
+        delayMicroseconds(1);
+    }
+    readoutHal->ArduinoHal::spiBeginTransaction(); // the base class's: the task already holds the lock
+    readoutHal->digitalWrite(rawCs, readoutHal->GpioLevelLow);
+    readoutHal->spiTransfer(out, len, in);
+    readoutHal->digitalWrite(rawCs, readoutHal->GpioLevelHigh);
+    readoutHal->ArduinoHal::spiEndTransaction();
+    return true;
+}
+
+/// What readData(), getSNR() and getRSSI() do for handleReceiveInterrupt(), as soon as RX_DONE rises rather than
+/// whenever the main loop next runs this thread: the chip has one buffer, and the next frame overwrites it.
+template <typename T> void SX126xInterface<T>::readOutFromTask()
+{
+    const uint32_t wakeTicks = rxWakeTicks;
+    // A radio command in progress on the main loop holds the lock for one transaction at a time
+    if (!spiLock->lock(100)) {
+        rxReadoutLockTimeouts = rxReadoutLockTimeouts + 1;
+        notify(ISR_RX, true); // RX_DONE stays set; the thread's handler hands it back or reads it itself
+        return;
+    }
+    const uint32_t t0 = micros();
+    uint8_t irqOut[4] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
+                         RADIOLIB_SX126X_CMD_NOP};
+    uint8_t irqIn[4] = {0, 0, 0, 0};
+    if (rawCs == RADIOLIB_NC || !rawTransferFromTask(irqOut, irqIn, sizeof(irqOut))) {
+        spiLock->unlock();
+        rxReadoutChipBusy = rxReadoutChipBusy + 1;
+        notify(ISR_RX, true);
+        return;
+    }
+    const uint8_t mode = (irqIn[1] >> 4) & 0x7;
+    const uint16_t irq = ((uint16_t)irqIn[2] << 8) | irqIn[3];
+    if (!(irq & RADIOLIB_SX126X_IRQ_RX_DONE)) {
+        spiLock->unlock();
+        // TIMEOUT (a CAD handoff's RX expired) and HEADER_ERR stay the thread's, as before. Anything else is an edge
+        // for a frame already taken.
+        if (irq & (RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_HEADER_ERR | RADIOLIB_SX126X_IRQ_CRC_ERR))
+            notify(ISR_RX, true);
+        return;
+    }
+
+    // Response bytes follow the opcode (and ReadBuffer's offset) and one status byte.
+    uint8_t bufOut[4] = {RADIOLIB_SX126X_CMD_GET_RX_BUFFER_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
+                         RADIOLIB_SX126X_CMD_NOP};
+    uint8_t bufIn[4] = {0, 0, 0, 0};
+    uint8_t pktOut[5] = {RADIOLIB_SX126X_CMD_GET_PACKET_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
+                         RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP};
+    uint8_t pktIn[5] = {0, 0, 0, 0, 0};
+    // Clear what this frame raised, as readData() would, but not bits the next frame may raise meanwhile.
+    const uint16_t clearMask = irq & (RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR |
+                                      RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_SYNC_WORD_VALID |
+                                      RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_TIMEOUT);
+    uint8_t clearOut[3] = {RADIOLIB_SX126X_CMD_CLEAR_IRQ_STATUS, (uint8_t)(clearMask >> 8), (uint8_t)(clearMask & 0xFF)};
+    uint8_t clearIn[3];
+    bool ok = rawTransferFromTask(bufOut, bufIn, sizeof(bufOut));
+    const uint8_t len = bufIn[2];
+    const uint8_t offset = bufIn[3];
+    if (ok) {
+        memset(rxReadoutOut, RADIOLIB_SX126X_CMD_NOP, sizeof(rxReadoutOut));
+        rxReadoutOut[0] = RADIOLIB_SX126X_CMD_READ_BUFFER;
+        rxReadoutOut[1] = offset;
+        ok = rawTransferFromTask(rxReadoutOut, rxReadoutIn, 3 + (size_t)len);
+    }
+    if (ok)
+        ok = rawTransferFromTask(pktOut, pktIn, sizeof(pktOut));
+    if (ok)
+        ok = rawTransferFromTask(clearOut, clearIn, sizeof(clearOut));
+    const uint32_t spiUs = micros() - t0;
+    spiLock->unlock();
+    if (!ok) {
+        // RX_DONE may still be set; the thread's handler hands it back or reads it itself
+        rxReadoutChipBusy = rxReadoutChipBusy + 1;
+        notify(ISR_RX, true);
+        return;
+    }
+    rxReadoutFrames = rxReadoutFrames + 1;
+
+    const uint8_t head = rxRingHead;
+    const uint8_t next = (uint8_t)((head + 1) % rxRingSize);
+    if (next == rxRingTail) {
+        rxReadoutDropped = rxReadoutDropped + 1; // the thread has not taken the last 8: this frame is lost
+    } else {
+        CapturedFrame &f = rxRing[head];
+        const uint32_t nowTicks = xTaskGetTickCount();
+        const uint32_t nowMs = millis();
+        f.info.readMs = nowMs;
+        f.info.wakeMs = nowMs - ticksToMs(nowTicks - wakeTicks);
+        f.info.spiUs = spiUs;
+        // As getRSSI() and getSNR(): the third status byte is the RSSI in -0.5 dB, the second the SNR in 0.25 dB
+        f.info.rssi = -(int32_t)pktIn[4] / 2;
+        f.info.snr = (float)(int8_t)pktIn[3] / 4.0f;
+        // As readData(): a payload CRC error, or a header error without a valid header
+        f.info.state = ((irq & RADIOLIB_SX126X_IRQ_CRC_ERR) ||
+                        ((irq & RADIOLIB_SX126X_IRQ_HEADER_ERR) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID)))
+                           ? RADIOLIB_ERR_CRC_MISMATCH
+                           : RADIOLIB_ERR_NONE;
+        f.info.len = len;
+        f.info.chipListening = mode == (RADIOLIB_SX126X_STATUS_MODE_RX >> 4);
+        memcpy(f.data, rxReadoutIn + 3, len);
+        __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
+        rxRingHead = next;
+    }
+    notify(ISR_RX, true);
+}
+
+template <typename T> bool SX126xInterface<T>::takeCapturedFrame(CapturedRxInfo &info)
+{
+    // The task's counters, logged from here on the thread: drops, lock timeouts and busy chips at once, the rest
+    // with them
+    static uint32_t loggedDropped = 0, loggedLockTimeouts = 0, loggedChipBusy = 0;
+    if (rxReadoutDropped != loggedDropped || rxReadoutLockTimeouts != loggedLockTimeouts || rxReadoutChipBusy != loggedChipBusy) {
+        loggedDropped = rxReadoutDropped;
+        loggedLockTimeouts = rxReadoutLockTimeouts;
+        loggedChipBusy = rxReadoutChipBusy;
+        LOG_WARN("RX readout task: %u frames read, %u dropped (ring full), %u SPI lock timeouts, %u chip busy",
+                 (unsigned)rxReadoutFrames, (unsigned)loggedDropped, (unsigned)loggedLockTimeouts, (unsigned)loggedChipBusy);
+    }
+    if (rxRingTail == rxRingHead)
+        return false;
+    __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
+    const CapturedFrame &f = rxRing[rxRingTail];
+    info = f.info;
+    memcpy(&radioBuffer, f.data, info.len <= sizeof(radioBuffer) ? info.len : sizeof(radioBuffer));
+    __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
+    rxRingTail = (uint8_t)((rxRingTail + 1) % rxRingSize);
     return true;
 }
 #endif

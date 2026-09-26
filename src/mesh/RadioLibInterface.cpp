@@ -81,6 +81,9 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 
 void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 {
+    // Bench: a readout task takes the frame out of the chip, and the interrupt stays enabled for the next one.
+    if (instance->rxDoneFromIsr())
+        return;
     isrLevel0Common(ISR_RX);
 }
 
@@ -420,6 +423,13 @@ void RadioLibInterface::deliverPendingIrqFromPoll(PendingISR cause)
 
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+    // Bench: frames the readout task captured whose ISR_RX a later notification overwrote. Delivering them leaves the
+    // radio alone; only a bounded RX that ended with one still needs this thread's re-arm.
+    if (notification != ISR_RX && rxReadoutActive()) {
+        bool rxEnded = false;
+        if (deliverCapturedFrames(&rxEnded) && rxEnded && isReceiving)
+            notify(ISR_RX, false);
+    }
 
     switch (notification) {
     case ISR_TX:
@@ -452,6 +462,20 @@ void RadioLibInterface::onNotify(uint32_t notification)
         setTransmitDelay();
         break;
     case ISR_RX:
+        if (rxReadoutActive()) {
+            // Bench: the readout task has already taken the frames out of the chip.
+            bool rxEnded = false;
+            const unsigned delivered = deliverCapturedFrames(&rxEnded);
+            if (!isReceiving) // this thread has since moved the radio on (a scan or a TX): leave it there
+                break;
+            if (delivered && !rxEnded) {
+                // The chip is still listening: nothing to re-arm. RX_DONE ends the frame's hold, as a re-arm would.
+                rxSighting.reset();
+                setTransmitDelay();
+                break;
+            }
+            // A bounded RX (a CAD handoff) ended with the frame, or the task left TIMEOUT or HEADER_ERR to us.
+        }
         // The chip is still listening while the packet is read out, but startReceive() puts it into
         // standby first, so a frame that begins in this window is lost all the same.
         noteDeafFrom("rx");
@@ -691,37 +715,77 @@ void RadioLibInterface::completeSending()
     }
 }
 
-void RadioLibInterface::handleReceiveInterrupt()
+bool RadioLibInterface::beginReceiveFromChip(size_t &length)
 {
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
     const bool wasCadHandoff = cadHandoffRxStart != 0;
     cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
-#ifdef ARCH_PORTDUINO
-    const uint32_t isrAt = lastIsrMillis;
-    const uint32_t dispatchMs = millis() - isrAt;
-#endif
 
     if (!isReceiving) {
         LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
-        return;
+        return false;
     }
 
     isReceiving = false;
+
+    if (rxReadoutActive() && iface->checkIrq(RADIOLIB_IRQ_RX_DONE) == 1) {
+        // Bench: an RX_DONE the readout task has not taken. Hand it over rather than read the frame twice; the task
+        // runs above this thread, so it has normally read the frame out by the time the wake returns.
+        wakeRxReadout();
+        if (deliverCapturedFrames(nullptr) || iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1)
+            return false; // taken: delivered here, or on the task's own ISR_RX
+    }
 
     // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
     // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
         LOG_DEBUG("CAD>RX empty");
         iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
-        return;
+        return false;
     }
+
+    // Bench: with the readout task, only a HEADER_ERR or CRC_ERR it left behind is still ours to read. With neither,
+    // the chip holds no frame for us, and reading its buffer would deliver an old one again.
+    if (rxReadoutActive() && iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_HEADER_ERR) != 1 &&
+        iface->checkIrq(RADIOLIB_IRQ_CRC_ERR) != 1)
+        return false;
 
     if (wasCadHandoff)
         LOG_DEBUG("CAD>RX pkt");
 
     // read the number of actually received bytes
-    size_t length = iface->getPacketLength();
+    length = iface->getPacketLength();
+    return true;
+}
+
+unsigned RadioLibInterface::deliverCapturedFrames(bool *rxEnded)
+{
+    unsigned delivered = 0;
+    CapturedRxInfo info;
+    while (takeCapturedFrame(info)) {
+        delivered++;
+        if (!info.chipListening && rxEnded)
+            *rxEnded = true;
+        LOG_TRACE("RX read out by task: wake to readout %u ms (SPI %u us), readout to handler %u ms",
+                  (unsigned)(info.readMs - info.wakeMs), (unsigned)info.spiUs, (unsigned)(millis() - info.readMs));
+        handleReceiveInterrupt(&info);
+    }
+    return delivered;
+}
+
+void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
+{
+#ifdef ARCH_PORTDUINO
+    const uint32_t isrAt = lastIsrMillis;
+    const uint32_t dispatchMs = millis() - isrAt;
+#endif
+
+    size_t length = 0;
+    if (captured)
+        length = captured->len; // the readout task already took the frame into radioBuffer
+    else if (!beginReceiveFromChip(length))
+        return;
 
     // Some drivers report this as a 16 bit value, so a bad readback can overrun radioBuffer in readData()
     if (length > sizeof(radioBuffer)) {
@@ -740,7 +804,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
 
-    int state = iface->readData((uint8_t *)&radioBuffer, length);
+    int state = captured ? captured->state : iface->readData((uint8_t *)&radioBuffer, length);
 #if ARCH_PORTDUINO
     if (portduino_config.logoutputlevel == level_trace) {
         printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
@@ -751,7 +815,8 @@ void RadioLibInterface::handleReceiveInterrupt()
         LOG_ERROR("Ignore rx packet, error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
                   "nextHop=0x%x relay=0x%x)",
                   state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
-                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+                  captured ? captured->snr : iface->getSNR(), captured ? (long)captured->rssi : lround(iface->getRSSI()),
+                  radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -796,7 +861,14 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->next_hop = mp->hop_start == 0 ? NO_NEXT_HOP_PREFERENCE : radioBuffer.header.next_hop;
             mp->relay_node = mp->hop_start == 0 ? NO_RELAY_NODE : radioBuffer.header.relay_node;
 
-            addReceiveMetadata(mp);
+            if (captured) {
+                // What addReceiveMetadata() reads from the chip, read by the task before the next frame replaced it
+                mp->rx_snr = captured->snr;
+                mp->rx_rssi = captured->rssi;
+                mp->has_rx_rssi = true;
+            } else {
+                addReceiveMetadata(mp);
+            }
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
@@ -808,7 +880,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 #ifdef ARCH_PORTDUINO
             // The poll saw RX_DONE at most one poll interval after the chip raised it. Reached from pollMissedIrqs()
             // instead, the interrupt stamp is an older one and the numbers are meaningless.
-            if (irqPolledOverUsb()) {
+            if (!captured && irqPolledOverUsb()) {
                 const uint32_t sinceIsrMs = millis() - isrAt;
                 LOG_TRACE("RX_DONE seen %u ms before Lora RX: dispatch %u, readout %u", sinceIsrMs, dispatchMs,
                           sinceIsrMs - dispatchMs);
@@ -996,6 +1068,10 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
 void RadioLibInterface::checkRxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
+        if (wakeRxReadout()) { // bench: the readout task takes it, and notifies ISR_RX itself
+            LOG_WARN("caught missed RX_DONE, woke the readout task");
+            return;
+        }
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
     }

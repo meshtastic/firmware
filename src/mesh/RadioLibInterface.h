@@ -330,6 +330,36 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Bench: after TX, take over the RX rearmReceiveFromIsr() started instead of restarting it; false if there is none. */
     virtual bool adoptReceiveArmedFromIsr() { return false; }
 
+    /** Bench: a frame a readout task took from the chip, and what it saw; the frame itself goes into radioBuffer */
+    struct CapturedRxInfo {
+        uint32_t wakeMs;    // millis() of the RX_DONE interrupt, or of the poll that found RX_DONE
+        uint32_t readMs;    // millis() when the readout ended
+        uint32_t spiUs;     // SPI time of the readout, lock wait excluded
+        int32_t rssi;       // as getRSSI() would report
+        float snr;          // as getSNR() would report
+        int16_t state;      // as readData() would report: RADIOLIB_ERR_NONE or RADIOLIB_ERR_CRC_MISMATCH
+        uint8_t len;        // bytes in the frame
+        bool chipListening; // the chip was still in RX after the frame, so nothing needs re-arming
+    };
+
+    /** Bench: from the RX_DONE interrupt, hand the readout to a task; true if one took it. The interrupt then stays
+     *  enabled, and the task notifies ISR_RX once the frame is out of the chip. */
+    virtual bool rxDoneFromIsr() { return false; }
+
+    /** Bench: whether a readout task takes RX_DONE instead of this thread */
+    virtual bool rxReadoutActive() const { return false; }
+
+    /** Bench: wake the readout task from this thread, for an RX_DONE found by a poll. The task runs above this thread,
+     *  so the frame is normally out of the chip when this returns. False if there is no task. */
+    virtual bool wakeRxReadout() { return false; }
+
+    /** Bench: move the oldest frame the readout task captured into radioBuffer; false if there is none */
+    virtual bool takeCapturedFrame(CapturedRxInfo &info)
+    {
+        (void)info;
+        return false;
+    }
+
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
      *  with rearmReceive() before anything else touches the radio. */
@@ -402,7 +432,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
     void handleTransmitInterrupt();
-    void handleReceiveInterrupt();
+    /** Read out and deliver the frame behind RX_DONE; with captured, deliver one a readout task already took */
+    void handleReceiveInterrupt(const CapturedRxInfo *captured = nullptr);
+    /** handleReceiveInterrupt()'s side of the chip: the RX bookkeeping, and the frame's length; false if there is
+     *  nothing to read */
+    bool beginReceiveFromChip(size_t &length);
+    /** Bench: deliver every frame the readout task captured; sets *rxEnded if the chip had left RX after one */
+    unsigned deliverCapturedFrames(bool *rxEnded);
 
     static void timerCallback(void *p1, uint32_t p2);
 
