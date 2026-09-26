@@ -44,6 +44,10 @@ static bool moduleConfigIsCompiledOut(pb_size_t tag)
     if (tag == meshtastic_ModuleConfig_mesh_beacon_tag)
         return true;
 #endif
+#if MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+    if (tag == meshtastic_ModuleConfig_router_retirement_tag)
+        return true;
+#endif
     return false;
 }
 
@@ -83,7 +87,7 @@ static bool decodeResponseTagFromReply(meshtastic_MeshPacket *reply, pb_size_t &
 // ModuleConfigType with its submessage tag without a lookup table.
 void test_tagRangeMatchesTypeRange(void)
 {
-    TEST_ASSERT_EQUAL_MESSAGE(moduleConfigTypeCount, meshtastic_ModuleConfig_mesh_beacon_tag,
+    TEST_ASSERT_EQUAL_MESSAGE(moduleConfigTypeCount, meshtastic_ModuleConfig_router_retirement_tag,
                               "ModuleConfigType and ModuleConfig submessage tags are no longer 1:1");
 }
 
