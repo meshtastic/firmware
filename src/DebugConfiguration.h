@@ -58,19 +58,11 @@ extern MemGet memGet;
 #endif
 #endif
 
-#ifdef USE_SEGGER
-// #undef DEBUG_PORT
-#define LOG_DEBUG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#define LOG_INFO(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#define LOG_WARN(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#define LOG_ERROR(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#define LOG_CRIT(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#if MESHTASTIC_TRACE_LOGGING
-#define LOG_TRACE(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#else
-#define LOG_TRACE(...)
-#endif
-#else
+// USE_SEGGER no longer maps LOG_* to SEGGER_RTT_printf(): it has no float
+// support, and a skipped %f leaves its argument on the va_list, so a later %s
+// dereferences garbage and HardFaults (e.g. PacketHistory's
+// "Reusing slot aged %.3fs TRACE %s"). RedirectablePrint::write() already
+// mirrors every log character to RTT when USE_SEGGER is set.
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
 #define LOG_DEBUG(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #define LOG_INFO(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_INFO, __VA_ARGS__)
@@ -89,7 +81,6 @@ extern MemGet memGet;
 #define LOG_ERROR(...)
 #define LOG_CRIT(...)
 #define LOG_TRACE(...)
-#endif
 #endif
 
 #if defined(DEBUG_HEAP)
