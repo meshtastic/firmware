@@ -50,6 +50,18 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 #endif
 }
 
+#ifdef SX126X_RX_READOUT_TASK
+#if !defined(HAS_FREE_RTOS) || defined(ARCH_PORTDUINO) || defined(LORA_DIO1_SOFTWARE_POLL)
+#error "SX126X_RX_READOUT_TASK is a bench flag for FreeRTOS targets with a DIO1 interrupt: it reads the chip from a task"
+#endif
+// ESP-IDF counts a task's stack in bytes, the other ports in words
+#ifdef ARCH_ESP32
+#define SX126X_RX_READOUT_STACK 3072
+#else
+#define SX126X_RX_READOUT_STACK 384
+#endif
+#endif
+
 #ifdef SX126X_STATE_SAMPLER_TASK
 #if !defined(SX126X_STATE_SAMPLER_MS) || !defined(ARCH_NRF52)
 #error "SX126X_STATE_SAMPLER_TASK is a bench flag for nRF52, and needs SX126X_STATE_SAMPLER_MS for its period"
@@ -329,14 +341,30 @@ template <typename T> bool SX126xInterface<T>::init()
     }
 #endif
 #ifdef SX126X_RX_READOUT_TASK
-    // Above the Arduino loop task and the chip state sampler, so a main-loop hold cannot delay a readout. Until it
-    // exists, RX_DONE takes the usual path.
+    // Above the Arduino loop task (this one) and the chip state sampler, so a main-loop hold cannot delay a readout;
+    // the loop's priority differs by core. Until the task exists, RX_DONE takes the usual path.
     if (!rxReadoutTask) {
+        UBaseType_t priority = uxTaskPriorityGet(nullptr) + 2;
+        if (priority < tskIDLE_PRIORITY + 3)
+            priority = tskIDLE_PRIORITY + 3;
+        if (priority > configMAX_PRIORITIES - 1)
+            priority = configMAX_PRIORITIES - 1;
         TaskHandle_t task = nullptr;
-        if (xTaskCreate(rxReadoutTaskMain, "RxReadout", 384, this, tskIDLE_PRIORITY + 3, &task) != pdPASS)
+        // On ESP32, on the loop's core, so a wake from this thread runs the readout at once, as on one core. Elsewhere
+        // wakeRxReadout() waits for it.
+#ifdef ARCH_ESP32
+        const int core = xPortGetCoreID();
+        if (xTaskCreatePinnedToCore(rxReadoutTaskMain, "RxReadout", SX126X_RX_READOUT_STACK, this, priority, &task, core) !=
+            pdPASS)
             task = nullptr;
+#else
+        const int core = -1; // unpinned
+        if (xTaskCreate(rxReadoutTaskMain, "RxReadout", SX126X_RX_READOUT_STACK, this, priority, &task) != pdPASS)
+            task = nullptr;
+#endif
         rxReadoutTask = task;
-        LOG_INFO("RX readout task %s", task ? "started" : "not started");
+        LOG_INFO("RX readout task %s, priority %u (loop %u), core %d", task ? "started" : "not started", (unsigned)priority,
+                 (unsigned)uxTaskPriorityGet(nullptr), core);
     }
 #endif
 
@@ -965,9 +993,6 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 #endif
 
 #ifdef SX126X_RX_READOUT_TASK
-#if !defined(ARCH_NRF52)
-#error "SX126X_RX_READOUT_TASK is a bench flag for nRF52 only: it reads the chip from a FreeRTOS task"
-#endif
 
 namespace
 {
@@ -978,14 +1003,19 @@ uint32_t ticksToMs(uint32_t ticks)
 } // namespace
 
 /// RX_DONE: wake the readout task and return. The SPI work runs there, with interrupts enabled, not here.
-template <typename T> bool SX126xInterface<T>::rxDoneFromIsr()
+template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rxDoneFromIsr()
 {
     if (!rxReadoutTask)
         return false;
     rxWakeTicks = xTaskGetTickCountFromISR();
     BaseType_t woken = pdFALSE;
     vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
+#ifdef ARCH_ESP32
+    (void)woken;
+    portYIELD_FROM_ISR(); // as isrLevel0Common(): the ESP32 port takes no flag
+#else
     portYIELD_FROM_ISR(woken);
+#endif
     return true;
 }
 
@@ -993,8 +1023,13 @@ template <typename T> bool SX126xInterface<T>::wakeRxReadout()
 {
     if (!rxReadoutTask)
         return false;
+    const uint32_t passes = rxReadoutPasses;
     rxWakeTicks = xTaskGetTickCount();
-    xTaskNotifyGive(rxReadoutTask); // the task is above us, so it runs before this returns
+    xTaskNotifyGive(rxReadoutTask);
+    // On one core the task, being above us, has already run. On two it may run beside us: wait for it, past its own
+    // SPI lock wait, so the caller never reads the chip while the task does.
+    for (unsigned waited = 0; rxReadoutPasses == passes && waited < 150; waited++)
+        vTaskDelay(pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
     return true;
 }
 
@@ -1004,6 +1039,7 @@ template <typename T> void SX126xInterface<T>::rxReadoutTaskMain(void *arg)
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         self->readOutFromTask();
+        self->rxReadoutPasses = self->rxReadoutPasses + 1;
     }
 }
 

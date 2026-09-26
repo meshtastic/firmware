@@ -349,8 +349,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Bench: whether a readout task takes RX_DONE instead of this thread */
     virtual bool rxReadoutActive() const { return false; }
 
-    /** Bench: wake the readout task from this thread, for an RX_DONE found by a poll. The task runs above this thread,
-     *  so the frame is normally out of the chip when this returns. False if there is no task. */
+    /** Bench: wake the readout task from this thread, for an RX_DONE found by a poll, and wait for its readout (on
+     *  one core it runs above this thread, so there is no wait). False if there is no task. */
     virtual bool wakeRxReadout() { return false; }
 
     /** Bench: move the oldest frame the readout task captured into radioBuffer; false if there is none */
