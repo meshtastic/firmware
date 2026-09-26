@@ -19,8 +19,9 @@
 // it in hardware avoids upstream's per-byte reverse_byte() over the whole buffer.
 #define CH341_STREAM_MODE_SPI_MSB_FIRST 0x80
 
-// Matches upstream's poll interval, so IRQ latency is the same as on Linux.
-#define PIN_POLL_INTERVAL_MS (1000 / 30)
+// Matches upstream's default poll interval. Sleep() rounds up to the system timer, so the real interval
+// can be longer here than on Linux.
+#define PIN_POLL_INTERVAL_MS 1
 
 typedef HANDLE(WINAPI *ch341_open_t)(ULONG);
 typedef VOID(WINAPI *ch341_close_t)(ULONG);
