@@ -21,6 +21,26 @@ struct CryptoKey {
  *
  */
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+struct CachedSharedSecret {
+    uint32_t lookup_key;
+    uint8_t shared_secret[32];
+    uint8_t last_used;
+};
+
+/**
+ * Max number of cached secrets to track. This should be roughly dependent on MAX_NUM_NODES but
+ * cannot be directly because it is not a constant expression.
+ */
+#if defined(ARCH_STM32WL)
+#define MAX_CACHED_SHARED_SECRETS 2
+#elif defined(ARCH_NRF52)
+#define MAX_CACHED_SHARED_SECRETS 8
+#else
+#define MAX_CACHED_SHARED_SECRETS 10
+#endif
+#endif
+
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 #define XEDDSA_SIGNATURE_SIZE 64
@@ -88,8 +108,8 @@ class CryptoEngine
      *  - Integers are little-endian explicitly, so the value is a property of the protocol and not of
      *    the compiler that built the node.
      *
-     * Cost: setDHPublicKey runs Curve25519::dh2 on every call and nothing caches the result, so this
-     * is one X25519 per verify, which an attacker chooses when we pay by sending a forged ack.
+     * Cost: one X25519 per peer whose derived key is not in the shared-secret cache, which an
+     * attacker chooses when we pay by sending a forged ack from an unseen key.
      * Callers MUST gate on cheap checks first - see ReliableRouter::ackProofPermitsAction.
      *
      * Clobbers shared_key, so the caller must hold cryptLock (which is NOT recursive - do not call
@@ -179,6 +199,20 @@ class CryptoEngine
     uint8_t cached_curve_pubkey[32] = {0};
     uint8_t cached_ed_pubkey[32] = {0};
 #endif
+
+    /**
+     * Cache mapping peers' public keys -> {shared_secret, last_used}
+     */
+    CachedSharedSecret sharedSecretCache[MAX_CACHED_SHARED_SECRETS] = {};
+
+    /**
+     * Set cryptographic (hashed) shared_key calculated from the given peer public key, deriving it
+     * only on a cache miss. Caller must hold cryptLock, as with setDHPublicKey.
+     */
+    bool setCryptoSharedSecret(const uint8_t *peerPubKey);
+
+    /** Drop every cached secret. Called whenever our own private key changes: they are all stale. */
+    void clearSharedSecretCache();
 #endif
     /**
      * Init our 128 bit nonce for a new packet

@@ -420,6 +420,63 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig2));
 }
 
+// Finds the cache slot holding `lookupKey`, so the tests can assert on the cache itself and not
+// only on what setCryptoSharedSecret leaves in shared_key. Protected members are public under
+// PIO_UNIT_TESTING.
+static bool findCachedSecret(uint32_t lookupKey, CachedSharedSecret &entry)
+{
+    for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
+        if (crypto->sharedSecretCache[i].lookup_key == lookupKey) {
+            entry = crypto->sharedSecretCache[i];
+            return true;
+        }
+    }
+    return false;
+}
+
+void test_shared_secret_cache(void)
+{
+    uint8_t private_key[32];
+    uint8_t other_private_key[32];
+    uint8_t public_key[32];
+    uint8_t derived[32];
+    uint8_t stale[32];
+
+    // Same wycheproof vector test_DH25519 uses, hashed: the cache holds the hashed key packet
+    // crypto and the ack proof both consume.
+    HexToBytes(public_key, "504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
+    HexToBytes(private_key, "c8a9d5a91091ad851c668b0736c1c9a02936c0d3ad62670858088047ba057475");
+    HexToBytes(other_private_key, "d85d8c061a50804ac488ad774ac716c3f5ba714b2712e048491379a500211958");
+    HexToBytes(derived, "436a2c040cf45fea9b29a0cb81b1f41458f863d0d61b453d0a982720d6d61320");
+    crypto->hash(derived, 32);
+
+    crypto->setDHPrivateKey(private_key);
+    TEST_ASSERT(crypto->setCryptoSharedSecret(public_key));
+    TEST_ASSERT_EQUAL_MEMORY(derived, crypto->shared_key, 32);
+
+    // The derivation was cached under the first 4 bytes of the peer key
+    uint32_t lookupKey;
+    memcpy(&lookupKey, public_key, sizeof(lookupKey));
+    CachedSharedSecret entry;
+    TEST_ASSERT(findCachedSecret(lookupKey, entry));
+    TEST_ASSERT_EQUAL_MEMORY(derived, entry.shared_secret, 32);
+
+    // A second call refills shared_key from the cache. Clearing it first means an equal result can
+    // only have come from the cache or from a fresh derivation, and either way it must match.
+    memset(crypto->shared_key, 0, 32);
+    TEST_ASSERT(crypto->setCryptoSharedSecret(public_key));
+    TEST_ASSERT_EQUAL_MEMORY(derived, crypto->shared_key, 32);
+
+    // Our own key changing invalidates every entry: the old secrets no longer belong to this identity
+    memcpy(stale, derived, 32);
+    crypto->setDHPrivateKey(other_private_key);
+    TEST_ASSERT_FALSE(findCachedSecret(lookupKey, entry));
+    TEST_ASSERT(crypto->setCryptoSharedSecret(public_key));
+    TEST_ASSERT(memcmp(stale, crypto->shared_key, 32) != 0);
+    TEST_ASSERT(findCachedSecret(lookupKey, entry));
+    TEST_ASSERT_EQUAL_MEMORY(crypto->shared_key, entry.shared_secret, 32);
+}
+
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -919,6 +976,7 @@ void setup()
     RUN_TEST(test_ECB_AES128);
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
+    RUN_TEST(test_shared_secret_cache);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_AES_CCM_partial_block_bounds);
     RUN_TEST(test_AES_CCM_rfc3610);
