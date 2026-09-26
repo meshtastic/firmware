@@ -71,14 +71,15 @@ bool Lock::lock(uint32_t timeout)
     }
 
     while (true) {
+        struct timespec slice = {0, 200000L}; // 0.2 ms, fine enough for an SPI bus handover
+        nanosleep(&slice, nullptr);
+
+        // Checked immediately before the retry, so the lock is never taken past the deadline.
         struct timespec now = {};
         clock_gettime(CLOCK_MONOTONIC, &now);
         if (now.tv_sec > deadline.tv_sec || (now.tv_sec == deadline.tv_sec && now.tv_nsec >= deadline.tv_nsec)) {
             return false;
         }
-
-        struct timespec slice = {0, 200000L}; // 0.2 ms, fine enough for an SPI bus handover
-        nanosleep(&slice, nullptr);
 
         if (pthread_mutex_trylock(&mutex) == 0) {
             return true;
