@@ -413,8 +413,16 @@ def resolve_initial_terminal_size(cols_override: Optional[int], rows_override: O
     return cols, rows
 
 
-def recv_stream_frame(transport) -> bytes:
+def recv_stream_frame(transport, deadline: Optional[float] = None) -> bytes:
+    """Read one stream-API frame, skipping whatever precedes its start marker.
+
+    deadline is a time.monotonic() value that bounds the whole scan, not each read. A transport
+    timeout cannot do that job: a wrong port or a noisy serial line delivers bytes steadily, every
+    read returns inside its own timeout, and the scan below never comes back to the caller's clock.
+    """
     while True:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("no stream-API frame marker before the deadline")
         start = recv_exact(transport, 1)[0]
         if start != START1:
             continue
@@ -1352,7 +1360,7 @@ def wait_for_config_complete(transport, pb2, timeout: float, verbose: bool) -> N
                 break
             transport.settimeout(remaining)
             try:
-                raw = recv_stream_frame(transport)
+                raw = recv_stream_frame(transport, deadline)
             except (socket.timeout, TimeoutError):
                 continue
             except ConnectionError:
