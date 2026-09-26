@@ -1150,9 +1150,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
 
 #if !MESHTASTIC_EXCLUDE_GPS
-        // Enable gps if it was previously disabled due to region not being set
-        if (!requiresReboot && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr &&
-            !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        // Enable gps if it was previously disabled due to region not being set. Only then: a probe that
+        // gave up also leaves it disabled, and re-enabling on every LoRa save re-runs the blocking probe.
+        if (!requiresReboot && oldLoraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+            config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr && !gps->isEnabled() &&
+            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             gps->enable();
         }
 #endif
