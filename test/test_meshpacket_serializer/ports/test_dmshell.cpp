@@ -1,5 +1,6 @@
 #include "../test_helpers.h"
 #include "mesh/mesh-pb-constants.h"
+#include <cstring>
 
 namespace
 {
@@ -58,6 +59,12 @@ void assert_dmshell_roundtrip(meshtastic_RemoteShell_OpCode op, uint32_t session
     tx.seq = seq;
     tx.cols = cols;
     tx.rows = rows;
+    TEST_ASSERT_TRUE(payloadLen <= sizeof(tx.payload.bytes));
+    if (payloadLen > 0) {
+        TEST_ASSERT_NOT_NULL(payload);
+        memcpy(tx.payload.bytes, payload, payloadLen);
+        tx.payload.size = payloadLen;
+    }
 
     uint8_t encoded[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
     size_t encodedLen = pb_encode_to_bytes(encoded, sizeof(encoded), meshtastic_RemoteShell_fields, &tx);
@@ -71,6 +78,10 @@ void assert_dmshell_roundtrip(meshtastic_RemoteShell_OpCode op, uint32_t session
     TEST_ASSERT_EQUAL_UINT32(seq, rx.seq);
     TEST_ASSERT_EQUAL_UINT32(cols, rx.cols);
     TEST_ASSERT_EQUAL_UINT32(rows, rx.rows);
+    TEST_ASSERT_EQUAL_UINT32(payloadLen, rx.payload.size);
+    if (payloadLen > 0) {
+        TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, rx.payload.bytes, payloadLen);
+    }
 }
 } // namespace
 
