@@ -4,10 +4,19 @@
 #include "Stream.h"
 #include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
+#include "generated/meshtastic/serial_hal.pb.h"
+#include <atomic>
 #include <cstdarg>
 
-// A To/FromRadio packet + our 32 bit header
-#define MAX_STREAM_BUF_SIZE (MAX_TO_FROM_RADIO_SIZE + sizeof(uint32_t))
+// Buffer sized for the larger of a full ToRadio/FromRadio payload or a full SerialHalCommand payload, plus header.
+#if HAS_SERIAL_HAL_DEVICE
+#define MAX_STREAM_PAYLOAD_SIZE                                                                                                  \
+    (MAX_TO_FROM_RADIO_SIZE > (int)meshtastic_SerialHalCommand_size ? MAX_TO_FROM_RADIO_SIZE                                     \
+                                                                    : (int)meshtastic_SerialHalCommand_size)
+#else
+#define MAX_STREAM_PAYLOAD_SIZE MAX_TO_FROM_RADIO_SIZE
+#endif
+#define MAX_STREAM_BUF_SIZE (MAX_STREAM_PAYLOAD_SIZE + (int)sizeof(uint32_t))
 
 // Cap on one writeStream() slice: an uncapped dump never reaches loop(), so a board with a
 // hardware watchdog (RP2350 arms 8s) resets mid-dump.
@@ -43,6 +52,10 @@ class StreamAPI : public PhoneAPI
 
     uint8_t rxBuf[MAX_STREAM_BUF_SIZE] = {0};
     size_t rxPtr = 0;
+#if HAS_SERIAL_HAL_DEVICE
+    bool rxIsSerialHal = false; ///< true when the current in-progress frame is a SerialHal frame (START1 SH_MAGIC ...)
+    std::atomic<bool> serialHalRxActive{false};
+#endif
 
     /// time of last rx, used, to slow down our polling if we haven't heard from anyone
     uint32_t lastRxMsec = 0;
@@ -64,6 +77,19 @@ class StreamAPI : public PhoneAPI
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override = 0;
 
+#if HAS_SERIAL_HAL_DEVICE
+    /**
+     * Emit a SerialHal response frame with proper framing (START1 SERIALHAL_MAGIC LEN_H LEN_L payload).
+     * Called by SerialHalDevice to send responses back to the host.
+     *
+     * @param hdr     4-byte header (START1 SERIALHAL_MAGIC LEN_H LEN_L)
+     * @param hdrLen  Length of header (should be 4)
+     * @param payload Encoded SerialHalResponse protobuf payload
+     * @param payloadLen Length of payload
+     */
+    void emitSerialHalResponse(const uint8_t *hdr, size_t hdrLen, const uint8_t *payload, size_t payloadLen);
+#endif
+
   private:
     /**
      * Read any rx chars from the link and call handleToRadio
@@ -81,6 +107,14 @@ class StreamAPI : public PhoneAPI
      * Send a FromRadio.rebooted = true packet to the phone
      */
     void emitRebooted();
+
+#if HAS_SERIAL_HAL_DEVICE
+    /**
+     * Called when a complete SerialHal-framed packet has been received.
+     * Default implementation dispatches to SerialHalDevice for GPIO/SPI handling.
+     */
+    virtual void handleSerialHalCommand(const uint8_t *buf, size_t len);
+#endif
 
     virtual void onConnectionChanged(bool connected) override;
 

@@ -726,6 +726,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 #undef MESHTASTIC_ENCRYPTED_STORAGE
 #undef MESHTASTIC_ENABLE_APPROTECT
+// Device side of the SerialHal proxy: this node answers GPIO/SPI/interrupt frames so a native host can
+// drive its radio. Off unless a variant asks; the host side (platform/portduino) needs none of it.
+#ifndef HAS_SERIAL_HAL_DEVICE
+#define HAS_SERIAL_HAL_DEVICE 0
+#endif
+
 #ifndef MESHTASTIC_EXCLUDE_LOCKDOWN
 #define MESHTASTIC_EXCLUDE_LOCKDOWN 1
 #endif
