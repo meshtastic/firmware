@@ -1220,11 +1220,6 @@ static void test_handleSetHamMode_blankShortNameKeepsTheExistingOne()
 class HamModeMockRouter : public Router
 {
   public:
-    ~HamModeMockRouter()
-    {
-        delete cryptLock; // the Router ctor asserts this is clear, so a later suite can construct one
-        cryptLock = nullptr;
-    }
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         packetPool.release(p);
