@@ -23,12 +23,12 @@ struct CryptoKey {
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 struct CachedSharedSecret {
-    uint32_t lookup_key;
+    // The whole peer key, not a short digest of it: a peer identified by a prefix can be
+    // impersonated by anyone who grinds a key sharing it, who would then be handed the secret we
+    // use to talk to the real peer. `valid` marks a slot in use, since any key bytes can be zero.
+    uint8_t peer_public_key[32];
     uint8_t shared_secret[32];
     uint8_t last_used;
-    // An explicit flag, rather than lookup_key == 0 meaning empty: a peer key whose first 4 bytes
-    // are zero - the all-zero weak key among them - would otherwise match every unused slot and be
-    // served an all-zero secret as a hit. Costs nothing, the struct is padded to the same size.
     bool valid;
 };
 

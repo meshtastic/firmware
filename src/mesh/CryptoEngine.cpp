@@ -400,8 +400,8 @@ void CryptoEngine::clearSharedSecretCache()
 
 /**
  * Derive shared_key = SHA256(X25519(our private, peer public)), reusing the cached result when we
- * have derived it for this peer before. The lookup key is the first 4 bytes of the peer's public
- * key: a collision costs a failed decrypt with the wrong peer's secret, never a disclosed one.
+ * have derived it for this peer before. Entries are matched on the whole peer key: a shorter tag
+ * can be ground out by an impostor, who would then receive traffic meant for the peer it shadows.
  */
 bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
 {
@@ -409,28 +409,17 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
     uint8_t peer[32];
     memcpy(peer, peerPubKey, 32);
 
-    // A weak peer key is rejected before the cache is consulted. The lookup key is only 4 bytes, so
-    // a weak key sharing those bytes with a cached peer would otherwise be served that peer's
-    // secret and pass, bypassing the check dh2 does on a miss.
-    if (Curve25519::isWeakPoint(peer)) {
-        return false;
-    }
-
     // The last used timestamp is in units of ~1.165 hours, which gives us
     // ~12.3 days before the timestamps roll over. This is ok since a periodic
     // misfire on evicting the oldest secret has very little impact.
     const uint8_t now = (millis() >> 22) & 0xff;
-
-    // Get a short lookup key from the pubkey
-    uint32_t lookupKey;
-    memcpy(&lookupKey, peerPubKey, sizeof(lookupKey));
 
     uint16_t oldestDelta = 0;
     size_t oldestIndex = 0;
     bool haveEmptySlot = false;
     for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
         CachedSharedSecret &entry = sharedSecretCache[i];
-        if (entry.valid && entry.lookup_key == lookupKey) {
+        if (entry.valid && memcmp(entry.peer_public_key, peerPubKey, 32) == 0) {
             // Cache hit! Copy it into shared_key.
             memcpy(shared_key, entry.shared_secret, 32);
             // Update the last used timestamp
@@ -472,7 +461,7 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
 
     // Insert the calculated shared secret into the cache, overwriting an old entry if needed.
     CachedSharedSecret &oldestEntry = sharedSecretCache[oldestIndex];
-    oldestEntry.lookup_key = lookupKey;
+    memcpy(oldestEntry.peer_public_key, peerPubKey, 32);
     oldestEntry.last_used = now;
     oldestEntry.valid = true;
     memcpy(oldestEntry.shared_secret, shared_key, 32);
