@@ -280,10 +280,16 @@ class ReentrantSpiLock : public ISpiLock
             depth++;
             return true;
         }
-        bool result = spiLock->lock(timeout);
+        // Only on success. Portduino's timed lock could not fail before it grew a real mutex, so
+        // claiming ownership unconditionally was harmless; now a false result would leave this thread
+        // passing the reentrancy check above without holding the mutex, and unlock()ing one it never
+        // took.
+        if (!spiLock->lock(timeout)) {
+            return false;
+        }
         owner = self;
         depth = 1;
-        return result;
+        return true;
     }
 
     void unlock(void) override

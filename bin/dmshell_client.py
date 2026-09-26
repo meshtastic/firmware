@@ -394,9 +394,14 @@ def recv_exact(transport, length: int, deadline: Optional[float] = None) -> byte
     while len(chunks) < length:
         # A trickling sender returns a byte inside every read timeout, so the per-read timeout alone
         # cannot bound a frame that arrives one byte at a time. Checked per chunk when a caller has a
-        # deadline to keep; without one the loop behaves as it always did.
-        if deadline is not None and time.monotonic() >= deadline:
-            raise TimeoutError("incomplete stream-API frame at the deadline")
+        # deadline to keep, and the transport's own timeout is shortened to what is left of it - a
+        # timeout set once before the first read would let the last one run a full timeout past the
+        # deadline. Without a deadline the loop behaves as it always did.
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("incomplete stream-API frame at the deadline")
+            transport.settimeout(remaining)
         piece = transport.recv(length - len(chunks))
         if not piece:
             raise ConnectionError("connection closed by transport")

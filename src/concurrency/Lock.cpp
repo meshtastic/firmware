@@ -44,7 +44,11 @@ void Lock::unlock()
 #elif defined(ARCH_PORTDUINO)
 Lock::Lock()
 {
-    pthread_mutex_init(&mutex, NULL);
+    // Same posture as the FreeRTOS branch above: a lock that cannot be created is not something a
+    // caller can do anything about, and every use of an uninitialised mutex is undefined.
+    if (pthread_mutex_init(&mutex, NULL) != 0) {
+        abort();
+    }
 }
 
 void Lock::lock()
