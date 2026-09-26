@@ -879,6 +879,9 @@ void RadioLibInterface::periodicRadioMaintenance()
             startReceive();
         return; // a chip just re-inited (or still dead) has no use for an AGC reset this tick
     }
+    // resetAGC() ends in startReceive(), whose standby would run a queued packet's TX delay, start it and cut it off.
+    if (hasQueuedTx())
+        return;
 
     resetAGC();
 }
