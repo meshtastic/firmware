@@ -184,6 +184,13 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         LOG_DEBUG("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
     }
 
+    if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0) {
+        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered: from STDBY_RC every SetRx and SetTx
+        // first waits out the TCXO start-up delay (5 ms by RadioLib's default).
+        const int16_t xoscRes = lora.setStandbyXOSC(true);
+        LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
+    }
+
 // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
 // no effect
 #if ARCH_PORTDUINO
