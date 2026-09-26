@@ -424,15 +424,18 @@ void RadioLibInterface::onNotify(uint32_t notification)
 {
 
     switch (notification) {
-    case ISR_TX:
-        handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
+    case ISR_TX: {
+        // The chip is deaf in standby until startReceive(), so the airtime log and printPacket() wait until after it.
+        meshtastic_MeshPacket *sent = handleTransmitInterrupt(); // radio already back on the home config
         // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
         // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
         // but it keeps the post-TX listen window on the channel we are about to transmit on.
         (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
         startReceive();
         setTransmitDelay();
+        finishSentPacket(sent);
         break;
+    }
     case ISR_RX:
         handleReceiveInterrupt();
         // Re-arm for the next packet. rearmReceive() avoids a standby where the chip is already in RX,
@@ -592,41 +595,49 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     return false;
 }
 
-void RadioLibInterface::handleTransmitInterrupt()
+meshtastic_MeshPacket *RadioLibInterface::handleTransmitInterrupt()
 {
-    // This can be null if we forced the device to enter standby mode.  In that case
-    // ignore the transmit interrupt
-    if (sendingPacket)
-        completeSending();
+    // Null if we forced the device into standby, which already completed the send.
+    meshtastic_MeshPacket *sent = detachSentPacket();
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
+    return sent;
 }
 
 void RadioLibInterface::completeSending()
 {
-    // We are careful to clear sending packet before calling printPacket because
-    // that can take a long time
+    finishSentPacket(detachSentPacket());
+}
+
+meshtastic_MeshPacket *RadioLibInterface::detachSentPacket()
+{
+    // Cleared first: printPacket() in finishSentPacket() can take a long time.
     auto p = sendingPacket;
     sendingPacket = NULL;
 #ifdef LED_LORA
     digitalWrite(LED_LORA, LED_STATE_OFF);
 #endif
-
-    if (p) {
-        // Packet has been sent, count it toward our TX airtime utilization.
-        uint32_t xmitMsec = getPacketTime(p);
-        airTime->logAirtime(TX_LOG, xmitMsec);
-
-        txGood++;
-        if (!isFromUs(p))
-            txRelay++;
-        printPacket("Completed sending", p);
-        // Keep this inside `if (p)`: completeSending() also runs on every setStandby(), where a hook
-        // undoing its own pre-TX switch would recurse back through reconfigure().
+    // Keep this behind `if (p)`: completeSending() also runs on every setStandby(), where a hook
+    // undoing its own pre-TX switch would recurse back through reconfigure().
+    if (p)
         RadioTxHooks::packetReleased(this, p);
+    return p;
+}
 
-        // We are done sending that packet, release it
-        packetPool.release(p);
-    }
+void RadioLibInterface::finishSentPacket(meshtastic_MeshPacket *p)
+{
+    if (!p)
+        return;
+    // Packet has been sent, count it toward our TX airtime utilization.
+    uint32_t xmitMsec = getPacketTime(p);
+    airTime->logAirtime(TX_LOG, xmitMsec);
+
+    txGood++;
+    if (!isFromUs(p))
+        txRelay++;
+    printPacket("Completed sending", p);
+
+    // We are done sending that packet, release it
+    packetPool.release(p);
 }
 
 void RadioLibInterface::handleReceiveInterrupt()

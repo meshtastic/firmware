@@ -335,7 +335,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
-    void handleTransmitInterrupt();
+    /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
+    meshtastic_MeshPacket *handleTransmitInterrupt();
     void handleReceiveInterrupt();
 
     static void timerCallback(void *p1, uint32_t p2);
@@ -381,6 +382,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+
+    /** Clear sendingPacket and release its per-packet radio state; returns the packet, or null. */
+    meshtastic_MeshPacket *detachSentPacket();
+
+    /** Airtime, counters, log and pool release for a packet detachSentPacket() returned. */
+    void finishSentPacket(meshtastic_MeshPacket *p);
 
     /**
      * Add SNR data to received messages
