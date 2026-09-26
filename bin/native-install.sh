@@ -9,3 +9,4 @@ else
 	cp bin/config-dist.yaml /etc/meshtasticd/config.yaml
 fi
 cp bin/meshtasticd.service /usr/lib/systemd/system/meshtasticd.service
+cp bin/meshtasticd@.service /usr/lib/systemd/system/meshtasticd@.service
