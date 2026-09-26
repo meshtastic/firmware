@@ -19,6 +19,10 @@
 
 #if defined(MESHTASTIC_HAS_DMSHELL)
 
+// Enough for the peer's whole input window (four frames of 64 bytes, with slack), so a PTY that
+// stalls mid-frame never forces us to drop bytes the peer has been told we took.
+constexpr size_t DMSHELL_PENDING_WRITE_CAPACITY = 512;
+
 struct DMShellSession {
     bool active = false;
     uint32_t sessionId = 0;
@@ -26,6 +30,11 @@ struct DMShellSession {
     uint8_t channel = 0;
     int masterFd = -1;
     int childPid = -1;
+    // masterFd is nonblocking, so write() can take only part of an INPUT frame. The rest waits here
+    // and goes out ahead of any later input; dropping it would lose bytes the peer counts as
+    // delivered, since its receive cursor has already moved past them.
+    uint8_t pendingWrite[DMSHELL_PENDING_WRITE_CAPACITY] = {};
+    size_t pendingWriteLen = 0;
     uint32_t nextTxSeq = 1;
     uint32_t lastAckedRxSeq = 0;
     // In-order frames processed since we last originated one carrying lastAckedRxSeq. The peer bounds
@@ -80,6 +89,8 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
 
     DMShellSession session;
     pid_t pendingChildPid = -1;
+    // SIGKILL has been sent to pendingChildPid; it is kept until waitpid() reaps it.
+    bool pendingChildKilled = false;
     // Set once at construction from DMSHELL_TX_WINDOW (0 = unbounded); see the constructor.
     uint32_t txWindowFrames = 0;
     // Set once at construction from DMSHELL_MAX_RETRANSMITS (0 = no bound).
@@ -102,6 +113,10 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     bool openSession(const meshtastic_MeshPacket &mp, const meshtastic_RemoteShell &frame);
     DMShellRxDecision classifyIncomingFrame(const meshtastic_RemoteShell &frame);
     bool writeSessionInput(const meshtastic_RemoteShell &frame);
+    /// Push whatever the PTY could not take last time. True once nothing is left queued.
+    bool flushPendingWrite();
+    /// Retain bytes the PTY would not take. False when they will not fit, which ends the session.
+    bool queuePendingWrite(const uint8_t *bytes, size_t len);
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
     void processPendingChildReap();

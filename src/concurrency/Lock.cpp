@@ -2,6 +2,10 @@
 #include "configuration.h"
 #include <cassert>
 
+#if !defined(HAS_FREE_RTOS) && defined(ARCH_PORTDUINO)
+#include <time.h>
+#endif
+
 namespace concurrency
 {
 
@@ -48,12 +52,38 @@ void Lock::lock()
     pthread_mutex_lock(&mutex);
 }
 
-bool Lock::lock(uint32_t)
+bool Lock::lock(uint32_t timeout)
 {
-    // No portable timed pthread lock across Linux and macOS, so block instead: returning true
-    // without acquiring would leave callers such as SPILock unlocking a mutex they never took.
-    lock();
-    return true;
+    if (pthread_mutex_trylock(&mutex) == 0) {
+        return true;
+    }
+
+    // pthread_mutex_timedlock is not portable (macOS has none), so poll to the deadline instead.
+    // Returning true without acquiring is not an option: callers such as SPILock would unlock a
+    // mutex they never took.
+    struct timespec deadline = {};
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += timeout / 1000;
+    deadline.tv_nsec += (long)(timeout % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec += 1;
+        deadline.tv_nsec -= 1000000000L;
+    }
+
+    while (true) {
+        struct timespec now = {};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        if (now.tv_sec > deadline.tv_sec || (now.tv_sec == deadline.tv_sec && now.tv_nsec >= deadline.tv_nsec)) {
+            return false;
+        }
+
+        struct timespec slice = {0, 200000L}; // 0.2 ms, fine enough for an SPI bus handover
+        nanosleep(&slice, nullptr);
+
+        if (pthread_mutex_trylock(&mutex) == 0) {
+            return true;
+        }
+    }
 }
 
 void Lock::unlock()

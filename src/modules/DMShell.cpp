@@ -305,10 +305,10 @@ void DMShellModule::applySessionFrame(const meshtastic_RemoteShell &frame)
         }
         break;
     case meshtastic_RemoteShell_OpCode_PING: {
-        uint32_t peerLastRxSeq = frame.ack_seq;
-        if (frame.last_rx_seq > 0) {
-            peerLastRxSeq = frame.last_rx_seq;
-        }
+        // Same rule as notePeerReceiveCursor(): a stale last_rx_seq must not walk the cursor back
+        // behind what the peer has already acknowledged, or we replay from a frame history has
+        // dropped and close a session the peer is happy with.
+        const uint32_t peerLastRxSeq = frame.last_rx_seq > frame.ack_seq ? frame.last_rx_seq : frame.ack_seq;
 
         const uint32_t nextMissingForPeer = peerLastRxSeq + 1;
         if (nextMissingForPeer > 0 && nextMissingForPeer < session.nextTxSeq) {
@@ -351,6 +351,9 @@ int32_t DMShellModule::runOnce()
     if (!session.active) {
         return 100;
     }
+
+    // Anything the PTY would not take last time goes ahead of new input and of the read below.
+    flushPendingWrite();
 
     if (Throttle::isWithinTimespanMs(session.lastActivityMs, SESSION_IDLE_TIMEOUT_MS) == false) {
         closeSession("idle_timeout", true);
@@ -609,8 +612,61 @@ bool DMShellModule::writeSessionInput(const meshtastic_RemoteShell &frame)
 
     flushPendingOutputOnInterrupt(frame);
 
+    if (!flushPendingWrite()) {
+        // The PTY is still backed up, so this frame queues behind what is already waiting.
+        return queuePendingWrite(frame.payload.bytes, frame.payload.size);
+    }
+
     const ssize_t bytesWritten = write(session.masterFd, frame.payload.bytes, frame.payload.size);
-    return bytesWritten >= 0;
+    if (bytesWritten < 0) {
+        if (errno == EAGAIN || errno == EINTR) {
+            return queuePendingWrite(frame.payload.bytes, frame.payload.size);
+        }
+        return false;
+    }
+    if ((size_t)bytesWritten < frame.payload.size) {
+        // A nonblocking write may take less than it was given; the tail is ours to keep.
+        return queuePendingWrite(frame.payload.bytes + bytesWritten, frame.payload.size - bytesWritten);
+    }
+    return true;
+}
+
+bool DMShellModule::flushPendingWrite()
+{
+    if (session.pendingWriteLen == 0) {
+        return true;
+    }
+    if (session.masterFd < 0) {
+        session.pendingWriteLen = 0;
+        return true;
+    }
+
+    while (session.pendingWriteLen > 0) {
+        const ssize_t bytesWritten = write(session.masterFd, session.pendingWrite, session.pendingWriteLen);
+        if (bytesWritten <= 0) {
+            return false;
+        }
+        session.pendingWriteLen -= (size_t)bytesWritten;
+        if (session.pendingWriteLen > 0) {
+            memmove(session.pendingWrite, session.pendingWrite + bytesWritten, session.pendingWriteLen);
+        }
+    }
+    return true;
+}
+
+bool DMShellModule::queuePendingWrite(const uint8_t *bytes, size_t len)
+{
+    if (len == 0) {
+        return true;
+    }
+    if (session.pendingWriteLen + len > sizeof(session.pendingWrite)) {
+        LOG_WARN("DMShell: PTY write backlog full (%u queued, %u more)", (unsigned)session.pendingWriteLen, (unsigned)len);
+        return false;
+    }
+    memcpy(session.pendingWrite + session.pendingWriteLen, bytes, len);
+    session.pendingWriteLen += len;
+    LOG_DEBUG("DMShell: PTY took a partial write, %u bytes queued", (unsigned)session.pendingWriteLen);
+    return true;
 }
 
 void DMShellModule::closeSession(const char *reason, bool notifyPeer)
@@ -649,7 +705,16 @@ void DMShellModule::closeSession(const char *reason, bool notifyPeer)
             LOG_WARN("DMShell: failed to send SIGTERM to pid=%d errno=%d", session.childPid, errno);
         }
 
+        // One pending slot only, and the reap above may have left a killed child unreaped. Collect
+        // it here rather than overwriting the pid and leaving a zombie behind.
+        if (pendingChildPid > 0) {
+            int status = 0;
+            if (waitpid(pendingChildPid, &status, WNOHANG) != pendingChildPid) {
+                LOG_WARN("DMShell: pid=%d has not exited yet, dropping it", pendingChildPid);
+            }
+        }
         pendingChildPid = session.childPid;
+        pendingChildKilled = false;
         session.childPid = -1;
     }
 
@@ -681,20 +746,26 @@ void DMShellModule::processPendingChildReap()
 
     if (result == pendingChildPid || (result < 0 && errno == ECHILD)) {
         pendingChildPid = -1;
+        pendingChildKilled = false;
         return;
     }
 
     if (result < 0) {
         LOG_WARN("DMShell: waitpid failed for pid=%d errno=%d", pendingChildPid, errno);
         pendingChildPid = -1;
+        pendingChildKilled = false;
         return;
     }
 
-    if (pendingChildPid > 0) {
+    // Still running. SIGKILL ends it but does not reap it, so keep the pid and let the next tick's
+    // waitpid() collect the corpse; clearing it here leaves a zombie behind on every close.
+    if (!pendingChildKilled) {
         if (kill(pendingChildPid, SIGKILL) < 0 && errno != ESRCH) {
             LOG_WARN("DMShell: failed to send SIGKILL to pid=%d errno=%d", pendingChildPid, errno);
+            pendingChildPid = -1;
+            return;
         }
-        pendingChildPid = -1;
+        pendingChildKilled = true;
     }
 }
 
@@ -958,8 +1029,21 @@ void DMShellModule::drainBufferedFrames()
 
 void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember)
 {
+    // A sequenced frame that never reaches the air has to give its number back. The callers draw it
+    // from nextTxSeq before we are called, so dropping out here would leave a hole no replay can
+    // fill: the peer waits on a frame that was never remembered, and resendFramesFrom() ends the
+    // session when it cannot find it. Only the number just drawn can be returned, which is exactly
+    // the case here - a replay arrives with an older seq and does not qualify.
+    auto returnSequence = [this, &frame]() {
+        if (frame.seq != 0 && session.active && session.nextTxSeq == frame.seq + 1) {
+            session.nextTxSeq = frame.seq;
+        }
+    };
+
     meshtastic_MeshPacket *packet = allocDataPacket();
     if (!packet) {
+        LOG_WARN("DMShell: no packet available for op=%u seq=%u", frame.op, frame.seq);
+        returnSequence();
         return;
     }
     LOG_TRACE("DMShell: building packet op=%u session=0x%x seq=%u payloadLen=%zu", frame.op, frame.session_id, frame.seq,
@@ -967,6 +1051,9 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
     const size_t encoded = pb_encode_to_bytes(packet->decoded.payload.bytes, sizeof(packet->decoded.payload.bytes),
                                               meshtastic_RemoteShell_fields, &frame);
     if (encoded == 0) {
+        LOG_WARN("DMShell: failed to encode op=%u seq=%u", frame.op, frame.seq);
+        packetPool.release(packet);
+        returnSequence();
         return;
     }
     packet->decoded.payload.size = encoded;
