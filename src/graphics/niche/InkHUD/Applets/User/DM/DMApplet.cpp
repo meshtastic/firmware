@@ -94,7 +94,7 @@ void InkHUD::DMApplet::onRender(bool full)
     // ===================
 
     // Parse any non-ascii chars in the message
-    std::string text = parse(std::string(MessageStore::getText(latestMessage->dm)));
+    std::string text = parse(std::string(latestMessage->dmText));
 
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
