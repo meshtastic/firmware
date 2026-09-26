@@ -282,7 +282,7 @@ def load_proto_modules() -> object:
     try:
         from meshtastic import mesh_pb2, portnums_pb2  # type: ignore
     except ImportError as exc:
-        print(f"Failed to import protobuf modules. Output dir contents:", file=sys.stderr)
+        print("Failed to import protobuf modules. Output dir contents:", file=sys.stderr)
         for item in (out_dir / "meshtastic").iterdir():
             print(f"  {item.name}", file=sys.stderr)
         raise SystemExit(f"could not import meshtastic proto modules: {exc}") from exc
@@ -314,6 +314,9 @@ class SerialTransport:
 
     def recv(self, length: int) -> bytes:
         return self._serial.read(length)
+
+    def settimeout(self, value) -> None:
+        self._serial.timeout = value
 
     def sendall(self, data: bytes) -> None:
         self._serial.write(data)
@@ -1320,15 +1323,35 @@ def wait_for_config_complete(transport, pb2, timeout: float, verbose: bool) -> N
     toradio.want_config_id = nonce
     send_toradio(transport, toradio)
 
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        fromradio = pb2.mesh.FromRadio()
-        fromradio.ParseFromString(recv_stream_frame(transport))
-        variant = fromradio.WhichOneof("payload_variant")
-        if verbose and variant:
-            print(f"[api] fromradio {variant}", file=sys.stderr)
-        if variant == "config_complete_id" and fromradio.config_complete_id == nonce:
-            return
+    # Both transports are opened blocking, so the deadline has to be pushed down into each read:
+    # a peer that never answers - the wrong --port, a non-Meshtastic service, a serial device that
+    # ignores want_config_id - otherwise hangs here for good and --timeout means nothing.
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            transport.settimeout(remaining)
+            try:
+                raw = recv_stream_frame(transport)
+            except (socket.timeout, TimeoutError):
+                continue
+            except ConnectionError:
+                # pyserial reports a read timeout as a short read, which recv_exact turns into
+                # this; a genuine disconnect before the deadline is still worth raising.
+                if time.monotonic() < deadline:
+                    raise
+                break
+            fromradio = pb2.mesh.FromRadio()
+            fromradio.ParseFromString(raw)
+            variant = fromradio.WhichOneof("payload_variant")
+            if verbose and variant:
+                print(f"[api] fromradio {variant}", file=sys.stderr)
+            if variant == "config_complete_id" and fromradio.config_complete_id == nonce:
+                return
+    finally:
+        transport.settimeout(None)
     raise TimeoutError("timed out waiting for config handshake to complete")
 
 
@@ -1654,6 +1677,12 @@ def run_interactive_mode(transport, state: SessionState) -> None:
             drain_events(state)
             data = sys.stdin.buffer.read(INPUT_BATCH_MAX_BYTES)
             if not data:
+                # The input window holds at most INPUT_WINDOW_FRAMES frames in flight, so piped
+                # input longer than that is still queued here. The server handles CLOSE out of
+                # order, ahead of any gap, so sending it now truncates the script silently.
+                while (state.has_queued_input() or state.outstanding_input() > 0) and not state.closed_event.is_set():
+                    drain_events(state)
+                    time.sleep(HEARTBEAT_POLL_INTERVAL_SEC)
                 send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE)
                 break
             send_input(transport, state, data)
