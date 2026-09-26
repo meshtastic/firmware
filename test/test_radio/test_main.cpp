@@ -648,6 +648,59 @@ void tearDown(void)
     mockMeshService = nullptr;
 }
 
+// shouldDeferPreambleVerdict(): whether a "that preamble was false" verdict has actually observed the
+// window it is judging. At SF7/BW500 the deadline is 8 ms, and measured on a two-node bench the
+// interval between reads of the IRQ flags ran 8-96 ms, median 60 - so 7 of 8 false-preamble verdicts
+// were reached by a read that arrived later than the entire deadline, and the node then transmitted
+// over what may have been a real packet. That interval is a CSMA backoff rather than a poll, so it is
+// not specific to any one bus or scheduler. The boundaries below are the whole decision, so they are
+// pinned here rather than left to the call site.
+
+static void test_preambleVerdict_trustedWhenLooksAreFasterThanTheDeadline()
+{
+    // The healthy case, and the one that must not change: a loop reading every 2 ms against an 8 ms
+    // deadline has seen the window, so its verdict stands and the packet is declared false at once.
+    TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(2, 8, 9, 99));
+    TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(7, 8, 20, 99));
+}
+
+static void test_preambleVerdict_deferredWhenTheWindowWasNeverObserved()
+{
+    // The measured case: an 8 ms deadline judged by a read 60 ms after the previous one. The flag
+    // would have read as absent either way, so wait for a read that can answer the question.
+    TEST_ASSERT_TRUE(shouldDeferPreambleVerdict(60, 8, 60, 99));
+    TEST_ASSERT_TRUE(shouldDeferPreambleVerdict(96, 8, 96, 99));
+    // LongFast: a 262 ms deadline judged by a read 490 ms late.
+    TEST_ASSERT_TRUE(shouldDeferPreambleVerdict(490, 262, 490, 2157));
+}
+
+static void test_preambleVerdict_boundariesAreExclusiveOnBothSides()
+{
+    // A read exactly as old as the deadline counts as having seen the window: the deadline test in
+    // Throttle::isWithinTimespanMs() is an exclusive <, so at equality the window has just closed.
+    TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(8, 8, 20, 99));
+    TEST_ASSERT_TRUE(shouldDeferPreambleVerdict(9, 8, 20, 99));
+    // The wait ends exactly at the maximum packet time, matching the same exclusive <.
+    TEST_ASSERT_TRUE(shouldDeferPreambleVerdict(60, 8, 98, 99));
+    TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(60, 8, 99, 99));
+}
+
+static void test_preambleVerdict_boundedSoAStalledLoopCannotHoldTheChannel()
+{
+    // Past a maximum-length packet nothing we could collide with is still in the air. A loop that has
+    // stopped looking altogether must not be able to defer a transmission forever, however stale its
+    // last read is.
+    TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(5000, 8, 150, 99));
+    TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(5000, 8, 5000, 99));
+}
+
+static void test_preambleVerdict_firstLookIsNotTreatedAsStale()
+{
+    // The caller passes 0 before anything has read the flags, which must not read as "infinitely long
+    // ago" and defer every verdict on a freshly started radio.
+    TEST_ASSERT_FALSE(shouldDeferPreambleVerdict(0, 8, 20, 99));
+}
+
 void setup()
 {
     delay(10);
@@ -680,6 +733,11 @@ void setup()
     RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
     RUN_TEST(test_beginSending_oversizedPayloadIsClamped);
     RUN_TEST(test_beginSending_fittingPayloadIsSentWhole);
+    RUN_TEST(test_preambleVerdict_trustedWhenLooksAreFasterThanTheDeadline);
+    RUN_TEST(test_preambleVerdict_deferredWhenTheWindowWasNeverObserved);
+    RUN_TEST(test_preambleVerdict_boundariesAreExclusiveOnBothSides);
+    RUN_TEST(test_preambleVerdict_boundedSoAStalledLoopCannotHoldTheChannel);
+    RUN_TEST(test_preambleVerdict_firstLookIsNotTreatedAsStale);
     RUN_TEST(test_computePacketTime_txUsesTheRadiosOwnAnswer);
     RUN_TEST(test_computePacketTime_txFallsBackWhenTheRadioReportsAnError);
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);

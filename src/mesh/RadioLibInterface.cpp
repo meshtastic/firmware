@@ -122,22 +122,50 @@ bool RadioLibInterface::canSendImmediately()
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
     bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
+    const uint32_t nowMsec = Time::getMillis();
+    // How long since anything last read the IRQ flags. The deadline below is 2 * preambleTimeMsec,
+    // derived from symbol time alone - about 8 ms at SF7/BW500 - but nothing polls the flags on that
+    // cadence. This function runs from canSendImmediately(), so a look happens once per CSMA backoff
+    // while something is queued, and getTxDelayMsec() draws that backoff as
+    // random(0, 2^CWsize) * slotTimeMsec. slotTimeMsec carries a fixed 7.6 ms propagation/turnaround
+    // term while preambleTimeMsec is pure symbol time, so the two scale apart: an 8 ms deadline against
+    // a 0-56 ms backoff at ShortTurbo, but 262 ms against 0-196 ms at LongFast. At a fast preset the
+    // flag is therefore declared false because nobody looked in time, not because no packet arrived -
+    // on any platform, whatever the bus costs.
+    const uint32_t sinceLastLookMsec = lastReceiveDetectedMs ? nowMsec - lastReceiveDetectedMs : 0;
+    lastReceiveDetectedMs = Time::skipZero(nowMsec);
     // Handle false detections
     if (detected) {
         if (!activeReceiveStart) {
-            activeReceiveStart = Time::skipZero(Time::getMillis());
+            activeReceiveStart = Time::skipZero(nowMsec);
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
+            const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
             if (!(irq & syncWordHeaderValidFlag)) {
-                // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
+                // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag -
+                // but only when we were in a position to have seen it. The deadline is 2 * preambleTimeMsec, derived from
+                // symbol time alone, and a look that arrived later than that has not observed the window it is judging:
+                // the flag would have been read as absent whether or not a packet was arriving. Wait for a look that can
+                // answer the question instead of transmitting over what may be a real packet.
+                //
+                // Bounded by the maximum packet time, because past that no packet we could still collide with is in the
+                // air, so a loop that has stopped looking altogether cannot hold a transmission indefinitely. A build
+                // that polls faster than the deadline never takes this path at all, and behaves exactly as before.
+                if (shouldDeferPreambleVerdict(sinceLastLookMsec, 2 * preambleTimeMsec, nowMsec - activeReceiveStart,
+                                               maxPacketTimeMsec)) {
+                    LOG_TRACE("Defer false preamble verdict, deadline %ums, last look %ums ago, held %ums of %ums",
+                              2 * preambleTimeMsec, sinceLastLookMsec, nowMsec - activeReceiveStart, maxPacketTimeMsec);
+                    return detected;
+                }
                 activeReceiveStart = 0;
-                LOG_TRACE("Ignore false preamble detection");
+                LOG_TRACE("Ignore false preamble detection, deadline %ums, last look %ums ago", 2 * preambleTimeMsec,
+                          sinceLastLookMsec);
                 return false;
             } else {
-                uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
                 if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
                     // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
                     activeReceiveStart = 0;
-                    LOG_TRACE("Ignore false header detection");
+                    LOG_TRACE("Ignore false header detection, deadline %ums, last look %ums ago", maxPacketTimeMsec,
+                              sinceLastLookMsec);
                     return false;
                 }
             }

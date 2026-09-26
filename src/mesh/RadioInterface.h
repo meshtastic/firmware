@@ -341,5 +341,22 @@ class RadioInterface
 
 std::unique_ptr<RadioInterface> initLoRa();
 
+/// Whether a "this preamble was false" verdict has to wait for a better look at the radio.
+///
+/// A preamble with no HEADER_VALID after 2 * preambleTimeMsec is normally declared false. That
+/// deadline comes from symbol time alone - about 8 ms at SF7/BW500 - and says nothing about how often
+/// anything actually reads the IRQ flags. When the previous read was longer ago than the deadline
+/// itself, the window has not been observed: the flag reads as absent whether or not a packet is
+/// arriving, so the verdict carries no information and transmitting on it may step on a real packet.
+///
+/// elapsedMsec is measured from the first look that saw the preamble, and maxPacketTimeMsec bounds
+/// the wait: past a maximum-length packet nothing we could collide with is still in the air, so a
+/// loop that has stopped looking cannot hold a transmission indefinitely. Both boundaries are
+/// deliberate - a look exactly as old as the deadline is treated as having seen the window, and the
+/// wait ends exactly at the maximum packet time, matching Throttle::isWithinTimespanMs()'s
+/// exclusive <.
+bool shouldDeferPreambleVerdict(uint32_t sinceLastLookMsec, uint32_t deadlineMsec, uint32_t elapsedMsec,
+                                uint32_t maxPacketTimeMsec);
+
 /// Debug printing for packets
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p);
