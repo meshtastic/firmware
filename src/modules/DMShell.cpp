@@ -201,10 +201,10 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     if (frame.op == meshtastic_RemoteShell_OpCode_OPEN) {
         LOG_WARN("DMShell: received OPEN from 0x%x sessionId=0x%x", mp.from, frame.session_id);
-        const DMShellOpenAction action =
-            legacyRecovery ? DMShellOpenAction::Open
-                           : classifyOpen(session.active, session.sessionId, session.peer, frame.session_id, getFrom(&mp),
-                                          session.txWindow.peerAcked());
+        const DMShellOpenAction action = legacyRecovery
+                                             ? DMShellOpenAction::Open
+                                             : classifyOpen(session.active, session.sessionId, session.peer, frame.session_id,
+                                                            getFrom(&mp), session.txWindow.peerAcked());
         if (action == DMShellOpenAction::ResendOpenOk) {
             // OPEN_OK is always seq 1. The cursor check in classifyOpen() is what keeps it in the history.
             LOG_INFO("DMShell: repeated OPEN for session=0x%x, resending OPEN_OK", session.sessionId);
@@ -878,9 +878,8 @@ void DMShellModule::retransmitOldestUnacked()
         return;
     }
 
-    LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting (%u) interval=%ums ack_latency=%ums",
-             missing, (unsigned)session.retransmitRun.repeatCount(), (unsigned)intervalMs,
-             (unsigned)session.ackLatency.estimateMs());
+    LOG_WARN("DMShell: window shut and peer still missing seq=%u, retransmitting (%u) interval=%ums ack_latency=%ums", missing,
+             (unsigned)session.retransmitRun.repeatCount(), (unsigned)intervalMs, (unsigned)session.ackLatency.estimateMs());
     resendFramesFrom(missing);
 }
 
