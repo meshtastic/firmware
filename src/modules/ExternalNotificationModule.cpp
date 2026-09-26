@@ -223,6 +223,11 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #endif
         if (moduleConfig.external_notification.output_vibra)
             digitalWrite(moduleConfig.external_notification.output_vibra, on);
+#if defined(T_DECK_PRO) && defined(PIN_DRV_EN)
+        // Without a DRV2605 the motor hangs straight off PIN_DRV_EN
+        else if (!drv_found)
+            digitalWrite(PIN_DRV_EN, on);
+#endif
         break;
     case 2:
         // Only control buzzer pin digitally if not using PWM mode
