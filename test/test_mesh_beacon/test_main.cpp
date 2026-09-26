@@ -4951,6 +4951,41 @@ static void test_sidecar_evictedEntryStillQueued_isDroppedNotSentOnHome(void)
 }
 
 /**
+ * Two full cycles of legacy-split beacons reaped while still queued: 16 packets, the whole TX queue.
+ * Regression guarded: the expired-id ring held 8, so reaping the second cycle overwrote the first
+ * cycle's ids and those packets reached the head as ordinary traffic on the home config.
+ */
+static void test_sidecar_twoReapedSplitCycles_allDroppedNotSentOnHome(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket cycles[3][4][2];
+    for (int c = 0; c < 3; c++) {
+        for (int t = 0; t < 4; t++) {
+            for (int h = 0; h < 2; h++) {
+                cycles[c][t][h] = meshtastic_MeshPacket_init_zero;
+                cycles[c][t][h].id = 0x5EED0900 + (uint32_t)(c * 16 + t * 2 + h);
+            }
+            const auto s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, (uint16_t)(t + 1), false,
+                                          meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Split");
+            const int entry = MeshBeaconModule::setTargetRadioSettings(&cycles[c][t][0], s);
+            MeshBeaconModule::setTargetRadioSettings(&cycles[c][t][1], s, entry);
+        }
+        // Age this cycle past the interval so arming the next one reaps it.
+        for (int t = 0; t < 4; t++)
+            backdateArmedAt(cycles[c][t][0], kBeaconIntervalMs + 1000);
+    }
+
+    for (int c = 0; c < 2; c++)
+        for (int t = 0; t < 4; t++)
+            for (int h = 0; h < 2; h++) {
+                TEST_ASSERT_NULL_MESSAGE(MeshBeaconModule::getTargetRadioSettings(&cycles[c][t][h]), "the reaper freed it");
+                TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&cycles[c][t][h]),
+                                         "every reaped packet still queued is dropped at the head, not sent on the home config");
+            }
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
+/**
  * A local write whose offer claims a slot tells the phone about it with one get_channel_response.
  * Regression guarded: channels reach a phone only in the connect-time dump, so the writer showed a
  * stale list until it reconnected.
@@ -5347,6 +5382,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sanitise_messageCap_dropsAStraddlingCharacterWhole);
     RUN_TEST(test_sidecar_reapedEntryStillQueued_isDroppedNotSentOnHome);
     RUN_TEST(test_sidecar_evictedEntryStillQueued_isDroppedNotSentOnHome);
+    RUN_TEST(test_sidecar_twoReapedSplitCycles_allDroppedNotSentOnHome);
     RUN_TEST(test_byValue_localClaim_pushesTheClaimedChannelToThePhone);
     RUN_TEST(test_byValue_heldChannel_pushesNothing);
     RUN_TEST(test_byValue_remoteClaim_pushesNothingToTheLocalPhone);

@@ -23,16 +23,25 @@ static MeshBeaconModule_TargetRadioSettings targetRadioSettings[4];
 
 // Ids of entries reaped or evicted while their packets may still be queued: without them such a packet would
 // reach the radio as ordinary traffic and key up on the home config with the target channel's key.
-static PacketId expiredIds[sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0]) *
-                           sizeof(MeshBeaconModule_TargetRadioSettings::ids) / sizeof(PacketId)];
+// Sized to the TX queue, not the table: batches from several cycles can be queued at once.
+static PacketId expiredIds[MAX_TX_QUEUE];
 static uint8_t expiredNext;
 
-// A ring, so overwriting is safe: ids are unique per boot, and only a queue-overflow release leaves one behind.
+// A free slot first, else round-robin: a queued id is overwritten only once every slot holds an unreleased id.
 static void rememberExpired(const MeshBeaconModule_TargetRadioSettings &entry)
 {
+    constexpr uint8_t kSlots = sizeof(expiredIds) / sizeof(expiredIds[0]);
     for (uint8_t i = 0; i < entry.idCount; i++) {
-        expiredIds[expiredNext] = entry.ids[i];
-        expiredNext = (uint8_t)((expiredNext + 1) % (sizeof(expiredIds) / sizeof(expiredIds[0])));
+        uint8_t slot = expiredNext;
+        for (uint8_t j = 0; j < kSlots; j++) {
+            if (!expiredIds[j]) {
+                slot = j;
+                break;
+            }
+        }
+        expiredIds[slot] = entry.ids[i];
+        if (slot == expiredNext)
+            expiredNext = (uint8_t)((expiredNext + 1) % kSlots);
     }
 }
 
