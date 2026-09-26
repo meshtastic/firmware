@@ -31,6 +31,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "sleep.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -475,6 +476,7 @@ static uint8_t ourMacAddr[6];
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
+    rebootObserver.observe(&notifyReboot);
     loadFromDisk();
     cleanupMeshDB();
 
@@ -3276,6 +3278,8 @@ bool NodeDB::saveNodeDatabaseToDisk()
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
     bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    if (ok)
+        nodeDatabaseDirty = false;
 
     nodeDatabase.positions.clear();
     nodeDatabase.positions.shrink_to_fit();
@@ -3790,6 +3794,23 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     saveNodeDatabaseToDisk();
 }
 
+void NodeDB::saveNodeDatabaseIfDirty()
+{
+    // Single attempt; shares updateUser()'s once-a-minute budget, so the write rate is unchanged.
+    if (!nodeDatabaseDirty || Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS))
+        return;
+    lastNodeDbSave = Time::getMillis();
+    saveNodeDatabaseToDisk();
+}
+
+int NodeDB::onReboot(void *)
+{
+    // A graceful reboot has no other save point.
+    if (nodeDatabaseDirty)
+        saveNodeDatabaseToDisk();
+    return 0;
+}
+
 /** Update user info and channel for this node based on received user data
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
@@ -3871,9 +3892,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         updateGUIforNode = info;
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something about a User,
-        // store our DB unless we just did so less than a minute ago
-
+        // We just changed something about a User. Store our DB unless we just did so less than a minute
+        // ago; a deferred save stays pending and saveNodeDatabaseIfDirty() retries it.
+        nodeDatabaseDirty = true;
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
             saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
