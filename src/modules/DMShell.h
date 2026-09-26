@@ -88,9 +88,14 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     static constexpr uint32_t SESSION_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
     DMShellSession session;
-    pid_t pendingChildPid = -1;
-    // SIGKILL has been sent to pendingChildPid; it is kept until waitpid() reaps it.
-    bool pendingChildKilled = false;
+    struct PendingChild {
+        pid_t pid = -1;
+        // SIGKILL has been sent; the pid is kept until waitpid() reaps it.
+        bool killed = false;
+    };
+    // Children whose exit has not been collected yet. More than one slot because a close can land
+    // while the previous child is still dying, and losing a pid means leaving a zombie.
+    std::array<PendingChild, 4> pendingChildren = {};
     // Set once at construction from DMSHELL_TX_WINDOW (0 = unbounded); see the constructor.
     uint32_t txWindowFrames = 0;
     // Set once at construction from DMSHELL_MAX_RETRANSMITS (0 = no bound).
@@ -120,6 +125,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
     void processPendingChildReap();
+    void rememberPendingChild(pid_t pid);
 
     void rememberSentFrame(meshtastic_RemoteShell frame);
     void resendFramesFrom(uint32_t startSeq);

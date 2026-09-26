@@ -705,16 +705,7 @@ void DMShellModule::closeSession(const char *reason, bool notifyPeer)
             LOG_WARN("DMShell: failed to send SIGTERM to pid=%d errno=%d", session.childPid, errno);
         }
 
-        // One pending slot only, and the reap above may have left a killed child unreaped. Collect
-        // it here rather than overwriting the pid and leaving a zombie behind.
-        if (pendingChildPid > 0) {
-            int status = 0;
-            if (waitpid(pendingChildPid, &status, WNOHANG) != pendingChildPid) {
-                LOG_WARN("DMShell: pid=%d has not exited yet, dropping it", pendingChildPid);
-            }
-        }
-        pendingChildPid = session.childPid;
-        pendingChildKilled = false;
+        rememberPendingChild(session.childPid);
         session.childPid = -1;
     }
 
@@ -735,37 +726,61 @@ void DMShellModule::reapChildIfExited()
     }
 }
 
-void DMShellModule::processPendingChildReap()
+/// Take a slot for a child that has been asked to go away, so its exit is collected later.
+void DMShellModule::rememberPendingChild(pid_t pid)
 {
-    if (pendingChildPid <= 0) {
+    if (pid <= 0) {
         return;
     }
 
-    int status = 0;
-    const pid_t result = waitpid(pendingChildPid, &status, WNOHANG);
+    // A slot may have come free since the last tick.
+    processPendingChildReap();
 
-    if (result == pendingChildPid || (result < 0 && errno == ECHILD)) {
-        pendingChildPid = -1;
-        pendingChildKilled = false;
-        return;
-    }
-
-    if (result < 0) {
-        LOG_WARN("DMShell: waitpid failed for pid=%d errno=%d", pendingChildPid, errno);
-        pendingChildPid = -1;
-        pendingChildKilled = false;
-        return;
-    }
-
-    // Still running. SIGKILL ends it but does not reap it, so keep the pid and let the next tick's
-    // waitpid() collect the corpse; clearing it here leaves a zombie behind on every close.
-    if (!pendingChildKilled) {
-        if (kill(pendingChildPid, SIGKILL) < 0 && errno != ESRCH) {
-            LOG_WARN("DMShell: failed to send SIGKILL to pid=%d errno=%d", pendingChildPid, errno);
-            pendingChildPid = -1;
+    for (PendingChild &pending : pendingChildren) {
+        if (pending.pid <= 0) {
+            pending.pid = pid;
+            pending.killed = false;
             return;
         }
-        pendingChildKilled = true;
+    }
+
+    // Every slot still holds a child that has not exited. Waiting here would stall the thread, so
+    // the pid is lost and init will collect it; one warning, because it should not be reachable
+    // with a single session at a time.
+    LOG_WARN("DMShell: no slot left for pid=%d, dropping it", pid);
+}
+
+void DMShellModule::processPendingChildReap()
+{
+    for (PendingChild &pending : pendingChildren) {
+        if (pending.pid <= 0) {
+            continue;
+        }
+
+        int status = 0;
+        const pid_t result = waitpid(pending.pid, &status, WNOHANG);
+
+        if (result == pending.pid || (result < 0 && errno == ECHILD)) {
+            pending = PendingChild{};
+            continue;
+        }
+
+        if (result < 0) {
+            LOG_WARN("DMShell: waitpid failed for pid=%d errno=%d", pending.pid, errno);
+            pending = PendingChild{};
+            continue;
+        }
+
+        // Still running. SIGKILL ends it but does not reap it, so the pid stays here until a later
+        // waitpid() collects the corpse; clearing it now would leave a zombie behind.
+        if (!pending.killed) {
+            if (kill(pending.pid, SIGKILL) < 0 && errno != ESRCH) {
+                LOG_WARN("DMShell: failed to send SIGKILL to pid=%d errno=%d", pending.pid, errno);
+                pending = PendingChild{};
+                continue;
+            }
+            pending.killed = true;
+        }
     }
 }
 
