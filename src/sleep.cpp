@@ -465,9 +465,16 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Side-key interrupt line from PCA9535 expander (active low).
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN)
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+    gpio_num_t pin = (gpio_num_t)config.device.button_gpio;
+    const bool wakeOnButton = IS_RUNTIME_BUTTON_PIN(config.device.button_gpio);
+    if (wakeOnButton) {
+        gpio_pullup_en(pin); // a user-added switch pulls to ground, so it needs our pullup
+        gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+    }
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
@@ -528,9 +535,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BOARD_PCA9535_INT
     gpio_wakeup_disable((gpio_num_t)BOARD_PCA9535_INT);
 #endif
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN)
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+    if (wakeOnButton)
+        gpio_wakeup_disable(pin);
 #endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
