@@ -24,15 +24,14 @@ on:
       - "**.md"
       - version.properties
 
+  # No paths-ignore here: ci-gate is the required status check, and a PR that
+  # never runs this workflow never reports it, so a docs-only PR cannot merge.
   pull_request:
     branches:
       - master
       - develop
       - event/*
       - feature/*
-    paths-ignore:
-      - "**.md"
-      #- "**.yml"
 
   schedule:
     # Nightly develop build, published to the meshtastic-firmware-nightly R2
@@ -59,7 +58,7 @@ jobs:
         with:
           # Needed to diff against the base branch for newly added variants.
           fetch-depth: 0
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7
         with:
           python-version: 3.x
           cache: pip
@@ -500,7 +499,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7
         with:
           python-version: 3.x
 
@@ -599,7 +598,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7
         with:
           python-version: 3.x
 
@@ -657,7 +656,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7
         with:
           python-version: 3.x
 

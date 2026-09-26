@@ -175,7 +175,8 @@ typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1
 } meshtastic_Config_NetworkConfig_ProtocolFlags;
 
-/* Deprecated in 2.7.4: Unused */
+/* Unused. Kept so the deprecated gps_format field still has a type; when
+ firmware stopped reading that field is recorded on the field itself. */
 typedef enum _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat {
     meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED = 0
 } meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat;
@@ -562,8 +563,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* Number of seconds the screen stays on after pressing the user button or receiving a message
  0 for default of one minute MAXUINT for always on */
     uint32_t screen_on_secs;
-    /* Deprecated in 2.7.4: Unused
- How the GPS coordinates are formatted on the OLED screen. */
+    /* How the GPS coordinates are formatted on the OLED screen. */
     meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat gps_format;
     /* Automatically toggles to the next page on the screen like a carousel, based the specified interval in seconds.
  Potentially useful for devices without user buttons. */
@@ -610,8 +610,10 @@ typedef struct _meshtastic_Config_LoRaConfig {
  Certain bandwidth numbers are 'special' and will be converted to the
  appropriate floating point value: 31 -> 31.25kHz */
     uint16_t bandwidth;
-    /* A number from 7 to 12.
- Indicates number of chirps per symbol as 1<<spread_factor. */
+    /* A number from 5 to 12, which the firmware clamps to that range.
+ Indicates number of chirps per symbol as 1<<spread_factor.
+ RF95 radios additionally reject 5 and 6; that exclusion is per hardware
+ and so is not expressible as a bound here. */
     uint32_t spread_factor;
     /* The denominator of the coding rate.
  ie for 4/5, the value is 5. 4/8 the value is 8. */
