@@ -125,6 +125,9 @@ INPUT_WINDOW_FRAMES = _input_window_frames()
 # dropping them is not an option; this is the backpressure, and the shape of the local terminal's own
 # tty buffer. Generous, because the frames it holds are small and the alternative is losing input.
 PENDING_INPUT_MAX_BYTES = 4096
+# Out-of-order frames held while a gap is outstanding, mirroring DMShellRxReorder::SLOTS in the
+# firmware: twice the peer's default send window, so a well-behaved peer never fills it.
+REORDER_SLOTS = 8
 # Consecutive retransmissions of one input frame before we give up on the server, matching the
 # firmware's bound. The interval escalates the way a replay re-ask does, because unlike the firmware
 # we cannot read the modem config: that puts the allowance at roughly 1 s x 4 then doubling to an 8 s
@@ -764,18 +767,33 @@ class SessionState:
             return ("process", None)
 
     def remember_out_of_order_frame(self, shell) -> None:
+        held = False
+        dropped = False
         with self.tx_lock:
             if shell.seq <= self.next_expected_rx_seq:
                 return
-            if shell.seq not in self.pending_rx_frames:
+            if shell.seq in self.pending_rx_frames:
+                held = False  # already waiting on this one
+            elif len(self.pending_rx_frames) < REORDER_SLOTS:
                 self.pending_rx_frames[shell.seq] = shell
                 held = True
             else:
-                held = False
+                # Same rule as the firmware's DMShellRxReorder: the lowest sequence numbers are the
+                # ones needed soonest, so the highest held is the one worth losing, and only to
+                # something lower than it. Without a bound, a peer that never fills the gap grows this
+                # dictionary for as long as the session lasts.
+                highest = max(self.pending_rx_frames)
+                if shell.seq < highest:
+                    del self.pending_rx_frames[highest]
+                    self.pending_rx_frames[shell.seq] = shell
+                    held = True
+                dropped = True
             if shell.seq > self.highest_seen_rx_seq:
                 self.highest_seen_rx_seq = shell.seq
         if held:
             self.bump("rx_frames_held_for_gap")
+        if dropped:
+            self.bump("rx_frames_dropped_reorder_full")
 
     def pop_next_buffered_frame(self):
         with self.tx_lock:
@@ -1359,6 +1377,14 @@ def decode_shell_packet(state: SessionState, packet) -> Optional[object]:
     if packet.WhichOneof("payload_variant") != "decoded":
         return None
     if packet.decoded.portnum != state.pb2.portnums.REMOTE_SHELL_APP:
+        return None
+    # Only the node we selected can speak for this session. The session id alone is not an identity:
+    # it is carried in the frame, so any sender whose decoded packets reach this stream could match
+    # it and then write to our terminal, move our cursors or close the session. 'from' is a Python
+    # keyword, hence the getattr.
+    sender = getattr(packet, "from", 0)
+    if sender != state.target:
+        state.bump("rx_frames_other_sender")
         return None
     shell = state.pb2.mesh.RemoteShell()
     shell.ParseFromString(packet.decoded.payload)
