@@ -79,6 +79,10 @@ static struct uBloxGnssModelInfo {
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
+// Listen for a streaming NMEA GNSS before giving up on a baud rate: long enough to span one
+// full period of a 1 Hz receiver's sentence burst.
+#define GPS_NMEA_PROBE_TIMEOUT_MS 1200
+
 namespace
 {
 // Versioned on-disk record for persisted GPS probe results.
@@ -1147,6 +1151,10 @@ bool GPS::setup()
             // enable RMC
             _serial_gps->write("$CFGMSG,0,4,1,1*1F\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_GENERIC_NMEA) {
+            // Streams standard NMEA but ignores vendor probes (e.g. the GAT562's L76K): nothing to
+            // initialise, the sentences go straight to TinyGPS++.
+            LOG_INFO("GNSS: using generic NMEA stream, skipping chip-specific init");
         }
         didSerialInit = true;
     }
@@ -1702,6 +1710,12 @@ static const char *DETECTED_MESSAGE = "%s detected";
         }                                                                                                                        \
     } while (0)
 
+/**
+ * @brief  Probe for a GNSS module at one baud rate: send each family's identification
+ *  command and match the reply. If nothing answers but NMEA sentences are streaming,
+ *  select the generic NMEA driver instead of reporting no module.
+ * @retval The detected model, or GNSS_MODEL_UNKNOWN to move on to the next baud rate.
+ */
 GnssModel_t GPS::probe(int serialSpeed)
 {
     uint8_t buffer[768] = {0};
@@ -1829,6 +1843,11 @@ GnssModel_t GPS::probe(int serialSpeed)
         // Check that the returned response class and message ID are correct
         GPS_RESPONSE response = getACK(0x06, 0x08, 750);
         if (response == GNSS_RESPONSE_NONE) {
+            if (sawNmeaSentenceAtBaud(_serial_gps, GPS_NMEA_PROBE_TIMEOUT_MS)) {
+                LOG_INFO("GNSS: no probe response, but NMEA stream detected at %d baud - using generic NMEA driver", serialSpeed);
+                currentStep = 0;
+                return GNSS_MODEL_GENERIC_NMEA;
+            }
             LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
             currentDelay = 2000;
             currentStep = 0;
@@ -1915,6 +1934,11 @@ GnssModel_t GPS::probe(int serialSpeed)
             }
         }
     }
+    }
+    if (sawNmeaSentenceAtBaud(_serial_gps, GPS_NMEA_PROBE_TIMEOUT_MS)) {
+        LOG_INFO("GNSS: no probe response, but NMEA stream detected at %d baud - using generic NMEA driver", serialSpeed);
+        currentStep = 0;
+        return GNSS_MODEL_GENERIC_NMEA;
     }
     LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
     currentDelay = 2000;
