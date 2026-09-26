@@ -5,6 +5,7 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
+#include <math.h>
 
 // Sentinel marking the end of a modem preset array. Declared `const` rather
 // than `constexpr` because the cast from 0xFF to the enum is out-of-range and
@@ -92,6 +93,24 @@ struct RegionInfo {
         while (profile->presets[n] != MODEM_PRESET_END)
             n++;
         return n;
+    }
+    float getSpacing(float bwKHz = 0) const
+    {
+        if (code == meshtastic_Config_LoRaConfig_RegionCode_JP)
+            return 0.0f;
+        return profile ? profile->spacing : 0.0f;
+    }
+    float getPadding(float bwKHz = 0) const
+    {
+        if (code == meshtastic_Config_LoRaConfig_RegionCode_JP) {
+            // ARIB STD-T108: 200 kHz unit channel grid. Center LoRa BW symmetrically within ceil(bw/200kHz) unit channels.
+            const float unitChannelMHz = 0.200f;
+            const float bwMHz = (bwKHz > 0 ? bwKHz : 250.0f) / 1000.0f;
+            const int numUnits = (int)ceil(bwMHz / unitChannelMHz);
+            const float slotWidth = numUnits * unitChannelMHz;
+            return (slotWidth - bwMHz) / 2.0f;
+        }
+        return profile ? profile->padding : 0.0f;
     }
 };
 
