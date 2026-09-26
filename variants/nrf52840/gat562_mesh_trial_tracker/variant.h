@@ -217,6 +217,15 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Per-setting PA gain (actual output minus radio setting, dB) so requested Tx
+// power matches what the PA actually radiates. From the vendor's GAT562 30s
+// measurements at 869 MHz. The PA saturates at 30 dBm from setting 15 up, so
+// the curve is truncated there: driving harder wastes battery and linearity
+// for zero extra output, and max-power requests map to setting 15.
+// https://shop.mtoolstec.com/product/gat562-30s-kit-30dbm-mesh-device
+#define NUM_PA_POINTS 16
+#define TX_GAIN_LORA 14, 15, 16, 17, 17, 18, 18, 18, 18, 18, 17, 17, 17, 16, 16, 15
+
 // Testing USB detection
 #define NRF_APM
 
