@@ -162,7 +162,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
         uint8_t mode;
         uint8_t status;
     };
-    static constexpr uint8_t chipStateRingSize = 64;
+    static constexpr uint8_t chipStateRingSize = 255; // holds 254: a 175 ms loop hold at a few changes a frame
     ChipStateEvent chipStateRing[chipStateRingSize];
     volatile uint8_t chipStateHead = 0, chipStateTail = 0;
     volatile uint32_t chipStateDropped = 0, chipStateLockBusy = 0, chipStateTaskLate = 0;

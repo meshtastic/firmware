@@ -199,8 +199,9 @@ template <typename T> void SX126xInterface<T>::sampleChipState()
         return;
 
 #ifdef SX126X_STATE_SAMPLER_TASK
-    // The task did the looking; this only logs what it queued, each change with the time the task saw it.
-    while (chipStateTail != chipStateHead) {
+    // The task did the looking; this only logs what it queued, each change with the time the task saw it. At most 16
+    // lines a run, so draining a backlog after a hold does not become a hold of its own.
+    for (unsigned n = 0; n < 16 && chipStateTail != chipStateHead; n++) {
         __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
         const ChipStateEvent e = chipStateRing[chipStateTail];
         __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
