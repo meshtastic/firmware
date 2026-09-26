@@ -877,6 +877,27 @@ def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
     )
 
 
+def log_input_window_transition(state: SessionState) -> None:
+    """Record the window opening and closing, independently of whether input is waiting.
+
+    This used to live inside the flush loop, which only runs while bytes are queued - so a window
+    that reopened with an empty queue logged nothing, and the run showed a closed with no matching
+    reopen. That reads as a latch and is not one. Called on every service tick instead, so the
+    closed/reopened counts describe the window rather than the typing.
+    """
+    if state.input_window_frames == 0:
+        return
+    closed = not state.input_window_open()
+    if closed == state.input_window_blocked:
+        return
+    state.input_window_blocked = closed
+    if closed:
+        state.log_replay_event("input_window_closed", state.peer_acked_tx_seq,
+                               f"outstanding={state.outstanding_input()}")
+    else:
+        state.log_replay_event("input_window_reopened", state.peer_acked_tx_seq)
+
+
 def flush_pending_input(transport, state: SessionState) -> None:
     """Send as much held input as the window allows, oldest bytes first."""
     with state.input_lock:
@@ -885,15 +906,9 @@ def flush_pending_input(transport, state: SessionState) -> None:
 
 def _flush_pending_input_locked(transport, state: SessionState) -> None:
     while state.active and not state.closed_event.is_set() and state.has_queued_input():
+        log_input_window_transition(state)
         if not state.input_window_open():
-            if not state.input_window_blocked:
-                state.input_window_blocked = True
-                state.log_replay_event("input_window_closed", state.peer_acked_tx_seq,
-                                       f"outstanding={state.outstanding_input()}")
             return
-        if state.input_window_blocked:
-            state.input_window_blocked = False
-            state.log_replay_event("input_window_reopened", state.peer_acked_tx_seq)
         chunk = state.take_queued_input(INPUT_BATCH_MAX_BYTES)
         if not chunk:
             return
@@ -917,6 +932,7 @@ def service_input_window(transport, state: SessionState) -> None:
     flush_pending_input(transport, state)
     if not state.active or state.closed_event.is_set():
         return
+    log_input_window_transition(state)
     if state.input_window_open():
         return
     missing, exhausted = state.input_retransmit_due()
@@ -931,7 +947,13 @@ def service_input_window(transport, state: SessionState) -> None:
         state.active = False
         state.closed_event.set()
         return
-    state.log_replay_event("input_retransmit", missing)
+    # The attempt number is what distinguishes a link that is recovering slowly from one that is not
+    # recovering at all: a healthy gap clears in a handful, and an attempt count climbing toward
+    # MAX_INPUT_RETRANSMITS on one sequence number is a direction of the link that is not passing
+    # traffic, not a flow-control problem.
+    state.log_replay_event("input_retransmit", missing,
+                           f"attempt={state.input_retransmits} of {MAX_INPUT_RETRANSMITS} "
+                           f"interval={state.input_retransmit_interval:g}s")
     replay_frames_from(transport, state, missing)
 
 
