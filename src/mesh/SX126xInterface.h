@@ -83,6 +83,9 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    // Sub-GHz only. isChannelActive() passes CAD_ON_4_SYMB; keep the two in step.
+    uint8_t getCadSymbolCountSubGhz() const override { return 4; }
+
   private:
 #ifdef LORA_DIO1_SOFTWARE_POLL
     bool irqPollingActive = false;
