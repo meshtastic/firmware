@@ -225,7 +225,9 @@ void setupModules()
 #endif
 #if ARCH_PORTDUINO
     new HostMetricsModule();
+#if defined(MESHTASTIC_HAS_DMSHELL)
     dmShellModule = new DMShellModule();
+#endif
 #endif
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();

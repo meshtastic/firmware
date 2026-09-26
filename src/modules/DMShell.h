@@ -11,7 +11,13 @@
 #include <array>
 #include <functional>
 
-#if defined(ARCH_PORTDUINO)
+// The module drives a login shell through forkpty(), which only the Linux Portduino hosts have:
+// the Windows and macOS builds have no <pty.h>.
+#if defined(ARCH_PORTDUINO) && defined(__linux__)
+#define MESHTASTIC_HAS_DMSHELL 1
+#endif
+
+#if defined(MESHTASTIC_HAS_DMSHELL)
 
 struct DMShellSession {
     bool active = false;
