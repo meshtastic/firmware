@@ -13,7 +13,7 @@ jobs:
   stale_issues:
     if: github.repository == 'meshtastic/firmware'
     name: Close Stale Issues
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Stale PR+Issues

@@ -21,7 +21,7 @@ jobs:
     with:
       distro: debian
       platform: linux/amd64
-      runs-on: ubuntu-24.04
+      runs-on: ubuntu-26.04
       push: true
     secrets: inherit
 
@@ -30,7 +30,7 @@ jobs:
     with:
       distro: debian
       platform: linux/arm64
-      runs-on: ubuntu-24.04-arm
+      runs-on: ubuntu-26.04-arm
       push: true
     secrets: inherit
 
@@ -39,7 +39,7 @@ jobs:
     with:
       distro: debian
       platform: linux/arm/v7
-      runs-on: ubuntu-24.04-arm
+      runs-on: ubuntu-26.04-arm
       push: true
     secrets: inherit
 
@@ -48,7 +48,7 @@ jobs:
     with:
       distro: debian
       platform: linux/riscv64
-      runs-on: ubuntu-24.04-arm
+      runs-on: ubuntu-26.04-arm
       push: true
     secrets: inherit
 
@@ -57,7 +57,7 @@ jobs:
     with:
       distro: alpine
       platform: linux/amd64
-      runs-on: ubuntu-24.04
+      runs-on: ubuntu-26.04
       push: true
     secrets: inherit
 
@@ -66,7 +66,7 @@ jobs:
     with:
       distro: alpine
       platform: linux/arm64
-      runs-on: ubuntu-24.04-arm
+      runs-on: ubuntu-26.04-arm
       push: true
     secrets: inherit
 
@@ -75,7 +75,7 @@ jobs:
     with:
       distro: alpine
       platform: linux/arm/v7
-      runs-on: ubuntu-24.04-arm
+      runs-on: ubuntu-26.04-arm
       push: true
     secrets: inherit
 
@@ -84,7 +84,7 @@ jobs:
     with:
       distro: alpine
       platform: linux/riscv64
-      runs-on: ubuntu-24.04-arm
+      runs-on: ubuntu-26.04-arm
       push: true
     secrets: inherit
 
@@ -100,7 +100,7 @@ jobs:
       - docker-alpine-arm64
       - docker-alpine-armv7
       - docker-alpine-riscv64
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
