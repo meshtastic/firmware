@@ -61,12 +61,6 @@ constexpr NodeNum kRemoteNode = 0xBBBB0002;
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         // Capture the primary channel as seen AT send() time. sendBeaconPacket() temporarily swaps
