@@ -267,7 +267,11 @@ void DMShellModule::applySessionFrame(const meshtastic_RemoteShell &frame)
     switch (frame.op) {
     case meshtastic_RemoteShell_OpCode_INPUT:
         if (!writeSessionInput(frame)) {
-            sendError("input_write_failed");
+            // The frame's sequence number is already acknowledged by the time we are called, so the
+            // peer will never send these bytes again and no replay can recover them. An ERROR the
+            // client treats as non-terminal would leave a hole in the command line with nothing to
+            // say which keystrokes are missing, which for a shell is worse than ending the session.
+            closeSession("input_write_failed", true);
         } else if (!session.txWindow.canSend()) {
             // Same bound as runOnce's path. Skipping the read rather than dropping the frame leaves
             // the bytes in the PTY for runOnce to pick up once the window reopens.
@@ -722,6 +726,9 @@ void DMShellModule::reapChildIfExited()
     int status = 0;
     const pid_t result = waitpid(session.childPid, &status, WNOHANG);
     if (result == session.childPid || (result < 0 && errno == ECHILD)) {
+        // Reaped, so the kernel is free to hand that pid to an unrelated process: nothing may signal
+        // it again. Clear it before closing, or closeSession() sends SIGTERM to whoever holds it now.
+        session.childPid = -1;
         closeSession("shell_exited", true);
     }
 }
