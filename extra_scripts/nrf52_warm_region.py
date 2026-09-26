@@ -65,6 +65,5 @@ def _assert_warm_region_clear(source, target, env):
     )
 
 
-# Attach to the phony "buildprog" alias (not the .elf node) so the guard runs
-# on incremental relinks too -- same reasoning as nrf52_lto.py's guard.
-env.AddPostAction("buildprog", _assert_warm_region_clear)
+# Run by extra_scripts/nrf52_postlink_guards.py on every build and before every upload.
+env.Append(NRF52_POSTLINK_GUARDS=[_assert_warm_region_clear])
