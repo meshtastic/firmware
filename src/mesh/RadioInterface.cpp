@@ -364,6 +364,10 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 LoRaRadioType radioType = NO_RADIO;
 
 extern RadioLibHal *RadioLibHAL;
+#if defined(ARCH_PORTDUINO) && !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+// Owns the serial-proxied HAL across the LoRa_in_error re-init: RadioLibHAL only borrows it.
+static std::unique_ptr<SerialHal> serialHal;
+#endif
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 #if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
 extern SPIClass &SPI1; // alias for SPI_HSPI; both on SPI2_HOST
@@ -420,8 +424,12 @@ std::unique_ptr<RadioInterface> initLoRa()
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
     } else if (portduino_config.lora_spi_dev == "serial") {
         // A radio behind a serial link: POSIX hosts only - the browser has no tty and Windows has no termios.
-        RadioLibHAL = new SerialHal(portduino_config.lora_serial_device, portduino_config.lora_serial_baud,
-                                    (uint32_t)portduino_config.lora_serial_timeout_ms);
+        // Close the previous HAL first: its reader thread would otherwise keep consuming the same tty.
+        RadioLibHAL = nullptr;
+        serialHal.reset();
+        serialHal = std::make_unique<SerialHal>(portduino_config.lora_serial_device, portduino_config.lora_serial_baud,
+                                                (uint32_t)portduino_config.lora_serial_timeout_ms);
+        RadioLibHAL = serialHal.get();
 #endif
     } else {
         if (RadioLibHAL != nullptr) {

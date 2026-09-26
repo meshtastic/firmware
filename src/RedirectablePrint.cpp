@@ -306,7 +306,9 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
 #if HAS_SERIAL_HAL_DEVICE
-    if (isSerialHalLogSuppressed()) {
+    // Mute chatter during a SerialHal transaction, but never hide errors.
+    if (isSerialHalLogSuppressed() && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) != 0 &&
+        strcmp(logLevel, MESHTASTIC_LOG_LEVEL_CRIT) != 0) {
         return;
     }
 #endif

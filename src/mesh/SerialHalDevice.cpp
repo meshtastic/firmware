@@ -5,11 +5,13 @@
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "mesh/SerialHalDevice.h"
+#include "mesh/SerialHalFraming.h"
 #include "mesh/StreamAPI.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <cstring>
+#include <pb_encode.h>
 #include <stdint.h>
 
 #if defined(ARCH_ESP32)
@@ -18,12 +20,15 @@ extern SPIClass SPI1;
 #endif
 #endif
 
+// ESP32 ISRs must live in IRAM: flash is unmapped while NVS/LittleFS writes run.
+#ifdef ARCH_ESP32
+#define SERIALHAL_ISR_ATTR IRAM_ATTR
+#else
+#define SERIALHAL_ISR_ATTR
+#endif
+
 namespace
 {
-constexpr uint32_t SERIAL_PI_RISING = 1;
-constexpr uint32_t SERIAL_PI_FALLING = 2;
-constexpr uint32_t SERIAL_PI_INPUT = 0;
-constexpr uint32_t SERIAL_PI_OUTPUT = 1;
 constexpr size_t MAX_INTERRUPT_SLOTS = 8;
 constexpr int32_t INTERRUPT_POLL_MS = 5;
 
@@ -62,10 +67,10 @@ int allocateSlotLocked()
 #if defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
 PinStatus toInterruptMode(uint32_t serialMode)
 {
-    if (serialMode == SERIAL_PI_RISING) {
+    if (serialMode == serialhal::EDGE_RISING) {
         return PinStatus::RISING;
     }
-    if (serialMode == SERIAL_PI_FALLING) {
+    if (serialMode == serialhal::EDGE_FALLING) {
         return PinStatus::FALLING;
     }
     return PinStatus::CHANGE;
@@ -73,10 +78,10 @@ PinStatus toInterruptMode(uint32_t serialMode)
 #else
 int toInterruptMode(uint32_t serialMode)
 {
-    if (serialMode == SERIAL_PI_RISING) {
+    if (serialMode == serialhal::EDGE_RISING) {
         return RISING;
     }
-    if (serialMode == SERIAL_PI_FALLING) {
+    if (serialMode == serialhal::EDGE_FALLING) {
         return FALLING;
     }
     return CHANGE;
@@ -99,48 +104,48 @@ void emitInterruptEvent(uint32_t pin, StreamAPI *streamApi)
     }
 
     meshtastic_SerialHalResponse event = meshtastic_SerialHalResponse_init_zero;
-    event.transaction_id = 0; // asynchronous interrupt notification
+    event.transaction_id = serialhal::INTERRUPT_TRANSACTION_ID;
     event.result = meshtastic_SerialHalResponse_Result_OK;
     event.value = pin; // host-side SerialHal treats value as interrupt pin
     SerialHalDevice::emitResponse(event, streamApi);
 }
 
-void markPendingBySlot(uint8_t slot)
+SERIALHAL_ISR_ATTR void markPendingBySlot(uint8_t slot)
 {
     if (slot < MAX_INTERRUPT_SLOTS && interruptSlots[slot].used) {
         interruptSlots[slot].pending = true;
     }
 }
 
-void isr0()
+SERIALHAL_ISR_ATTR void isr0()
 {
     markPendingBySlot(0);
 }
-void isr1()
+SERIALHAL_ISR_ATTR void isr1()
 {
     markPendingBySlot(1);
 }
-void isr2()
+SERIALHAL_ISR_ATTR void isr2()
 {
     markPendingBySlot(2);
 }
-void isr3()
+SERIALHAL_ISR_ATTR void isr3()
 {
     markPendingBySlot(3);
 }
-void isr4()
+SERIALHAL_ISR_ATTR void isr4()
 {
     markPendingBySlot(4);
 }
-void isr5()
+SERIALHAL_ISR_ATTR void isr5()
 {
     markPendingBySlot(5);
 }
-void isr6()
+SERIALHAL_ISR_ATTR void isr6()
 {
     markPendingBySlot(6);
 }
-void isr7()
+SERIALHAL_ISR_ATTR void isr7()
 {
     markPendingBySlot(7);
 }
@@ -188,15 +193,6 @@ void SerialHalDevice::handleCommand(const uint8_t *buf, size_t len, StreamAPI *s
         return;
     }
 
-    // Validate role - SerialHal commands only handled when config.lora.serial_hal_only
-    if (!config.lora.serial_hal_only) {
-        meshtastic_SerialHalResponse response = meshtastic_SerialHalResponse_init_zero;
-        response.result = meshtastic_SerialHalResponse_Result_UNSUPPORTED;
-        snprintf(response.error, sizeof(response.error), "SerialHal not enabled for this role");
-        emitResponse(response, streamApi);
-        return;
-    }
-
     // Decode the command
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
     if (!pb_decode_from_bytes(buf, len, &meshtastic_SerialHalCommand_msg, &cmd)) {
@@ -211,6 +207,13 @@ void SerialHalDevice::handleCommand(const uint8_t *buf, size_t len, StreamAPI *s
     meshtastic_SerialHalResponse response = meshtastic_SerialHalResponse_init_zero;
     response.transaction_id = cmd.transaction_id;
     response.result = meshtastic_SerialHalResponse_Result_OK;
+
+    // Validate role - SerialHal commands only handled when config.lora.serial_hal_only
+    if (!config.lora.serial_hal_only) {
+        setResponseError(response, meshtastic_SerialHalResponse_Result_UNSUPPORTED, "SerialHal not enabled for this role");
+        emitResponse(response, streamApi);
+        return;
+    }
 
     // Dispatch to operation handler
     switch (cmd.type) {
@@ -247,9 +250,9 @@ void SerialHalDevice::handleCommand(const uint8_t *buf, size_t len, StreamAPI *s
 void SerialHalDevice::handlePinMode(const meshtastic_SerialHalCommand &cmd, meshtastic_SerialHalResponse &response)
 {
     // LOG_DEBUG("SerialHalDevice: pinMode pin=%u mode=%u", cmd.pin, cmd.mode);
-    if (cmd.mode == SERIAL_PI_INPUT) {
+    if (cmd.mode == serialhal::PIN_INPUT) {
         pinMode((int)cmd.pin, INPUT);
-    } else if (cmd.mode == SERIAL_PI_OUTPUT) {
+    } else if (cmd.mode == serialhal::PIN_OUTPUT) {
         pinMode((int)cmd.pin, OUTPUT);
     } else {
         setResponseError(response, meshtastic_SerialHalResponse_Result_BAD_REQUEST, "Unsupported pin mode");
@@ -319,7 +322,7 @@ void SerialHalDevice::handleSpiTransfer(const meshtastic_SerialHalCommand &cmd, 
         return;
     }
 
-#if !ARCH_PORTDUINO
+#ifndef ARCH_PORTDUINO
     if (spiLock == nullptr) {
         setResponseError(response, meshtastic_SerialHalResponse_Result_ERROR, "SPI lock not initialized");
         return;
@@ -357,27 +360,16 @@ void SerialHalDevice::emitResponse(const meshtastic_SerialHalResponse &response,
     }
 
     // Encode the response
+    // pb_encode directly: an interrupt event for pin 0 is all defaults and legitimately encodes to zero bytes,
+    // which pb_encode_to_bytes() cannot tell apart from a failure.
     uint8_t encoded[meshtastic_SerialHalResponse_size] = {0};
-    const size_t responseLen =
-        pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_SerialHalResponse_msg, static_cast<const void *>(&response));
-
-    if (responseLen == 0 || responseLen > 0xFFFF) {
-        LOG_ERROR("SerialHalDevice: Failed to encode response (len=%zu)", responseLen);
+    pb_ostream_t stream = pb_ostream_from_buffer(encoded, sizeof(encoded));
+    if (!pb_encode(&stream, &meshtastic_SerialHalResponse_msg, &response)) {
+        LOG_ERROR("SerialHalDevice: Failed to encode response: %s", PB_GET_ERROR(&stream));
         return;
     }
 
-    // Build frame with StreamAPI framing: START1 SERIALHAL_MAGIC LEN_H LEN_L [payload]
-    constexpr uint8_t START1 = 0x94;
-    constexpr uint8_t SERIALHAL_MAGIC = 0xA5;
-
-    uint8_t hdr[4];
-    hdr[0] = START1;
-    hdr[1] = SERIALHAL_MAGIC;
-    hdr[2] = (uint8_t)((responseLen >> 8) & 0xFF); // LEN_H
-    hdr[3] = (uint8_t)(responseLen & 0xFF);        // LEN_L
-
-    // Emit via StreamAPI (this uses the internal txBuf + framing)
-    streamApi->emitSerialHalResponse(hdr, sizeof(hdr), encoded, responseLen);
+    streamApi->emitSerialHalResponse(encoded, stream.bytes_written);
 
     // Keep a recent stream instance so async interrupt events can be emitted.
     {

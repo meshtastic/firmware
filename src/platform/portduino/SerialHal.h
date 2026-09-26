@@ -12,14 +12,8 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
-
-#define SERIAL_PI_INPUT (0)
-#define SERIAL_PI_OUTPUT (1)
-#define SERIAL_PI_LOW (0)
-#define SERIAL_PI_HIGH (1)
-#define SERIAL_PI_RISING (1)
-#define SERIAL_PI_FALLING (2)
 
 class SerialHal : public RadioLibHal
 {
@@ -61,24 +55,24 @@ class SerialHal : public RadioLibHal
     bool writeAll(const uint8_t *data, size_t len);
     bool readExact(uint8_t *data, size_t len);
     bool waitForReadable(int timeoutMs);
-    bool readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs);
+    bool readFrame(std::vector<uint8_t> &payload);
+    uint16_t nextTransactionId();
     void readerLoop();
     void interruptDispatchLoop();
     void startReaderThread();
     void stopReaderThread();
 
-    uint16_t crc16(const uint8_t *data, size_t len) const;
     void setTransportError(const char *msg);
 
     std::string device;
     uint32_t baud;
     uint32_t timeoutMs;
     int fd = -1;
-    bool hasWarned = false;
+    std::atomic<bool> hasWarned{false};
     std::atomic<bool> inError{false};
+    std::atomic<bool> portLost{false}; ///< set by the reader when the tty hangs up or errors
     std::atomic<uint16_t> txId{1};
 
-    std::mutex fdMutex;
     std::mutex writeMutex;
     std::mutex stateMutex;
     std::condition_variable responseCv;
@@ -93,6 +87,7 @@ class SerialHal : public RadioLibHal
     std::deque<uint32_t> pendingInterruptPins;
 
     std::unordered_map<uint32_t, void (*)(void)> interruptCallbacks;
+    std::unordered_set<uint16_t> inFlight; ///< transaction ids with a caller waiting in sendRequest()
     std::unordered_map<uint16_t, meshtastic_SerialHalResponse> pendingResponses;
 };
 

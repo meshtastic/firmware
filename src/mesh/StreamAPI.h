@@ -79,15 +79,14 @@ class StreamAPI : public PhoneAPI
 
 #if HAS_SERIAL_HAL_DEVICE
     /**
-     * Emit a SerialHal response frame with proper framing (START1 SERIALHAL_MAGIC LEN_H LEN_L payload).
-     * Called by SerialHalDevice to send responses back to the host.
+     * Emit a SerialHal response frame (START1 SERIALHAL_MAGIC LEN_H LEN_L payload) to the host.
+     * Honours canWrite/canWriteFrame() and reports short writes via onFrameWriteFailed().
      *
-     * @param hdr     4-byte header (START1 SERIALHAL_MAGIC LEN_H LEN_L)
-     * @param hdrLen  Length of header (should be 4)
-     * @param payload Encoded SerialHalResponse protobuf payload
+     * @param payload    Encoded SerialHalResponse protobuf (may be empty: the all-defaults message)
      * @param payloadLen Length of payload
+     * @return true if the whole frame was written
      */
-    void emitSerialHalResponse(const uint8_t *hdr, size_t hdrLen, const uint8_t *payload, size_t payloadLen);
+    bool emitSerialHalResponse(const uint8_t *payload, size_t payloadLen);
 #endif
 
   private:
@@ -114,6 +113,9 @@ class StreamAPI : public PhoneAPI
      * Default implementation dispatches to SerialHalDevice for GPIO/SPI handling.
      */
     virtual void handleSerialHalCommand(const uint8_t *buf, size_t len);
+
+    /// Mark a SerialHal frame as in progress (fast polling, logs muted) or finished.
+    void setSerialHalRxActive(bool active);
 #endif
 
     virtual void onConnectionChanged(bool connected) override;

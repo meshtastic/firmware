@@ -7,6 +7,7 @@
 #include "RedirectablePrint.h"
 #if HAS_SERIAL_HAL_DEVICE
 #include "SerialHalDevice.h"
+#include "SerialHalFraming.h"
 #endif
 #include "StreamAPI.h"
 #include "Throttle.h"
@@ -15,10 +16,11 @@
 
 #define START1 0x94
 #define START2 0xc3
-#if HAS_SERIAL_HAL_DEVICE
-#define SERIALHAL_MAGIC 0xa5 // second framing byte for SerialHal frames (START1 SH_MAGIC LEN_H LEN_L PAYLOAD)
-#endif
 #define HEADER_LEN 4
+#if HAS_SERIAL_HAL_DEVICE
+static_assert(serialhal::FRAME_START1 == START1 && serialhal::FRAME_START2 == START2 && serialhal::FRAME_HEADER_LEN == HEADER_LEN,
+              "SerialHal framing must match StreamAPI framing");
+#endif
 
 /// Poll the underlying stream, drain output, and update connection state.
 int32_t StreamAPI::runOncePart()
@@ -113,17 +115,14 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
         } else if (ptr == 1) { // discriminate frame type on second byte
             if (c == START2) {
                 rxIsSerialHal = false; // standard ToRadio frame
-                serialHalRxActive.store(false);
-                RedirectablePrint::setSerialHalLogSuppressed(false);
-            } else if (c == SERIALHAL_MAGIC) {
+                setSerialHalRxActive(false);
+            } else if (c == serialhal::FRAME_MAGIC) {
                 rxIsSerialHal = true; // SerialHal command frame
-                serialHalRxActive.store(true);
-                RedirectablePrint::setSerialHalLogSuppressed(true);
+                setSerialHalRxActive(true);
             } else {
                 // A stray byte can itself be the START1 of the real frame (0x94 0x94 ...): re-test it.
                 rxPtr = (c == START1) ? 1 : 0;
-                serialHalRxActive.store(false);
-                RedirectablePrint::setSerialHalLogSuppressed(false);
+                setSerialHalRxActive(false);
             }
 #else
         } else if (ptr == 1) { // looking for START2
@@ -154,16 +153,15 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
                         handleSerialHalCommand(rxBuf + HEADER_LEN, len);
                     else
                         handleToRadio(rxBuf + HEADER_LEN, len);
-
-                    if (rxIsSerialHal)
-                        serialHalRxActive.store(false);
-                    if (rxIsSerialHal)
-                        RedirectablePrint::setSerialHalLogSuppressed(false);
 #else
                     handleToRadio(rxBuf + HEADER_LEN, len);
 #endif
                 }
         }
+#if HAS_SERIAL_HAL_DEVICE
+        if (rxPtr == 0 && serialHalRxActive.load())
+            setSerialHalRxActive(false); // frame finished or framing lost: stop muting logs
+#endif
     }
     return 0;
 }
@@ -176,8 +174,13 @@ int32_t StreamAPI::readStream()
     if (!stream->available()) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
         bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
-        if (!recentRx)
+        if (!recentRx) {
+#if HAS_SERIAL_HAL_DEVICE
+            if (serialHalRxActive.load())
+                setSerialHalRxActive(false); // host stalled mid-frame: stop muting logs
+#endif
             return 250; // Sleep a long time if we haven't heard from the computer in a while
+        }
 #if HAS_SERIAL_HAL_DEVICE
         if (serialHalRxActive.load())
             return 0; // If we are in the middle of a SerialHal transaction, don't sleep at all because we want to be as
@@ -208,18 +211,14 @@ int32_t StreamAPI::readStream()
             } else if (ptr == 1) { // discriminate frame type on second byte
                 if (c == START2) {
                     rxIsSerialHal = false; // standard ToRadio frame
-                    serialHalRxActive.store(false);
-                    RedirectablePrint::setSerialHalLogSuppressed(false);
-                } else if (c == SERIALHAL_MAGIC) {
+                    setSerialHalRxActive(false);
+                } else if (c == serialhal::FRAME_MAGIC) {
                     rxIsSerialHal = true; // SerialHal command frame
-                    serialHalRxActive.store(true);
-                    RedirectablePrint::setSerialHalLogSuppressed(true);
-                    LOG_WARN("StreamAPI: Detected SerialHal command frame");
+                    setSerialHalRxActive(true);
                 } else {
                     // A stray byte can itself be the START1 of the real frame (0x94 0x94 ...): re-test it.
                     rxPtr = (c == START1) ? 1 : 0;
-                    serialHalRxActive.store(false);
-                    RedirectablePrint::setSerialHalLogSuppressed(false);
+                    setSerialHalRxActive(false);
                 }
 #else
             } else if (ptr == 1) { // looking for START2
@@ -250,16 +249,15 @@ int32_t StreamAPI::readStream()
                             handleSerialHalCommand(rxBuf + HEADER_LEN, len);
                         else
                             handleToRadio(rxBuf + HEADER_LEN, len);
-
-                        if (rxIsSerialHal)
-                            serialHalRxActive.store(false);
-                        if (rxIsSerialHal)
-                            RedirectablePrint::setSerialHalLogSuppressed(false);
 #else
                         handleToRadio(rxBuf + HEADER_LEN, len);
 #endif
                     }
             }
+#if HAS_SERIAL_HAL_DEVICE
+            if (rxPtr == 0 && serialHalRxActive.load())
+                setSerialHalRxActive(false); // frame finished or framing lost: stop muting logs
+#endif
         }
 
         // we had bytes available this time, so assume we might have them next time also
@@ -381,24 +379,42 @@ void StreamAPI::handleSerialHalCommand(const uint8_t *buf, size_t len)
     SerialHalDevice::handleCommand(buf, len, this);
 }
 
-void StreamAPI::emitSerialHalResponse(const uint8_t *hdr, size_t hdrLen, const uint8_t *payload, size_t payloadLen)
+void StreamAPI::setSerialHalRxActive(bool active)
 {
-    if (hdr == nullptr || hdrLen != 4 || payload == nullptr || payloadLen > meshtastic_SerialHalResponse_size) {
+    serialHalRxActive.store(active);
+    RedirectablePrint::setSerialHalLogSuppressed(active);
+}
+
+bool StreamAPI::emitSerialHalResponse(const uint8_t *payload, size_t payloadLen)
+{
+    if (payload == nullptr || payloadLen > meshtastic_SerialHalResponse_size) {
         LOG_ERROR("StreamAPI: Invalid SerialHal response parameters");
-        return;
+        return false;
+    }
+    if (!canWrite)
+        return false;
+
+    // Own buffer rather than writeFrame(): that stamps a START2 header, and txBuf may hold a pending FromRadio.
+    uint8_t frame[HEADER_LEN + meshtastic_SerialHalResponse_size];
+    frame[0] = serialhal::FRAME_START1;
+    frame[1] = serialhal::FRAME_MAGIC;
+    frame[2] = (payloadLen >> 8) & 0xff;
+    frame[3] = payloadLen & 0xff;
+    memcpy(frame + HEADER_LEN, payload, payloadLen);
+    const size_t totalLen = HEADER_LEN + payloadLen;
+
+    // Same readiness and short-write handling as writeFrame(), serialized against other emitters.
+    concurrency::LockGuard guard(&streamLock);
+    if (!canWriteFrame(totalLen))
+        return false;
+
+    size_t written = stream->write(frame, totalLen);
+    if (written == totalLen) {
+        stream->flush();
+        return true;
     }
 
-    // Build complete frame in a temporary buffer
-    uint8_t frame[4 + meshtastic_SerialHalResponse_size];
-    memcpy(frame, hdr, hdrLen);
-    memcpy(frame + hdrLen, payload, payloadLen);
-
-    size_t totalLen = hdrLen + payloadLen;
-
-    // Serialize stream writes against other emit operations via streamLock
-    concurrency::LockGuard guard(&streamLock);
-    stream->write(frame, totalLen);
-    stream->flush();
-    LOG_WARN("StreamAPI: Emitted SerialHal response frame (len=%zu)", totalLen);
+    onFrameWriteFailed(totalLen, written);
+    return false;
 }
 #endif // HAS_SERIAL_HAL_DEVICE

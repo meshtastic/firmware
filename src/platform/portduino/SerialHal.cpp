@@ -3,6 +3,7 @@
 // termios + poll: POSIX hosts only. The Windows build has neither, and RadioInterface never constructs it there.
 #ifndef _WIN32
 
+#include "mesh/SerialHalFraming.h"
 #include "mesh/mesh-pb-constants.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <cerrno>
@@ -18,10 +19,16 @@
 
 namespace
 {
-constexpr uint8_t START1 = 0x94;
-constexpr uint8_t SERIALHAL_MAGIC = 0xA5;
-constexpr size_t HEADER_SIZE = 4; // START1 + SERIALHAL_MAGIC + LEN_H + LEN_L
-constexpr uint8_t START2 = 0xC3;  // second byte of a normal FromRadio frame
+using serialhal::FRAME_HEADER_LEN;
+using serialhal::FRAME_MAGIC;
+using serialhal::FRAME_START1;
+using serialhal::FRAME_START2;
+
+// A read error on a tty that means the device is gone rather than a transient condition.
+bool isDisconnectErrno(int err)
+{
+    return err == EIO || err == ENXIO || err == ENODEV || err == EBADF;
+}
 
 speed_t toTermiosBaud(uint32_t baud)
 {
@@ -53,7 +60,8 @@ speed_t toTermiosBaud(uint32_t baud)
 } // namespace
 
 SerialHal::SerialHal(const std::string &devicePath, uint32_t baudRate, uint32_t opTimeoutMs)
-    : RadioLibHal(SERIAL_PI_INPUT, SERIAL_PI_OUTPUT, SERIAL_PI_LOW, SERIAL_PI_HIGH, SERIAL_PI_RISING, SERIAL_PI_FALLING),
+    : RadioLibHal(serialhal::PIN_INPUT, serialhal::PIN_OUTPUT, serialhal::PIN_LOW, serialhal::PIN_HIGH, serialhal::EDGE_RISING,
+                  serialhal::EDGE_FALLING),
       device(devicePath), baud(baudRate), timeoutMs(opTimeoutMs)
 {
     if (!openPort()) {
@@ -100,6 +108,7 @@ bool SerialHal::openPort()
     }
 
     tcflush(fd, TCIOFLUSH);
+    portLost = false;
     inError = false;
     startReaderThread();
     return true;
@@ -133,6 +142,12 @@ bool SerialHal::waitForReadable(int timeout)
     pfd.fd = fd;
     pfd.events = POLLIN;
     int ret = poll(&pfd, 1, timeout);
+    if (ret > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) && !(pfd.revents & POLLIN)) {
+        // The tty went away (USB unplug). poll() keeps returning immediately from here on, so flag it
+        // rather than let the reader spin.
+        portLost = true;
+        return false;
+    }
     return ret > 0 && (pfd.revents & POLLIN);
 }
 
@@ -168,6 +183,9 @@ bool SerialHal::readExact(uint8_t *data, size_t len)
             if (errno == EINTR) {
                 continue;
             }
+            if (isDisconnectErrno(errno)) {
+                portLost = true;
+            }
             return false;
         }
         if (rc == 0) {
@@ -178,20 +196,15 @@ bool SerialHal::readExact(uint8_t *data, size_t len)
     return true;
 }
 
-uint16_t SerialHal::crc16(const uint8_t *data, size_t len) const
+uint16_t SerialHal::nextTransactionId()
 {
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < len; ++i) {
-        crc ^= ((uint16_t)data[i] << 8);
-        for (int bit = 0; bit < 8; ++bit) {
-            if (crc & 0x8000) {
-                crc = (uint16_t)((crc << 1) ^ 0x1021);
-            } else {
-                crc = (uint16_t)(crc << 1);
-            }
-        }
+    uint16_t id = txId.fetch_add(1);
+    if (id == serialhal::INTERRUPT_TRANSACTION_ID) {
+        // The counter wrapped onto the id reserved for interrupt events; a request carrying it would be
+        // dispatched as an interrupt and never answered.
+        id = txId.fetch_add(1);
     }
-    return crc;
+    return id;
 }
 
 bool SerialHal::sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_SerialHalResponse *response)
@@ -209,43 +222,60 @@ bool SerialHal::sendRequest(const meshtastic_SerialHalCommand &cmd, meshtastic_S
         return false;
     }
 
-    // Build frame with StreamAPI canonical framing: START1 SERIALHAL_MAGIC LEN_H LEN_L [payload]
+    // Build frame with StreamAPI canonical framing: START1 MAGIC LEN_H LEN_L [payload]
     std::vector<uint8_t> frame;
-    frame.resize(HEADER_SIZE + payloadLen);
+    frame.resize(FRAME_HEADER_LEN + payloadLen);
 
-    frame[0] = START1;
-    frame[1] = SERIALHAL_MAGIC;
+    frame[0] = FRAME_START1;
+    frame[1] = FRAME_MAGIC;
     frame[2] = (uint8_t)((payloadLen >> 8) & 0xFF); // LEN_H (big-endian)
     frame[3] = (uint8_t)(payloadLen & 0xFF);        // LEN_L
-    memcpy(frame.data() + HEADER_SIZE, encoded, payloadLen);
+    memcpy(frame.data() + FRAME_HEADER_LEN, encoded, payloadLen);
 
+    // Register before writing so the reader cannot drop a fast reply as unsolicited.
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        pendingResponses.erase(cmd.transaction_id);
+        inFlight.insert(cmd.transaction_id);
+    }
+
+    bool written;
     {
         std::lock_guard<std::mutex> writeGuard(writeMutex);
-        if (!writeAll(frame.data(), frame.size())) {
-            setTransportError("serial write failed");
-            return false;
-        }
+        written = writeAll(frame.data(), frame.size());
     }
 
     meshtastic_SerialHalResponse got = meshtastic_SerialHalResponse_init_zero;
+    bool arrived = false;
     {
         std::unique_lock<std::mutex> lock(stateMutex);
-        const auto timeout = std::chrono::milliseconds(timeoutMs);
-        const bool arrived = responseCv.wait_for(lock, timeout, [&]() { return pendingResponses.count(cmd.transaction_id) > 0; });
-        if (!arrived) {
-            setTransportError("serial response timeout");
-            LOG_WARN("SerialHal: response timeout for transaction_id %u, cmd type %u", cmd.transaction_id, cmd.type);
-            return false;
+        if (written) {
+            const auto timeout = std::chrono::milliseconds(timeoutMs);
+            arrived = responseCv.wait_for(lock, timeout,
+                                          [&]() { return portLost.load() || pendingResponses.count(cmd.transaction_id) > 0; });
+            arrived = arrived && pendingResponses.count(cmd.transaction_id) > 0;
+            if (arrived) {
+                got = pendingResponses[cmd.transaction_id];
+            }
         }
-
-        got = pendingResponses[cmd.transaction_id];
+        // Whatever happened, this id no longer has a waiter: a late reply must not satisfy a future request.
+        inFlight.erase(cmd.transaction_id);
         pendingResponses.erase(cmd.transaction_id);
     }
 
-    if (got.result != meshtastic_SerialHalResponse_Result_OK) {
-        setTransportError("serial response reported error");
-        LOG_WARN("SerialHal: response error: %s, %u, %u", got.error, cmd.type, cmd.data.size);
+    if (!written) {
+        setTransportError("serial write failed");
+        return false;
+    }
+    if (!arrived) {
+        setTransportError(portLost.load() ? "serial device disconnected" : "serial response timeout");
+        LOG_WARN("SerialHal: no response for transaction_id %u, cmd type %u", cmd.transaction_id, cmd.type);
+        return false;
+    }
 
+    if (got.result != meshtastic_SerialHalResponse_Result_OK) {
+        // The device answered, so the link is healthy: report the failed operation without tearing down the radio.
+        LOG_WARN("SerialHal: device rejected cmd type %u (result %u): %s", cmd.type, got.result, got.error);
         return false;
     }
 
@@ -265,7 +295,7 @@ void SerialHal::pinMode(uint32_t pin, uint32_t mode)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_PIN_MODE;
     cmd.pin = pin;
     cmd.mode = mode;
@@ -281,7 +311,7 @@ void SerialHal::digitalWrite(uint32_t pin, uint32_t value)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_DIGITAL_WRITE;
     cmd.pin = pin;
     cmd.value = value;
@@ -297,7 +327,7 @@ uint32_t SerialHal::digitalRead(uint32_t pin)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_DIGITAL_READ;
     cmd.pin = pin;
 
@@ -320,7 +350,7 @@ void SerialHal::attachInterrupt(uint32_t interruptNum, void (*interruptCb)(void)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_ATTACH_INTERRUPT;
     cmd.pin = interruptNum;
     cmd.mode = mode;
@@ -341,7 +371,7 @@ void SerialHal::detachInterrupt(uint32_t interruptNum)
     }
 
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
+    cmd.transaction_id = nextTransactionId();
     cmd.type = meshtastic_SerialHalCommand_Type_DETACH_INTERRUPT;
     cmd.pin = interruptNum;
 
@@ -397,34 +427,38 @@ void SerialHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
         return;
     }
 
-    if (len == 0) {
-        return;
-    }
+    // RadioLib drives chip select through digitalWrite(), so CS stays asserted across chunks and a
+    // transfer larger than one frame's data field can be split without changing what the radio sees.
+    const size_t maxChunk = sizeof(meshtastic_SerialHalCommand{}.data.bytes);
+    size_t off = 0;
+    while (off < len) {
+        const size_t chunk = (len - off) < maxChunk ? (len - off) : maxChunk;
 
-    meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
-    cmd.transaction_id = txId.fetch_add(1);
-    cmd.type = meshtastic_SerialHalCommand_Type_SPI_TRANSFER;
-
-    const size_t maxTx = sizeof(cmd.data.bytes);
-    const size_t txLen = len < maxTx ? len : maxTx;
-    cmd.data.size = txLen;
-    if (out != nullptr) {
-        memcpy(cmd.data.bytes, out, txLen);
-    } else {
-        memset(cmd.data.bytes, 0, txLen);
-    }
-
-    meshtastic_SerialHalResponse response = meshtastic_SerialHalResponse_init_zero;
-    if (!sendRequest(cmd, &response)) {
-        return;
-    }
-
-    if (in != nullptr) {
-        size_t copyLen = response.data.size < len ? response.data.size : len;
-        memcpy(in, response.data.bytes, copyLen);
-        if (copyLen < len) {
-            memset(in + copyLen, 0, len - copyLen);
+        meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
+        cmd.transaction_id = nextTransactionId();
+        cmd.type = meshtastic_SerialHalCommand_Type_SPI_TRANSFER;
+        cmd.data.size = chunk;
+        if (out != nullptr) {
+            memcpy(cmd.data.bytes, out + off, chunk);
         }
+
+        meshtastic_SerialHalResponse response = meshtastic_SerialHalResponse_init_zero;
+        const bool ok = sendRequest(cmd, &response);
+        if (ok && response.data.size != chunk) {
+            LOG_WARN("SerialHal: SPI transfer returned %u bytes, expected %u", (unsigned)response.data.size, (unsigned)chunk);
+        }
+        if (in != nullptr) {
+            const size_t copyLen = ok ? (response.data.size < chunk ? response.data.size : chunk) : 0;
+            memcpy(in + off, response.data.bytes, copyLen);
+            memset(in + off + copyLen, 0, chunk - copyLen);
+        }
+        if (!ok) {
+            if (in != nullptr) {
+                memset(in + off, 0, len - off);
+            }
+            return;
+        }
+        off += chunk;
     }
 }
 
@@ -442,7 +476,7 @@ bool SerialHal::checkError()
     return false;
 }
 
-bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
+bool SerialHal::readFrame(std::vector<uint8_t> &payload)
 {
     payload.clear();
 
@@ -450,31 +484,43 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
     // device on the same serial port are drained and discarded rather than
     // causing the byte stream to desync.
     for (;;) {
-        uint8_t hdr[HEADER_SIZE] = {0};
+        uint8_t hdr[FRAME_HEADER_LEN] = {0};
         for (;;) {
-
             ssize_t rc = ::read(fd, &hdr[0], 1);
             if (rc < 0) {
                 if (errno == EINTR) {
                     continue;
+                }
+                if (isDisconnectErrno(errno)) {
+                    portLost = true;
                 }
                 return false;
             }
             if (rc == 0) {
                 return false;
             }
-            if (hdr[0] == START1) {
+            if (hdr[0] == FRAME_START1) {
                 break;
             }
         }
 
-        if (!readExact(hdr + 1, HEADER_SIZE - 1)) {
+        // A byte that fails the second-byte test can itself be the START1 of the real frame: re-test it.
+        do {
+            if (!readExact(hdr + 1, 1)) {
+                return false;
+            }
+        } while (hdr[1] == FRAME_START1);
+
+        if (hdr[1] != FRAME_MAGIC && hdr[1] != FRAME_START2) {
+            continue; // not a frame start, resume the search for START1
+        }
+        if (!readExact(hdr + 2, FRAME_HEADER_LEN - 2)) {
             return false;
         }
 
         const uint16_t len = ((uint16_t)hdr[2] << 8) | (uint16_t)hdr[3];
 
-        if (hdr[1] == SERIALHAL_MAGIC) {
+        if (hdr[1] == FRAME_MAGIC) {
             // SerialHal response frame - this is what we want.
             if (len > meshtastic_SerialHalResponse_size) {
                 return false;
@@ -485,19 +531,15 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
                 return false;
             }
             return true;
-        } else if (hdr[1] == START2) {
-            // Normal FromRadio frame emitted by the device - drain and discard
-            // its payload so we stay in sync, then loop to find a SerialHal frame.
-            if (len > 0) {
-                std::vector<uint8_t> discard(len);
-                if (!readExact(discard.data(), len)) {
-                    return false;
-                }
+        }
+
+        // Normal FromRadio frame emitted by the device - drain and discard
+        // its payload so we stay in sync, then loop to find a SerialHal frame.
+        if (len > 0) {
+            std::vector<uint8_t> discard(len);
+            if (!readExact(discard.data(), len)) {
+                return false;
             }
-            // continue looping, look for next frame
-        } else {
-            // Unknown second byte after START1 - restart search for framing.
-            continue;
         }
     }
 }
@@ -505,27 +547,36 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
 void SerialHal::readerLoop()
 {
     readerRunning = true;
+    std::vector<uint8_t> payload;
     while (!readerStopRequested.load()) {
         if (fd < 0) {
             break;
         }
 
-        if (!waitForReadable(100)) {
-            continue;
-        }
-
-        std::vector<uint8_t> payload;
-        if (!readFrame(payload, 40)) {
+        if (!waitForReadable(100) || !readFrame(payload)) {
+            if (portLost.load()) {
+                setTransportError("serial device disconnected");
+                {
+                    // Take the lock so a waiter between its predicate check and its sleep cannot miss the wakeup.
+                    std::lock_guard<std::mutex> lock(stateMutex);
+                }
+                responseCv.notify_all(); // fail any waiter now instead of at its timeout
+                break;
+            }
             continue;
         }
 
         meshtastic_SerialHalResponse resp = meshtastic_SerialHalResponse_init_zero;
-        if (payload.empty() || !pb_decode_from_bytes(payload.data(), payload.size(), &meshtastic_SerialHalResponse_msg, &resp)) {
+        // An empty payload is valid: it is the all-defaults message, i.e. an interrupt event for pin 0.
+        if (!pb_decode_from_bytes(payload.data(), payload.size(), &meshtastic_SerialHalResponse_msg, &resp)) {
             continue;
         }
 
-        if (resp.transaction_id == 0) {
-            LOG_WARN("SerialHal: received unsolicited interrupt event: pin=%u", resp.value);
+        if (resp.transaction_id == serialhal::INTERRUPT_TRANSACTION_ID) {
+            if (resp.result != meshtastic_SerialHalResponse_Result_OK) {
+                LOG_WARN("SerialHal: device reported an error without a transaction: %s", resp.error);
+                continue;
+            }
             // transaction_id 0 is reserved for unsolicited interrupt events.
             // The device reports the triggered pin in resp.value instead of
             // matching one of the synchronous request/response transactions.
@@ -541,6 +592,9 @@ void SerialHal::readerLoop()
 
         {
             std::lock_guard<std::mutex> lock(stateMutex);
+            if (inFlight.count(resp.transaction_id) == 0) {
+                continue; // late reply to a request that already timed out
+            }
             pendingResponses[resp.transaction_id] = resp;
         }
         responseCv.notify_all();
