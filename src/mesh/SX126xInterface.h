@@ -4,6 +4,12 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 
+// Bench: -DSX126X_TX_LAUNCH_TRACE times each step from the CAD verdict to SET_TX, as a CH341 host always does, and
+// -DSX126X_TX_PRESTAGE also writes the payload before the scan.
+#if defined(ARCH_PORTDUINO) || defined(SX126X_TX_LAUNCH_TRACE) || defined(SX126X_TX_PRESTAGE)
+#define SX126X_TX_LAUNCH_OVERRIDE 1
+#endif
+
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for SX126x: SX1262, SX1268.
@@ -36,6 +42,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
 #ifdef SX126X_STATE_SAMPLER_MS
     /// Bench: read the chip's mode and IRQ flags, changing neither, and log them when they differ from the last look
     void sampleChipState();
+#ifdef SX126X_STATE_SAMPLER_TASK
+    /// Bench: the same look from a FreeRTOS task above the main loop, queueing changes for sampleChipState() to log
+    void sampleChipStateFromTask();
+    static void chipStateTaskMain(void *arg);
+#endif
 #endif
 
   protected:
@@ -91,9 +102,12 @@ template <class T> class SX126xInterface : public RadioLibInterface
     // Sub-GHz only. isChannelActive() passes CAD_ON_4_SYMB; keep the two in step.
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
 
-#ifdef ARCH_PORTDUINO
-    /** On a CH341 host: time each step from the CAD verdict to SET_TX, and launch a payload staged before the scan */
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
+    /** On a CH341 host or a bench build: time each step from the CAD verdict to SET_TX, and launch a payload staged
+     *  before the scan */
     int16_t launchTransmit(size_t numbytes) override;
+    /** Whether launchTransmit() takes the timed path: a CH341 host, or a build with the launch trace */
+    bool txLaunchTimed() const;
 #endif
 
   private:
@@ -104,8 +118,9 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
 
-#ifdef ARCH_PORTDUINO
-    /** MESHTASTIC_TX_PRESTAGE=1 on a CH341 host: write the payload before the CAD, leaving four commands after it */
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
+    /** MESHTASTIC_TX_PRESTAGE=1 on a CH341 host, or -DSX126X_TX_PRESTAGE: write the payload before the CAD, leaving four
+     *  commands after it */
     bool txPrestageEnabled = false;
     /** A full RadioLib TX staging (which applies the sensitivity fix) has run since the chip last lost its registers */
     bool txStagedByRadioLib = false;
@@ -134,6 +149,23 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint8_t sampledMode = 0xFF;
     uint16_t sampledIrq = 0xFFFF;
     uint32_t lastSampleMs = 0;
+    /** One GetIrqStatus; mode 0xB if the chip was BUSY. False only from the task, when the SPI lock was held */
+    bool readChipState(bool fromTask, uint8_t &mode, uint16_t &irq, uint8_t &status);
+#endif
+#ifdef SX126X_STATE_SAMPLER_TASK
+    /** The HAL without its lock, for the task: it takes the SPI lock itself, and never waits for it */
+    ArduinoHal *samplerHal = nullptr;
+    /** Changes seen by the task, stamped when seen; single producer (the task), single consumer (the main loop) */
+    struct ChipStateEvent {
+        uint32_t ms;
+        uint16_t irq;
+        uint8_t mode;
+        uint8_t status;
+    };
+    static constexpr uint8_t chipStateRingSize = 64;
+    ChipStateEvent chipStateRing[chipStateRingSize];
+    volatile uint8_t chipStateHead = 0, chipStateTail = 0;
+    volatile uint32_t chipStateDropped = 0, chipStateLockBusy = 0, chipStateTaskLate = 0;
 #endif
 
     /** RX was armed continuous and nothing has put the chip into standby since, so it is still listening */

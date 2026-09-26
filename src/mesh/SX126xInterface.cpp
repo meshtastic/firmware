@@ -42,17 +42,30 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 #ifdef SX126X_RX_REARM_AT_TX_DONE
     isrHal = hal;
 #endif
+#ifdef SX126X_STATE_SAMPLER_TASK
+    samplerHal = hal;
+#endif
 }
+
+#ifdef SX126X_STATE_SAMPLER_TASK
+#if !defined(SX126X_STATE_SAMPLER_MS) || !defined(ARCH_NRF52)
+#error "SX126X_STATE_SAMPLER_TASK is a bench flag for nRF52, and needs SX126X_STATE_SAMPLER_MS for its period"
+#endif
+// The task looks every SX126X_STATE_SAMPLER_MS; the main loop only logs what it queued, so it need not run as often.
+#define SX126X_STATE_SAMPLER_LOOP_MS 10
+#elif defined(SX126X_STATE_SAMPLER_MS)
+#define SX126X_STATE_SAMPLER_LOOP_MS SX126X_STATE_SAMPLER_MS
+#endif
 
 #ifdef SX126X_STATE_SAMPLER_MS
 namespace
 {
-/** Bench: runs the chip state sample every SX126X_STATE_SAMPLER_MS on the main loop, between the other threads */
+/** Bench: runs the chip state sample (or, with the task, its logging) on the main loop, between the other threads */
 class ChipStateSampler : public concurrency::OSThread
 {
   public:
     explicit ChipStateSampler(std::function<void()> sample)
-        : concurrency::OSThread("ChipState", SX126X_STATE_SAMPLER_MS), sample(std::move(sample))
+        : concurrency::OSThread("ChipState", SX126X_STATE_SAMPLER_LOOP_MS), sample(std::move(sample))
     {
     }
 
@@ -60,7 +73,7 @@ class ChipStateSampler : public concurrency::OSThread
     int32_t runOnce() override
     {
         sample();
-        return SX126X_STATE_SAMPLER_MS;
+        return SX126X_STATE_SAMPLER_LOOP_MS;
     }
 
   private:
@@ -88,40 +101,138 @@ const char *chipModeName(uint8_t mode)
 }
 } // namespace
 
+template <typename T> bool SX126xInterface<T>::readChipState(bool fromTask, uint8_t &mode, uint16_t &irq, uint8_t &status)
+{
+    // GetIrqStatus returns the status byte (the chip mode) and then the IRQ word; unlike ClearIrqStatus it changes nothing.
+    // BUSY high means mid-command, waking or starting the TCXO: the chip would not answer, so report the mode as BUSY and
+    // leave irq as the caller passed it.
+    uint8_t out[4] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
+                      RADIOLIB_SX126X_CMD_NOP};
+    uint8_t in[4] = {0, 0, 0, 0};
+    bool busy;
+#ifdef SX126X_STATE_SAMPLER_TASK
+    if (fromTask) {
+        // Never wait for the lock: a look that holds up the radio would change what it measures.
+        if (!spiLock->lock(0)) {
+            chipStateLockBusy = chipStateLockBusy + 1;
+            return false;
+        }
+        busy = samplerHal->digitalRead(module.getGpio());
+        if (!busy) {
+            samplerHal->ArduinoHal::spiBeginTransaction();
+            samplerHal->digitalWrite(rawCs, samplerHal->GpioLevelLow);
+            samplerHal->spiTransfer(out, sizeof(out), in);
+            samplerHal->digitalWrite(rawCs, samplerHal->GpioLevelHigh);
+            samplerHal->ArduinoHal::spiEndTransaction();
+        }
+        spiLock->unlock();
+    } else
+#endif
+    {
+        (void)fromTask;
+        busy = module.hal->digitalRead(module.getGpio());
+        if (!busy) {
+            module.hal->spiBeginTransaction();
+            module.hal->digitalWrite(rawCs, module.hal->GpioLevelLow);
+            module.hal->spiTransfer(out, sizeof(out), in);
+            module.hal->digitalWrite(rawCs, module.hal->GpioLevelHigh);
+            module.hal->spiEndTransaction();
+        }
+    }
+    if (busy) {
+        mode = 0xB;
+        status = 0;
+        return true;
+    }
+    status = in[1];
+    mode = (status >> 4) & 0x7;
+    irq = ((uint16_t)in[2] << 8) | in[3];
+    return true;
+}
+
+#ifdef SX126X_STATE_SAMPLER_TASK
+template <typename T> void SX126xInterface<T>::chipStateTaskMain(void *arg)
+{
+    auto *self = static_cast<SX126xInterface<T> *>(arg);
+    const TickType_t period = pdMS_TO_TICKS(SX126X_STATE_SAMPLER_MS) ? pdMS_TO_TICKS(SX126X_STATE_SAMPLER_MS) : 1;
+    TickType_t wake = xTaskGetTickCount();
+    for (;;) {
+        vTaskDelayUntil(&wake, period);
+        if (xTaskGetTickCount() - wake >= period) // woke a whole period late: something above us ran
+            self->chipStateTaskLate = self->chipStateTaskLate + 1;
+        self->sampleChipStateFromTask();
+    }
+}
+
+template <typename T> void SX126xInterface<T>::sampleChipStateFromTask()
+{
+    static uint8_t lastMode = 0xFF;
+    static uint16_t lastIrq = 0xFFFF;
+    uint8_t mode = 0xB, status = 0;
+    uint16_t irq = lastIrq;
+    if (rawCs == RADIOLIB_NC || !readChipState(true, mode, irq, status))
+        return; // the SPI lock was held: no look this tick
+    if (mode == lastMode && irq == lastIrq)
+        return;
+    lastMode = mode;
+    lastIrq = irq;
+    const uint8_t head = chipStateHead;
+    const uint8_t next = (uint8_t)((head + 1) % chipStateRingSize);
+    if (next == chipStateTail) {
+        chipStateDropped = chipStateDropped + 1;
+        return;
+    }
+    chipStateRing[head] = {millis(), irq, mode, status};
+    __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
+    chipStateHead = next;
+}
+#endif
+
 template <typename T> void SX126xInterface<T>::sampleChipState()
 {
     const uint32_t now = millis();
-    // Sampling runs on the main loop, so a late sample is a span in which nothing ran there, the RX handler included.
-    if (lastSampleMs && now - lastSampleMs > 2 * SX126X_STATE_SAMPLER_MS)
+    // This runs on the main loop, so a late run is a span in which nothing ran there, the RX handler included.
+    if (lastSampleMs && now - lastSampleMs > 2 * SX126X_STATE_SAMPLER_LOOP_MS)
         LOG_DEBUG("chip state: sampler late, %u ms since the last look", (unsigned)(now - lastSampleMs));
     lastSampleMs = now;
     if (rawCs == RADIOLIB_NC)
         return;
 
+#ifdef SX126X_STATE_SAMPLER_TASK
+    // The task did the looking; this only logs what it queued, each change with the time the task saw it.
+    while (chipStateTail != chipStateHead) {
+        __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
+        const ChipStateEvent e = chipStateRing[chipStateTail];
+        __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
+        chipStateTail = (uint8_t)((chipStateTail + 1) % chipStateRingSize);
+        LOG_DEBUG("chip state @%u: %s irq 0x%03x, was %s irq 0x%03x, status 0x%02x", (unsigned)e.ms, chipModeName(e.mode), e.irq,
+                  chipModeName(sampledMode), sampledIrq, e.status);
+        sampledMode = e.mode;
+        sampledIrq = e.irq;
+    }
+    // Drops and late ticks log at once; lock skips are routine, so they only refresh the line every 10 s.
+    static uint32_t loggedDropped = 0, loggedLate = 0, loggedLockBusy = 0, loggedCountersMs = 0;
+    if (chipStateDropped != loggedDropped || chipStateTaskLate != loggedLate ||
+        (chipStateLockBusy != loggedLockBusy && now - loggedCountersMs >= 10000)) {
+        loggedDropped = chipStateDropped;
+        loggedLate = chipStateTaskLate;
+        loggedLockBusy = chipStateLockBusy;
+        loggedCountersMs = now;
+        LOG_DEBUG("chip state task: %u changes dropped, %u late ticks, %u looks skipped for the SPI lock",
+                  (unsigned)loggedDropped, (unsigned)loggedLate, (unsigned)loggedLockBusy);
+    }
+#else
     uint8_t mode = 0xB;
     uint8_t status = 0;
     uint16_t irq = sampledIrq;
-    // BUSY high: mid-command, waking or starting the TCXO. The chip would not answer, and waiting would stall the loop.
-    if (!module.hal->digitalRead(module.getGpio())) {
-        // GetIrqStatus returns the status byte (the chip mode) and then the IRQ word; unlike ClearIrqStatus it changes nothing.
-        uint8_t out[4] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
-                          RADIOLIB_SX126X_CMD_NOP};
-        uint8_t in[4] = {0, 0, 0, 0};
-        module.hal->spiBeginTransaction();
-        module.hal->digitalWrite(rawCs, module.hal->GpioLevelLow);
-        module.hal->spiTransfer(out, sizeof(out), in);
-        module.hal->digitalWrite(rawCs, module.hal->GpioLevelHigh);
-        module.hal->spiEndTransaction();
-        status = in[1];
-        mode = (status >> 4) & 0x7;
-        irq = ((uint16_t)in[2] << 8) | in[3];
-    }
+    readChipState(false, mode, irq, status);
     if (mode == sampledMode && irq == sampledIrq)
         return;
     LOG_DEBUG("chip state: %s irq 0x%03x, was %s irq 0x%03x, status 0x%02x", chipModeName(mode), irq, chipModeName(sampledMode),
               sampledIrq, status);
     sampledMode = mode;
     sampledIrq = irq;
+#endif
 }
 #endif
 
@@ -203,6 +314,15 @@ template <typename T> bool SX126xInterface<T>::init()
     static ChipStateSampler *chipStateSampler = nullptr; // init() runs once per radio; never start a second sampler
     if (!chipStateSampler)
         chipStateSampler = new ChipStateSampler([this]() { sampleChipState(); });
+#endif
+#ifdef SX126X_STATE_SAMPLER_TASK
+    // Above the Arduino loop task, so a main-loop hold cannot delay a look.
+    static bool chipStateTaskStarted = false;
+    if (!chipStateTaskStarted) {
+        chipStateTaskStarted = xTaskCreate(chipStateTaskMain, "ChipState", 256, this, tskIDLE_PRIORITY + 2, nullptr) == pdPASS;
+        LOG_INFO("Chip state sampler task %s, every %u ms", chipStateTaskStarted ? "started" : "not started",
+                 (unsigned)SX126X_STATE_SAMPLER_MS);
+    }
 #endif
 
     return true;
@@ -294,6 +414,14 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         txPrestageEnabled = prestage && prestage[0] == '1' && prestage[1] == '\0';
         LOG_INFO("CH341 TX prestage %s", txPrestageEnabled ? "on" : "off");
     }
+#endif
+#ifdef SX126X_TX_PRESTAGE
+    txPrestageEnabled = true;
+    LOG_INFO("SX126x TX prestage on (build flag)");
+#elif defined(SX126X_TX_LAUNCH_TRACE)
+    LOG_INFO("SX126x TX launch trace on, prestage off (build flag)");
+#endif
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
     txStagedByRadioLib = false; // begin() reset the chip, and the sensitivity fix with it
 #endif
     // \todo Display actual typename of the adapter, not just `SX126x`
@@ -841,7 +969,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                                        .irqMask = cadIrqMask}};
     // Each step is timed: on a USB-SPI host every command is a bus round trip, and a scan measured at a
     // median 27 ms swallows a 10.4 ms SHORT_FAST preamble. This is lora.scanChannel(cfg), unrolled.
-#ifdef ARCH_PORTDUINO
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
     prestagedLen = 0; // only a clear verdict from this scan may launch what it stages
 #endif
     const uint32_t t0 = millis();
@@ -851,10 +979,10 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     const uint32_t tStandby = millis();
     uint32_t tPrestage = tStandby;
     if (result == RADIOLIB_ERR_NONE) {
-#ifdef ARCH_PORTDUINO
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
         // Write the payload now, while nothing is listening anyway, rather than after the verdict. The CAD leaves
         // the buffer alone; a detection's RX may overwrite it, but then there is no TX and the next scan rewrites it.
-        if (txPrestageEnabled && scanForTx && txStagedByRadioLib && irqPolledOverUsb()) {
+        if (txPrestageEnabled && scanForTx && txStagedByRadioLib) {
             const size_t numbytes = encodeRadioBuffer(scanForTx);
             const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, 0x00}; // offset 0, RadioLib's TX base
             if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
@@ -877,7 +1005,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
             tWait = millis();
             result = lora.getChannelScanResult();
         }
-#ifdef ARCH_PORTDUINO
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
         cadVerdictMs = millis();
 #endif
         LOG_TRACE("Channel scan steps: txen %u, standby %u, setup %u, cad wait %u (%u polls), result %u ms; "
@@ -885,7 +1013,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                   (unsigned)(tTxEn - t0), (unsigned)(tStandby - tTxEn), (unsigned)(tSetup - tPrestage),
                   (unsigned)(tWait - tSetup), polls, (unsigned)(millis() - tWait), (unsigned)lastStandbySteps.notifyMs,
                   (unsigned)lastStandbySteps.cmdMs, (unsigned)lastStandbySteps.detachMs, (unsigned)(tPrestage - tStandby));
-#ifdef ARCH_PORTDUINO
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
         if (result != RADIOLIB_CHANNEL_FREE)
             prestagedLen = 0; // no TX follows, and a detection's RX may have overwritten the buffer
 #endif
@@ -909,10 +1037,19 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
-#ifdef ARCH_PORTDUINO
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
+template <typename T> bool SX126xInterface<T>::txLaunchTimed() const
+{
+#if defined(SX126X_TX_LAUNCH_TRACE) || defined(SX126X_TX_PRESTAGE)
+    return true;
+#else
+    return irqPolledOverUsb();
+#endif
+}
+
 template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes)
 {
-    if (!irqPolledOverUsb())
+    if (!txLaunchTimed())
         return RadioLibInterface::launchTransmit(numbytes);
 
     // Everything from the CAD verdict to SET_TX is time the channel goes unwatched, and each command is several
@@ -990,7 +1127,7 @@ template <typename T> bool SX126xInterface<T>::sleep()
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_DEBUG("SX126x entering sleep mode"); // (FIXME, don't keep config)
-#ifdef ARCH_PORTDUINO
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
     txStagedByRadioLib = false; // sleep does not keep every register; let RadioLib stage the next TX in full
 #endif
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
@@ -1021,7 +1158,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
         return;
 
     LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
-#ifdef ARCH_PORTDUINO
+#ifdef SX126X_TX_LAUNCH_OVERRIDE
     txStagedByRadioLib = false; // as in sleep(): the next TX gets RadioLib's full staging
 #endif
 
