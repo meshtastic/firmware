@@ -232,6 +232,16 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
 
+#if SX126X_RX_REARM_AT_TX_DONE
+    // After TX_DONE the chip falls back to STDBY_RC, where a DIO3 TCXO is off, so the SET_RX the interrupt writes would
+    // still wait out the TCXO start-up (5 ms) before listening. Keep the oscillator running in standby instead; this
+    // also sets the RX/TX fallback mode to STDBY_XOSC.
+    if (res == RADIOLIB_ERR_NONE) {
+        const int16_t xoscErr = lora.setStandbyXOSC(true);
+        LOG_INFO("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
+    }
+#endif
+
 #ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
     // begin() applied the optimization table; re-apply the fixed PA config.
     if (res == RADIOLIB_ERR_NONE)
@@ -515,10 +525,8 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #if !defined(ARCH_NRF52)
 #error "SX126X_RX_REARM_AT_TX_DONE is for nRF52 only: it drives SPI from the DIO1 interrupt"
 #endif
-// Test values, not definedness: init() above defines both pins as RADIOLIB_NC when a variant leaves them out.
-#if (defined(SX126X_TXEN) && (SX126X_TXEN) != RADIOLIB_NC) || (defined(SX126X_RXEN) && (SX126X_RXEN) != RADIOLIB_NC) ||          \
-    HAS_LORA_FEM
-#error "SX126X_RX_REARM_AT_TX_DONE needs a board with no CPU-driven RF switch: the ISR does not drive TX/RX enable pins"
+#if HAS_LORA_FEM
+#error "SX126X_RX_REARM_AT_TX_DONE needs a board without a LoRa FEM: the ISR does not set the FEM to RX"
 #endif
 
 template <typename T>
@@ -592,8 +600,11 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
         outcome = rawCommandFromIsr(clearIrq, sizeof(clearIrq), nullptr);
     if (outcome == REARM_ARMED)
         outcome = rawCommandFromIsr(packetParams, sizeof(packetParams), nullptr);
-    if (outcome == REARM_ARMED)
+    if (outcome == REARM_ARMED) {
+        // SX126X_TXEN/RXEN, if the board has them: only GPIO writes, which are safe here
+        module.setRfSwitchState(Module::MODE_RX);
         outcome = rawCommandFromIsr(setRx, sizeof(setRx), nullptr);
+    }
     spiLock->unlockFromISR();
     rearmOutcome = outcome;
     if (outcome != REARM_ARMED)

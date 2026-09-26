@@ -5,11 +5,10 @@
 #include "configuration.h"
 
 // Re-arm RX from the TX_DONE interrupt instead of waiting for the RadioIf thread, which a main-loop hold can delay by
-// hundreds of ms. On by default on nRF52, whose SPI can be driven from an interrupt, where no CPU-driven RF switch or FEM
-// needs setting for RX and DIO1 is a real interrupt. -DSX126X_RX_REARM_AT_TX_DONE=0 turns it off.
+// hundreds of ms. On by default on nRF52, whose SPI can be driven from an interrupt, where DIO1 is a real interrupt and no
+// LoRa FEM needs setting for RX. -DSX126X_RX_REARM_AT_TX_DONE=0 turns it off.
 #ifndef SX126X_RX_REARM_AT_TX_DONE
-#if defined(ARCH_NRF52) && !defined(LORA_DIO1_SOFTWARE_POLL) && !HAS_LORA_FEM &&                                                 \
-    !(defined(SX126X_TXEN) && (SX126X_TXEN) != RADIOLIB_NC) && !(defined(SX126X_RXEN) && (SX126X_RXEN) != RADIOLIB_NC)
+#if defined(ARCH_NRF52) && !defined(LORA_DIO1_SOFTWARE_POLL) && !HAS_LORA_FEM
 #define SX126X_RX_REARM_AT_TX_DONE 1
 #else
 #define SX126X_RX_REARM_AT_TX_DONE 0
