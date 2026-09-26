@@ -140,7 +140,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
-#if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE)
+#if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE) || defined(SX126X_RX_READOUT_TASK)
     /** The chip select, kept for raw commands outside RadioLib, which does not expose it */
     RADIOLIB_PIN_TYPE rawCs = RADIOLIB_NC;
 #endif
@@ -186,6 +186,35 @@ template <class T> class SX126xInterface : public RadioLibInterface
     volatile uint8_t rearmOutcome = REARM_NONE;
     /** FreeRTOS tick count when the ISR re-armed RX */
     volatile uint32_t rearmTicks = 0;
+#endif
+
+#ifdef SX126X_RX_READOUT_TASK
+    bool rxDoneFromIsr() override;
+    bool rxReadoutActive() const override { return rxReadoutTask != nullptr; }
+    bool wakeRxReadout() override;
+    bool takeCapturedFrame(CapturedRxInfo &info) override;
+    static void rxReadoutTaskMain(void *arg);
+    /** The task's readout: IRQ status, buffer status, buffer, packet status, then clear what it saw */
+    void readOutFromTask();
+    /** One raw command from the task, which holds the SPI lock: wait briefly for BUSY, then transfer; false if BUSY held */
+    bool rawTransferFromTask(uint8_t *out, uint8_t *in, size_t len);
+    TaskHandle_t rxReadoutTask = nullptr;
+    /** The HAL without its lock: the task takes the SPI lock itself, for the whole readout */
+    ArduinoHal *readoutHal = nullptr;
+    /** FreeRTOS tick count of the last wake, from the interrupt or from a poll */
+    volatile uint32_t rxWakeTicks = 0;
+    /** Frames read out, single producer (the task), single consumer (the RadioIf thread) */
+    struct CapturedFrame {
+        CapturedRxInfo info;
+        uint8_t data[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
+    };
+    static constexpr uint8_t rxRingSize = 9; // holds 8: frames that end back to back behind a long main-loop hold
+    CapturedFrame rxRing[rxRingSize];
+    volatile uint8_t rxRingHead = 0, rxRingTail = 0;
+    volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutLockTimeouts = 0, rxReadoutChipBusy = 0;
+    /** The ReadBuffer transfer: opcode, offset, status, then up to 255 bytes */
+    uint8_t rxReadoutOut[3 + RADIOLIB_SX126X_MAX_PACKET_LENGTH];
+    uint8_t rxReadoutIn[3 + RADIOLIB_SX126X_MAX_PACKET_LENGTH];
 #endif
 
     /** How long the last trySetStandby() spent in each part, in ms, for the channel scan's step trace */
