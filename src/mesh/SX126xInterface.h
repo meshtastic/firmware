@@ -203,6 +203,8 @@ template <class T> class SX126xInterface : public RadioLibInterface
     ArduinoHal *readoutHal = nullptr;
     /** FreeRTOS tick count of the last wake, from the interrupt or from a poll */
     volatile uint32_t rxWakeTicks = 0;
+    /** Readouts the task has finished, for wakeRxReadout() to wait on */
+    volatile uint32_t rxReadoutPasses = 0;
     /** Frames read out, single producer (the task), single consumer (the RadioIf thread) */
     struct CapturedFrame {
         CapturedRxInfo info;
