@@ -21,6 +21,8 @@ class ReliableRouter : public NextHopRouter
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+    virtual meshtastic_MeshPacket_AckProofStatus ackProofStatusFor(const meshtastic_MeshPacket &p) const override;
+
   protected:
     /**
      * Look for acks/naks or someone retransmitting us
@@ -44,9 +46,21 @@ class ReliableRouter : public NextHopRouter
     bool shouldSuccessAckWithWantAck(const meshtastic_MeshPacket *p);
 
     /**
-     * May this ack/nak act on our pending send for `originalId`? Always true unless the ack carries
-     * a pairwise proof that fails to verify AND enforcement is on. An absent proof is not a failure:
-     * only peers we share a PKI key with can produce one at all.
+     * May this ack/nak act on our pending send for `originalId`? Always true unless enforcement is
+     * on AND the packet is a success ack that either carries a proof failing to verify, or does not
+     * come from the node we addressed. An absent proof is never a failure: only peers we share a
+     * PKI key with can produce one at all.
+     *
+     * isAck separates the two: a nak legitimately arrives from an intermediate rather than from the
+     * destination, so it is never held to the sender check.
      */
-    bool ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId);
+    bool ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId, bool isAck);
+
+    /** The last verdict ackProofPermitsAction() reached, keyed by the ack that carried it. */
+    struct AckProofVerdict {
+        NodeNum from = 0;
+        PacketId id = 0;
+        meshtastic_MeshPacket_AckProofStatus status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+    };
+    AckProofVerdict lastAckProof;
 };

@@ -214,7 +214,7 @@ void LoRaFEMInterface::setRxModeEnable(void)
         }
     }
 #elif defined(USE_GC1109_PA)
-    digitalWrite(LORA_GC1109_PA_EN, HIGH);    // CSD=1: Chip enabled
+    digitalWrite(LORA_GC1109_PA_EN, HIGH); // CSD=1: Chip enabled
     digitalWrite(LORA_GC1109_PA_TX_EN, LOW);
 #elif defined(USE_KCT8103L_PA)
     enableFEMPower();

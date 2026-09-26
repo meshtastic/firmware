@@ -2134,7 +2134,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (totalIcons == 0)
         return;
 
-        // Compact panels: briefly show current frame's icon+title centered, then nothing.
+    // Compact panels: briefly show current frame's icon+title centered, then nothing.
 #if defined(OLED_COMPACT_UI)
     if (compactPanel) {
         const bool introVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS_COMPACT;
