@@ -4,15 +4,9 @@
 
 #include "MotionSensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMC6309.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<MagnetometerDrv.hpp>)
 
-// SensorQMC6309.hpp (SensorLib 0.4.1) references the isBitSet() macro in an inline method but never includes
-// SensorLib.h where it is defined. Define it here (guarded) so the header compiles regardless of include order
-// (pulling in SensorLib.h is unreliable - its #pragma once can already be tripped by an in-progress include).
-#ifndef isBitSet
-#define isBitSet(value, bit) (((value) & (1UL << (bit))) == (1UL << (bit)))
-#endif
-#include <SensorQMC6309.hpp>
+#include <MagnetometerDrv.hpp>
 
 class QMC6309Sensor : public MotionSensor
 {
