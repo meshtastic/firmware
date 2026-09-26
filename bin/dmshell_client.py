@@ -389,9 +389,14 @@ def open_transport(args: argparse.Namespace):
     return SerialTransport(serial_obj)
 
 
-def recv_exact(transport, length: int) -> bytes:
+def recv_exact(transport, length: int, deadline: Optional[float] = None) -> bytes:
     chunks = bytearray()
     while len(chunks) < length:
+        # A trickling sender returns a byte inside every read timeout, so the per-read timeout alone
+        # cannot bound a frame that arrives one byte at a time. Checked per chunk when a caller has a
+        # deadline to keep; without one the loop behaves as it always did.
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("incomplete stream-API frame at the deadline")
         piece = transport.recv(length - len(chunks))
         if not piece:
             raise ConnectionError("connection closed by transport")
@@ -416,21 +421,20 @@ def resolve_initial_terminal_size(cols_override: Optional[int], rows_override: O
 def recv_stream_frame(transport, deadline: Optional[float] = None) -> bytes:
     """Read one stream-API frame, skipping whatever precedes its start marker.
 
-    deadline is a time.monotonic() value that bounds the whole scan, not each read. A transport
+    deadline is a time.monotonic() value that bounds the whole read, not each recv(). A transport
     timeout cannot do that job: a wrong port or a noisy serial line delivers bytes steadily, every
-    read returns inside its own timeout, and the scan below never comes back to the caller's clock.
+    read returns inside its own timeout, and neither the marker scan nor a frame arriving a byte at a
+    time ever comes back to the caller's clock.
     """
     while True:
-        if deadline is not None and time.monotonic() >= deadline:
-            raise TimeoutError("no stream-API frame marker before the deadline")
-        start = recv_exact(transport, 1)[0]
+        start = recv_exact(transport, 1, deadline)[0]
         if start != START1:
             continue
-        if recv_exact(transport, 1)[0] != START2:
+        if recv_exact(transport, 1, deadline)[0] != START2:
             continue
-        header = recv_exact(transport, 2)
+        header = recv_exact(transport, 2, deadline)
         length = (header[0] << 8) | header[1]
-        return recv_exact(transport, length)
+        return recv_exact(transport, length, deadline)
 
 
 def send_stream_frame(transport, payload: bytes) -> None:
