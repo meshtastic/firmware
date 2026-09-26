@@ -405,6 +405,17 @@ void CryptoEngine::clearSharedSecretCache()
  */
 bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
 {
+    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
+    uint8_t peer[32];
+    memcpy(peer, peerPubKey, 32);
+
+    // A weak peer key is rejected before the cache is consulted. The lookup key is only 4 bytes, so
+    // a weak key sharing those bytes with a cached peer would otherwise be served that peer's
+    // secret and pass, bypassing the check dh2 does on a miss.
+    if (Curve25519::isWeakPoint(peer)) {
+        return false;
+    }
+
     // The last used timestamp is in units of ~1.165 hours, which gives us
     // ~12.3 days before the timestamps roll over. This is ok since a periodic
     // misfire on evicting the oldest secret has very little impact.
@@ -416,9 +427,10 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
 
     uint16_t oldestDelta = 0;
     size_t oldestIndex = 0;
+    bool haveEmptySlot = false;
     for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
         CachedSharedSecret &entry = sharedSecretCache[i];
-        if (entry.lookup_key == lookupKey) {
+        if (entry.valid && entry.lookup_key == lookupKey) {
             // Cache hit! Copy it into shared_key.
             memcpy(shared_key, entry.shared_secret, 32);
             // Update the last used timestamp
@@ -426,14 +438,15 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
             return true;
         }
 
-        if (sharedSecretCache[oldestIndex].lookup_key == 0) {
-            // We already have a valid slot to insert into. Keep looking for a cache hit.
+        if (haveEmptySlot) {
+            // We already have a slot to insert into. Keep looking for a cache hit.
             continue;
         }
 
-        if (entry.lookup_key == 0) {
+        if (!entry.valid) {
             // This entry is empty. We can insert into it later, if needed.
             oldestIndex = i;
+            haveEmptySlot = true;
             continue;
         }
 
@@ -451,10 +464,7 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
         }
     }
 
-    // Cache miss. Generate the shared secret. setDHPublicKey takes a mutable buffer
-    // (Curve25519::dh2 works in place), so copy the peer key.
-    uint8_t peer[32];
-    memcpy(peer, peerPubKey, 32);
+    // Cache miss. Generate the shared secret.
     if (!setDHPublicKey(peer)) {
         return false;
     }
@@ -464,6 +474,7 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
     CachedSharedSecret &oldestEntry = sharedSecretCache[oldestIndex];
     oldestEntry.lookup_key = lookupKey;
     oldestEntry.last_used = now;
+    oldestEntry.valid = true;
     memcpy(oldestEntry.shared_secret, shared_key, 32);
     return true;
 }

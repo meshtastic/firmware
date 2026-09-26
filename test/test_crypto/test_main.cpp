@@ -426,7 +426,7 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
 static bool findCachedSecret(uint32_t lookupKey, CachedSharedSecret &entry)
 {
     for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
-        if (crypto->sharedSecretCache[i].lookup_key == lookupKey) {
+        if (crypto->sharedSecretCache[i].valid && crypto->sharedSecretCache[i].lookup_key == lookupKey) {
             entry = crypto->sharedSecretCache[i];
             return true;
         }
@@ -475,6 +475,38 @@ void test_shared_secret_cache(void)
     TEST_ASSERT(memcmp(stale, crypto->shared_key, 32) != 0);
     TEST_ASSERT(findCachedSecret(lookupKey, entry));
     TEST_ASSERT_EQUAL_MEMORY(crypto->shared_key, entry.shared_secret, 32);
+}
+
+void test_shared_secret_cache_zero_prefixed_keys(void)
+{
+    uint8_t private_key[32];
+    uint8_t zeroPub[32] = {0};
+    uint8_t prefixedPub[32];
+    uint8_t expected[32];
+    uint8_t cached[32];
+
+    HexToBytes(private_key, "c8a9d5a91091ad851c668b0736c1c9a02936c0d3ad62670858088047ba057475");
+    crypto->setDHPrivateKey(private_key);
+
+    // The all-zero peer key is a weak point and must be rejected. An empty cache slot must not read
+    // as a hit for it and hand back the zeroed secret it holds.
+    TEST_ASSERT_FALSE(crypto->setCryptoSharedSecret(zeroPub));
+
+    // A usable peer key whose first 4 bytes happen to be zero - so its lookup key is zero too - is
+    // derived and cached like any other. SHA256 of X25519(private_key, prefixedPub).
+    HexToBytes(prefixedPub, "000000009f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
+    HexToBytes(expected, "8df84c5a00ed192f7dadac05873a1dae6a07478153db8395c4604fc905a274ae");
+    TEST_ASSERT(crypto->setCryptoSharedSecret(prefixedPub));
+    TEST_ASSERT_EQUAL_MEMORY(expected, crypto->shared_key, 32);
+
+    // And served from the cache on the next call, not rederived into something else
+    memset(crypto->shared_key, 0, 32);
+    TEST_ASSERT(crypto->setCryptoSharedSecret(prefixedPub));
+    memcpy(cached, crypto->shared_key, 32);
+    TEST_ASSERT_EQUAL_MEMORY(expected, cached, 32);
+
+    // Still rejected with that entry in place, rather than colliding with it
+    TEST_ASSERT_FALSE(crypto->setCryptoSharedSecret(zeroPub));
 }
 
 void test_AES_CTR(void)
@@ -977,6 +1009,7 @@ void setup()
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_shared_secret_cache);
+    RUN_TEST(test_shared_secret_cache_zero_prefixed_keys);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_AES_CCM_partial_block_bounds);
     RUN_TEST(test_AES_CCM_rfc3610);

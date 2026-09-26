@@ -26,6 +26,10 @@ struct CachedSharedSecret {
     uint32_t lookup_key;
     uint8_t shared_secret[32];
     uint8_t last_used;
+    // An explicit flag, rather than lookup_key == 0 meaning empty: a peer key whose first 4 bytes
+    // are zero - the all-zero weak key among them - would otherwise match every unused slot and be
+    // served an all-zero secret as a hit. Costs nothing, the struct is padded to the same size.
+    bool valid;
 };
 
 /**
