@@ -1,6 +1,6 @@
 #include "DMShell.h"
 
-#if defined(ARCH_PORTDUINO)
+#if defined(MESHTASTIC_HAS_DMSHELL)
 
 #include "Channels.h"
 #include "MeshService.h"
