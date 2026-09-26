@@ -128,13 +128,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
 
-    /**
-     * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
-     * Implementations should return dBm, or an invalid value that updateNoiseFloor()
-     * can reject.
-     */
-    virtual int16_t getCurrentRSSI() = 0;
-
   public:
     /** Our ISR code currently needs this to find our active instance
      */
@@ -241,6 +234,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() = 0;
+
+    /** Pure virtual hook for derived radio interfaces to provide instantaneous RSSI in dBm */
+    int16_t getCurrentRSSI() override = 0;
 
     /** are we actively receiving a packet (only called during receiving state)
      *  This method is only public to facilitate debugging.  Do not call.
