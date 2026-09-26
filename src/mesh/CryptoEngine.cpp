@@ -235,10 +235,9 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
         LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
     }
-    if (!setDHPublicKey(remotePublic.bytes)) {
+    if (!deriveSharedKey(remotePublic.bytes)) {
         return false;
     }
-    hash(shared_key, 32);
     initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
@@ -276,10 +275,9 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     }
 
     // Calculate the shared secret with the sending node and decrypt
-    if (!setDHPublicKey(remotePublic.bytes)) {
+    if (!deriveSharedKey(remotePublic.bytes)) {
         return false;
     }
-    hash(shared_key, 32);
 
     initNonce(fromNode, packetNum, extraNonce);
     printBytes("Attempt decrypt with nonce: ", nonce, 13);
@@ -308,12 +306,8 @@ bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, 
     if (memfll(private_key, 0, sizeof(private_key)))
         return false; // no identity yet - nothing to prove with
 
-    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
-    uint8_t peer[32];
-    memcpy(peer, peerPubKey, 32);
-    if (!setDHPublicKey(peer))
-        return false;     // includes the library's weak-point check
-    hash(shared_key, 32); // same derivation encryptCurve25519/decryptCurve25519 use
+    if (!deriveSharedKey(peerPubKey))
+        return false; // includes the library's weak-point check; same derivation as packet crypto
 
     uint8_t header[ACK_PROOF_LABEL_LEN + 3 * sizeof(uint32_t)];
     memcpy(header, ACK_PROOF_LABEL, ACK_PROOF_LABEL_LEN);
@@ -397,6 +391,42 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
         LOG_WARN("Curve25519DH step 2 failed");
         return false;
     }
+    return true;
+}
+
+bool CryptoEngine::deriveSharedKey(const uint8_t *peerPub)
+{
+    const uint32_t start = millis();
+#if MESHTASTIC_DH_CACHE_SIZE > 0
+    if (memcmp(dhCachePrivateKey, private_key, sizeof(private_key)) != 0) {
+        memset(dhCache, 0, sizeof(dhCache)); // derived with a key we no longer hold
+        memcpy(dhCachePrivateKey, private_key, sizeof(private_key));
+    }
+    DhCacheEntry *slot = &dhCache[0]; // where a miss goes: a free entry, else the least recently used
+    for (auto &e : dhCache) {
+        if (e.valid && memcmp(e.peer, peerPub, 32) == 0) {
+            memcpy(shared_key, e.key, 32);
+            e.lastUse = ++dhCacheClock;
+            LOG_DEBUG("PKI shared key from cache");
+            return true;
+        }
+        if (slot->valid && (!e.valid || e.lastUse < slot->lastUse))
+            slot = &e;
+    }
+#endif
+    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
+    uint8_t peer[32];
+    memcpy(peer, peerPub, 32);
+    if (!setDHPublicKey(peer))
+        return false;
+    hash(shared_key, 32);
+    LOG_DEBUG("PKI shared key derived in %u ms", (unsigned)(millis() - start));
+#if MESHTASTIC_DH_CACHE_SIZE > 0
+    memcpy(slot->peer, peerPub, 32);
+    memcpy(slot->key, shared_key, 32);
+    slot->lastUse = ++dhCacheClock;
+    slot->valid = true;
+#endif
     return true;
 }
 

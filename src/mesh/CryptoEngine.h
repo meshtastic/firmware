@@ -30,6 +30,11 @@ struct CryptoKey {
 // Length of Routing.ack_proof, taken from the generated field so the protocol owns the number.
 static constexpr size_t ACK_PROOF_SIZE = sizeof(meshtastic_Routing_ack_proof_t::bytes);
 
+// Bench: -DMESHTASTIC_DH_CACHE_SIZE=<n> keeps the derived PKI key of the last n peers; 0 (default) derives it per packet.
+#ifndef MESHTASTIC_DH_CACHE_SIZE
+#define MESHTASTIC_DH_CACHE_SIZE 0
+#endif
+
 class CryptoEngine
 {
   public:
@@ -72,8 +77,8 @@ class CryptoEngine
      *  - Integers are little-endian explicitly, so the value is a property of the protocol and not of
      *    the compiler that built the node.
      *
-     * Cost: setDHPublicKey runs Curve25519::dh2 on every call and nothing caches the result, so this
-     * is one X25519 per verify, which an attacker chooses when we pay by sending a forged ack.
+     * Cost: one X25519 per verify, which an attacker chooses when we pay by sending a forged ack (a bench
+     * build with MESHTASTIC_DH_CACHE_SIZE derives it once per cached peer instead).
      * Callers MUST gate on cheap checks first - see ReliableRouter::ackProofPermitsAction.
      *
      * Clobbers shared_key, so the caller must hold cryptLock (which is NOT recursive - do not call
@@ -162,6 +167,22 @@ class CryptoEngine
     // Single-entry cache for curve_to_ed_pub conversion (avoids expensive field inversion per packet)
     uint8_t cached_curve_pubkey[32] = {0};
     uint8_t cached_ed_pubkey[32] = {0};
+#endif
+    /** shared_key = SHA256(X25519(our private, peerPub)), the pairwise PKI key; false for a weak key. Caller holds cryptLock */
+    bool deriveSharedKey(const uint8_t *peerPub);
+#if MESHTASTIC_DH_CACHE_SIZE > 0
+    /** Bench: the last MESHTASTIC_DH_CACHE_SIZE peers' derived keys, so a conversation pays for X25519 once, not per packet.
+     *  The pairwise secrets stay in RAM while cached, beside the private key they come from. */
+    struct DhCacheEntry {
+        uint8_t peer[32];
+        uint8_t key[32];
+        uint32_t lastUse;
+        bool valid;
+    };
+    DhCacheEntry dhCache[MESHTASTIC_DH_CACHE_SIZE] = {};
+    /** The private key the cached entries were derived with: any change of ours empties the cache */
+    uint8_t dhCachePrivateKey[32] = {0};
+    uint32_t dhCacheClock = 0;
 #endif
 #endif
     /**
