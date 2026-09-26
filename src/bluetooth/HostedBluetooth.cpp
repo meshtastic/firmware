@@ -1,5 +1,9 @@
 #include "configuration.h"
 
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && !defined(CONFIG_ESP_HOSTED_ENABLED) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#error "ESP32-P4 BLE requires ESP-Hosted, but the framework libs were built without CONFIG_ESP_HOSTED_ENABLED"
+#endif
+
 #if defined(CONFIG_IDF_TARGET_ESP32P4) && defined(CONFIG_ESP_HOSTED_ENABLED) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BluetoothStatus.h"
 #include "PowerFSM.h"
