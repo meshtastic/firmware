@@ -1373,6 +1373,32 @@ static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
     TEST_ASSERT_EQUAL(32, owner.public_key.size);
 }
 
+#if !MESHTASTIC_EXCLUDE_GPS
+/**
+ * A LoRa save re-enables a disabled GPS only when it sets the region for the first time.
+ * Regression guarded: every LoRa save re-enabled it, so a GPS the probe had given up on (and left
+ * disabled) re-ran the blocking probe on each preset change.
+ */
+static void test_gpsShouldEnableOnLoraSave_onlyOnFirstRegion()
+{
+    const auto on = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    const auto unset = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    const auto us = meshtastic_Config_LoRaConfig_RegionCode_US;
+    const auto eu = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+
+    TEST_ASSERT_TRUE_MESSAGE(AdminModuleTestShim::gpsShouldEnableOnLoraSave(unset, us, on),
+                             "UNSET -> a region brings back the GPS the unset region held off");
+    TEST_ASSERT_FALSE_MESSAGE(AdminModuleTestShim::gpsShouldEnableOnLoraSave(us, us, on),
+                              "a preset-only save leaves a disabled GPS disabled");
+    TEST_ASSERT_FALSE_MESSAGE(AdminModuleTestShim::gpsShouldEnableOnLoraSave(us, eu, on),
+                              "a region change between set regions does not re-probe");
+    TEST_ASSERT_FALSE_MESSAGE(AdminModuleTestShim::gpsShouldEnableOnLoraSave(unset, unset, on), "still unset, still off");
+    TEST_ASSERT_FALSE_MESSAGE(
+        AdminModuleTestShim::gpsShouldEnableOnLoraSave(unset, us, meshtastic_Config_PositionConfig_GpsMode_DISABLED),
+        "a GPS the user turned off stays off");
+}
+#endif
+
 // Unlicensed twin of the test above. Without the re-derivation the node signs broadcasts every receiver
 // drops (verifyFirstContactNodeInfo: crc32(user.public_key) != from).
 static void test_handleSetConfig_persistsUnlicensedFirstRegionIdentity()
@@ -2550,6 +2576,9 @@ void setup()
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
+#if !MESHTASTIC_EXCLUDE_GPS
+    RUN_TEST(test_gpsShouldEnableOnLoraSave_onlyOnFirstRegion);
+#endif
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
     RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);

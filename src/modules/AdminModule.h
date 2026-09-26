@@ -57,6 +57,13 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
 
+#if !MESHTASTIC_EXCLUDE_GPS
+    /// A LoRa save re-enables a disabled GPS only when it sets the region for the first time.
+    static bool gpsShouldEnableOnLoraSave(meshtastic_Config_LoRaConfig_RegionCode oldRegion,
+                                          meshtastic_Config_LoRaConfig_RegionCode newRegion,
+                                          meshtastic_Config_PositionConfig_GpsMode gpsMode);
+#endif
+
     /**
      * Getters
      *
