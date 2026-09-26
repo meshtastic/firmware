@@ -89,6 +89,7 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"I2C", {"I2CDevice"}},
         {"Logging", {"LogLevel", "TraceFile", "JSONFile", "JSONFileRotate", "JSONFilter", "AsciiLogs"}},
         {"Webserver", {"Port", "RootPath", "SSLCert", "SSLKey"}},
+        {"Bluetooth", {"Enabled", "AdapterId"}},
         {"HostMetrics", {"ReportInterval", "Channel", "UserStringCommand"}},
         // Read by packaging/menu tooling rather than by meshtasticd itself.
         {"Meta", {}},
@@ -592,6 +593,8 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Webserver.RootPath", {kString, false}},
         {"Webserver.SSLCert", {kString, false}},
         {"Webserver.SSLKey", {kString, false}},
+        {"Bluetooth.Enabled", {kBool, false}},
+        {"Bluetooth.AdapterId", {kString, false}},
         {"HostMetrics.ReportInterval", {kInt, false}},
         {"HostMetrics.Channel", {kInt, false}},
         {"HostMetrics.UserStringCommand", {kString, false}},
@@ -894,6 +897,19 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             if (value.IsSequence())
                 for (const auto &pin : value)
                     checkPinNode(file, section + "." + key, pin, findings);
+        } else if (section == "Bluetooth" && key == "AdapterId") {
+            // LinuxBluetooth uses this verbatim as the BlueZ object path (/org/bluez/<id>), while the
+            // MAC fallback only reads the leading hciN. A value like "hci1junk" therefore looks
+            // plausible, yields a MAC, and then finds no adapter -- BLE just never comes up. Only
+            // hci<digits> is a real adapter name.
+            const std::string adapter = value.as<std::string>("");
+            const bool wellFormed = adapter.rfind("hci", 0) == 0 && adapter.size() > 3 &&
+                                    adapter.find_first_not_of("0123456789", 3) == std::string::npos;
+            if (!wellFormed)
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Bluetooth.AdapterId '" + adapter +
+                                        "' is not a BlueZ adapter name. It must be hci followed by digits (hci0, hci1); "
+                                        "anything else leaves no /org/bluez entry to attach to and Bluetooth stays off"});
         } else if (key == "JoystickButtons") {
             checkJoystickButtons(file, value, findings);
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
@@ -1215,6 +1231,17 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         findings.push_back({kError, merged, 0,
                             "Display.Panel is HUB75 but this meshtasticd was built without HUB75 support, so it exits at "
                             "startup. Rebuild with hzeller/rpi-rgb-led-matrix installed (it provides rgbmatrix.pc)"});
+#endif
+
+#if !HAS_BLUETOOTH
+    // Same class of build-time gap as HUB75 above, but only a warning: BLE
+    // quietly stays off rather than aborting startup.
+    if (portduino_config.bluetooth_enabled)
+        findings.push_back({kWarn, merged, 0,
+                            "Bluetooth.Enabled is true but this meshtasticd "
+                            "was built without BLE support, so Bluetooth "
+                            "stays off. Rebuild with libsdbus-c++-dev "
+                            "installed (it provides sdbus-c++.pc)"});
 #endif
 
     if (portduino_config.lora_cs_pin.enabled && !portduino_config.lora_spi_dev.empty() &&

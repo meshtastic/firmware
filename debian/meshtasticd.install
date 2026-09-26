@@ -5,5 +5,6 @@ bin/config.d/*                     etc/meshtasticd/available.d
 
 bin/meshtasticd.service            lib/systemd/system
 bin/meshtasticd-start.sh           usr/bin
+bin/dbus-1/meshtasticd.conf        usr/share/dbus-1/system.d
 
 web/*                              usr/share/meshtasticd/web
