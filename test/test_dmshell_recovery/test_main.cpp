@@ -41,6 +41,10 @@
 //
 // Time is passed in rather than read from millis() so the damping boundaries can be asserted
 // exactly, including across the millis() wrap.
+// Arduino.h for its extern "C" declarations of setup() and loop(): portduino's main() calls both
+// with C linkage, and nothing else this suite includes reaches a platform header, so without it
+// the definitions below are mangled and the test program does not link.
+#include "Arduino.h"
 #include "TestUtil.h"
 #include "modules/DMShellRecovery.h"
 #include <cstdint>
