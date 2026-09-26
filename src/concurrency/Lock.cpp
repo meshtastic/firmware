@@ -37,6 +37,16 @@ void Lock::unlock()
         abort();
     }
 }
+
+bool Lock::tryLockFromISR()
+{
+    return xSemaphoreTakeFromISR(handle, nullptr) == pdTRUE;
+}
+
+void Lock::unlockFromISR()
+{
+    xSemaphoreGiveFromISR(handle, nullptr);
+}
 #else
 Lock::Lock() {}
 

@@ -83,6 +83,8 @@ void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
+    // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
+    instance->rearmReceiveFromIsr();
     isrLevel0Common(ISR_TX);
 }
 
@@ -411,7 +413,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
         // but it keeps the post-TX listen window on the channel we are about to transmit on.
         (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
-        startReceive();
+        if (!adoptReceiveArmedFromIsr())
+            startReceive();
         setTransmitDelay();
         break;
     case ISR_RX:

@@ -4,6 +4,18 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 
+// Re-arm RX from the TX_DONE interrupt instead of waiting for the RadioIf thread, which a main-loop hold can delay by
+// hundreds of ms. On by default on nRF52, whose SPI can be driven from an interrupt, where no CPU-driven RF switch or FEM
+// needs setting for RX and DIO1 is a real interrupt. -DSX126X_RX_REARM_AT_TX_DONE=0 turns it off.
+#ifndef SX126X_RX_REARM_AT_TX_DONE
+#if defined(ARCH_NRF52) && !defined(LORA_DIO1_SOFTWARE_POLL) && !HAS_LORA_FEM &&                                                 \
+    !(defined(SX126X_TXEN) && (SX126X_TXEN) != RADIOLIB_NC) && !(defined(SX126X_RXEN) && (SX126X_RXEN) != RADIOLIB_NC)
+#define SX126X_RX_REARM_AT_TX_DONE 1
+#else
+#define SX126X_RX_REARM_AT_TX_DONE 0
+#endif
+#endif
+
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for SX126x: SX1262, SX1268.
@@ -102,5 +114,22 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
+
+#if SX126X_RX_REARM_AT_TX_DONE
+    bool rearmReceiveFromIsr() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmOutcome : uint8_t { REARM_NONE, REARM_ARMED, REARM_SPI_BUSY, REARM_CHIP_BUSY, REARM_NOT_TX_DONE };
+    /** Longest raw command the ISR sends: SET_DIO_IRQ_PARAMS, opcode plus 8 bytes */
+    static constexpr size_t rawCommandMax = 9;
+    /** One raw command from the ISR, with the SPI lock already held: wait briefly for BUSY, then write it */
+    RearmOutcome rawCommandFromIsr(const uint8_t *cmd, size_t len, uint8_t *in);
+    /** The chip select, kept for raw commands: RadioLib does not expose it */
+    RADIOLIB_PIN_TYPE rawCs = RADIOLIB_NC;
+    /** The HAL without its lock, for the ISR, which takes the SPI lock itself without blocking */
+    ArduinoHal *isrHal = nullptr;
+    volatile uint8_t rearmOutcome = REARM_NONE;
+    /** FreeRTOS tick count when the ISR re-armed RX */
+    volatile uint32_t rearmTicks = 0;
+#endif
 };
 #endif
