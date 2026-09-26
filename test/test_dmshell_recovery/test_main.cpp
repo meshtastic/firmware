@@ -751,7 +751,7 @@ void test_dmshell_retransmit_waits_for_the_frame_not_the_poll()
 
 void test_dmshell_retransmit_due_survives_millis_wrap()
 {
-    const uint32_t sent = 0xFFFFFF00u; // 256 ms before the wrap
+    const uint32_t sent = 0xFFFFFF00u;                         // 256 ms before the wrap
     TEST_ASSERT_FALSE(retransmitDue(0x00000100u, sent, 1400)); // 512 ms later, across the wrap
     TEST_ASSERT_TRUE(retransmitDue(sent + 1400, sent, 1400));
 }
