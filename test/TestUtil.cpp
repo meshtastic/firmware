@@ -5,6 +5,7 @@
 #include "SerialConsole.h"
 #include "concurrency/OSThread.h"
 #include "gps/RTC.h"
+#include "mesh/CryptoEngine.h"
 
 #include "TestUtil.h"
 
@@ -164,6 +165,12 @@ void initializeTestEnvironment()
 {
     concurrency::hasBeenSetup = true;
     consoleInit();
+
+    // Only Router's constructor creates this in production, and a suite can reach the admin and
+    // crypto paths that take it without ever building a Router. That was survivable while
+    // Lock::lock() was a no-op on Portduino; now it takes a real mutex.
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
 #if ARCH_PORTDUINO
     baselineEnvironment();
 
