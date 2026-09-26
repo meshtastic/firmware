@@ -376,7 +376,10 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
     // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
     // poll loop spins at high rate while they stay latched.
     if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
-        lora.clearIrqFlags(noisyRxMask);
+        // Record the look first: it clears PREAMBLE, and the TX path must still see a header this clear hides.
+        receiveDetected(irq, RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
+        if (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID)
+            lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_HEADER_VALID);
         scheduleIrqPollTick();
         return;
     }
@@ -408,7 +411,7 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
         portduino_status.LoRa_in_error = true;
 #endif
     isReceiving = false; // If we were receiving, not any more
-    activeReceiveStart = 0;
+    rxSighting.reset();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();

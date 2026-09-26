@@ -2,6 +2,7 @@
 
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
+#include "UptimeClock.h"
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
@@ -20,6 +21,40 @@
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
+
+/// What the radio's latched RX flags have shown since the last standby, stamped at each look at them.
+/// The owner must clear PREAMBLE_DETECTED whenever a look finds it, so every sighting is a new detection.
+class RxSighting
+{
+  public:
+    /// Record one look at the flags; returns whether a frame may be on air, so TX should wait.
+    bool observe(uint32_t nowMsec, bool preamble, bool header, uint32_t maxPacketMsec)
+    {
+        const uint32_t now = lastPeekMsec = Time::skipZero(nowMsec);
+        if (preamble)
+            preambleSeenMsec = now;
+        if (header && !headerSeenMsec)
+            headerSeenMsec = now;
+        // Neither flag says when its frame ends; only RX_DONE (via reset()) or one max packet from the sighting does.
+        if (preambleSeenMsec && now - preambleSeenMsec >= maxPacketMsec)
+            preambleSeenMsec = 0;
+        // A header is kept past expiry so that the same latch, left by a missed RX IRQ, cannot re-arm the hold.
+        const bool headerHolds = headerSeenMsec && now - headerSeenMsec < maxPacketMsec;
+        return headerHolds || preambleSeenMsec;
+    }
+
+    /// Standby and RX start clear the chip's flags, so they clear this too.
+    void reset() { lastPeekMsec = preambleSeenMsec = headerSeenMsec = 0; }
+
+    uint32_t lastPeek() const { return lastPeekMsec; }
+    uint32_t preambleSeen() const { return preambleSeenMsec; }
+    uint32_t headerSeen() const { return headerSeenMsec; }
+
+  private:
+    uint32_t lastPeekMsec = 0;     // last look at the flags, 0 if none since reset
+    uint32_t preambleSeenMsec = 0; // last look that found a fresh PREAMBLE_DETECTED, 0 once its hold ends
+    uint32_t headerSeenMsec = 0;   // first look that found HEADER_VALID, 0 if none since reset
+};
 
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
@@ -322,8 +357,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     meshtastic_QueueStatus getQueueStatus();
 
   protected:
-    uint32_t activeReceiveStart = 0;
+    RxSighting rxSighting;
 
+    /** Airtime of the longest frame we could be receiving: 255 bytes at CR 4/8 with CRC, whatever our own CR. */
+    uint32_t maxRxFrameMsec();
+
+    /** Record a look at the RX flags and clear a PREAMBLE_DETECTED it found; true while a frame may be on air. */
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
     /** Do any hardware setup needed on entry into send configuration for the radio.
