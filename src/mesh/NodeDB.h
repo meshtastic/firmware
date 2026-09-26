@@ -171,6 +171,12 @@ static constexpr const char *backupFileName = RADIO_PROFILE_STORAGE.backup;
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 
+// A pre-cut 2.8.0 module.proto: its mesh_beacon.broadcast_message may run to 100 bytes. Copies in to out with that
+// message cut to what the current schema holds; false if it does not parse or needed no cut.
+bool truncateLegacyBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen);
+// The same cut for a pre-cut BackupPreferences, whose module_config embeds that LocalModuleConfig.
+bool truncateLegacyBackupBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen);
+
 // An unverified config load only endangers the radio profile, so only these files take part in
 // boot-write deferral. Lives next to the path table above so the two cannot drift apart.
 inline bool isRadioProfileFile(const char *filename)
@@ -697,6 +703,7 @@ class NodeDB
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     bool migrationSavePending = false;
+    bool moduleConfigMigrationSavePending = false;
     /// Set when loadFromDisk() hit a present-but-undecodable config (DECODE_FAILED). The ctor uses it to
     /// skip boot keygen and skip persisting defaults, so a transient read failure can't change our NodeNum
     /// or overwrite the on-disk config. Cleared at the top of every loadFromDisk() run.
@@ -742,6 +749,9 @@ class NodeDB
     /// The slot this radio is committed to; see refreshCommittedLoraSlot().
     uint16_t committedSlot = 0;
     bool loraSlotTransient = false;
+    // Set when the module config was installed from defaults, so the next resetRadioConfig() places a userPrefs
+    // offer's channel once. Never on an ordinary boot: a channel the operator deleted stays deleted.
+    bool beaconChannelsFromDefaults = false;
     LoraSlotSnapshot currentLoraSlot() const;
 
     /*
@@ -800,6 +810,13 @@ class NodeDB
     // the legacy descriptor and copies entries into the v25 layout. Caller
     // is responsible for save / install-default on the result.
     bool migrateLegacyNodeDatabase();
+
+    // Defined in NodeDBLegacyMigration.cpp. Re-reads a module.proto that failed to decode and, if it is a pre-cut
+    // 2.8.0 save, decodes it into moduleConfig with the beacon message truncated. Caller saves on true.
+    bool migrateLegacyModuleConfig();
+
+    // Defined in NodeDBLegacyMigration.cpp. The same for a backup file: decodes a pre-cut backup into `backup`.
+    bool migrateLegacyBackup(meshtastic_BackupPreferences &backup);
 
     // Route satellite-store decode entries straight into our maps instead of
     // temp vectors. Must be paired - disarm before any other NodeDatabase decode.
