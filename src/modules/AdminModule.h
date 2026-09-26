@@ -84,7 +84,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleSetChannel(const meshtastic_Channel &cc);
 
   protected:
-    void handleSetConfig(const meshtastic_Config &c, bool fromOthers);
+    bool handleSetConfig(const meshtastic_Config &c, bool fromOthers);
 
 #ifdef PIO_UNIT_TESTING
   protected:

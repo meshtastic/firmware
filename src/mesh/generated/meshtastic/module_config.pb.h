@@ -196,6 +196,10 @@ typedef struct _meshtastic_ModuleConfig_NeighborInfoConfig {
     /* Whether in addition to sending it to MQTT and the PhoneAPI, our NeighborInfo should be transmitted over LoRa.
  Note that this is not available on a channel with default key and name. */
     bool transmit_over_lora;
+    /* NeighborInfo policy: who may poll us, how a directed reply is encrypted (bitwise OR of
+ PortPolicyFlags). 0 is today's behaviour. There is no routine destination, so
+ REPLY_ONLY_TO_DEST refuses everyone on the mesh. */
+    uint32_t policy_flags;
 } meshtastic_ModuleConfig_NeighborInfoConfig;
 
 /* Detection Sensor Module Config */
@@ -253,6 +257,13 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
     int32_t wifi_threshold;
     /* BLE RSSI threshold. Defaults to -80 */
     int32_t ble_threshold;
+    /* Destination for routine paxcounter broadcasts. 0 = broadcast.
+ Paxcounter is not made promiscuous, so a directed paxcounter packet is consumed by its
+ target and by nothing else on the mesh. */
+    uint32_t paxcounter_dest;
+    /* Paxcounter policy: who may poll the count, how a directed count is encrypted (bitwise OR
+ of PortPolicyFlags). 0 is today's behaviour. */
+    uint32_t policy_flags;
 } meshtastic_ModuleConfig_PaxcounterConfig;
 
 /* Config for the Traffic Management module.
@@ -417,6 +428,25 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     bool device_telemetry_enabled;
     /* Enable/Disable the air quality telemetry measurement module on-device display */
     bool air_quality_screen_enabled;
+    /* Destination for routine device telemetry.
+ 0 (the default) broadcasts, preserving the historic behaviour. Any other value sends
+ routine telemetry of this sub-type to that node only. A destination does not enable a
+ sub-type: the matching *_enabled flag still governs whether anything is sent at all. */
+    uint32_t device_dest;
+    /* Destination for routine environment telemetry. 0 = broadcast. */
+    uint32_t environment_dest;
+    /* Destination for routine air quality telemetry. 0 = broadcast. */
+    uint32_t air_quality_dest;
+    /* Destination for routine power telemetry. 0 = broadcast. */
+    uint32_t power_dest;
+    /* Destination for routine health telemetry. 0 = broadcast.
+ Health is not made promiscuous, so a directed health packet is consumed by its target
+ and by nothing else on the mesh. Without PKC_ALWAYS it still goes out on the channel PSK
+ whenever the destination's public key is not held; set PKC_ALWAYS if that matters. */
+    uint32_t health_dest;
+    /* Telemetry policy, every sub-type: who may poll us, how a directed telemetry packet is
+ encrypted (bitwise OR of PortPolicyFlags). 0 is today's behaviour. */
+    uint32_t policy_flags;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
 /* Canned Messages Module Config */
@@ -659,16 +689,16 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0, "", 0, 0, false, meshtastic_ModuleConfig_MapReportSettings_init_default}
 #define meshtastic_ModuleConfig_MapReportSettings_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
-#define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0, 0}
+#define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
@@ -680,16 +710,16 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, "", 0, 0, false, meshtastic_ModuleConfig_MapReportSettings_init_zero}
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
-#define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0}
+#define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
@@ -716,6 +746,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_NeighborInfoConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_NeighborInfoConfig_update_interval_tag 2
 #define meshtastic_ModuleConfig_NeighborInfoConfig_transmit_over_lora_tag 3
+#define meshtastic_ModuleConfig_NeighborInfoConfig_policy_flags_tag 4
 #define meshtastic_ModuleConfig_DetectionSensorConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_broadcast_secs_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_state_broadcast_secs_tag 3
@@ -735,6 +766,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_PaxcounterConfig_paxcounter_update_interval_tag 2
 #define meshtastic_ModuleConfig_PaxcounterConfig_wifi_threshold_tag 3
 #define meshtastic_ModuleConfig_PaxcounterConfig_ble_threshold_tag 4
+#define meshtastic_ModuleConfig_PaxcounterConfig_paxcounter_dest_tag 5
+#define meshtastic_ModuleConfig_PaxcounterConfig_policy_flags_tag 6
 #define meshtastic_ModuleConfig_TrafficManagementConfig_position_min_interval_secs_tag 4
 #define meshtastic_ModuleConfig_TrafficManagementConfig_nodeinfo_direct_response_max_hops_tag 6
 #define meshtastic_ModuleConfig_TrafficManagementConfig_rate_limit_window_secs_tag 8
@@ -788,6 +821,12 @@ extern "C" {
 #define meshtastic_ModuleConfig_TelemetryConfig_health_screen_enabled_tag 13
 #define meshtastic_ModuleConfig_TelemetryConfig_device_telemetry_enabled_tag 14
 #define meshtastic_ModuleConfig_TelemetryConfig_air_quality_screen_enabled_tag 15
+#define meshtastic_ModuleConfig_TelemetryConfig_device_dest_tag 16
+#define meshtastic_ModuleConfig_TelemetryConfig_environment_dest_tag 17
+#define meshtastic_ModuleConfig_TelemetryConfig_air_quality_dest_tag 18
+#define meshtastic_ModuleConfig_TelemetryConfig_power_dest_tag 19
+#define meshtastic_ModuleConfig_TelemetryConfig_health_dest_tag 20
+#define meshtastic_ModuleConfig_TelemetryConfig_policy_flags_tag 21
 #define meshtastic_ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -914,7 +953,8 @@ X(a, STATIC,   REPEATED, MESSAGE,  available_pins,    3)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   update_interval,   2) \
-X(a, STATIC,   SINGULAR, BOOL,     transmit_over_lora,   3)
+X(a, STATIC,   SINGULAR, BOOL,     transmit_over_lora,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   policy_flags,      4)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_NeighborInfoConfig_DEFAULT NULL
 
@@ -945,7 +985,9 @@ X(a, STATIC,   SINGULAR, UINT32,   i2s_sck,           7)
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   paxcounter_update_interval,   2) \
 X(a, STATIC,   SINGULAR, INT32,    wifi_threshold,    3) \
-X(a, STATIC,   SINGULAR, INT32,    ble_threshold,     4)
+X(a, STATIC,   SINGULAR, INT32,    ble_threshold,     4) \
+X(a, STATIC,   SINGULAR, UINT32,   paxcounter_dest,   5) \
+X(a, STATIC,   SINGULAR, UINT32,   policy_flags,      6)
 #define meshtastic_ModuleConfig_PaxcounterConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_PaxcounterConfig_DEFAULT NULL
 
@@ -1022,7 +1064,13 @@ X(a, STATIC,   SINGULAR, BOOL,     health_measurement_enabled,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   health_update_interval,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     health_screen_enabled,  13) \
 X(a, STATIC,   SINGULAR, BOOL,     device_telemetry_enabled,  14) \
-X(a, STATIC,   SINGULAR, BOOL,     air_quality_screen_enabled,  15)
+X(a, STATIC,   SINGULAR, BOOL,     air_quality_screen_enabled,  15) \
+X(a, STATIC,   SINGULAR, UINT32,   device_dest,      16) \
+X(a, STATIC,   SINGULAR, UINT32,   environment_dest,  17) \
+X(a, STATIC,   SINGULAR, UINT32,   air_quality_dest,  18) \
+X(a, STATIC,   SINGULAR, UINT32,   power_dest,       19) \
+X(a, STATIC,   SINGULAR, UINT32,   health_dest,      20) \
+X(a, STATIC,   SINGULAR, UINT32,   policy_flags,     21)
 #define meshtastic_ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TelemetryConfig_DEFAULT NULL
 
@@ -1144,15 +1192,15 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_size 10
 #define meshtastic_ModuleConfig_MeshBeaconConfig_size 242
-#define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
-#define meshtastic_ModuleConfig_PaxcounterConfig_size 30
+#define meshtastic_ModuleConfig_NeighborInfoConfig_size 16
+#define meshtastic_ModuleConfig_PaxcounterConfig_size 42
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StatusMessageConfig_size 81
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4
-#define meshtastic_ModuleConfig_TelemetryConfig_size 50
+#define meshtastic_ModuleConfig_TelemetryConfig_size 92
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 30
 #define meshtastic_ModuleConfig_size             246
 #define meshtastic_RemoteHardwarePin_size        21

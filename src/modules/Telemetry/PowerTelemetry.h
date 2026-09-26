@@ -23,6 +23,8 @@ class PowerTelemetryModule : private concurrency::OSThread,
         : concurrency::OSThread("PowerTelemetry"),
           ProtobufModule("PowerTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        // Promiscuous: learn from telemetry unicast between other nodes that we relay or overhear.
+        isPromiscuous = true;
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
@@ -48,7 +50,7 @@ class PowerTelemetryModule : private concurrency::OSThread,
     /**
      * Send our Telemetry into the mesh
      */
-    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool phoneOnly = false);
 
   private:
     bool firstTime = 1;

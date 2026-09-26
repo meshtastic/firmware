@@ -8,6 +8,7 @@
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "Telemetry/BaseTelemetryModule.h"
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
@@ -323,14 +324,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // Non-LoRa configs need no further validation.
         if (r->set_config.which_payload_variant != meshtastic_Config_lora_tag) {
             LOG_DEBUG("Non-LoRa config, applying directly");
-            handleSetConfig(r->set_config, fromOthers);
+            if (!handleSetConfig(r->set_config, fromOthers))
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
             break;
         }
 
         // Only LORA_24 requires hardware capability validation.
         if (r->set_config.payload_variant.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
             LOG_DEBUG("LoRa config, region is not LORA_24, applying directly");
-            handleSetConfig(r->set_config, fromOthers);
+            if (!handleSetConfig(r->set_config, fromOthers))
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
             break;
         }
 
@@ -338,7 +341,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // Fail closed: null instance is treated as incapable.
         if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
             LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
-            handleSetConfig(r->set_config, fromOthers);
+            if (!handleSetConfig(r->set_config, fromOthers))
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
             break;
         }
 
@@ -877,7 +881,7 @@ static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incomi
                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
 }
 
-void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
+bool AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
@@ -940,6 +944,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     } // case meshtastic_Config_device_tag
     case meshtastic_Config_position_tag:
         LOG_INFO("Set config: Position");
+        {
+            char why[128] = {0};
+            if (!pkcAlwaysDestsHaveKeys(c.payload_variant.position.policy_flags, &c.payload_variant.position.position_dest, 1,
+                                        why, sizeof(why))) {
+                sendWarning("%s", why); // a BAD_REQUEST alone leaves the user guessing which key is missing
+                return false;           // refused: nothing applied, nothing saved
+            }
+        }
         config.has_position = true;
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
         // clear the stored position since it may not get updated
@@ -1250,11 +1262,25 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
         flushChannelWarnings();
+    return true;
 } // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
+    // Refuse before the BLE shutdown below: a rejected request neither saves nor reboots, so BLE would stay down.
+    char why[128] = {0};
+    if (c.which_payload_variant == meshtastic_ModuleConfig_telemetry_tag &&
+        !BaseTelemetryModule::pkcOnlyDestsHaveKeys(c.payload_variant.telemetry, why, sizeof(why))) {
+        sendWarning("%s", why);
+        return false;
+    }
+    if (c.which_payload_variant == meshtastic_ModuleConfig_paxcounter_tag &&
+        !pkcAlwaysDestsHaveKeys(c.payload_variant.paxcounter.policy_flags, &c.payload_variant.paxcounter.paxcounter_dest, 1, why,
+                                sizeof(why))) {
+        sendWarning("%s", why);
+        return false;
+    }
     // Skip the variants that must not lose BLE here: MQTT and Serial validate first and disable it
     // themselves, and statusmessage/mesh_beacon never reboot, so a disable would strand BLE until the
     // next PowerFSM transition. Everything else reboots, so take BLE down before the phone interferes.
