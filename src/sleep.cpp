@@ -513,7 +513,6 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef ROTARY_PRESS
-    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef KB_INT
@@ -625,17 +624,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Unconditional: the config can have changed while we were asleep.
     gpio_wakeup_disable((gpio_num_t)MOTION_WAKE_INT_PIN);
 #endif
-#if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && (defined(LORA_DIO1) || defined(SX128X_DIO1))
-    const int wokeDio1 = loraWakeDio1Pin(); // must match what enableLoraInterrupt() armed
-    if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)wokeDio1);
-    }
-#endif
-#if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
-    if (radioType == RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
-    }
-#endif
+    disarmLoraWake(); // both enableLoraInterrupt() paths arm via gpio_wakeup_enable
 
     // A skipped sleep reports what a real DIO1 wake does, not the last sleep's stale cause: runASAP below services
     // the packet. PowerFSM's GPIO case then treats it as a possible button/KB_INT press, as for any LoRa wake.
