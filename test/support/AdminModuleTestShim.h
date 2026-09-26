@@ -8,6 +8,9 @@ class AdminModuleTestShim : public AdminModule
 {
   public:
     using AdminModule::checkPassKey; // session-key gate seam (see test_admin_session_repro)
+#if !MESHTASTIC_EXCLUDE_GPS
+    using AdminModule::gpsShouldEnableOnLoraSave;
+#endif
     using AdminModule::handleGetConfig;
     using AdminModule::handleGetModuleConfig;
     using AdminModule::handleReceivedProtobuf;

@@ -877,6 +877,17 @@ static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incomi
                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
 }
 
+#if !MESHTASTIC_EXCLUDE_GPS
+bool AdminModule::gpsShouldEnableOnLoraSave(meshtastic_Config_LoRaConfig_RegionCode oldRegion,
+                                            meshtastic_Config_LoRaConfig_RegionCode newRegion,
+                                            meshtastic_Config_PositionConfig_GpsMode gpsMode)
+{
+    return oldRegion == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+           newRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+           gpsMode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+}
+#endif
+
 void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
@@ -1152,9 +1163,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #if !MESHTASTIC_EXCLUDE_GPS
         // Enable gps if it was previously disabled due to region not being set. Only then: a probe that
         // gave up also leaves it disabled, and re-enabling on every LoRa save re-runs the blocking probe.
-        if (!requiresReboot && oldLoraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
-            config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr && !gps->isEnabled() &&
-            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        if (!requiresReboot && gps != nullptr && !gps->isEnabled() &&
+            gpsShouldEnableOnLoraSave(oldLoraConfig.region, config.lora.region, config.position.gps_mode)) {
             gps->enable();
         }
 #endif
