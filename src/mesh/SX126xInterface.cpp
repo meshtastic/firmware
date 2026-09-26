@@ -707,29 +707,32 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
 #if !defined(ARCH_NRF52)
 #error "SX126X_RX_REARM_AT_TX_DONE is a bench flag for nRF52 only: it drives SPI from the DIO1 interrupt"
 #endif
-#if defined(SX126X_TXEN) || defined(SX126X_RXEN) || HAS_LORA_FEM
-#error "SX126X_RX_REARM_AT_TX_DONE needs DIO2 to switch the antenna: the ISR does not drive TX/RX enable pins"
+// Test values, not definedness: init() above defines both pins as RADIOLIB_NC when a variant leaves them out.
+#if (defined(SX126X_TXEN) && (SX126X_TXEN) != RADIOLIB_NC) || (defined(SX126X_RXEN) && (SX126X_RXEN) != RADIOLIB_NC) ||          \
+    HAS_LORA_FEM
+#error "SX126X_RX_REARM_AT_TX_DONE needs a board with no CPU-driven RF switch: the ISR does not drive TX/RX enable pins"
 #endif
 
-template <typename T> bool SX126xInterface<T>::rawCommandFromIsr(const uint8_t *cmd, size_t len)
+template <typename T>
+typename SX126xInterface<T>::RearmOutcome SX126xInterface<T>::rawCommandFromIsr(const uint8_t *cmd, size_t len)
 {
+    uint8_t out[rawCommandMax];
+    uint8_t in[rawCommandMax];
+    if (len > sizeof(out))
+        return REARM_BAD_COMMAND;
     // The chip holds BUSY for microseconds after each command. Bounded: millis() does not advance in an ISR.
     for (unsigned i = 0; module.hal->digitalRead(module.getGpio()); i++) {
         if (i >= 200)
-            return false;
+            return REARM_CHIP_BUSY;
         delayMicroseconds(1);
     }
-    uint8_t out[8];
-    uint8_t in[8];
-    if (len > sizeof(out))
-        return false;
     memcpy(out, cmd, len);
     isrHal->ArduinoHal::spiBeginTransaction(); // the base class's: the lock is already held
     isrHal->digitalWrite(rawCs, isrHal->GpioLevelLow);
     isrHal->spiTransfer(out, len, in);
     isrHal->digitalWrite(rawCs, isrHal->GpioLevelHigh);
     isrHal->ArduinoHal::spiEndTransaction();
-    return true;
+    return REARM_ARMED;
 }
 
 /// After TX_DONE the chip sits in standby until the RadioIf thread re-arms it, and a main-loop hold can make that
@@ -764,11 +767,19 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
                                     RADIOLIB_SX126X_MAX_PACKET_LENGTH,     RADIOLIB_SX126X_LORA_CRC_ON,
                                     RADIOLIB_SX126X_LORA_IQ_STANDARD};
     const uint8_t setRx[] = {RADIOLIB_SX126X_CMD_SET_RX, 0xFF, 0xFF, 0xFF}; // continuous
-    const bool ok = rawCommandFromIsr(setDioIrq, sizeof(setDioIrq)) && rawCommandFromIsr(clearIrq, sizeof(clearIrq)) &&
-                    rawCommandFromIsr(packetParams, sizeof(packetParams)) && rawCommandFromIsr(setRx, sizeof(setRx));
+    static_assert(sizeof(setDioIrq) <= rawCommandMax && sizeof(clearIrq) <= rawCommandMax &&
+                      sizeof(packetParams) <= rawCommandMax && sizeof(setRx) <= rawCommandMax,
+                  "rawCommandFromIsr() would reject a re-arm command");
+    RearmOutcome outcome = rawCommandFromIsr(setDioIrq, sizeof(setDioIrq));
+    if (outcome == REARM_ARMED)
+        outcome = rawCommandFromIsr(clearIrq, sizeof(clearIrq));
+    if (outcome == REARM_ARMED)
+        outcome = rawCommandFromIsr(packetParams, sizeof(packetParams));
+    if (outcome == REARM_ARMED)
+        outcome = rawCommandFromIsr(setRx, sizeof(setRx));
     spiLock->unlockFromISR();
-    if (!ok) {
-        rearmOutcome = REARM_CHIP_BUSY; // the thread's startReceive() redoes all of it
+    if (outcome != REARM_ARMED) {
+        rearmOutcome = outcome; // the thread's startReceive() redoes all of it
         return false;
     }
     rearmTicks = xTaskGetTickCountFromISR();
@@ -782,6 +793,10 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
     rearmOutcome = REARM_NONE;
     if (outcome == REARM_SPI_BUSY || outcome == REARM_CHIP_BUSY) {
         LOG_TRACE("RX re-arm at TX_DONE skipped, %s busy", outcome == REARM_SPI_BUSY ? "SPI" : "chip");
+        return false;
+    }
+    if (outcome == REARM_BAD_COMMAND) {
+        LOG_ERROR("RX re-arm at TX_DONE skipped, command longer than %u bytes", (unsigned)rawCommandMax);
         return false;
     }
     if (outcome != REARM_ARMED)

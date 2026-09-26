@@ -144,11 +144,13 @@ template <class T> class SX126xInterface : public RadioLibInterface
 #ifdef SX126X_RX_REARM_AT_TX_DONE
     bool rearmReceiveFromIsr() override;
     bool adoptReceiveArmedFromIsr() override;
+    enum RearmOutcome : uint8_t { REARM_NONE, REARM_ARMED, REARM_SPI_BUSY, REARM_CHIP_BUSY, REARM_BAD_COMMAND };
+    /** Longest raw command the ISR sends: SET_DIO_IRQ_PARAMS, opcode plus 8 bytes */
+    static constexpr size_t rawCommandMax = 9;
     /** One raw command from the ISR: wait briefly for BUSY, then write it without RadioLib or the SPI lock */
-    bool rawCommandFromIsr(const uint8_t *cmd, size_t len);
+    RearmOutcome rawCommandFromIsr(const uint8_t *cmd, size_t len);
     /** The HAL without its lock: the ISR has already taken the SPI lock without blocking */
     ArduinoHal *isrHal = nullptr;
-    enum RearmOutcome : uint8_t { REARM_NONE, REARM_ARMED, REARM_SPI_BUSY, REARM_CHIP_BUSY };
     volatile uint8_t rearmOutcome = REARM_NONE;
     /** FreeRTOS tick count when the ISR re-armed RX */
     volatile uint32_t rearmTicks = 0;
