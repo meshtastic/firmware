@@ -4894,8 +4894,13 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             spiLock->unlock();
         }
         meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
-                            &meshtastic_BackupPreferences_msg, &backup);
+        LoadFileResult state = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
+                                         &meshtastic_BackupPreferences_msg, &backup);
+        // A pre-cut 2.8.0 backup with a long beacon message fails the decode; migrate it as loadFromDisk() does.
+        if (state == LoadFileResult::DECODE_FAILED && migrateLegacyBackup(backup))
+            state = LoadFileResult::LOAD_SUCCESS;
+        // Compared, not converted: every LoadFileResult is nonzero, so a failed decode used to restore a half-read backup.
+        success = state == LoadFileResult::LOAD_SUCCESS;
         if (success) {
             if (restoreWhat & SEGMENT_CONFIG) {
                 config = backup.config;

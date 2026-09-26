@@ -157,15 +157,25 @@ void assertValidUtf8(const char *s, size_t width)
     TEST_ASSERT_FALSE_MESSAGE(sanitizeUtf8(copy, width), "migrated name still contains invalid UTF-8");
 }
 
-void writeModuleBytes(const uint8_t *bytes, size_t len)
+void writeFileBytes(const char *dir, const char *path, const uint8_t *bytes, size_t len)
 {
-    FSCom.mkdir("/prefs");
-    FSCom.remove(moduleConfigFileName);
-    auto f = FSCom.open(moduleConfigFileName, FILE_O_WRITE);
+    FSCom.mkdir(dir);
+    FSCom.remove(path);
+    auto f = FSCom.open(path, FILE_O_WRITE);
     TEST_ASSERT_TRUE((bool)f);
     const size_t wrote = f.write(bytes, len);
     f.close();
-    TEST_ASSERT_EQUAL_MESSAGE(len, wrote, "short write laying down the module.proto fixture");
+    TEST_ASSERT_EQUAL_MESSAGE(len, wrote, "short write laying down a fixture");
+}
+
+void writeModuleBytes(const uint8_t *bytes, size_t len)
+{
+    writeFileBytes("/prefs", moduleConfigFileName, bytes, len);
+}
+
+void writeBackupBytes(const std::vector<uint8_t> &bytes)
+{
+    writeFileBytes("/backups", backupFileName, bytes.data(), bytes.size());
 }
 
 /// A 2.8.0 module.proto from before the broadcast_message cut: base's fields, with a mesh_beacon whose
@@ -196,6 +206,26 @@ std::vector<uint8_t> encodePreCutModuleConfig(const meshtastic_LocalModuleConfig
         TEST_ASSERT_TRUE(pb_encode_tag(&os, PB_WT_STRING, 1000));
         TEST_ASSERT_TRUE(pb_encode_string(&os, pad.data(), pad.size()));
     }
+    buf.resize(os.bytes_written);
+    return buf;
+}
+
+/// A backup from a pre-cut build: this node's config and an owner named "Backup Owner", with module_config encoded
+/// by hand as moduleBody.
+std::vector<uint8_t> encodeBackup(const std::vector<uint8_t> &moduleBody)
+{
+    meshtastic_BackupPreferences b = meshtastic_BackupPreferences_init_zero;
+    b.version = DEVICESTATE_CUR_VER;
+    b.has_config = true;
+    b.config = config;
+    b.has_owner = true;
+    b.owner = owner;
+    strncpy(b.owner.long_name, "Backup Owner", sizeof(b.owner.long_name) - 1);
+    std::vector<uint8_t> buf(4096);
+    pb_ostream_t os = pb_ostream_from_buffer(buf.data(), buf.size());
+    TEST_ASSERT_TRUE(pb_encode(&os, meshtastic_BackupPreferences_fields, &b));
+    TEST_ASSERT_TRUE(pb_encode_tag(&os, PB_WT_STRING, meshtastic_BackupPreferences_module_config_tag));
+    TEST_ASSERT_TRUE(pb_encode_string(&os, moduleBody.data(), moduleBody.size()));
     buf.resize(os.bytes_written);
     return buf;
 }
@@ -692,6 +722,46 @@ static void test_preCutModuleConfig_corruptElsewhere_installsDefaults(void)
     TEST_ASSERT_TRUE_MESSAGE(strcmp("mqtt.example", moduleConfig.mqtt.address) != 0, "a broken file is not migrated");
 }
 
+// --- backup.proto: the same cut, inside BackupPreferences.module_config ---
+
+// A backup taken by a pre-cut build with a 100-byte beacon message fails the current decode.
+// Regression guarded: restorePreferences() had no migration, so the restore failed or restored a half-read backup.
+static void test_preCutBackup_longBeaconMessage_restoresEveryModule(void)
+{
+    writeBackupBytes(encodeBackup(encodePreCutModuleConfig(distinctiveModuleConfig(), std::string(100, 'x'))));
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE),
+        "a pre-cut backup is migrated, not refused");
+    assertDistinctiveModulesSurvived(moduleConfig);
+    TEST_ASSERT_EQUAL_STRING(std::string(60, 'x').c_str(), moduleConfig.mesh_beacon.broadcast_message);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Backup Owner", devicestate.owner.long_name, "the fields around it restore too");
+    FSCom.remove(backupFileName);
+}
+
+// A backup that does not decode is refused and restores nothing.
+// Regression guarded: loadProto()'s DECODE_FAILED converted to true, so the half-read backup was restored and saved.
+static void test_undecodableBackup_isRefusedAndRestoresNothing(void)
+{
+    const meshtastic_LocalModuleConfig current = distinctiveModuleConfig();
+    std::vector<uint8_t> moduleBody(meshtastic_LocalModuleConfig_size);
+    const size_t moduleLen =
+        pb_encode_to_bytes(moduleBody.data(), moduleBody.size(), &meshtastic_LocalModuleConfig_msg, &current);
+    TEST_ASSERT_GREATER_THAN_UINT(0, moduleLen);
+    moduleBody.resize(moduleLen);
+    std::vector<uint8_t> file = encodeBackup(moduleBody);
+    file.insert(file.end(), {0xFF, 0xFF, 0xFF}); // a key with no end
+    writeBackupBytes(file);
+
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+    strncpy(moduleConfig.mqtt.address, "before.restore", sizeof(moduleConfig.mqtt.address) - 1);
+    TEST_ASSERT_FALSE_MESSAGE(nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_MODULECONFIG),
+                              "an undecodable backup is refused");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("before.restore", moduleConfig.mqtt.address, "nothing from it is restored");
+    FSCom.remove(backupFileName);
+}
+
 NDBM_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -725,6 +795,10 @@ NDBM_TEST_ENTRY void setup()
     RUN_TEST(test_truncateLegacyBeaconMessage_straddlingCharacter_isDroppedWhole);
     RUN_TEST(test_truncateLegacyBeaconMessage_messageThatFits_needsNoMigration);
     RUN_TEST(test_preCutModuleConfig_corruptElsewhere_installsDefaults);
+
+    printf("\n=== backup.proto beacon message cut ===\n");
+    RUN_TEST(test_preCutBackup_longBeaconMessage_restoresEveryModule);
+    RUN_TEST(test_undecodableBackup_isRefusedAndRestoresNothing);
 
     exit(UNITY_END());
 }

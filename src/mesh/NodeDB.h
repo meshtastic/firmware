@@ -174,6 +174,8 @@ static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 // A pre-cut 2.8.0 module.proto: its mesh_beacon.broadcast_message may run to 100 bytes. Copies in to out with that
 // message cut to what the current schema holds; false if it does not parse or needed no cut.
 bool truncateLegacyBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen);
+// The same cut for a pre-cut BackupPreferences, whose module_config embeds that LocalModuleConfig.
+bool truncateLegacyBackupBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen);
 
 // An unverified config load only endangers the radio profile, so only these files take part in
 // boot-write deferral. Lives next to the path table above so the two cannot drift apart.
@@ -812,6 +814,9 @@ class NodeDB
     // Defined in NodeDBLegacyMigration.cpp. Re-reads a module.proto that failed to decode and, if it is a pre-cut
     // 2.8.0 save, decodes it into moduleConfig with the beacon message truncated. Caller saves on true.
     bool migrateLegacyModuleConfig();
+
+    // Defined in NodeDBLegacyMigration.cpp. The same for a backup file: decodes a pre-cut backup into `backup`.
+    bool migrateLegacyBackup(meshtastic_BackupPreferences &backup);
 
     // Route satellite-store decode entries straight into our maps instead of
     // temp vectors. Must be paired - disarm before any other NodeDatabase decode.
