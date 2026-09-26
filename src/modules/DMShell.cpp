@@ -721,7 +721,7 @@ void DMShellModule::reapChildIfExited()
 
     int status = 0;
     const pid_t result = waitpid(session.childPid, &status, WNOHANG);
-    if (result == session.childPid) {
+    if (result == session.childPid || (result < 0 && errno == ECHILD)) {
         closeSession("shell_exited", true);
     }
 }
@@ -744,10 +744,22 @@ void DMShellModule::rememberPendingChild(pid_t pid)
         }
     }
 
-    // Every slot still holds a child that has not exited. Waiting here would stall the thread, so
-    // the pid is lost and init will collect it; one warning, because it should not be reachable
-    // with a single session at a time.
-    LOG_WARN("DMShell: no slot left for pid=%d, dropping it", pid);
+    // Every slot still holds a child that has not exited, and dropping a pid leaves a zombie.
+    // Free one by waiting for the child in the first slot: SIGKILL cannot be caught or blocked, so
+    // it dies promptly unless it is stuck in the kernel. A blanket waitpid(-1) is not an option
+    // here - it would swallow the exit status of a popen() elsewhere in the process.
+    PendingChild &slot = pendingChildren.front();
+    if (!slot.killed && kill(slot.pid, SIGKILL) < 0 && errno != ESRCH) {
+        LOG_WARN("DMShell: failed to send SIGKILL to pid=%d errno=%d", slot.pid, errno);
+    }
+
+    int status = 0;
+    LOG_WARN("DMShell: no free slot for pid=%d, waiting for pid=%d", pid, slot.pid);
+    while (waitpid(slot.pid, &status, 0) < 0 && errno == EINTR) {
+    }
+
+    slot.pid = pid;
+    slot.killed = false;
 }
 
 void DMShellModule::processPendingChildReap()
