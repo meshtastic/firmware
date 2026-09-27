@@ -366,6 +366,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Bench: move the oldest frame the readout task captured into radioBuffer; false if there is none */
     bool takeCapturedFrame(CapturedRxInfo &info);
+
+    /** Bench: from the TX_DONE interrupt, have the readout task call rearmReceiveFromTask() before anything else; false if
+     *  there is no task. For drivers that re-arm RX through RadioLib, which an interrupt cannot call. */
+    bool requestRearmFromIsr();
+
+    /** Bench: the readout task's half of requestRearmFromIsr(), run at the task's priority with the SPI lock free */
+    virtual void rearmReceiveFromTask() {}
 #else
     bool rxDoneFromIsr() { return false; }
     bool rxReadoutActive() const { return false; }
@@ -614,6 +621,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     volatile uint32_t rxWakeTicks = 0;
     /** Readouts the task has finished, for wakeRxReadout() to wait on */
     volatile uint32_t rxReadoutPasses = 0;
+    /** Set by requestRearmFromIsr(), taken by the task */
+    volatile bool rxRearmFromTaskPending = false;
     /** Frames read out, single producer (the task), single consumer (this thread) */
     struct CapturedFrame {
         CapturedRxInfo info;

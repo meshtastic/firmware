@@ -379,6 +379,9 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
         limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
     }
 
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false; // begin() resets the chip
+#endif
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
     applyBenchTcxoDelay(res);
     if (res == RADIOLIB_ERR_NONE)
@@ -449,6 +452,9 @@ template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
     }
 
     isReceiving = false; // If we were receiving, not any more
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false;
+#endif
     rxSighting.reset();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
@@ -517,12 +523,105 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     }
 
     RadioLibInterface::startReceive();
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // RADIOLIB_LR11X0_RX_TIMEOUT_INF: continuous
+#endif
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
 #endif
 }
+
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+template <typename T> bool LR11x0Interface<T>::resumeRunningReceive()
+{
+    // A continuous RX keeps listening after RX_DONE and after CRC or header errors, so pick it back up instead of a
+    // standby and restart, which is deaf through a TCXO start-up. Checked on the chip: this LR11x0 behaviour is the
+    // round's question.
+    if (!rxArmedContinuous)
+        return false;
+    const uint8_t mode = readChipMode();
+    if (mode != RADIOLIB_LR11X0_STAT_2_MODE_RX) {
+        LOG_WARN("LR11x0 RX not running after a frame (stat2 mode 0x%02x), restarting it", mode);
+        rxArmedContinuous = false;
+        return false;
+    }
+    // readData() clears these, but handleReceiveInterrupt()'s early outs do not, and a latched one would hold the pin high
+    // past the re-arm. With the readout task, it clears what it reads, and a clear here could take an unread RX_DONE.
+    if (!rxReadoutActive())
+        lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_RX_DONE | RADIOLIB_LR11X0_IRQ_CRC_ERR | RADIOLIB_LR11X0_IRQ_HEADER_ERR |
+                           RADIOLIB_LR11X0_IRQ_TIMEOUT);
+    if (deafSinceMs) {
+        LOG_TRACE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
+                  (unsigned)(Time::getMillis() - deafSinceMs));
+        deafSinceMs = 0; // the chip never stopped listening, so there is no deaf window to report
+    }
+    rxSighting.reset(); // RX_DONE ends the frame's hold, as the standby it replaces would
+    RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that beat the arm
+    return true;
+}
+#endif
+
+#ifdef LR11X0_RX_REARM_AT_TX_DONE
+template <typename T> bool LR11x0Interface<T>::rearmReceiveFromIsr()
+{
+    // After TX_DONE the chip sits in standby until the radio thread re-arms it, and a main-loop hold can make that
+    // hundreds of ms. The interrupt cannot call RadioLib, so the readout task, above the loop, re-arms as soon as the
+    // interrupt returns.
+    rearmState = REARM_PENDING;
+    if (requestRearmFromIsr())
+        return true;
+    rearmState = REARM_NONE;
+    return false;
+}
+
+template <typename T> void LR11x0Interface<T>::rearmReceiveFromTask()
+{
+    // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
+    const uint32_t t0 = benchClock();
+    int16_t err = lora.setPreambleLength(preambleLength);
+    if (err == RADIOLIB_ERR_NONE)
+        err =
+            lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    rearmUs = benchClockToUs(benchClock() - t0);
+    rearmErr = err;
+    rearmTicks = xTaskGetTickCount();
+    rearmState = err == RADIOLIB_ERR_NONE ? REARM_ARMED : REARM_FAILED;
+}
+
+template <typename T> bool LR11x0Interface<T>::adoptReceiveArmedFromIsr()
+{
+    // On one core the task, above this thread, has already run. Where it has not (blocked on a lock), give it a moment.
+    for (unsigned waited = 0; rearmState == REARM_PENDING && waited < 20; waited++)
+        vTaskDelay(pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
+    const uint8_t state = rearmState;
+    rearmState = REARM_NONE;
+    if (state == REARM_PENDING) {
+        // Leave the task nothing to do: the thread's startReceive() takes it from here
+        LOG_WARN("RX re-arm at TX_DONE: readout task did not run");
+        return false;
+    }
+    if (state == REARM_FAILED) {
+        LOG_WARN("RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
+        return false;
+    }
+    if (state != REARM_ARMED)
+        return false;
+    const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
+    LOG_TRACE("Radio back in RX at TX_DONE, re-arm %u us, %u ms before the handler ran", (unsigned)rearmUs, (unsigned)heldMs);
+    deafSinceMs = 0; // listening since the task re-armed: no deaf window to report
+    RadioLibInterface::startReceive();
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // the task armed a continuous RX
+#endif
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
+    return true;
+}
+#endif
 
 /** Is the channel currently active? */
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
@@ -672,15 +771,14 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
-#ifdef LR11X0_CAD_EXIT_PROBE
-template <typename T> uint8_t LR11x0Interface<T>::readChipMode()
+#ifdef LR11X0_READ_CHIP_MODE
+template <typename T> uint8_t LR11x0Interface<T>::readChipMode() const
 {
-    // RadioLib keeps LRxxxx::getStatus() protected even under GODMODE, so make the same transfer it does through its
-    // Module: the chip answers any NOP transfer with stat1, stat2 and the IRQ word. FS is the chip on its way to TX
-    // or RX, so look again for up to 1 ms.
+    // The transfer RadioLib's LRxxxx::getStatus() makes: the chip answers any NOP transfer with stat1, stat2 and the
+    // IRQ word. FS is the chip on its way to TX or RX, so look again for up to 1 ms.
     uint8_t buff[6] = {0};
     for (int tries = 0; tries < 10; tries++) {
-        if (lora.getMod()->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true) != RADIOLIB_ERR_NONE)
+        if (statusModule->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true) != RADIOLIB_ERR_NONE)
             return 0xFF;
         if ((buff[1] & 0x0E) != RADIOLIB_LR11X0_STAT_2_MODE_FS)
             break;
@@ -761,6 +859,9 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
         return;
 
     LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false; // the warm sleep below stops RX
+#endif
 
     // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
