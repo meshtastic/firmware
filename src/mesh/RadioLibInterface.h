@@ -326,6 +326,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
     void handleReceiveInterrupt(const CapturedRxInfo *captured = nullptr);
 
+    /** Pick up an RX the chip is still running after a frame instead of restarting it; false if it is not known to be
+     *  running, and the caller restarts it with startReceive() */
+    virtual bool resumeRunningReceive() { return false; }
+
     static void timerCallback(void *p1, uint32_t p2);
 
     virtual void onNotify(uint32_t notification) override;

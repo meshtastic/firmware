@@ -430,7 +430,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
         } else {
             handleReceiveInterrupt();
         }
-        startReceive();
+        if (!resumeRunningReceive())
+            startReceive();
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
