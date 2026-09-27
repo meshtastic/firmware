@@ -89,11 +89,6 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_DEBUG("TCXO_OPTIONAL: no Vref configured, probing default TCXO Vref %f V on DIO3", tcxoVoltage);
     else
         LOG_DEBUG("Lora.DIO3_TCXO_VOLTAGE set, DIO3 as TCXO Vref %f V", tcxoVoltage);
-#else
-    if (tcxoVoltage == 0.0)
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
-    else
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", tcxoVoltage);
 #endif
     setTransmitEnable(false);
 
@@ -103,6 +98,22 @@ template <typename T> bool SX126xInterface<T>::init()
         return false;
 
     startReceive(); // start receiving
+
+    // RadioLib's getStatus() is protected and reads no data bytes, so catch the status byte through parseStatusCb
+    // on a GetDeviceErrors read. osc is the Vref reinitChip() settled on, 0 when RadioLib fell back to the XTAL.
+    static uint8_t status;
+    uint8_t errors[2] = {0, 0};
+    const Module::SPIparseStatusCb_t parse = module.spiConfig.parseStatusCb;
+    module.spiConfig.parseStatusCb = [](uint8_t in) -> int16_t {
+        status = in;
+        return RADIOLIB_ERR_NONE;
+    };
+    module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_DEVICE_ERRORS, errors, 2);
+    module.spiConfig.parseStatusCb = parse;
+    static const char *const modes[] = {"?", "?", "STDBY_RC", "STDBY_XOSC", "FS", "RX", "TX", "?"};
+    LOG_INFO("SX126x state: osc=%s %.1fV, mode=%s, cmd status %u, device errors 0x%02x%02x",
+             tcxoVoltage > 0 ? "TCXO" : "XTAL", tcxoVoltage, modes[(status >> 4) & 0x07], (status >> 1) & 0x07,
+             errors[0], errors[1]);
 
     return true;
 }
@@ -123,6 +134,10 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+    // RadioLib >= 7.5.0 retries on the XTAL inside begin() when the TCXO will not start, and zeroes its own Vref;
+    // follow it so logs and later begin() calls reflect the oscillator actually in use.
+    if (res == RADIOLIB_ERR_NONE && lora.tcxoVoltage == 0)
+        tcxoVoltage = 0;
 
     // Chip answered but would not start on the TCXO: retry on the XTAL. CHIP_NOT_FOUND is a
     // wiring or SPI fault, where a second attempt only hides it. Portduino only - an embedded
