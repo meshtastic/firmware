@@ -24,6 +24,7 @@
 #endif
 #include "rom/rtc.h"
 #include <RadioLib.h>
+#include <driver/gpio.h>
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
 
@@ -521,6 +522,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(res == ESP_OK);
 #ifdef ROTARY_PRESS
     gpio_wakeup_disable((gpio_num_t)ROTARY_PRESS);
+    gpio_intr_disable((gpio_num_t)ROTARY_PRESS);
 #endif
 #ifdef KB_INT
     gpio_wakeup_disable((gpio_num_t)KB_INT);
@@ -531,9 +533,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BUTTON_PIN
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
+    gpio_intr_disable(pin);
 #endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
+    gpio_intr_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
 #undef INPUTDRIVER_WAKE_BTN_PIN
 #endif
 #if defined(WAKE_ON_TOUCH)
