@@ -39,6 +39,11 @@ struct RegionProfile {
  */
 extern float getEffectiveDutyCycle();
 
+// True if `preset` appears in at least one region's preset list, i.e. it is a real preset
+// some region offers rather than a fabricated or long-retired enum value. Defined in
+// RadioInterface.cpp, where the region table lives.
+extern bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset);
+
 extern const RegionProfile PROFILE_STD;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
@@ -71,6 +76,14 @@ struct RegionInfo {
             if (profile->presets[i] == preset)
                 return true;
         }
+        // UNSET is "no region chosen yet", not a regulatory domain: the radio is held silent
+        // either way (see the region==UNSET gates in RadioLibInterface::send/handleReceive),
+        // so there is nothing here to enforce. Rejecting would instead destroy a preset the
+        // user already picked - the clamp rewrites it to LONG_FAST, and that clamp runs on
+        // every boot and on every set_config while the region is unset. Accept any preset a
+        // real region offers; fabricated values still fail and are clamped as before.
+        if (code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            return isKnownModemPreset(preset);
         return false;
     }
     size_t getNumPresets() const

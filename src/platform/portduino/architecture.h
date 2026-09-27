@@ -25,11 +25,11 @@
 #endif
 #ifndef HAS_TRACKBALL
 #define HAS_TRACKBALL 1
-#define TB_DOWN (uint8_t) portduino_config.tbDownPin.pin
-#define TB_UP (uint8_t) portduino_config.tbUpPin.pin
-#define TB_LEFT (uint8_t) portduino_config.tbLeftPin.pin
-#define TB_RIGHT (uint8_t) portduino_config.tbRightPin.pin
-#define TB_PRESS (uint8_t) portduino_config.tbPressPin.pin
+#define TB_DOWN (uint8_t)portduino_config.tbDownPin.pin
+#define TB_UP (uint8_t)portduino_config.tbUpPin.pin
+#define TB_LEFT (uint8_t)portduino_config.tbLeftPin.pin
+#define TB_RIGHT (uint8_t)portduino_config.tbRightPin.pin
+#define TB_PRESS (uint8_t)portduino_config.tbPressPin.pin
 #endif
 
 // HUB75 RGB-matrix panel support on Raspberry Pi (Portduino) turns on automatically when the

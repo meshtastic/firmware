@@ -1,3 +1,8 @@
+// Deliberately does NOT include TestUtil.h. This suite is pure-function - no NodeDB, no router, no
+// sockets, no PKC - so the harness-wide guards there (no listening sockets, force_simradio clear)
+// would assert conditions it cannot reach, and initializeTestEnvironment()'s RTC and OSThread setup
+// would add portduino globals it otherwise never touches. Suite-level state cleanliness is still
+// checked from outside by bin/pio-test-isolate.sh, which wraps every suite regardless.
 #include "test_helpers.h"
 #include <Arduino.h>
 #include <unity.h>
@@ -19,6 +24,13 @@ void test_telemetry_environment_metrics_complete_coverage();
 void test_telemetry_environment_metrics_unset_fields();
 void test_encrypted_packet_serialization();
 void test_empty_encrypted_packet();
+void test_timestamp_present_when_has_rx_time();
+void test_timestamp_zeroed_when_rx_time_absent();
+void test_encrypted_timestamp_zeroed_when_rx_time_absent();
+
+// Required by Unity: PlatformIO's weak defaults do not link on MinGW (PE-COFF weak externals).
+void setUp(void) {}
+void tearDown(void) {}
 
 void setup()
 {
@@ -52,7 +64,14 @@ void setup()
     RUN_TEST(test_encrypted_packet_serialization);
     RUN_TEST(test_empty_encrypted_packet);
 
-    UNITY_END();
+    // rx_time explicit-presence tests
+    RUN_TEST(test_timestamp_present_when_has_rx_time);
+    RUN_TEST(test_timestamp_zeroed_when_rx_time_absent);
+    RUN_TEST(test_encrypted_timestamp_zeroed_when_rx_time_absent);
+
+    // exit(), not a bare UNITY_END(): without it setup() returns and the runtime spins loop()
+    // forever, so the process never terminates even though the suite is finished.
+    exit(UNITY_END());
 }
 
 void loop()

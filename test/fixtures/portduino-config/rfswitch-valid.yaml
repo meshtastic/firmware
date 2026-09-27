@@ -1,0 +1,17 @@
+# CLEAN. A full seven-mode table on an LR11xx: every mode present, every row the same
+# length as the pins list, every value exactly HIGH or LOW.
+Lora:
+  Module: lr1121
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, LOW, LOW]
+    MODE_TX: [HIGH, HIGH, LOW, LOW]
+    MODE_TX_HP: [LOW, HIGH, LOW, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW, LOW]
+    MODE_GNSS: [LOW, LOW, HIGH, LOW]
+    MODE_WIFI: [LOW, LOW, LOW, HIGH]

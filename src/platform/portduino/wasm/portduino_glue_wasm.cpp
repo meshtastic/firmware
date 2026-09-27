@@ -12,10 +12,9 @@
 //   - exec() short-circuits to "" (no popen/shell in the browser).
 // Downstream is unchanged: Ch341Hal -> libpinedio_webusb.c -> WebUSB.
 
-#include "CryptoEngine.h"   // crypto->ensurePkiKeys()
 #include "MeshRadio.h"      // initRegion()
 #include "MeshService.h"    // service->reloadConfig()
-#include "NodeDB.h"         // config, owner globals + SEGMENT_CONFIG
+#include "NodeDB.h"         // config globals, SEGMENT_*, nodeDB->ensurePkiIdentity()
 #include "PhoneAPI.h"       // the transport-agnostic client API seam
 #include "PortduinoFS.h"    // portduinoVFS
 #include "PortduinoGlue.h"  // declares `portduino_config` + Ch341Hal
@@ -260,11 +259,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
     if (!(RadioInterface::validateConfigRegion(validated) && RadioInterface::validateConfigLora(validated)))
         return -1;
 
+    int changes = SEGMENT_CONFIG;
     bool wasUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     if (wasUnset && newRegion > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-        if (crypto)
-            crypto->ensurePkiKeys(config.security, owner); // first real region -> generate keys
+        // Minting the key moves our node num with it, so persist devicestate + the node DB too.
+        if (nodeDB && nodeDB->ensurePkiIdentity())
+            changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
 #endif
         validated.tx_enabled = true;
     }
@@ -274,8 +275,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
     config.lora = validated;
     initRegion(); // repoint myRegion at the new region table
     if (service)
-        service->reloadConfig(SEGMENT_CONFIG); // reconfigure radio (new freq) + persist
-    wasm_fs_sync();                            // browser: flush config.proto to IndexedDB
+        service->reloadConfig(changes); // reconfigure radio (new freq) + persist
+    wasm_fs_sync();                     // browser: flush config.proto to IndexedDB
     return 0;
 }
 

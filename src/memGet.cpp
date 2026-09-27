@@ -23,7 +23,10 @@ static uint32_t sbrkHeadroom()
     extern char _estack;
     extern char _Min_Stack_Size;
 
-    uint32_t max_sp = (uint32_t)(&_estack - &_Min_Stack_Size);
+    // Both are linker-script symbols rather than real objects: _estack is the top-of-RAM address and
+    // _Min_Stack_Size is a plain value. Convert each to an integer before subtracting - differencing the
+    // pointers themselves is pointer arithmetic across unrelated objects.
+    uint32_t max_sp = (uint32_t)&_estack - (uint32_t)&_Min_Stack_Size;
     uint32_t heap_end = (uint32_t)sbrk(0);
     return (max_sp > heap_end) ? (max_sp - heap_end) : 0;
 }
@@ -73,6 +76,32 @@ uint32_t MemGet::getHeapSize()
 #else
     // this platform does not have heap management function implemented
     return UINT32_MAX;
+#endif
+}
+
+/**
+ * Returns the lowest the free heap has ever been since boot.
+ * @return uint32_t Low watermark in bytes, or 0 if the platform can't report it.
+ */
+uint32_t MemGet::getMinFreeHeap()
+{
+#ifdef ARCH_ESP32
+    return ESP.getMinFreeHeap();
+#else
+    return 0;
+#endif
+}
+
+/**
+ * Returns the largest contiguous block malloc() could still return.
+ * @return uint32_t Block size in bytes, or 0 if the platform can't report it.
+ */
+uint32_t MemGet::getMaxAllocHeap()
+{
+#ifdef ARCH_ESP32
+    return ESP.getMaxAllocHeap();
+#else
+    return 0;
 #endif
 }
 

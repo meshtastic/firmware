@@ -67,7 +67,7 @@ struct StoredMessage {
     uint8_t channelIndex; // Channel index used
     uint32_t dest;        // Destination node (broadcast or direct)
     MessageType type;     // Derived from dest (explicit classification)
-    bool isBootRelative;  // true = millis()/1000 fallback; false = epoch/RTC absolute
+    bool isBootRelative;  // true = Time::getUptimeSecs() fallback; false = epoch/RTC absolute
     AckStatus ackStatus;  // Delivery status (only meaningful for our own sent messages)
 
     // Text storage metadata - rebuilt from flash at boot

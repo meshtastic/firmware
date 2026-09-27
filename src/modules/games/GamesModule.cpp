@@ -56,8 +56,17 @@ void GamesModule::startPlaying()
     active->start(static_cast<uint32_t>(random()) ^ millis());
     uiState = GAMES_PLAYING;
     lastAwakeKickMs = millis();
+    noteActivity();
     kickTick();
     requestRedraw();
+}
+
+void GamesModule::goHome()
+{
+    // Left idle too long: drop any game and return to the clearly-Meshtastic home frame.
+    exitToIdle();
+    if (screen)
+        screen->showHomeFrame();
 }
 
 void GamesModule::enterGameOver()
@@ -113,7 +122,7 @@ void GamesModule::announceHighScore(const char *initials, uint32_t score)
     // One shared message for every game, with the game's name spliced in. ASCII only -- avoids tofu
     // if a receiving node's font lacks a glyph.
     p->decoded.payload.size = snprintf(reinterpret_cast<char *>(p->decoded.payload.bytes), sizeof(p->decoded.payload.bytes),
-                                       GAMES_HIGH_SCORE_STRING, active->name(), initials, static_cast<unsigned long>(score));
+                                       GAMES_HIGH_SCORE_STRING, active->name(), static_cast<unsigned long>(score), initials);
     service->sendToMesh(p);
     LOG_INFO("Games: announced new %s high score %lu", active->name(), static_cast<unsigned long>(score));
 }
@@ -151,6 +160,27 @@ void GamesModule::kickTick()
 
 int32_t GamesModule::runOnce()
 {
+    const uint32_t now = millis();
+
+    // Whether the games UI is actually in front of the player: a game is active (which forces the
+    // games frame), or the attract screen is the current frame. When it is, an idle stretch bounces
+    // back to the home frame so a walked-away device reads as a Meshtastic node.
+    const bool gamesVisible = (uiState != GAMES_IDLE) || (screen && screen->isGamesFrameShown());
+    if (gamesVisible) {
+        if (screen && screen->isOverlayBannerShowing()) {
+            // A picker or banner is up (e.g. high-score initials entry, which our handleInputEvent
+            // never sees). The user is busy with it -- don't time out and yank them away.
+            lastActivityMs = now;
+        } else if (now - lastActivityMs >= INACTIVITY_TIMEOUT_MS) {
+            goHome();
+            return disable();
+        }
+    } else {
+        // Not in front of the player (attract screen is just one of the rotating frames, and the
+        // player is elsewhere): keep the timer fresh so a later visit starts a full 15 s.
+        lastActivityMs = now;
+    }
+
     if (uiState == GAMES_PLAYING && active) {
         if (!active->tick()) {
             enterGameOver();
@@ -158,7 +188,6 @@ int32_t GamesModule::runOnce()
         }
 
         // Keep the display awake through long runs that generate no key presses.
-        const uint32_t now = millis();
         if (now - lastAwakeKickMs > 1500) {
             powerFSM.trigger(EVENT_PRESS);
             lastAwakeKickMs = now;
@@ -168,12 +197,17 @@ int32_t GamesModule::runOnce()
         return active->tickIntervalMs();
     }
 
-    // Idle: service any game that broadcasts periodically; sleep until the soonest one is due.
+    // Idle-ish (attract / paused / game-over / high scores): service any periodic mesh broadcast,
+    // and while the games UI is visible keep a slow poll running so the inactivity timeout fires.
     int32_t next = -1;
     for (Game *g : games) {
         const int32_t due = g->meshTick(*this);
         if (due >= 0 && (next < 0 || due < next))
             next = due;
+    }
+    if (gamesVisible) {
+        const int32_t poll = 1000;
+        return (next >= 0 && next < poll) ? next : poll;
     }
     return next < 0 ? disable() : next;
 }
@@ -191,8 +225,15 @@ int GamesModule::handleInputEvent(const InputEvent *event)
     if (screen->isOverlayBannerShowing())
         return 0; // a menu banner is up; don't steal its input
 
+    noteActivity(); // any input on the games frame resets the return-to-home timer
+
     const input_broker_event ev = event->inputEvent;
     const bool isBack = (ev == INPUT_BROKER_CANCEL || ev == INPUT_BROKER_BACK);
+
+    // Start is mapped to select like any other button, so it launches games and works the menus.
+    // Inside a running game it means pause/resume instead, which we can tell only because kbchar
+    // names the physical button behind the action.
+    const bool isPauseButton = (ev == INPUT_BROKER_SELECT && isJoyStartButton(event->kbchar));
 
     switch (uiState) {
     case GAMES_IDLE:
@@ -214,12 +255,22 @@ int GamesModule::handleInputEvent(const InputEvent *event)
         return 0;
 
     case GAMES_PLAYING:
-        if (isBack) {
+        // Start pauses, and is never forwarded to the game: unlike BACK it has no second meaning
+        // in play, so a game cannot claim it the way Breakout claims BACK to serve.
+        if (isPauseButton) {
+            uiState = GAMES_PAUSED;
+            disable();
+            requestRedraw();
+            return 1;
+        }
+        // BACK pauses, unless the active game has temporarily claimed that button (see
+        // Game::wantsBackButton) -- then it is forwarded like any other key.
+        if (isBack && !(active && active->wantsBackButton())) {
             uiState = GAMES_PAUSED; // BACK to pause; from there choose resume or quit
             disable();
             requestRedraw();
         } else if (active) {
-            active->handleInput(ev);
+            active->handleInput(event);
             if (!active->isPlaying()) {
                 enterGameOver();
                 return 1;
@@ -232,7 +283,7 @@ int GamesModule::handleInputEvent(const InputEvent *event)
         if (isBack) {
             exitToIdle(); // quit from pause
         } else if (ev == INPUT_BROKER_SELECT || ev == INPUT_BROKER_UP || ev == INPUT_BROKER_DOWN || ev == INPUT_BROKER_LEFT ||
-                   ev == INPUT_BROKER_RIGHT) {
+                   ev == INPUT_BROKER_RIGHT) { // Start arrives as SELECT, so it resumes too
             uiState = GAMES_PLAYING;
             kickTick();
             requestRedraw();
@@ -316,6 +367,18 @@ void GamesModule::drawHighScores(OLEDDisplay *display, int16_t x, int16_t y, Hig
 void GamesModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState * /*state*/, int16_t x, int16_t y)
 {
     display->setColor(WHITE);
+
+    // drawFrame runs only while the games frame is the current frame. Several idle-ish states
+    // (attract / paused / game-over / high-scores) otherwise leave the tick thread asleep, so use
+    // this render as the trigger to (re)start the slow inactivity poll and reset the timer -- so
+    // arriving on such a screen gets a fresh 15 s before we bounce back home, and walking away from
+    // it eventually does. (While a game is PLAYING the thread is already ticking, so !enabled is
+    // false here and the play-time timer is left to run.)
+    if (!enabled) {
+        noteActivity();
+        enabled = true;
+        setIntervalFromNow(1000);
+    }
 
     switch (uiState) {
     case GAMES_IDLE:

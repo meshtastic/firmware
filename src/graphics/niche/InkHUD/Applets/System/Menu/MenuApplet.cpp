@@ -9,12 +9,19 @@
 #include "MessageStore.h"
 #include "Power.h"
 #include "Router.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "gps/RTC.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
+#include "mqtt/MQTT.h"
+#endif
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "modules/GeofenceModule.h"
+#include "modules/WaypointModule.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
 #if defined(ARCH_ESP32) && HAS_WIFI
@@ -324,8 +331,9 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     auto changes = SEGMENT_CONFIG;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (crypto) {
-        crypto->ensurePkiKeys(config.security, owner);
+    // Minting the key moves our node num with it, and the reboot below only re-derives after the save.
+    if (nodeDB->ensurePkiIdentity()) {
+        changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
     }
 #endif
 
@@ -337,15 +345,15 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
         config.lora.ignore_mqtt = true;
     }
 
-    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
+#if !MESHTASTIC_EXCLUDE_MQTT
+    if (MQTT::applyRegionRootTopic(myRegion->name))
         changes |= SEGMENT_MODULECONFIG;
-    }
+#endif
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
     service->reloadConfig(changes);
 
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
 }
 
 static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
@@ -362,7 +370,7 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
 }
 
 static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
@@ -379,7 +387,7 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
 }
 
 static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
@@ -389,7 +397,7 @@ static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = f
 
     if (reboot) {
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
     }
 }
 
@@ -568,7 +576,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
-        shutdownAtMsec = millis();
+        shutdownAtMsec = Time::skipZero(Time::getMillis());
         // Menu is then sent to background via onShutdown
         break;
 
@@ -671,7 +679,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         config.bluetooth.enabled = true;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + 2000;
+        rebootAtMsec = Time::timerEndsAtMillis(2000);
         break;
 
         // Power / Network (ESP32-only)
@@ -680,7 +688,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         config.power.is_power_saving = !config.power.is_power_saving;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case TOGGLE_WIFI:
@@ -693,7 +701,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 #endif
     // ADC Calibration
@@ -771,7 +779,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case TOGGLE_BLUETOOTH_PAIR_MODE:
@@ -1119,13 +1127,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case RESET_NODEDB_ALL:
         InkHUD::getInstance()->notifyApplyingChanges();
         nodeDB->resetNodes();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case RESET_NODEDB_KEEP_FAVORITES:
         InkHUD::getInstance()->notifyApplyingChanges();
         nodeDB->resetNodes(1);
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         break;
 
     case WIPE_MESSAGES_ALL:
@@ -1156,6 +1164,35 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
     }
 
+    case REMOVE_WAYPOINT: {
+        // cursor - 2 because index 0 is "Back" and index 1 is the "Select to Remove" header
+        const size_t index = cursor - 2;
+        if (waypointModule && index < removeWaypointIds.size())
+            waypointModule->broadcastDelete(removeWaypointIds.at(index));
+        break;
+    }
+
+    case SELECT_GEOFENCE_WAYPOINT: {
+        const size_t index = cursor - 2;
+        if (index < geofenceWaypointIds.size())
+            selectedGeofenceWaypointId = geofenceWaypointIds.at(index);
+        break;
+    }
+
+    case TOGGLE_GEOFENCE_ENTER:
+    case TOGGLE_GEOFENCE_EXIT:
+    case TOGGLE_GEOFENCE_FAVORITES_ONLY: {
+        const StoredWaypoint *entry = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+        if (!entry)
+            break;
+        const WaypointNotificationPreference preference =
+            item.action == TOGGLE_GEOFENCE_ENTER
+                ? WAYPOINT_NOTIFY_ENTER
+                : (item.action == TOGGLE_GEOFENCE_EXIT ? WAYPOINT_NOTIFY_EXIT : WAYPOINT_NOTIFY_FAVORITES_ONLY);
+        waypointStore.setNotificationPreference(selectedGeofenceWaypointId, preference, !entry->notificationEnabled(preference));
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -1172,6 +1209,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     items.clear();
     items.shrink_to_fit();
     nodeConfigLabels.clear();
+    removeWaypointIds.clear();
+    geofenceWaypointIds.clear();
 
     switch (page) {
     case ROOT:
@@ -1195,6 +1234,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             }
         }
 
+        // Remove Waypoint - only when viewing the waypoint list applet
+        {
+            WaypointListApplet *waypointListApplet = borrowedTileOwner ? borrowedTileOwner->asWaypointListApplet() : nullptr;
+            if (waypointListApplet && waypointListApplet->waypointCount() > 0) {
+                items.push_back(MenuItem("Remove Waypoint", MenuPage::REMOVE_WAYPOINT_LIST));
+                for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+                    if (GeofenceModule::hasGeofence(entry.waypoint)) {
+                        items.push_back(MenuItem("Geofence Alerts", MenuPage::GEOFENCE_WAYPOINT_LIST));
+                        break;
+                    }
+                }
+            }
+        }
+
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
@@ -1211,6 +1264,43 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         populateRecipientPage();
         previousPage = MenuPage::SEND;
         break;
+
+    case REMOVE_WAYPOINT_LIST:
+        previousPage = MenuPage::ROOT;
+        populateRemoveWaypointPage(); // must be first
+        items.insert(items.begin(), MenuItem::Header("Select to Remove"));
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case GEOFENCE_WAYPOINT_LIST:
+        previousPage = MenuPage::ROOT;
+        populateGeofenceWaypointPage();
+        items.insert(items.begin(), MenuItem::Header("Select Geofence"));
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case GEOFENCE_OPTIONS: {
+        previousPage = MenuPage::GEOFENCE_WAYPOINT_LIST;
+        items.push_back(MenuItem("Back", previousPage));
+        const StoredWaypoint *entry = waypointStore.findWaypoint(selectedGeofenceWaypointId);
+        if (!entry) {
+            items.push_back(MenuItem::Header("Geofence unavailable"));
+            break;
+        }
+        const std::string enterLabel =
+            std::string("Enter Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_ENTER) ? "On" : "Off");
+        const std::string exitLabel =
+            std::string("Exit Alerts: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_EXIT) ? "On" : "Off");
+        const std::string favoritesLabel =
+            std::string("Favorites Only: ") + (entry->notificationEnabled(WAYPOINT_NOTIFY_FAVORITES_ONLY) ? "On" : "Off");
+        items.push_back(MenuItem(enterLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_ENTER, MenuPage::GEOFENCE_OPTIONS));
+        items.push_back(MenuItem(exitLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_EXIT, MenuPage::GEOFENCE_OPTIONS));
+        items.push_back(MenuItem(favoritesLabel.c_str(), MenuAction::TOGGLE_GEOFENCE_FAVORITES_ONLY, MenuPage::GEOFENCE_OPTIONS));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
 
     case OPTIONS:
         previousPage = MenuPage::ROOT;
@@ -2439,6 +2529,40 @@ void InkHUD::MenuApplet::populateRecipientPage()
     }
 
     items.push_back(MenuItem("Exit", MenuPage::EXIT));
+}
+
+// Dynamically create MenuItem entries for each waypoint in the active WaypointListApplet
+void InkHUD::MenuApplet::populateRemoveWaypointPage()
+{
+    assert(items.size() == 0);
+
+    WaypointListApplet *waypointListApplet = borrowedTileOwner ? borrowedTileOwner->asWaypointListApplet() : nullptr;
+    if (waypointListApplet) {
+        for (size_t i = 0; i < waypointListApplet->waypointCount(); i++) {
+            removeWaypointIds.push_back(waypointListApplet->waypointIdAt(i));
+            items.push_back(MenuItem(waypointListApplet->waypointLabelAt(i).c_str(), MenuAction::REMOVE_WAYPOINT,
+                                     MenuPage::REMOVE_WAYPOINT_LIST));
+        }
+    }
+}
+
+void InkHUD::MenuApplet::populateGeofenceWaypointPage()
+{
+    assert(items.empty());
+
+    WaypointListApplet *waypointListApplet = borrowedTileOwner ? borrowedTileOwner->asWaypointListApplet() : nullptr;
+    if (!waypointListApplet)
+        return;
+
+    for (size_t i = 0; i < waypointListApplet->waypointCount(); ++i) {
+        const uint32_t id = waypointListApplet->waypointIdAt(i);
+        const StoredWaypoint *entry = waypointStore.findWaypoint(id);
+        if (!entry || !GeofenceModule::hasGeofence(entry->waypoint))
+            continue;
+        geofenceWaypointIds.push_back(id);
+        items.push_back(MenuItem(waypointListApplet->waypointLabelAt(i).c_str(), MenuAction::SELECT_GEOFENCE_WAYPOINT,
+                                 MenuPage::GEOFENCE_OPTIONS));
+    }
 }
 
 void InkHUD::MenuApplet::drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, const std::string &text)

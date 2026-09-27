@@ -231,8 +231,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define PIN_3V3_EN (34)
 #define WB_IO2 PIN_3V3_EN
 
-#if defined(WISMESH_POCKET)
-// Pocket v3: P1.02 (GPIO 34) = GPS_PWR_EN
+// GPS EN only for finished products that accept cutting 3V3_S with GPS off.
+// Generic rak4631 / sensor bases keep this undefined so sensors on 3V3_S stay powered.
+#if defined(WISMESH_POCKET) || defined(WISMESH_REPEATER_MINI)
 #define PIN_GPS_EN PIN_3V3_EN
 #endif
 
@@ -289,11 +290,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_11_16
 
-#if defined(WISMESH_POCKET)
+// General-purpose RAK4631 builds disable Ethernet; use env:rak4631_eth_gw for RAK13800 W5100S.
 #define HAS_ETHERNET 0
-#else
-#define HAS_ETHERNET 1
-#endif
 
 #define RAK_4631 1
 

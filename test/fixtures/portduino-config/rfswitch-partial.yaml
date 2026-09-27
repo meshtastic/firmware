@@ -1,0 +1,12 @@
+# CLEAN but NOTED. A partial table is legal. The modes left out (MODE_TX_HP,
+# MODE_TX_HF, MODE_GNSS, MODE_WIFI) are driven all-LOW, which on most modules is the
+# shutdown state -- so the report names them rather than leaving it to be found on air.
+Lora:
+  Module: lr1121
+  CS: 21
+  IRQ: 16
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_STBY: [LOW, LOW]
+    MODE_RX: [HIGH, LOW]
+    MODE_TX: [HIGH, HIGH]

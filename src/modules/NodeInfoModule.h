@@ -19,9 +19,9 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     NodeInfoModule();
 
     /**
-     * Send our NodeInfo into the mesh
+     * Send our NodeInfo into the mesh. True only when a packet was handed to the router.
      */
-    void sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
+    bool sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
                          bool _shorterTimeout = false);
 
     /**
@@ -29,6 +29,18 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
      * Used when external conditions change (for example time source quality).
      */
     void triggerImmediateNodeInfoCheck();
+
+#ifdef PIO_UNIT_TESTING
+    /// Test-only reads of the routine-broadcast countdown a send re-arms. concurrency::OSThread is a
+    /// private base, so only this class can reach it - a test shim cannot.
+    unsigned long broadcastCountdownMsForTests() const { return interval; }
+    void armBroadcastCountdownForTests(unsigned long ms) { setIntervalFromNow(ms); }
+    /// The deadline the scheduler actually reads. interval alone cannot tell a deadline moved to
+    /// now from one recomputed off a stale last_run, which is the regression worth catching.
+    unsigned long broadcastDeadlineMsForTests() const { return _cached_next_run; }
+    /// Pretend the periodic thread last ran ageMs ago, so those two deadlines differ by ageMs.
+    void ageLastRunForTests(unsigned long ageMs) { runned(millis() - ageMs); }
+#endif
 
   protected:
     /** Called to handle a particular incoming message
@@ -49,7 +61,11 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
   private:
     bool shorterTimeout = false;
+    /// Set across sendOurNodeInfo()'s own allocReply(), so the transmit stamp waits for an accepted send.
+    bool deferHistoryStamp = false;
     bool suppressReplyForCurrentRequest = false;
+    /// Sender -> uptime seconds (Time::getUptimeSecs()) at our last reply. Seconds, not millis:
+    /// the suppression window is hours wide. See handleReceivedProtobuf().
     std::map<NodeNum, uint32_t> lastNodeInfoSeen;
 
     void pruneLastNodeInfoCache();

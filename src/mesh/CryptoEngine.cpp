@@ -1,17 +1,17 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
+#include "aes-ccm.h"
 #include "architecture.h"
+#include <SHA256.h>
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "HardwareRNG.h"
 #include "NodeDB.h"
-#include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <RNG.h>
-#include <SHA256.h>
 
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 #include "XEdDSA.h"
@@ -86,34 +86,98 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     return true;
 }
 
+/** Write a little-endian uint32 - the encoding is pinned by the protocol, not by the host. */
+static void putLE32(uint8_t *out, uint32_t v)
+{
+    out[0] = (uint8_t)(v & 0xff);
+    out[1] = (uint8_t)((v >> 8) & 0xff);
+    out[2] = (uint8_t)((v >> 16) & 0xff);
+    out[3] = (uint8_t)((v >> 24) & 0xff);
+}
+
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 /**
- * Build a signing buffer that covers packet metadata and payload:
- *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]
- * This prevents replay, reattribution, and portnum redirection attacks.
+ * Build the buffer a signature covers. One fixed layout, always:
+ *
+ *   version(1) | from(4) | id(4) | to(4) | portnum(4) | request_id(4) | reply_id(4)
+ *             | emoji(4) | bitfield(4) | flags(1) | payload(N)
+ *
+ * Everything in the Data envelope is covered, not just Data.payload. Those envelope fields ride
+ * outside the payload, and channel crypto is AES-CTR with no MAC, so anything left out of here is
+ * rewritable in flight by any PSK holder while the signature still verifies:
+ *
+ *  - reply_id: re-points a signed reply or tapback at a different message.
+ *  - emoji: turns a signed reply into a signed reaction, or the reverse. Binding reply_id without
+ *    it leaves the reaction attack half-open, so the two belong together.
+ *  - bitfield: carries OK_TO_MQTT, the sender's consent to being uploaded to a public broker, and
+ *    the exploitable direction (0 -> 1) is the one that leaks. The whole uint32 is covered rather
+ *    than the two defined bits, so bits 2..31 are protected before anything uses them.
+ *  - want_response: bit 1 of bitfield mirrors it and Router.cpp merges them with |=, so signing one
+ *    without the other protects neither. Both, in the flags byte.
+ *  - to: without it a signed broadcast can be re-addressed as a direct message and still verify,
+ *    delivering a public statement as an apparent private one. Relays rewrite hop_limit, next_hop
+ *    and relay_node, never `to`, so it is stable end to end.
+ *  - request_id: only reachable in ham mode, where licensed nodes sign unicasts too, but free.
+ *
+ * Deliberately NOT covered: dest and source (one write in the tree, no readers), channel (the wire
+ * carries a hash where the decoded packet carries an index), and the hop fields, which relays
+ * rewrite by design. Data.payload IS covered, and always was - note that this makes TRACEROUTE_APP
+ * unsignable, since every hop rewrites the RouteDiscovery in place.
+ *
+ * Fixed-length header, so the payload boundary is total - XEDDSA_SIGNED_HEADER_LEN and never
+ * depends on content. That is what makes the encoding unambiguous: with a conditional layout, a
+ * payload could be re-split into header fields to produce identical bytes, letting an attacker move
+ * payload bytes into request_id/reply_id and truncate a signed message without breaking it.
+ *
+ * Integers are little-endian explicitly, so the value is a property of the protocol rather than of
+ * the compiler that built the node.
+ *
+ * Covering the metadata also prevents replay, reattribution, and portnum redirection.
  */
-static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 const uint8_t *payload, size_t payloadLen)
+static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t toNode,
+                                 const meshtastic_Data *d)
 {
-    const size_t headerLen = sizeof(uint32_t) * 3;
-    size_t totalLen = headerLen + payloadLen;
+    if (!d)
+        return 0;
+    const size_t totalLen = XEDDSA_SIGNED_HEADER_LEN + d->payload.size;
     if (totalLen > bufSize)
         return 0;
-    // May need endian conversion for oddball platforms.
-    memcpy(buf, &fromNode, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
-    memcpy(buf + headerLen, payload, payloadLen);
+
+    uint8_t *w = buf;
+    *w++ = XEDDSA_SIGNING_VERSION;
+    putLE32(w, fromNode);
+    w += sizeof(uint32_t);
+    putLE32(w, packetId);
+    w += sizeof(uint32_t);
+    putLE32(w, toNode);
+    w += sizeof(uint32_t);
+    putLE32(w, (uint32_t)d->portnum);
+    w += sizeof(uint32_t);
+    putLE32(w, d->request_id);
+    w += sizeof(uint32_t);
+    putLE32(w, d->reply_id);
+    w += sizeof(uint32_t);
+    putLE32(w, d->emoji);
+    w += sizeof(uint32_t);
+    // Absent bitfield signs as zero; its presence is carried in the flags byte, so stripping the
+    // field is not the same as sending it empty.
+    putLE32(w, d->has_bitfield ? d->bitfield : 0);
+    w += sizeof(uint32_t);
+    *w++ = (uint8_t)((d->want_response ? XEDDSA_SIGNED_FLAG_WANT_RESPONSE : 0) |
+                     (d->has_bitfield ? XEDDSA_SIGNED_FLAG_HAS_BITFIELD : 0));
+
+    if (d->payload.size)
+        memcpy(w, d->payload.bytes, d->payload.size);
     return totalLen;
 }
 
-bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
+bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t toNode, const meshtastic_Data *d,
                                uint8_t *signature)
 {
     if (memfll(xeddsa_private_key, 0, sizeof(xeddsa_private_key)))
         return false;
-    uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    uint8_t sigBuf[XEDDSA_SIGN_BUF_LEN];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, toNode, d);
     if (sigLen == 0)
         return false;
     // XEdDSA::sign mixes signature[0..31] into the nonce as the spec's random Z (meshtastic/Crypto#3)
@@ -125,16 +189,16 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
     return true;
 }
 
-bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 const uint8_t *payload, size_t payloadLen, const uint8_t *signature)
+bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t toNode,
+                                 const meshtastic_Data *d, const uint8_t *signature)
 {
     // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
     if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
         curve_to_ed_pub(pubKey, cached_ed_pubkey);
         memcpy(cached_curve_pubkey, pubKey, 32);
     }
-    uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    uint8_t sigBuf[XEDDSA_SIGN_BUF_LEN];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, toNode, d);
     if (sigLen == 0)
         return false;
     return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
@@ -230,8 +294,6 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     if (!HardwareRNG::fill((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp)))
         CryptRNG.rand((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
     auth = bytesOut + numBytes;
-    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
-           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
@@ -246,8 +308,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempt encrypt with nonce: ", nonce, 13);
     printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
-    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
-               auth); // this can write up to 15 bytes longer than numbytes past bytesOut
+    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     return true;
@@ -290,10 +351,51 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
+// The label is domain separation only - it never needs to be secret. It is fixed length and
+// precedes the fixed-width fields, and only the trailing Routing bytes are variable, so the input is
+// unambiguous without length prefixes.
+static const char ACK_PROOF_LABEL[] = "ack";
+#define ACK_PROOF_LABEL_LEN (sizeof(ACK_PROOF_LABEL) - 1) // no trailing NUL on the wire
+
+bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, uint32_t ackTo, uint32_t requestId,
+                                   const uint8_t *routing, size_t routingLen, uint8_t *proofOut)
+{
+    if (memfll(private_key, 0, sizeof(private_key)))
+        return false; // no identity yet - nothing to prove with
+
+    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
+    uint8_t peer[32];
+    memcpy(peer, peerPubKey, 32);
+    if (!setDHPublicKey(peer))
+        return false;     // includes the library's weak-point check
+    hash(shared_key, 32); // same derivation encryptCurve25519/decryptCurve25519 use
+
+    uint8_t header[ACK_PROOF_LABEL_LEN + 3 * sizeof(uint32_t)];
+    memcpy(header, ACK_PROOF_LABEL, ACK_PROOF_LABEL_LEN);
+    putLE32(header + ACK_PROOF_LABEL_LEN, ackFrom);
+    putLE32(header + ACK_PROOF_LABEL_LEN + 4, ackTo);
+    putLE32(header + ACK_PROOF_LABEL_LEN + 8, requestId);
+
+    uint8_t digest[32];
+    SHA256 mac;
+    mac.resetHMAC(shared_key, 32);
+    mac.update(header, sizeof(header));
+    if (routing && routingLen)
+        mac.update(routing, routingLen);
+    mac.finalizeHMAC(shared_key, 32, digest, sizeof(digest));
+    memcpy(proofOut, digest, ACK_PROOF_SIZE);
+
+    memset(digest, 0, sizeof(digest));
+    memset(shared_key, 0, sizeof(shared_key)); // do not leave the pairwise secret sitting in the engine
+    return true;
+}
+
 void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
 {
     memcpy(private_key, _private_key, 32);
 }
+
+#endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 /**
  * Hash arbitrary data using SHA256.
@@ -305,8 +407,8 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 {
     SHA256 hash;
     size_t posn;
-    uint8_t size = numBytes;
-    uint8_t inc = 16;
+    size_t size = numBytes;
+    constexpr size_t inc = 16;
     hash.reset();
     for (posn = 0; posn < size; posn += inc) {
         size_t len = size - posn;
@@ -317,11 +419,17 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
     hash.finalize(bytes, 32);
 }
 
+// aes-ccm.cpp drives the block cipher through these two, and it is compiled in every build,
+// so they must stay outside the PKI guard or MESHTASTIC_EXCLUDE_PKI=1 fails to link.
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
-    if (key_len != 0) {
-        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
+    // Full key schedule: faster per block than AESSmall*, and encryptAESCtr already links these classes.
+    if (key_len == 16) {
+        aes = std::unique_ptr<BlockCipher>(new AES128());
+        aes->setKey(key_bytes, 16);
+    } else if (key_len != 0) {
+        aes = std::unique_ptr<BlockCipher>(new AES256());
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -331,6 +439,8 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
     aes->encryptBlock(out, in);
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 {
     uint8_t local_priv[32];
@@ -339,7 +449,7 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     // Calculate the shared secret with the specified node's public key and our private key
     // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
     if (!Curve25519::dh2(shared_key, local_priv)) {
-        LOG_WARN("Curve25519DH step 2 failed!");
+        LOG_WARN("Curve25519DH step 2 failed");
         return false;
     }
     return true;
@@ -372,11 +482,55 @@ bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_pu
 }
 
 #endif
+
+// AAD layout: [fromNode (4)] [toNode (4)], in the same native byte order initNonce uses.
+static void initAad(uint32_t fromNode, uint32_t toNode, uint8_t *aad)
+{
+    // memcpy to avoid breaking strict-aliasing, as initNonce does
+    memcpy(aad, &fromNode, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint32_t), &toNode, sizeof(uint32_t));
+}
+
+bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                                    const uint8_t *plaintext, uint8_t *ciphertextWithTag)
+{
+    // length is int8_t and the aes_ccm_* key length is size_t, so the -1 "invalid key"
+    // sentinel would widen into a huge unsigned length rather than being rejected.
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD encryption requires a valid, non-empty PSK");
+        return false;
+    }
+    initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
+    // Output layout: [ciphertext (numBytes)] [auth_tag (AEAD_TAG_SIZE bytes)]
+    return aes_ccm_ae(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, plaintext, numBytes, aad, sizeof(aad), ciphertextWithTag,
+                      ciphertextWithTag + numBytes) == 0;
+}
+
+bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId,
+                                    size_t totalBytes, const uint8_t *ciphertextWithTag, uint8_t *plaintext)
+{
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD decryption requires a valid, non-empty PSK");
+        return false;
+    }
+    if (totalBytes <= AEAD_TAG_SIZE)
+        return false;
+    initNonce(fromNode, packetId);
+    uint8_t aad[AEAD_AAD_SIZE];
+    initAad(fromNode, toNode, aad);
+    size_t crypt_len = totalBytes - AEAD_TAG_SIZE;
+    const uint8_t *auth = ciphertextWithTag + crypt_len;
+    return aes_ccm_ad(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, aad, sizeof(aad), auth,
+                      plaintext);
+}
+
 concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {
-    LOG_DEBUG("Use AES%d key!", k.length * 8);
+    LOG_DEBUG("Use AES%d key", k.length * 8);
     key = k;
 }
 
@@ -392,7 +546,7 @@ void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t nu
         if (numBytes <= MAX_BLOCKSIZE) {
             encryptAESCtr(key, nonce, numBytes, bytes);
         } else {
-            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
+            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption", numBytes);
         }
     }
 }
@@ -406,11 +560,20 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    std::unique_ptr<CTRCommon> ctr;
-    if (_key.length == 16)
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES128>());
-    else
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES256>());
+    // Reused instead of reallocated per packet: safe because all callers hold cryptLock and setKey/setIV reset the
+    // full cipher state. Lazy so overriding platforms reserve nothing; key material now lives until the next call.
+    static CTR<AES128> *ctr128 = nullptr;
+    static CTR<AES256> *ctr256 = nullptr;
+    CTRCommon *ctr;
+    if (_key.length == 16) {
+        if (!ctr128)
+            ctr128 = new CTR<AES128>();
+        ctr = ctr128;
+    } else {
+        if (!ctr256)
+            ctr256 = new CTR<AES256>();
+        ctr = ctr256;
+    }
     ctr->setKey(_key.bytes, _key.length);
     static uint8_t scratch[MAX_BLOCKSIZE];
     memcpy(scratch, bytes, numBytes);

@@ -19,7 +19,12 @@ namespace NicheGraphics::InkHUD
 class Notification
 {
   public:
-    enum Type : uint8_t { NOTIFICATION_MESSAGE_BROADCAST, NOTIFICATION_MESSAGE_DIRECT, NOTIFICATION_BATTERY } type;
+    enum Type : uint8_t {
+        NOTIFICATION_MESSAGE_BROADCAST,
+        NOTIFICATION_MESSAGE_DIRECT,
+        NOTIFICATION_BATTERY,
+        NOTIFICATION_GEOFENCE
+    } type;
 
     uint32_t timestamp;
 
@@ -33,6 +38,10 @@ class Notification
     uint8_t channel;
     uint32_t sender;
     uint8_t batteryPercentage;
+    char geofenceNodeName[sizeof(meshtastic_User::long_name)];
+    char geofenceName[sizeof(meshtastic_Waypoint::name)];
+    uint32_t geofenceWaypointId;
+    bool geofenceEntered;
 };
 
 } // namespace NicheGraphics::InkHUD

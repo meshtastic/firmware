@@ -27,7 +27,7 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings) {};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
@@ -36,6 +36,19 @@ class LockingArduinoHal : public ArduinoHal
 
 #endif
 };
+
+// TCXO_OPTIONAL (variant define) or Lora.TCXO_OPTIONAL (Portduino YAML): probe for a TCXO and
+// fall back to the XTAL. LR11x0 tries XTAL first - TCXO-first hangs RadioLib's calibration wait.
+#if ARCH_PORTDUINO
+#define TCXO_OPTIONAL_ENABLED (portduino_config.tcxo_optional)
+#elif defined(TCXO_OPTIONAL)
+#define TCXO_OPTIONAL_ENABLED true
+#else
+#define TCXO_OPTIONAL_ENABLED false
+#endif
+
+// RadioLib's own default Vref, for a probe with no explicit voltage configured.
+#define TCXO_OPTIONAL_DEFAULT_VOLTAGE 1.6f
 
 #if defined(USE_STM32WLx)
 /**
@@ -46,7 +59,7 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
   public:
     STM32WLx_ModuleWrapper(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                            RADIOLIB_PIN_TYPE busy)
-        : STM32WLx_Module(){};
+        : STM32WLx_Module() {};
 };
 #endif
 
@@ -99,6 +112,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
+    /// has the radio IRQ ever been armed? latches true and is never cleared, so ISR context only reads it
+    volatile bool isrEverArmed = false;
+
   protected:
     // Noise floor tracking - rolling window of samples.
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
@@ -144,13 +160,26 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /**
      * Glue functions called from ISR land
+     *
+     * Skip the detach until the IRQ has been armed once: the first setStandby() runs before any
+     * enableInterrupt(), and ESP-IDF logs "GPIO isr service is not installed" for that call.
      */
-    virtual void disableInterrupt() = 0;
+    void disableInterrupt()
+    {
+        if (!isrEverArmed)
+            return;
+        clearRadioIsr();
+    }
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*)()) = 0;
+    void enableInterrupt(void (*callback)())
+    {
+        // Latch before arming: the ISR can fire the moment the handler is installed.
+        isrEverArmed = true;
+        setRadioIsr(callback);
+    }
 
     /**
      * Poll as a backup to catch missed edge-triggered interrupts.
@@ -163,6 +192,24 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Safe to call periodically - skips if currently sending or receiving.
      */
     virtual void resetAGC();
+
+    /** Periodic radio upkeep: re-arms RX if a failed startReceive() left it off, otherwise resets AGC. */
+    void periodicRadioMaintenance();
+
+    /** Chip-specific recovery of a chip that lost its state to a reset/brownout. Returns true if reprogrammed. */
+    virtual bool recoverChipStateLoss() { return false; }
+
+    /** Throttled recoverChipStateLoss(), so a dead chip can't stall the RX/TX hot paths with repeated begin(). */
+    bool maybeRecoverChipStateLoss();
+
+    uint32_t lastChipRecoveryMs = 0;
+
+    /// Consecutive recovery attempts that never got RX armed again, before rebooting to re-run init()
+    static constexpr uint8_t MAX_CHIP_RECOVERY_FAILURES = 5;
+    uint8_t chipRecoveryFailures = 0;
+
+    /// Set by a driver's startReceive() when it gives up and leaves RX off; cleared once RX is armed again.
+    bool rxOffline = false;
 
     /**
      * Debugging counts
@@ -300,39 +347,67 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
+    /** Chip specific arm/disarm of the radio IRQ; call enableInterrupt()/disableInterrupt() instead */
+    virtual void setRadioIsr(void (*callback)()) = 0;
+    virtual void clearRadioIsr() = 0;
+
     /**
      * Subclasses must override, implement and then call into this base class implementation
      */
     virtual void setStandby();
+
+    /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
+    /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
+    /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
+    /// range; the slowest packet we can configure is ~229s, well clear of it.
+    static bool isRadioLibTimeError(RadioLibTime_t usec) { return usec == 0 || usec >= (RadioLibTime_t)0 - 32768; }
 
     /**
      * Derive packet time either for a received (using header info) or a transmitted packet
      */
     template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
     {
+        DataRate_t dr = getDataRate();
+        PacketConfig_t pc = getPacketConfig();
+
         if (received) {
-            // First get the actual coding rate and CRC status from the received packet
-            uint8_t rxCR;
-            bool hasCRC;
-            lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC);
-            // Go from raw header value to denominator
-            if (rxCR < 5) {
-                rxCR += 4;
-            } else if (rxCR == 7) {
-                rxCR = 8;
-            }
-
             // Received packet configuration must be the same as configured, except for coding rate and CRC
-            DataRate_t dr = getDataRate();
-            dr.lora.codingRate = rxCR;
+            uint8_t rxCR = 0;
+            bool hasCRC = true;
+            if (lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE) {
+                // Raw 0 is reserved and >7 is either undefined or an LR2021-only convolutional rate no
+                // Meshtastic peer can send. calculateTimeOnAir() would multiply by it unchecked.
+                if (rxCR < 1 || rxCR > 7) {
+                    LOG_WARN("Bogus RX coding rate %d from radio, use configured %d", rxCR, dr.lora.codingRate);
+                } else {
+                    // Go from raw header value to denominator
+                    if (rxCR < 5) {
+                        rxCR += 4;
+                    } else if (rxCR == 7) {
+                        rxCR = 8;
+                    }
 
-            PacketConfig_t pc = getPacketConfig();
-            pc.lora.crcEnabled = hasCRC;
-
-            return lora.calculateTimeOnAir(modemType, dr, pc, pl) / 1000;
+                    dr.lora.codingRate = rxCR;
+                    pc.lora.crcEnabled = hasCRC;
+                }
+            }
+        } else {
+            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM.
+            RadioLibTime_t reported = lora.getTimeOnAir(pl);
+            if (!isRadioLibTimeError(reported))
+                return reported / 1000;
+            LOG_WARN("%s%d from getTimeOnAir, use configured modem", radioLibErr, (int)(int16_t)reported);
         }
 
-        return lora.getTimeOnAir(pl) / 1000;
+        // Arithmetic on the config we asked for, with no readback to fail. Guarded too: once a code is
+        // in milliseconds nothing downstream can tell it from a duration.
+        RadioLibTime_t computed = lora.calculateTimeOnAir(modemType, dr, pc, pl);
+        if (isRadioLibTimeError(computed)) {
+            LOG_ERROR("%s%d from calculateTimeOnAir", radioLibErr, (int)(int16_t)computed);
+            return 0;
+        }
+
+        return computed / 1000;
     }
 
     const char *radioLibErr = "RadioLib err=";

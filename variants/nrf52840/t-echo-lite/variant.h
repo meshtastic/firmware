@@ -131,7 +131,7 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 
 // GPS pins
-// #define GPS_DEBUG
+// #define GPS_DEBUG 1
 #define GPS_L76K
 #define GPS_BAUDRATE 9600
 #define HAS_GPS 1

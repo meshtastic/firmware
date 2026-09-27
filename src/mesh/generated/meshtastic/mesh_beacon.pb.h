@@ -63,7 +63,7 @@ extern const pb_msgdesc_t meshtastic_MeshBeacon_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_MESH_BEACON_PB_H_MAX_SIZE meshtastic_MeshBeacon_size
-#define meshtastic_MeshBeacon_size               180
+#define meshtastic_MeshBeacon_size               182
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -1,6 +1,7 @@
 #include "BMM150Sensor.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<DFRobot_BMM150.h>)
+#include "detect/ScanI2CTwoWire.h"
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
@@ -34,11 +35,9 @@ int32_t BMM150Sensor::runOnce()
 // Get a singleton wrapper for an Sparkfun BMM_150_I2C
 BMM150Singleton *BMM150Singleton::GetInstance(ScanI2C::FoundDevice device)
 {
-#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
-    TwoWire &bus = (device.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
-#else
-    TwoWire &bus = Wire; // fallback if only one I2C interface
-#endif
+    // resolved via the scanner: WIRE1 may be a bridged bus rather than the
+    // local Wire1 (e.g. SenseCAP Indicator)
+    TwoWire &bus = *ScanI2CTwoWire::fetchI2CBus(device.address);
     if (pinstance == nullptr) {
         pinstance = new BMM150Singleton(&bus, device.address.address);
     }

@@ -51,7 +51,7 @@ meshtastic_MeshPacket *HostMetricsModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_HostMetrics_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding HostMetrics module!");
+            LOG_ERROR("Can't decode HostMetrics module");
             return NULL;
         }
         // Check for a request for device metrics

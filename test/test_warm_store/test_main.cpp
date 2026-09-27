@@ -171,19 +171,19 @@ void test_ws_meta_roundTrip()
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
 }
 
-// The signer flag rides the same packed word as role/protected, so it must survive a
+// The XEdDSA-signed flag rides the same packed word as role/protected, so it must survive a
 // round trip without disturbing them (or the quantised timestamp).
-void test_ws_signer_roundTrip()
+void test_ws_xeddsaSigned_roundTrip()
 {
     WarmNodeStore ws;
     uint8_t key[32];
     makeKey(key, 0x78);
-    TEST_ASSERT_TRUE(ws.absorb(0x710, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/true));
-    TEST_ASSERT_TRUE(ws.absorb(0x711, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/false));
+    TEST_ASSERT_TRUE(ws.absorb(0x710, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*xeddsaSigned=*/true));
+    TEST_ASSERT_TRUE(ws.absorb(0x711, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*xeddsaSigned=*/false));
 
     WarmNodeEntry e;
     TEST_ASSERT_TRUE(ws.take(0x710, e));
-    TEST_ASSERT_TRUE_MESSAGE(warmSignerOf(e), "signer flag must round trip");
+    TEST_ASSERT_TRUE_MESSAGE(warmXeddsaSignedOf(e), "xeddsa-signed flag must round trip");
     TEST_ASSERT_EQUAL(5, warmRoleOf(e)); // and must not disturb its neighbours in the word
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
     TEST_ASSERT_EQUAL(1234u & WARM_TIME_MASK, warmTimeOf(e));
@@ -191,7 +191,7 @@ void test_ws_signer_roundTrip()
     // Control: without the flag the same entry reads back clear, so the accessor is
     // reporting the stored bit rather than always-true.
     TEST_ASSERT_TRUE(ws.take(0x711, e));
-    TEST_ASSERT_FALSE(warmSignerOf(e));
+    TEST_ASSERT_FALSE(warmXeddsaSignedOf(e));
     TEST_ASSERT_EQUAL(5, warmRoleOf(e));
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
 }
@@ -282,15 +282,15 @@ void test_ws_v1_migration_discardsLastHeard()
     b.saveIfDirty();
 }
 
-// A v2 (WRM2) warm.dat used bit 6 as a timestamp bit, so loading one must not read it as a
-// signer, while role/protected/time carry over. File backend only.
-void test_ws_v2_migration_clearsSignerBit()
+// A v2 (WRM2) warm.dat used bit 6 as a timestamp bit, so loading one must not read it as
+// XEdDSA-signed, while role/protected/time carry over. File backend only.
+void test_ws_v2_migration_clearsXeddsaSignedBit()
 {
     WarmNodeStore a;
     uint8_t key[32], got[32];
     makeKey(key, 0x67);
-    // signer=true sets bit 6, standing in for a v2 record whose timestamp had it set.
-    a.absorb(0x910, 123456, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/true);
+    // xeddsaSigned=true sets bit 6, standing in for a v2 record whose timestamp had it set.
+    a.absorb(0x910, 123456, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*xeddsaSigned=*/true);
     if (!a.saveIfDirty()) {
         TEST_IGNORE_MESSAGE("Filesystem not available in this test environment");
         return;
@@ -329,7 +329,7 @@ void test_ws_v2_migration_clearsSignerBit()
 
     WarmNodeEntry e;
     TEST_ASSERT_TRUE(b.take(0x910, e));
-    TEST_ASSERT_FALSE_MESSAGE(warmSignerOf(e), "a v2 timestamp bit must not read as a signer");
+    TEST_ASSERT_FALSE_MESSAGE(warmXeddsaSignedOf(e), "a v2 timestamp bit must not read as xeddsa-signed");
     // Unlike v1, v2 kept role/protected/time in place, so they survive the migration.
     TEST_ASSERT_EQUAL(123456u & WARM_TIME_MASK, warmTimeOf(e));
     TEST_ASSERT_EQUAL(5, warmRoleOf(e));
@@ -396,11 +396,11 @@ WS_TEST_ENTRY void setup()
     RUN_TEST(test_ws_keyedCandidate_evictsOldestKeylessFirst);
     RUN_TEST(test_ws_keyedCandidate_evictsOldestKeyedWhenNoKeyless);
     RUN_TEST(test_ws_meta_roundTrip);
-    RUN_TEST(test_ws_signer_roundTrip);
+    RUN_TEST(test_ws_xeddsaSigned_roundTrip);
     RUN_TEST(test_ws_remove_and_clear);
     RUN_TEST(test_ws_persistence_roundTrip);
     RUN_TEST(test_ws_v1_migration_discardsLastHeard);
-    RUN_TEST(test_ws_v2_migration_clearsSignerBit);
+    RUN_TEST(test_ws_v2_migration_clearsXeddsaSignedBit);
     RUN_TEST(test_ws_load_rejectsOversizedSnapshot);
     exit(UNITY_END());
 }

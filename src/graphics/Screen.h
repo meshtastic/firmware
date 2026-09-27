@@ -5,6 +5,7 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -46,6 +47,8 @@ struct BannerOverlayOptions {
 
 bool shouldWakeOnReceivedMessage();
 
+class MeshModule;
+
 #if !HAS_SCREEN
 #include "Power.h"
 namespace graphics
@@ -64,6 +67,8 @@ class Screen
     };
 
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
+    // These are empty stubs, but they mirror the real Screen's instance API, so they can't become static.
+    // cppcheck-suppress-begin functionStatic
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -73,6 +78,10 @@ class Screen
     void increaseBrightness() {}
     void decreaseBrightness() {}
     void startAlert(const char *) {}
+    void setModalModule(const MeshModule *) {}
+    void clearModalModule(const MeshModule *) {}
+    bool hasModalModule() const { return false; }
+    bool isShowingModuleFrame(const MeshModule *) const { return false; }
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
@@ -80,6 +89,7 @@ class Screen
     bool getIsI2cScreen() const { return false; }
     uint32_t getI2cFrequency() const { return 0; }
     ScanI2C::I2CPort getI2CPort() const { return ScanI2C::I2CPort::NO_I2C; }
+    // cppcheck-suppress-end functionStatic
 };
 } // namespace graphics
 #else
@@ -108,8 +118,15 @@ class Screen
 #include <AutoOLEDWire.h>
 #endif
 
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+// NicheGraphics-backed BaseUI e-ink stack; supplies the EINK_* compat macros for converted variants.
+// InkHUD builds keep the legacy includes: their TUs carry InkHUD's own NicheGraphics::Drivers classes,
+// which would collide with graphics/eink/ declarations until InkHUD moves onto the shared layer.
+#include "BaseUIEInkDisplay.h"
+#else
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
+#endif
 #include "PointStruct.h"
 #include "Power.h"
 #include "TFTDisplay.h"
@@ -195,27 +212,6 @@ enum class FrameDirection { NEXT, PREVIOUS };
 // Forward declarations
 class Screen;
 
-/// Handles gathering and displaying debug information.
-class DebugInfo
-{
-  public:
-    DebugInfo(const DebugInfo &) = delete;
-    DebugInfo &operator=(const DebugInfo &) = delete;
-
-  private:
-    friend Screen;
-
-    DebugInfo() {}
-
-    /// Renders the debug screen.
-    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    /// Protects all of internal state.
-    concurrency::Lock lock;
-};
-
 /**
  * @brief This class deals with showing things on the screen of the device.
  *
@@ -263,6 +259,9 @@ class Screen : public concurrency::OSThread
     void setFrames(FrameFocus focus = FOCUS_DEFAULT);
 
     std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
+#if defined(OLED_COMPACT_UI)
+    std::vector<const char *> frameTitles; // Per-frame short labels, parallel to indicatorIcons
+#endif
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
@@ -288,15 +287,32 @@ class Screen : public concurrency::OSThread
 
     bool isOverlayBannerShowing();
 
+    // Thread-safe snapshot of whether the text-message frame is currently shown.
+    bool isTextMessageFrameShown() const;
+
     // True if the always-present games frame is the one currently on screen. Lets the games module
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
+
+    // Jump straight to the home (device-focused) frame. Used to bounce back to a clearly "this is a
+    // Meshtastic node" screen after a game is left idle. Home is optional, so when it is hidden this
+    // falls back to the messages frame rather than staying put.
+    void showHomeFrame();
+
+    // True when the user is in the middle of something that must not be interrupted: a module (or
+    // game) is holding the D-pad, or an interactive overlay (picker / text entry) is open. Callers
+    // that would pop a transient banner should check this first -- a banner both covers the screen
+    // and REPLACES any interactive overlay, discarding a half-finished entry.
+    bool isInteractionBusy();
 
     bool isScreenOn() { return screenOn; }
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
     char ourId[5];
+
+    // if we have a step counter, this stores the number of steps.
+    uint32_t steps = 0;
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
@@ -345,6 +361,20 @@ class Screen : public concurrency::OSThread
         cmd.cmd = Cmd::STOP_ALERT_FRAME;
         enqueueCmd(cmd);
     }
+
+    // Holds the screen against the carousel, the new-message banner and a foreign endAlert().
+    // Only the owner can release it, unlike endAlert(), which any caller can fire.
+    void setModalModule(const MeshModule *owner) { modalModule = owner; }
+    void clearModalModule(const MeshModule *owner)
+    {
+        if (modalModule == owner)
+            modalModule = nullptr;
+    }
+    bool hasModalModule() const { return modalModule != nullptr; }
+
+    // True while this module's own frame is on screen. Modules observe input before Screen does,
+    // so one handling keys needs this or it takes them from the frame the user is looking at.
+    bool isShowingModuleFrame(const MeshModule *m) const;
 
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);
     void showOverlayBanner(BannerOverlayOptions);
@@ -647,11 +677,6 @@ class Screen : public concurrency::OSThread
                              // stick to standard EASCII codes)
     }
 
-    /// Returns a handle to the DebugInfo screen.
-    //
-    // Use this handle to set things like battery status, user count, GPS status, etc.
-    DebugInfo *debug_info() { return &debugInfo; }
-
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
@@ -693,6 +718,9 @@ class Screen : public concurrency::OSThread
     uint16_t displayHeight = 0;
 
   private:
+    // nullptr for every build with no modal module, which is why the three sites are unchanged.
+    const MeshModule *modalModule = nullptr;
+
     FrameCallback alertFrames[1];
     struct ScreenCmd {
         Cmd cmd;
@@ -814,6 +842,7 @@ class Screen : public concurrency::OSThread
     // Whether we are showing the regular screen (as opposed to booth screen or
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
+    std::atomic<bool> textMessageFrameShown{false};
     /// Track USB power state to only wake screen on actual power state changes
     bool lastPowerUSBState = false;
 
@@ -824,9 +853,6 @@ class Screen : public concurrency::OSThread
     float compassHeading;
     uint32_t endCalibrationAt;
 
-    /// Holds state for debug information
-    DebugInfo debugInfo;
-
     /// Display device
 #ifdef USE_ST7789
     ST7789Spi *dispdev;
@@ -835,6 +861,10 @@ class Screen : public concurrency::OSThread
 #endif
 
     /// UI helper for rendering to frames and switching between them
+    // True if any module frame -- or the games frame, which is not a moduleFrame -- is currently
+    // holding the D-pad. Shared by the input router and isInteractionBusy().
+    bool anyModuleInterceptingInput();
+
     OLEDDisplayUi *ui;
 };
 

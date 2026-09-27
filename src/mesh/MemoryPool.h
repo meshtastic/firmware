@@ -115,7 +115,7 @@ template <class T> class MemoryDynamic : public Allocator<T>
     {
         T *p = (T *)malloc(sizeof(T));
         if (!p) {
-            LOG_WARN("malloc(%u) failed, heap exhausted!", (unsigned)sizeof(T));
+            LOG_WARN("malloc(%u) failed, heap exhausted", (unsigned)sizeof(T));
             return nullptr;
         }
         this->auditAdd((int32_t)sizeof(T));
@@ -156,7 +156,7 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
             this->auditAdd(-(int32_t)sizeof(T));
             LOG_HEAP("Released static pool item %d at 0x%x", index, p);
         } else {
-            LOG_WARN("Pointer 0x%x not from our pool!", p);
+            LOG_WARN("Pointer 0x%x not from our pool", p);
         }
     }
 
@@ -175,7 +175,7 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         }
 
         // No free slots available - return nullptr instead of asserting
-        LOG_WARN("No free slots available in static memory pool!");
+        LOG_WARN("No free slots available in static memory pool");
         return nullptr;
     }
 };

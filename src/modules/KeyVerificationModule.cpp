@@ -3,6 +3,7 @@
 #include "CryptoEngine.h"
 #include "HardwareRNG.h"
 #include "MeshService.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
@@ -116,7 +117,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
-            LOG_INFO("Hash1 matches!");
+            LOG_INFO("Hash1 matches");
             static const char *optionsArray[] = {"Reject", "Accept"};
             // Don't try to put the array definition in the macro. Does not work with curly braces.
             IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;
@@ -400,7 +401,7 @@ void KeyVerificationModule::resetToIdle()
     memset(hash1, 0, 32);
     memset(hash2, 0, 32);
     if (sessionFromRemote)
-        lastRemoteSessionMs = millis(); // start the cooldown when the session ends, not when it opened
+        lastRemoteSessionMs = Time::skipZero(Time::getMillis()); // start the cooldown when the session ends, not when it opened
     sessionFromRemote = false;
     currentNonce = 0;
     currentNonceTimestamp = 0;

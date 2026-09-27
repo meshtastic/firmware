@@ -54,6 +54,7 @@ void OSThread::setIntervalFromNow(unsigned long _interval)
     interval = _interval;
 
     // Cache the next run based on the last_run
+    // unset-sentinel-ok: enabled is the armed flag, and tillRun() reads this as a wrap-safe delta
     _cached_next_run = millis() + interval;
 }
 

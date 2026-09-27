@@ -5,6 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 
 namespace concurrency
 {
@@ -29,9 +30,9 @@ class PowerFSMThread : public OSThread
         if (powerStatus->getHasUSB()) {
             timeLastPowered = millis();
         } else if (config.power.on_battery_shutdown_after_secs > 0 && config.power.on_battery_shutdown_after_secs != UINT32_MAX &&
-                   millis() > (timeLastPowered +
-                               Default::getConfiguredOrDefaultMs(
-                                   config.power.on_battery_shutdown_after_secs))) { // shutdown after 30 minutes unpowered
+                   Throttle::hasElapsed(
+                       timeLastPowered,
+                       Default::getConfiguredOrDefaultMs(config.power.on_battery_shutdown_after_secs))) { // unpowered too long
             powerFSM.trigger(EVENT_SHUTDOWN);
         }
 

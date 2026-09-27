@@ -6,6 +6,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#include "meshUtils.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -49,6 +50,30 @@
 #include "meshSolarApp.h"
 #endif
 
+// Outside the architecture guard on purpose: config validation, not serial I/O. See SerialModule.h.
+bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+        const char *warning = "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS "
+                              "Config output-only modes.";
+        LOG_ERROR(warning);
+#ifndef PIO_UNIT_TESTING
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message), "%s", warning);
+            service->sendClientNotification(cn);
+        }
+#endif
+        return false;
+    }
+
+    return true;
+}
+
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
@@ -85,29 +110,6 @@ static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 
 char serialBytes[512];
 size_t serialPayloadSize;
-
-bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
-{
-    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
-        const char *warning =
-            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
-        LOG_ERROR(warning);
-#ifndef PIO_UNIT_TESTING
-        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        if (cn) {
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            cn->time = getValidTime(RTCQualityFromNet);
-            snprintf(cn->message, sizeof(cn->message), "%s", warning);
-            service->sendClientNotification(cn);
-        }
-#endif
-        return false;
-    }
-
-    return true;
-}
 
 SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", meshtastic_PortNum_SERIAL_APP)
 {
@@ -407,17 +409,14 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                        HAS_GPS) {
                 // Decode the Payload some more
                 meshtastic_Position scratch;
-                meshtastic_Position *decoded = NULL;
                 if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
                     memset(&scratch, 0, sizeof(scratch));
+                    // A payload that fails to decode leaves nothing to report, so say nothing.
                     if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Position_msg, &scratch)) {
-                        decoded = &scratch;
-                    }
-                    // send position packet as WPL to the serial port
-                    {
-                        meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
+                        // send position packet as WPL to the serial port
+                        const meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
                         const char *senderName = senderNode ? senderNode->long_name : "";
-                        printWPL(outbuf, sizeof(outbuf), *decoded, senderName,
+                        printWPL(outbuf, sizeof(outbuf), scratch, senderName,
                                  moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
                         serialPrint->printf("%s", outbuf);
                     }
@@ -595,14 +594,14 @@ void SerialModule::processWXSerial()
                         if (strlen(parsed.name) > 0) {
                             if (strcmp(parsed.name, "WindDir") == 0) {
                                 strlcpy(windDir, parsed.value, sizeof(windDir));
-                                double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
+                                double radians = GeoCoord::toRadians(parseDecimalFloat(windDir));
                                 dir_sum_sin += sin(radians);
                                 dir_sum_cos += cos(radians);
                                 dirCount++;
                                 gotwind = true;
                             } else if (strcmp(parsed.name, "WindSpeed") == 0) {
                                 strlcpy(windVel, parsed.value, sizeof(windVel));
-                                float newv = strtof(windVel, nullptr);
+                                float newv = parseDecimalFloat(windVel);
                                 velSum += newv;
                                 velCount++;
                                 if (newv < lull || lull == -1) {
@@ -611,27 +610,27 @@ void SerialModule::processWXSerial()
                                 gotwind = true;
                             } else if (strcmp(parsed.name, "WindGust") == 0) {
                                 strlcpy(windGust, parsed.value, sizeof(windGust));
-                                float newg = strtof(windGust, nullptr);
+                                float newg = parseDecimalFloat(windGust);
                                 if (newg > gust) {
                                     gust = newg;
                                 }
                                 gotwind = true;
                             } else if (strcmp(parsed.name, "BatVoltage") == 0) {
                                 strlcpy(batVoltage, parsed.value, sizeof(batVoltage));
-                                batVoltageF = strtof(batVoltage, nullptr);
+                                batVoltageF = parseDecimalFloat(batVoltage);
                                 break; // last possible data we want so break
                             } else if (strcmp(parsed.name, "CapVoltage") == 0) {
                                 strlcpy(capVoltage, parsed.value, sizeof(capVoltage));
-                                capVoltageF = strtof(capVoltage, nullptr);
+                                capVoltageF = parseDecimalFloat(capVoltage);
                             } else if (strcmp(parsed.name, "GXTS04Temp") == 0 || strcmp(parsed.name, "Temperature") == 0) {
                                 strlcpy(temperature, parsed.value, sizeof(temperature));
-                                temperatureF = strtof(temperature, nullptr);
+                                temperatureF = parseDecimalFloat(temperature);
                             } else if (strcmp(parsed.name, "RainIntSum") == 0) {
                                 strlcpy(rainStr, parsed.value, sizeof(rainStr));
-                                rainSum = int(strtof(rainStr, nullptr));
+                                rainSum = int(parseDecimalFloat(rainStr));
                             } else if (strcmp(parsed.name, "Rain") == 0) {
                                 strlcpy(rainStr, parsed.value, sizeof(rainStr));
-                                rain = strtof(rainStr, nullptr);
+                                rain = parseDecimalFloat(rainStr);
                             }
                         }
 
@@ -649,8 +648,8 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
-                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
+        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), parseDecimalFloat(windVel),
+                 parseDecimalFloat(windGust), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis) && velCount > 0 && dirCount > 0) {
         // calculate averages and send to the mesh
@@ -665,6 +664,7 @@ void SerialModule::processWXSerial()
         if (dirAvg < 0) {
             dirAvg += 360.0;
         }
+        // unset-sentinel-ok: gotwind carries the armed state; no read tests this for 0
         lastAveraged = millis();
 
         // make a telemetry packet with the data
