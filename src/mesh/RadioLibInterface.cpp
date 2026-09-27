@@ -733,6 +733,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         // Race Condition?
         if (!isReceiving) {
             LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
+            clearReadIrqs(); // nothing will read this frame out, and a latched RX_DONE holds DIO1 high
             return;
         }
 
@@ -797,6 +798,12 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
+        // readData() clears the flags on its way out, but several of its error returns come before that (an Rx
+        // timeout, a failed SPI stream check, a failed buffer read), so the flags of the frame it just gave up on
+        // can still be latched. This frame is lost either way; leaving RX_DONE set would hold DIO1 high past the
+        // re-arm and stop the next one being noticed.
+        if (!captured)
+            clearReadIrqs();
 
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf

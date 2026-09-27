@@ -542,10 +542,10 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     // RX_DONE and CRC_ERR are never cleared here: whoever read a frame out cleared its own flags, so anything still
     // latched belongs to a frame that has not been read, and checkRxDoneIrqFlag() below drives that readout. Clearing
     // them would erase a frame that finished while we got here - on a CH341 host the readout's own bus traffic, the
-    // overlap check included, is several round trips wide. The two early outs in handleReceiveInterrupt() that return
-    // before readData() clear them where they return. PREAMBLE/HEADER_VALID stay: they may belong to the next frame,
-    // already arriving. A stale HEADER_ERR or TIMEOUT has no readout waiting and would cost checkStaleRxFlags() a
-    // re-arm, so those two go unconditionally.
+    // overlap check included, is several round trips wide. The early outs in handleReceiveInterrupt() that return
+    // before readData(), and readData()'s own error returns, clear them where they give up. PREAMBLE/HEADER_VALID
+    // stay: they may belong to the next frame, already arriving. A stale HEADER_ERR or TIMEOUT has no readout
+    // waiting and would cost checkStaleRxFlags() a re-arm, so those two go unconditionally.
     lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_HEADER_ERR | RADIOLIB_SX126X_IRQ_TIMEOUT);
     activeReceiveStart = 0; // as the standby this replaces would
     RadioLibInterface::startReceive();
