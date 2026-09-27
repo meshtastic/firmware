@@ -906,6 +906,10 @@ void RadioLibInterface::noteDeafFrom(const char *what)
 
 void RadioLibInterface::startReceive()
 {
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    if (!rxReadoutTaskTried)
+        startRxReadoutTask();
+#endif
     // How long the radio could not hear, reported at the moment it can again. On a slow bus the
     // transactions on either side of a scan, a transmission or a reception take long enough to swallow
     // a whole preamble, and nothing else in the log says so.
@@ -1076,6 +1080,195 @@ void RadioLibInterface::checkRxDoneIrqFlag()
         notify(ISR_RX, true);
     }
 }
+
+#ifdef MESHTASTIC_RX_READOUT_TASK
+#if !defined(HAS_FREE_RTOS) || defined(ARCH_PORTDUINO) || defined(LORA_DIO1_SOFTWARE_POLL)
+#error "MESHTASTIC_RX_READOUT_TASK is a bench flag for FreeRTOS targets with a DIO1 interrupt: it reads the radio from a task"
+#endif
+
+// ESP-IDF counts a task's stack in bytes, the other ports in words
+#ifdef ARCH_ESP32
+#define RX_READOUT_STACK 4096
+#else
+#define RX_READOUT_STACK 512
+#endif
+
+namespace
+{
+uint32_t ticksToMs(uint32_t ticks)
+{
+    return (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
+}
+
+// The readout's duration. Adafruit's nRF52 micros() counts FreeRTOS ticks (976.6 us steps), too coarse for a readout
+// of about a millisecond, so time it on the cycle counter there.
+#ifdef ARDUINO_NRF52_ADAFRUIT
+void readoutClockStart()
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+uint32_t readoutClock()
+{
+    return DWT->CYCCNT;
+}
+uint32_t readoutClockToUs(uint32_t elapsed)
+{
+    return elapsed / (SystemCoreClock / 1000000);
+}
+#else
+void readoutClockStart() {}
+uint32_t readoutClock()
+{
+    return micros();
+}
+uint32_t readoutClockToUs(uint32_t elapsed)
+{
+    return elapsed;
+}
+#endif
+} // namespace
+
+void RadioLibInterface::startRxReadoutTask()
+{
+    rxReadoutTaskTried = true;
+    // Above the task calling (the Arduino loop) and the nRF52 chip state sampler (idle+2), so a main-loop hold cannot
+    // delay a readout; the loop's priority differs by core.
+    UBaseType_t priority = uxTaskPriorityGet(nullptr) + 2;
+    if (priority < tskIDLE_PRIORITY + 3)
+        priority = tskIDLE_PRIORITY + 3;
+    if (priority > configMAX_PRIORITIES - 1)
+        priority = configMAX_PRIORITIES - 1;
+    TaskHandle_t task = nullptr;
+    // On the loop's core where the port allows it, so the task preempts the loop as on one core: none of the loop's
+    // RadioLib calls can fall between the task's. wakeRxReadout() waits for it either way.
+    int core = -1; // unpinned
+#ifdef ARCH_ESP32
+    core = xPortGetCoreID();
+    if (xTaskCreatePinnedToCore(rxReadoutTaskMain, "RxReadout", RX_READOUT_STACK, this, priority, &task, core) != pdPASS)
+        task = nullptr;
+#else
+    if (xTaskCreate(rxReadoutTaskMain, "RxReadout", RX_READOUT_STACK, this, priority, &task) != pdPASS)
+        task = nullptr;
+#if defined(ARCH_RP2040) && configUSE_CORE_AFFINITY == 1 && configNUMBER_OF_CORES > 1
+    if (task) {
+        core = rp2040.cpuid();
+        vTaskCoreAffinitySet(task, 1u << core);
+    }
+#endif
+#endif
+    rxReadoutTask = task;
+    LOG_INFO("RX readout task %s, priority %u (loop %u), core %d", task ? "started" : "not started", (unsigned)priority,
+             (unsigned)uxTaskPriorityGet(nullptr), core);
+}
+
+/// RX_DONE: wake the readout task and return. The radio is read there, with interrupts enabled, not here.
+bool INTERRUPT_ATTR RadioLibInterface::rxDoneFromIsr()
+{
+    if (!rxReadoutTask)
+        return false;
+    rxWakeTicks = xTaskGetTickCountFromISR();
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
+    YIELD_FROM_ISR(woken);
+    return true;
+}
+
+bool RadioLibInterface::wakeRxReadout()
+{
+    if (!rxReadoutTask)
+        return false;
+    const uint32_t passes = rxReadoutPasses;
+    rxWakeTicks = xTaskGetTickCount();
+    xTaskNotifyGive(rxReadoutTask);
+    // On one core the task, being above us, has already run. Beside us on another it may not have: wait for it, so
+    // the caller never reads the radio while the task does.
+    for (unsigned waited = 0; rxReadoutPasses == passes && waited < 150; waited++)
+        vTaskDelay(pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
+    return true;
+}
+
+void RadioLibInterface::rxReadoutTaskMain(void *arg)
+{
+    auto *self = static_cast<RadioLibInterface *>(arg);
+    readoutClockStart();
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        self->readOutFromTask();
+        self->rxReadoutPasses = self->rxReadoutPasses + 1;
+    }
+}
+
+/// What handleReceiveInterrupt() reads, with the same RadioLib calls, as soon as RX_DONE rises rather than whenever the
+/// main loop next runs this thread: the radio holds one frame, and the next one overwrites it. Each call takes the SPI
+/// lock for itself.
+void RadioLibInterface::readOutFromTask()
+{
+    const uint32_t wakeTicks = rxWakeTicks;
+    const uint32_t t0 = readoutClock();
+    const uint32_t irq = iface->getIrqFlags();
+    if (!(irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))) {
+        // TIMEOUT (a CAD handoff's RX expired), HEADER_ERR and a lone CRC_ERR stay the thread's, as before. Anything
+        // else is an edge for a frame already taken.
+        if (irq &
+            iface->getIrqMapped((1UL << RADIOLIB_IRQ_TIMEOUT) | (1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_CRC_ERR)))
+            notify(ISR_RX, true);
+        return;
+    }
+    const bool listening = receiveStillRunning();
+    const size_t len = iface->getPacketLength();
+    const uint8_t head = rxRingHead;
+    const uint8_t next = (uint8_t)((head + 1) % rxRingSize);
+    if (len > sizeof(rxRing[0].data) || next == rxRingTail) {
+        // A length that would overrun the buffer, or the thread has not taken the last 8: the frame is lost. Clear its
+        // flags so the next RX_DONE raises a fresh edge.
+        iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR) |
+                        (1UL << RADIOLIB_IRQ_TIMEOUT));
+        if (len > sizeof(rxRing[0].data))
+            rxReadoutBadLength = rxReadoutBadLength + 1;
+        else
+            rxReadoutDropped = rxReadoutDropped + 1;
+        notify(ISR_RX, true); // for the counter line
+        return;
+    }
+    CapturedFrame &f = rxRing[head];
+    f.info.state = iface->readData(f.data, len);
+    f.info.snr = iface->getSNR();
+    f.info.rssi = lround(iface->getRSSI());
+    f.info.spiUs = readoutClockToUs(readoutClock() - t0);
+    f.info.len = (uint8_t)len;
+    f.info.chipListening = listening;
+    const uint32_t nowTicks = xTaskGetTickCount();
+    const uint32_t nowMs = millis();
+    f.info.readMs = nowMs;
+    f.info.wakeMs = nowMs - ticksToMs(nowTicks - wakeTicks);
+    rxReadoutFrames = rxReadoutFrames + 1;
+    __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
+    rxRingHead = next;
+    notify(ISR_RX, true);
+}
+
+bool RadioLibInterface::takeCapturedFrame(CapturedRxInfo &info)
+{
+    // The task's counters, logged from here on the thread whenever a frame was lost
+    static uint32_t loggedDropped = 0, loggedBadLength = 0;
+    if (rxReadoutDropped != loggedDropped || rxReadoutBadLength != loggedBadLength) {
+        loggedDropped = rxReadoutDropped;
+        loggedBadLength = rxReadoutBadLength;
+        LOG_WARN("RX readout task: %u frames read, %u dropped (ring full), %u bad length", (unsigned)rxReadoutFrames,
+                 (unsigned)loggedDropped, (unsigned)loggedBadLength);
+    }
+    if (rxRingTail == rxRingHead)
+        return false;
+    __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
+    const CapturedFrame &f = rxRing[rxRingTail];
+    info = f.info;
+    memcpy(&radioBuffer, f.data, info.len);
+    __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
+    rxRingTail = (uint8_t)((rxRingTail + 1) % rxRingSize);
+    return true;
+}
+#endif
 
 void RadioLibInterface::checkTxDoneIrqFlag()
 {
