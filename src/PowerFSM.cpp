@@ -160,20 +160,27 @@ static void lsIdle()
             case ESP_SLEEP_WAKEUP_GPIO: {
                 bool pressed = false;
 #if defined(BUTTON_PIN)
-                pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#elif defined(INPUTDRIVER_ENCODER_BTN)
-#if defined(INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW) && !INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW
-                pressed = digitalRead(INPUTDRIVER_ENCODER_BTN);
-#else
-                pressed = !digitalRead(INPUTDRIVER_ENCODER_BTN);
+                pressed = pressed || !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
 #endif
-#elif defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
-                pressed = !digitalRead(INPUTDRIVER_TWO_WAY_ROCKER_BTN);
-#elif defined(TB_PRESS) && (TB_PRESS != 255)
-                pressed = !digitalRead(TB_PRESS);
-#elif defined(KB_INT)
-                // keyboard press (probably) triggered GPIO interrupt
-                pressed = true;
+#if defined(INPUTDRIVER_ENCODER_BTN)
+#if defined(INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW) && !INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW
+                pressed = pressed || digitalRead(INPUTDRIVER_ENCODER_BTN);
+#else
+                pressed = pressed || !digitalRead(INPUTDRIVER_ENCODER_BTN);
+#endif
+#endif
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+                pressed = pressed || !digitalRead(INPUTDRIVER_TWO_WAY_ROCKER_BTN);
+#endif
+#if defined(TB_PRESS) && (TB_PRESS != 255)
+                pressed = pressed || !digitalRead(TB_PRESS);
+#endif
+#if defined(KB_INT)
+#if defined(KB_INT_WAKE_ON_HIGH) && KB_INT_WAKE_ON_HIGH
+                pressed = pressed || digitalRead(KB_INT);
+#else
+                pressed = pressed || !digitalRead(KB_INT);
+#endif
 #endif
                 if (pressed) {
                     powerFSM.trigger(EVENT_PRESS);
