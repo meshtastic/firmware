@@ -719,6 +719,16 @@ void RadioLibInterface::finishSentPacket(meshtastic_MeshPacket *p)
     packetPool.release(p);
 }
 
+/// Whether readData() came back with the chip's terminal flags still latched. Every driver decides a CRC or damaged-header
+/// verdict BEFORE its clear and returns it after (SX126x asserts crcState one line past clearIrqStatus(); SX127x has no
+/// early return at all), so those two codes mean the flags are already gone and clearing again could take the RX_DONE of a
+/// frame that arrived meanwhile. Every other error - an Rx timeout, a failed SPI stream check or buffer read, a wrong
+/// modem - returns before the clear, leaving the flags to be dropped by hand.
+static bool readDataLeftIrqFlags(int16_t state)
+{
+    return state != RADIOLIB_ERR_NONE && state != RADIOLIB_ERR_CRC_MISMATCH && state != RADIOLIB_ERR_LORA_HEADER_DAMAGED;
+}
+
 void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
 {
     const bool wasCadHandoff = cadHandoffRxStart != 0;
@@ -798,11 +808,11 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
-        // readData() clears the flags on its way out, but several of its error returns come before that (an Rx
-        // timeout, a failed SPI stream check, a failed buffer read), so the flags of the frame it just gave up on
-        // can still be latched. This frame is lost either way; leaving RX_DONE set would hold DIO1 high past the
-        // re-arm and stop the next one being noticed.
-        if (!captured)
+        // Only where readData() returned before its own clear. A CRC mismatch is the common error on a noisy
+        // channel and comes back with the flags already cleared, so clearing again would drop the RX_DONE of a
+        // frame that completed while this error was being logged. The task clears its own failed reads, so a
+        // captured frame is never ours to clear.
+        if (!captured && readDataLeftIrqFlags(state))
             clearReadIrqs();
 
     } else {
@@ -1179,7 +1189,7 @@ void RadioLibInterface::readOutFromTask()
     if (len > sizeof(rxRing[0].data) || next == rxRingTail) {
         // A length that would overrun the buffer, or the thread has not taken the last 8: the frame is lost. Clear its
         // flags so the next RX_DONE raises a fresh edge.
-        iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+        clearReadIrqs();
         if (len > sizeof(rxRing[0].data))
             rxReadoutBadLength = rxReadoutBadLength + 1;
         else
@@ -1189,6 +1199,13 @@ void RadioLibInterface::readOutFromTask()
     }
     CapturedFrame &f = rxRing[head];
     f.info.state = iface->readData(f.data, len);
+    if (readDataLeftIrqFlags(f.info.state)) {
+        // This read came back before RadioLib's own clear, so RX_DONE is still latched for a frame nobody will ever
+        // read. Drop it here, while we know that: leaving it would have checkRxDoneIrqFlag() wake this task again for
+        // the same dead event, round after round. The radio thread cannot tell - a captured frame's flags are not its
+        // to judge - which is why this belongs to the reader.
+        clearReadIrqs();
+    }
     f.info.snr = iface->getSNR();
     f.info.rssi = lround(iface->getRSSI());
     f.info.len = (uint16_t)len;
