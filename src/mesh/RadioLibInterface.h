@@ -602,7 +602,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         uint8_t data[sizeof(RadioBuffer)];
     };
     static constexpr uint8_t rxRingSize = 9; // holds 8, for frames that end back to back behind a long main-loop hold
-    CapturedFrame rxRing[rxRingSize];
+    CapturedFrame rxRing[rxRingSize] = {};
     volatile uint8_t rxRingHead = 0, rxRingTail = 0;
     volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
 #else
