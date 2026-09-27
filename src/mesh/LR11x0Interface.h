@@ -10,6 +10,11 @@
 #if defined(LR11X0_TX_PRESTAGE) && !RADIOLIB_GODMODE
 #error "LR11X0_TX_PRESTAGE calls RadioLib's LR11x0 commands directly: build with -DRADIOLIB_GODMODE=1"
 #endif
+// Bench probe: -DLR11X0_CAD_EXIT_PROBE scans with CAD exit mode 0x11 (RX on detection | TX when clear), which Semtech does
+// not document, and logs the mode the chip lands in after each verdict. It keys up from the prestaged payload.
+#if defined(LR11X0_CAD_EXIT_PROBE) && !defined(LR11X0_TX_PRESTAGE)
+#error "LR11X0_CAD_EXIT_PROBE sends the prestaged payload: build with -DLR11X0_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
+#endif
 
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
@@ -117,6 +122,12 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     uint32_t prestagedId = 0;
     /** When the last CAD verdict was read, on the bench clock, for the launch step trace */
     uint32_t cadVerdictClock = 0;
+#endif
+#ifdef LR11X0_CAD_EXIT_PROBE
+    /** The chip's mode (stat2 bits 3..1, as RADIOLIB_LR11X0_STAT_2_MODE_*), waiting out a passing FS; 0xFF on SPI failure */
+    uint8_t readChipMode();
+    /** A clear CAD under exit mode 0x11 put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+    bool chipKeyedUp = false;
 #endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
