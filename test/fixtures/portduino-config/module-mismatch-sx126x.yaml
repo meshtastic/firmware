@@ -1,0 +1,13 @@
+# FAULT: the opposite direction -- a switch table on a radio that never applies one.
+# The table is only handed to LR11xx parts, so this one is silently inert.
+Lora:
+  Module: sx1262
+  rfswitch_table:
+    pins: [DIO5]
+    MODE_STBY: [LOW]
+    MODE_RX: [HIGH]
+    MODE_TX: [HIGH]
+    MODE_TX_HP: [HIGH]
+    MODE_TX_HF: [LOW]
+    MODE_GNSS: [LOW]
+    MODE_WIFI: [LOW]

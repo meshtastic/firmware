@@ -7,14 +7,16 @@ LIS3DHSensor::LIS3DHSensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::Mot
 
 bool LIS3DHSensor::init()
 {
-    if (sensor.begin(deviceAddress())) {
+    // The SC7A20 shares the register map but identifies as 0x11.
+    const uint8_t whoAmI = (deviceType() == ScanI2C::DeviceType::SC7A20) ? 0x11 : 0x33;
+    if (sensor.begin(deviceAddress(), whoAmI)) {
         sensor.setRange(LIS3DH_RANGE_2_G);
         // Adjust threshold, higher numbers are less sensitive
         sensor.setClick(config.device.double_tap_as_button_press ? 2 : 1, MOTION_SENSOR_CHECK_INTERVAL_MS);
-        LOG_DEBUG("LIS3DH init ok");
+        LOG_DEBUG("%s init ok", deviceType() == ScanI2C::DeviceType::SC7A20 ? "SC7A20" : "LIS3DH");
         return true;
     }
-    LOG_DEBUG("LIS3DH init failed");
+    LOG_DEBUG("%s init failed", deviceType() == ScanI2C::DeviceType::SC7A20 ? "SC7A20" : "LIS3DH");
     return false;
 }
 

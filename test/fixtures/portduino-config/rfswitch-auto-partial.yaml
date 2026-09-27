@@ -1,0 +1,12 @@
+# CLEAN. A partial table under autodetect. Which modes are missing cannot be known before
+# the radio is probed -- naming them against the union of both families would advise adding
+# MODE_TX_HP, MODE_GNSS and MODE_WIFI rows to what may turn out to be an LR20x0.
+Lora:
+  Module: auto
+  CS: 21
+  IRQ: 16
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_STBY: [LOW, LOW]
+    MODE_RX: [HIGH, LOW]
+    MODE_TX: [HIGH, HIGH]

@@ -1,0 +1,5 @@
+# FAULT: the gain table is uint16_t[22], so a negative or >65535 entry silently wraps
+# to a completely different gain rather than being rejected. Expect an ERROR each.
+Lora:
+  Module: sx1262
+  TX_GAIN_LORA: [0, -5, 70000]

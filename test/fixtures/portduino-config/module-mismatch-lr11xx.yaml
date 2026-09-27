@@ -1,0 +1,7 @@
+# FAULT: an LR11xx with no rfswitch_table. setRfSwitchTable() is never called, and
+# most LR11xx modules cannot transmit or receive without one. Expect a WARNING from
+# the merged-configuration checks rather than from any single file.
+Lora:
+  Module: lr1121
+  CS: 21
+  IRQ: 16

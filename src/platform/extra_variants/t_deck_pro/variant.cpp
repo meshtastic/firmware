@@ -119,7 +119,7 @@ void lateInitVariant()
 
                 break;
             } else {
-                LOG_DEBUG("CST3530 not response ~!");
+                LOG_DEBUG("CST3530 no response");
             }
         }
         uint8_t cmd1[] = {0xD0, 0x00, 0x04, 0x00};

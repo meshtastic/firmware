@@ -115,6 +115,10 @@ template <typename Driver0, typename Driver1> class GxEPD2_Multi
     // Select driver by passing whichDriver as 0 or 1
     GxEPD2_Multi(uint8_t whichDriver, int16_t cs, int16_t dc, int16_t rst, int16_t busy, SPIClass &spi)
     {
+        // Only the selected driver is allocated; the other stays null
+        driver0 = nullptr;
+        driver1 = nullptr;
+
         assert(whichDriver == 0 || whichDriver == 1);
         which = whichDriver;
         LOG_DEBUG("GxEPD2_Multi driver: %d", which);
@@ -127,6 +131,11 @@ template <typename Driver0, typename Driver1> class GxEPD2_Multi
             epd2.m_epd2 = &(driver1->epd2);
         }
     }
+
+    // The driver we allocate above is owned by this object, and a single display can only be driven
+    // by one of them: copying would alias that pointer. There is exactly one instance per device.
+    GxEPD2_Multi(const GxEPD2_Multi &) = delete;
+    GxEPD2_Multi &operator=(const GxEPD2_Multi &) = delete;
 
   private:
     uint8_t which;

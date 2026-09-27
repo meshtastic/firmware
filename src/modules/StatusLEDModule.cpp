@@ -2,6 +2,7 @@
 #include "MeshService.h"
 #include "configuration.h"
 #include "mesh/RadioInterface.h"
+#include "mesh/Throttle.h"
 #include <Arduino.h>
 
 /*
@@ -118,7 +119,7 @@ int32_t StatusLEDModule::runOnce()
     } else if (power_state == charged) {
         CHARGE_LED_state = LED_STATE_ON;
     } else if (power_state == critical) {
-        if (POWER_LED_starttime + 30000 < millis() && !doing_fast_blink) {
+        if (Throttle::hasElapsed(POWER_LED_starttime, 30000) && !doing_fast_blink) {
             doing_fast_blink = true;
             POWER_LED_starttime = millis();
         }
@@ -126,7 +127,7 @@ int32_t StatusLEDModule::runOnce()
             PAIRING_LED_state = LED_STATE_OFF;
             CHARGE_LED_state = !CHARGE_LED_state;
             my_interval = 250;
-            if (POWER_LED_starttime + 2000 < millis()) {
+            if (Throttle::hasElapsed(POWER_LED_starttime, 2000)) {
                 doing_fast_blink = false;
                 CHARGE_LED_state = LED_STATE_OFF;
             }
@@ -165,7 +166,7 @@ int32_t StatusLEDModule::runOnce()
     }
 #endif
 #ifdef LED_PAIRING
-    if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
+    if (!config.bluetooth.enabled || Throttle::hasElapsed(PAIRING_LED_starttime, 30 * 1000) || doing_fast_blink) {
         PAIRING_LED_state = LED_STATE_OFF;
     } else if (ble_state == unpaired) {
         if (slowTrack) {
@@ -190,7 +191,7 @@ int32_t StatusLEDModule::runOnce()
     bool chargeIndicatorLED2 = LED_STATE_OFF;
     bool chargeIndicatorLED3 = LED_STATE_OFF;
     bool chargeIndicatorLED4 = LED_STATE_OFF;
-    if (lastUserbuttonTime + 10 * 1000 > millis() || CHARGE_LED_state == LED_STATE_ON) {
+    if (Throttle::isWithinTimespanMs(lastUserbuttonTime, 10 * 1000) || CHARGE_LED_state == LED_STATE_ON) {
         // should this be off at very low percentages?
         chargeIndicatorLED1 = LED_STATE_ON;
         if (powerStatus && powerStatus->getBatteryChargePercent() >= 25)

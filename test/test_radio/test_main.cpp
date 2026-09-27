@@ -1,13 +1,58 @@
+#include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
+#include "RadioLibInterface.h"
 #include "TestUtil.h"
+#include "memory/MemAudit.h"
+#include <string.h>
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
 #include "support/MockMeshService.h"
 
 static MockMeshService *mockMeshService;
+
+static void test_lr20x0BandClassification()
+{
+    TEST_ASSERT_FALSE(isLr20x0HighBand(906.875f));
+    TEST_ASSERT_FALSE(isLr20x0HighBand(1500.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2400.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2420.71875f));
+}
+
+static void test_lr20x0BandHopDetection()
+{
+    TEST_ASSERT_FALSE(isLr20x0BandHop(0.0f, 2420.71875f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 915.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2400.0f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(906.875f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(2420.71875f, 906.875f));
+    // Invalid requested frequency must not look like a band hop.
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, -1.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, -915.0f));
+}
+
+static void test_lr20x0ReconfigurePathSelection()
+{
+    // LF -> HF and HF -> LF take full begin(); same-band stays incremental.
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 906.875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 915.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2400.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(0.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 0.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, -1.0f)));
+}
 
 // Test shim to expose protected radio parameters set by applyModemConfig()
 class TestableRadioInterface : public RadioInterface
@@ -17,6 +62,10 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getCr() const { return cr; }
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
+
+    size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
+    meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
+    void clearSendingPacketForTest() { sendingPacket = nullptr; }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
@@ -256,7 +305,11 @@ static void test_regionPresetMap_coversAllRegionsWithinBounds()
     meshtastic_LoRaRegionPresetMap map;
     getRegionPresetMap(map);
 
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const size_t known = countKnownRegions() + 1; // + the UNSET intent entry
+#else
     const size_t known = countKnownRegions();
+#endif
     TEST_ASSERT_EQUAL_UINT((unsigned)known, (unsigned)map.region_groups_count);
 
     // Bounds derived from the generated nanopb arrays (mesh.options max_count), so
@@ -292,16 +345,36 @@ static void test_regionPresetMap_matchesRegionTable()
         const meshtastic_LoRaPresetGroup &grp = map.groups[gi];
         const RegionInfo *r = getRegion(code);
 
-        // Group's list is non-empty, within the generated array bound, and is the
-        // region's full list.
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+        // UNSET states the pinned preset, not PROFILE_UNDEF's list, so the table checks below don't apply.
+        if (code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            continue;
+#endif
+
+        // Group's list is non-empty and within the generated array bound.
         const size_t maxPresets = sizeof(grp.presets) / sizeof(grp.presets[0]);
         TEST_ASSERT_GREATER_THAN_UINT(0, grp.presets_count);
         TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxPresets, grp.presets_count);
-        TEST_ASSERT_EQUAL_UINT((unsigned)r->getNumPresets(), (unsigned)grp.presets_count);
 
-        // Every advertised preset is legal in this region.
-        for (pb_size_t p = 0; p < grp.presets_count; p++)
-            TEST_ASSERT_TRUE(r->supportsPreset(grp.presets[p]));
+        // Every advertised preset must be selectable from this region: either legal here,
+        // or legal in a sibling the firmware will auto-swap us to (the EU 86x trio, which
+        // advertises the union of the trio's presets rather than just its own).
+        for (pb_size_t p = 0; p < grp.presets_count; p++) {
+            bool selectable =
+                r->supportsPreset(grp.presets[p]) || RadioInterface::regionSwapForPreset(code, grp.presets[p]) != nullptr;
+            TEST_ASSERT_TRUE(selectable);
+        }
+
+        // The region's own enforced presets must all be advertised (advertised is a
+        // superset of the enforced list, never a subset).
+        const meshtastic_Config_LoRaConfig_ModemPreset *enforced = r->getAvailablePresets();
+        for (size_t e = 0; e < r->getNumPresets(); e++) {
+            bool advertised = false;
+            for (pb_size_t p = 0; p < grp.presets_count; p++)
+                if (grp.presets[p] == enforced[e])
+                    advertised = true;
+            TEST_ASSERT_TRUE(advertised);
+        }
 
         // Default preset matches the table, is legal, and is present in the list.
         TEST_ASSERT_EQUAL(r->getDefaultPreset(), grp.default_preset);
@@ -315,6 +388,244 @@ static void test_regionPresetMap_matchesRegionTable()
         // Licensed flag matches the region's profile.
         TEST_ASSERT_EQUAL(r->profile->licensedOnly, grp.licensed_only);
     }
+}
+
+// UNSET appears only when the build pins a preset, and then states exactly that preset.
+// A stock build leaves it out entirely, which clients read as "unconstrained".
+static void test_regionPresetMap_unsetCarriesUserprefsIntent()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+    const meshtastic_LoRaPresetGroup *grp = nullptr;
+    for (pb_size_t i = 0; i < map.region_groups_count; i++)
+        if (map.region_groups[i].region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            grp = &map.groups[map.region_groups[i].group_index];
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    const meshtastic_Config_LoRaConfig_ModemPreset pinned = USERPREFS_LORACONFIG_MODEM_PRESET;
+    TEST_ASSERT_NOT_NULL_MESSAGE(grp, "a build that pins a preset must state it for UNSET");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, (unsigned)grp->presets_count, "the pinned preset is the sole entry");
+    TEST_ASSERT_EQUAL(pinned, grp->presets[0]);
+    TEST_ASSERT_EQUAL(pinned, grp->default_preset);
+    TEST_ASSERT_FALSE_MESSAGE(grp->licensed_only, "UNSET is not a licensed-only region");
+
+    // Stating intent must not narrow what the device accepts: the firmware still takes any
+    // real preset while the region is unset (#11496), so the map cannot become enforcement.
+    const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_TRUE(unset->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+#else
+    TEST_ASSERT_NULL_MESSAGE(grp, "a stock build must leave UNSET out of the map entirely");
+#endif
+}
+
+// In-flight packet bytes as packetPool reports them, 0 before the first alloc registers the tag.
+static int32_t packetPoolLiveBytes()
+{
+    memaudit::Tag rows[memaudit::kMaxTags];
+    size_t n = memaudit::snapshot(rows, memaudit::kMaxTags);
+    for (size_t i = 0; i < n; i++)
+        if (rows[i].tag && strcmp(rows[i].tag, "pktpool(live)") == 0)
+            return rows[i].bytes;
+    return 0;
+}
+
+// Oversize is refused at the radio queue in Router::send(). If one ever gets this far the memcpy is
+// clamped instead of failing, and the packet stays the caller's to release.
+static void test_beginSending_oversizedPayloadIsClamped()
+{
+    const int32_t liveBefore = packetPoolLiveBytes();
+
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    // Without this the check below would also pass against a dead probe.
+    TEST_ASSERT_GREATER_THAN_INT32(liveBefore, packetPoolLiveBytes());
+
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203040;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = MAX_RADIO_PAYLOAD_LEN + 10;
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(MAX_LORA_PAYLOAD_LEN, testRadio->beginSendingPublic(p),
+                                   "an oversized payload must be clamped to the PHY limit, not rejected");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(p, testRadio->getSendingPacket(), "beginSending must still take the packet");
+
+    // beginSending has no failure path that releases, so the packet is ours to free.
+    testRadio->clearSendingPacketForTest();
+    packetPool.release(p);
+    TEST_ASSERT_EQUAL_INT32(liveBefore, packetPoolLiveBytes());
+}
+
+// The clamp must not shorten ordinary traffic, and a maximum-size frame must still fit the PHY.
+static void test_beginSending_fittingPayloadIsSentWhole()
+{
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203041;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = MAX_RADIO_PAYLOAD_LEN;
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(MAX_LORA_PAYLOAD_LEN, testRadio->beginSendingPublic(p),
+                                   "the largest allowed payload must produce a frame at the PHY limit");
+    testRadio->clearSendingPacketForTest();
+    packetPool.release(p);
+}
+
+// -----------------------------------------------------------------------
+// computePacketTime(): RadioLib error codes must never be read as durations (#11935)
+// -----------------------------------------------------------------------
+
+// computePacketTime() is a template over the driver, so only the calls it makes have to exist.
+class FakeLoraRadio
+{
+  public:
+    RadioLibTime_t reportedTimeOnAir = 0;   // what getTimeOnAir() answers
+    RadioLibTime_t calculatedTimeOnAir = 0; // what calculateTimeOnAir() answers
+    int16_t headerInfoResult = RADIOLIB_ERR_UNSUPPORTED;
+    uint8_t headerCodingRate = 0;
+    bool headerCrcEnabled = true;
+
+    uint32_t calculateCalls = 0;
+    uint8_t lastCodingRate = 0;
+    bool lastCrcEnabled = false;
+
+    RadioLibTime_t getTimeOnAir(size_t) { return reportedTimeOnAir; }
+
+    RadioLibTime_t calculateTimeOnAir(ModemType_t, DataRate_t dr, PacketConfig_t pc, size_t)
+    {
+        calculateCalls++;
+        lastCodingRate = dr.lora.codingRate;
+        lastCrcEnabled = pc.lora.crcEnabled;
+        return calculatedTimeOnAir;
+    }
+
+    int16_t getLoRaRxHeaderInfo(uint8_t *cr, bool *crc)
+    {
+        if (headerInfoResult == RADIOLIB_ERR_NONE) {
+            *cr = headerCodingRate;
+            *crc = headerCrcEnabled;
+        }
+        return headerInfoResult;
+    }
+};
+
+// Test shim: no chip, just the modem parameters computePacketTime() reads.
+class TestableRadioLibInterface : public RadioLibInterface
+{
+  public:
+    TestableRadioLibInterface() : RadioLibInterface(nullptr, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC) {}
+
+    void setModem(uint8_t spreadFactor, float bandwidth, uint8_t codingRate)
+    {
+        sf = spreadFactor;
+        bw = bandwidth;
+        cr = codingRate;
+    }
+
+    uint32_t computePacketTimePublic(FakeLoraRadio &radio, uint32_t pl, bool received)
+    {
+        return computePacketTime(radio, pl, received);
+    }
+
+    static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
+
+    // Chip-specific hooks this test never reaches
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    int16_t getCurrentRSSI() override { return 0; }
+    bool isChannelActive() override { return false; }
+    bool isActivelyReceiving() override { return false; }
+    void addReceiveMetadata(meshtastic_MeshPacket *) override {}
+    void setRadioIsr(void (*)()) override {}
+    void clearRadioIsr() override {}
+};
+
+static TestableRadioLibInterface *makeTestableRadioLibInterface()
+{
+    auto *radioIf = new TestableRadioLibInterface();
+    radioIf->setModem(11, 250.0f, 5); // LONG_FAST
+    return radioIf;
+}
+
+// A healthy chip answers getTimeOnAir(), and that answer is what we report.
+static void test_computePacketTime_txUsesTheRadiosOwnAnswer()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.reportedTimeOnAir = 123456; // usec
+    radio.calculatedTimeOnAir = 999000;
+
+    TEST_ASSERT_EQUAL_UINT32(123, radioIf->computePacketTimePublic(radio, 32, false));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio.calculateCalls, "a working radio must not need the fallback");
+
+    delete radioIf;
+}
+
+// WRONG_MODEM read as a duration is 4294967ms of airtime for one packet, which stops the node
+// transmitting until it is rebooted.
+static void test_computePacketTime_txFallsBackWhenTheRadioReportsAnError()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.reportedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
+    radio.calculatedTimeOnAir = 500000; // usec, from the modem config we asked for
+
+    uint32_t msec = radioIf->computePacketTimePublic(radio, 32, false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(500, msec, "an error must fall back to the configured modem, not be divided by 1000");
+    TEST_ASSERT_EQUAL_UINT32(1, radio.calculateCalls);
+
+    delete radioIf;
+}
+
+// If the fallback fails too, report no airtime rather than let a code reach the airtime windows.
+static void test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.reportedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
+    radio.calculatedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_INVALID_CODING_RATE;
+
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->computePacketTimePublic(radio, 32, false));
+
+    delete radioIf;
+}
+
+// The RX path still takes coding rate and CRC from the header, and is guarded the same way.
+static void test_computePacketTime_rxUsesHeaderInfoAndIsGuarded()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    FakeLoraRadio radio;
+    radio.headerInfoResult = RADIOLIB_ERR_NONE;
+    radio.headerCodingRate = 2; // raw header value for 4/6
+    radio.headerCrcEnabled = false;
+    radio.calculatedTimeOnAir = 78000;
+
+    TEST_ASSERT_EQUAL_UINT32(78, radioIf->computePacketTimePublic(radio, 32, true));
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(6, radio.lastCodingRate, "raw header coding rate must become a denominator");
+    TEST_ASSERT_FALSE(radio.lastCrcEnabled);
+
+    radio.calculatedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->computePacketTimePublic(radio, 32, true));
+
+    delete radioIf;
+}
+
+// Every RADIOLIB_ERR_* is rejected, every duration a LoRa packet can actually take is kept.
+static void test_isRadioLibTimeError_separatesCodesFromDurations()
+{
+    TEST_ASSERT_TRUE(TestableRadioLibInterface::isRadioLibTimeErrorPublic((RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM));
+    TEST_ASSERT_TRUE(TestableRadioLibInterface::isRadioLibTimeErrorPublic((RadioLibTime_t)RADIOLIB_ERR_UNKNOWN));
+    TEST_ASSERT_TRUE(TestableRadioLibInterface::isRadioLibTimeErrorPublic((RadioLibTime_t)RADIOLIB_ERR_SPI_CMD_FAILED));
+    TEST_ASSERT_TRUE_MESSAGE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(0), "the PhysicalLayer stub answers 0");
+
+    TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(1));
+    TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(123456));
+    // ~229s: SF12 at 7.8kHz with a full 255-byte frame, the slowest packet that can be configured.
+    TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(229ul * 1000ul * 1000ul));
 }
 
 void setUp(void)
@@ -345,6 +656,9 @@ void setup()
     initializeTestEnvironment();
 
     UNITY_BEGIN();
+    RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_lr20x0BandHopDetection);
+    RUN_TEST(test_lr20x0ReconfigurePathSelection);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
     RUN_TEST(test_bwCodeToKHz_roundTrip);
@@ -363,6 +677,14 @@ void setup()
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
+    RUN_TEST(test_regionPresetMap_unsetCarriesUserprefsIntent);
+    RUN_TEST(test_beginSending_oversizedPayloadIsClamped);
+    RUN_TEST(test_beginSending_fittingPayloadIsSentWhole);
+    RUN_TEST(test_computePacketTime_txUsesTheRadiosOwnAnswer);
+    RUN_TEST(test_computePacketTime_txFallsBackWhenTheRadioReportsAnError);
+    RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
+    RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
+    RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
     exit(UNITY_END());
 }
 

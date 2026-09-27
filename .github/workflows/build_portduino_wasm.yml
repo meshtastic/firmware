@@ -18,6 +18,10 @@ jobs:
   build-wasm:
     name: Build PortDuino WASM
     runs-on: ubuntu-latest
+    # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
+    # restore it but never save, so they stop filling up the repo's Actions cache storage.
+    env:
+      SAVE_CACHE: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,13 +33,29 @@ jobs:
         uses: ./.github/actions/setup-native
 
       - name: Setup Emscripten SDK
-        uses: emscripten-core/setup-emsdk@v16
+        uses: emscripten-core/setup-emsdk@0822153d7a5488b70a269cfa0a631b2a86ab4da2 # 'v17' main
         with:
           version: 6.0.1
           actions-cache-folder: emsdk-cache
 
+      - name: Restore PlatformIO cache
+        id: pio-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-wasm-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
+          restore-keys: |
+            pio-wasm-
+
       - name: Build PortDuino WASM
         run: platformio run -e native-wasm
+
+      - name: Save PlatformIO cache
+        if: env.SAVE_CACHE == 'true' && steps.pio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-wasm-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
 
       - name: Assert WASM artifacts
         run: |

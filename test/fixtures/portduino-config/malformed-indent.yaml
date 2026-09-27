@@ -1,0 +1,8 @@
+# FAULT: three-space indent on the CS line below, so the file will not parse at all.
+# The point of this fixture is that --check still reaches its report and names the
+# file and line, rather than exiting early with a bare "Unable to use ...".
+# Also run without --check, where meshtasticd must refuse to start.
+Lora:
+  Module: sx1262
+   CS: 21
+  IRQ: 16

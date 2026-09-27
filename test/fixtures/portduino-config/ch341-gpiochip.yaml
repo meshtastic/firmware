@@ -1,0 +1,16 @@
+# FAULT: a CH341 config that also maps its pins onto a gpiochip. Every Lora pin is
+# skipped by the GPIO claim loop when spidev is ch341, so the chip and line numbers below
+# are read, stored, and never used - while reading as though they were authoritative.
+Lora:
+  Module: sx1262
+  spidev: ch341
+  gpiochip: 4
+  CS:
+    pin: 0
+    gpiochip: 4
+    line: 21
+  IRQ: 6
+  Reset: 2
+  Busy: 4
+  USB_PID: 0x5512
+  USB_VID: 0x1A86

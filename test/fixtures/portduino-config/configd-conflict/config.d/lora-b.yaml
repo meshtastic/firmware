@@ -1,0 +1,8 @@
+# Third of three files, and the one that wins -- but only because the filesystem
+# happens to return it last. config.d/ load order is not guaranteed to be
+# alphabetical and can differ between machines, which is why the report warns
+# rather than assuming an order.
+Lora:
+  Module: lr1121
+  CS: 99
+  IRQ: 16

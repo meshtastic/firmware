@@ -1,10 +1,13 @@
-#include "SerialConsole.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "Default.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "SerialConsole.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #include "main.h"
 #include "time.h"
 
@@ -12,6 +15,11 @@
 #define IS_USB_SERIAL
 #ifdef SERIAL_HAS_ON_RECEIVE
 #undef SERIAL_HAS_ON_RECEIVE
+#endif
+// Port is HWCDC only in hardware USB-Serial/JTAG mode. With ARDUINO_USB_MODE=0 it is TinyUSB
+// USBCDC, the PHY is routed away from the USJ peripheral, and isPlugged() would never see a SOF.
+#if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE
+#define IS_USB_HWCDC
 #endif
 #include "HWCDC.h"
 #endif
@@ -30,6 +38,16 @@
 
 SerialConsole *console;
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+// Last-seen USB-CDC host link (DTR/mount) state, sampled each runOnce() so a
+// physical unplug/replug re-locks the per-connection admin auth (see runOnce()).
+// Kept at file scope rather than as a member both because there is exactly one
+// console singleton and because adding per-instance members to the PhoneAPI
+// hierarchy has historically perturbed nRF52 USB-CDC enumeration (see PhoneAPI.h).
+// Only compiled on lockdown (nRF52) builds.
+static bool s_serialLinkUp = false;
+#endif
+
 /// Create the shared serial console once and register receive wakeups.
 void consoleInit()
 {
@@ -45,16 +63,6 @@ void consoleInit()
     (void)sc;
 #endif
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
-}
-
-/// Print and flush an unclassified formatted console message.
-void consolePrintf(const char *format, ...)
-{
-    va_list arg;
-    va_start(arg, format);
-    console->vprintf(nullptr, format, arg);
-    va_end(arg);
-    console->flush();
 }
 
 /// Initialize console, protobuf transport, serial port, and worker thread state.
@@ -88,6 +96,30 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 /// Service one serial API iteration and select the next polling interval.
 int32_t SerialConsole::runOnce()
 {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    // Lockdown (nRF52) builds only. The SerialConsole is a process-lifetime
+    // singleton, so its inherited PhoneAPI object - and therefore its entry in
+    // the per-connection admin-auth slot table (keyed by PhoneAPI*) - is reused
+    // for every USB/serial client for the whole boot. Nothing re-locks that slot
+    // when the operator unplugs and a different client plugs in before the
+    // 15-minute inactivity timeout fires, so a fresh client would inherit the
+    // prior operator's admin authorization. Re-lock when the physical USB-CDC link
+    // drops - the serial analog of the BLE onDisconnect() -> close() session reset.
+    //
+    // On the nRF52 TinyUSB (Adafruit) core, (bool)Port == tud_cdc_n_connected():
+    // it goes false on cable unplug or host port-close (DTR de-assert). close()
+    // frees the auth slot and resets PhoneAPI state, so whoever connects next
+    // re-locks via handleStartConfig()'s !isConnected() branch on their first
+    // want_config - the same physical-link boundary BLE enforces in onConnect().
+    // Console transports without a real DTR line (e.g. a UART USER_DEBUG_PORT) hold
+    // this constant, so no edge fires and we fall back to the existing inactivity
+    // timeout - no worse than the pre-fix behavior.
+    const bool linkUp = static_cast<bool>(Port);
+    if (s_serialLinkUp && !linkUp)
+        close();
+    s_serialLinkUp = linkUp;
+#endif
+
 #ifdef HELTEC_MESH_SOLAR
     // After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
     if (moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port &&
@@ -98,9 +130,15 @@ int32_t SerialConsole::runOnce()
 
     int32_t delay = runOncePart();
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
+    // Nothing wakes the idle sleep for "TX space freed" or a bounded-drain remainder
+    // (#11164), so keep polling while the API holds undelivered output.
+    if (hasPendingOutput())
+        return delay < 25 ? delay : 25; // 0 continues a budget slice; else short-poll TX drain
     return Port.available() ? delay : INT32_MAX;
-#elif defined(IS_USB_SERIAL)
-    return HWCDC::isPlugged() ? delay : (1000 * 20);
+#elif defined(IS_USB_HWCDC)
+    // isPlugged() is a SOF watchdog that flaps false while USB is fine (#11864), and nothing wakes
+    // this thread on RX, so cap the idle sleep at the rate readStream() already idles at.
+    return HWCDC::isPlugged() ? delay : 250;
 #else
     return delay;
 #endif
@@ -182,6 +220,17 @@ bool SerialConsole::finishPendingFrame()
     return frameWriter.finishPendingFrame(Port);
 #else
     return true;
+#endif
+}
+
+/// Report a retained USB CDC frame awaiting TX space.
+bool SerialConsole::hasRetainedFrame()
+{
+#ifdef IS_USB_SERIAL
+    concurrency::LockGuard guard(&streamLock);
+    return !frameWriter.isIdle();
+#else
+    return false;
 #endif
 }
 

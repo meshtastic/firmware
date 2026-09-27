@@ -16,8 +16,9 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
     }
 
     const float northAngle = (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) ? -myHeading : 0.0f;
-    const int16_t nX = compassX + static_cast<int16_t>((radius - 1) * sinf(northAngle));
-    const int16_t nY = compassY - static_cast<int16_t>((radius - 1) * cosf(northAngle));
+    // Double sin/cos on purpose: GeoCoord already links them, sinf/cosf would add ~3 KB of float libm.
+    const int16_t nX = compassX + static_cast<int16_t>((radius - 1) * sin(double(northAngle)));
+    const int16_t nY = compassY - static_cast<int16_t>((radius - 1) * cos(double(northAngle)));
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -37,8 +38,8 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
 void drawArrowToNode(OLEDDisplay *display, int16_t x, int16_t y, int16_t size, float bearing)
 {
     const float radians = bearing * DEG_TO_RAD;
-    const float sinA = sinf(radians);
-    const float cosA = cosf(radians);
+    const float sinA = sin(double(radians));
+    const float cosA = cos(double(radians));
     const float tipHalf = size * 0.5f;
     const float lx = -(size / 6.0f);
     const float ly = size / 4.0f;

@@ -13,6 +13,10 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "modules/PositionModule.h"
 
+#ifdef SENSECAP_INDICATOR
+#include "mesh/comms/UARTProxy.h"
+#endif
+
 // Allow defining the polarity of the ENABLE output.  default is active high
 #ifndef GPS_EN_ACTIVE
 #define GPS_EN_ACTIVE 1
@@ -21,6 +25,17 @@
 // Allow defining the polarity of the STANDBY output.  default is LOW for standby
 #ifndef GPS_STANDBY_ACTIVE
 #define GPS_STANDBY_ACTIVE LOW
+#endif
+
+// Allow defining the polarity of an external GPS RF front-end enable. Default is active high.
+#ifndef GPS_RF_EN_ACTIVE
+#define GPS_RF_EN_ACTIVE HIGH
+#endif
+
+// Only park an Airoha receiver in software RTC where we can also pulse it back out; the sleep and
+// the wake must never be guarded separately, or a board without RTC_INT would sleep with no way back.
+#if defined(GNSS_AIROHA) && defined(GPS_RTC_INT)
+#define HAS_AIROHA_SOFT_RTC 1
 #endif
 
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
@@ -43,6 +58,9 @@ typedef enum {
     GNSS_MODEL_AG3352,
     GNSS_MODEL_LS20031,
     GNSS_MODEL_CM121,
+    GNSS_MODEL_LC760CA,
+    // Keep GNSS_MODEL_GENERIC_NMEA last: isValidGnssModel() uses it as the exclusive upper bound
+    // for values the probe cache is allowed to hold.
     GNSS_MODEL_GENERIC_NMEA // generic NMEA source (e.g. gpsd); skips chip-specific probe and init
 } GnssModel_t;
 
@@ -110,9 +128,6 @@ class GPS : private concurrency::OSThread
 
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
-
-    /// Returns true if there's valid data flow with the chip.
-    virtual bool hasFlow();
 
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
@@ -213,13 +228,18 @@ class GPS : private concurrency::OSThread
     bool GPSInitStarted = false;  // Init thread finished?
 
     GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
+#ifdef HAS_AIROHA_SOFT_RTC
+    uint8_t airohaSleepMisses = 0; // consecutive $PAIR650 sleeps that went unacked
+#endif
 
     uint8_t numSatellites = 0;
 
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
     /** If !NULL we will use this serial port to construct our GPS */
-#if defined(ARCH_RP2040)
+#if defined(SENSECAP_INDICATOR)
+    static UARTProxy *_serial_gps;
+#elif defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
 #elif defined(ARCH_NRF52)
     static Uart *_serial_gps;
@@ -254,6 +274,10 @@ class GPS : private concurrency::OSThread
      */
     void writePinStandby(bool standby);
 
+    /** Set the external RF front-end enable pin, if relevant
+     */
+    void writePinRFEN(bool on);
+
     /** Set GPS power with PMU, if relevant
      */
     void setPowerPMU(bool on);
@@ -261,6 +285,10 @@ class GPS : private concurrency::OSThread
     /** Set UBLOX power, if relevant
      */
     void setPowerUBLOX(bool on, uint32_t sleepMs = 0);
+
+    /** Put an Airoha receiver into software RTC mode, if relevant
+     */
+    void airohaEnterSoftRtcSleep();
 
     /**
      * Tell users we have new GPS readings

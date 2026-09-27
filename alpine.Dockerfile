@@ -1,4 +1,5 @@
-# trunk-ignore-all(trivy/DS002): We must run as root for this container
+# trunk-ignore-all(trivy/DS-0002): We must run as root for this container
+# trunk-ignore-all(checkov/CKV_DOCKER_8): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3002): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3018): Do not pin apk package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
@@ -16,7 +17,7 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN apk --no-cache add \
         bash g++ libstdc++-dev linux-headers zip git ca-certificates libbsd-dev \
         py3-pip py3-grpcio-tools \
-        libgpiod-dev yaml-cpp-dev jsoncpp-dev bluez-dev \
+        libgpiod-dev yaml-cpp-dev jsoncpp-dev bluez-dev curl-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
         libx11-dev libinput-dev libxkbcommon-dev sqlite-dev sdl2-dev \
     && rm -rf /var/cache/apk/* \
@@ -49,7 +50,7 @@ USER root
 
 RUN apk --no-cache add \
         shadow libstdc++ libbsd libgpiod yaml-cpp jsoncpp libusb \
-        i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
+        libcurl i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

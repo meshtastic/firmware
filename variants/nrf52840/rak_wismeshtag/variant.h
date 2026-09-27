@@ -55,10 +55,13 @@ extern "C" {
 /*
  * Buttons
  */
-
+#ifndef WISMESH_POD
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
+#else
+#define HAS_BUTTON 0
+#endif
 
 /*
  * Analog pins

@@ -55,7 +55,6 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     CannedMessageModule();
 
     void LaunchWithDestination(NodeNum, uint8_t newChannel = 0);
-    void LaunchRepeatDestination();
     void LaunchFreetextWithDestination(NodeNum, uint8_t newChannel = 0);
 
     // === Emote Picker navigation ===
@@ -70,11 +69,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     // === State/UI ===
     bool shouldDraw();
-    bool hasMessages();
     void resetSearch();
     void updateDestinationSelectionList();
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    bool isCharInputAllowed() const;
+    bool isFreeTextActive() const { return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT; }
     String drawWithCursor(String text, int cursor);
 
     // === Emote Picker ===
@@ -192,6 +190,11 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
+    // Opens the on-screen keyboard prompt for the current destination.
+    // Returns false when this device has no on-screen keyboard.
+    bool showOnScreenKeyboard();
+    // Set when a menu requested on-screen-keyboard compose; serviced by runOnce().
+    bool pendingOskLaunch = false;
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},

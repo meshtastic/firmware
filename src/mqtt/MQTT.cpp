@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "ServiceEnvelope.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
@@ -22,6 +23,9 @@
 #endif
 #if HAS_ETHERNET && defined(ARCH_ESP32)
 #include <ETH.h>
+#if HAS_ETHERNET && defined(ETH_SHARED_SPI)
+#include "platform/esp32/SharedBusEthernet.h"
+#endif
 #endif // HAS_ETHERNET
 #if HAS_ETHERNET && defined(USE_CH390D)
 #include "ESP32_CH390.h"
@@ -33,12 +37,16 @@
 
 #include "IPAddress.h"
 #if defined(ARCH_PORTDUINO)
+#if defined(_WIN32)
+#include <winsock2.h> // ntohl()
+#else
 #include <netinet/in.h>
+#endif
 #elif !defined(ntohl)
 #include <machine/endian.h>
 #define ntohl __ntohl
 #endif
-#include <RTC.h>
+#include <gps/RTC.h>
 
 MQTT *mqtt;
 
@@ -55,11 +63,37 @@ static bool isConnected = false;
 static uint32_t lastPositionUnavailableWarning = 0;
 static const uint32_t POSITION_UNAVAILABLE_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
+inline bool shouldDropMqttDownlink(const meshtastic_MeshPacket &packet)
+{
+    if (is_in_repeated(config.lora.ignore_incoming, packet.from)) {
+        LOG_INFO("Drop MQTT ignored 0x%08x", packet.from);
+        return true;
+    }
+
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
+    if (nodeInfoLiteIsIgnored(node)) {
+        LOG_INFO("Drop MQTT node 0x%08x", packet.from);
+        return true;
+    }
+
+    if (packet.from == NODENUM_BROADCAST) {
+        LOG_INFO("Drop MQTT broadcast src");
+        return true;
+    }
+
+    if (config.lora.ignore_mqtt) {
+        LOG_INFO("Drop MQTT ignore_mqtt");
+        return true;
+    }
+
+    return false;
+}
+
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
     if (!e.validDecode || e.channel_id == NULL || e.gateway_id == NULL || e.packet == NULL) {
-        LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
+        LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u", topic, length);
         return;
     }
 
@@ -91,15 +125,18 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // receives it when we get our own packet back. Then we'll stop our retransmissions.
         if (isFromUs(e.packet)) {
             auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+            if (!pAck)
+                return;
             pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
-            router->sendLocal(pAck);
+            if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
+                packetPool.release(pAck);
         } else {
-            LOG_INFO("Ignore downlink message we originally sent");
+            LOG_INFO("Ignore downlink msg we sent");
         }
         return;
     }
     if (isFromUs(e.packet)) {
-        LOG_INFO("Ignore downlink message we originally sent");
+        LOG_INFO("Ignore downlink msg we sent");
         return;
     }
 
@@ -110,6 +147,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     }
 
     UniquePacketPoolPacket p = packetPool.allocUniqueZeroed();
+    if (!p)
+        return;
     p->from = e.packet->from;
     p->to = e.packet->to;
     p->id = e.packet->id;
@@ -117,14 +156,18 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->hop_limit = e.packet->hop_limit;
     p->hop_start = e.packet->hop_start;
     p->want_ack = e.packet->want_ack;
-    p->via_mqtt = true; // Mark that the packet was received via MQTT
+    p->via_mqtt = true;       // Mark that the packet was received via MQTT
+    p->pki_encrypted = false; // Only local AES-CCM decryption may establish PKI authentication.
     p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
     p->which_payload_variant = e.packet->which_payload_variant;
     memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
 
+    if (shouldDropMqttDownlink(*p))
+        return;
+
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {
-            LOG_INFO("Ignore decoded message on MQTT, encryption is enabled");
+            LOG_INFO("Ignore decoded msg on MQTT, encryption enabled");
             return;
         }
         if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
@@ -139,12 +182,9 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
         // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
         // CryptoEngine cache state, and MQTT ingress can run on a different task.
-        {
-            concurrency::LockGuard g(cryptLock);
-            if (!checkXeddsaReceivePolicy(p.get())) {
-                LOG_INFO("Ignore decoded message failing XEdDSA policy");
-                return;
-            }
+        if (passesRoutingAuthGate(p.get()) != RoutingAuthVerdict::ACCEPT) {
+            LOG_INFO("Ignore decoded msg failing XEdDSA policy");
+            return;
         }
 #endif
     }
@@ -157,8 +197,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // likely they discovered each other via a channel we have downlink enabled for
         if (isToUs(p.get()) || (nodeInfoLiteHasUser(tx) && nodeInfoLiteHasUser(rx)))
             router->enqueueReceivedMessage(p.release());
-    } else if (router &&
-               perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
+    } else if (router && passesRoutingAuthGate(p.get()) == RoutingAuthVerdict::ACCEPT)
         router->enqueueReceivedMessage(p.release());
 }
 
@@ -208,9 +247,22 @@ bool isDefaultServer(const String &host)
     return host.length() == 0 || host == default_mqtt_address;
 }
 
+// "msh/<region>" is what the default broker's convention produces; any other suffix is the user's own.
+bool isRegionRootTopic(const char *root)
+{
+    const size_t prefixLen = strlen(default_mqtt_root) + 1;
+    if (strncmp(root, default_mqtt_root "/", prefixLen) != 0)
+        return false;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++)
+        if (strcmp(r->name, root + prefixLen) == 0)
+            return true;
+    return false;
+}
+
+// The regional roots count as default: they are what a region change writes on the default broker.
 bool isDefaultRootTopic(const String &root)
 {
-    return root.length() == 0 || root == default_mqtt_root;
+    return root.length() == 0 || root == default_mqtt_root || isRegionRootTopic(root.c_str());
 }
 
 struct PubSubConfig {
@@ -246,8 +298,8 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
     pubSub.setClient(client);
     pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
 
-    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: ***", config.serverAddr.c_str(),
-             config.serverPort, config.mqttUsername);
+    LOG_INFO("Direct MQTT connect %s, port %d, user %s, password ***", config.serverAddr.c_str(), config.serverPort,
+             config.mqttUsername);
 
     // Generate node ID from nodenum for client identification
     std::string nodeId = nodeDB->getNodeId();
@@ -257,7 +309,7 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
         LOG_INFO("MQTT connected");
     } else {
         isConnected = false;
-        LOG_WARN("Failed to connect to MQTT server");
+        LOG_WARN("MQTT server connect failed");
     }
     return connected;
 }
@@ -301,17 +353,43 @@ void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 
 void MQTT::onClientProxyReceive(meshtastic_MqttClientProxyMessage msg)
 {
-    onReceive(msg.topic, msg.payload_variant.data.bytes, msg.payload_variant.data.size);
+    // payload_variant is a union: on the text variant, data.size aliases the first bytes of the
+    // string, so reading it unconditionally let a client name any length up to PB_SIZE_MAX.
+    switch (msg.which_payload_variant) {
+    case meshtastic_MqttClientProxyMessage_data_tag:
+        onReceive(msg.topic, msg.payload_variant.data.bytes, msg.payload_variant.data.size);
+        break;
+    case meshtastic_MqttClientProxyMessage_text_tag:
+        onReceive(msg.topic, (byte *)msg.payload_variant.text,
+                  strnlen(msg.payload_variant.text, sizeof(msg.payload_variant.text)));
+        break;
+    default:
+        LOG_WARN("MQTT proxy msg has no payload, topic %s", msg.topic);
+        break;
+    }
 }
 
 void MQTT::onReceive(char *topic, byte *payload, size_t length)
 {
     if (length == 0) {
-        LOG_WARN("Empty MQTT payload received, topic %s!", topic);
+        LOG_WARN("Empty MQTT payload, topic %s", topic);
         return;
     }
 
     onReceiveProto(topic, payload, length);
+}
+
+bool MQTT::applyRegionRootTopic(const char *regionName)
+{
+    // The region suffix is a convention of the default broker; a regional broker is regional already.
+    auto [host, parsedPort] = parseHostAndPort(moduleConfig.mqtt.address);
+    (void)parsedPort;
+    if (!isDefaultServer(host))
+        return false;
+    if (!isDefaultRootTopic(moduleConfig.mqtt.root))
+        return false; // the user picked their own root
+    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, regionName);
+    return true;
 }
 
 void mqttInit()
@@ -320,6 +398,23 @@ void mqttInit()
         return;
 
     new MQTT();
+}
+
+void MQTT::reinitTopics()
+{
+    topicRoot = moduleConfig.mqtt.root;
+    const std::string root = *moduleConfig.mqtt.root ? moduleConfig.mqtt.root : default_mqtt_root;
+    cryptTopic = root + "/2/e/";
+    mapTopic = root + "/2/map/";
+    isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
+
+#if HAS_NETWORKING
+    // Force a broker reconnect so subscriptions are refreshed with the new topic prefix
+    if (pubSub.connected()) {
+        pubSub.disconnect();
+    }
+    isConnected = false;
+#endif
 }
 
 #if HAS_NETWORKING
@@ -336,15 +431,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         assert(!mqtt);
         mqtt = this;
 
-        if (*moduleConfig.mqtt.root) {
-            cryptTopic = moduleConfig.mqtt.root + cryptTopic;
-            mapTopic = moduleConfig.mqtt.root + mapTopic;
-            isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
-        } else {
-            cryptTopic = "msh" + cryptTopic;
-            mapTopic = "msh" + mapTopic;
-            isConfiguredForDefaultRootTopic = true;
-        }
+        reinitTopics();
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
             map_position_precision = Default::getConfiguredOrDefault(moduleConfig.mqtt.map_report_settings.position_precision,
@@ -365,7 +452,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
-            LOG_INFO("MQTT configured to use client proxy");
+            LOG_INFO("MQTT uses client proxy");
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
@@ -472,16 +559,16 @@ void MQTT::reconnect()
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
             reconnectCount++;
-            LOG_ERROR("Failed to contact MQTT server directly (%d/%d)", reconnectCount, reconnectMax);
+            LOG_ERROR("Direct MQTT contact failed (%d/%d)", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
 #if defined(USE_WS5500) || defined(USE_CH390D)
-                LOG_WARN("MQTT connect failed repeatedly; waiting for Ethernet reconnect");
+                LOG_WARN("MQTT connect keeps failing; wait for Ethernet reconnect");
 #else
                 needReconnect = true;
                 if (wifiReconnect) {
                     wifiReconnect->setIntervalFromNow(0);
                 } else {
-                    LOG_WARN("MQTT connect failed repeatedly, but WiFi reconnect is unavailable");
+                    LOG_WARN("MQTT connect keeps failing, WiFi reconnect unavailable");
                 }
 #endif
                 reconnectCount = 0;
@@ -520,6 +607,9 @@ int32_t MQTT::runOnce()
 {
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
+    // A region change rewrites the root at runtime, from several call sites
+    if (topicRoot != moduleConfig.mqtt.root)
+        reinitTopics();
     bool wantConnection = wantsLink();
 
     perhapsReportToMap();
@@ -567,7 +657,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
 #if HAS_NETWORKING
         if (config.tls_enabled) {
 #if !MQTT_SUPPORTS_TLS
-            LOG_ERROR("Invalid MQTT config: tls_enabled is not supported on this node");
+            LOG_ERROR("Invalid MQTT config: tls_enabled unsupported on this node");
             return false;
 #endif
         }
@@ -652,6 +742,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 {
     if (mp_encrypted.via_mqtt)
         return; // Don't send messages that came from MQTT back into MQTT
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (isBlockedEventCoordinatePacket(&mp_decoded)) {
+        LOG_DEBUG("MQTT onSend - Suppress coordinate packet on event channel");
+        return;
+    }
+#endif
     bool uplinkEnabled = false;
     for (int i = 0; i <= 7; i++) {
         if (channels.getByIndex(i).settings.uplink_enabled)
@@ -667,13 +763,13 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         bool dontUplink = !mp_decoded.decoded.has_bitfield || !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK);
         // Respect the DontMqttMeBro flag for other nodes' packets on public MQTT servers
         if (!isFromUs(&mp_decoded) && !isMqttServerAddressPrivate && dontUplink) {
-            LOG_INFO("MQTT onSend - Not forwarding packet due to DontMqttMeBro flag");
+            LOG_INFO("MQTT onSend - drop packet: DontMqttMeBro flag");
             return;
         }
 
         if (isConfiguredForDefaultServer && (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
                                              mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
-            LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt");
+            LOG_DEBUG("MQTT onSend - Ignore range test/detection sensor msg on public mqtt");
             return;
         }
     }
@@ -704,6 +800,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
                                             .channel_id = const_cast<char *>(channelId),
                                             .gateway_id = const_cast<char *>(nodeId.c_str())};
     size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    if (topicRoot != moduleConfig.mqtt.root)
+        reinitTopics(); // root changed before runOnce() noticed
     std::string topic = cryptTopic + channelId + "/" + nodeId;
 
     if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
@@ -721,7 +819,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         entry->topic = std::move(topic);
         entry->envBytes.assign(bytes, numBytes);
         if (mqttQueue.enqueue(entry, 0) == false) {
-            LOG_CRIT("Failed to add a message to mqttQueue!");
+            LOG_CRIT("Can't add msg to mqttQueue");
             abort();
         }
     }
@@ -729,6 +827,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
 void MQTT::perhapsReportToMap()
 {
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (channels.isEventChannel(channels.getPrimaryIndex())) {
+        LOG_DEBUG("Suppress MQTT map report on event (everyone) channel");
+        return;
+    }
+#endif
     if (!moduleConfig.mqtt.map_reporting_enabled || !moduleConfig.mqtt.map_report_settings.should_report_location ||
         !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
@@ -736,7 +840,7 @@ void MQTT::perhapsReportToMap()
     // Coerce the map position precision to be within the valid range
     // This removes obtusely large radius and privacy problematic ones from the map
     if (map_position_precision < 12 || map_position_precision > 15) {
-        LOG_WARN("MQTT Map report position precision %u is out of range, using default %u", map_position_precision,
+        LOG_WARN("MQTT Map report position precision %u out of range, use default %u", map_position_precision,
                  default_map_position_precision);
         map_position_precision = default_map_position_precision;
     }
@@ -746,7 +850,7 @@ void MQTT::perhapsReportToMap()
 
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
         if (Throttle::isWithinTimespanMs(lastPositionUnavailableWarning, POSITION_UNAVAILABLE_WARNING_INTERVAL_MS) == false) {
-            LOG_WARN("MQTT Map report enabled, but no position available");
+            LOG_WARN("MQTT Map report enabled but no position");
             lastPositionUnavailableWarning = millis();
         }
         return;
@@ -807,5 +911,5 @@ void MQTT::perhapsReportToMap()
     packetPool.release(mp);
 
     // Update the last report time
-    last_report_to_map = millis();
+    last_report_to_map = Time::skipZero(Time::getMillis());
 }

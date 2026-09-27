@@ -243,10 +243,6 @@ void setSession(uint32_t maxSeconds);
 /// from the main loop on a low-frequency tick.
 bool isSessionExpired();
 
-/// Seconds remaining in the current session. 0 if no timer is set, or if
-/// the timer has expired (use isSessionExpired() to distinguish).
-uint32_t getSessionRemainingSeconds();
-
 /// Consume one boot from the on-flash token (the rollback ledger) and
 /// re-arm the session timer in place - no reboot. Called from the main
 /// loop when a session expires AND there is still budget. Decrements
