@@ -23,6 +23,9 @@
 #define MESHTASTIC_RX_READOUT_TASK
 #endif
 
+// Bench: -DMESHTASTIC_TX_HOLD_FOR_CAD_RX holds TX while the RX a busy CAD handed off to is still open, so the next
+// scan's standby does not abort the frame the CAD heard.
+
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
