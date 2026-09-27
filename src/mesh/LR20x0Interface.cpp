@@ -265,6 +265,8 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 template <typename T> bool LR20x0Interface<T>::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     // Propagated to the return value below, separately from the chip-programming outcome, so a
     // base-class failure isn't masked as success.
     const bool reconfigureSuccess = RadioLibInterface::reconfigure();
