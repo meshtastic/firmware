@@ -145,6 +145,7 @@ void RadioLibInterface::recordRxFlagsBeforeStandby()
 
 void RadioLibInterface::rxFlagsClearedByStandby()
 {
+    // Called after standby: the flags recordRxFlagsBeforeStandby() saw are gone, so age out any hold they can no longer renew.
     rxSighting.flagsCleared(Time::getMillis(), maxRxFrameMsec());
 }
 
@@ -455,8 +456,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
         if (!txQueue.empty()) {
             const bool clear = canSendImmediately();
             // A bare preamble held past the time its header needed: let the CAD below decide instead of waiting it out.
-            const bool peek = !clear && sendingPacket == NULL &&
-                              rxSighting.barePreamblePeekable(Time::getMillis(), barePreambleGraceMsec());
+            const bool peek =
+                !clear && sendingPacket == NULL && rxSighting.barePreamblePeekable(Time::getMillis(), barePreambleGraceMsec());
             if (!clear && !peek) {
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
