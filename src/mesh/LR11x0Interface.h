@@ -2,8 +2,8 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "RadioLibInterface.h"
 
-// Bench: -DLR11X0_TX_LAUNCH_TRACE times each step from the CAD verdict to TX, and -DLR11X0_TX_PRESTAGE also writes the
-// payload before the scan. Prestage calls RadioLib's LR11x0 commands directly, so it needs -DRADIOLIB_GODMODE=1.
+// Bench: -DLR11X0_TX_LAUNCH_TRACE times each step from the CAD verdict to TX in microseconds, and -DLR11X0_TX_PRESTAGE also
+// writes the payload before the scan. Prestage calls RadioLib's LR11x0 commands directly, so it needs -DRADIOLIB_GODMODE=1.
 #if defined(LR11X0_TX_LAUNCH_TRACE) || defined(LR11X0_TX_PRESTAGE)
 #define LR11X0_TX_LAUNCH_OVERRIDE 1
 #endif
@@ -103,6 +103,9 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
+    /** Bench: -DLR11X0_TCXO_DELAY_US=<us> replaces RadioLib's 5000 us TCXO start-up wait after a successful begin() */
+    void applyBenchTcxoDelay(int res);
+
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 
@@ -112,8 +115,8 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** The payload isChannelActive() wrote into the chip's buffer before the CAD, or 0 bytes if none */
     size_t prestagedLen = 0;
     uint32_t prestagedId = 0;
-    /** When the last CAD verdict was read, for the launch step trace */
-    uint32_t cadVerdictMs = 0;
+    /** When the last CAD verdict was read, on the bench clock, for the launch step trace */
+    uint32_t cadVerdictClock = 0;
 #endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup

@@ -1,4 +1,5 @@
 #include "RadioLibInterface.h"
+#include "BenchClock.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
@@ -1099,34 +1100,6 @@ uint32_t ticksToMs(uint32_t ticks)
 {
     return (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
 }
-
-// The readout's duration. Adafruit's nRF52 micros() counts FreeRTOS ticks (976.6 us steps), too coarse for a readout
-// of about a millisecond, so time it on the cycle counter there.
-#ifdef ARDUINO_NRF52_ADAFRUIT
-void readoutClockStart()
-{
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-}
-uint32_t readoutClock()
-{
-    return DWT->CYCCNT;
-}
-uint32_t readoutClockToUs(uint32_t elapsed)
-{
-    return elapsed / (SystemCoreClock / 1000000);
-}
-#else
-void readoutClockStart() {}
-uint32_t readoutClock()
-{
-    return micros();
-}
-uint32_t readoutClockToUs(uint32_t elapsed)
-{
-    return elapsed;
-}
-#endif
 } // namespace
 
 void RadioLibInterface::startRxReadoutTask()
@@ -1191,7 +1164,7 @@ bool RadioLibInterface::wakeRxReadout()
 void RadioLibInterface::rxReadoutTaskMain(void *arg)
 {
     auto *self = static_cast<RadioLibInterface *>(arg);
-    readoutClockStart();
+    benchClockStart();
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         self->readOutFromTask();
@@ -1205,7 +1178,7 @@ void RadioLibInterface::rxReadoutTaskMain(void *arg)
 void RadioLibInterface::readOutFromTask()
 {
     const uint32_t wakeTicks = rxWakeTicks;
-    const uint32_t t0 = readoutClock();
+    const uint32_t t0 = benchClock();
     const uint32_t irq = iface->getIrqFlags();
     if (!(irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))) {
         // TIMEOUT (a CAD handoff's RX expired), HEADER_ERR and a lone CRC_ERR stay the thread's, as before. Anything
@@ -1235,7 +1208,7 @@ void RadioLibInterface::readOutFromTask()
     f.info.state = iface->readData(f.data, len);
     f.info.snr = iface->getSNR();
     f.info.rssi = lround(iface->getRSSI());
-    f.info.spiUs = readoutClockToUs(readoutClock() - t0);
+    f.info.spiUs = benchClockToUs(benchClock() - t0);
     f.info.len = (uint8_t)len;
     f.info.chipListening = listening;
     const uint32_t nowTicks = xTaskGetTickCount();

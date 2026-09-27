@@ -1,5 +1,6 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "LR11x0Interface.h"
+#include "BenchClock.h"
 #include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
@@ -244,6 +245,11 @@ template <typename T> bool LR11x0Interface<T>::init()
     }
 #endif
 
+    applyBenchTcxoDelay(res);
+#ifdef LR11X0_TX_LAUNCH_OVERRIDE
+    benchClockStart();
+#endif
+
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
@@ -347,6 +353,22 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
     return RADIOLIB_ERR_NONE;
 }
 
+template <typename T> void LR11x0Interface<T>::applyBenchTcxoDelay(int res)
+{
+#ifdef LR11X0_TCXO_DELAY_US
+    // Bench: begin() leaves RadioLib's 5000 us TCXO start-up wait, and a clear CAD drops the chip to STBY_RC, so every
+    // CAD and every TX after one waits that long for the oscillator. Reapplied after each begin(), which resets it.
+    if (res == RADIOLIB_ERR_NONE && resolvedTcxoVoltage > 0) {
+        const int16_t tcxoErr = lora.setTCXO(resolvedTcxoVoltage, (uint32_t)(LR11X0_TCXO_DELAY_US));
+        LOG_INFO("LR11x0 TCXO start-up delay %u us %s%d", (unsigned)(LR11X0_TCXO_DELAY_US), radioLibErr, tcxoErr);
+    } else if (res == RADIOLIB_ERR_NONE) {
+        LOG_INFO("LR11x0 TCXO start-up delay not set: no TCXO Vref");
+    }
+#else
+    (void)res;
+#endif
+}
+
 template <typename T> bool LR11x0Interface<T>::reinitChip()
 {
     // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
@@ -358,6 +380,7 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
     }
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
+    applyBenchTcxoDelay(res);
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
     if (res == RADIOLIB_ERR_NONE)
@@ -582,7 +605,7 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 #endif
         result = lora.scanChannel(cfg);
 #ifdef LR11X0_TX_LAUNCH_OVERRIDE
-        cadVerdictMs = millis();
+        cadVerdictClock = benchClock();
         if (result != RADIOLIB_CHANNEL_FREE)
             prestagedLen = 0; // no TX follows, and a detection's RX may have overwritten the buffer
 #endif
@@ -607,7 +630,7 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
 {
     // Everything from the CAD verdict to SET_TX is time the channel goes unwatched. Time each step; with a prestaged
     // payload, send only the rest of RadioLib's TX staging.
-    const uint32_t t0 = millis();
+    const uint32_t t0 = benchClock();
     const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
     prestagedLen = 0;
     int16_t res;
@@ -629,11 +652,13 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
         RadioModeConfig_t cfg = {.transmit = {.data = (uint8_t *)&radioBuffer, .len = numbytes, .addr = 0}};
         res = lora.stageMode(RADIOLIB_RADIO_MODE_TX, &cfg);
     }
-    const uint32_t tStage = millis();
+    const uint32_t tStage = benchClock();
     if (res == RADIOLIB_ERR_NONE)
         res = lora.launchMode(); // RF switch, SET_TX, then the BUSY wait for the PA ramp
-    LOG_TRACE("Tx launch steps: %s, verdict to launch %u, stage %u, settx+busy %u ms", prestaged ? "prestaged" : "radiolib",
-              (unsigned)(t0 - cadVerdictMs), (unsigned)(tStage - t0), (unsigned)(millis() - tStage));
+    const uint32_t tDone = benchClock();
+    LOG_TRACE("Tx launch steps: %s, len %u, verdict to launch %u, stage %u, settx+busy %u us",
+              prestaged ? "prestaged" : "radiolib", (unsigned)numbytes, (unsigned)benchClockToUs(t0 - cadVerdictClock),
+              (unsigned)benchClockToUs(tStage - t0), (unsigned)benchClockToUs(tDone - tStage));
     return res;
 }
 #endif
